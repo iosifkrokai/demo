@@ -24,9 +24,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastembed import TextEmbedding
 from pydantic import BaseModel, Field
 
-from llm import init as init_llm, parse_query
-from search import candidates_by_embedding, fetch_points_by_ids
-from valhalla_client import route_through
+from .llm import init as init_llm, parse_query
+from .search import candidates_by_embedding, fetch_points_by_ids
+from .valhalla_client import route_through
 
 DSN = os.environ.get("DATABASE_URL", "postgresql://grodno:grodno@localhost:5432/grodno")
 VALHALLA_URL = os.environ.get("VALHALLA_URL", "http://localhost:8002")
@@ -69,7 +69,11 @@ class RerouteReq(BaseModel):
 
 
 def embed_query(text: str) -> list[float]:
-    return list(state["embedder"].embed([text]))[0]
+    # fastembed returns a numpy array; psycopg3 can't auto-adapt that into a
+    # pgvector via %s::vector, so materialize to a plain Python list.
+    import numpy as np
+    arr = list(state["embedder"].embed([text]))[0]
+    return arr.tolist() if isinstance(arr, np.ndarray) else list(arr)
 
 
 def greedy_order(cands: list[dict], n: int) -> list[dict]:

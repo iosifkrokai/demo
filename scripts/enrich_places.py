@@ -114,9 +114,11 @@ def main() -> None:
                 ]
                 vecs = list(model.embed(texts, batch_size=EMBED_BATCH))
                 for row, v in zip(rows, vecs):
+                    # v is a numpy ndarray; tolist() gives a plain Python list
+                    # that psycopg3 can adapt into vector(384) via %s::vector.
                     cur.execute(
                         "UPDATE places SET embedding = %s::vector WHERE id = %s",
-                        (list(v), row["id"]),
+                        (v.tolist() if hasattr(v, "tolist") else list(v), row["id"]),
                     )
                 conn.commit()
 
