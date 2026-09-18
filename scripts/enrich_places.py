@@ -26,11 +26,18 @@ from agent.llm import classify_items, init as init_llm  # noqa: E402
 
 DSN = os.environ.get("DATABASE_URL", "postgresql://grodno:grodno@localhost:5432/grodno")
 
-# Fixed taxonomy.
+# Fixed taxonomy. Kept short on purpose: Qwen2.5-1.5B at q4_k_m struggles with
+# long label lists in structured-output prompts (often returns invalid JSON
+# for more than ~6 options). 6 broad buckets give reasonable reliability on
+# CPU. The agent doesn't read this column — vector similarity on embeddings
+# does the actual route selection — so partial / NULL categories are fine.
 TAXONOMY = [
-    "замок", "костёл", "церковь", "монастырь",
-    "дворец", "усадьба", "парк",
-    "музей", "памятник", "городище", "другое",
+    "замок",   # замки, крепости, фортификации
+    "храм",    # костёлы, церкви, монастыри, синагоги
+    "дворец",  # дворцы, усадьбы
+    "музей",   # музеи, галереи, театры
+    "парк",    # парки, скверы, сады
+    "другое",
 ]
 
 EMBED_MODEL = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"  # 384-d, multilingual, ONNX via fastembed
@@ -55,16 +62,16 @@ def main() -> None:
 
     with psycopg.connect(DSN) as conn:
         with conn.cursor() as cur:
-            # === Pass 1: categories (only rows where category IS NULL) ===
-            # Independent of the embeddings gate so this loop terminates even
-            # if embeddings were already filled by a prior partial run.
-            while True:
-                rows = fetch_pending(
-                    cur,
-                    "SELECT id, name, description FROM places WHERE category IS NULL ORDER BY id",
-                )
-                if not rows:
-                    break
+            # === Pass 1: categories (single pass, best-effort) ===
+            # Qwen 1.5B at q4_k_m on CPU produces invalid JSON on a meaningful
+            # share of chunks, so the categories loop runs ONCE and we accept
+            # whatever got assigned. NULL rows stay NULL — the agent doesn't
+            # read this column.
+            rows = fetch_pending(
+                cur,
+                "SELECT id, name, description FROM places WHERE category IS NULL ORDER BY id",
+            )
+            if rows:
                 print(f"  categorizing {len(rows)} rows (chunks of 12 via local LLM)...", flush=True)
                 items = [
                     f"{(r.get('name') or '').strip()}. {(r.get('description') or '')[:200]}".strip(" .")
@@ -78,7 +85,12 @@ def main() -> None:
                             (cat, row["id"]),
                         )
                 conn.commit()
-                print(f"  categories: {sum(c is not None for c in cats)}/{len(rows)} assigned", flush=True)
+                assigned = sum(c is not None for c in cats)
+                print(
+                    f"  categories: {assigned}/{len(rows)} assigned (rest NULL — "
+                    "Qwen 1.5B is best-effort, agent doesn't use this column)",
+                    flush=True,
+                )
 
             # === Pass 2: embeddings (only rows where embedding IS NULL) ===
             while True:
