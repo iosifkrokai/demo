@@ -4,4 +4,4 @@ psycopg[binary]
 httpx
 pydantic
 fastembed
-openai
+llama-cpp-python

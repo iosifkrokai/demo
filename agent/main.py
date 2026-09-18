@@ -24,7 +24,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastembed import TextEmbedding
 from pydantic import BaseModel, Field
 
-from llm import parse_query
+from llm import init as init_llm, parse_query
 from search import candidates_by_embedding, fetch_points_by_ids
 from valhalla_client import route_through
 
@@ -39,6 +39,7 @@ state: dict[str, Any] = {}
 async def lifespan(_: FastAPI):
     print(f"loading {EMBED_MODEL} via fastembed (one-time)...")
     state["embedder"] = TextEmbedding(EMBED_MODEL)
+    init_llm()  # local GGUF via llama-cpp-python; blocking first-time download
     state["db"] = psycopg.connect(DSN, autocommit=True)
     yield
     state["db"].close()
