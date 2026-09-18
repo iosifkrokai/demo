@@ -6,13 +6,13 @@ Endpoints:
     POST /routes/reroute    body: {"point_ids": [int]}
                             -> {points: [...], shape, summary}
 
-Local sentence-transformers model is loaded once at startup (lifespan handler) and held
-in a module-level `state.embedder`. Same model is used by the DB-load step (enrich_places.py).
+Local fastembed model is loaded once at startup (lifespan handler) and held in
+state["embedder"]. Same model is used by the DB-load step (enrich_places.py).
+The e5 family requires a "query: " prefix on queries; passages get "passage: " in enrich.
 """
 
 from __future__ import annotations
 
-import json
 import os
 from contextlib import asynccontextmanager
 from typing import Any
@@ -20,8 +20,8 @@ from typing import Any
 import httpx
 import psycopg
 from fastapi import FastAPI, HTTPException
+from fastembed import TextEmbedding
 from pydantic import BaseModel, Field
-from sentence_transformers import SentenceTransformer
 
 from llm import parse_query
 from search import candidates_by_embedding, fetch_points_by_ids
@@ -29,16 +29,16 @@ from valhalla_client import route_through
 
 DSN = os.environ.get("DATABASE_URL", "postgresql://grodno:grodno@localhost:5432/grodno")
 VALHALLA_URL = os.environ.get("VALHALLA_URL", "http://localhost:8002")
-EMBED_MODEL = os.environ.get("EMBED_MODEL", "paraphrase-multilingual-MiniLM-L12-v2")
+EMBED_MODEL = os.environ.get("EMBED_MODEL", "intfloat/multilingual-e5-small")
+QUERY_PREFIX = "query: "
 
-# Module-level state populated in lifespan()
 state: dict[str, Any] = {}
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    print(f"loading {EMBED_MODEL}...")
-    state["embedder"] = SentenceTransformer(EMBED_MODEL)
+    print(f"loading {EMBED_MODEL} via fastembed (one-time)...")
+    state["embedder"] = TextEmbedding(EMBED_MODEL)
     state["db"] = psycopg.connect(DSN, autocommit=True)
     yield
     state["db"].close()
@@ -54,6 +54,10 @@ class GenerateReq(BaseModel):
 
 class RerouteReq(BaseModel):
     point_ids: list[int] = Field(min_length=2)
+
+
+def embed_query(text: str) -> list[float]:
+    return list(state["embedder"].embed([QUERY_PREFIX + text]))[0]
 
 
 def greedy_order(cands: list[dict], n: int) -> list[dict]:
@@ -83,7 +87,7 @@ def generate(req: GenerateReq):
     n = parsed.get("n_points") or req.n_points
     n = max(2, min(n, 10))
 
-    qvec = state["embedder"].encode([req.query], normalize_embeddings=True)[0].tolist()
+    qvec = embed_query(req.query)
     rows = candidates_by_embedding(state["db"], qvec, limit=50, region_bbox=parsed.get("region_bbox"))
     if len(rows) < n:
         raise HTTPException(404, f"only {len(rows)} candidates within scope; need {n}")

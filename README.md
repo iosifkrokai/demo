@@ -49,7 +49,7 @@ Open `http://localhost/` in a browser, place 2–3 pins anywhere in Grodno (e.g.
 . .venv/bin/activate
 python scripts/parse_places.py        # ~hundreds of sights, 5–10 min with 1.5s/request
 export OPENAI_API_KEY=sk-...          # optional — without it, only embeddings populate
-python scripts/enrich_places.py       # categories via LLM + local sentence-transformer embeddings
+python scripts/enrich_places.py       # categories via LLM + local fastembed embeddings
 ```
 
 Spot-check the result:

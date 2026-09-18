@@ -3,5 +3,5 @@ uvicorn[standard]
 psycopg[binary]
 httpx
 pydantic
-sentence-transformers
+fastembed
 openai
