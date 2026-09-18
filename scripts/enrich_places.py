@@ -86,10 +86,11 @@ def assign_categories(rows: list[dict]) -> list[str | None]:
 
 
 def main() -> None:
-    print(f"loading {EMBED_MODEL} via fastembed (one-time, ~120 MB cached in ~/.cache/fastembed)...")
+    print(f"loading {EMBED_MODEL} via fastembed (~470 MB cached in ~/.cache/fastembed)...", flush=True)
     model = TextEmbedding(EMBED_MODEL)
-    dim = len(next(iter(model.embed(["test"]))))
+    dim = len(next(iter(model.embed(["warmup"]))))
     assert dim == 384, f"expected 384-dim, got {dim}"
+    print(f"model loaded, dim={dim}", flush=True)
 
     with psycopg.connect(DSN) as conn:
         with conn.cursor() as cur:
@@ -97,7 +98,7 @@ def main() -> None:
                 rows = fetch_pending(cur)
                 if not rows:
                     break
-                print(f"processing {len(rows)} rows...")
+                print(f"processing {len(rows)} rows...", flush=True)
 
                 # 1) categories via LLM (one batched call)
                 cats = assign_categories(rows)
@@ -107,13 +108,19 @@ def main() -> None:
                             "UPDATE places SET category = %s WHERE id = %s",
                             (cat, row["id"]),
                         )
+                print(f"  categories: {sum(c is not None for c in cats)}/{len(rows)} assigned", flush=True)
 
-                # 2) embeddings via local model
+                # 2) embeddings via local model. show_progress=True prints a tqdm
+                # bar so the user sees the script is alive (CPU encode of 384-d
+                # vectors takes ~1-2 min for ~76 rows).
                 texts = [
                     f"{(r['name'] or '').strip()}. {(r['description'] or '').strip()}".strip(" .")
                     for r in rows
                 ]
-                vecs = list(model.embed(texts, batch_size=EMBED_BATCH))
+                print(f"  encoding {len(texts)} embeddings (CPU)...", flush=True)
+                vecs = list(
+                    model.embed(texts, batch_size=EMBED_BATCH, show_progress=True)
+                )
                 for row, v in zip(rows, vecs):
                     # v is a numpy ndarray; tolist() gives a plain Python list
                     # that psycopg3 can adapt into vector(384) via %s::vector.
@@ -122,8 +129,9 @@ def main() -> None:
                         (v.tolist() if hasattr(v, "tolist") else list(v), row["id"]),
                     )
                 conn.commit()
+                print(f"  embedded {len(rows)} rows, committed", flush=True)
 
-    print("done.")
+    print("done.", flush=True)
 
 
 if __name__ == "__main__":
