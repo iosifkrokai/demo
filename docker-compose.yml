@@ -13,7 +13,12 @@ services:
     # no ports published — only reachable inside the compose network
 
   db:
-    image: pgvector/pgvector:pg16
+    # pgvector/pgvector:pg16 ships with pgvector only, no PostGIS. We build a
+    # tiny layer on top that adds postgresql-16-postgis-3 from the PGDG repo.
+    # See db/Dockerfile.
+    build:
+      context: .
+      dockerfile: db/Dockerfile
     container_name: grodno-db
     environment:
       POSTGRES_USER: grodno
@@ -30,16 +35,23 @@ services:
       retries: 20
 
   valhalla:
-    image: gisops/valhalla:latest
+    image: ghcr.io/nilsnolde/docker-valhalla/valhalla:latest
     container_name: grodno-valhalla
     depends_on:
       - pbf-sidecar
-    ports: ["8002:8002"]
-    volumes:
-      - valhalla-data:/custom_files
+    restart: unless-stopped
+    ports:
+      - "8002:8002"
     environment:
       tile_urls: http://pbf-sidecar:8001/grodno.osm.pbf
-    restart: unless-stopped
+    volumes:
+      - valhalla-data:/custom_files
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8002/status"]
+      interval: 15s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
 
   valhalla-app:
     build: ./web-app
