@@ -28,7 +28,8 @@ def candidates_by_embedding(
     params.extend([qvec, limit])
     with db.cursor() as cur:
         cur.execute("\n".join(sql), params)
-        return [dict(r) for r in cur.fetchall()]
+        cols = [d.name for d in cur.description]
+        return [dict(zip(cols, r)) for r in cur.fetchall()]
 
 
 def fetch_points_by_ids(db: psycopg.Connection, ids: list[int]) -> list[dict[str, Any]]:
@@ -37,6 +38,7 @@ def fetch_points_by_ids(db: psycopg.Connection, ids: list[int]) -> list[dict[str
             "SELECT id, name, category, lat, lon FROM places WHERE id = ANY(%s)",
             (ids,),
         )
-        rows = [dict(r) for r in cur.fetchall()]
+        cols = [d.name for d in cur.description]
+        rows = [dict(zip(cols, r)) for r in cur.fetchall()]
     by_id = {r["id"]: r for r in rows}
     return [by_id[i] for i in ids if i in by_id]
