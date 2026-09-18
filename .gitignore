@@ -4,3 +4,7 @@ cache/
 __pycache__/
 *.pyc
 .env
+
+# valhalla/web-app is a third-party clone the user manages manually
+# (see README "One-time setup" step 1). Not part of this repo.
+web-app/
