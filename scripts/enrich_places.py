@@ -37,13 +37,7 @@ EMBED_MODEL = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"  # 3
 EMBED_BATCH = 64
 
 
-def fetch_pending(cur, limit: int | None = None) -> list[dict]:
-    # Only gate on embedding being missing — categories are attempted on each
-    # pass and the loop exits as soon as embeddings are populated, even if a
-    # few categories come back as NULL.
-    sql = "SELECT id, name, description FROM places WHERE embedding IS NULL ORDER BY id"
-    if limit:
-        sql += f" LIMIT {int(limit)}"
+def fetch_pending(cur, sql: str) -> list[dict]:
     cur.execute(sql)
     cols = [d.name for d in cur.description]
     return [dict(zip(cols, r)) for r in cur.fetchall()]
@@ -61,13 +55,17 @@ def main() -> None:
 
     with psycopg.connect(DSN) as conn:
         with conn.cursor() as cur:
+            # === Pass 1: categories (only rows where category IS NULL) ===
+            # Independent of the embeddings gate so this loop terminates even
+            # if embeddings were already filled by a prior partial run.
             while True:
-                rows = fetch_pending(cur)
+                rows = fetch_pending(
+                    cur,
+                    "SELECT id, name, description FROM places WHERE category IS NULL ORDER BY id",
+                )
                 if not rows:
                     break
-                print(f"processing {len(rows)} rows...", flush=True)
-
-                # 1) categories via local LLM, batched in chunks of 12
+                print(f"  categorizing {len(rows)} rows (chunks of 12 via local LLM)...", flush=True)
                 items = [
                     f"{(r.get('name') or '').strip()}. {(r.get('description') or '')[:200]}".strip(" .")
                     for r in rows
@@ -82,20 +80,23 @@ def main() -> None:
                 conn.commit()
                 print(f"  categories: {sum(c is not None for c in cats)}/{len(rows)} assigned", flush=True)
 
-                # 2) embeddings via local model. show_progress=True prints a tqdm
-                # bar so the user sees the script is alive (CPU encode of 384-d
-                # vectors takes ~1-2 min for ~76 rows).
+            # === Pass 2: embeddings (only rows where embedding IS NULL) ===
+            while True:
+                rows = fetch_pending(
+                    cur,
+                    "SELECT id, name, description FROM places WHERE embedding IS NULL ORDER BY id",
+                )
+                if not rows:
+                    break
+                print(f"  encoding {len(rows)} embeddings (CPU)...", flush=True)
                 texts = [
                     f"{(r['name'] or '').strip()}. {(r['description'] or '').strip()}".strip(" .")
                     for r in rows
                 ]
-                print(f"  encoding {len(texts)} embeddings (CPU)...", flush=True)
                 vecs = list(
                     model.embed(texts, batch_size=EMBED_BATCH, show_progress=True)
                 )
                 for row, v in zip(rows, vecs):
-                    # v is a numpy ndarray; tolist() gives a plain Python list
-                    # that psycopg3 can adapt into vector(384) via %s::vector.
                     cur.execute(
                         "UPDATE places SET embedding = %s::vector WHERE id = %s",
                         (v.tolist() if hasattr(v, "tolist") else list(v), row["id"]),
