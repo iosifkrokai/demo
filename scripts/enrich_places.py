@@ -5,8 +5,8 @@ Idempotent: skips rows that already have both fields. Re-runnable after partial 
 Reads OPENAI_API_KEY from env to enable LLM-based category assignment. If unset, category is
 left NULL (embedding still runs). The agent's query pipeline tolerates NULL categories.
 
-Embedding model: intfloat/multilingual-e5-small (384-d, ONNX via fastembed, ~120 MB on first
-load, cached in ~/.cache/fastembed/). No torch, no CUDA, no scipy — total dep footprint ~30 MB.
+Embedding model: sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2 (384-d, ONNX via
+fastembed, ~470 MB on first load, cached in ~/.cache/fastembed/). No torch, no CUDA.
 
 Usage:
     OPENAI_API_KEY=sk-... python scripts/enrich_places.py
@@ -29,11 +29,8 @@ TAXONOMY = [
 ]
 TAXONOMY_STR = " | ".join(TAXONOMY)
 
-EMBED_MODEL = "intfloat/multilingual-e5-small"  # 384-d, multilingual, ONNX via fastembed
+EMBED_MODEL = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"  # 384-d, multilingual, ONNX via fastembed
 EMBED_BATCH = 64
-# e5-family expects "passage: " on documents and "query: " on queries. Without the prefix,
-# retrieval quality drops sharply. Same prefix is used by the agent for query embedding.
-PASSAGE_PREFIX = "passage: "
 
 CATEGORY_PROMPT = (
     "Ты — ассистент, который классифицирует достопримечательности Гродненской области.\n"
@@ -112,7 +109,7 @@ def main() -> None:
 
                 # 2) embeddings via local model
                 texts = [
-                    PASSAGE_PREFIX + f"{(r['name'] or '').strip()}. {(r['description'] or '').strip()}".strip(" .")
+                    f"{(r['name'] or '').strip()}. {(r['description'] or '').strip()}".strip(" .")
                     for r in rows
                 ]
                 vecs = list(model.embed(texts, batch_size=EMBED_BATCH))

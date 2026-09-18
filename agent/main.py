@@ -29,8 +29,7 @@ from valhalla_client import route_through
 
 DSN = os.environ.get("DATABASE_URL", "postgresql://grodno:grodno@localhost:5432/grodno")
 VALHALLA_URL = os.environ.get("VALHALLA_URL", "http://localhost:8002")
-EMBED_MODEL = os.environ.get("EMBED_MODEL", "intfloat/multilingual-e5-small")
-QUERY_PREFIX = "query: "
+EMBED_MODEL = os.environ.get("EMBED_MODEL", "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2")
 
 state: dict[str, Any] = {}
 
@@ -57,7 +56,7 @@ class RerouteReq(BaseModel):
 
 
 def embed_query(text: str) -> list[float]:
-    return list(state["embedder"].embed([QUERY_PREFIX + text]))[0]
+    return list(state["embedder"].embed([text]))[0]
 
 
 def greedy_order(cands: list[dict], n: int) -> list[dict]:
