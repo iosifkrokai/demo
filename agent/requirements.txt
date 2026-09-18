@@ -1,0 +1,7 @@
+fastapi
+uvicorn[standard]
+psycopg[binary]
+httpx
+pydantic
+sentence-transformers
+openai

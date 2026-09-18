@@ -1,0 +1,54 @@
+services:
+  pbf-sidecar:
+    # Tiny static file server that exposes valhalla-data/ to the valhalla container
+    # via the compose network. Lets us feed an osmium-cut PBF into gisops without
+    # making it re-download the full Belarus extract from Geofabrik.
+    image: python:3.12-alpine
+    container_name: grodno-pbf-sidecar
+    working_dir: /data
+    command: ["python", "-m", "http.server", "8001"]
+    volumes:
+      - ./valhalla-data:/data:ro
+    restart: unless-stopped
+    # no ports published — only reachable inside the compose network
+
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: grodno-db
+    environment:
+      POSTGRES_USER: grodno
+      POSTGRES_PASSWORD: grodno
+      POSTGRES_DB: grodno
+    ports: ["5432:5432"]
+    volumes:
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U grodno -d grodno"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  valhalla:
+    image: gisops/valhalla:latest
+    container_name: grodno-valhalla
+    depends_on:
+      - pbf-sidecar
+    ports: ["8002:8002"]
+    volumes:
+      - valhalla-data:/custom_files
+    environment:
+      tile_urls: http://pbf-sidecar:8001/grodno.osm.pbf
+    restart: unless-stopped
+
+  valhalla-app:
+    build: ./web-app
+    container_name: grodno-valhalla-app
+    ports: ["80:80"]
+    depends_on:
+      - valhalla
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  valhalla-data:
