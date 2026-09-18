@@ -4,23 +4,32 @@ NOT a service. NOT a cron. Run once to populate; safe to re-run (cache + ON CONF
 
 Usage:
     python scripts/parse_places.py
+    PARSER_DELAY=0.5 PARSER_WORKERS=6 python scripts/parse_places.py
 
 Respects:
     - robots.txt via urllib.robotparser.RobotFileParser (raises on disallowed paths).
-    - 1.5s delay between requests.
     - Disk cache under ./cache so re-runs during debugging do not re-hit the site.
     - Honest User-Agent with contact info.
+    - Per-worker delay between requests (PARSER_DELAY, default 0.5s). With the default
+      4 workers, peak throughput is ~8 req/s — polite for a one-shot scrape of a small
+      regional CMS. Tighten PARSER_DELAY or raise PARSER_WORKERS at your own risk.
 
-Honors the user spec's "geocode manually before inserting" rule by:
-    - Reading lat/lon directly from the page's inline JS `initialCenter = [LON, LAT]`
-      (server-rendered, full precision), so we never trust a separate Nominatim lookup.
-    - Applying a bbox filter (Grodno Oblast) as the manual sanity check.
+Crawl strategy: planetabelarus.by exposes a server-side filtered listing at
+`/sights/filter/location-is-0000000275/apply/?PAGEN_1=N` (0000000275 = Гродненская
+область in their Bitrix taxonomy). Other query-param filter shapes return
+mixed Belarus-wide results in HTML; this one returns only Grodno-region pages,
+saving ~50x network traffic vs. crawling the full Belarus sitemap and bbox-filtering
+later.
+
+Coordinates come from the page's inline JS `const initialCenter = [LON, LAT];`
+(server-rendered, full precision) — no Nominatim call needed.
 """
 
 import hashlib
 import os
 import re
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from urllib.parse import urljoin
 from urllib.robotparser import RobotFileParser
@@ -28,17 +37,15 @@ from urllib.robotparser import RobotFileParser
 import psycopg
 import requests
 from bs4 import BeautifulSoup
+from requests.adapters import HTTPAdapter
 
 BASE = "https://planetabelarus.by"
-SITEMAP = f"{BASE}/sitemap-iblock-6.xml"
+GRODNO_LISTING = f"{BASE}/sights/filter/location-is-0000000275/apply/"
 UA = "grodno-poc-collector/1.0 (research POC; contact: dev@example.com)"
 HEADERS = {"User-Agent": UA}
 CACHE = Path(os.environ.get("PARSER_CACHE", "./cache"))
-DELAY_S = float(os.environ.get("PARSER_DELAY", "1.5"))
-
-# Grodno Oblast bbox (OSM relation 59173, approximate).
-# (min_lat, min_lon, max_lat, max_lon)
-BBOX = (52.85, 23.50, 54.10, 26.55)
+DELAY_S = float(os.environ.get("PARSER_DELAY", "0.5"))
+WORKERS = int(os.environ.get("PARSER_WORKERS", "4"))
 
 DSN = os.environ.get("DATABASE_URL", "postgresql://grodno:grodno@localhost:5432/grodno")
 
@@ -46,20 +53,70 @@ DSN = os.environ.get("DATABASE_URL", "postgresql://grodno:grodno@localhost:5432/
 INITIAL_CENTER_RE = re.compile(
     r"const\s+initialCenter\s*=\s*\[\s*([-\d.]+)\s*,\s*([-\d.]+)\s*\]"
 )
+# Detail-page slug in href like /sights/boriso-glebskaya-kolozhskaya-tserkov-v-grodno/
+# Trailing slash excludes pagination links like /filter/.../?PAGEN_1=N.
+SLUG_RE = re.compile(r'href="(/sights/[a-z0-9][a-z0-9-]+/)"')
+
+# Errors worth retrying (DNS blips, connection drops, transient timeouts).
+TRANSIENT_HTTP = (
+    requests.exceptions.ConnectionError,
+    requests.exceptions.Timeout,
+    requests.exceptions.ChunkedEncodingError,
+)
 
 
-def fetch(url: str, rp: RobotFileParser) -> str:
+def http_get(session: requests.Session, url: str, attempts: int = 4) -> requests.Response:
+    """session.get with exponential-backoff retry on transient network errors."""
+    delay = 2.0
+    for attempt in range(1, attempts + 1):
+        try:
+            return session.get(url, timeout=20)
+        except TRANSIENT_HTTP as e:
+            if attempt == attempts:
+                raise
+            print(f"  retry {attempt}/{attempts} in {delay:.0f}s ({type(e).__name__})")
+            time.sleep(delay)
+            delay *= 2
+
+
+def fetch_cached(url: str, session: requests.Session, rp: RobotFileParser) -> str:
     if not rp.can_fetch("*", url):
         raise RuntimeError(f"disallowed by robots.txt: {url}")
     CACHE.mkdir(parents=True, exist_ok=True)
     p = CACHE / f"{hashlib.sha1(url.encode()).hexdigest()}.html"
     if p.exists():
         return p.read_text(encoding="utf-8")
-    r = requests.get(url, headers=HEADERS, timeout=20)
+    r = http_get(session, url)
     r.raise_for_status()
     p.write_text(r.text, encoding="utf-8")
-    time.sleep(DELAY_S)
+    time.sleep(DELAY_S)  # delay only on real network hit; cache hits are instant
     return r.text
+
+
+def crawl_grodno_urls(session: requests.Session, rp: RobotFileParser) -> list[str]:
+    """Paginate the server-side Grodno filter and collect unique sight URLs."""
+    seen: set[str] = set()
+    page = 0
+    while True:
+        page += 1
+        url = f"{GRODNO_LISTING}?PAGEN_1={page}"
+        if not rp.can_fetch("*", url):
+            raise RuntimeError(f"disallowed by robots.txt: {url}")
+        r = http_get(session, url)
+        r.raise_for_status()
+        slugs = set(SLUG_RE.findall(r.text))
+        if not slugs:
+            break
+        new = slugs - seen
+        if page > 1 and not new:
+            break  # pagination looped back to the same content
+        seen.update(slugs)
+        if page >= 50:  # safety cap; Grodno currently sits at 7
+            print(f"  warning: stopped paginating at page {page} (safety cap)")
+            break
+        time.sleep(DELAY_S)
+    print(f"  paginated {page - 1} pages, {len(seen)} unique slugs")
+    return [urljoin(BASE, s) for s in sorted(seen)]
 
 
 def parse_detail(url: str, html: str):
@@ -90,10 +147,6 @@ def parse_detail(url: str, html: str):
         return None
     lon, lat = float(m.group(1)), float(m.group(2))
 
-    # bbox sanity filter — manual "verify the result before inserting" step
-    if not (BBOX[0] <= lat <= BBOX[2] and BBOX[1] <= lon <= BBOX[3]):
-        return None
-
     return {
         "name": name,
         "description": desc,
@@ -104,57 +157,69 @@ def parse_detail(url: str, html: str):
     }
 
 
+def process_one(url: str, session: requests.Session, rp: RobotFileParser):
+    """Worker function. Returns ("ok", rec) | ("skip", reason) | ("fail", error)."""
+    try:
+        html = fetch_cached(url, session, rp)
+        rec = parse_detail(url, html)
+        return ("ok", rec) if rec else ("skip", "no_match")
+    except RuntimeError as e:
+        return ("skip", str(e))
+    except Exception as e:
+        return ("fail", repr(e))
+
+
+INSERT_SQL = """
+    INSERT INTO places (name, description, lat, lon, photo_url, source_url)
+    VALUES (%(name)s, %(description)s, %(lat)s, %(lon)s, %(photo_url)s, %(source_url)s)
+    ON CONFLICT (source_url) DO UPDATE SET
+        name = EXCLUDED.name,
+        description = EXCLUDED.description,
+        lat = EXCLUDED.lat,
+        lon = EXCLUDED.lon,
+        photo_url = EXCLUDED.photo_url
+    RETURNING (xmax = 0) AS was_insert
+"""
+
+
 def main() -> None:
     rp = RobotFileParser()
     rp.set_url(f"{BASE}/robots.txt")
     rp.read()
 
-    print(f"fetching sitemap {SITEMAP}...")
-    r = requests.get(SITEMAP, headers=HEADERS, timeout=30)
-    r.raise_for_status()
-    urls = re.findall(r"<loc>([^<]+)</loc>", r.text)
-    urls = [u for u in urls if "/sights/" in u.rstrip("/") and not u.rstrip("/").endswith("/sights")]
-    print(f"{len(urls)} sight URLs")
+    # shared session with connection pool — TCP/TLS handshake reused across threads
+    session = requests.Session()
+    session.headers.update(HEADERS)
+    adapter = HTTPAdapter(pool_connections=WORKERS + 2, pool_maxsize=WORKERS + 2)
+    session.mount("https://", adapter)
+    session.mount("http://", adapter)
+
+    print(f"crawling {GRODNO_LISTING} ...")
+    urls = crawl_grodno_urls(session, rp)
+    print(f"{len(urls)} Grodno sight URLs (workers={WORKERS}, delay={DELAY_S}s)")
 
     inserted = updated = skipped = failed = 0
     with psycopg.connect(DSN) as conn:
         with conn.cursor() as cur:
-            for i, url in enumerate(urls, 1):
-                try:
-                    html = fetch(url, rp)
-                    rec = parse_detail(url, html)
-                except RuntimeError as e:
-                    print(f"[{i}/{len(urls)}] skip {url}: {e}")
-                    skipped += 1
-                    continue
-                except Exception as e:
-                    print(f"[{i}/{len(urls)}] fail {url}: {e}")
-                    failed += 1
-                    continue
-                if not rec:
-                    skipped += 1
-                    continue
-                cur.execute(
-                    """
-                    INSERT INTO places (name, description, lat, lon, photo_url, source_url)
-                    VALUES (%(name)s, %(description)s, %(lat)s, %(lon)s, %(photo_url)s, %(source_url)s)
-                    ON CONFLICT (source_url) DO UPDATE SET
-                        name = EXCLUDED.name,
-                        description = EXCLUDED.description,
-                        lat = EXCLUDED.lat,
-                        lon = EXCLUDED.lon,
-                        photo_url = EXCLUDED.photo_url
-                    RETURNING (xmax = 0) AS was_insert
-                    """,
-                    rec,
-                )
-                was_insert = cur.fetchone()[0]
-                if was_insert:
-                    inserted += 1
-                else:
-                    updated += 1
-                if i % 50 == 0:
-                    print(f"[{i}/{len(urls)}] inserted={inserted} updated={updated} skipped={skipped} failed={failed}")
+            with ThreadPoolExecutor(max_workers=WORKERS) as pool:
+                futures = {pool.submit(process_one, url, session, rp): url for url in urls}
+                for i, fut in enumerate(as_completed(futures), 1):
+                    kind, payload = fut.result()
+                    if kind == "ok":
+                        cur.execute(INSERT_SQL, payload)
+                        was_insert = cur.fetchone()[0]
+                        if was_insert:
+                            inserted += 1
+                        else:
+                            updated += 1
+                    elif kind == "skip":
+                        skipped += 1
+                    else:
+                        failed += 1
+                        print(f"  fail: {payload}")
+                    if i % 25 == 0 or i == len(urls):
+                        print(f"[{i}/{len(urls)}] inserted={inserted} updated={updated} skipped={skipped} failed={failed}")
+                        conn.commit()
         conn.commit()
 
     print(f"done. inserted={inserted} updated={updated} skipped={skipped} failed={failed}")

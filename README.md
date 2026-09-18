@@ -47,7 +47,7 @@ Open `http://localhost/` in a browser, place 2–3 pins anywhere in Grodno (e.g.
 
 ```bash
 . .venv/bin/activate
-python scripts/parse_places.py        # ~hundreds of sights, 5–10 min with 1.5s/request
+python scripts/parse_places.py        # ~76 Grodno sights via server-side filter, 4 workers, 0.5s delay, ~20s
 export OPENAI_API_KEY=sk-...          # optional — without it, only embeddings populate
 python scripts/enrich_places.py       # categories via LLM + local fastembed embeddings
 ```
