@@ -51,7 +51,8 @@ def fetch_pending(cur, limit: int | None = None) -> list[dict]:
     if limit:
         sql += f" LIMIT {int(limit)}"
     cur.execute(sql)
-    return [dict(r) for r in cur.fetchall()]
+    cols = [d.name for d in cur.description]
+    return [dict(zip(cols, r)) for r in cur.fetchall()]
 
 
 def assign_categories(rows: list[dict]) -> list[str | None]:
