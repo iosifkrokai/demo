@@ -116,3 +116,49 @@ def parse_query(query: str, default_n_points: int = 4) -> dict:
     except (TypeError, ValueError):
         parsed["n_points"] = default_n_points
     return parsed
+
+
+def classify_items(
+    items: list[str],
+    categories: list[str],
+    chunk_size: int = 12,
+) -> list[str | None]:
+    """Classify each item into one of the allowed categories using the local LLM.
+
+    Batched in chunks because the model's default n_ctx (2048) doesn't fit ~76
+    short Russian strings + a system prompt in one go. Returns a parallel list
+    of category strings (or None on per-row failure / unparsable output).
+    """
+    if _LLM is None or not items:
+        return [None] * len(items)
+
+    out: list[str | None] = [None] * len(items)
+    system = (
+        "Ты — ассистент, который классифицирует достопримечательности Гродненской области.\n"
+        "Для каждой строки выбери ровно одну категорию из списка ниже. "
+        "Вход приходит как JSON-массив объектов {id, text} под ключом 'items'.\n"
+        "Верни JSON-объект {\"classes\": [\"категория1\", ...]} той же длины. "
+        "Если сомневаешься — ставь 'другое'. Никаких пояснений, только JSON.\n\n"
+        f"Категории: {' | '.join(categories)}"
+    )
+
+    for i in range(0, len(items), chunk_size):
+        chunk = items[i : i + chunk_size]
+        payload = {"items": [{"id": j, "text": t} for j, t in enumerate(chunk)]}
+        try:
+            resp = _LLM.create_chat_completion(
+                messages=[
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
+                ],
+                temperature=0.0,
+                response_format={"type": "json_object"},
+            )
+            parsed = json.loads(resp["choices"][0]["message"]["content"])
+            classes = parsed.get("classes") if isinstance(parsed, dict) else None
+            if isinstance(classes, list) and len(classes) == len(chunk):
+                for j, c in enumerate(classes):
+                    out[i + j] = c if isinstance(c, str) and c in categories else None
+        except Exception as e:
+            print(f"  classify_items chunk {i}: {e}")
+    return out

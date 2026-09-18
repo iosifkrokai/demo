@@ -1,53 +1,47 @@
-"""One-shot enrichment: assigns category (LLM) + embedding (local fastembed).
+"""One-shot enrichment: assigns category (local LLM) + embedding (local fastembed).
 
-Idempotent: skips rows that already have both fields. Re-runnable after partial failures.
+Idempotent: skips rows that already have embeddings; categories are attempted
+on each pass and may stay NULL if the local LLM returns unparsable output.
 
-Reads OPENAI_API_KEY from env to enable LLM-based category assignment. If unset, category is
-left NULL (embedding still runs). The agent's query pipeline tolerates NULL categories.
-
-Embedding model: sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2 (384-d, ONNX via
-fastembed, ~470 MB on first load, cached in ~/.cache/fastembed/). No torch, no CUDA.
+Local models only — no API keys needed:
+  - Embedding: sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2 (384-d)
+  - Categories: Qwen2.5-1.5B-Instruct q4_k_m GGUF via llama-cpp-python
+    (reuses agent/llm.py; the model is downloaded once when the agent first
+    starts and cached in ~/.cache/huggingface/)
 
 Usage:
-    OPENAI_API_KEY=sk-... python scripts/enrich_places.py
+    python scripts/enrich_places.py
 """
 
 import json
 import os
+import sys
 
 import psycopg
 from fastembed import TextEmbedding
-from openai import OpenAI
+
+# Make agent.llm importable when this script is run from the project root
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+from agent.llm import classify_items, init as init_llm  # noqa: E402
 
 DSN = os.environ.get("DATABASE_URL", "postgresql://grodno:grodno@localhost:5432/grodno")
 
-# Fixed taxonomy. Pass to the LLM as the only allowed values.
+# Fixed taxonomy.
 TAXONOMY = [
     "замок", "костёл", "церковь", "монастырь",
     "дворец", "усадьба", "парк",
     "музей", "памятник", "городище", "другое",
 ]
-TAXONOMY_STR = " | ".join(TAXONOMY)
 
 EMBED_MODEL = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"  # 384-d, multilingual, ONNX via fastembed
 EMBED_BATCH = 64
 
-CATEGORY_PROMPT = (
-    "Ты — ассистент, который классифицирует достопримечательности Гродненской области.\n"
-    "Для каждого объекта выбери ровно одну категорию из списка ниже. "
-    "Вход приходит как JSON-объект со списком объектов {id, name, desc} под ключом 'items'.\n"
-    "Верни JSON-объект вида {\"categories\": [\"категория1\", \"категория2\", ...]} той же длины. "
-    "Если сомневаешься — ставь 'другое'. Никаких пояснений, только JSON.\n\n"
-    f"Категории: {TAXONOMY_STR}"
-)
-
 
 def fetch_pending(cur, limit: int | None = None) -> list[dict]:
-    sql = (
-        "SELECT id, name, description FROM places "
-        "WHERE embedding IS NULL OR category IS NULL "
-        "ORDER BY id"
-    )
+    # Only gate on embedding being missing — categories are attempted on each
+    # pass and the loop exits as soon as embeddings are populated, even if a
+    # few categories come back as NULL.
+    sql = "SELECT id, name, description FROM places WHERE embedding IS NULL ORDER BY id"
     if limit:
         sql += f" LIMIT {int(limit)}"
     cur.execute(sql)
@@ -55,42 +49,15 @@ def fetch_pending(cur, limit: int | None = None) -> list[dict]:
     return [dict(zip(cols, r)) for r in cur.fetchall()]
 
 
-def assign_categories(rows: list[dict]) -> list[str | None]:
-    """One LLM call for the whole batch. Returns parallel list of categories."""
-    if not os.environ.get("OPENAI_API_KEY"):
-        return [None] * len(rows)
-    client = OpenAI()
-    payload = {"items": [{"id": r["id"], "name": r["name"], "desc": (r.get("description") or "")[:500]} for r in rows]}
-    resp = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[
-            {"role": "system", "content": CATEGORY_PROMPT},
-            {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
-        ],
-        response_format={"type": "json_object"},
-    )
-    try:
-        parsed = json.loads(resp.choices[0].message.content)
-    except Exception:
-        return [None] * len(rows)
-    cats = parsed.get("categories") if isinstance(parsed, dict) else None
-    if not isinstance(cats, list) or len(cats) != len(rows):
-        return [None] * len(rows)
-    out: list[str | None] = []
-    for c in cats:
-        if isinstance(c, str) and c in TAXONOMY:
-            out.append(c)
-        else:
-            out.append(None)
-    return out
-
-
 def main() -> None:
     print(f"loading {EMBED_MODEL} via fastembed (~470 MB cached in ~/.cache/fastembed)...", flush=True)
     model = TextEmbedding(EMBED_MODEL)
     dim = len(next(iter(model.embed(["warmup"]))))
     assert dim == 384, f"expected 384-dim, got {dim}"
-    print(f"model loaded, dim={dim}", flush=True)
+    print(f"embedding model loaded, dim={dim}", flush=True)
+
+    print("loading local LLM (Qwen2.5-1.5B) for categories...", flush=True)
+    init_llm()  # reuse the agent's loaded model if already in this process; otherwise load
 
     with psycopg.connect(DSN) as conn:
         with conn.cursor() as cur:
@@ -100,14 +67,19 @@ def main() -> None:
                     break
                 print(f"processing {len(rows)} rows...", flush=True)
 
-                # 1) categories via LLM (one batched call)
-                cats = assign_categories(rows)
+                # 1) categories via local LLM, batched in chunks of 12
+                items = [
+                    f"{(r.get('name') or '').strip()}. {(r.get('description') or '')[:200]}".strip(" .")
+                    for r in rows
+                ]
+                cats = classify_items(items, TAXONOMY)
                 for row, cat in zip(rows, cats):
                     if cat is not None:
                         cur.execute(
                             "UPDATE places SET category = %s WHERE id = %s",
                             (cat, row["id"]),
                         )
+                conn.commit()
                 print(f"  categories: {sum(c is not None for c in cats)}/{len(rows)} assigned", flush=True)
 
                 # 2) embeddings via local model. show_progress=True prints a tqdm
