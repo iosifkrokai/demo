@@ -4,3 +4,9 @@ cache/
 __pycache__/
 *.pyc
 .env
+
+# valhalla/web-app is a third-party clone (has its own .git inside). We modify
+# it locally for the POC but DO NOT track those files in this repo — only the
+# docker-compose / nginx changes that integrate it. The webapp's modifications
+# live in the working tree and are consumed by `docker compose build`.
+web-app/
