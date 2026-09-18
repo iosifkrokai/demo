@@ -20,6 +20,7 @@ from typing import Any
 import httpx
 import psycopg
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from fastembed import TextEmbedding
 from pydantic import BaseModel, Field
 
@@ -44,6 +45,17 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="grodno-poc-agent", lifespan=lifespan)
+
+# The webapp (port 80) and the agent (port 8080) are different origins, so the
+# browser fires a CORS preflight before fetch(). Locking origins to localhost
+# is fine for the POC.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost", "http://localhost:80", "http://127.0.0.1"],
+    allow_credentials=False,
+    allow_methods=["POST", "GET"],
+    allow_headers=["Content-Type"],
+)
 
 
 class GenerateReq(BaseModel):
