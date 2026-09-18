@@ -15,22 +15,13 @@ Usage:
 
 import json
 import os
-import sys
 
 import psycopg
 from fastembed import TextEmbedding
 
-# Make agent.llm importable when this script is run from the project root
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from agent.llm import classify_items, init as init_llm  # noqa: E402
-
 DSN = os.environ.get("DATABASE_URL", "postgresql://grodno:grodno@localhost:5432/grodno")
 
-# Fixed taxonomy. Kept short on purpose: Qwen2.5-1.5B at q4_k_m struggles with
-# long label lists in structured-output prompts (often returns invalid JSON
-# for more than ~6 options). 6 broad buckets give reasonable reliability on
-# CPU. The agent doesn't read this column — vector similarity on embeddings
-# does the actual route selection — so partial / NULL categories are fine.
+# Fixed taxonomy.
 TAXONOMY = [
     "замок",   # замки, крепости, фортификации
     "храм",    # костёлы, церкви, монастыри, синагоги
@@ -39,6 +30,26 @@ TAXONOMY = [
     "парк",    # парки, скверы, сады
     "другое",
 ]
+
+# Keyword-based category detection. Replaces the previous LLM-based call,
+# which Qwen 1.5B couldn't reliably produce JSON for at scale. The agent
+# doesn't read this column, so we don't need the precision.
+CATEGORY_KEYWORDS: dict[str, list[str]] = {
+    "замок":  ["замок", "крепость", "форт", "бастион", "цитадел", "замков"],
+    "храм":   ["костёл", "костел", "церковь", "монастыр", "синагог", "собор",
+               "храм", "мечеть", "часовня", "молельн", "приход"],
+    "дворец": ["дворец", "усадьба", "палац", "резиденц", "двор"],
+    "музей":  ["музей", "галерея", "театр", "экспозиц", "аптека"],
+    "парк":   ["парк", "сквер", "сад", "ботанич", "заповедник"],
+}
+
+
+def classify_by_keywords(name: str, description: str) -> str:
+    text = f"{name or ''} {description or ''}".lower()
+    for cat, keywords in CATEGORY_KEYWORDS.items():
+        if any(kw in text for kw in keywords):
+            return cat
+    return "другое"
 
 EMBED_MODEL = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"  # 384-d, multilingual, ONNX via fastembed
 EMBED_BATCH = 64
@@ -57,40 +68,23 @@ def main() -> None:
     assert dim == 384, f"expected 384-dim, got {dim}"
     print(f"embedding model loaded, dim={dim}", flush=True)
 
-    print("loading local LLM (Qwen2.5-1.5B) for categories...", flush=True)
-    init_llm()  # reuse the agent's loaded model if already in this process; otherwise load
-
     with psycopg.connect(DSN) as conn:
         with conn.cursor() as cur:
-            # === Pass 1: categories (single pass, best-effort) ===
-            # Qwen 1.5B at q4_k_m on CPU produces invalid JSON on a meaningful
-            # share of chunks, so the categories loop runs ONCE and we accept
-            # whatever got assigned. NULL rows stay NULL — the agent doesn't
-            # read this column.
+            # === Pass 1: categories (keyword-based, instant) ===
             rows = fetch_pending(
                 cur,
                 "SELECT id, name, description FROM places WHERE category IS NULL ORDER BY id",
             )
             if rows:
-                print(f"  categorizing {len(rows)} rows (chunks of 12 via local LLM)...", flush=True)
-                items = [
-                    f"{(r.get('name') or '').strip()}. {(r.get('description') or '')[:200]}".strip(" .")
-                    for r in rows
-                ]
-                cats = classify_items(items, TAXONOMY)
-                for row, cat in zip(rows, cats):
-                    if cat is not None:
-                        cur.execute(
-                            "UPDATE places SET category = %s WHERE id = %s",
-                            (cat, row["id"]),
-                        )
+                print(f"  categorizing {len(rows)} rows (keyword matcher)...", flush=True)
+                for row in rows:
+                    cat = classify_by_keywords(row.get("name") or "", row.get("description") or "")
+                    cur.execute(
+                        "UPDATE places SET category = %s WHERE id = %s",
+                        (cat, row["id"]),
+                    )
                 conn.commit()
-                assigned = sum(c is not None for c in cats)
-                print(
-                    f"  categories: {assigned}/{len(rows)} assigned (rest NULL — "
-                    "Qwen 1.5B is best-effort, agent doesn't use this column)",
-                    flush=True,
-                )
+                print(f"  categories: {len(rows)}/{len(rows)} assigned", flush=True)
 
             # === Pass 2: embeddings (only rows where embedding IS NULL) ===
             while True:
