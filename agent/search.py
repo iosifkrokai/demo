@@ -6,14 +6,43 @@ from typing import Any
 
 import psycopg
 
+# LLM-extracted categories (agent/llm.py taxonomy) -> DB category values
+# (scripts/enrich_places.py taxonomy). A query category maps to several DB
+# values because the DB taxonomy is finer-grained for cult places.
+CATEGORY_TO_DB: dict[str, list[str]] = {
+    "замок": ["замок"],
+    "костёл": ["костёл", "храм"],
+    "церковь": ["церковь", "храм"],
+    "монастырь": ["монастырь"],
+    "дворец": ["дворец"],
+    "усадьба": ["усадьба", "дворец"],
+    "парк": ["парк"],
+    "музей": ["музей"],
+    "памятник": ["памятник"],
+    "городище": ["городище"],
+    "храм": ["храм", "костёл", "церковь", "монастырь"],
+}
+
+
+def db_categories(categories: list[str]) -> list[str]:
+    """Flatten LLM categories into distinct DB category values."""
+    out: list[str] = []
+    for c in categories or []:
+        for db_cat in CATEGORY_TO_DB.get(c, []):
+            if db_cat not in out:
+                out.append(db_cat)
+    return out
+
 
 def candidates_by_embedding(
     db: psycopg.Connection,
     qvec: list[float],
     limit: int = 50,
     region_bbox: list[float] | None = None,
+    categories: list[str] | None = None,
 ) -> list[dict[str, Any]]:
-    """Top-K by vector cosine. Optional bbox filter via PostGIS."""
+    """Top-K by vector cosine. Optional bbox filter via PostGIS and
+    category filter (DB values from db_categories()); pass None to disable."""
     sql = [
         "SELECT id, name, category, lat, lon",
         "  FROM places",
@@ -24,6 +53,9 @@ def candidates_by_embedding(
         s, w, n, e = region_bbox
         sql.append("   AND geom && ST_MakeEnvelope(%s, %s, %s, %s, 4326)")
         params.extend([w, s, e, n])
+    if categories:
+        sql.append("   AND category = ANY(%s)")
+        params.append(categories)
     sql.append(" ORDER BY embedding <=> %s::vector LIMIT %s")
     params.extend([qvec, limit])
     with db.cursor() as cur:

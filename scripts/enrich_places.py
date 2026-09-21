@@ -1,7 +1,9 @@
 """One-shot enrichment: assigns category (local LLM) + embedding (local fastembed).
 
-Idempotent: skips rows that already have embeddings; categories are attempted
-on each pass and may stay NULL if the local LLM returns unparsable output.
+Categories are (re-)assigned on every run for ALL rows: the local LLM classifies
+name+description into the taxonomy below (grammar-constrained JSON output, so
+only taxonomy strings can come back); anything the model fails on stays
+«другое». Embeddings are computed only for rows where embedding IS NULL.
 
 Local models only — no API keys needed:
   - Embedding: sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2 (384-d)
@@ -13,43 +15,37 @@ Usage:
     python scripts/enrich_places.py
 """
 
-import json
 import os
+import sys
 
 import psycopg
 from fastembed import TextEmbedding
 
-DSN = os.environ.get("DATABASE_URL", "postgresql://grodno:grodno@localhost:5432/grodno")
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from agent.llm import classify_items, init as init_llm  # noqa: E402
 
-# Fixed taxonomy.
+DSN = os.environ.get("DATABASE_URL", "postgresql://grodno:grodno@localhost:5433/grodno")
+
+# Taxonomy aligned with agent/llm.py CATEGORY_SYNONYMS (+ храм for cult places
+# that are neither catholic костёл nor orthodox церковь, and «другое»).
 TAXONOMY = [
-    "замок",   # замки, крепости, фортификации
-    "храм",    # костёлы, церкви, монастыри, синагоги
-    "дворец",  # дворцы, усадьбы
-    "музей",   # музеи, галереи, театры
-    "парк",    # парки, скверы, сады
+    "замок",      # замки, крепости, фортификации
+    "костёл",     # католические и лютеранские храмы (костёлы, кирхи)
+    "церковь",    # православные церкви, соборы, часовни
+    "монастырь",  # монастыри (без конкретного храма)
+    "дворец",     # дворцы, палаты, административные резиденции
+    "усадьба",    # усадьбы, имения
+    "парк",       # парки, скверы, сады
+    "музей",      # музеи, галереи, театры, аптеки-музеи
+    "памятник",   # памятники, монументы, мемориальные знаки
+    "городище",   # городища, археология
+    "храм",       # прочие культовые: синагоги, мечети, молельные дома
     "другое",
 ]
 
-# Keyword-based category detection. Replaces the previous LLM-based call,
-# which Qwen 1.5B couldn't reliably produce JSON for at scale. The agent
-# doesn't read this column, so we don't need the precision.
-CATEGORY_KEYWORDS: dict[str, list[str]] = {
-    "замок":  ["замок", "крепость", "форт", "бастион", "цитадел", "замков"],
-    "храм":   ["костёл", "костел", "церковь", "монастыр", "синагог", "собор",
-               "храм", "мечеть", "часовня", "молельн", "приход"],
-    "дворец": ["дворец", "усадьба", "палац", "резиденц", "двор"],
-    "музей":  ["музей", "галерея", "театр", "экспозиц", "аптека"],
-    "парк":   ["парк", "сквер", "сад", "ботанич", "заповедник"],
-}
-
-
-def classify_by_keywords(name: str, description: str) -> str:
-    text = f"{name or ''} {description or ''}".lower()
-    for cat, keywords in CATEGORY_KEYWORDS.items():
-        if any(kw in text for kw in keywords):
-            return cat
-    return "другое"
+# Keyword matcher removed: substring rules misclassified names mentioning
+# «Монастырский» (surname), «напоминает синагогу» (simile), etc. Rows the LLM
+# couldn't classify reliably just stay «другое».
 
 EMBED_MODEL = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"  # 384-d, multilingual, ONNX via fastembed
 EMBED_BATCH = 64
@@ -62,31 +58,37 @@ def fetch_pending(cur, sql: str) -> list[dict]:
 
 
 def main() -> None:
-    print(f"loading {EMBED_MODEL} via fastembed (~470 MB cached in ~/.cache/fastembed)...", flush=True)
-    model = TextEmbedding(EMBED_MODEL)
-    dim = len(next(iter(model.embed(["warmup"]))))
-    assert dim == 384, f"expected 384-dim, got {dim}"
-    print(f"embedding model loaded, dim={dim}", flush=True)
-
     with psycopg.connect(DSN) as conn:
         with conn.cursor() as cur:
-            # === Pass 1: categories (keyword-based, instant) ===
+            # === Pass 1: categories — ALL rows, every run ===
             rows = fetch_pending(
                 cur,
-                "SELECT id, name, description FROM places WHERE category IS NULL ORDER BY id",
+                "SELECT id, name, description FROM places ORDER BY id",
             )
             if rows:
-                print(f"  categorizing {len(rows)} rows (keyword matcher)...", flush=True)
-                for row in rows:
-                    cat = classify_by_keywords(row.get("name") or "", row.get("description") or "")
+                print(f"  classifying {len(rows)} rows with the local LLM...", flush=True)
+                init_llm()
+                items = [
+                    f"{(r['name'] or '').strip()}. {(r['description'] or '').strip()}".strip(" .")
+                    for r in rows
+                ]
+                # Smaller chunks than the default: name+description rows are
+                # long, and the model's n_ctx is only 2048.
+                classes = classify_items(items, TAXONOMY, chunk_size=6)
+
+                n_llm = 0
+                for row, cat in zip(rows, classes):
+                    if cat:
+                        n_llm += 1
                     cur.execute(
                         "UPDATE places SET category = %s WHERE id = %s",
-                        (cat, row["id"]),
+                        (cat or "другое", row["id"]),
                     )
                 conn.commit()
-                print(f"  categories: {len(rows)}/{len(rows)} assigned", flush=True)
+                print(f"  categories: {n_llm}/{len(rows)} by LLM, rest set to «другое»", flush=True)
 
             # === Pass 2: embeddings (only rows where embedding IS NULL) ===
+            model = None
             while True:
                 rows = fetch_pending(
                     cur,
@@ -94,6 +96,11 @@ def main() -> None:
                 )
                 if not rows:
                     break
+                if model is None:
+                    print(f"loading {EMBED_MODEL} via fastembed (~470 MB cached in ~/.cache/fastembed)...", flush=True)
+                    model = TextEmbedding(EMBED_MODEL)
+                    dim = len(next(iter(model.embed(["warmup"]))))
+                    assert dim == 384, f"expected 384-dim, got {dim}"
                 print(f"  encoding {len(rows)} embeddings (CPU)...", flush=True)
                 texts = [
                     f"{(r['name'] or '').strip()}. {(r['description'] or '').strip()}".strip(" .")

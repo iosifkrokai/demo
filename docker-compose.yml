@@ -1,8 +1,5 @@
 services:
   pbf-sidecar:
-    # Tiny static file server that exposes valhalla-data/ to the valhalla container
-    # via the compose network. Lets us feed an osmium-cut PBF into gisops without
-    # making it re-download the full Belarus extract from Geofabrik.
     image: python:3.12-alpine
     container_name: grodno-pbf-sidecar
     working_dir: /data
@@ -10,12 +7,8 @@ services:
     volumes:
       - ./valhalla-data:/data:ro
     restart: unless-stopped
-    # no ports published — only reachable inside the compose network
 
   db:
-    # pgvector/pgvector:pg16 ships with pgvector only, no PostGIS. We build a
-    # tiny layer on top that adds postgresql-16-postgis-3 from the PGDG repo.
-    # See db/Dockerfile.
     build:
       context: .
       dockerfile: db/Dockerfile
@@ -59,11 +52,8 @@ services:
     ports: ["80:80"]
     depends_on:
       - valhalla
-    # Loki (Valhalla's HTTP server) doesn't handle OPTIONS preflight. We override
-    # the webapp's nginx to proxy /route /status /etc. to the engine container,
-    # so the browser sees same-origin requests and skips CORS preflight entirely.
     volumes:
-      - ./web-app-nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./web-app/nginx.conf:/etc/nginx/conf.d/default.conf:ro
     restart: unless-stopped
 
 volumes:

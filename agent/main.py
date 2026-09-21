@@ -25,7 +25,7 @@ from fastembed import TextEmbedding
 from pydantic import BaseModel, Field
 
 from .llm import init as init_llm, parse_query
-from .search import candidates_by_embedding, fetch_points_by_ids
+from .search import candidates_by_embedding, db_categories, fetch_points_by_ids
 from .valhalla_client import route_through
 
 DSN = os.environ.get("DATABASE_URL", "postgresql://grodno:grodno@localhost:5432/grodno")
@@ -62,10 +62,52 @@ app.add_middleware(
 class GenerateReq(BaseModel):
     query: str
     n_points: int = Field(default=4, ge=2, le=10)
+    time_budget_minutes: int | None = Field(default=None, ge=15, le=600)
 
 
 class RerouteReq(BaseModel):
-    point_ids: list[int] = Field(min_length=2)
+    point_ids: list[int]
+
+
+# Visit time per category, minutes. Used to fit a route into a time budget:
+# walking time (Valhalla summary) + visit time at each stop must not exceed it.
+VISIT_TIME_MIN: dict[str, int] = {
+    "замок": 40,
+    "музей": 40,
+    "монастырь": 30,
+    "дворец": 30,
+    "усадьба": 30,
+    "парк": 30,
+    "костёл": 20,
+    "церковь": 20,
+    "храм": 20,
+    "городище": 20,
+    "сквер": 15,
+    "памятник": 10,
+    "монумент": 10,
+}
+_DEFAULT_VISIT_TIME = 15
+
+
+def visit_time(category: str | None) -> int:
+    """Estimated minutes to look around a place of a given category."""
+    if not category:
+        return _DEFAULT_VISIT_TIME
+    c = category.lower()
+    if c in VISIT_TIME_MIN:
+        return VISIT_TIME_MIN[c]
+    # compound / verbose categories — substring match
+    for key, minutes in VISIT_TIME_MIN.items():
+        if key in c:
+            return minutes
+    return _DEFAULT_VISIT_TIME
+
+
+def route_minutes(summary: dict | None) -> int:
+    """Valhalla trip time (seconds) rounded up to whole minutes."""
+    if not summary:
+        return 0
+    return int((summary.get("time") or 0) / 60) + 1
 
 
 def embed_query(text: str) -> list[float]:
@@ -97,22 +139,85 @@ def to_locations(points: list[dict]) -> list[dict]:
     return out
 
 
+def sanitize_bbox(bbox) -> list[float] | None:
+    """Drop malformed bboxes hallucinated by the small LLM.
+
+    Accepts the object form {"south": "53.6", "west": ..., "north": ..., "east": ...}
+    produced by the grammar-constrained LLM, as well as the legacy array form
+    [south, west, north, east] (from the regex fallback). Rejects swapped
+    lat/lon axes, reversed corners, and values outside the Grodno region.
+    """
+    if isinstance(bbox, dict):
+        try:
+            bbox = [float(bbox[k]) for k in ("south", "west", "north", "east")]
+        except (KeyError, TypeError, ValueError):
+            return None
+    if not isinstance(bbox, list) or len(bbox) != 4:
+        return None
+    s, w, n, e = bbox
+    if not all(isinstance(v, (int, float)) for v in (s, w, n, e)):
+        return None
+    # Grodno region: lat ~53-54 N, lon ~23-27 E; anything else is a
+    # hallucination (usually swapped axes), so ignore it.
+    if not (53.0 <= s <= n <= 54.2 and 23.0 <= w <= e <= 27.5):
+        return None
+    return [s, w, n, e]
+
+
 @app.post("/routes/generate")
 def generate(req: GenerateReq):
     parsed = parse_query(req.query, default_n_points=req.n_points)
-    n = parsed.get("n_points") or req.n_points
-    n = max(2, min(n, 10))
+    # An explicit n_points from the client wins over whatever the small LLM
+    # guessed from the text (it tends to answer with small numbers).
+    n = req.n_points if req.n_points != 4 else parsed.get("n_points")
+    n = max(2, min(int(n or 4), 10))
+    bbox = sanitize_bbox(parsed.get("region_bbox"))
+    # Same for the time budget: explicit request field > LLM-extracted value.
+    budget = req.time_budget_minutes or parsed.get("time_budget_minutes")
+    if budget is not None:
+        budget = max(15, min(int(budget), 600))
 
     qvec = embed_query(req.query)
-    rows = candidates_by_embedding(state["db"], qvec, limit=50, region_bbox=parsed.get("region_bbox"))
+    # Categories from the query (LLM-extracted) narrow the candidate pool.
+    # Filtered spots come first; if there are fewer than requested, top up
+    # with the best unfiltered ones instead of dropping the filter entirely.
+    db_cats = db_categories(parsed.get("categories") or [])
+    rows: list[dict] = []
+    if db_cats:
+        rows = candidates_by_embedding(state["db"], qvec, limit=50, region_bbox=bbox, categories=db_cats)
+    if len(rows) < n:
+        filtered_ids = {r["id"] for r in rows}
+        extra = candidates_by_embedding(state["db"], qvec, limit=50, region_bbox=bbox)
+        rows.extend(r for r in extra if r["id"] not in filtered_ids)
     if len(rows) < n:
         raise HTTPException(404, f"only {len(rows)} candidates within scope; need {n}")
 
     chosen = greedy_order(rows, n)
     shape, summary = route_through(VALHALLA_URL, to_locations(chosen))
 
+    # Fit into the time budget: walk time + visit time at each stop. Drop the
+    # least-relevant stop (last picked by greedy_order) and re-route until it
+    # fits or only 2 stops remain.
+    budget_info = None
+    if budget is not None:
+        while len(chosen) > 2:
+            total = route_minutes(summary) + sum(visit_time(p["category"]) for p in chosen)
+            if total <= budget:
+                break
+            chosen = chosen[:-1]
+            shape, summary = route_through(VALHALLA_URL, to_locations(chosen))
+        total = route_minutes(summary) + sum(visit_time(p["category"]) for p in chosen)
+        budget_info = {
+            "budget_minutes": budget,
+            "total_minutes": total,
+            "walk_minutes": route_minutes(summary),
+            "visit_minutes": total - route_minutes(summary),
+            "fits": total <= budget,
+        }
+
     return {
         "parsed": parsed,
+        **({"budget": budget_info} if budget_info else {}),
         "points": [{"id": p["id"], "name": p["name"], "category": p["category"], "lat": p["lat"], "lon": p["lon"]} for p in chosen],
         "shape": shape,
         "summary": summary,

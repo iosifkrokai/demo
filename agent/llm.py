@@ -27,7 +27,11 @@ SYSTEM_PROMPT = (
     "Extract structured intent from a Russian-language walking-tour query about Grodno.\n"
     "Return JSON with keys: keywords (list of strings), categories "
     "(list of: замок|костёл|церковь|монастырь|дворец|усадьба|парк|музей|памятник|городище), "
-    "n_points (int 2..8), region_bbox ([south,west,north,east] or null).\n"
+    "n_points (int 2..8), time_budget_minutes (null, or int 15..600 — total time "
+    "the user has, extracted from phrases like «есть 2 часа» or «полдня»), "
+    "region_bbox (null, or an object "
+    '{"south": "53.6", "west": "23.7", "north": "53.7", "east": "23.9"} '
+    "with coordinate strings).\n"
     "Do not invent places or coordinates. Keep lists short."
 )
 
@@ -42,6 +46,49 @@ CATEGORY_SYNONYMS: dict[str, list[str]] = {
     "музей": ["музей", "museum"],
     "памятник": ["памятник", "монумент", "monument"],
     "городище": ["городище", "hillfort"],
+}
+
+# NOTE: no JSON-schema "pattern" here — llama-cpp-python cannot compile regex
+# patterns into GBNF (llama.cpp aborts with "error parsing grammar" and kills
+# the process). Coordinate ranges/axes are validated post-hoc in
+# main.sanitize_bbox() instead.
+_LAT_DOC = 'latitude string in the Grodno region, e.g. "53.6"'
+_LON_DOC = 'longitude string in the Grodno region, e.g. "23.8"'
+
+# Fed to llama-cpp-python as response_format={"type": "json_object", "schema": ...};
+# the library compiles it into a GBNF grammar, so the structure (keys, enums,
+# coordinate ranges) is guaranteed at sampling time, not just checked after.
+PARSE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "keywords": {"type": "array", "items": {"type": "string"}, "maxItems": 10},
+        "categories": {"type": "array", "items": {"enum": list(CATEGORY_SYNONYMS)}, "maxItems": 10},
+        "n_points": {"type": "integer", "enum": list(range(2, 9))},
+        "time_budget_minutes": {
+            "anyOf": [
+                {"type": "null"},
+                {"type": "integer", "minimum": 15, "maximum": 600},
+            ]
+        },
+        "region_bbox": {
+            "anyOf": [
+                {"type": "null"},
+                {
+                    "type": "object",
+                    "properties": {
+                        "south": {"type": "string", "description": _LAT_DOC},
+                        "west": {"type": "string", "description": _LON_DOC},
+                        "north": {"type": "string", "description": _LAT_DOC},
+                        "east": {"type": "string", "description": _LON_DOC},
+                    },
+                    "required": ["south", "west", "north", "east"],
+                    "additionalProperties": False,
+                },
+            ]
+        },
+    },
+    "required": ["keywords", "categories", "n_points", "time_budget_minutes", "region_bbox"],
+    "additionalProperties": False,
 }
 
 _LLM = None  # set by init(); module-level so parse_query() stays cheap
@@ -64,7 +111,7 @@ def init() -> None:
     repo = os.environ.get("LLM_MODEL", DEFAULT_MODEL)
     fname = os.environ.get("LLM_FILE", DEFAULT_FILE_GLOB)
     n_ctx = int(os.environ.get("LLM_CTX", "2048"))
-    n_threads = int(os.environ.get("LLM_THREADS", "4"))
+    n_threads = int(os.environ.get("LLM_THREADS", "2"))
     print(f"loading local LLM {repo} / {fname} (ctx={n_ctx}, threads={n_threads})...")
     _LLM = Llama.from_pretrained(
         repo_id=repo,
@@ -82,11 +129,32 @@ def _fallback_parse(query: str, default_n_points: int) -> dict:
     keywords = [w for w in re.findall(r"[а-яёa-z]{3,}", q)]
     word_to_n = {"пара": 2, "два": 2, "две": 2, "три": 3, "четыре": 4, "пять": 5, "шесть": 6, "семь": 7}
     n_points = next((v for k, v in word_to_n.items() if re.search(rf"\b{k}\b", q)), default_n_points)
-    return {"keywords": keywords, "categories": categories, "n_points": n_points, "region_bbox": None}
+    # time budget: «2 часа», «час», «90 минут», «полдня»
+    time_budget_minutes = None
+    m = re.search(r"(\d+)\s*(ч|час|часа|часов)", q)
+    if m:
+        time_budget_minutes = int(m.group(1)) * 60
+    if time_budget_minutes is None and re.search(r"\b(час|часа|часов)\b", q):
+        time_budget_minutes = 60
+    if time_budget_minutes is None:
+        m = re.search(r"(\d+)\s*(мин|минут|минуты|минуту)", q)
+        if m:
+            time_budget_minutes = int(m.group(1))
+    if time_budget_minutes is None and re.search(r"полдн\w*", q):
+        time_budget_minutes = 240
+    if time_budget_minutes is not None:
+        time_budget_minutes = max(15, min(time_budget_minutes, 600))
+    return {
+        "keywords": keywords,
+        "categories": categories,
+        "n_points": n_points,
+        "time_budget_minutes": time_budget_minutes,
+        "region_bbox": None,
+    }
 
 
 def parse_query(query: str, default_n_points: int = 4) -> dict:
-    """Parse a free-text Russian query into {keywords, categories, n_points, region_bbox}."""
+    """Parse a free-text Russian query into {keywords, categories, n_points, time_budget_minutes, region_bbox}."""
     if _LLM is None:
         return _fallback_parse(query, default_n_points)
 
@@ -97,7 +165,7 @@ def parse_query(query: str, default_n_points: int = 4) -> dict:
                 {"role": "user", "content": query},
             ],
             temperature=0.0,
-            response_format={"type": "json_object"},
+            response_format={"type": "json_object", "schema": PARSE_SCHEMA},
         )
         parsed = json.loads(out["choices"][0]["message"]["content"])
     except Exception:
@@ -108,6 +176,7 @@ def parse_query(query: str, default_n_points: int = 4) -> dict:
     parsed.setdefault("keywords", [])
     parsed.setdefault("categories", [])
     parsed.setdefault("n_points", default_n_points)
+    parsed.setdefault("time_budget_minutes", None)
     parsed.setdefault("region_bbox", None)
     # Sanity-bound n_points to the agent's allowed range.
     try:
@@ -125,9 +194,9 @@ def classify_items(
 ) -> list[str | None]:
     """Classify each item into one of the allowed categories using the local LLM.
 
-    Batched in chunks because the model's default n_ctx (2048) doesn't fit ~76
-    short Russian strings + a system prompt in one go. Returns a parallel list
-    of category strings (or None on per-row failure / unparsable output).
+    One item per completion with a grammar-constrained single-category schema:
+    batched arrays confused the tiny model into echoing categories across items.
+    Returns a parallel list of category strings (or None on per-row failure).
     """
     if _LLM is None or not items:
         return [None] * len(items)
@@ -135,30 +204,40 @@ def classify_items(
     out: list[str | None] = [None] * len(items)
     system = (
         "Ты — ассистент, который классифицирует достопримечательности Гродненской области.\n"
-        "Для каждой строки выбери ровно одну категорию из списка ниже. "
-        "Вход приходит как JSON-массив объектов {id, text} под ключом 'items'.\n"
-        "Верни JSON-объект {\"classes\": [\"категория1\", ...]} той же длины. "
+        "Для описания места выбери ровно одну категорию из списка ниже.\n"
+        "Верни JSON-объект {\"category\": \"категория\"}. "
         "Если сомневаешься — ставь 'другое'. Никаких пояснений, только JSON.\n\n"
         f"Категории: {' | '.join(categories)}"
     )
 
     for i in range(0, len(items), chunk_size):
         chunk = items[i : i + chunk_size]
-        payload = {"items": [{"id": j, "text": t} for j, t in enumerate(chunk)]}
-        try:
-            resp = _LLM.create_chat_completion(
-                messages=[
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
-                ],
-                temperature=0.0,
-                response_format={"type": "json_object"},
-            )
-            parsed = json.loads(resp["choices"][0]["message"]["content"])
-            classes = parsed.get("classes") if isinstance(parsed, dict) else None
-            if isinstance(classes, list) and len(classes) == len(chunk):
-                for j, c in enumerate(classes):
-                    out[i + j] = c if isinstance(c, str) and c in categories else None
-        except Exception as e:
-            print(f"  classify_items chunk {i}: {e}")
+        # One item per prompt, with a task instruction and its own response
+        # slot: batched arrays made the tiny model echo categories for other
+        # items (зоопарк → «костёл» and the like).
+        for j, text in enumerate(chunk):
+            idx = i + j
+            schema = {
+                "type": "object",
+                "properties": {
+                    "category": {"type": "string", "enum": categories},
+                },
+                "required": ["category"],
+                "additionalProperties": False,
+            }
+            try:
+                resp = _LLM.create_chat_completion(
+                    messages=[
+                        {"role": "system", "content": system},
+                        {"role": "user", "content": text},
+                    ],
+                    temperature=0.0,
+                    response_format={"type": "json_object", "schema": schema},
+                )
+                parsed = json.loads(resp["choices"][0]["message"]["content"])
+                category = parsed.get("category") if isinstance(parsed, dict) else None
+                if isinstance(category, str) and category in categories:
+                    out[idx] = category
+            except Exception as e:
+                print(f"  classify_items item {idx}: {e}")
     return out
