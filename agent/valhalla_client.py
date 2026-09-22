@@ -1,11 +1,24 @@
-"""Thin Valhalla HTTP client. Returns (shape, summary) for a list of locations."""
+"""Thin Valhalla HTTP client with retries + matrix support.
+
+Two operations:
+  - route_through(locations): GET /route → (shape, summary)
+  - time_matrix(sources, targets): GET /sources_to_targets → NxM seconds/seconds matrix
+
+The matrix is what the planner uses to pick a better ordering than the
+greedy nearest-neighbour heuristic in the original code. With n ≤ 8 a
+brute-force over n! permutations is fine and guarantees the optimal order.
+"""
 
 from __future__ import annotations
 
 import json
+import time as _time
 from typing import Iterable
 
 import httpx
+
+from .config import settings
+from .errors import UpstreamUnavailable
 
 # Valhalla encodes leg shapes as an encoded polyline (same alphabet and delta
 # scheme as Google's) with 1e6 precision, not as "lon,lat lon,lat" pairs.
@@ -35,30 +48,74 @@ def _decode_polyline(encoded: str) -> list[list[float]]:
     return coords
 
 
-def route_through(base_url: str, locations: Iterable[dict], costing: str = "pedestrian"):
-    """Call GET /route. Locations are [{lat, lon, type}], first/last should be 'break'.
+def _request_with_retry(method: str, url: str, *, params: dict, timeout: float) -> dict:
+    """GET with bounded retries on transient failures.
+
+    httpx raises on connect errors / timeouts / 5xx. We catch and retry up to
+    VALHALLA_MAX_RETRIES times with linear backoff. The last error is wrapped
+    as UpstreamUnavailable so main.py can return 503.
+    """
+    last_exc: Exception | None = None
+    for attempt in range(1, settings.VALHALLA_MAX_RETRIES + 2):  # 1 + retries
+        try:
+            with httpx.Client(timeout=timeout) as client:
+                r = client.request(method, url, params=params)
+                if r.status_code >= 500:
+                    raise httpx.HTTPStatusError("server error", request=r.request, response=r)
+                r.raise_for_status()
+                return r.json()
+        except (httpx.ConnectError, httpx.ReadTimeout, httpx.WriteTimeout, httpx.HTTPStatusError) as e:
+            last_exc = e
+            if attempt > settings.VALHALLA_MAX_RETRIES:
+                break
+            _time.sleep(0.5 * attempt)  # 0.5s, 1.0s between retries
+    raise UpstreamUnavailable(f"valhalla {method} {url} failed after retries: {last_exc}")
+
+
+def ping(timeout: float = 2.0) -> bool:
+    """Cheap liveness check: GET /status. Used by /health."""
+    try:
+        _request_with_retry(
+            "GET",
+            f"{settings.VALHALLA_URL.rstrip('/')}/status",
+            params={},
+            timeout=timeout,
+        )
+        return True
+    except Exception:
+        return False
+
+
+def route_through(
+    locations: Iterable[dict],
+    costing: str = "pedestrian",
+    language: str = "ru",
+    timeout: float | None = None,
+):
+    """Call GET /route. Locations are [{lat, lon, type}], first/last 'break'.
 
     Returns:
-        shape   — GeoJSON LineString geometry for the trip (or None on failure).
+        shape   — GeoJSON LineString geometry for the trip (or {} on failure).
         summary — Valhalla trip.summary dict (km, seconds) or None.
+
+    Raises UpstreamUnavailable on persistent network failure.
     """
     payload = {
         "costing": costing,
         "locations": list(locations),
         "units": "kilometers",
-        "language": "ru",
+        "language": language,
         "alternates": 0,
         "directions_options": {"units": "kilometers"},
     }
-    r = httpx.get(
-        f"{base_url.rstrip('/')}/route",
+    body = _request_with_retry(
+        "GET",
+        f"{settings.VALHALLA_URL.rstrip('/')}/route",
         params={"json": json.dumps(payload, separators=(",", ":"))},
-        timeout=30.0,
+        timeout=timeout or settings.VALHALLA_TIMEOUT_S,
     )
-    r.raise_for_status()
-    body = r.json()
     if "trip" not in body:
-        raise RuntimeError(f"valhalla /route returned no trip: {body}")
+        return {}, None
     trip = body["trip"]
     legs = trip.get("legs", [])
     coords: list[list[float]] = []
@@ -66,3 +123,38 @@ def route_through(base_url: str, locations: Iterable[dict], costing: str = "pede
         coords.extend(_decode_polyline(leg.get("shape", "")))
     shape = {"type": "LineString", "coordinates": coords}
     return shape, trip.get("summary")
+
+
+def time_matrix(
+    sources: list[dict],
+    targets: list[dict],
+    costing: str = "pedestrian",
+    timeout: float | None = None,
+) -> list[list[float]]:
+    """GET /sources_to_targets → symmetric-ish time matrix in seconds.
+
+    sources/targets are [{lat, lon}] objects. The matrix has shape
+    [len(sources)][len(targets)]; cell [i][j] is the walk time from
+    sources[i] to targets[j] in seconds. Diagonal of a square matrix
+    (sources == targets) is 0.
+
+    A small matrix (≤ 50 cells) is one HTTP call to Valhalla.
+    """
+    payload = {
+        "costing": costing,
+        "sources": sources,
+        "targets": targets,
+        "units": "kilometers",
+    }
+    body = _request_with_retry(
+        "GET",
+        f"{settings.VALHALLA_URL.rstrip('/')}/sources_to_targets",
+        params={"json": json.dumps(payload, separators=(",", ":"))},
+        timeout=timeout or settings.VALHALLA_TIMEOUT_S,
+    )
+    # The response is { "sources_to_targets": [[{ "time": s, "distance": km }, ...], ...] }
+    rows = body.get("sources_to_targets") or []
+    matrix: list[list[float]] = []
+    for row in rows:
+        matrix.append([float(cell.get("time", 0.0)) for cell in row])
+    return matrix

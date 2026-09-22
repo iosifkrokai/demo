@@ -47,7 +47,7 @@ CACHE = Path(os.environ.get("PARSER_CACHE", "./cache"))
 DELAY_S = float(os.environ.get("PARSER_DELAY", "0.5"))
 WORKERS = int(os.environ.get("PARSER_WORKERS", "4"))
 
-DSN = os.environ.get("DATABASE_URL", "postgresql://grodno:grodno@localhost:5432/grodno")
+DSN = os.environ.get("DATABASE_URL", "postgresql://grodno:grodno@localhost:5433/grodno")
 
 # `const initialCenter = [23.82318289, 53.67719794];` — full precision, [lon, lat].
 INITIAL_CENTER_RE = re.compile(

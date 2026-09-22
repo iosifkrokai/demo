@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS places (
   name          TEXT NOT NULL,
   description   TEXT,
   category      TEXT,
+  blurb         TEXT,
   lat           DOUBLE PRECISION NOT NULL,
   lon           DOUBLE PRECISION NOT NULL,
   geom          GEOGRAPHY(POINT, 4326) GENERATED ALWAYS AS

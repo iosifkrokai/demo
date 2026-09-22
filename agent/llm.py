@@ -26,7 +26,8 @@ DEFAULT_FILE_GLOB = "*q4_k_m.gguf"
 SYSTEM_PROMPT = (
     "Extract structured intent from a Russian-language walking-tour query about Grodno.\n"
     "Return JSON with keys: keywords (list of strings), categories "
-    "(list of: замок|костёл|церковь|монастырь|дворец|усадьба|парк|музей|памятник|городище), "
+    "(list of: замок|костёл|церковь|монастырь|дворец|усадьба|парк|музей|памятник|"
+    "храм|архитектура|инфраструктура|кладбище), "
     "n_points (int 2..8), time_budget_minutes (null, or int 15..600 — total time "
     "the user has, extracted from phrases like «есть 2 часа» or «полдня»), "
     "region_bbox (null, or an object "
@@ -36,16 +37,30 @@ SYSTEM_PROMPT = (
 )
 
 CATEGORY_SYNONYMS: dict[str, list[str]] = {
-    "замок": ["замок", "крепость", "castle"],
-    "костёл": ["костёл", "костел"],
-    "церковь": ["церковь", "church"],
-    "монастырь": ["монастырь"],
-    "дворец": ["дворец", "palace"],
-    "усадьба": ["усадьба", "manor"],
-    "парк": ["парк", "сквер", "park", "сад"],
-    "музей": ["музей", "museum"],
-    "памятник": ["памятник", "монумент", "monument"],
-    "городище": ["городище", "hillfort"],
+    "замок": ["замок", "замки", "крепость", "castle"],
+    "костёл": ["костёл", "костёлы", "костел", "костелы"],
+    "церковь": ["церковь", "церкви", "church"],
+    "монастырь": ["монастырь", "монастыри"],
+    "дворец": ["дворец", "дворцы", "дворц"],
+    "усадьба": ["усадьба", "усадьбы", "manor", "резиденция"],
+    "парк": ["парк", "парки", "парка", "парков", "сквер", "park"],
+    "музей": ["музей", "музеи", "музея", "museum", "галерея"],
+    "памятник": ["памятник", "памятники", "монумент", "monument", "композиция белые росы"],
+    "храм": ["храм", "храмы", "кирха", "синагога", "каплица", "молитвенный"],
+    "архитектура": ["архитектура", "архитектурный", "здание", "здания", "дом", "фабрик", "школ", "банк", "театр"],
+    "инфраструктура": ["инфраструктура", "мост", "башн", "стадион", "водонапорн", "набережн"],
+    "кладбище": ["кладбищ", "некропол"],
+}
+
+# Keywords that strongly suggest a specific historical/narrative category.
+# These queries don't mention a category word directly but are well-served
+# by historical place types (замок, дворец, монастырь, музей, костёл).
+HISTORICAL_QUERY_MARKERS: dict[str, list[str]] = {
+    "история": ["история", "историческ", "истори"],
+    "необычный": ["необычн", "нестандарт", "уникальн", "интересн"],
+    "съёмка": ["съёмок", "съёмки", "фильм", "белые росы"],
+    "советский": ["советск"],
+    "неман": ["неман", "набережн", "река"],
 }
 
 # NOTE: no JSON-schema "pattern" here — llama-cpp-python cannot compile regex
@@ -94,6 +109,11 @@ PARSE_SCHEMA = {
 _LLM = None  # set by init(); module-level so parse_query() stays cheap
 
 
+def llm_is_ready() -> bool:
+    """Public liveness probe for the LLM. Avoids reaching into module state."""
+    return _LLM is not None
+
+
 def init() -> None:
     """Load the GGUF model into memory. Blocking; call once at agent startup."""
     global _LLM
@@ -125,7 +145,59 @@ def init() -> None:
 
 def _fallback_parse(query: str, default_n_points: int) -> dict:
     q = query.lower()
-    categories = [cat for cat, syns in CATEGORY_SYNONYMS.items() if any(s in q for s in syns)]
+    categories: list[str] = []
+
+    # 1. Keyword-based category extraction (most reliable for explicit queries)
+    for cat, syns in CATEGORY_SYNONYMS.items():
+        if any(s in q for s in syns):
+            if cat not in categories:
+                categories.append(cat)
+
+    # 2. Historical/narrative query markers → broaden category set
+    # These queries don't name a category word but want historical places.
+    for marker_key, marker_words in HISTORICAL_QUERY_MARKERS.items():
+        if any(w in q for w in marker_words):
+            if marker_key == "история":
+                # Broaden: include all historically interesting categories
+                for hist_cat in ["замок", "дворец", "монастырь", "костёл", "музей", "архитектура"]:
+                    if hist_cat not in categories:
+                        categories.append(hist_cat)
+            elif marker_key == "необычный":
+                # "необычные памятники" — prefer памятник, but might get музей too
+                if "памятник" not in categories:
+                    categories.append("памятник")
+            elif marker_key == "неман":
+                # River → park + infrastructure near water
+                if "парк" not in categories:
+                    categories.append("парк")
+                if "инфраструктура" not in categories:
+                    categories.append("инфраструктура")
+            elif marker_key == "советский":
+                # Soviet → architecture
+                if "архитектура" not in categories:
+                    categories.append("архитектура")
+            elif marker_key == "съёмка":
+                # Film locations → include the monument directly
+                if "памятник" not in categories:
+                    categories.append("памятник")
+                if "монастырь" not in categories:
+                    categories.append("монастырь")
+
+    # 3. Single-word category query → override whatever LLM returned
+    # e.g. "замок" should return замок, not whatever the model hallucinated
+    single_word_cats = {
+        "замок": ["замок"], "костёл": ["костёл"], "костел": ["костёл"],
+        "церковь": ["церковь"], "монастырь": ["монастырь"],
+        "дворец": ["дворец"], "усадьба": ["усадьба"],
+        "парк": ["парк"], "парки": ["парк"],
+        "музей": ["музей"], "музеи": ["музей"],
+        "памятник": ["памятник"], "памятники": ["памятник"],
+        "храм": ["храм"], "кирха": ["храм"],
+    }
+    q_stripped = q.strip()
+    if q_stripped in single_word_cats:
+        categories = single_word_cats[q_stripped]
+
     keywords = [w for w in re.findall(r"[а-яёa-z]{3,}", q)]
     word_to_n = {"пара": 2, "два": 2, "две": 2, "три": 3, "четыре": 4, "пять": 5, "шесть": 6, "семь": 7}
     n_points = next((v for k, v in word_to_n.items() if re.search(rf"\b{k}\b", q)), default_n_points)
@@ -156,7 +228,7 @@ def _fallback_parse(query: str, default_n_points: int) -> dict:
 def parse_query(query: str, default_n_points: int = 4) -> dict:
     """Parse a free-text Russian query into {keywords, categories, n_points, time_budget_minutes, region_bbox}."""
     if _LLM is None:
-        return _fallback_parse(query, default_n_points)
+        return {**_fallback_parse(query, default_n_points), "source": "fallback"}
 
     try:
         out = _LLM.create_chat_completion(
@@ -169,10 +241,10 @@ def parse_query(query: str, default_n_points: int = 4) -> dict:
         )
         parsed = json.loads(out["choices"][0]["message"]["content"])
     except Exception:
-        return _fallback_parse(query, default_n_points)
+        return {**_fallback_parse(query, default_n_points), "source": "fallback"}
 
     if not isinstance(parsed, dict):
-        return _fallback_parse(query, default_n_points)
+        return {**_fallback_parse(query, default_n_points), "source": "fallback"}
     parsed.setdefault("keywords", [])
     parsed.setdefault("categories", [])
     parsed.setdefault("n_points", default_n_points)
@@ -184,6 +256,7 @@ def parse_query(query: str, default_n_points: int = 4) -> dict:
         parsed["n_points"] = max(2, min(8, n))
     except (TypeError, ValueError):
         parsed["n_points"] = default_n_points
+    parsed["source"] = "llm"
     return parsed
 
 

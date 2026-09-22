@@ -7,20 +7,26 @@ from typing import Any
 import psycopg
 
 # LLM-extracted categories (agent/llm.py taxonomy) -> DB category values
-# (scripts/enrich_places.py taxonomy). A query category maps to several DB
-# values because the DB taxonomy is finer-grained for cult places.
+# (the curated taxonomy in data/places_curated.csv). A query category maps
+# to several DB values because the DB taxonomy is finer-grained for cult
+# places.
 CATEGORY_TO_DB: dict[str, list[str]] = {
+    # the original 10 from llm.py
     "замок": ["замок"],
-    "костёл": ["костёл", "храм"],
-    "церковь": ["церковь", "храм"],
+    "костёл": ["костёл"],
+    "церковь": ["церковь"],
     "монастырь": ["монастырь"],
-    "дворец": ["дворец"],
+    "дворец": ["дворец", "усадьба"],
     "усадьба": ["усадьба", "дворец"],
     "парк": ["парк"],
     "музей": ["музей"],
     "памятник": ["памятник"],
-    "городище": ["городище"],
-    "храм": ["храм", "костёл", "церковь", "монастырь"],
+    "городище": [],  # no gorodishche rows in curated set; placeholder
+    # extended mapping from curated categories the user might ask about
+    "храм": ["храм"],
+    "архитектура": ["архитектура", "инфраструктура"],
+    "инфраструктура": ["инфраструктура"],
+    "кладбище": ["кладбище"],
 }
 
 
@@ -44,7 +50,7 @@ def candidates_by_embedding(
     """Top-K by vector cosine. Optional bbox filter via PostGIS and
     category filter (DB values from db_categories()); pass None to disable."""
     sql = [
-        "SELECT id, name, category, lat, lon",
+        "SELECT id, name, category, lat, lon, blurb",
         "  FROM places",
         " WHERE embedding IS NOT NULL",
     ]
@@ -67,7 +73,7 @@ def candidates_by_embedding(
 def fetch_points_by_ids(db: psycopg.Connection, ids: list[int]) -> list[dict[str, Any]]:
     with db.cursor() as cur:
         cur.execute(
-            "SELECT id, name, category, lat, lon FROM places WHERE id = ANY(%s)",
+            "SELECT id, name, category, lat, lon, blurb FROM places WHERE id = ANY(%s)",
             (ids,),
         )
         cols = [d.name for d in cur.description]

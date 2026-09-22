@@ -1,9 +1,16 @@
 """One-shot enrichment: assigns category (local LLM) + embedding (local fastembed).
 
-Categories are (re-)assigned on every run for ALL rows: the local LLM classifies
+# Categories are NOT auto-reassigned: the curated ground truth lives in
+# data/places_curated.csv (76 rows manually labelled, see agent/data_quality.md).
+# On startup we sync category+name+blurb from that file, then embeddings only.
+# To re-classify, run scripts/reclassify_with_llm.py explicitly.
+#
+# NOTE (legacy): Categories used to be (re-)assigned on every run for ALL rows: the local LLM classifies
 name+description into the taxonomy below (grammar-constrained JSON output, so
 only taxonomy strings can come back); anything the model fails on stays
-«другое». Embeddings are computed only for rows where embedding IS NULL.
+«другое». Embeddings are recomputed for rows whose name/blurb/description has changed,
+# then for any remaining rows where embedding IS NULL.
+# Detects changes by recomputing a small md5 of (name||blurb||description).
 
 Local models only — no API keys needed:
   - Embedding: sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2 (384-d)
@@ -26,21 +33,24 @@ from agent.llm import classify_items, init as init_llm  # noqa: E402
 
 DSN = os.environ.get("DATABASE_URL", "postgresql://grodno:grodno@localhost:5433/grodno")
 
-# Taxonomy aligned with agent/llm.py CATEGORY_SYNONYMS (+ храм for cult places
-# that are neither catholic костёл nor orthodox церковь, and «другое»).
+# Taxonomy aligned with data/places_curated.csv (manually curated ground truth).
+# Includes original categories from agent/llm.py plus finer-grained ones that
+# Qwen 1.5B could not reliably distinguish (архитектура, кладбище, инфраструктура).
 TAXONOMY = [
-    "замок",      # замки, крепости, фортификации
-    "костёл",     # католические и лютеранские храмы (костёлы, кирхи)
-    "церковь",    # православные церкви, соборы, часовни
-    "монастырь",  # монастыри (без конкретного храма)
-    "дворец",     # дворцы, палаты, административные резиденции
-    "усадьба",    # усадьбы, имения
-    "парк",       # парки, скверы, сады
-    "музей",      # музеи, галереи, театры, аптеки-музеи
-    "памятник",   # памятники, монументы, мемориальные знаки
-    "городище",   # городища, археология
-    "храм",       # прочие культовые: синагоги, мечети, молельные дома
-    "другое",
+    "замок",       # крепости, оборонительные сооружения
+    "костёл",      # католические храмы
+    "церковь",     # православные храмы
+    "монастырь",   # монастыри
+    "дворец",      # дворцы, резиденции
+    "усадьба",     # загородные имения
+    "парк",        # парки, скверы, сады, зоопарк
+    "музей",       # музеи, галереи, театральные здания
+    "архитектура", # исторические здания, бывшие дома, фабрики, банки
+    "памятник",    # памятники, монументы, мемориалы, могилы
+    "инфраструктура", # мосты, башни, стадионы, водонапорные башни
+    "храм",        # синагоги, кирхи, прочие культовые
+    "кладбище",    # некрополи, кладбища
+    "другое",      # fallback
 ]
 
 # Keyword matcher removed: substring rules misclassified names mentioning
