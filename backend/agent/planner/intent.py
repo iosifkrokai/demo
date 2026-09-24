@@ -1,305 +1,149 @@
-"""Step 1 — Intent extraction.
+"""Step 1 — Intent extraction via TypeSafe Jev (System One).
 
-Primary path: OpenRouter Gemini 2.5 Flash via OpenAI-compatible chat completions
-with response_format=json_object (constrained JSON). Falls back to a regex
-parser on any error or if OPENROUTER_API_KEY is missing.
+One /systemone call with typed questions against the raw query:
+    * categories_pos  — noul per category (13 questions, batched)
+    * categories_neg  — noul per category against "does the user NOT want X"
+    * intent_type     — choice (discovery/specific/themed/vague)
+    * party_type      — choice (solo/family/couple/group)
+    * era_hint        — choice (any/pre1900/soviet/modern)
+    * time_hours      — score 0..8 (0 = not mentioned) → minutes in code
 
-Returns an IntentResult wrapping an IntentDecision. Latency target: < 1s.
+Jev's primary training language is English (docs), so questions and
+criteria are written in English while the state (the user query) stays
+Russian — live-tested: "замки и костёлы Новогрудка" → castles 0.98,
+churches 0.94.
+
+No fallbacks by design: on failure the caller surfaces a 502 — a silently
+degraded route is worse than an explicit error.
 """
 
 from __future__ import annotations
 
-import json
-import os
-import re
 import time
-from typing import Any
 
-import httpx
-
-from ..config import settings
-
+from .. import constants, jev
 from ..models import IntentDecision, IntentResult
 
-OPENROUTER_URL = settings.OPENROUTER_URL
+# Probability threshold: a category counts as requested above this.
+_CAT_YES = 0.5
+# Score levels for the time budget: hours 0..8 (0 means "not mentioned").
+_TIME_LEVELS = ["not mentioned", "1h", "2h", "3h", "4h", "5h", "6h", "7h", "8h+"]
 
-INTENT_SYSTEM_PROMPT = """Ты парсер туристических запросов по Гродно на русском языке.
-Твоя задача — извлечь из свободного запроса структурированный intent для построения пешего маршрута.
-
-Верни строго JSON со следующими полями:
-
-{
-  "intent_type": "discovery" | "specific" | "themed" | "vague",
-  "categories_pos": ["замок", "костёл", "церковь", "монастырь", "дворец",
-                     "усадьба", "парк", "музей", "памятник", "храм",
-                     "архитектура", "инфраструктура", "кладбище"],
-  "categories_neg": [... те же категории, что пользователь НЕ хочет видеть ...],
-  "keywords_pos": ["парк", "тихий"],         // дополнительные позитивные слова
-  "keywords_neg": ["шумный", "толпа"],      // слова, противоречащие запросу
-  "named_places": ["горисполком", "Каложская церковь"],
-  "narrative": ["контраст эпох", "у воды"], // тематическая ось запроса
-  "time_budget_minutes": 180 или null,      // null если не указан
-  "era_hint": "any" | "pre1900" | "soviet" | "modern",
-  "party_type": "solo" | "family" | "couple" | "group"
+_QUESTIONS: dict[str, dict] = {
+    **{
+        f"cat_{cat}": {
+            "type": "noul",
+            "instructions": "Does this tourist query ask to visit places of this type?",
+            "criteria": {
+                "true": f"`{cat}` — yes, the user wants to see this kind of place",
+                "false": "no mention of this kind of place",
+            },
+        }
+        for cat in constants.CATEGORIES
+    },
+    **{
+        f"neg_{cat}": {
+            "type": "noul",
+            "instructions": "Does this tourist query explicitly EXCLUDE this kind of place (phrases like 'без X', 'кроме X', 'не хочу X')?",
+            "criteria": {
+                "true": f"`{cat}` — explicitly excluded",
+                "false": "not excluded",
+            },
+        }
+        for cat in constants.CATEGORIES
+    },
+    "intent_type": {
+        "type": "choice",
+        "instructions": "What kind of tourist query is this?",
+        "criteria": {
+            "specific": "asks about one concrete named place",
+            "themed": "explicit theme or contrast (e.g. old vs soviet, by the river)",
+            "discovery": "general exploration / a walk without a strong theme",
+            "vague": "no clear ask at all",
+        },
+    },
+    "party_type": {
+        "type": "choice",
+        "instructions": "Who is travelling according to the query?",
+        "criteria": {
+            "family": "with children / family",
+            "couple": "two people, romantic wording",
+            "group": "friends or a group",
+            "solo": "one person or unspecified",
+        },
+    },
+    "era_hint": {
+        "type": "choice",
+        "instructions": "Which historical era does the query emphasise?",
+        "criteria": {
+            "pre1900": "old / medieval / pre-revolutionary explicitly requested",
+            "soviet": "soviet era explicitly requested",
+            "modern": "modern / contemporary explicitly requested",
+            "any": "no era preference",
+        },
+    },
+    "time_hours": {
+        "type": "score",
+        "instructions": "How many hours of sightseeing does the query budget (phrases like '3 часа', 'полдня', 'весь день')? Use 0 only if not mentioned.",
+        "criteria": _TIME_LEVELS,
+    },
 }
 
-Правила:
-- intent_type=specific: запрос про одну конкретную достопримечательность (имя собственное)
-- intent_type=vague: общий запрос без конкретной темы ("покажи Гродно", "достопримечательности")
-- intent_type=themed: запрос с явной темой/контрастом ("старое vs советское", "у реки")
-- intent_type=discovery: всё остальное (исследование города, прогулка без явной темы)
-- categories_pos/neg — ТОЛЬКО из списка в схеме (никаких других значений)
-- named_places — ТОЛЬКО имена собственные, упомянутые явно
-- Если в запросе "без X" или "кроме X" — добавь в categories_neg
-- time_budget_minutes: null если не упомянуто; целое число минут если упомянуто ("3 часа" → 180, "полдня" → 240)
-- party_type: "family" если "с детьми", "couple" если "вдвоём", "group" если "с друзьями/группой", иначе "solo"
-- Не придумывай лишних полей. Отвечай ТОЛЬКО JSON, без пояснений и markdown-обёрток."""
 
-
-def extract_intent(query: str, *, force_regex: bool = False) -> IntentResult:
-    """Top-level: try Gemini, fall back to regex on any failure.
-
-    force_regex=True skips the LLM (useful in tests and when the key is
-    missing — keeps behaviour deterministic).
-    """
+def extract_intent(query: str) -> IntentResult:
+    """Typed intent decision in one Jev call. Raises on upstream failure."""
     t0 = time.perf_counter()
 
-    if not force_regex:
-        try:
-            decision, raw = _call_gemini(query, settings.GEMINI_TIMEOUT_S)
-            latency = int((time.perf_counter() - t0) * 1000)
-            return IntentResult(
-                decision=decision,
-                source="gemini",
-                confidence=0.9,
-                latency_ms=latency,
-                raw_response=raw,
-            )
-        except Exception as e:
-            # Drop through to fallback.
-            error = e
-    else:
-        error = None
+    answers = jev.ask(query, _QUESTIONS)
 
-    decision = _fallback_intent(query)
-    latency = int((time.perf_counter() - t0) * 1000)
-    return IntentResult(
-        decision=decision,
-        source="regex",
-        confidence=0.5,
-        latency_ms=latency,
-    )
+    cat_pos = [
+        cat for cat in constants.CATEGORIES
+        if jev.noul(answers[f"cat_{cat}"]) >= _CAT_YES
+    ]
+    cat_neg = [
+        cat for cat in constants.CATEGORIES
+        if jev.noul(answers[f"neg_{cat}"]) >= 0.7
+    ]
 
+    hours = jev.score(answers["time_hours"])
+    time_budget = int(round(hours * 60)) if hours >= 0.5 else None
 
-CATEGORY_SYNONYMS: dict[str, list[str]] = {
-    "замок": ["замок", "замки", "крепость", "castle"],
-    "костёл": ["костёл", "костёлы", "костел", "костелы"],
-    "церковь": ["церковь", "церкви", "church"],
-    "монастырь": ["монастырь", "монастыри"],
-    "дворец": ["дворец", "дворцы", "дворц"],
-    "усадьба": ["усадьба", "усадьбы", "manor", "резиденция"],
-    "парк": ["парк", "парки", "парка", "парков", "сквер", "park"],
-    "музей": ["музей", "музеи", "музея", "museum", "галерея"],
-    "памятник": ["памятник", "памятники", "монумент", "monument", "композиция белые росы"],
-    "храм": ["храм", "храмы", "кирха", "синагога", "каплица", "молитвенный"],
-    "архитектура": ["архитектура", "архитектурный", "здание", "здания", "дом", "фабрик", "школ", "банк", "театр"],
-    "инфраструктура": ["инфраструктура", "мост", "башн", "стадион", "водонапорн", "набережн"],
-    "кладбище": ["кладбищ", "некропол"],
-}
+    # Jev returns free-form strings; validate against the taxonomy and fail
+    # loud on drift (stray values mean the model or taxonomy changed).
+    itype = jev.choice(answers["intent_type"])
+    if itype not in constants.INTENT_TYPES:
+        raise ValueError(f"jev: unknown intent_type {itype!r}")
+    era = jev.choice(answers["era_hint"])
+    if era not in constants.ERA_HINTS:
+        raise ValueError(f"jev: unknown era_hint {era!r}")
+    party = jev.choice(answers["party_type"])
+    if party not in constants.PARTY_TYPES:
+        raise ValueError(f"jev: unknown party_type {party!r}")
+    known = set(constants.CATEGORIES)
+    pos = [c for c in cat_pos if c in known]
+    neg = [c for c in cat_neg if c in known]
 
-HISTORICAL_QUERY_MARKERS: dict[str, list[str]] = {
-    "история": ["история", "историческ", "истори"],
-    "необычный": ["необычн", "нестандарт", "уникальн", "интересн"],
-    "съёмка": ["съёмок", "съёмки", "фильм", "белые росы"],
-    "советский": ["советск"],
-    "неман": ["неман", "набережн", "река"],
-}
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Gemini path
-# ─────────────────────────────────────────────────────────────────────────────
-
-def _call_gemini(query: str, timeout_s: float) -> tuple[IntentDecision, dict]:
-    api_key = os.environ.get("OPENROUTER_API_KEY")
-    if not api_key:
-        raise RuntimeError("OPENROUTER_API_KEY not set")
-
-    with httpx.Client(timeout=timeout_s) as client:
-        r = client.post(
-            f"{OPENROUTER_URL}/chat/completions",
-            headers={"Authorization": f"Bearer {api_key}"},
-            json={
-                "model": settings.GEMINI_MODEL,
-                "messages": [
-                    {"role": "system", "content": INTENT_SYSTEM_PROMPT},
-                    {"role": "user", "content": query},
-                ],
-                "response_format": {"type": "json_object"},
-                "temperature": 0.0,
-                "max_tokens": 384,
-            },
-        )
-        r.raise_for_status()
-        body = r.json()
-        content = body["choices"][0]["message"]["content"]
-        parsed = _strip_fences(content)
-        # Validate via Pydantic — bad keys → bad values → drop to fallback.
-        decision = IntentDecision.model_validate(parsed)
-        return decision, parsed
-
-
-def _strip_fences(text: str) -> Any:
-    """LLM may wrap JSON in ```json ... ``` fences. Strip them."""
-    s = text.strip()
-    if s.startswith("```"):
-        # Drop first ``` and trailing ```
-        s = re.sub(r"^```(?:json)?\s*", "", s)
-        s = re.sub(r"\s*```\s*$", "", s)
-    return json.loads(s)
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Regex fallback (ported from agent/llm.py:_fallback_parse)
-# ─────────────────────────────────────────────────────────────────────────────
-
-_VALID_CATEGORIES = {
-    "замок", "костёл", "церковь", "монастырь", "дворец", "усадьба",
-    "парк", "музей", "памятник", "храм", "архитектура",
-    "инфраструктура", "кладбище",
-}
-
-
-def _fallback_intent(query: str) -> IntentDecision:
-    q = query.lower()
-    categories: list[str] = []
-
-    # ── Direct category synonym match ──
-    for cat, syns in CATEGORY_SYNONYMS.items():
-        if cat not in _VALID_CATEGORIES:
-            continue
-        if any(s in q for s in syns) and cat not in categories:
-            categories.append(cat)
-
-    # ── Historical/thematic markers ──
-    for marker_key, marker_words in HISTORICAL_QUERY_MARKERS.items():
-        if not any(w in q for w in marker_words):
-            continue
-        if marker_key == "история":
-            for hist_cat in ("замок", "дворец", "монастырь", "костёл", "музей", "архитектура"):
-                if hist_cat not in categories:
-                    categories.append(hist_cat)
-        elif marker_key == "необычный":
-            if "памятник" not in categories:
-                categories.append("памятник")
-        elif marker_key == "неман":
-            if "парк" not in categories:
-                categories.append("парк")
-            if "инфраструктура" not in categories:
-                categories.append("инфраструктура")
-        elif marker_key == "советский":
-            if "архитектура" not in categories:
-                categories.append("архитектура")
-        elif marker_key == "съёмка":
-            if "памятник" not in categories:
-                categories.append("памятник")
-            if "монастырь" not in categories:
-                categories.append("монастырь")
-
-    # ── Single-word exact match (cleanest case: "замок", "музеи") ──
-    single_word_cats = {
-        "замок": "замок", "костёл": "костёл", "костел": "костёл",
-        "церковь": "церковь", "монастырь": "монастырь",
-        "дворец": "дворец", "усадьба": "усадьба",
-        "парк": "парк", "парки": "парк",
-        "музей": "музей", "музеи": "музей",
-        "памятник": "памятник", "памятники": "памятник",
-        "храм": "храм", "кирха": "храм",
-    }
-    q_stripped = q.strip().rstrip(".,!?")
-    if q_stripped in single_word_cats:
-        categories = [single_word_cats[q_stripped]]
-
-    keywords = re.findall(r"[а-яёa-z]{3,}", q)
-
-    # ── Time budget ──
-    time_budget_minutes = None
-    m = re.search(r"(\d+)\s*(ч|час|часа|часов)", q)
-    if m:
-        time_budget_minutes = int(m.group(1)) * 60
-    if time_budget_minutes is None and re.search(r"\b(час|часа|часов)\b", q):
-        time_budget_minutes = 60
-    if time_budget_minutes is None:
-        m = re.search(r"(\d+)\s*(мин|минут|минуты|минуту)", q)
-        if m:
-            time_budget_minutes = int(m.group(1))
-    if time_budget_minutes is None and re.search(r"полдн\w*", q):
-        time_budget_minutes = 240
-    if time_budget_minutes is not None:
-        time_budget_minutes = max(15, min(time_budget_minutes, 600))
-
-    # ── Intent type guess ──
-    if not categories and not keywords:
-        intent_type = "vague"
-    elif len(categories) == 1 and not keywords:
-        intent_type = "specific"
-    elif any(w in q for w in ("контраст", "эпох", "стар", "советск", "разн")):
-        intent_type = "themed"
-    else:
-        intent_type = "discovery"
-
-    # ── Negative constraints from "без X" / "кроме X" ──
-    neg_cats: list[str] = []
-    neg_pattern = re.search(r"(без|кроме|не)\s+(.+?)(?:,|$)", q)
-    if neg_pattern:
-        fragment = neg_pattern.group(2)
-        for cat in _VALID_CATEGORIES:
-            syns = CATEGORY_SYNONYMS.get(cat, [cat])
-            if any(s in fragment for s in syns):
-                neg_cats.append(cat)
-                continue
-            # Russian morphology fallback: stem match on first 4 chars.
-            # Catches "музеев" <-> "музей", "костёлов" <-> "костёл".
-            frag_stem = fragment[:4]
-            for s in syns:
-                if len(s) >= 4 and s[:4] == frag_stem:
-                    neg_cats.append(cat)
-                    break
-
-    # ── Era hint ──
-    era_hint = "any"
-    if re.search(r"советск", q):
-        era_hint = "soviet"
-    elif re.search(r"(стар\w+|дореволюц|до 1900|до 1917|древн)", q):
-        era_hint = "pre1900"
-
-    # ── Party ──
-    party_type = "solo"
-    if re.search(r"(с детьми|ребен|ребён|малыш)", q):
-        party_type = "family"
-    elif re.search(r"(вдвоём|с женой|с мужем|парой)", q):
-        party_type = "couple"
-    elif re.search(r"(с друзьями|группой|компанией)", q):
-        party_type = "group"
-
-    # ── Narrative ──
-    narrative: list[str] = []
-    if re.search(r"контраст", q):
-        narrative.append("контраст эпох")
-    if re.search(r"у реки|набереж|неман", q):
-        narrative.append("у воды")
-    if re.search(r"тих|спокойн", q):
-        narrative.append("тишина")
-
-    return IntentDecision(
-        intent_type=intent_type,
-        categories_pos=categories,
-        categories_neg=neg_cats,
-        keywords_pos=keywords,
+    decision = IntentDecision(
+        intent_type=itype,  # type: ignore[arg-type]
+        categories_pos=pos,  # type: ignore[arg-type]
+        categories_neg=neg,  # type: ignore[arg-type]
+        keywords_pos=[],   # keyword signal comes from retrieval, not the LLM
         keywords_neg=[],
         named_places=[],
-        narrative=narrative,
-        time_budget_minutes=time_budget_minutes,
-        era_hint=era_hint,
-        party_type=party_type,
+        narrative=[],
+        time_budget_minutes=time_budget,
+        era_hint=era,  # type: ignore[arg-type]
+        party_type=party,  # type: ignore[arg-type]
+    )
+
+    return IntentResult(
+        decision=decision,
+        source="jev",
+        confidence=max(
+            (a.get("confidence", 0.0) for a in answers.values()
+             if isinstance(a, dict)),
+            default=0.0,
+        ),
+        latency_ms=int((time.perf_counter() - t0) * 1000),
+        raw_response=answers,
     )

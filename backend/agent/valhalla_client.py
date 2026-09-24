@@ -17,6 +17,7 @@ from typing import Iterable
 
 import httpx
 
+from . import constants
 from .config import settings
 from .errors import UpstreamUnavailable
 
@@ -56,7 +57,7 @@ def _request_with_retry(method: str, url: str, *, params: dict, timeout: float) 
     as UpstreamUnavailable so main.py can return 503.
     """
     last_exc: Exception | None = None
-    for attempt in range(1, settings.VALHALLA_MAX_RETRIES + 2):  # 1 + retries
+    for attempt in range(1, constants.VALHALLA_MAX_RETRIES + 2):  # 1 + retries
         try:
             with httpx.Client(timeout=timeout) as client:
                 r = client.request(method, url, params=params)
@@ -66,7 +67,7 @@ def _request_with_retry(method: str, url: str, *, params: dict, timeout: float) 
                 return r.json()
         except (httpx.ConnectError, httpx.ReadTimeout, httpx.WriteTimeout, httpx.HTTPStatusError) as e:
             last_exc = e
-            if attempt > settings.VALHALLA_MAX_RETRIES:
+            if attempt > constants.VALHALLA_MAX_RETRIES:
                 break
             _time.sleep(0.5 * attempt)  # 0.5s, 1.0s between retries
     raise UpstreamUnavailable(f"valhalla {method} {url} failed after retries: {last_exc}")
@@ -112,7 +113,7 @@ def route_through(
         "GET",
         f"{settings.VALHALLA_URL.rstrip('/')}/route",
         params={"json": json.dumps(payload, separators=(",", ":"))},
-        timeout=timeout or settings.VALHALLA_TIMEOUT_S,
+        timeout=timeout or constants.VALHALLA_TIMEOUT_S,
     )
     if "trip" not in body:
         return {}, None
@@ -150,7 +151,7 @@ def time_matrix(
         "GET",
         f"{settings.VALHALLA_URL.rstrip('/')}/sources_to_targets",
         params={"json": json.dumps(payload, separators=(",", ":"))},
-        timeout=timeout or settings.VALHALLA_TIMEOUT_S,
+        timeout=timeout or constants.VALHALLA_TIMEOUT_S,
     )
     # The response is { "sources_to_targets": [[{ "time": s, "distance": km }, ...], ...] }
     rows = body.get("sources_to_targets") or []

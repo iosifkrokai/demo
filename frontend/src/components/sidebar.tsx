@@ -99,6 +99,12 @@ export const Sidebar = () => {
   const [query, setQuery] = useState('');
   const [timeBudget, setTimeBudget] = useState(120); // default 2 hours
   const [busy, setBusy] = useState(false);
+  const [geoStatus, setGeoStatus] = useState<'idle' | 'granted' | 'denied'>('idle');
+  const [geoReason, setGeoReason] = useState('');
+
+  // Derived icon color for the geolocation indicator
+  const geoColor = geoStatus === 'granted' ? 'text-green-500' : geoStatus === 'denied' ? 'text-red-500' : 'text-muted-foreground';
+  const geoTitle = geoStatus === 'idle' ? 'Геолокация не запрошена' : geoStatus === 'granted' ? 'Координаты переданы агенту' : `Геолокация недоступна: ${geoReason}`;
   const [status, setStatus] = useState<{
     kind: 'ok' | 'err';
     text: string;
@@ -129,22 +135,43 @@ export const Sidebar = () => {
     if (!q || busy) return;
     setBusy(true);
     setStatus(null);
+    // Get geolocation before the request
+    let origin: { lat: number; lon: number } | undefined;
+    try {
+      origin = await new Promise<{ lat: number; lon: number }>((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(
+          (pos) => resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
+          (err) => reject(err),
+          { enableHighAccuracy: true, timeout: 5000 }
+        );
+      });
+      setGeoStatus('granted');
+      setGeoReason('');
+    } catch {
+      // Geolocation failed (permission denied, timeout, etc.) — proceed without origin
+      setGeoStatus('denied');
+      setGeoReason('Доступ запрещён');
+      origin = undefined;
+    }
+
     try {
       const body: {
         query: string;
         time_budget_minutes?: number;
         profile?: string;
+        origin?: { lat: number; lon: number };
       } = {
         query: q,
       };
       if (timeBudget >= 15) {
         body.time_budget_minutes = timeBudget;
       }
-      // Send the transport mode picked in the UI (URL search param) so the
-      // agent optimizes and renders with the same costing.
       const profile = router.state.location.search.profile as string | undefined;
       if (profile) {
         body.profile = profile;
+      }
+      if (origin) {
+        body.origin = origin;
       }
       const r = await fetch(`${AGENT_URL}/routes/generate`, {
         method: 'POST',
@@ -364,6 +391,9 @@ export const Sidebar = () => {
                 <Send className="h-4 w-4" />
               )}
             </Button>
+            <span title={geoTitle}>
+              <MapPin className={`h-3.5 w-3.5 shrink-0 ${geoColor}`} />
+            </span>
           </div>
           <div className="mt-2 flex items-center gap-3 text-xs">
             <label className="flex items-center gap-1.5 text-muted-foreground">

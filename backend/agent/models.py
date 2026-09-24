@@ -14,6 +14,7 @@ from __future__ import annotations
 from typing import Literal
 from pydantic import BaseModel, Field, field_validator
 
+from . import constants
 from .config import settings
 
 
@@ -41,7 +42,7 @@ class LatLon(BaseModel):
 class GenerateReq(BaseModel):
     """POST /routes/generate body."""
     query: str = Field(min_length=3, max_length=500)
-    time_budget_minutes: int | None = Field(default=None, ge=settings.MIN_BUDGET_MIN, le=settings.MAX_BUDGET_MIN)
+    time_budget_minutes: int | None = Field(default=None, ge=constants.MIN_BUDGET_MIN, le=constants.MAX_BUDGET_MIN)
     # Tourist's current position. When set: geo-focus anchors on it (places near
     # ME, not near the top-scored hit) and the route starts at this point.
     origin: LatLon | None = None
@@ -107,7 +108,7 @@ class ParsedQuery(BaseModel):
     keywords: list[str] = []
     categories: list[str] = []
     time_budget_minutes: int | None = None
-    source: Literal["llm", "fallback", "explicit", "gemini", "regex"] = "llm"
+    source: Literal["llm", "fallback", "explicit", "gemini", "regex", "jev"] = "llm"
 
 
 class BudgetInfo(BaseModel):
@@ -175,7 +176,7 @@ class IntentDecision(BaseModel):
 
 class IntentResult(BaseModel):
     decision: IntentDecision
-    source: Literal["gemini", "regex"] = "regex"
+    source: Literal["gemini", "regex", "jev"] = "jev"
     confidence: float = 1.0
     latency_ms: int = 0
     raw_response: dict | None = None

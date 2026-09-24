@@ -39,6 +39,7 @@ RRF_K = 60
 # MMR relevance/diversity trade-off (0=pure diversity, 1=pure relevance).
 MMR_LAMBDA = 0.7
 
+NEGATIVE_FILTER_ENABLED = True  # drop candidates matching forbidden categories
 RETRIEVAL_POOL_SIZE = 50   # candidates after RRF fusion
 RERANK_POOL_SIZE = 30      # candidates sent to Jev scoring
 MMR_POOL_SIZE = 12         # final candidate pool for the optimizer

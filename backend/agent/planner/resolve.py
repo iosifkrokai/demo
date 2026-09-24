@@ -12,10 +12,26 @@ from __future__ import annotations
 
 import psycopg
 
-from ..config import settings
-from .intent import CATEGORY_SYNONYMS
+from .. import constants
 from ..models import IntentResult, ResolvedConstraints
 from ..search import _keyword_search
+
+# Russian synonym expansion for retrieval — category → search keywords.
+CATEGORY_SYNONYMS: dict[str, list[str]] = {
+    "замок": ["замок", "замки", "крепость"],
+    "костёл": ["костёл", "костёлы", "костел"],
+    "церковь": ["церковь", "церкви"],
+    "монастырь": ["монастырь", "монастыри"],
+    "дворец": ["дворец", "дворцы"],
+    "усадьба": ["усадьба", "усадьбы", "резиденция"],
+    "парк": ["парк", "парки", "сквер"],
+    "музей": ["музей", "музеи", "галерея"],
+    "памятник": ["памятник", "памятники", "монумент"],
+    "храм": ["храм", "храмы", "кирха", "синагога", "каплица"],
+    "архитектура": ["архитектура", "здание", "театр"],
+    "инфраструктура": ["мост", "башня", "набережная", "шлюз"],
+    "кладбище": ["кладбище", "некрополь"],
+}
 
 
 def resolve(
@@ -33,8 +49,8 @@ def resolve(
     elif d.time_budget_minutes is not None:
         budget = d.time_budget_minutes
     else:
-        budget = settings.DEFAULT_TIME_BUDGET_MIN
-    budget = max(settings.MIN_TIME_BUDGET_MIN, min(budget, settings.MAX_TIME_BUDGET_MIN))
+        budget = constants.DEFAULT_BUDGET_MIN
+    budget = max(constants.MIN_BUDGET_MIN, min(budget, constants.MAX_BUDGET_MIN))
 
     # ── Bbox: explicit wins; else None. Format: (W, S, E, N) — matches ST_MakeEnvelope.
     bbox = tuple(explicit_bbox) if explicit_bbox else None

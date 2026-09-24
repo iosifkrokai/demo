@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import numpy as np
 
+from .. import constants
 from ..config import settings
 from ..models import Candidate, ResolvedConstraints
 from ..search import fetch_embeddings
@@ -44,7 +45,7 @@ def mmr_select(
     relevance-only truncation (no diversity penalty).
     """
     if lam is None:
-        lam = settings.MMR_LAMBDA
+        lam = constants.MMR_LAMBDA
     if not candidates or len(candidates) <= n:
         return list(candidates)
 

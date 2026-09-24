@@ -28,6 +28,7 @@ import time as _time
 import httpx
 import psycopg
 
+from .. import constants
 from ..config import settings
 from ..errors import (
     NoCandidatesFound,
@@ -68,13 +69,13 @@ def _openrouter_embed(texts: list[str]) -> list[list[float]]:
 
     with httpx.Client(timeout=30.0) as client:
         r = client.post(
-            f"{settings.OPENROUTER_URL}/embeddings",
+            f"https://openrouter.ai/api/v1/embeddings",
             headers={
                 "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json",
             },
             json={
-                "model": settings.OPENROUTER_EMBED_MODEL,
+                "model": constants.EMBED_MODEL,
                 "input": texts,
             },
         )
@@ -101,7 +102,7 @@ def _geo_focus(candidates: list, origin: LatLon | None = None) -> list:
     else:
         anchor = max(candidates, key=lambda c: c.rrf_score)
         dist = lambda c: _distance_m(c, anchor)
-    max_m = settings.GEO_FOCUS_KM * 1000
+    max_m = constants.GEO_FOCUS_KM * 1000
     while True:
         keep = [
             c for c in candidates
@@ -179,7 +180,7 @@ class Pipeline:
 
         # 3.5 Rerank (OpenRouter) — needs the API key; skipped in keyword mode.
         if api_key:
-            candidates = rerank_pool(req.query, candidates, top_k=settings.RERANK_POOL_SIZE)
+            candidates = rerank_pool(req.query, candidates, top_k=constants.RERANK_POOL_SIZE)
 
         # 3.6 Geographic focus: keep the route walkable — candidates beyond
         # GEO_FOCUS_KM from the tourist's position (or the top-scored hit when
@@ -191,7 +192,7 @@ class Pipeline:
             )
 
         # 4. MMR diversity
-        mmr_pool_size = min(settings.MMR_POOL_SIZE, len(candidates))
+        mmr_pool_size = min(constants.MMR_POOL_SIZE, len(candidates))
         candidates = mmr_select(
             candidates,
             n=mmr_pool_size,
@@ -270,7 +271,7 @@ class Pipeline:
             explicit_bbox=None,
             db=self.db,
         )
-        constraints.time_budget_minutes = settings.MAX_TIME_BUDGET_MIN
+        constraints.time_budget_minutes = constants.MAX_BUDGET_MIN
         constraints.must_visit_ids = list(point_ids)
 
         cost = compute_cost_matrix(candidates, constraints, costing=profile or "pedestrian")

@@ -21,6 +21,7 @@ from typing import Iterable
 
 import psycopg
 
+from .. import constants
 from ..config import settings
 from ..models import Candidate, ResolvedConstraints
 from ..search import (
@@ -41,7 +42,7 @@ def retrieve(
 
     Returns up to RETRIEVAL_POOL_SIZE candidates, ordered by rrf_score DESC.
     """
-    pool_limit = settings.RETRIEVAL_POOL_SIZE
+    pool_limit = constants.RETRIEVAL_POOL_SIZE
 
     # ── Signal 1: vector (skipped when no embedding service is configured) ──
     # Without it, the keyword signal below carries the retrieval alone.
@@ -64,7 +65,7 @@ def retrieve(
     # ── RRF fusion ──
     fused = rrf_fuse(
         [vector_signal, keyword_signal, must_signal, cat_signal],
-        k=settings.RRF_K,
+        k=constants.RRF_K,
     )
 
     # ── Top-N by fused score ──
@@ -74,7 +75,7 @@ def retrieve(
     candidates = _hydrate(db, top_ids, fused)
 
     # ── Negative filter ──
-    if settings.NEGATIVE_FILTER_ENABLED:
+    if constants.NEGATIVE_FILTER_ENABLED:
         candidates = apply_negative_filter(candidates, constraints)
 
     # ── Must-visit guarantee: ensure they survived negative filter / pool truncation ──

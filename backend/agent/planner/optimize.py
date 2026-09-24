@@ -23,6 +23,7 @@ from __future__ import annotations
 import random
 from itertools import permutations
 
+from .. import constants
 from ..config import settings
 from ..models import Candidate, CostMatrix, ResolvedConstraints
 from .cost import total_seconds, walk_cost
@@ -152,7 +153,7 @@ def _regret_insertion(
         remaining = [i for i in range(n) if i != seed]
 
     iterations = 0
-    while remaining and len(route) < settings.ROUTE_MAX_STOPS:
+    while remaining and len(route) < constants.ROUTE_MAX_STOPS:
         # Budget check: stop growing if even the cheapest single insertion exceeds.
         cur_cost = total_seconds(route, matrix, visits)
         if budget_s is not None and cur_cost >= budget_s:

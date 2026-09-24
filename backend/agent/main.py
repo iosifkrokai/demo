@@ -21,6 +21,7 @@ import uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
+from . import constants
 from .config import settings
 from .errors import AgentError
 from .models import (
@@ -47,9 +48,9 @@ async def lifespan(_: FastAPI):
         # (agent/search.py); mirrors db/migrations/0003_trgm_search.sql
         cur.execute("SET pg_trgm.word_similarity_threshold = 0.45")
     app.state.planner = Pipeline(db=db)
-    log.info("agent ready (OpenRouter: embed=%s, rerank=%s, intent=%s)",
-             settings.OPENROUTER_EMBED_MODEL, settings.OPENROUTER_RERANK_MODEL,
-             settings.GEMINI_MODEL)
+    log.info("agent ready (OpenRouter: embed=%s, jev=%s, key=%s)",
+             constants.EMBED_MODEL, constants.JEV_MODEL,
+             "set" if settings.OPENROUTER_API_KEY else "MISSING")
     yield
     db.close()
 
