@@ -38,16 +38,24 @@ from ..errors import (
 from ..models import (
     BudgetInfo,
     Candidate,
+    CostMatrix,
     GenerateReq,
     LatLon,
     ParsedQuery,
     Place,
+    ResolvedConstraints,
     RouteResponse,
     RouteSummary,
 )
 from ..search import fetch_points_by_ids
+from ..valhalla_client import optimized_route as valhalla_optimized_route
 from ..valhalla_client import ping as valhalla_ping
-from .cost import compute_cost_matrix, visit_time_minutes
+from .cost import (
+    compute_cost_matrix,
+    drop_unreachable,
+    prune_unroutable_stops,
+    visit_time_minutes,
+)
 from .diversity import mmr_select
 from .explain import explain as explain_route
 from .intent import extract_intent
@@ -106,7 +114,20 @@ def _geo_focus(
         anchor = next(c for c in candidates if c.id == anchor_id)
         dist = lambda c: _distance_m(c, anchor)
     else:
-        anchor = max(candidates, key=lambda c: c.rrf_score)
+        # Vague discovery query with no anchor: taking the single top-ranked hit
+        # as the anchor can land on an outlier — "достопримечательности
+        # Гродненской области" anchored on a fortress ring spread over 20 km,
+        # where no walking leg is possible and the optimizer answered 422.
+        # Pick the densest cluster instead: the candidate with the most
+        # neighbours inside one GEO_FOCUS_KM radius.
+        focus_m = constants.GEO_FOCUS_KM * 1000
+        anchor = max(
+            candidates,
+            key=lambda c: (
+                sum(1 for o in candidates if _distance_m(o, c) <= focus_m),
+                c.rrf_score,
+            ),
+        )
         dist = lambda c: _distance_m(c, anchor)
     max_m = constants.GEO_FOCUS_KM * 1000
 
@@ -118,14 +139,19 @@ def _geo_focus(
         keep = [c for c in candidates if c is anchor or dist(c) <= max_m]
         return keep
 
+    # No anchor at all (vague discovery query): stay local around the best
+    # candidate. Widening the radius here used to pull stops hundreds of km
+    # apart into one walking tour, and the optimizer then gave up with
+    # 422 "optimizer could not produce a route with ≥ 2 stops".
+    discovery_max_m = constants.GEO_FOCUS_DISCOVERY_MAX_KM * 1000
     while True:
         keep = [
             c for c in candidates
             if c is anchor or dist(c) <= max_m
         ]
-        if len(keep) >= 3 or max_m > constants.GEO_FOCUS_MAX_KM * 1000:
+        if len(keep) >= 3 or max_m >= discovery_max_m:
             return keep
-        max_m *= 2
+        max_m = min(max_m * 2, discovery_max_m)
 
 
 def _distance_m(a, b) -> float:
@@ -187,6 +213,98 @@ def _drop_duplicates(candidates: list[Candidate], radius_m: float) -> list[Candi
     return kept
 
 
+def _build_cost(
+    candidates: list[Candidate], constraints: ResolvedConstraints, costing: str
+) -> tuple[list[Candidate], CostMatrix]:
+    """Cost matrix, aligned to the candidates, minus what Valhalla cannot reach.
+
+    The matrix pre-filter may drop rows, so the candidate list is re-aligned to
+    it; then candidates with no reachable partner at all (a fortress POI with no
+    pedestrian edges nearby makes every order look impossible) are dropped.
+    """
+    cost = compute_cost_matrix(candidates, constraints, costing=costing)
+    if cost.indices != list(range(len(candidates))):
+        candidates = [candidates[i] for i in cost.indices]
+    candidates, cost = drop_unreachable(candidates, cost)
+    if len(candidates) < 2:
+        raise NoRoutePossible(
+            "Valhalla не нашла дороги между нашими точками — "
+            "уточните город или район"
+        )
+    return candidates, cost
+
+
+def _valhalla_order(
+    route: list[Candidate], info: dict, *, costing: str
+) -> tuple[list[Candidate], dict]:
+    """Let Valhalla order the walk when nothing pins the sequence.
+
+    With no GPS start and no must-visit stops, /optimized_route is the router's
+    own solver, so the order the tourist sees is the one Valhalla built. With a
+    fixed start or must-visit stops the planned order wins and Valhalla only
+    draws it.
+    """
+    if len(route) < 3:
+        return route, info
+    coords = [{"lat": c.lat, "lon": c.lon} for c in route]
+    try:
+        v_order, _, _ = valhalla_optimized_route(coords, costing=costing)
+    except UpstreamUnavailable:
+        return route, info
+    if len(v_order) != len(route) or sorted(v_order) != list(range(len(route))):
+        return route, info
+    planned = list(info.get("order") or range(len(route)))
+    return (
+        [route[i] for i in v_order],
+        {
+            **info,
+            "order": [planned[i] for i in v_order],
+            "algorithm": f"{info.get('algorithm')}+valhalla",
+        },
+    )
+
+
+def _prune_unroutable(
+    route: list[Candidate], candidates: list[Candidate], cost: CostMatrix
+) -> list[Candidate]:
+    """Drop stops the matrix cannot connect to their predecessor in this order.
+
+    Valhalla's own verdict (UNREACHABLE_S = 400 "No path could be found for
+    input"): a chapel on a road island, reachable from its neighbour but from
+    nothing else, made /route fail for the WHOLE tour — the UI showed every
+    point drawn with no line between them.
+    """
+    route, pruned = prune_unroutable_stops(route, candidates, cost)
+    if pruned:
+        log.warning(
+            "pruned %d stop(s) Valhalla cannot reach in this order: %s",
+            len(pruned),
+            ", ".join(c.name for c in pruned),
+        )
+    if len(route) < 2:
+        raise NoRoutePossible(
+            "Valhalla не нашла дороги между нашими точками — "
+            "уточните город или район"
+        )
+    return route
+
+
+def _render_tour(
+    route: list[Candidate], *, costing: str, origin: LatLon | None
+) -> tuple[dict, dict]:
+    """Draw the tour, never failing the request over geometry.
+
+    render() already falls back to per-leg geometry; if even that yields
+    nothing we answer with the stops and no line, which the UI can explain,
+    instead of a 500 for a tour that was planned fine.
+    """
+    try:
+        return render(route, costing=costing, origin=origin)
+    except UpstreamUnavailable as exc:
+        log.warning("render failed (%s) — answering without geometry", exc)
+        return {}, {}
+
+
 class Pipeline:
     """Stateless planner. One instance, reused across requests."""
 
@@ -205,6 +323,11 @@ class Pipeline:
 
         # 1. Intent
         intent = extract_intent(req.query)
+
+        # The scope comes from the intent model (typed), not from keyword
+        # matching: a region-wide request ("все костёлы Гродненской области") is a
+        # drivable list across the voblast, not a walk in one town.
+        region_scope = intent.decision.search_scope == "region"
 
         # 2. Resolve
         constraints = resolve(
@@ -230,7 +353,7 @@ class Pipeline:
         near: tuple[float, float] | None = None
         if req.origin is not None:
             near = (req.origin.lat, req.origin.lon)
-        elif geo_anchor is not None:
+        elif geo_anchor is not None and not region_scope:
             anchor_rows = fetch_points_by_ids(self.db, [geo_anchor])
             if anchor_rows:
                 near = (float(anchor_rows[0]["lat"]), float(anchor_rows[0]["lon"]))
@@ -265,10 +388,17 @@ class Pipeline:
         # Use area_anchor (town/district geo anchor) when available — this keeps
         # the geo focus on the correct town without forcing an arbitrary POI as must-visit.
         # Fall back to must_visit_ids only when there is no separate area anchor.
-        geo_anchor = constraints.area_anchor or (
-            constraints.must_visit_ids[0] if constraints.must_visit_ids else None
-        )
-        candidates = _geo_focus(candidates, origin=req.origin, anchor_id=geo_anchor)
+        if region_scope:
+            # "все костёлы Гродненской области" asks for the region, not for one
+            # town-sized walking cluster: focusing on the anchor town here is what
+            # used to return Grodno-city churches only. Keep the regional spread;
+            # Valhalla still builds the walk over whatever stops get selected.
+            log.info("geo_focus skipped: region scope in query")
+        else:
+            geo_anchor = constraints.area_anchor or (
+                constraints.must_visit_ids[0] if constraints.must_visit_ids else None
+            )
+            candidates = _geo_focus(candidates, origin=req.origin, anchor_id=geo_anchor)
         if len(candidates) < 2:
             raise NoCandidatesFound(
                 "все кандидаты слишком далеко друг от друга — уточните город или район"
@@ -289,28 +419,32 @@ class Pipeline:
 
         # Transport mode from the request (webapp profile picker); the
         # cost matrix AND the rendered shape must use the same costing.
-        costing = req.profile or "pedestrian"
+        # A region-wide request is a drive across the voblast — walking it is
+        # impossible, which is exactly why it used to end in 422.
+        costing = req.profile or ("auto" if region_scope else "pedestrian")
 
-        # 5. Cost matrix (pre-filter may drop some candidates — align the list)
-        cost = compute_cost_matrix(candidates, constraints, costing=costing)
-        if cost.indices != list(range(len(candidates))):
-            candidates = [candidates[i] for i in cost.indices]
+        # 5. Cost matrix + drop candidates Valhalla cannot connect to anything.
+        candidates, cost = _build_cost(candidates, constraints, costing)
 
         # 6. Optimize. With a known tourist position the route must START there:
         # the optimizer scores orders over the candidate matrix; we prepend the
         # origin afterwards as a fixed first leg (render walks origin → first stop).
-        route, info = optimize(candidates, cost, constraints)
+        route, info = optimize(candidates, cost, constraints, costing=costing)
         if len(route) < 2:
             raise NoRoutePossible("optimizer could not produce a route with ≥ 2 stops")
+
+        # 6b. Valhalla orders the walk when nothing pins the sequence.
+        route, info = _valhalla_order(route, info, costing=costing)
+
+        # 6c. Drop stops the matrix cannot connect to their predecessor in this
+        # order (Valhalla's own verdict — see _prune_unroutable).
+        route = _prune_unroutable(route, candidates, cost)
 
         # 7. Validate
         plan = validate(route, cost, constraints, info)
 
         # 8. Render (Valhalla /route) — origin is the tourist's GPS start
-        try:
-            shape, summary = render(plan.route, costing=costing, origin=req.origin)
-        except UpstreamUnavailable:
-            shape, summary = {}, {}
+        shape, summary = _render_tour(plan.route, costing=costing, origin=req.origin)
 
         walk_s = float(summary.get("time", 0.0)) if summary else 0.0
         length_km = summary.get("length") if summary else None
@@ -319,11 +453,11 @@ class Pipeline:
             walk_s = plan.walk_seconds
 
         # 9. Explain
-        explanation = explain_route(plan.route, plan.trace, walk_s)
+        explanation = explain_route(plan.route, plan.trace, walk_s, costing)
 
         ms = int((_time.perf_counter() - t0) * 1000)
         log.info(
-            "pipeline.ok query_len=%d ms=%d n_stops=%d walk_s=%.0f budget_min=%d source=%s",
+            "pipeline.ok query_len=%d ms=%d n_stops=%d walk_s=%.0f budget_min=%s source=%s",
             len(req.query), ms, len(plan.route), walk_s,
             constraints.time_budget_minutes, intent.source,
         )
@@ -336,6 +470,7 @@ class Pipeline:
             walk_s=walk_s,
             length_km=length_km,
             explanation=explanation,
+            costing=costing,
         )
 
     def reroute(self, point_ids: list[int], profile: str | None = None) -> RouteResponse:
@@ -360,7 +495,7 @@ class Pipeline:
         cost = compute_cost_matrix(candidates, constraints, costing=profile or "pedestrian")
         if cost.indices != list(range(len(candidates))):
             candidates = [candidates[i] for i in cost.indices]
-        route, info = optimize(candidates, cost, constraints)
+        route, info = optimize(candidates, cost, constraints, costing=profile or "pedestrian")
         plan = validate(route, cost, constraints, info)
 
         try:
@@ -385,6 +520,7 @@ class Pipeline:
             ],
             shape=shape,
             summary=RouteSummary(length_km=length_km, time_seconds=walk_s),
+            costing=profile or "pedestrian",
             budget=None,
             explanation=explain_route(plan.route, plan.trace, walk_s),
         )
@@ -441,6 +577,7 @@ class Pipeline:
         walk_s: float,
         length_km: float | None,
         explanation: str,
+        costing: str = "pedestrian",
     ) -> RouteResponse:
         d = intent.decision
         return RouteResponse(
@@ -471,6 +608,7 @@ class Pipeline:
             ],
             shape=shape,
             summary=RouteSummary(length_km=length_km, time_seconds=walk_s),
+            costing=costing,
             budget=BudgetInfo(
                 budget_minutes=constraints.time_budget_minutes,
                 walk_minutes=int(walk_s / 60) + 1,

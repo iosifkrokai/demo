@@ -45,6 +45,7 @@ def _mock_jev_ask(query: str, questions: dict) -> dict:
         "intent_type": {"choice": "specific", "confidence": 0.9},
         "party_type": {"choice": "solo", "confidence": 0.9},
         "era_hint": {"choice": "any", "confidence": 0.9},
+        "search_scope": {"choice": "town", "confidence": 0.9},
         "mentions_named_place": {"noul": 1.0, "confidence": 0.9},
         "time_hours": {"score": 2, "confidence": 0.9},
     }

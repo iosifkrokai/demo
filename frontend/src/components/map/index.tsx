@@ -23,7 +23,6 @@ import { DrawControl } from './draw-control';
 import type { Summary } from '@/components/types';
 import RoutingIcon from '@/images/routing_icon_minimal_bw.svg?url';
 import { ToolButton } from './parts/tool-button';
-import { Landmark } from 'lucide-react';
 
 import { MapStyleControl } from './map-style-control';
 import { getInitialMapStyle, getCustomStyle, getMapStyleUrl } from './utils';
@@ -39,7 +38,6 @@ import { IsochronePolygons } from './parts/isochrone-polygons';
 import { IsochroneLocations } from './parts/isochrone-locations';
 import { RouteHoverPopup } from './parts/route-hover-popup';
 import { BrandLogos } from './parts/brand-logos';
-import { MapInfoPopup } from './parts/map-info-popup';
 import { MapContextMenu } from './parts/map-context-menu';
 import { TilesInfoPopup } from './parts/tiles-info-popup';
 import {
@@ -55,7 +53,7 @@ import { PlaceMarkerLabel } from './parts/place-marker-label';
 import { maxBounds } from './constants';
 import { getInitialMapPosition, LAST_CENTER_KEY } from './utils';
 import { useCommonStore } from '@/stores/common-store';
-import { useDirectionsStore } from '@/stores/directions-store';
+import { ME_WAYPOINT_ID, useDirectionsStore } from '@/stores/directions-store';
 import { useIsochronesStore } from '@/stores/isochrones-store';
 import {
   useDirectionsQuery,
@@ -94,14 +92,11 @@ export const MapComponent = () => {
   const updateSettings = useCommonStore((state) => state.updateSettings);
   const setMapReady = useCommonStore((state) => state.setMapReady);
   const { style } = useSearch({ from: '/$activeTab' });
-  const [showInfoPopup, setShowInfoPopup] = useState(false);
   const [showContextPopup, setShowContextPopup] = useState(false);
-  const [isHeightLoading, setIsHeightLoading] = useState(false);
   const [popupLngLat, setPopupLngLat] = useState<{
     lng: number;
     lat: number;
   } | null>(null);
-  const [elevation, setElevation] = useState('');
   const waypoints = useDirectionsStore((state) => state.waypoints);
   const placeDetails = useDirectionsStore((state) => state.placeDetails);
   const setActiveRouteIndex = useDirectionsStore(
@@ -139,19 +134,10 @@ export const MapComponent = () => {
   const [currentMapStyle, setCurrentMapStyle] = useState<MapStyleType>(
     getInitialMapStyle(style)
   );
-  // When POI mode is on, we show the alidade-smooth style (has POI icons).
-  // Remember the previous style to restore when POI mode is toggled off.
-  const poiStylePreviousRef = useRef<MapStyleType | null>(null);
-  const [poiMode, setPoiMode] = useState(false);
   const [customStyleData, setCustomStyleData] =
     useState<maplibregl.StyleSpecification | null>(() => getCustomStyle());
 
   const resolvedMapStyle = useMemo(() => {
-    // When POI mode is on, force the Stadia style which shows infrastructure POIs
-    // (toilets, cafes, hotels, hospitals) as distinct icons at zoom 14+.
-    if (poiMode) {
-      return getMapStyleUrl('alidade-smooth');
-    }
     if (currentMapStyle === 'custom') {
       return customStyleData ?? getMapStyleUrl('shortbread');
     }
@@ -159,21 +145,7 @@ export const MapComponent = () => {
   }, [
     currentMapStyle,
     customStyleData,
-    poiMode,
   ]) as unknown as maplibregl.StyleSpecification;
-
-  const togglePoiMode = useCallback(() => {
-    setPoiMode((prev) => {
-      if (!prev) {
-        // Turning on: remember current style
-        poiStylePreviousRef.current = currentMapStyle;
-      } else {
-        // Turning off: restore previous style if it wasn't POI already
-        // (if user switched to alidade-smooth manually, don't override)
-      }
-      return !prev;
-    });
-  }, [currentMapStyle]);
 
   const mapRef = useRef<MapRef>(null);
   const drawRef = useRef<MaplibreTerradrawControl | null>(null);
@@ -287,35 +259,6 @@ export const MapComponent = () => {
     [directionsPanelOpen, toggleDirections, navigate]
   );
 
-  const getHeight = useCallback(async (lng: number, lat: number) => {
-    setIsHeightLoading(true);
-
-    try {
-      const response = await fetch(`${getValhallaUrl()}/height`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...VALHALLA_CLIENT_HEADERS,
-        },
-        body: JSON.stringify(buildHeightRequest([[lat, lng]])),
-      });
-
-      if (!response.ok) {
-        throw new Error('Could not fetch resource');
-      }
-
-      const data = await response.json();
-
-      if ('height' in data) {
-        setElevation(data.height[0] + ' m');
-      }
-    } catch (error) {
-      console.error(error);
-    } finally {
-      setIsHeightLoading(false);
-    }
-  }, []);
-
   const handleAddWaypoint = useCallback(
     (index: number) => {
       if (!popupLngLat) return;
@@ -340,11 +283,34 @@ export const MapComponent = () => {
   const markers = useMemo(() => {
     const newMarkers: MarkerData[] = [];
 
-    // Add waypoint markers
-    waypoints.forEach((waypoint, index) => {
+    // Add waypoint markers. The "my location" waypoint (the route start the
+    // sidebar pins) is drawn as its own blue pin and does not take a number, so
+    // the tourist's stops stay numbered from 1.
+    const poiWaypoints = waypoints.filter((w) => w.id !== ME_WAYPOINT_ID);
+    waypoints
+      .filter((w) => w.id === ME_WAYPOINT_ID)
+      .forEach((waypoint) => {
+        waypoint.geocodeResults.forEach((address) => {
+          if (!address.selected) return;
+          newMarkers.push({
+            id: ME_WAYPOINT_ID,
+            lng: address.displaylnglat[0],
+            lat: address.displaylnglat[1],
+            type: 'waypoint',
+            index: 0,
+            title: 'Моё местоположение',
+            color: 'blue',
+          });
+        });
+      });
+
+    poiWaypoints.forEach((waypoint, index) => {
+      // The store index (for dragging) differs from the displayed number once a
+      // "my location" waypoint sits at the front.
+      const sourceIndex = waypoints.indexOf(waypoint);
       const isOrigin = index === 0;
       const isDestination =
-        index === waypoints.length - 1 && waypoints.length > 1;
+        index === poiWaypoints.length - 1 && poiWaypoints.length > 1;
       const color: MarkerColor = isOrigin
         ? 'green'
         : isDestination
@@ -353,11 +319,11 @@ export const MapComponent = () => {
       waypoint.geocodeResults.forEach((address) => {
         if (address.selected) {
           newMarkers.push({
-            id: `waypoint-${index}`,
+            id: `waypoint-${sourceIndex}`,
             lng: address.displaylnglat[0],
             lat: address.displaylnglat[1],
             type: 'waypoint',
-            index: index,
+            index: sourceIndex,
             title: address.title,
             color,
             number: (index + 1).toString(),
@@ -507,11 +473,6 @@ export const MapComponent = () => {
         return;
       }
 
-      if (showInfoPopup) {
-        setShowInfoPopup(false);
-        return;
-      }
-
       // Check if TerraDraw is in an active drawing mode
       if (drawRef.current) {
         const terraDrawInstance = drawRef.current.getTerraDrawInstance();
@@ -555,11 +516,15 @@ export const MapComponent = () => {
         if (pendingLngLat) {
           if (activeTab === 'tiles') {
             handleMapTilesClick(event);
+          } else if (markerClickRef.current) {
+            // The click landed on a place marker: its own card (blurb, fun
+            // facts, links) is already open — keep it.
+            markerClickRef.current = false;
           } else {
+            // Plain click on the tourist map: only clear the selection. Nothing
+            // pops up — the coordinate / "Valhalla location JSON" popup was a
+            // developer tool and has no place in a walk planner.
             setActivePlace(null);
-            setPopupLngLat(pendingLngLat);
-            setShowInfoPopup(true);
-            getHeight(pendingLngLat.lng, pendingLngLat.lat);
           }
         }
         clickStateRef.current.timer = null;
@@ -567,8 +532,6 @@ export const MapComponent = () => {
       }, CLICK_DELAY_MS);
     },
     [
-      getHeight,
-      showInfoPopup,
       showContextPopup,
       cancelPendingClick,
       activeTab,
@@ -602,7 +565,6 @@ export const MapComponent = () => {
 
       const { lngLat } = event;
       setPopupLngLat(lngLat);
-      setShowInfoPopup(false);
       setShowContextPopup(true);
     },
     [activeTab]
@@ -718,7 +680,7 @@ export const MapComponent = () => {
 
   const handleMouseMove = useCallback(
     (event: maplibregl.MapLayerMouseEvent) => {
-      if (!mapRef.current || showInfoPopup) return; // Don't show if click popup is visible
+      if (!mapRef.current) return;
 
       const features = event.features;
       // Check if we're hovering over the routes-line / hit-target layer
@@ -753,7 +715,7 @@ export const MapComponent = () => {
         }
       }
     },
-    [showInfoPopup, routeHoverPopup, onRouteLineHover]
+    [routeHoverPopup, onRouteLineHover]
   );
 
   const handleMouseLeave = useCallback(() => {
@@ -886,25 +848,6 @@ export const MapComponent = () => {
           </Popup>
         )}
 
-        {showInfoPopup && popupLngLat && (
-          <Popup
-            longitude={popupLngLat.lng}
-            latitude={popupLngLat.lat}
-            closeButton={false}
-            closeOnClick={false}
-            maxWidth="none"
-          >
-            <MapInfoPopup
-              popupLngLat={popupLngLat}
-              elevation={elevation}
-              isHeightLoading={isHeightLoading}
-              onClose={() => {
-                setShowInfoPopup(false);
-              }}
-            />
-          </Popup>
-        )}
-
         {routeHoverPopup && (
           <RouteHoverPopup
             lng={routeHoverPopup.lng}
@@ -935,18 +878,6 @@ export const MapComponent = () => {
         className="absolute top-4 left-4 z-10 flex flex-col gap-2"
         aria-label="Panel shortcuts"
       >
-        <ToolButton
-          title={poiMode ? 'Скрыть инфраструктуру' : 'Показать туалеты, кафе, отели'}
-          icon={
-            <Landmark
-              size={18}
-              className={poiMode ? 'text-primary' : 'text-muted-foreground'}
-            />
-          }
-          onClick={togglePoiMode}
-          active={poiMode}
-          data-testid="poi-toggle"
-        />
         <ToolButton
           title="Directions"
           icon={

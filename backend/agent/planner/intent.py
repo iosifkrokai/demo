@@ -19,16 +19,36 @@ degraded route is worse than an explicit error.
 
 from __future__ import annotations
 
+import logging as _logging
 import re as _re
 import time
 
 from .. import constants, jev
 from ..models import IntentDecision, IntentResult
 
+log = _logging.getLogger(__name__)
+
 # Probability threshold: a category counts as requested above this.
 _CAT_YES = 0.5
 # Score levels for the time budget: hours 0..8 (0 means "not mentioned").
 _TIME_LEVELS = ["not mentioned", "1h", "2h", "3h", "4h", "5h", "6h", "7h", "8h+"]
+
+# The time budget exists only when the USER stated it. Jev scores generously —
+# "хочу посмотреть все костёлы области" came back as 2 hours — and an invented
+# budget trims a perfectly good route down to two stops, so a budget is kept
+# only when the query itself carries a time expression. No expression → no
+# limit at all, and the whole route is built.
+_TIME_PHRASE_RE = _re.compile(
+    r"\d+\s*(?:час|мин)|"
+    r"пол\s*дня|полдня|"
+    r"(?:весь|целый|полный)\s+день|"
+    r"\b(?:час|часа|часов|минут|минуты)\b|"
+    r"\bдень\b|\bутр[оа]\b|\bвечер\w*|\bноч\w*|"
+    r"\bнедел\w*|"
+    r"быстр\w*|коротк\w*|недолг\w*|"
+    r"на\s+выходн\w*",
+    _re.I,
+)
 
 _QUESTIONS: dict[str, dict] = {
     **{
@@ -91,6 +111,15 @@ _QUESTIONS: dict[str, dict] = {
             "false": "no specific place named",
         },
     },
+    "search_scope": {
+        "type": "choice",
+        "instructions": "How wide is the area the user wants to cover?",
+        "criteria": {
+            "town": "one town / a spot inside a town ('замки Гродно', 'костёлы Новогрудка')",
+            "district": "a town with its rural surroundings, or one named district",
+            "region": "an entire administrative region / voblast, no single town ('все костёлы Гродненской области', 'что посмотреть по всей области')",
+        },
+    },
     "time_hours": {
         "type": "score",
         "instructions": "How many hours of sightseeing does the query budget (phrases like '3 часа', 'полдня', 'весь день')? Use 0 only if not mentioned.",
@@ -125,6 +154,12 @@ def extract_intent(query: str) -> IntentResult:
 
     hours = jev.score(answers["time_hours"])
     time_budget = int(round(hours * 60)) if hours >= 0.5 else None
+    if time_budget is not None and not _TIME_PHRASE_RE.search(query):
+        # The model guessed a duration the user never gave. Treat as unlimited:
+        # no budget means the whole route is built, not trimmed to fit a number
+        # nobody asked for.
+        log.info("intent: dropping inferred time budget (%s min) — no time in query", time_budget)
+        time_budget = None
 
     # Jev returns free-form strings; validate against the taxonomy and fail
     # loud on drift (stray values mean the model or taxonomy changed).
@@ -137,6 +172,9 @@ def extract_intent(query: str) -> IntentResult:
     party = jev.choice(answers["party_type"])
     if party not in constants.PARTY_TYPES:
         raise ValueError(f"jev: unknown party_type {party!r}")
+    scope = jev.choice(answers["search_scope"])
+    if scope not in constants.SEARCH_SCOPES:
+        raise ValueError(f"jev: unknown search_scope {scope!r}")
     known = set(constants.CATEGORIES)
     pos = [c for c in cat_pos if c in known]
     neg = [c for c in cat_neg if c in known]
@@ -165,6 +203,7 @@ def extract_intent(query: str) -> IntentResult:
         time_budget_minutes=time_budget,
         era_hint=era,  # type: ignore[arg-type]
         party_type=party,  # type: ignore[arg-type]
+        search_scope=scope,  # type: ignore[arg-type]
     )
 
     return IntentResult(

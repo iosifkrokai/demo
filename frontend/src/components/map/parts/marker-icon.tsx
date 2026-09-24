@@ -27,7 +27,7 @@ export function MarkerIcon({ color, number, className }: MarkerIconProps) {
   return (
     <div
       className={cn(markerIconVariants({ color, className }))}
-      aria-label={`Map marker ${number}`}
+      aria-label={number ? `Точка ${number}` : 'Старт'}
     >
       <svg
         width="35"

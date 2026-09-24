@@ -86,9 +86,9 @@ def _make_pts(n: int) -> list[dict]:
 
 
 def test_small_matrix_one_call():
-    """A 5x6 matrix should be one HTTP call (fast path)."""
+    """A 5x5 matrix should be one HTTP call (fast path)."""
     sources = _make_pts(5)
-    targets = _make_pts(6)
+    targets = _make_pts(5)
 
     calls = []
     def fake_request(*args, **kwargs):
@@ -101,7 +101,7 @@ def test_small_matrix_one_call():
 
     assert len(calls) == 1
     assert_no_unsafe_shapes(calls)
-    assert_matrix_correct(result, 5, 6)
+    assert_matrix_correct(result, 5, 5)
 
 
 def test_12x12_is_chunked():
@@ -120,8 +120,8 @@ def test_12x12_is_chunked():
 
     assert_no_unsafe_shapes(calls)
     assert_matrix_correct(result, 12, 12)
-    # ceil(12/5) * ceil(12/6) = 3 * 2 = 6 chunks
-    assert len(calls) == 6, f"Expected 6 chunks, got {len(calls)}"
+    # ceil(12/5) * ceil(12/5) = 3 * 3 = 9 chunks
+    assert len(calls) == 9, f"Expected 9 chunks, got {len(calls)}"
 
 
 def test_rectangular_chunking():
@@ -200,33 +200,24 @@ def test_diagonal_zero_for_identical_coordinates():
 
 
 def test_constants_recorded():
-    """The module constants exist and match the observed safe-shape rule."""
+    """Every shape above 5x5 is split: a live 6x6 has 500'd on this box."""
     assert vc.MATRIX_MAX_SOURCES == 5
-    assert vc.MATRIX_MAX_TARGETS == 6
+    assert vc.MATRIX_MAX_TARGETS == 5
 
-    # _chunks_safe takes (n_sources, n_targets) ints.
-    # Bug fires when sources >= 6 AND targets >= 7.
-    # Safe means: sources < 6  OR  targets < 7.
+    # Safe: both dimensions fit in one request.
+    assert vc._chunks_safe(5, 5) is True
+    assert vc._chunks_safe(3, 3) is True
+    assert vc._chunks_safe(1, 5) is True
+    assert vc._chunks_safe(5, 1) is True
 
-    # Safe: both below threshold.
-    assert vc._chunks_safe(5, 6) is True   # 5 < 6, 6 < 7
-
-    # Safe: rows < 6 even if cols >= 7 (the documented safe shapes).
-    assert vc._chunks_safe(5, 7) is True   # 5 < 6  → safe regardless of cols
-    assert vc._chunks_safe(5, 12) is True  # 5 < 6  → safe regardless of cols
-    assert vc._chunks_safe(4, 12) is True  # 4 < 6  → safe regardless of cols
-
-    # Unsafe: rows >= 6 AND cols >= 7.
-    assert vc._chunks_safe(6, 7) is False  # 6 >= 6 AND 7 >= 7
+    # Unsafe: either dimension above the cap gets chunked, including 6x6,
+    # which is what "замки Гродно" actually sent before this rule.
+    assert vc._chunks_safe(6, 6) is False
+    assert vc._chunks_safe(5, 6) is False
+    assert vc._chunks_safe(6, 5) is False
+    assert vc._chunks_safe(6, 7) is False
     assert vc._chunks_safe(7, 7) is False
-    assert vc._chunks_safe(8, 8) is False
     assert vc._chunks_safe(12, 12) is False
-
-    # Unsafe: rows >= 6 AND cols >= 7 (even if only one is above).
-    # 6x6: rows >= 6 is True, but cols >= 7 is False → AND = False → safe.
-    # 6x7: rows >= 6 is True, cols >= 7 is True → AND = True → unsafe.
-    assert vc._chunks_safe(6, 6) is True   # 6 >= 6, but 6 < 7 → safe
-    assert vc._chunks_safe(6, 7) is False  # 6 >= 6 AND 7 >= 7 → unsafe
 
 
 def test_6x7_is_chunked_not_one_call():

@@ -24,6 +24,8 @@ EMBED_DIM = 1536
 INTENT_TYPES = ("discovery", "specific", "themed", "vague")
 ERA_HINTS = ("any", "pre1900", "soviet", "modern")
 PARTY_TYPES = ("solo", "family", "couple", "group")
+# Area width of a request, decided by the intent model (not by keyword matching).
+SEARCH_SCOPES = ("town", "district", "region")
 
 # Category taxonomy — mirrors data/*.csv `category` column and the
 # visit-time table in planner/cost.py.
@@ -52,9 +54,23 @@ MAX_VISIT_BUDGET_SHARE = 0.4
 # Keyword retrieval can fuse places across the whole voblast otherwise.
 GEO_FOCUS_KM = 12.0
 GEO_FOCUS_MAX_KM = 200.0   # cap: Valhalla's matrix limit
+# Discovery query with no anchor/named place at all: the route still has to be
+# walkable, so the pool stays local. Expanding to GEO_FOCUS_MAX_KM used to mix
+# stops hundreds of kilometres apart and the optimizer then answered 422
+# "optimizer could not produce a route with ≥ 2 stops".
+GEO_FOCUS_DISCOVERY_MAX_KM = 36.0
+
+# ── Unreachable pairs ───────────────────────────────────────────────────────
+# A pair Valhalla cannot connect (500 "Could not find candidate edge used for
+# label" at every snap radius — e.g. the Grodno-fortress POI at
+# 53.597305,23.800828, which has no pedestrian edges anywhere near it) is marked
+# with this many seconds. It is deliberately finite: budget/leg comparisons treat
+# it as unreachable, while int(inf) would raise OverflowError in the optimizer.
+UNREACHABLE_S = 10**9
 
 # ── Route optimizer ─────────────────────────────────────────────────────────
-ROUTE_MAX_STOPS = 8
+# (No stop cap here: the only limits are the user's time budget and transport.
+#  The old ROUTE_MAX_STOPS=8 silently cut routes short.)
 
 # ── Time budget bounds (minutes) ────────────────────────────────────────────
 MIN_BUDGET_MIN = 15

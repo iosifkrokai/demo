@@ -1,0 +1,12 @@
+{
+  "reason": "POIs that ARE in Belarus but sit just outside the 10m-simplified border polygon; each one was confirmed with Nominatim reverse geocoding (country_code=by). Treated as inside by agent.geofence.",
+  "radius_m": 300,
+  "points": [
+    {"name": "Костёл Пресвятой Троицы (Вороново)", "lat": 54.1330, "lon": 25.0660},
+    {"name": "Усадьба (Субботники)", "lat": 54.1373, "lon": 25.6062},
+    {"name": "Старый мост (разрушен)", "lat": 53.9114, "lon": 23.6292},
+    {"name": "Каплица", "lat": 53.9151, "lon": 23.5723},
+    {"name": "Костёл Святого Иоанна Крестителя", "lat": 54.2531, "lon": 25.3595},
+    {"name": "Водяная мельница", "lat": 54.2622, "lon": 25.3602}
+  ]
+}

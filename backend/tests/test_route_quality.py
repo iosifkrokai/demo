@@ -441,5 +441,54 @@ class TestResolveIntegration:
             "Гродно matched on town -> area_anchor must be set"
 
 
+class TestBudgetRule:
+    """The only limit is the one the user names; 0 / absent both mean none."""
+
+    @staticmethod
+    def _resolve(explicit, llm_budget):
+        import psycopg
+
+        from agent.models import IntentDecision, IntentResult
+        from agent.planner.resolve import resolve
+
+        intent = IntentResult(
+            decision=IntentDecision(
+                named_places=[],
+                categories_pos=["костёл"],
+                categories_neg=[],
+                keywords_pos=[],
+                keywords_neg=[],
+                time_budget_minutes=llm_budget,
+            ),
+            source="jev",
+        )
+        with patch("agent.planner.resolve._name_match_search", return_value=[]):
+            with patch("agent.planner.resolve._keyword_search", return_value=[]):
+                return resolve(
+                    intent,
+                    explicit_time_budget=explicit,
+                    explicit_bbox=None,
+                    db=MagicMock(spec=psycopg.Connection),
+                ).time_budget_minutes
+
+    def test_zero_budget_means_no_limit(self):
+        assert self._resolve(0, None) is None
+
+    def test_absent_budget_means_no_limit(self):
+        assert self._resolve(None, None) is None
+
+    def test_named_budget_is_kept(self):
+        assert self._resolve(90, None) == 90
+
+    def test_zero_selector_overrides_a_model_guess(self):
+        assert self._resolve(0, 120) is None
+
+    def test_api_accepts_zero_as_no_limit(self):
+        from agent.models import GenerateReq
+
+        assert GenerateReq(query="костёлы Гродно", time_budget_minutes=0).time_budget_minutes == 0
+        assert GenerateReq(query="костёлы Гродно").time_budget_minutes is None
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

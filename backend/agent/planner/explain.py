@@ -32,6 +32,11 @@ def _area_name(route: list[Candidate]) -> str:
     if districts and len(set(districts)) == 1:
         return districts[0]
 
+    # Mixed area: when the stops span several districts the tour covers the
+    # voblast — naming one of its towns ("по Волковыск") would be wrong.
+    if districts and len(set(districts)) > 1:
+        return "Гродненской области"
+
     # If all stops share one town -> use the town.
     if towns and len(set(towns)) == 1:
         return towns[0]
@@ -45,16 +50,25 @@ def _area_name(route: list[Candidate]) -> str:
     return "Гродно"
 
 
-def explain(route: list[Candidate], trace: dict, walk_seconds: float) -> str:
+def explain(
+    route: list[Candidate],
+    trace: dict,
+    walk_seconds: float,
+    costing: str = "pedestrian",
+) -> str:
     if not route:
         return "Маршрут не удалось построить."
 
     n = len(route)
     walk_min = max(1, int(walk_seconds // 60))
     area = _area_name(route)
-    parts: list[str] = [
-        f"Пеший маршрут по {area}: {n} остановок, ≈{walk_min} мин ходьбы."
-    ]
+    # A region-wide request is driven, not walked — saying "пешком" over 90 km
+    # is nonsense.
+    if costing == "pedestrian":
+        head = f"Пеший маршрут по {area}: {n} остановок, ≈{walk_min} мин ходьбы."
+    else:
+        head = f"Маршрут на машине по {area}: {n} остановок, ≈{walk_min} мин в пути."
+    parts: list[str] = [head]
 
     cats = [c.category for c in route if c.category]
     unique_cats = sorted(set(cats))

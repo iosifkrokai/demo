@@ -15,6 +15,13 @@ export interface Waypoint {
   placeId?: number;
 }
 
+/**
+ * Id of the waypoint that marks the tourist's own position (the route start the
+ * sidebar pins when the browser hands us coordinates). The map draws it as a
+ * separate pin and keeps the stops numbered from 1.
+ */
+export const ME_WAYPOINT_ID = 'me';
+
 interface HighlightSegment {
   startIndex: number;
   endIndex: number;

@@ -16,7 +16,30 @@ times. The `route` (Candidate objects) is just for display.
 
 from __future__ import annotations
 
+import math
+
+from .. import constants
 from ..models import Candidate, CostMatrix, ResolvedConstraints, ValidatedPlan
+
+
+def _leg_s(value: float) -> float:
+    """Cell value with non-finite cells saturated to UNREACHABLE_S.
+
+    int(inf) raises OverflowError, and these numbers end up in int() calls and
+    in the JSON trace, so saturate instead of propagating a non-finite value.
+    """
+    return float(constants.UNREACHABLE_S) if not math.isfinite(value) else value
+
+
+def _leg_sum(matrix: list[list[float]], order: list[int]) -> float:
+    if len(order) < 2:
+        return 0.0
+    total = 0.0
+    for a, b in zip(order, order[1:]):
+        total += _leg_s(matrix[a][b])
+        if total >= constants.UNREACHABLE_S:
+            return float(constants.UNREACHABLE_S)
+    return total
 
 
 def validate(
@@ -48,11 +71,12 @@ def validate(
     matrix = cost.walk_seconds
     visits = cost.visit_minutes
 
-    walk = sum(matrix[a][b] for a, b in zip(order, order[1:])) if n >= 2 else 0.0
+    walk = _leg_sum(matrix, order)
     visits_s = sum(visits[i] for i in order) * 60
     total = int(walk) + int(visits_s)
 
-    budget_s = constraints.time_budget_minutes * 60
+    # No stated limit → nothing to fit into: the route is whatever was planned.
+    budget_s = (constraints.time_budget_minutes or 0) * 60
     fits = total <= budget_s if budget_s > 0 else True
 
     # Diversity: unique categories / n.
@@ -61,7 +85,7 @@ def validate(
 
     # Longest single walking leg.
     max_leg = max(
-        (matrix[a][b] for a, b in zip(order, order[1:])), default=0.0
+        (_leg_s(matrix[a][b]) for a, b in zip(order, order[1:])), default=0.0
     )
 
     trace = {

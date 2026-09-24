@@ -12,6 +12,7 @@ brute-force over n! permutations is fine and guarantees the optimal order.
 from __future__ import annotations
 
 import json
+import logging
 import time as _time
 from collections.abc import Iterable, Iterator
 
@@ -20,6 +21,8 @@ import httpx
 from . import constants
 from .config import settings
 from .errors import UpstreamUnavailable
+
+logger = logging.getLogger(__name__)
 
 # Valhalla encodes leg shapes as an encoded polyline (same alphabet and delta
 # scheme as Google's) with 1e6 precision, not as "lon,lat lon,lat" pairs.
@@ -33,6 +36,27 @@ _PRECISION = 1e6
 # Measured: radius=100 fixes all three (radius=500 also works; search_radius and
 # street_side_tolerance do NOT). Do not remove without re-testing those points.
 LOCATION_SNAP_RADIUS_M = 100
+
+# /route: some stops sit off the walking graph (a monument out in a field, or a
+# POI whose tiles have no pedestrian edges nearby). Valhalla then answers
+#   500 "Could not find candidate edge used for destination label"
+# and the whole tour is lost. Instead of giving up we widen the snap radius, and
+# as a last resort drop the stops that cannot be snapped at all.
+ROUTE_SNAP_RADII_M = (LOCATION_SNAP_RADIUS_M, 500, 2000, 5000)
+LOCATE_RADIUS_M = 5000
+SNAP_ERROR_MARKERS = ("candidate edge", "for destination label", "for origin label")
+
+# A stop can also sit on a road island: the point IS on an edge (so /locate is
+# happy), but its little network is not connected to the rest of the graph for
+# the chosen costing, and Valhalla answers
+#   400 {"error_code":442,"error":"No path could be found for input"}
+# for any request that has to reach it. Measured with the auto costing on
+# «Костел Святого Антония Падуанского» (53.007611,23.917041): /route from
+# Волковыск → 400/442, while the 2.3 km hop to its neighbour works. One such
+# stop used to fail the whole tour and the UI drew points with no line, so it
+# gets the same treatment as a snap failure: widen the radius, then drop it.
+NO_PATH_MARKERS = ("no path could be found", "error_code\":442")
+ROUTE_FAILURE_MARKERS = SNAP_ERROR_MARKERS + NO_PATH_MARKERS
 
 
 # ── Matrix chunking limits ──────────────────────────────────────────────────
@@ -49,8 +73,8 @@ LOCATION_SNAP_RADIUS_M = 100
 # Safe means: len(sources) < 6  OR  len(targets) < 7.
 # These constants are deliberately conservative.  Do NOT increase them without
 # re-measuring against a live Valhalla 3.5.1 instance.
-MATRIX_MAX_SOURCES = 5   # sources <= 5  → len(sources) < 6
-MATRIX_MAX_TARGETS = 6   # targets <= 6  → len(targets) < 7
+MATRIX_MAX_SOURCES = 5   # keep both dimensions <= 5: a 6x6 matrix 500s in practice
+MATRIX_MAX_TARGETS = 5
 
 
 def _decode_polyline(encoded: str) -> list[list[float]]:
@@ -97,7 +121,13 @@ def _request_with_retry(method: str, url: str, *, params: dict, timeout: float) 
             with httpx.Client(timeout=timeout) as client:
                 r = client.request(method, url, params=params)
                 if r.status_code >= 500:
-                    raise httpx.HTTPStatusError("server error", request=r.request, response=r)
+                    # Keep the upstream body: /route answers 500 with a reason
+                    # ("Could not find candidate edge used for destination
+                    # label") that route_through inspects to decide whether the
+                    # request is worth retrying with a wider snap radius.
+                    raise httpx.HTTPStatusError(
+                        f"server error: {r.text[:300]}", request=r.request, response=r
+                    )
                 r.raise_for_status()
                 return r.json()
         except (httpx.ConnectError, httpx.ReadTimeout, httpx.WriteTimeout, httpx.HTTPStatusError) as e:
@@ -122,23 +152,81 @@ def ping(timeout: float = 2.0) -> bool:
         return False
 
 
-def _with_snap_radius(location: dict) -> dict:
-    """Copy a location and give it LOCATION_SNAP_RADIUS_M (unless it sets its own).
+# ── Snapping ────────────────────────────────────────────────────────────────
+# /route and /sources_to_targets answer
+#   500 {"error_code":499,"error":"Could not find candidate edge used for label"}
+# when a POI sits off the walking graph: "Опорный пункт №16 Гродненской крепости"
+# (53.597305,23.800828) is ~340 m from the nearest pedestrian edge, and every
+# request containing it fails. /locate reports that nearest edge, so points are
+# snapped onto the network first and Valhalla then routes real geometry instead
+# of us silently dropping the stop.
+LOCATE_SNAP_RADIUS_M = 500
+_SNAP_CACHE: dict[tuple[int, int], tuple[float, float]] = {}
 
-    Keeps /route and /sources_to_targets snapping to the same edges — otherwise
-    the rendered shape can follow a different edge than the one the cost matrix
-    was measured on.
+
+def _locate_snap(
+    location: dict, costing: str, timeout: float, radius: int
+) -> tuple[float, float] | None:
+    payload = {
+        "locations": [{**location, "radius": radius}],
+        "costing": costing,
+    }
+    try:
+        body = _request_with_retry(
+            "GET",
+            f"{settings.VALHALLA_URL.rstrip('/')}/locate",
+            params={"json": json.dumps(payload, separators=(",", ":"))},
+            timeout=timeout,
+        )
+    except UpstreamUnavailable:
+        return None
+    entry = body[0] if isinstance(body, list) and body else None
+    edges = (entry or {}).get("edges") or []
+    if not edges:
+        return None
+    edge = edges[0]
+    if "correlated_lat" not in edge or "correlated_lon" not in edge:
+        return None
+    return float(edge["correlated_lat"]), float(edge["correlated_lon"])
+
+
+def snap_locations(
+    locations: list[dict],
+    costing: str = "pedestrian",
+    timeout: float | None = None,
+    radius: int = LOCATE_SNAP_RADIUS_M,
+) -> list[dict]:
+    """Snap every location onto the routing network; keeps lat/lon dict shape.
+
+    Results are memoised per rounded coordinate, so an NxN matrix + the final
+    /route cost one /locate call per distinct POI, not one per pair.
+    A point Valhalla cannot snap at all keeps its original coordinates — the
+    caller's own fallbacks deal with it.
     """
-    loc = dict(location)
-    loc.setdefault("radius", LOCATION_SNAP_RADIUS_M)
-    return loc
+    out: list[dict] = []
+    for loc in locations:
+        lat, lon = float(loc["lat"]), float(loc["lon"])
+        key = (round(lat * 100_000), round(lon * 100_000))
+        if key not in _SNAP_CACHE:
+            snapped = _locate_snap(
+                {"lat": lat, "lon": lon},
+                costing,
+                timeout or constants.VALHALLA_TIMEOUT_S,
+                radius,
+            )
+            _SNAP_CACHE[key] = snapped or (lat, lon)
+        snap_lat, snap_lon = _SNAP_CACHE[key]
+        out.append({**loc, "lat": snap_lat, "lon": snap_lon})
+    return out
 
 
-def _matrix_via_route(source: dict, target: dict, costing: str, timeout: float) -> float:
+def _matrix_via_route(source: dict, target: dict, costing: str, timeout: float,
+                      radius: int | None = None) -> float:
     """Fallback: single pair via GET /route."""
+    snap = radius or LOCATION_SNAP_RADIUS_M
     payload = {
         "costing": costing,
-        "locations": [_with_snap_radius(source), _with_snap_radius(target)],
+        "locations": [{**source, "radius": snap}, {**target, "radius": snap}],
         "units": "kilometers",
         "alternates": 0,
         "directions_options": {"units": "kilometers"},
@@ -160,12 +248,14 @@ def _matrix_chunk(
     targets: list[dict],
     costing: str,
     timeout: float,
+    radius: int | None = None,
 ) -> list[list[float]]:
     """Single chunk: issue one /sources_to_targets request and return its matrix."""
+    snap = radius or LOCATION_SNAP_RADIUS_M
     payload = {
         "costing": costing,
-        "sources": [_with_snap_radius(loc) for loc in sources],
-        "targets": [_with_snap_radius(loc) for loc in targets],
+        "sources": [{**loc, "radius": snap} for loc in sources],
+        "targets": [{**loc, "radius": snap} for loc in targets],
         "units": "kilometers",
     }
     body = _request_with_retry(
@@ -179,23 +269,84 @@ def _matrix_chunk(
     for row in rows:
         row_times: list[float] = []
         for cell in row:
-            # Valhalla returns "time": null for a pair it cannot connect. Crashing
-            # the whole request over one such cell is not acceptable, and 0.0
-            # (the value used for the diagonal) would make it look adjacent, so
-            # treat it as unreachable and let the caller decide.
+            # Valhalla returns "time": null for a pair it cannot connect — e.g.
+            # «Костел Святого Антония Падуанского» (53.007611,23.917041) with the
+            # auto costing: 200 for the 2.3 km hop to its neighbour, null for
+            # Волковыск → it, because its little road island is not connected to
+            # the rest of the graph. 0.0 (the diagonal's value) made such a hop
+            # look FREE, so the optimizer happily ordered it and /route then
+            # answered 400 "No path could be found for input" — every point drawn,
+            # no line. The sentinel marks it unreachable and the caller decides.
             cell_time = cell.get("time")
-            row_times.append(0.0 if cell_time is None else float(cell_time))
+            row_times.append(
+                float(constants.UNREACHABLE_S) if cell_time is None else float(cell_time)
+            )
         matrix.append(row_times)
     return matrix
 
 
-def _chunks_safe(n_sources: int, n_targets: int) -> bool:
-    """True when this shape is guaranteed not to hit the Valhalla 500 bug.
+def _matrix_chunk_resilient(
+    sources: list[dict],
+    targets: list[dict],
+    costing: str,
+    timeout: float,
+) -> list[list[float]]:
+    """A chunk request, retried with a wider snap radius, then per-pair /route.
 
-    The bug fires when len(sources) >= 6 AND len(targets) >= 7.
-    Safe means: len(sources) < 6  OR  len(targets) < 7.
+    /sources_to_targets answers 500 with
+        {"error_code":499,"error":"Unknown: Could not find candidate edge used for
+         destination label"}
+    for some point combinations (this reached the UI as a 503 "Unknown: …" toast),
+    and the failure carries no partial data. Widening the radius fixes most of
+    them; if not, fall back to one /route call per pair.
     """
-    return n_sources <= MATRIX_MAX_SOURCES or n_targets <= MATRIX_MAX_TARGETS
+    last_exc: Exception | None = None
+    for radius in ROUTE_SNAP_RADII_M:
+        try:
+            return _matrix_chunk(sources, targets, costing, timeout, radius=radius)
+        except UpstreamUnavailable as exc:
+            last_exc = exc
+    logger.warning(
+        "matrix chunk failed at every snap radius (%s) — falling back to per-pair /route",
+        last_exc,
+    )
+    return _fill_via_route(sources, targets, costing, timeout)
+
+
+def _chunks_safe(n_sources: int, n_targets: int) -> bool:
+    """True when this shape fits in a single /sources_to_targets request.
+
+    Valhalla 3.5.1 answers 500 for larger shapes (a 6x6 has failed live, the
+    documented threshold is sources >= 6 AND targets >= 7), so both dimensions
+    are capped at MATRIX_MAX_* and anything bigger is split.
+    """
+    return n_sources <= MATRIX_MAX_SOURCES and n_targets <= MATRIX_MAX_TARGETS
+
+
+def _matrix_via_route_resilient(
+    source: dict, target: dict, costing: str, timeout: float
+) -> float:
+    """One pair: widen the snap radius, and if the pair stays unroutable return inf.
+
+    inf is how the rest of the pipeline spells "not reachable" (budget validation
+    and the max-leg walkability check both reject such a leg), so a single
+    pathological pair shortens the tour instead of failing the whole request.
+    """
+    last_exc: Exception | None = None
+    for radius in ROUTE_SNAP_RADII_M:
+        try:
+            return _matrix_via_route(source, target, costing, timeout, radius=radius)
+        except UpstreamUnavailable as exc:
+            last_exc = exc
+    logger.warning(
+        "pair (%s,%s) -> (%s,%s) unroutable at every snap radius: %s",
+        source.get("lat"),
+        source.get("lon"),
+        target.get("lat"),
+        target.get("lon"),
+        last_exc,
+    )
+    return float(constants.UNREACHABLE_S)
 
 
 def _fill_via_route(
@@ -214,7 +365,7 @@ def _fill_via_route(
             if sources[i] is targets[j]:
                 row.append(0.0)
             else:
-                row.append(_matrix_via_route(sources[i], targets[j], costing, timeout))
+                row.append(_matrix_via_route_resilient(sources[i], targets[j], costing, timeout))
         result.append(row)
     return result
 
@@ -248,9 +399,11 @@ def time_matrix(
     n_tgt = len(targets)
     timeout = timeout or constants.VALHALLA_TIMEOUT_S
 
-    # Fast path: small matrix fits in one safe request.
+    # Fast path: small matrix fits in one safe request. Still goes through the
+    # resilient wrapper — a 3x3 "замки Гродно" matrix has hit the Valhalla
+    # "Could not find candidate edge used for label" 500 in practice.
     if _chunks_safe(n_src, n_tgt):
-        fast_result = _matrix_chunk(sources, targets, costing, timeout)
+        fast_result = _matrix_chunk_resilient(sources, targets, costing, timeout)
         _zero_diagonal(fast_result, sources, targets)
         return fast_result
 
@@ -274,12 +427,9 @@ def time_matrix(
         for tgt_start, tgt_end in _matrix_chunk_indices(n_tgt, MATRIX_MAX_TARGETS):
             tgt_chunk = idx_targets[tgt_start:tgt_end]
 
-            try:
-                chunk_matrix = _matrix_chunk(src_chunk, tgt_chunk, costing, timeout)
-            except UpstreamUnavailable:
-                # Last resort: per-pair /route calls. (Do NOT try to "repair"
-                # values of a failed chunk — a failed chunk carries no values.)
-                chunk_matrix = _fill_via_route(src_chunk, tgt_chunk, costing, timeout)
+            # A chunk can fail (Valhalla label 500); the wrapper widens the snap
+            # radius and only then falls back to per-pair /route calls.
+            chunk_matrix = _matrix_chunk_resilient(src_chunk, tgt_chunk, costing, timeout)
 
             # Copy chunk into the right offset in the result.
             for li, row in enumerate(chunk_matrix):
@@ -289,6 +439,139 @@ def time_matrix(
                     result[global_src][global_tgt] = val
 
     return result
+
+
+def _is_snap_failure(exc: Exception) -> bool:
+    """True when Valhalla failed because it could not snap a location to the graph."""
+    text = str(exc).lower()
+    return any(marker in text for marker in SNAP_ERROR_MARKERS)
+
+
+def _is_route_failure(exc: Exception) -> bool:
+    """True when the tour itself is the problem, not the Valhalla connection.
+
+    Covers both a location with no candidate edge and a location on a road
+    island Valhalla cannot reach ("No path could be found for input"). Transport
+    failures (connect error, timeout) match neither and must keep bubbling up as
+    503 — retrying those would silently shorten the tour.
+    """
+    text = str(exc).lower()
+    return any(marker in text for marker in ROUTE_FAILURE_MARKERS)
+
+
+def _snappable(location: dict, costing: str, timeout: float | None) -> bool:
+    """Ask /locate whether this point can be snapped onto the network.
+
+    Anything else (timeout, 5xx) counts as snappable — dropping a stop because
+    Valhalla hiccuped would silently shorten the tour.
+    """
+    payload = {
+        "locations": [{**location, "radius": LOCATE_RADIUS_M}],
+        "costing": costing,
+    }
+    try:
+        body = _request_with_retry(
+            "GET",
+            f"{settings.VALHALLA_URL.rstrip('/')}/locate",
+            params={"json": json.dumps(payload, separators=(",", ":"))},
+            timeout=timeout or constants.VALHALLA_TIMEOUT_S,
+        )
+    except UpstreamUnavailable:
+        return True
+    if not body:
+        return False
+    entry = body[0] if isinstance(body, list) else body
+    return bool(entry.get("edges"))
+
+
+def _drop_unsnappable(locations: list[dict], costing: str, timeout: float | None) -> list[dict]:
+    """Keep only the locations /locate can place on the routing network.
+
+    Applied before any /route or matrix call, endpoints included: one POI off the
+    graph makes Valhalla answer
+    `500 {"error_code":499,"error":"Could not find candidate edge used for label"}`
+    for the whole request.
+    """
+    keep = [loc for loc in locations if _snappable(loc, costing, timeout)]
+    if len(keep) != len(locations):
+        logger.warning(
+            "snap: dropped %d of %d location(s) with no edge on the network",
+            len(locations) - len(keep),
+            len(locations),
+        )
+    return keep
+
+
+def _trip_to_shape(body: dict) -> tuple[dict, dict | None]:
+    if "trip" not in body:
+        return {}, None
+    trip = body["trip"]
+    coords: list[list[float]] = []
+    for leg in trip.get("legs", []):
+        coords.extend(_decode_polyline(leg.get("shape", "")))
+    return {"type": "LineString", "coordinates": coords}, trip.get("summary")
+
+
+def _route_request(
+    locations: list[dict],
+    costing: str,
+    language: str,
+    timeout: float | None,
+    radius: int,
+) -> dict:
+    locs = [{**loc, "radius": radius} for loc in locations]
+    payload = {
+        "costing": costing,
+        "locations": locs,
+        "units": "kilometers",
+        "language": language,
+        "alternates": 0,
+        "directions_options": {"units": "kilometers"},
+    }
+    return _request_with_retry(
+        "GET",
+        f"{settings.VALHALLA_URL.rstrip('/')}/route",
+        params={"json": json.dumps(payload, separators=(",", ":"))},
+        timeout=timeout or constants.VALHALLA_TIMEOUT_S,
+    )
+
+
+def optimized_route(
+    locations: list[dict],
+    costing: str = "pedestrian",
+    language: str = "ru",
+    timeout: float | None = None,
+) -> tuple[list[int], dict, dict | None]:
+    """Valhalla's own stop ordering: GET /optimized_route.
+
+    Returns (order, shape, summary) where order[i] is the index into `locations`
+    of the i-th stop in Valhalla's sequence. The caller applies it to its own
+    stop list, so the tour the user sees is the one the router built.
+    """
+    snapped = snap_locations(locations, costing, timeout)
+    payload = {
+        "costing": costing,
+        "locations": [
+            {**loc, "type": "break", "radius": LOCATION_SNAP_RADIUS_M} for loc in snapped
+        ],
+        "units": "kilometers",
+        "language": language,
+        "directions_options": {"units": "kilometers"},
+    }
+    body = _request_with_retry(
+        "GET",
+        f"{settings.VALHALLA_URL.rstrip('/')}/optimized_route",
+        params={"json": json.dumps(payload, separators=(",", ":"))},
+        timeout=timeout or constants.VALHALLA_TIMEOUT_S,
+    )
+    trip = body.get("trip") or {}
+    order: list[int] = []
+    for loc in trip.get("locations", []):
+        idx = loc.get("original_index")
+        if idx is not None and int(idx) not in order:
+            order.append(int(idx))
+    shape, summary = _trip_to_shape(body)
+    return order, shape, summary
 
 
 def route_through(
@@ -303,28 +586,55 @@ def route_through(
         shape   — GeoJSON LineString geometry for the trip (or {} on failure).
         summary — Valhalla trip.summary dict (km, seconds) or None.
 
-    Raises UpstreamUnavailable on persistent network failure.
+    A stop that cannot be snapped to the walking graph is retried with a wider
+    radius; if even 5 km is not enough it is dropped from the polyline (logged),
+    because a stop nobody can walk to must not turn the whole tour into a 500.
+
+    Raises UpstreamUnavailable on persistent network failure or when Valhalla
+    keeps failing for a reason that is not snapping.
     """
-    payload = {
-        "costing": costing,
-        "locations": [_with_snap_radius(loc) for loc in locations],
-        "units": "kilometers",
-        "language": language,
-        "alternates": 0,
-        "directions_options": {"units": "kilometers"},
-    }
-    body = _request_with_retry(
-        "GET",
-        f"{settings.VALHALLA_URL.rstrip('/')}/route",
-        params={"json": json.dumps(payload, separators=(",", ":"))},
-        timeout=timeout or constants.VALHALLA_TIMEOUT_S,
-    )
-    if "trip" not in body:
+    locs = [dict(loc) for loc in locations]
+    if len(locs) < 2:
         return {}, None
-    trip = body["trip"]
-    legs = trip.get("legs", [])
-    coords: list[list[float]] = []
-    for leg in legs:
-        coords.extend(_decode_polyline(leg.get("shape", "")))
-    shape = {"type": "LineString", "coordinates": coords}
-    return shape, trip.get("summary")
+    # Feed Valhalla points that sit ON its graph — a POI a few hundred metres off
+    # the pedestrian network otherwise 500s the whole tour.
+    locs = snap_locations(locs, costing, timeout)
+
+    # Drop stops Valhalla cannot place at all BEFORE routing, first and last
+    # included: one such POI (a fortress outside the network, a rural chapel with
+    # no address) used to fail the whole request, which the UI showed as "points
+    # drawn, no route". The caller keeps every point as a marker; only the
+    # polyline skips what cannot be walked/driven to.
+    locs = _drop_unsnappable(locs, costing, timeout)
+    if len(locs) < 2:
+        logger.warning("route: fewer than 2 of the stops can be snapped — no route")
+        return {}, None
+
+    last_exc: Exception | None = None
+    for radius in ROUTE_SNAP_RADII_M:
+        try:
+            body = _route_request(locs, costing, language, timeout, radius)
+        except UpstreamUnavailable as exc:
+            if not _is_route_failure(exc):
+                raise
+            last_exc = exc
+            continue
+        return _trip_to_shape(body)
+
+    # Every radius failed for the stops that /locate said were fine → find the
+    # culprit: try the route without each stop in turn and take the first that
+    # builds. n calls, only in this residual case.
+    for i in range(len(locs)):
+        subset = locs[:i] + locs[i + 1 :]
+        if len(subset) < 2:
+            break
+        try:
+            body = _route_request(subset, costing, language, timeout, ROUTE_SNAP_RADII_M[-1])
+        except UpstreamUnavailable as exc:
+            last_exc = exc
+            continue
+        logger.warning("route: dropped 1 stop that kept failing, built with %d", len(subset))
+        return _trip_to_shape(body)
+
+    logger.warning("route: no routable pair among %d stops (%s)", len(locs), last_exc)
+    return {}, None

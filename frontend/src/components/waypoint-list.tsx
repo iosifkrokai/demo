@@ -1,7 +1,18 @@
 import { useState } from 'react';
-import { ArrowDown, ArrowUp, GripVertical, MapPin, X } from 'lucide-react';
+import {
+  ArrowDown,
+  ArrowUp,
+  GripVertical,
+  LocateFixed,
+  MapPin,
+  X,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { useDirectionsStore, type Waypoint } from '@/stores/directions-store';
+import {
+  ME_WAYPOINT_ID,
+  useDirectionsStore,
+  type Waypoint,
+} from '@/stores/directions-store';
 import { useDirectionsQuery } from '@/hooks/use-directions-queries';
 
 interface Props {
@@ -66,6 +77,12 @@ export const WaypointList = ({ onChanged }: Props) => {
   return (
     <ol className="flex flex-col gap-1.5">
       {waypoints.map((wp, i) => {
+        // "my location" is the start, not a stop: it takes no number, so the
+        // tourist's stops stay numbered 1..N exactly as on the map.
+        const isMe = wp.id === ME_WAYPOINT_ID;
+        const stopNumber =
+          waypoints.slice(0, i).filter((w) => w.id !== ME_WAYPOINT_ID).length +
+          1;
         const isDragging = dragIndex === i;
         const isDragTarget =
           dragIndex !== null && dragIndex !== i && i === (dragIndex ?? -1) + 1;
@@ -106,8 +123,16 @@ export const WaypointList = ({ onChanged }: Props) => {
             >
               <GripVertical className="h-4 w-4" />
             </span>
-            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-medium text-primary">
-              {i + 1}
+            <span
+              className={[
+                'flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-medium',
+                isMe
+                  ? 'bg-sky-500/15 text-sky-600'
+                  : 'bg-primary/10 text-primary',
+              ].join(' ')}
+              title={isMe ? 'старт' : `остановка ${stopNumber}`}
+            >
+              {isMe ? <LocateFixed className="h-3.5 w-3.5" /> : stopNumber}
             </span>
             <MapPin className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
             <span className="min-w-0 flex-1 truncate" title={nameOf(wp)}>

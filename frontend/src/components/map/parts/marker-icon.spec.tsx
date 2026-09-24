@@ -25,7 +25,7 @@ describe('MarkerIcon', () => {
   it('should render aria-label with number', () => {
     render(<MarkerIcon number="1" />);
 
-    expect(screen.getByLabelText('Map marker 1')).toBeInTheDocument();
+    expect(screen.getByLabelText('Точка 1')).toBeInTheDocument();
   });
 
   it('should display number when provided', () => {

@@ -419,22 +419,20 @@ describe('MapComponent', () => {
     });
   });
 
-  it('should show info popup on map click after delay', async () => {
+  it('should NOT open the Valhalla coordinate popup on a plain map click', async () => {
     vi.useFakeTimers();
     render(<MapComponent />);
 
     fireEvent.click(screen.getByTestId('map'));
-
-    // popup should not appear immediately
-    expect(screen.queryByTestId('map-info-popup')).not.toBeInTheDocument();
 
     // advance timers past the click delay (200ms)
     await act(async () => {
       await vi.advanceTimersByTimeAsync(250);
     });
 
-    expect(screen.getByTestId('popup')).toBeInTheDocument();
-    expect(screen.getByTestId('map-info-popup')).toBeInTheDocument();
+    // The tourist view only clears the selection: the coordinate /
+    // "Valhalla location JSON" popup is a developer tool (tiles tab).
+    expect(screen.queryByTestId('map-info-popup')).not.toBeInTheDocument();
 
     vi.useRealTimers();
   });
@@ -447,29 +445,6 @@ describe('MapComponent', () => {
     await waitFor(() => {
       expect(screen.getByTestId('popup')).toBeInTheDocument();
       expect(screen.getByTestId('map-context-menu')).toBeInTheDocument();
-    });
-  });
-
-  it('should close info popup when close is triggered', async () => {
-    vi.useFakeTimers();
-    render(<MapComponent />);
-
-    fireEvent.click(screen.getByTestId('map'));
-
-    // advance timers to show popup
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(250);
-    });
-
-    expect(screen.getByTestId('map-info-popup')).toBeInTheDocument();
-
-    // use real timers for user interaction
-    vi.useRealTimers();
-    const user = userEvent.setup();
-    await user.click(screen.getByRole('button', { name: 'Close' }));
-
-    await waitFor(() => {
-      expect(screen.queryByTestId('map-info-popup')).not.toBeInTheDocument();
     });
   });
 
@@ -505,23 +480,24 @@ describe('MapComponent', () => {
     });
   });
 
-  it('should close info popup when clicking on map again', async () => {
+  it('should never show the coordinate popup on the tourist map', async () => {
     vi.useFakeTimers();
     render(<MapComponent />);
 
-    fireEvent.click(screen.getByTestId('map'));
+    const map = screen.getByTestId('map');
 
-    // advance timers to show popup
+    fireEvent.click(map);
     await act(async () => {
       await vi.advanceTimersByTimeAsync(250);
     });
+    expect(screen.queryByTestId('map-info-popup')).not.toBeInTheDocument();
 
-    expect(screen.getByTestId('map-info-popup')).toBeInTheDocument();
-
-    // click again to close
-    fireEvent.click(screen.getByTestId('map'));
-
-    // popup should close immediately (no delay for closing)
+    // a second click stays clean as well — no popup flash, and no fake timer
+    // left behind for the next test
+    fireEvent.click(map);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(250);
+    });
     expect(screen.queryByTestId('map-info-popup')).not.toBeInTheDocument();
 
     vi.useRealTimers();
@@ -678,7 +654,7 @@ describe('MapComponent', () => {
       vi.useRealTimers();
     });
 
-    it('should show popup on single tap after double-tap threshold passes', async () => {
+    it('should not leave a coordinate popup behind after a single tap', async () => {
       vi.useFakeTimers();
       render(<MapComponent />);
 
@@ -695,8 +671,9 @@ describe('MapComponent', () => {
         await vi.advanceTimersByTimeAsync(250);
       });
 
-      // popup should appear since no second tap occurred
-      expect(screen.getByTestId('map-info-popup')).toBeInTheDocument();
+      // no second tap occurred: the tourist view stays clean (the coordinate
+      // popup only exists for the tiles tab)
+      expect(screen.queryByTestId('map-info-popup')).not.toBeInTheDocument();
 
       vi.useRealTimers();
     });

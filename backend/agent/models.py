@@ -30,6 +30,10 @@ CategoryLiteral = Literal[
 EraLiteral = Literal["any", "pre1900", "soviet", "modern"]
 IntentTypeLiteral = Literal["discovery", "specific", "themed", "vague"]
 PartyTypeLiteral = Literal["solo", "family", "couple", "group"]
+# How wide the area of the request is: one town, one rural district around it,
+# or the whole administrative region (voblast). Decided by the intent model —
+# "все костёлы Гродненской области" is a region, "замки Гродно" is a town.
+SearchScopeLiteral = Literal["town", "district", "region"]
 
 
 class LatLon(BaseModel):
@@ -41,7 +45,12 @@ class LatLon(BaseModel):
 class GenerateReq(BaseModel):
     """POST /routes/generate body."""
     query: str = Field(min_length=3, max_length=500)
-    time_budget_minutes: int | None = Field(default=None, ge=constants.MIN_BUDGET_MIN, le=constants.MAX_BUDGET_MIN)
+    # The only limit on a route is the time the tourist names. 0 (and a missing
+    # field) both mean "без ограничения" — the UI selector's default — so they map
+    # to no budget at all instead of a zero-minute one.
+    time_budget_minutes: int | None = Field(
+        default=None, ge=0, le=constants.MAX_BUDGET_MIN
+    )
     # Tourist's current position. When set: geo-focus anchors on it (places near
     # ME, not near the top-scored hit) and the route starts at this point.
     origin: LatLon | None = None
@@ -111,7 +120,8 @@ class ParsedQuery(BaseModel):
 
 
 class BudgetInfo(BaseModel):
-    budget_minutes: int
+    # None = the user stated no time limit; the route is not trimmed to fit one.
+    budget_minutes: int | None = None
     walk_minutes: int
     visit_minutes: int
     total_minutes: int
@@ -131,6 +141,10 @@ class RouteResponse(BaseModel):
     summary: RouteSummary
     budget: BudgetInfo | None = None
     explanation: str | None = None
+    # Valhalla costing the plan and geometry were built with ("pedestrian",
+    # "auto", ...). The webapp mirrors it into its own profile so the line it
+    # draws itself uses the same transport as the plan.
+    costing: str | None = None
     debug: dict | None = None
 
 
@@ -171,6 +185,7 @@ class IntentDecision(BaseModel):
     time_budget_minutes: int | None = None
     era_hint: EraLiteral = "any"
     party_type: PartyTypeLiteral = "solo"
+    search_scope: SearchScopeLiteral = "town"
 
 
 class IntentResult(BaseModel):
@@ -191,7 +206,7 @@ class ResolvedConstraints(BaseModel):
     optional_categories: list[str] = []
     forbidden_categories: list[str] = []
     forbidden_keywords: list[str] = []
-    time_budget_minutes: int = 120
+    time_budget_minutes: int | None = 120
     bbox: tuple[float, float, float, float] | None = None  # (W, S, E, N)
     era_hint: EraLiteral = "any"
     party_type: str = "solo"

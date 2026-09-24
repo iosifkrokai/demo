@@ -1,0 +1,187 @@
+"""A stop on a disconnected road island must not kill the whole route.
+
+Measured on the live engine with the auto costing:
+  * «Костел Святого Антония Падуанского» (53.007611,23.917041)
+  * /route Волковыск → it           → 400 {"error_code":442,"error":"No path could be found for input"}
+  * /route its neighbour → it       → 200, 2.28 km (a local island)
+  * /sources_to_targets for that pair → "time": null
+
+Consequences this file pins down:
+  1. time_matrix must NOT price a null cell as 0 seconds (that made the
+     impossible hop look free, so the optimizer ordered it).
+  2. prune_unroutable_stops must drop the stop behind an unroutable leg.
+  3. render must fall back to per-leg geometry instead of returning {}.
+  4. route_through must treat 400/442 as a route-level failure, not a 503.
+
+No network: _request_with_retry is monkeypatched.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import sys
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+from agent import constants, valhalla_client as vc
+from agent.errors import UpstreamUnavailable
+from agent.models import Candidate, CostMatrix
+from agent.planner import render as render_mod
+from agent.planner.cost import prune_unroutable_stops
+
+ISLAND = (53.007611, 23.917041)  # the chapel on the island
+MAINLAND = (53.290892, 23.932859)  # Волковыск
+ISLAND_NEIGHBOUR = (53.017611, 23.917041)
+
+
+def _candidate(pid: int, lat: float, lon: float, name: str = "p") -> Candidate:
+    return Candidate(id=pid, name=name, category="костёл", lat=lat, lon=lon)
+
+
+def _no_path_error() -> UpstreamUnavailable:
+    body = '{"error_code":442,"error":"No path could be found for input"}'
+    return UpstreamUnavailable(
+        f"valhalla GET http://valhalla/route failed after retries: server error: {body}"
+    )
+
+
+# ── 1. the matrix must say "unreachable", not "free" ────────────────────────
+
+def test_null_matrix_cell_is_the_unreachable_sentinel(monkeypatch):
+    def fake_request(method, url, *, params, timeout):
+        return {
+            "sources_to_targets": [
+                [
+                    {"from_index": 0, "to_index": 0, "time": 0.0},
+                    {"from_index": 0, "to_index": 1, "time": None},  # island
+                ],
+                [
+                    {"from_index": 1, "to_index": 0, "time": None},  # island
+                    {"from_index": 1, "to_index": 1, "time": 0.0},
+                ],
+            ]
+        }
+
+    monkeypatch.setattr(vc, "_request_with_retry", fake_request)
+    monkeypatch.setattr(vc, "_chunks_safe", lambda n_src, n_tgt: True)
+
+    matrix = vc.time_matrix(
+        [{"lat": MAINLAND[0], "lon": MAINLAND[1]}, {"lat": ISLAND[0], "lon": ISLAND[1]}],
+        [{"lat": MAINLAND[0], "lon": MAINLAND[1]}, {"lat": ISLAND[0], "lon": ISLAND[1]}],
+    )
+
+    assert matrix[0][1] == float(constants.UNREACHABLE_S)
+    assert matrix[1][0] == float(constants.UNREACHABLE_S)
+    assert matrix[0][0] == 0.0 and matrix[1][1] == 0.0
+
+
+# ── 2. the stop behind an unroutable leg gets pruned ────────────────────────
+
+def test_prune_drops_the_stop_after_an_unroutable_leg():
+    a = _candidate(1, *MAINLAND, name="Волковыск")
+    b = _candidate(2, *ISLAND, name="каплица на острове")
+    c = _candidate(3, 53.6787, 23.8279, name="Гродно")
+
+    # Valhalla's verdict: a→b unroutable, everything else fine.
+    a_b = float(constants.UNREACHABLE_S)
+    cost = CostMatrix(
+        walk_seconds=[[0.0, a_b, 600.0], [a_b, 0.0, 700.0], [600.0, 700.0, 0.0]],
+        visit_minutes=[10, 10, 10],
+        indices=[0, 1, 2],
+    )
+
+    kept, dropped = prune_unroutable_stops([a, b, c], [a, b, c], cost)
+
+    assert [x.id for x in kept] == [1, 3]
+    assert [x.id for x in dropped] == [2]
+
+
+def test_prune_leaves_a_healthy_tour_alone():
+    a = _candidate(1, 53.6787, 23.8279)
+    b = _candidate(2, 53.6808, 23.8305)
+    c = _candidate(3, 53.6813, 23.8278)
+    cost = CostMatrix(
+        walk_seconds=[[0.0, 300.0, 400.0], [300.0, 0.0, 250.0], [400.0, 250.0, 0.0]],
+        visit_minutes=[10, 10, 10],
+        indices=[0, 1, 2],
+    )
+
+    kept, dropped = prune_unroutable_stops([a, b, c], [a, b, c], cost)
+
+    assert [x.id for x in kept] == [1, 2, 3]
+    assert dropped == []
+
+
+# ── 3. render falls back to legs ────────────────────────────────────────────
+
+def test_render_falls_back_to_legs_when_the_tour_is_refused(monkeypatch):
+    calls: list[list[dict]] = []
+
+    def fake_route_through(locations, costing="pedestrian", language="ru", timeout=None):
+        locs = list(locations)
+        calls.append(locs)
+        if len(locs) > 2:  # the whole-tour request is the one Valhalla refuses
+            return {}, None
+        return {"type": "LineString", "coordinates": [[23.9, 53.0], [23.91, 53.01]]}, {
+            "length": 1.5,
+            "time": 300.0,
+        }
+
+    monkeypatch.setattr(render_mod, "route_through", fake_route_through)
+    route = [
+        _candidate(1, 53.0, 23.9),
+        _candidate(2, 53.01, 23.91),
+        _candidate(3, 53.02, 23.92),
+    ]
+
+    shape, summary = render_mod.render(route, costing="auto")
+
+    assert len(calls) == 3, "one whole-tour attempt + two legs"
+    assert len(shape["coordinates"]) == 4
+    assert summary["length"] == 3.0
+    assert summary["time"] == 600.0
+
+
+# ── 4. a 400/442 is a route failure, not an outage ──────────────────────────
+
+def test_no_path_400_is_classified_as_a_route_failure():
+    assert vc._is_route_failure(_no_path_error())
+    assert not vc._is_route_failure(
+        UpstreamUnavailable("valhalla GET /route failed after retries: [Errno 111] Connection refused")
+    )
+
+
+def test_route_through_drops_the_island_stop_instead_of_raising(monkeypatch):
+    routed_sizes: list[int] = []
+
+    def fake_request(method, url, *, params, timeout):
+        payload = json.loads(params["json"])
+        locs = payload["locations"]
+        routed_sizes.append(len(locs))
+        # Any request that has to reach the island fails, exactly like the engine.
+        if any(abs(loc["lat"] - ISLAND[0]) < 1e-4 and abs(loc["lon"] - ISLAND[1]) < 1e-4 for loc in locs):
+            raise _no_path_error()
+        return {
+            "trip": {
+                "summary": {"length": 10.0, "time": 600.0},
+                "legs": [{"shape": "yzocbAqzc_hB"}],  # not decoded here on purpose
+            }
+        }
+
+    monkeypatch.setattr(vc, "_request_with_retry", fake_request)
+    monkeypatch.setattr(vc, "snap_locations", lambda locs, costing, timeout=None: list(locs))
+    monkeypatch.setattr(vc, "_snappable", lambda loc, costing, timeout: True)
+
+    shape, _ = vc.route_through(
+        [
+            {"lat": MAINLAND[0], "lon": MAINLAND[1], "type": "break"},
+            {"lat": ISLAND[0], "lon": ISLAND[1], "type": "via"},
+            {"lat": 53.6787, "lon": 23.8279, "type": "break"},
+        ],
+        costing="auto",
+    )
+
+    assert shape, "the tour still gets drawn without the island stop"
+    assert routed_sizes[0] == 3, "first try has all three stops"
+    assert 2 in routed_sizes[1:], "then the island stop is dropped and it routes"

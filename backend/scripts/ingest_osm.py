@@ -22,18 +22,18 @@ import argparse
 import csv
 import json
 import math
-import os
 import sys
 import time
-import hashlib
 from pathlib import Path
-from typing import Any
 
 try:
     import httpx
 except ImportError:
     sys.stderr.write("httpx required: pip install httpx\n")
     sys.exit(1)
+
+sys.path.insert(0, str(Path(__file__).parent.parent.resolve()))
+from agent.geofence import inside_project_area
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -392,6 +392,13 @@ def osm_element_to_row(element: dict) -> dict | None:
     if not category:
         return None
 
+    # The bbox covers a slice of Lithuania and Poland; the border polygon decides
+    # what actually belongs to the project. Without this, Vilnius landmarks
+    # (Гедимина башня, Верхний замок, …) get stored as "Островецкий район" and
+    # come back for Grodno queries.
+    if not inside_project_area(float(lat), float(lon)):
+        return None
+
     osm_type = element.get("type", "unknown")
     osm_id = element.get("id")
     source_url = f"osm:{osm_type}/{osm_id}"
@@ -483,7 +490,7 @@ def write_csv(rows: list[dict], path: Path) -> None:
     with path.open("w", encoding="utf-8") as fh:
         fh.write("# " + "|".join(fieldnames) + "\n")
         writer = csv.DictWriter(fh, fieldnames=fieldnames, delimiter="|", quoting=csv.QUOTE_MINIMAL)
-        pass  # header already written as comment
+        # header already written as comment
         for row in rows:
             writer.writerow(row)
 

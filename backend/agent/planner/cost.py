@@ -16,9 +16,12 @@ comes from this function and pipeline.py needs it for the Place response.
 
 from __future__ import annotations
 
+import math
+
+from .. import constants
 from ..errors import UpstreamUnavailable
 from ..models import Candidate, CostMatrix, ResolvedConstraints
-from ..valhalla_client import time_matrix
+from ..valhalla_client import snap_locations, time_matrix
 
 MAX_VISIT_BUDGET_SHARE = 0.4
 # A single stop may claim at most this share of the time budget; see the cap in
@@ -72,6 +75,10 @@ def compute_cost_matrix(
 
     # ── Valhalla matrix ──
     coords = [{"lat": c.lat, "lon": c.lon} for c in candidates]
+    # Snap every POI onto the routing graph first (one cached /locate per point):
+    # the walk times and the drawn route then both come from real network
+    # geometry instead of from a point Valhalla cannot place.
+    coords = snap_locations(coords, costing=costing)
     try:
         matrix = time_matrix(coords, coords, costing=costing)
     except UpstreamUnavailable:
@@ -119,6 +126,10 @@ def compute_cost_matrix(
         candidates = [candidates[i] for i in keep_idx]
         visits = [visits[i] for i in keep_idx]
         coords = [{"lat": c.lat, "lon": c.lon} for c in candidates]
+        # Snap every POI onto the routing graph first (one /locate per point, cached):
+        # the walk times and the drawn route then both come from real network
+        # geometry instead of from a point Valhalla cannot place.
+        coords = snap_locations(coords, costing=costing)
         matrix = time_matrix(coords, coords, costing=costing)
 
     return CostMatrix(
@@ -128,11 +139,108 @@ def compute_cost_matrix(
     )
 
 
+def drop_unreachable(
+    candidates: list[Candidate], cost: CostMatrix
+) -> tuple[list[Candidate], CostMatrix]:
+    """Remove candidates Valhalla cannot connect to anything else.
+
+    A POI with no reachable partner (e.g. the Grodno-fortress point at
+    53.597305,23.800828 — no pedestrian edges anywhere near it, so every pair
+    involving it comes back as UNREACHABLE_S) would otherwise make every order
+    look impossible and push the optimizer into 422. Dropping it here costs no
+    extra Valhalla calls: the matrix rows/columns are already known.
+    """
+    n = len(candidates)
+    if n < 3:
+        return candidates, cost
+
+    reachable = []
+    for i in range(n):
+        ok = any(
+            j != i
+            and math.isfinite(cost.walk_seconds[i][j])
+            and cost.walk_seconds[i][j] < constants.UNREACHABLE_S
+            for j in range(n)
+        )
+        if ok:
+            reachable.append(i)
+
+    if len(reachable) == n:
+        return candidates, cost
+    if len(reachable) < 2:
+        return candidates, cost  # nothing to gain, let the caller report it
+
+    return (
+        [candidates[i] for i in reachable],
+        CostMatrix(
+            walk_seconds=[[cost.walk_seconds[i][j] for j in reachable] for i in reachable],
+            visit_minutes=[cost.visit_minutes[i] for i in reachable],
+            indices=[cost.indices[i] for i in reachable],
+        ),
+    )
+
+
+def prune_unroutable_stops(
+    route: list[Candidate],
+    candidates: list[Candidate],
+    cost: CostMatrix,
+) -> tuple[list[Candidate], list[Candidate]]:
+    """Drop stops whose hop from the previous stop Valhalla cannot route at all.
+
+    The matrix already carries Valhalla's own verdict for every pair: an
+    unroutable pair comes back as UNREACHABLE_S ("No path could be found for
+    input"). A rural chapel can sit on a road island that is connected locally
+    but not to the rest of the network for the chosen costing — reachable from
+    its neighbour, unreachable from everything else. Ordering such a stop into
+    the tour makes /route answer 400 and the UI draw points with no line.
+
+    Returns (kept_route, dropped) — no extra Valhalla calls.
+    """
+    if len(route) < 3:
+        return route, []
+    index = {c.id: i for i, c in enumerate(candidates)}
+    keep = list(route)
+    dropped: list[Candidate] = []
+
+    def leg_bad(a: Candidate, b: Candidate) -> bool:
+        i, j = index.get(a.id), index.get(b.id)
+        if i is None or j is None:
+            return False
+        cell = cost.walk_seconds[i][j]
+        return not math.isfinite(cell) or cell >= constants.UNREACHABLE_S
+
+    changed = True
+    while changed and len(keep) >= 3:
+        changed = False
+        for i in range(len(keep) - 1):
+            if leg_bad(keep[i], keep[i + 1]):
+                # The hop into stop i+1 is impossible → that stop cannot be
+                # visited in this order.
+                dropped.append(keep.pop(i + 1))
+                changed = True
+                break
+    return keep, dropped
+
+
 def walk_cost(order: list[int], matrix: list[list[float]]) -> float:
-    """Sum walk_seconds along an ordered list of candidate indices."""
+    """Sum walk_seconds along an ordered list of candidate indices.
+
+    A non-finite cell (a pair Valhalla cannot connect) makes the whole order
+    unusable, so it saturates at UNREACHABLE_S instead of propagating inf:
+    every caller compares this against a budget or a max leg, where the sentinel
+    behaves exactly like "unreachable", but int(inf) would raise OverflowError.
+    """
     if len(order) < 2:
         return 0.0
-    return float(sum(matrix[a][b] for a, b in zip(order, order[1:])))
+    total = 0.0
+    for a, b in zip(order, order[1:]):
+        cell = matrix[a][b]
+        if not math.isfinite(cell):
+            return float(constants.UNREACHABLE_S)
+        total += cell
+        if total >= constants.UNREACHABLE_S:
+            return float(constants.UNREACHABLE_S)
+    return total
 
 
 def visit_cost(order: list[int], visit_minutes: list[int]) -> int:

@@ -34,9 +34,13 @@ export function PlaceCardPopup({
       closeOnClick={false}
       maxWidth="340px"
     >
+      {/* Clicks inside the card must not bubble to the map: the map's own click
+          handler would treat them as a miss and close the card mid-read. */}
       <div
         className="relative flex min-w-[260px] max-w-[340px] flex-col gap-2.5 px-3 py-3"
         data-testid="place-card-popup"
+        onClick={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
       >
         <Button
           variant="ghost"

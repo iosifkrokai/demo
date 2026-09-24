@@ -15,6 +15,7 @@ import {
   makeContours,
   makeLocations,
   buildOptimizedRouteRequest,
+  WAYPOINT_SNAP_RADIUS_M,
 } from './valhalla';
 
 // Mock the polyline decode function
@@ -349,9 +350,9 @@ describe('valhalla.ts', () => {
           },
           exclude_polygons: [],
           locations: [
-            { lon: -74.006, lat: 40.7128, type: 'break' },
-            { lon: -118.2437, lat: 34.0522, type: 'via' },
-            { lon: -87.6298, lat: 41.8781, type: 'break' },
+            { lon: -74.006, lat: 40.7128, type: 'break', radius: WAYPOINT_SNAP_RADIUS_M },
+            { lon: -118.2437, lat: 34.0522, type: 'via', radius: WAYPOINT_SNAP_RADIUS_M },
+            { lon: -87.6298, lat: 41.8781, type: 'break', radius: WAYPOINT_SNAP_RADIUS_M },
           ],
           units: 'kilometers',
           alternates: 0,
@@ -381,9 +382,9 @@ describe('valhalla.ts', () => {
           },
           exclude_polygons: [],
           locations: [
-            { lon: -74.006, lat: 40.7128, type: 'break' },
-            { lon: -118.2437, lat: 34.0522, type: 'via' },
-            { lon: -87.6298, lat: 41.8781, type: 'break' },
+            { lon: -74.006, lat: 40.7128, type: 'break', radius: WAYPOINT_SNAP_RADIUS_M },
+            { lon: -118.2437, lat: 34.0522, type: 'via', radius: WAYPOINT_SNAP_RADIUS_M },
+            { lon: -87.6298, lat: 41.8781, type: 'break', radius: WAYPOINT_SNAP_RADIUS_M },
           ],
           units: 'kilometers',
           alternates: 0,
@@ -414,9 +415,9 @@ describe('valhalla.ts', () => {
           },
           exclude_polygons: [],
           locations: [
-            { lon: -74.006, lat: 40.7128, type: 'break' },
-            { lon: -118.2437, lat: 34.0522, type: 'via' },
-            { lon: -87.6298, lat: 41.8781, type: 'break' },
+            { lon: -74.006, lat: 40.7128, type: 'break', radius: WAYPOINT_SNAP_RADIUS_M },
+            { lon: -118.2437, lat: 34.0522, type: 'via', radius: WAYPOINT_SNAP_RADIUS_M },
+            { lon: -87.6298, lat: 41.8781, type: 'break', radius: WAYPOINT_SNAP_RADIUS_M },
           ],
           units: 'kilometers',
           alternates: 0,
@@ -446,7 +447,7 @@ describe('valhalla.ts', () => {
             auto: mockSettings.costing,
           },
           exclude_polygons: [],
-          locations: [{ lon: -74.006, lat: 40.7128, type: 'break' }],
+          locations: [{ lon: -74.006, lat: 40.7128, type: 'break', radius: WAYPOINT_SNAP_RADIUS_M }],
           units: 'kilometers',
           alternates: 0,
           id: 'valhalla_directions',
@@ -524,10 +525,10 @@ describe('valhalla.ts', () => {
             auto: mockSettings.costing,
           },
           locations: [
-            { lon: -74.006, lat: 40.7128, type: 'break' },
-            { lon: -73.99, lat: 40.75, type: 'via' },
-            { lon: -73.98, lat: 40.755, type: 'via' },
-            { lon: -87.6298, lat: 41.8781, type: 'break' },
+            { lon: -74.006, lat: 40.7128, type: 'break', radius: WAYPOINT_SNAP_RADIUS_M },
+            { lon: -73.99, lat: 40.75, type: 'via', radius: WAYPOINT_SNAP_RADIUS_M },
+            { lon: -73.98, lat: 40.755, type: 'via', radius: WAYPOINT_SNAP_RADIUS_M },
+            { lon: -87.6298, lat: 41.8781, type: 'break', radius: WAYPOINT_SNAP_RADIUS_M },
           ],
           units: 'kilometers',
           id: 'valhalla_optimized_route',
@@ -878,7 +879,7 @@ describe('valhalla.ts', () => {
             auto: mockSettings.costing,
           },
           contours: [{ time: 10 }, { time: 20 }, { time: 30 }],
-          locations: [{ lon: -118.2437, lat: 34.0522, type: 'break' }],
+          locations: [{ lon: -118.2437, lat: 34.0522, type: 'break', radius: WAYPOINT_SNAP_RADIUS_M }],
           units: 'kilometers',
           id: 'valhalla_isochrones_lonlat_-118.2437,34.0522_range_30_interval_10',
         },
@@ -1016,10 +1017,10 @@ describe('valhalla.ts', () => {
       const result = makeLocations(mockWaypoints);
 
       expect(result).toEqual([
-        { lon: -74.006, lat: 40.7128, type: 'break' },
-        { lon: -118.2437, lat: 34.0522, type: 'via' },
-        { lon: -87.6298, lat: 41.8781, type: 'via' },
-        { lon: -122.4194, lat: 37.7749, type: 'break' },
+        { lon: -74.006, lat: 40.7128, type: 'break', radius: WAYPOINT_SNAP_RADIUS_M },
+        { lon: -118.2437, lat: 34.0522, type: 'via', radius: WAYPOINT_SNAP_RADIUS_M },
+        { lon: -87.6298, lat: 41.8781, type: 'via', radius: WAYPOINT_SNAP_RADIUS_M },
+        { lon: -122.4194, lat: 37.7749, type: 'break', radius: WAYPOINT_SNAP_RADIUS_M },
       ]);
     });
 
@@ -1028,7 +1029,9 @@ describe('valhalla.ts', () => {
 
       const result = makeLocations(singleWaypoint);
 
-      expect(result).toEqual([{ lon: -74.006, lat: 40.7128, type: 'break' }]);
+      expect(result).toEqual([
+        { lon: -74.006, lat: 40.7128, type: 'break', radius: WAYPOINT_SNAP_RADIUS_M },
+      ]);
     });
 
     it('should create locations from two waypoints', () => {
@@ -1037,8 +1040,8 @@ describe('valhalla.ts', () => {
       const result = makeLocations(twoWaypoints);
 
       expect(result).toEqual([
-        { lon: -74.006, lat: 40.7128, type: 'break' },
-        { lon: -118.2437, lat: 34.0522, type: 'break' },
+        { lon: -74.006, lat: 40.7128, type: 'break', radius: WAYPOINT_SNAP_RADIUS_M },
+        { lon: -118.2437, lat: 34.0522, type: 'break', radius: WAYPOINT_SNAP_RADIUS_M },
       ]);
     });
 

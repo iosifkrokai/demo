@@ -174,6 +174,13 @@ export const makeContours = ({
   return contours;
 };
 
+// Snap allowance (metres) sent to Valhalla for every waypoint. Without it the
+// implicit radius is 0, and any waypoint that is not exactly on a graph edge —
+// a castle centroid, a church set back from the street — makes the whole /route
+// call fail with {"error_code":499,"error":"Could not find candidate edge used
+// for destination label"}: points get drawn, no route line appears.
+export const WAYPOINT_SNAP_RADIUS_M = 100;
+
 export const makeLocations = (waypoints: ActiveWaypoint[]) => {
   const locations = [];
   for (const [idx, waypoint] of waypoints.entries()) {
@@ -182,6 +189,7 @@ export const makeLocations = (waypoints: ActiveWaypoint[]) => {
       lon: waypoint.displaylnglat[0],
       lat: waypoint.displaylnglat[1],
       type: type,
+      radius: WAYPOINT_SNAP_RADIUS_M,
     });
   }
 

@@ -50,14 +50,18 @@ def resolve(
 ) -> ResolvedConstraints:
     d = intent.decision
 
-    # ── Time budget: explicit > LLM > default ──
+    # ── Time budget: explicit > LLM > none ──
+    # No time limit stated by the user → no limit at all. A default of 120 min
+    # used to be applied silently, which trimmed the route to whatever fit two
+    # hours the user never asked for. 0 is the UI's "без ограничения" value and
+    # means exactly the same as an absent field.
     if explicit_time_budget is not None:
-        budget = explicit_time_budget
-    elif d.time_budget_minutes is not None:
-        budget = d.time_budget_minutes
+        # The selector wins over any model guess; 0 = "без ограничения".
+        budget = explicit_time_budget or None
     else:
-        budget = constants.DEFAULT_BUDGET_MIN
-    budget = max(constants.MIN_BUDGET_MIN, min(budget, constants.MAX_BUDGET_MIN))
+        budget = d.time_budget_minutes or None
+    if budget is not None:
+        budget = max(constants.MIN_BUDGET_MIN, min(budget, constants.MAX_BUDGET_MIN))
 
     # ── Bbox: explicit wins; else None. Format: (W, S, E, N) — matches ST_MakeEnvelope.
     bbox = tuple(explicit_bbox) if explicit_bbox else None

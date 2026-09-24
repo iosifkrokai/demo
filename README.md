@@ -105,6 +105,22 @@ export OPENROUTER_API_KEY=sk-or-...        # required for embeddings
 `--district-mode nominatim` (real reverse geocoding, 1 req/s) and `--limit N`.
 `load_osm.py` takes `--dry-run`, `--limit`, `--no-embed`, `--path`.
 
+`--bbox` covers a slice of Lithuania and Poland, so every row is checked against
+`agent/geofence.py` (Natural Earth border polygon, `data/belarus_border.json`) before it
+is written. Without that filter Vilnius landmarks land in the table labelled
+"Островецкий район" and come back for Grodno queries — a DB filled before the filter
+existed is cleaned with:
+
+```bash
+export DATABASE_URL=postgresql://grodno:...@localhost:5432/grodno
+.venv/bin/python scripts/purge_foreign_places.py           # dry run
+.venv/bin/python scripts/purge_foreign_places.py --apply
+```
+
+A dozen Belarusian POIs sit just outside the simplified polygon; they are listed
+explicitly in `data/belarus_border_keep.json` (each verified with Nominatim), so ingest
+and purge agree on the same set.
+
 Spot-check:
 ```bash
 docker exec grodno-db psql -U grodno -d grodno -c "

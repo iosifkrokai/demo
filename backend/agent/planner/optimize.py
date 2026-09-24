@@ -35,6 +35,8 @@ from .cost import total_seconds, walk_cost
 # km/h pedestrian speed — used to convert walk time to distance for the
 # max-leg check (avoids calling Valhalla just for a distance estimate).
 WALK_KMH = 4.0
+# Fallback per-leg ceiling for a driven tour (4 h) when the query sets no budget.
+_DRIVE_LEG_FALLBACK_S = 4 * 3600
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -45,6 +47,7 @@ def optimize(
     candidates: list[Candidate],
     cost: CostMatrix,
     constraints: ResolvedConstraints,
+    costing: str = "pedestrian",
 ) -> tuple[list[Candidate], dict]:
     """Pick the best order, return (ordered_candidates, debug_info)."""
     n = len(candidates)
@@ -61,11 +64,17 @@ def optimize(
         return [candidates[i] for i in order], {**info, "algorithm": "direct", "order": order}
 
     if n <= 6:
-        order, info = _brute_open(candidates, matrix, visits, budget_s, info)
+        order, info = _brute_open(
+            candidates, matrix, visits, budget_s, info, costing=costing
+        )
     elif n <= 12:
-        order, info = _regret_insertion(candidates, matrix, visits, budget_s, must_idx, info)
+        order, info = _regret_insertion(
+            candidates, matrix, visits, budget_s, must_idx, info, costing=costing
+        )
     else:
-        order, info = _nn_2opt_multi(candidates, matrix, visits, budget_s, info)
+        order, info = _nn_2opt_multi(
+            candidates, matrix, visits, budget_s, info, costing=costing
+        )
 
     # ── Defect 3 fix: budget-constrained greedy selection ─────────────────
     # After optimization, greedily trim the route to fit inside the budget
@@ -74,7 +83,7 @@ def optimize(
     # the budget is exceeded.
     must_ids = set(constraints.must_visit_ids)
     constrained, dropped = _budget_constrain(
-        candidates, order, matrix, visits, budget_s, must_ids
+        candidates, order, matrix, visits, budget_s, must_ids, costing=costing
     )
     if constrained != list(range(n)):
         new_order = [i for i in constrained if i < len(candidates)]
@@ -91,6 +100,8 @@ def _budget_constrain(
     visits: list[int],
     budget_s: int | None,
     must_ids: set[int],
+    *,
+    costing: str = "pedestrian",
 ) -> tuple[list[int], int]:
     """Greedily trim `order` to fit inside the time budget and max-leg constraint.
 
@@ -107,8 +118,9 @@ def _budget_constrain(
     must_idx_set = {i for i in route if candidates[i].id in must_ids}
     dropped = 0
 
-    # Compute the maximum allowed walk time for a single leg.
-    max_leg_s = _max_leg_seconds(budget_s)
+    # Compute the maximum allowed time for a single leg (walkability rule for a
+    # pedestrian tour; the budget itself when the tour is driven).
+    max_leg_s = _max_leg_seconds(budget_s, costing)
 
     # Greedy removal loop.
     while len(route) > 1:
@@ -135,8 +147,15 @@ def _budget_constrain(
     return route, dropped
 
 
-def _max_leg_seconds(budget_s: int | None) -> float:
-    """Maximum allowed walk time for a single leg, in seconds."""
+def _max_leg_seconds(budget_s: int | None, costing: str = "pedestrian") -> float:
+    """Maximum allowed time for a single leg, in seconds.
+
+    The cap is a *walkability* rule: a pedestrian tour must not contain a leg
+    nobody would walk. A region-wide tour is driven (costing "auto"), where a
+    long leg is normal, so the budget itself is the only bound.
+    """
+    if costing != "pedestrian":
+        return float(budget_s) if budget_s else _DRIVE_LEG_FALLBACK_S
     if budget_s is None:
         # No budget → use the absolute max in km converted to seconds.
         return (constants.MAX_WALK_LEG_KM / WALK_KMH) * 3600
@@ -162,6 +181,8 @@ def _brute_open(
     visits: list[int],
     budget_s: int | None,
     info: dict,
+    *,
+    costing: str = "pedestrian",
 ) -> tuple[list[int], dict]:
     """Enumerate (start, end) × all permutations of middle, return cheapest."""
     n = len(cands)
@@ -225,6 +246,8 @@ def _regret_insertion(
     budget_s: int | None,
     must_idx: list[int],
     info: dict,
+    *,
+    costing: str = "pedestrian",
 ) -> tuple[list[int], dict]:
     """Sequentially insert the most "regrettable-to-skip" candidate.
 
@@ -247,8 +270,8 @@ def _regret_insertion(
 
     iterations = 0
     skipped = 0
-    max_leg_s = _max_leg_seconds(budget_s)
-    while remaining and len(route) < constants.ROUTE_MAX_STOPS:
+    max_leg_s = _max_leg_seconds(budget_s, costing=costing)
+    while remaining:
         # Budget check: stop growing if even the cheapest single insertion exceeds.
         cur_cost = total_seconds(route, matrix, visits)
         if budget_s is not None and cur_cost >= budget_s:
@@ -316,6 +339,8 @@ def _nn_2opt_multi(
     visits: list[int],
     budget_s: int | None,
     info: dict,
+    *,
+    costing: str = "pedestrian",
 ) -> tuple[list[int], dict]:
     """Nearest-neighbour from K random starts + 2-opt local search.
 
