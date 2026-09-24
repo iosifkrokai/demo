@@ -1,16 +1,7 @@
-"""Local LLM wrapper for query parsing. Uses llama-cpp-python in-process.
+"""LLM wrapper for query parsing via DeepInfra API.
 
-The model is loaded once at agent startup (see `init()`) and reused for every
-request. Default model: Qwen2.5-1.5B-Instruct q4_k_m GGUF (~1 GB), pulled
-automatically from HuggingFace on first run and cached in
-~/.cache/huggingface/.
-
-Russian support is solid in Qwen2.5 (the family was retrained on multilingual
-data including Russian). For CPU-only inference this is the lightest option
-that still produces usable JSON.
-
-If `init()` hasn't been called (e.g. running llm.py standalone) or the model
-fails to load, we fall back to a regex-based keyword + category extractor.
+Uses DeepInfra's OpenAI-compatible API. Falls back to keyword-based regex parser
+if API is unavailable or DEEPINFRA_API_KEY is not set.
 """
 
 from __future__ import annotations
@@ -19,20 +10,18 @@ import json
 import os
 import re
 
-# Defaults — overridable via env.
-DEFAULT_MODEL = "Qwen/Qwen2.5-1.5B-Instruct-GGUF"
-DEFAULT_FILE_GLOB = "*q4_k_m.gguf"
+# DeepInfra configuration
+DEEPINFRA_API_KEY = os.environ.get("DEEPINFRA_API_KEY")
+DEEPINFRA_BASE_URL = "https://api.deepinfra.com/v1/openai"
+DEFAULT_MODEL = "google/gemini-3.1-pro"
 
 SYSTEM_PROMPT = (
-    "Extract structured intent from a Russian-language walking-tour query about Grodno.\n"
+    "Extract structured intent from a Russian-language walking-tour query about Grodno, Belarus.\n"
     "Return JSON with keys: keywords (list of strings), categories "
     "(list of: замок|костёл|церковь|монастырь|дворец|усадьба|парк|музей|памятник|"
     "храм|архитектура|инфраструктура|кладбище), "
-    "n_points (int 2..8), time_budget_minutes (null, or int 15..600 — total time "
-    "the user has, extracted from phrases like «есть 2 часа» or «полдня»), "
-    "region_bbox (null, or an object "
-    '{"south": "53.6", "west": "23.7", "north": "53.7", "east": "23.9"} '
-    "with coordinate strings).\n"
+    "time_budget_minutes (null, or int 15..480 — total time "
+    "the user has, extracted from phrases like «есть 2 часа» or «полдня»).\n"
     "Do not invent places or coordinates. Keep lists short."
 )
 
@@ -52,9 +41,6 @@ CATEGORY_SYNONYMS: dict[str, list[str]] = {
     "кладбище": ["кладбищ", "некропол"],
 }
 
-# Keywords that strongly suggest a specific historical/narrative category.
-# These queries don't mention a category word directly but are well-served
-# by historical place types (замок, дворец, монастырь, музей, костёл).
 HISTORICAL_QUERY_MARKERS: dict[str, list[str]] = {
     "история": ["история", "историческ", "истори"],
     "необычный": ["необычн", "нестандарт", "уникальн", "интересн"],
@@ -63,128 +49,66 @@ HISTORICAL_QUERY_MARKERS: dict[str, list[str]] = {
     "неман": ["неман", "набережн", "река"],
 }
 
-# NOTE: no JSON-schema "pattern" here — llama-cpp-python cannot compile regex
-# patterns into GBNF (llama.cpp aborts with "error parsing grammar" and kills
-# the process). Coordinate ranges/axes are validated post-hoc in
-# main.sanitize_bbox() instead.
-_LAT_DOC = 'latitude string in the Grodno region, e.g. "53.6"'
-_LON_DOC = 'longitude string in the Grodno region, e.g. "23.8"'
-
-# Fed to llama-cpp-python as response_format={"type": "json_object", "schema": ...};
-# the library compiles it into a GBNF grammar, so the structure (keys, enums,
-# coordinate ranges) is guaranteed at sampling time, not just checked after.
-PARSE_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "keywords": {"type": "array", "items": {"type": "string"}, "maxItems": 10},
-        "categories": {"type": "array", "items": {"enum": list(CATEGORY_SYNONYMS)}, "maxItems": 10},
-        "n_points": {"type": "integer", "enum": list(range(2, 9))},
-        "time_budget_minutes": {
-            "anyOf": [
-                {"type": "null"},
-                {"type": "integer", "minimum": 15, "maximum": 600},
-            ]
-        },
-        "region_bbox": {
-            "anyOf": [
-                {"type": "null"},
-                {
-                    "type": "object",
-                    "properties": {
-                        "south": {"type": "string", "description": _LAT_DOC},
-                        "west": {"type": "string", "description": _LON_DOC},
-                        "north": {"type": "string", "description": _LAT_DOC},
-                        "east": {"type": "string", "description": _LON_DOC},
-                    },
-                    "required": ["south", "west", "north", "east"],
-                    "additionalProperties": False,
-                },
-            ]
-        },
-    },
-    "required": ["keywords", "categories", "n_points", "time_budget_minutes", "region_bbox"],
-    "additionalProperties": False,
-}
-
-_LLM = None  # set by init(); module-level so parse_query() stays cheap
+_LLM_CLIENT = None
+_MODEL_NAME = None
 
 
 def llm_is_ready() -> bool:
-    """Public liveness probe for the LLM. Avoids reaching into module state."""
-    return _LLM is not None
+    return _LLM_CLIENT is not None
 
 
 def init() -> None:
-    """Load the GGUF model into memory. Blocking; call once at agent startup."""
-    global _LLM
-    if _LLM is not None:
-        return
-    try:
-        from llama_cpp import Llama  # imported lazily so the agent can still start
-                                    # without the package on systems where it failed
-                                    # to install (e.g. no prebuilt wheel).
-    except ImportError as e:
-        print(f"llama-cpp-python not available ({e}); falling back to keyword parser")
-        _LLM = None
+    global _LLM_CLIENT, _MODEL_NAME
+    if _LLM_CLIENT is not None:
         return
 
-    repo = os.environ.get("LLM_MODEL", DEFAULT_MODEL)
-    fname = os.environ.get("LLM_FILE", DEFAULT_FILE_GLOB)
-    n_ctx = int(os.environ.get("LLM_CTX", "2048"))
-    n_threads = int(os.environ.get("LLM_THREADS", "2"))
-    print(f"loading local LLM {repo} / {fname} (ctx={n_ctx}, threads={n_threads})...")
-    _LLM = Llama.from_pretrained(
-        repo_id=repo,
-        filename=fname,
-        n_ctx=n_ctx,
-        n_threads=n_threads,
-        verbose=False,
+    if not DEEPINFRA_API_KEY:
+        print("DEEPINFRA_API_KEY not set; falling back to keyword parser")
+        _LLM_CLIENT = None
+        return
+
+    import httpx
+    _MODEL_NAME = os.environ.get("LLM_MODEL", DEFAULT_MODEL)
+    _LLM_CLIENT = httpx.Client(
+        base_url=DEEPINFRA_BASE_URL,
+        headers={"Authorization": f"Bearer {DEEPINFRA_API_KEY}"},
+        timeout=30.0,
     )
-    print("LLM ready.")
+    print(f"DeepInfra LLM ready: {_MODEL_NAME}")
 
 
 def _fallback_parse(query: str, default_n_points: int) -> dict:
     q = query.lower()
     categories: list[str] = []
 
-    # 1. Keyword-based category extraction (most reliable for explicit queries)
     for cat, syns in CATEGORY_SYNONYMS.items():
         if any(s in q for s in syns):
             if cat not in categories:
                 categories.append(cat)
 
-    # 2. Historical/narrative query markers → broaden category set
-    # These queries don't name a category word but want historical places.
     for marker_key, marker_words in HISTORICAL_QUERY_MARKERS.items():
         if any(w in q for w in marker_words):
             if marker_key == "история":
-                # Broaden: include all historically interesting categories
                 for hist_cat in ["замок", "дворец", "монастырь", "костёл", "музей", "архитектура"]:
                     if hist_cat not in categories:
                         categories.append(hist_cat)
             elif marker_key == "необычный":
-                # "необычные памятники" — prefer памятник, but might get музей too
                 if "памятник" not in categories:
                     categories.append("памятник")
             elif marker_key == "неман":
-                # River → park + infrastructure near water
                 if "парк" not in categories:
                     categories.append("парк")
                 if "инфраструктура" not in categories:
                     categories.append("инфраструктура")
             elif marker_key == "советский":
-                # Soviet → architecture
                 if "архитектура" not in categories:
                     categories.append("архитектура")
             elif marker_key == "съёмка":
-                # Film locations → include the monument directly
                 if "памятник" not in categories:
                     categories.append("памятник")
                 if "монастырь" not in categories:
                     categories.append("монастырь")
 
-    # 3. Single-word category query → override whatever LLM returned
-    # e.g. "замок" should return замок, not whatever the model hallucinated
     single_word_cats = {
         "замок": ["замок"], "костёл": ["костёл"], "костел": ["костёл"],
         "церковь": ["церковь"], "монастырь": ["монастырь"],
@@ -199,9 +123,7 @@ def _fallback_parse(query: str, default_n_points: int) -> dict:
         categories = single_word_cats[q_stripped]
 
     keywords = [w for w in re.findall(r"[а-яёa-z]{3,}", q)]
-    word_to_n = {"пара": 2, "два": 2, "две": 2, "три": 3, "четыре": 4, "пять": 5, "шесть": 6, "семь": 7}
-    n_points = next((v for k, v in word_to_n.items() if re.search(rf"\b{k}\b", q)), default_n_points)
-    # time budget: «2 часа», «час», «90 минут», «полдня»
+
     time_budget_minutes = None
     m = re.search(r"(\d+)\s*(ч|час|часа|часов)", q)
     if m:
@@ -216,46 +138,71 @@ def _fallback_parse(query: str, default_n_points: int) -> dict:
         time_budget_minutes = 240
     if time_budget_minutes is not None:
         time_budget_minutes = max(15, min(time_budget_minutes, 600))
+
     return {
         "keywords": keywords,
         "categories": categories,
-        "n_points": n_points,
         "time_budget_minutes": time_budget_minutes,
-        "region_bbox": None,
     }
 
 
+def _extract_json(text: str) -> dict:
+    """Pull a JSON object out of a model reply, tolerating ``` fences."""
+    if text.startswith("```"):
+        for part in text.split("```"):
+            part = part.strip()
+            if part.startswith("json"):
+                part = part[4:].strip()
+            if part.startswith("{"):
+                text = part
+                break
+    return json.loads(text.strip())
+
+
+def chat_json(system: str, user: str, *, model: str | None = None,
+              timeout: float | None = None, max_tokens: int = 256) -> dict:
+    """One-shot chat completion that must return a JSON object.
+
+    Shared by query parsing and the reranker so the fence-stripping and error
+    contract live in exactly one place. Raises on any transport or parse
+    failure — callers are expected to degrade, never to propagate: an LLM
+    outage must not turn /routes/generate into a 5xx.
+    """
+    if _LLM_CLIENT is None:
+        raise RuntimeError("llm client not initialised")
+    request: dict = {
+        "model": model or _MODEL_NAME,
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ],
+        "temperature": 0.0,
+        "max_tokens": max_tokens,
+    }
+    if timeout is not None:
+        request["timeout"] = timeout
+    response = _LLM_CLIENT.post("/chat/completions", json=request)
+    response.raise_for_status()
+    content = response.json()["choices"][0]["message"]["content"]
+    parsed = _extract_json(content)
+    if not isinstance(parsed, dict):
+        raise ValueError(f"expected a JSON object, got {type(parsed).__name__}")
+    return parsed
+
+
 def parse_query(query: str, default_n_points: int = 4) -> dict:
-    """Parse a free-text Russian query into {keywords, categories, n_points, time_budget_minutes, region_bbox}."""
-    if _LLM is None:
+    if _LLM_CLIENT is None:
         return {**_fallback_parse(query, default_n_points), "source": "fallback"}
 
     try:
-        out = _LLM.create_chat_completion(
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": query},
-            ],
-            temperature=0.0,
-            response_format={"type": "json_object", "schema": PARSE_SCHEMA},
-        )
-        parsed = json.loads(out["choices"][0]["message"]["content"])
-    except Exception:
+        parsed = chat_json(SYSTEM_PROMPT, query, max_tokens=256)
+    except Exception as e:
+        print(f"LLM API error: {e}; falling back to keyword parser")
         return {**_fallback_parse(query, default_n_points), "source": "fallback"}
 
-    if not isinstance(parsed, dict):
-        return {**_fallback_parse(query, default_n_points), "source": "fallback"}
     parsed.setdefault("keywords", [])
     parsed.setdefault("categories", [])
-    parsed.setdefault("n_points", default_n_points)
     parsed.setdefault("time_budget_minutes", None)
-    parsed.setdefault("region_bbox", None)
-    # Sanity-bound n_points to the agent's allowed range.
-    try:
-        n = int(parsed["n_points"])
-        parsed["n_points"] = max(2, min(8, n))
-    except (TypeError, ValueError):
-        parsed["n_points"] = default_n_points
     parsed["source"] = "llm"
     return parsed
 
@@ -265,13 +212,7 @@ def classify_items(
     categories: list[str],
     chunk_size: int = 12,
 ) -> list[str | None]:
-    """Classify each item into one of the allowed categories using the local LLM.
-
-    One item per completion with a grammar-constrained single-category schema:
-    batched arrays confused the tiny model into echoing categories across items.
-    Returns a parallel list of category strings (or None on per-row failure).
-    """
-    if _LLM is None or not items:
+    if _LLM_CLIENT is None or not items:
         return [None] * len(items)
 
     out: list[str | None] = [None] * len(items)
@@ -285,29 +226,34 @@ def classify_items(
 
     for i in range(0, len(items), chunk_size):
         chunk = items[i : i + chunk_size]
-        # One item per prompt, with a task instruction and its own response
-        # slot: batched arrays made the tiny model echo categories for other
-        # items (зоопарк → «костёл» and the like).
         for j, text in enumerate(chunk):
             idx = i + j
-            schema = {
-                "type": "object",
-                "properties": {
-                    "category": {"type": "string", "enum": categories},
-                },
-                "required": ["category"],
-                "additionalProperties": False,
-            }
             try:
-                resp = _LLM.create_chat_completion(
-                    messages=[
-                        {"role": "system", "content": system},
-                        {"role": "user", "content": text},
-                    ],
-                    temperature=0.0,
-                    response_format={"type": "json_object", "schema": schema},
+                response = _LLM_CLIENT.post(
+                    "/chat/completions",
+                    json={
+                        "model": _MODEL_NAME,
+                        "messages": [
+                            {"role": "system", "content": system},
+                            {"role": "user", "content": text},
+                        ],
+                        "temperature": 0.0,
+                        "max_tokens": 32,
+                    },
                 )
-                parsed = json.loads(resp["choices"][0]["message"]["content"])
+                response.raise_for_status()
+                data = response.json()
+                content = data["choices"][0]["message"]["content"]
+                if content.startswith("```"):
+                    parts = content.split("```")
+                    for p in parts:
+                        p = p.strip()
+                        if p.startswith("json"):
+                            p = p[4:].strip()
+                        if p.startswith("{"):
+                            content = p
+                            break
+                parsed = json.loads(content.strip())
                 category = parsed.get("category") if isinstance(parsed, dict) else None
                 if isinstance(category, str) and category in categories:
                     out[idx] = category

@@ -47,14 +47,39 @@ services:
       start_period: 30s
 
   valhalla-app:
-    build: ./web-app
+    build:
+      context: ./web-app
     container_name: grodno-valhalla-app
-    ports: ["80:80"]
+    environment:
+      VITE_AGENT_URL: "http://host.docker.internal:8080"
+      VITE_VALHALLA_URL: "http://valhalla:8002"
+      SKIP_PREFLIGHT_CHECK: "true"
+    ports:
+      - "80:80"
     depends_on:
       - valhalla
     volumes:
       - ./web-app/nginx.conf:/etc/nginx/conf.d/default.conf:ro
     restart: unless-stopped
+
+  # agent:
+  #   build:
+  #     context: .
+  #     dockerfile: agent/Dockerfile
+  #   container_name: grodno-agent
+  #   environment:
+  #     AGENT_HOST: "0.0.0.0"
+  #     AGENT_PORT: "8080"
+  #     DATABASE_URL: "postgresql://grodno:grodno@db:5432/grodno"
+  #     VALHALLA_URL: "http://valhalla:8002"
+  #     DEEPINFRA_API_KEY: "${DEEPINFRA_API_KEY:-}"
+  #     RERANK_ENABLED: "${RERANK_ENABLED:-1}"
+  #   ports:
+  #     - "8080:8080"
+  #   depends_on:
+  #     - db
+  #     - valhalla
+  #   restart: unless-stopped
 
 volumes:
   pgdata:

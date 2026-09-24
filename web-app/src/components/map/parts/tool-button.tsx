@@ -6,6 +6,7 @@ interface ToolButtonProps {
   onClick: () => void;
   className?: string;
   disabled?: boolean;
+  active?: boolean;
   'data-testid'?: string;
 }
 
@@ -15,6 +16,7 @@ export function ToolButton({
   onClick,
   className,
   disabled = false,
+  active = false,
   'data-testid': testId,
 }: ToolButtonProps) {
   return (
@@ -29,9 +31,11 @@ export function ToolButton({
       style={{
         width: '42px',
         height: '42px',
-        backgroundColor: '#ffffff',
+        backgroundColor: active ? '#e0f2fe' : '#ffffff',
         borderRadius: '4px',
-        boxShadow: '0 0 0 2px rgba(0,0,0,0.1)',
+        boxShadow: active
+          ? '0 0 0 2px #3b82f6'
+          : '0 0 0 2px rgba(0,0,0,0.1)',
         border: 'none',
         cursor: disabled ? 'default' : 'pointer',
         display: 'flex',

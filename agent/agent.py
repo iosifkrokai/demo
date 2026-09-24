@@ -35,7 +35,8 @@ from .routing import (
     optimise_route,
     visit_time_minutes,
 )
-from .search import candidates_by_embedding, db_categories, fetch_points_by_ids
+from .search import _keyword_search, candidates_by_embedding, fetch_points_by_ids
+from .rerank import rerank
 from .valhalla_client import ping as valhalla_ping
 from .valhalla_client import route_through, time_matrix
 
@@ -56,52 +57,60 @@ class RoutePlanner:
     def generate(self, req: GenerateReq) -> RouteResponse:
         t0 = _time.perf_counter()
         log.info("generate.start", extra={"query_len": len(req.query),
-                                          "explicit_n": req.n_points,
                                           "explicit_budget": req.time_budget_minutes})
 
         parsed = self._parse_intent(req)
-        bbox = self._resolve_bbox(parsed, req.region_bbox)
-        n = self._resolve_n_points(parsed, req.n_points)
+        # Budget is the only control knob now. Default: 2 hours for a typical walk.
         budget_min = self._resolve_budget(parsed, req.time_budget_minutes)
+        # Upper bound for retrieval pool: agent decides how many fit the budget.
+        # Derive max stops from budget: avg 15 min per stop (walk + visit), cap at 20.
+        # Let the budget be the only knob; the planner fills it up to this ceiling.
+        n = min(20, max(3, budget_min // 15))
 
-        candidates = self._find_candidates(req.query, parsed.categories, bbox, n)
+        candidates = self._find_candidates(req.query, parsed.categories, n)
         if len(candidates) < 2:
             raise NoCandidatesFound(
                 f"only {len(candidates)} candidate(s) match the query; need ≥ 2"
             )
 
-        # Plan the order on the matrix (no shrinking yet — we need a real
-        # Valhalla walk time for the budget summary).
+        # Plan the order within the budget. optimise_route handles shrinking
+        # internally via the worst-neighbour heuristic (routing.py).
         ordered, info = self._plan_order(candidates, n=n, budget_min=budget_min)
 
-        # Final canonical route (with directions shape) from Valhalla. This
-        # is the authoritative walk time — we use it for the budget summary,
-        # not the matrix estimate.
+        # LLM re-ranker: the model may want to prefer/drop/swap points
+        # to better match the query intent (e.g. "museums but no churches").
+        # If ops are returned, rebuild the route with the new ids.
+        plan_ids = ordered  # type: ignore[assignment]
+        rerank_result = rerank(
+            req.query,
+            _as_point_dicts(ordered),
+            _as_point_dicts(candidates),
+            {"walk_minutes": int(budget_min), "length": None},
+            time_budget_minutes=budget_min,
+        )
+        if rerank_result["ids"] is not None:
+            # Remap ids back to Candidate objects and rebuild
+            id_to_candidate = {c.id: c for c in candidates}
+            plan_ids = [id_to_candidate[i] for i in rerank_result["ids"] if i in id_to_candidate]
+            if len(plan_ids) >= 2:
+                log.info("rerank.applied", extra={"ops": rerank_result["applied"]})
+            else:
+                plan_ids = ordered  # fall back if rerank killed the route
+        else:
+            plan_ids = ordered
+
+        # Final canonical route (with directions shape) from Valhalla.
         locations = [{"lat": p.lat, "lon": p.lon,
-                      "type": "break" if i in (0, len(ordered) - 1) else "via"}
-                     for i, p in enumerate(ordered)]
+                      "type": "break" if i in (0, len(plan_ids) - 1) else "via"}
+                     for i, p in enumerate(plan_ids)]
         shape, summary = route_through(locations)
         if summary is None:
             raise UpstreamUnavailable("valhalla /route returned no summary")
 
         walk_s = float(summary.get("time", 0.0))
-
-        # If we still exceed the budget after the planned order, drop middle
-        # stops and re-route until we fit (safety net).
         stops_dropped = info.get("stops_dropped", 0)
-        if budget_min is not None and req.allow_auto_relax:
-            ordered, walk_s, stops_dropped = self._shrink_to_budget(
-                ordered, walk_s, budget_min
-            )
-            locations = [{"lat": p.lat, "lon": p.lon,
-                          "type": "break" if i in (0, len(ordered) - 1) else "via"}
-                         for i, p in enumerate(ordered)]
-            shape, summary = route_through(locations)
-            if summary is None:
-                raise UpstreamUnavailable("valhalla /route returned no summary")
-            walk_s = float(summary.get("time", 0.0))
 
-        budget_info = self._budget_summary(ordered, walk_s, budget_min, stops_dropped)
+        budget_info = self._budget_summary(list(plan_ids), walk_s, budget_min, stops_dropped)
 
         ms = int((_time.perf_counter() - t0) * 1000)
         log.info("generate.ok", extra={
@@ -116,8 +125,11 @@ class RoutePlanner:
             points=[
                 Place(
                     id=p.id, name=p.name, category=p.category, lat=p.lat, lon=p.lon,
-                    blurb=p.blurb, visit_minutes=visit_time_minutes(p.category),
-                ) for p in ordered
+                    blurb=p.blurb, fun_fact=p.fun_fact,
+                    fun_facts=p.fun_facts,
+                    links=p.links,
+                    visit_minutes=visit_time_minutes(p.category),
+                ) for p in plan_ids
             ],
             shape=shape,
             summary=RouteSummary(
@@ -134,7 +146,8 @@ class RoutePlanner:
             raise NoCandidatesFound(f"unknown point_ids: {sorted(missing)}")
 
         candidates = [Candidate(id=r["id"], name=r["name"], category=r["category"],
-                                lat=r["lat"], lon=r["lon"], blurb=r.get("blurb"))
+                                lat=r["lat"], lon=r["lon"], blurb=r.get("blurb"),
+                                fun_fact=r.get("fun_fact"))
                       for r in rows]
         ordered, _ = self._plan_order(candidates, n=len(candidates), budget_min=None)
 
@@ -148,7 +161,9 @@ class RoutePlanner:
             parsed=ParsedQuery(source="explicit"),
             points=[
                 Place(id=p.id, name=p.name, category=p.category, lat=p.lat, lon=p.lon,
-                      blurb=p.blurb, visit_minutes=visit_time_minutes(p.category))
+                      blurb=p.blurb, fun_fact=p.fun_fact,
+                      fun_facts=p.fun_facts, links=p.links,
+                      visit_minutes=visit_time_minutes(p.category))
                 for p in ordered
             ],
             shape=shape,
@@ -208,103 +223,85 @@ class RoutePlanner:
         The LLM never overrides an explicit client request — that contract is
         enforced here, not by magic numbers in the call sites.
         """
-        raw = parse_query(req.query, default_n_points=settings.DEFAULT_N_POINTS)
+        raw = parse_query(req.query, default_n_points=settings.DEFAULT_BUDGET_MIN)
         return ParsedQuery(
             keywords=raw.get("keywords") or [],
             categories=raw.get("categories") or [],
-            n_points=raw.get("n_points"),
             time_budget_minutes=raw.get("time_budget_minutes"),
-            region_bbox=self._bbox_from_llm(raw.get("region_bbox")),
             source="llm" if raw.get("source") != "fallback" else "fallback",
         )
 
-    @staticmethod
-    def _bbox_from_llm(bbox) -> tuple[float, float, float, float] | None:
-        """Validate the LLM-extracted bbox is inside the Grodno region.
-
-        The small Qwen model swaps axes; we accept only well-formed boxes.
-        """
-        if isinstance(bbox, dict):
-            try:
-                bbox = (float(bbox["south"]), float(bbox["west"]),
-                        float(bbox["north"]), float(bbox["east"]))
-            except (KeyError, TypeError, ValueError):
-                return None
-        if not isinstance(bbox, (list, tuple)) or len(bbox) != 4:
-            return None
-        try:
-            s, w, n, e = (float(x) for x in bbox)
-        except (TypeError, ValueError):
-            return None
-        b = settings.GRODNO_BBOX
-        if not (b["south"] - 0.1 <= s <= n <= b["north"] + 0.1 and
-                b["west"] - 0.1 <= w <= e <= b["east"] + 0.1):
-            return None
-        return (s, w, n, e)
-
-    def _resolve_n_points(self, parsed: ParsedQuery, explicit: int | None) -> int:
-        """Client wins. If explicit is None, fall back to LLM or default."""
+    def _resolve_budget(self, parsed: ParsedQuery, explicit: int | None) -> int:
+        """Resolve time budget. Defaults to 120 min (2-hour walk) if unspecified."""
         if explicit is not None:
-            return explicit
-        if parsed.n_points is not None:
-            return max(settings.MIN_N_POINTS,
-                       min(int(parsed.n_points), settings.MAX_N_POINTS))
-        return settings.DEFAULT_N_POINTS
-
-    def _resolve_budget(self, parsed: ParsedQuery, explicit: int | None) -> int | None:
-        if explicit is not None:
-            return explicit
+            return max(settings.MIN_BUDGET_MIN,
+                       min(explicit, settings.MAX_BUDGET_MIN))
         if parsed.time_budget_minutes is not None:
             return max(settings.MIN_BUDGET_MIN,
                        min(int(parsed.time_budget_minutes), settings.MAX_BUDGET_MIN))
-        return None
+        return settings.DEFAULT_BUDGET_MIN
 
-    def _resolve_bbox(self, parsed: ParsedQuery,
-                      explicit: tuple[float, float, float, float] | None
-                      ) -> tuple[float, float, float, float] | None:
-        if explicit is not None:
-            return explicit
-        return parsed.region_bbox
-
-    def _find_candidates(self, query: str, categories: list[str],
-                         bbox: tuple[float, float, float, float] | None,
-                         n: int) -> list[Candidate]:
+    def _find_candidates(self, query: str, categories: list[str], n: int) -> list[Candidate]:
         """Return a relevance-ranked list of candidate places.
 
-        We over-fetch a bit (MAX_N_POINTS * 2 or pool_size, whichever is
-        larger) so the planner has a fallback if some candidates turn out
-        to be unreachable.
+        Hybrid retrieval:
+        1. Vector search: top-N by cosine similarity — best for full sentences.
+        2. Keyword search: exact name match — best for short queries where
+           embedding model gives poor results ("горисполком" ≠ "Здание Горисполкома").
+
+        Category preference is applied as a soft score boost, not a hard filter.
         """
         qvec = self._embed(query)
-        db_cats = db_categories(categories)
         pool_limit = max(settings.CANDIDATE_POOL_SIZE, n * 2)
 
-        rows: list[dict] = []
-        if db_cats:
-            rows = candidates_by_embedding(
-                self.db, qvec, limit=pool_limit,
-                region_bbox=list(bbox) if bbox else None,
-                categories=db_cats,
-            )
-        # Top up with unfiltered results if we don't have enough yet.
-        if len(rows) < n:
-            seen = {r["id"] for r in rows}
-            extra = candidates_by_embedding(
-                self.db, qvec, limit=pool_limit,
-                region_bbox=list(bbox) if bbox else None,
-            )
-            rows.extend(r for r in extra if r["id"] not in seen)
+        # Primary: vector search
+        rows = candidates_by_embedding(
+            self.db, qvec,
+            limit=pool_limit,
+        )
 
+        # Hybrid fallback for short queries: also search by name keywords
+        # (vector search is weak for 1-2 word queries)
+        import re
+        words = re.findall(r"[а-яёa-z]{3,}", query.lower())
+        if len(words) < 3:
+            kw_rows = _keyword_search(self.db, query, limit=pool_limit)
+            seen_ids = {r["id"] for r in rows}
+            for r in kw_rows:
+                if r["id"] not in seen_ids:
+                    rows.append(r)
+
+        # Soft category scoring
         cands: list[Candidate] = []
-        for i, r in enumerate(rows):
-            relevance = 1.0 - (i / max(len(rows), 1))
+        for r in rows:
+            cos_dist = float(r.get("cosine_dist", 0.0))
+            score = 1.0 - cos_dist
             if categories and r.get("category") in categories:
-                relevance += 0.05
+                score += 0.1  # category boost: soft preference, not filter
+            # Parse fun_facts (pipe-delimited) and links (JSON) from DB
+            fun_facts_raw = r.get("fun_facts") or ""
+            fun_facts = [f.strip() for f in fun_facts_raw.split("|") if f.strip()][:3]
+            # links stored as: {"title":"...","url":"..."}|{"title":"...","url":"..."}
+            # Parse each pipe-delimited JSON object
+            import json as _json
+            links = []
+            for raw in (r.get("links") or "").split("|"):
+                raw = raw.strip()
+                if raw:
+                    try:
+                        links.append(_json.loads(raw))
+                    except Exception:
+                        pass
             cands.append(Candidate(
                 id=r["id"], name=r["name"], category=r.get("category"),
                 lat=r["lat"], lon=r["lon"], blurb=r.get("blurb"),
-                relevance=relevance,
+                fun_fact=r.get("fun_fact"),
+                fun_facts=fun_facts,
+                links=links,
+                relevance=score,
             ))
+        # Sort by score descending, tie-break by id for determinism
+        cands.sort(key=lambda c: (c.relevance, -c.id), reverse=True)
         return cands
 
     def _embed(self, text: str) -> list[float]:
@@ -338,47 +335,9 @@ class RoutePlanner:
         info["matrix_cells"] = n * n
         return ordered, info
 
-    def _shrink_to_budget(
-        self,
-        ordered: list[Candidate],
-        walk_s: float,
-        budget_min: int,
-    ) -> tuple[list[Candidate], float, int]:
-        """Drop middle stops and re-route until walk+visit fits the budget.
-
-        Returns (new_ordered, new_walk_seconds, stops_dropped_count).
-        Each iteration hits Valhalla, so this is bounded by len(ordered)-2.
-        """
-        from .valhalla_client import route_through
-        target_s = budget_min * 60
-        stops_dropped = 0
-
-        while len(ordered) > 2:
-            visits_s = sum(visit_time_minutes(c.category) for c in ordered) * 60
-            if walk_s + visits_s <= target_s:
-                break
-            # Drop the second-to-last (the last stop is the destination and
-            # the first is the origin — both are user-anchored). If you want
-            # smarter "drop the least interesting stop" selection, do it in
-            # the optimiser before calling /route.
-            ordered.pop(-2)
-            stops_dropped += 1
-            shape, summary = route_through([
-                {"lat": p.lat, "lon": p.lon,
-                 "type": "break" if i in (0, len(ordered) - 1) else "via"}
-                for i, p in enumerate(ordered)
-            ])
-            if summary is None:
-                break  # Valhalla refused the sub-route; stop trying
-            walk_s = float(summary.get("time", 0.0))
-
-        return ordered, walk_s, stops_dropped
-
     @staticmethod
     def _budget_summary(ordered: list[Candidate], walk_s: float,
-                        budget_min: int | None, stops_dropped: int) -> BudgetInfo | None:
-        if budget_min is None:
-            return None
+                        budget_min: int, stops_dropped: int) -> BudgetInfo:
         visits_s = sum(visit_time_minutes(c.category) for c in ordered) * 60
         total_s = walk_s + visits_s
         return BudgetInfo(
@@ -389,3 +348,21 @@ class RoutePlanner:
             fits=total_s <= budget_min * 60,
             stops_dropped=stops_dropped,
         )
+
+
+def _as_point_dicts(candidates: list[Candidate]) -> list[dict]:
+    """Convert Candidate objects to the plain dicts rerank.py expects."""
+    return [
+        {
+            "id": c.id,
+            "name": c.name,
+            "category": c.category,
+            "description": (c.blurb or "")[:180],
+            "fun_fact": (c.fun_fact or "")[:120],
+            "lat": c.lat,
+            "lon": c.lon,
+            "fun_facts": c.fun_facts,
+            "links": c.links,
+        }
+        for c in candidates
+    ]

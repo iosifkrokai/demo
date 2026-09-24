@@ -61,11 +61,22 @@ prompt at top, waypoint list in the middle (drag the `⠿` handle to reorder, or
 python scripts/parse_places.py        # ~76 Grodno sights via server-side filter, 4 workers, 0.5s delay, ~20s
 export OPENAI_API_KEY=sk-...          # optional — without it, categories stay NULL
 python scripts/enrich_places.py       # embeddings always; categories only if OPENAI_API_KEY is set
+python scripts/apply_curated.py --dry-run   # preview what the curated CSV would change
+python scripts/apply_curated.py             # apply name/category/blurb/fun_fact (must run last)
 ```
+
+`data/places_curated.csv` is the hand-curated source of truth and must be applied **after**
+the scraper and the enrich pass, otherwise scraped names win. See
+[`data/data_quality.md`](data/data_quality.md) for the rationale and for the review rule that
+applies to `fun_fact`.
+
+> `db/init.sql` only runs when the `pgdata` volume is created. If you are upgrading an
+> existing DB, add the newer columns by hand first:
+> `docker exec grodno-db psql -U grodno -d grodno -c "ALTER TABLE places ADD COLUMN IF NOT EXISTS fun_fact TEXT;"`
 
 Spot-check:
 ```bash
-psql "$DATABASE_URL" -c "SELECT count(*) AS n, count(embedding) AS with_emb, count(category) AS with_cat FROM places;"
+psql "$DATABASE_URL" -c "SELECT count(*) AS n, count(embedding) AS with_emb, count(category) AS with_cat, count(fun_fact) AS with_fact FROM places;"
 psql "$DATABASE_URL" -c "SELECT name, lat, lon FROM places ORDER BY id LIMIT 10;"
 ```
 
@@ -88,12 +99,18 @@ Smoke test:
 ```bash
 curl -sX POST localhost:8080/routes/generate \
   -H 'content-type: application/json' \
-  -d '{"query":"Хочу погулять по замкам Гродно","n_points":4}' | jq .
+  -d '{"query":"Хочу погулять по замкам Гродно","time_budget_minutes":120}' | jq '.points[] | {name, blurb, fun_fact}'
 
 curl -sX POST localhost:8080/routes/reroute \
   -H 'content-type: application/json' \
   -d '{"point_ids":[1,2,3,4]}' | jq .shape | head -c 200
 ```
+
+Each point in a response carries `blurb`, `fun_fact` and `visit_minutes` straight from
+`places`. The webapp stores them in `directions-store.placeDetails` (keyed by `places.id`) and
+renders them next to the map markers: a permanent name+blurb caption under the marker, plus a
+card with the fun fact on click (`src/components/map/parts/place-marker-label.tsx`,
+`place-card-popup.tsx`).
 
 ## Notes / troubleshooting
 
@@ -105,7 +122,9 @@ curl -sX POST localhost:8080/routes/reroute \
 - **First LLM call is slow.** Qwen 1.5B q4 on CPU takes ~1–3 s for one short chat completion
   (especially the first call, before kernel caches warm up). Acceptable for a POC.
 - **Categories column.** Without `OPENAI_API_KEY` set, `places.category` stays NULL. The agent
-  doesn't read this column, so the route generation still works.
+  still works — it uses the category only as a soft score boost and to estimate per-stop visit
+  time — but curated categories noticeably improve relevance. `scripts/apply_curated.py` fills
+  them in without any API key.
 
 ## Out of scope
 

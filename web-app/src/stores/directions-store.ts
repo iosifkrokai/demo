@@ -10,6 +10,9 @@ export interface Waypoint {
   id: string;
   geocodeResults: ActiveWaypoint[];
   userInput: string;
+  // Set when the point came from the agent (or from a saved route): lets the
+  // map look the place up in `placeDetails` to render its blurb / fun fact.
+  placeId?: number;
 }
 
 interface HighlightSegment {
@@ -36,6 +39,68 @@ interface LatLng {
   lng: number;
   lat: number;
 }
+
+// Route history entry
+export interface RouteHistoryEntry {
+  id: string;
+  query: string;
+  timeBudget: number;
+  places: RouteHistoryPlace[];
+  createdAt: number; // timestamp
+}
+
+export interface PlaceLink {
+  title: string;
+  url: string;
+}
+
+export interface RouteHistoryPlace {
+  id: number;
+  name: string;
+  category: string | null;
+  lat: number;
+  lon: number;
+  blurb?: string | null;
+  funFact?: string | null;
+  funFacts?: string[];
+  links?: PlaceLink[];
+  visitMinutes?: number | null;
+}
+
+// What the agent knows about a place, keyed by the DB `places.id`. Populated
+// from /routes/generate and reused when a route is restored from history.
+export interface PlaceDetails {
+  name: string;
+  category: string | null;
+  blurb: string | null;
+  funFact: string | null;
+  funFacts: string[];
+  links: PlaceLink[];
+  visitMinutes: number | null;
+}
+
+const STORAGE_KEY = 'grodno-route-history';
+const MAX_HISTORY = 10;
+
+const loadHistoryFromStorage = (): RouteHistoryEntry[] => {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    return stored ? JSON.parse(stored) : [];
+  } catch {
+    return [];
+  }
+};
+
+const saveHistoryToStorage = (history: RouteHistoryEntry[]) => {
+  try {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify(history.slice(0, MAX_HISTORY))
+    );
+  } catch {
+    // localStorage might be full or unavailable
+  }
+};
 
 const createEmptyWaypoint = (id: string): Waypoint => ({
   id,
@@ -69,6 +134,10 @@ export interface DirectionsState {
   inclineDeclineTotal?: InclineDeclineTotal;
   isOptimized: boolean;
   activeRouteIndex: number;
+  // Route history
+  routeHistory: RouteHistoryEntry[];
+  // Curated info (blurb / fun fact) about agent-generated stops, by places.id.
+  placeDetails: Record<number, PlaceDetails>;
 }
 
 interface DirectionsActions {
@@ -100,6 +169,12 @@ interface DirectionsActions {
   ) => void;
   setIsOptimized: (isOptimized: boolean) => void;
   setActiveRouteIndex: (index: number) => void;
+  // Route history actions
+  addToHistory: (entry: Omit<RouteHistoryEntry, 'id' | 'createdAt'>) => void;
+  removeFromHistory: (id: string) => void;
+  clearHistory: () => void;
+  loadHistory: () => void;
+  setPlaceDetails: (details: Record<number, PlaceDetails>) => void;
 }
 
 type DirectionsStore = DirectionsState & DirectionsActions;
@@ -115,6 +190,8 @@ export const useDirectionsStore = create<DirectionsStore>()(
       results: { data: null, show: { '0': true } },
       isOptimized: false,
       activeRouteIndex: 0,
+      routeHistory: loadHistoryFromStorage(),
+      placeDetails: {},
 
       updateInclineDecline: (inclineDeclineTotal) =>
         set(
@@ -141,6 +218,7 @@ export const useDirectionsStore = create<DirectionsStore>()(
             state.inclineDeclineTotal = undefined;
             state.results.data = null;
             state.activeRouteIndex = 0;
+            state.placeDetails = {};
           },
           undefined,
           'clearRoutes'
@@ -352,6 +430,64 @@ export const useDirectionsStore = create<DirectionsStore>()(
           },
           undefined,
           'setActiveRouteIndex'
+        ),
+
+      // Route history actions
+      addToHistory: (entry) =>
+        set(
+          (state) => {
+            const newEntry: RouteHistoryEntry = {
+              ...entry,
+              id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+              createdAt: Date.now(),
+            };
+            // Remove duplicate queries
+            state.routeHistory = [
+              newEntry,
+              ...state.routeHistory.filter((e) => e.query !== entry.query),
+            ].slice(0, MAX_HISTORY);
+            saveHistoryToStorage(state.routeHistory);
+          },
+          undefined,
+          'addToHistory'
+        ),
+
+      removeFromHistory: (id) =>
+        set(
+          (state) => {
+            state.routeHistory = state.routeHistory.filter((e) => e.id !== id);
+            saveHistoryToStorage(state.routeHistory);
+          },
+          undefined,
+          'removeFromHistory'
+        ),
+
+      clearHistory: () =>
+        set(
+          (state) => {
+            state.routeHistory = [];
+            saveHistoryToStorage([]);
+          },
+          undefined,
+          'clearHistory'
+        ),
+
+      loadHistory: () =>
+        set(
+          (state) => {
+            state.routeHistory = loadHistoryFromStorage();
+          },
+          undefined,
+          'loadHistory'
+        ),
+
+      setPlaceDetails: (details) =>
+        set(
+          (state) => {
+            state.placeDetails = details;
+          },
+          undefined,
+          'setPlaceDetails'
         ),
     })),
     { name: 'directions-store' }

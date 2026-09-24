@@ -30,7 +30,8 @@ class GenerateReq(BaseModel):
     query: str = Field(min_length=3, max_length=500)
 
     # Explicit client overrides. None means "decide for me".
-    n_points: int | None = Field(default=None, ge=settings.MIN_N_POINTS, le=settings.MAX_N_POINTS)
+    # n_points removed: users think in time, not quantities.
+    # The agent derives an appropriate number of stops from time_budget_minutes.
     time_budget_minutes: int | None = Field(default=None, ge=settings.MIN_BUDGET_MIN, le=settings.MAX_BUDGET_MIN)
     region_bbox: list[float] | None = Field(
         default=None,
@@ -44,27 +45,18 @@ class GenerateReq(BaseModel):
         description="If the time budget is too tight, drop a stop instead of failing.",
     )
 
+    # === Fields for conversational guide (future) ===
+    # Currently ignored; reserved for conversation context + multi-turn planning.
+    conversation_id: str | None = Field(default=None)
+    user_interests: list[str] | None = Field(default=None)
+    preferences: dict | None = Field(default=None)
+
     @field_validator("query")
     @classmethod
     def _strip_query(cls, v: str) -> str:
         v = v.strip()
         if not v:
             raise ValueError("query must not be empty")
-        return v
-
-    @field_validator("region_bbox")
-    @classmethod
-    def _check_bbox(cls, v):
-        if v is None:
-            return v
-        if len(v) != 4:
-            raise ValueError("region_bbox must be [south, west, north, east]")
-        s, w, n, e = v
-        b = settings.GRODNO_BBOX
-        # Pad the bounds so user-supplied boxes near the edge of Grodno still work.
-        if not (b["south"] - 0.5 <= s <= n <= b["north"] + 0.2 and
-                b["west"]  - 0.5 <= w <= e <= b["east"]  + 0.5):
-            raise ValueError(f"region_bbox {v} outside Grodno region bounds")
         return v
 
 
@@ -87,15 +79,16 @@ class Place(BaseModel):
     lat: float
     lon: float
     blurb: str | None = None
+    fun_fact: str | None = None      # primary fact shown in card header
+    fun_facts: list[str] = []       # additional facts shown as list
+    links: list[dict] = []           # [{"title": str, "url": str}]
     visit_minutes: int | None = None
 
 
 class ParsedQuery(BaseModel):
     keywords: list[str] = []
     categories: list[str] = []
-    n_points: int | None = None
     time_budget_minutes: int | None = None
-    region_bbox: list[float] | None = None
     source: Literal["llm", "fallback", "explicit"] = "llm"
 
 
@@ -118,7 +111,7 @@ class RouteResponse(BaseModel):
     points: list[Place]
     shape: dict  # GeoJSON LineString
     summary: RouteSummary
-    budget: BudgetInfo | None = None
+    budget: BudgetInfo | None = None  # absent for /routes/reroute (no budget there)
     explanation: str | None = None
 
 
@@ -140,7 +133,10 @@ class Candidate(BaseModel):
     lat: float
     lon: float
     blurb: str | None = None
-    relevance: float = 0.0  # higher is better (1 - cosine_distance)
+    fun_fact: str | None = None
+    fun_facts: list[str] = []    # extra facts for the card
+    links: list[dict] = []        # [{"title": str, "url": str}]
+    relevance: float = 0.0        # higher is better (1 - cosine_distance)
 
 
 class Plan(BaseModel):

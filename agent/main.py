@@ -61,7 +61,7 @@ app = FastAPI(title="grodno-poc-agent", lifespan=lifespan)
 # is fine for the POC.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost", "http://localhost:80", "http://127.0.0.1"],
+    allow_origins=["http://localhost", "http://localhost:80", "http://localhost:3000", "http://127.0.0.1", "http://127.0.0.1:3000", "http://host.docker.internal"],
     allow_credentials=False,
     allow_methods=["POST", "GET"],
     allow_headers=["Content-Type"],

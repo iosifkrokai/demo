@@ -5,7 +5,7 @@ export const DEFAULT_CENTER: [number, number] = [
   parseFloat(centerCoords[0] || '52.51831'),
 ];
 
-export const DEFAULT_ZOOM = 10;
+export const DEFAULT_ZOOM = 14;
 
 export const maxBounds: [[number, number], [number, number]] | undefined =
   undefined;

@@ -9,6 +9,9 @@ CREATE TABLE IF NOT EXISTS places (
   description   TEXT,
   category      TEXT,
   blurb         TEXT,
+  -- Short "did you know" line shown next to the marker on the map. Curated in
+  -- data/places_curated.csv (column 5) and applied by scripts/apply_curated.py.
+  fun_fact      TEXT,
   lat           DOUBLE PRECISION NOT NULL,
   lon           DOUBLE PRECISION NOT NULL,
   geom          GEOGRAPHY(POINT, 4326) GENERATED ALWAYS AS

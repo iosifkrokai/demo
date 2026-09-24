@@ -66,7 +66,7 @@ The Vite `base` is derived from `package.json` `homepage` (see `vite.config.ts �
 Three Zustand stores, each with `immer` + `devtools`:
 
 - `src/stores/common-store.ts` — settings panel/directions panel open state, costing settings, dateTime, map-ready flag. `Profile` enum and `profileEnum` zod schema live here.
-- `src/stores/directions-store.ts` — waypoints (with geocode results), route results, highlighted maneuver, optimized-route flag, active-route index.
+- `src/stores/directions-store.ts` — waypoints (with geocode results), route results, highlighted maneuver, optimized-route flag, active-route index, plus `placeDetails`: curated info about agent-generated stops (`name`/`category`/`blurb`/`funFact`/`visitMinutes`) keyed by the backend `places.id`, set by the sidebar from the `/routes/generate` response and read by the map to decorate markers. Waypoints carry `placeId` to link back to it.
 - `src/stores/isochrones-store.ts` — input/result, range/interval/denoise/generalize, color palette, opacity.
 
 Server-state lives in TanStack Query. The global `QueryClient` (`src/lib/tanstack-query/root-provider.tsx`) sets `refetchOnWindowFocus: false`, `retry: 1`, `staleTime: 5min`, `gcTime: 10min`. Query hooks are in `src/hooks/use-*-queries.ts`. They read inputs directly from Zustand stores via `useStore.getState()` and from the router via `router.state.location.search` rather than parameters — keep that pattern when adding new queries.
@@ -104,6 +104,7 @@ All build-time, prefixed `VITE_`. Defined in `.env`, typed in `src/vite-env.d.ts
 | `VITE_CENTER_COORDS`         | Initial map center `"lat,lng"`                                                   |
 | `VITE_DEFAULT_COSTING_MODEL` | Default profile (auto/bicycle/pedestrian/car/truck/bus/motor_scooter/motorcycle) |
 | `VITE_CLIENT_ID`             | Sent as `X-Client-Id` on Valhalla requests                                       |
+| `VITE_AGENT_URL`             | Grodno FastAPI agent (`/routes/generate`); falls back to `http://localhost:8080`  |
 
 ## Deployment
 

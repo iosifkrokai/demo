@@ -31,11 +31,18 @@ export const WaypointList = ({ onChanged }: Props) => {
   };
 
   const move = (from: number, to: number) => {
-    if (from === to || from < 0 || to < 0 || from >= waypoints.length || to >= waypoints.length) {
+    if (
+      from === to ||
+      from < 0 ||
+      to < 0 ||
+      from >= waypoints.length ||
+      to >= waypoints.length
+    ) {
       return;
     }
     const next = [...waypoints];
     const [moved] = next.splice(from, 1);
+    if (!moved) return;
     next.splice(to, 0, moved);
     update(next);
   };
@@ -47,7 +54,8 @@ export const WaypointList = ({ onChanged }: Props) => {
   };
 
   const nameOf = (wp: Waypoint): string => {
-    const sel = wp.geocodeResults.find((r) => r.selected) ?? wp.geocodeResults[0];
+    const sel =
+      wp.geocodeResults.find((r) => r.selected) ?? wp.geocodeResults[0];
     return sel?.title ?? wp.userInput ?? '—';
   };
 
@@ -86,7 +94,9 @@ export const WaypointList = ({ onChanged }: Props) => {
             className={[
               'flex items-center gap-2 rounded-lg border bg-card px-2 py-1.5 text-sm transition-opacity',
               isDragging ? 'opacity-40' : '',
-              isDragTarget ? 'border-primary/60 ring-1 ring-primary/30' : 'border-border/60',
+              isDragTarget
+                ? 'border-primary/60 ring-1 ring-primary/30'
+                : 'border-border/60',
             ].join(' ')}
           >
             <span

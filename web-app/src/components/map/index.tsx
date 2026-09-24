@@ -21,9 +21,9 @@ import {
 } from '@/utils/valhalla';
 import { DrawControl } from './draw-control';
 import type { Summary } from '@/components/types';
-import type { FeatureCollection } from 'geojson';
 import RoutingIcon from '@/images/routing_icon_minimal_bw.svg?url';
 import { ToolButton } from './parts/tool-button';
+import { Landmark } from 'lucide-react';
 
 import { MapStyleControl } from './map-style-control';
 import { getInitialMapStyle, getCustomStyle, getMapStyleUrl } from './utils';
@@ -50,6 +50,8 @@ import {
   VALHALLA_ACCESS_RESTRICTIONS_TIMED_LAYER_ID,
 } from '@/components/tiles/valhalla-layers';
 import { MarkerIcon, type MarkerColor } from './parts/marker-icon';
+import { PlaceCardPopup } from './parts/place-card-popup';
+import { PlaceMarkerLabel } from './parts/place-marker-label';
 import { maxBounds } from './constants';
 import { getInitialMapPosition, LAST_CENTER_KEY } from './utils';
 import { useCommonStore } from '@/stores/common-store';
@@ -77,6 +79,8 @@ interface MarkerData {
   color?: MarkerColor;
   shape?: string;
   number?: string;
+  // Set for agent-generated stops: drives the label + card next to the marker.
+  placeId?: number;
 }
 
 export const MapComponent = () => {
@@ -98,17 +102,8 @@ export const MapComponent = () => {
     lat: number;
   } | null>(null);
   const [elevation, setElevation] = useState('');
-  const [heightPayload, setHeightPayload] = useState<{
-    range: boolean;
-    shape: { lat: number; lon: number }[];
-    id: string;
-  } | null>(null);
   const waypoints = useDirectionsStore((state) => state.waypoints);
-  const directionResults = useDirectionsStore((state) => state.results);
-  const directionsSuccessful = useDirectionsStore((state) => state.successful);
-  const updateInclineDecline = useDirectionsStore(
-    (state) => state.updateInclineDecline
-  );
+  const placeDetails = useDirectionsStore((state) => state.placeDetails);
   const setActiveRouteIndex = useDirectionsStore(
     (state) => state.setActiveRouteIndex
   );
@@ -128,6 +123,14 @@ export const MapComponent = () => {
     lat: number;
     features: MapGeoJSONFeature[];
   } | null>(null);
+  // Which agent-generated stop currently shows its info card.
+  const [activePlace, setActivePlace] = useState<{
+    id: number;
+    lng: number;
+    lat: number;
+  } | null>(null);
+  const activeDetails =
+    activePlace != null ? placeDetails[activePlace.id] : undefined;
   const [viewState, setViewState] = useState({
     longitude: center[0],
     latitude: center[1],
@@ -136,10 +139,19 @@ export const MapComponent = () => {
   const [currentMapStyle, setCurrentMapStyle] = useState<MapStyleType>(
     getInitialMapStyle(style)
   );
+  // When POI mode is on, we show the alidade-smooth style (has POI icons).
+  // Remember the previous style to restore when POI mode is toggled off.
+  const poiStylePreviousRef = useRef<MapStyleType | null>(null);
+  const [poiMode, setPoiMode] = useState(false);
   const [customStyleData, setCustomStyleData] =
     useState<maplibregl.StyleSpecification | null>(() => getCustomStyle());
 
   const resolvedMapStyle = useMemo(() => {
+    // When POI mode is on, force the Stadia style which shows infrastructure POIs
+    // (toilets, cafes, hotels, hospitals) as distinct icons at zoom 14+.
+    if (poiMode) {
+      return getMapStyleUrl('alidade-smooth');
+    }
     if (currentMapStyle === 'custom') {
       return customStyleData ?? getMapStyleUrl('shortbread');
     }
@@ -147,7 +159,21 @@ export const MapComponent = () => {
   }, [
     currentMapStyle,
     customStyleData,
+    poiMode,
   ]) as unknown as maplibregl.StyleSpecification;
+
+  const togglePoiMode = useCallback(() => {
+    setPoiMode((prev) => {
+      if (!prev) {
+        // Turning on: remember current style
+        poiStylePreviousRef.current = currentMapStyle;
+      } else {
+        // Turning off: restore previous style if it wasn't POI already
+        // (if user switched to alidade-smooth manually, don't override)
+      }
+      return !prev;
+    });
+  }, [currentMapStyle]);
 
   const mapRef = useRef<MapRef>(null);
   const drawRef = useRef<MaplibreTerradrawControl | null>(null);
@@ -163,6 +189,9 @@ export const MapComponent = () => {
     pendingLngLat: null,
     lastTapTime: 0,
   });
+  // Tracks whether the last click was on a route marker — if so, suppress the
+  // generic map-info popup (avoid two modals at once).
+  const markerClickRef = useRef(false);
 
   const cancelPendingClick = useCallback(() => {
     if (clickStateRef.current.timer) {
@@ -332,6 +361,7 @@ export const MapComponent = () => {
             title: address.title,
             color,
             number: (index + 1).toString(),
+            placeId: waypoint.placeId,
           });
         }
       });
@@ -526,6 +556,7 @@ export const MapComponent = () => {
           if (activeTab === 'tiles') {
             handleMapTilesClick(event);
           } else {
+            setActivePlace(null);
             setPopupLngLat(pendingLngLat);
             setShowInfoPopup(true);
             getHeight(pendingLngLat.lng, pendingLngLat.lat);
@@ -543,6 +574,7 @@ export const MapComponent = () => {
       activeTab,
       handleMapTilesClick,
       setActiveRouteIndex,
+      markerClickRef,
     ]
   );
 
@@ -557,6 +589,12 @@ export const MapComponent = () => {
       cancelPendingClick();
     };
   }, [cancelPendingClick]);
+
+  // A new route means new places — drop a stale info card that would otherwise
+  // stay pinned to coordinates the route no longer visits.
+  useEffect(() => {
+    setActivePlace(null);
+  }, [placeDetails]);
 
   const handleMapContextMenu = useCallback(
     (event: { lngLat: { lng: number; lat: number } }) => {
@@ -781,27 +819,55 @@ export const MapComponent = () => {
         <HighlightSegment />
         <IsochronePolygons />
         <IsochroneLocations />
-        {markers.map((marker) => (
-          <Marker
-            anchor="bottom"
-            key={marker.id}
-            longitude={marker.lng}
-            latitude={marker.lat}
-            draggable={true}
-            onDragEnd={(e) => {
-              if (marker.type === 'waypoint') {
-                updateWaypointPosition({
-                  latLng: { lat: e.lngLat.lat, lng: e.lngLat.lng },
-                  index: marker.index ?? 0,
-                });
-              } else if (marker.type === 'isocenter') {
-                updateIsoPosition(e.lngLat.lng, e.lngLat.lat);
-              }
-            }}
-          >
-            <MarkerIcon color={marker.color!} number={marker.number} />
-          </Marker>
-        ))}
+        {markers.map((marker) => {
+          const details =
+            marker.placeId != null ? placeDetails[marker.placeId] : undefined;
+          return (
+            <Marker
+              anchor="bottom"
+              key={marker.id}
+              longitude={marker.lng}
+              latitude={marker.lat}
+              draggable={true}
+              onClick={() => {
+                // Mark as marker click so handleMapClick doesn't open a second popup
+                markerClickRef.current = true;
+                if (details && marker.placeId != null) {
+                  setActivePlace({
+                    id: marker.placeId,
+                    lng: marker.lng,
+                    lat: marker.lat,
+                  });
+                }
+              }}
+              onDragEnd={(e) => {
+                setActivePlace(null);
+                if (marker.type === 'waypoint') {
+                  updateWaypointPosition({
+                    latLng: { lat: e.lngLat.lat, lng: e.lngLat.lng },
+                    index: marker.index ?? 0,
+                  });
+                } else if (marker.type === 'isocenter') {
+                  updateIsoPosition(e.lngLat.lng, e.lngLat.lat);
+                }
+              }}
+            >
+              <div className="relative">
+                <MarkerIcon color={marker.color!} number={marker.number} />
+                {details && <PlaceMarkerLabel details={details} />}
+              </div>
+            </Marker>
+          );
+        })}
+
+        {activePlace && activeDetails && (
+          <PlaceCardPopup
+            lng={activePlace.lng}
+            lat={activePlace.lat}
+            details={activeDetails}
+            onClose={() => setActivePlace(null)}
+          />
+        )}
 
         {showContextPopup && popupLngLat && (
           <Popup
@@ -869,6 +935,18 @@ export const MapComponent = () => {
         className="absolute top-4 left-4 z-10 flex flex-col gap-2"
         aria-label="Panel shortcuts"
       >
+        <ToolButton
+          title={poiMode ? 'Скрыть инфраструктуру' : 'Показать туалеты, кафе, отели'}
+          icon={
+            <Landmark
+              size={18}
+              className={poiMode ? 'text-primary' : 'text-muted-foreground'}
+            />
+          }
+          onClick={togglePoiMode}
+          active={poiMode}
+          data-testid="poi-toggle"
+        />
         <ToolButton
           title="Directions"
           icon={
