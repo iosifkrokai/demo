@@ -26,19 +26,28 @@ waypoints, place cards). Create its `.env` before building the image:
 ```bash
 cat > frontend/.env <<'ENV'
 SKIP_PREFLIGHT_CHECK=true
-VITE_VALHALLA_URL=http://localhost:8002
+# Leave the two URLs EMPTY: the UI then talks to the agent and to Valhalla on its
+# own origin, and nginx proxies /routes/* → agent, /route,/status,… → valhalla.
+# That is what makes the webapp work behind a forwarded port (Codespaces, tunnels).
+# Set a full URL only when the UI is served from another origin (`npm run dev`).
+VITE_AGENT_URL=
+VITE_VALHALLA_URL=
 VITE_NOMINATIM_URL=https://nominatim.openstreetmap.org
 VITE_TILE_SERVER_URL="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
 VITE_CENTER_COORDS="53.6772,23.8232"
 VITE_DEFAULT_COSTING_MODEL=pedestrian
 VITE_CLIENT_ID=grodno-poc
-VITE_AGENT_URL=http://localhost:8080
 ENV
 ```
 
 `VITE_*` vars are baked at image build time, so this file MUST exist before `docker compose build`.
 `frontend/.dockerignore` must NOT exclude `package-lock.json` — the Dockerfile runs `npm ci`,
 which fails without the lockfile in the build context.
+
+Upstreams are rendered into nginx at container start from
+`AGENT_UPSTREAM` / `VALHALLA_UPSTREAM` (`docker-compose.yml`, default `172.17.0.1:…` = the
+Docker host). On a plain Docker host where container→container traffic is allowed you can
+use `agent:8080` / `valhalla:8002` instead.
 
 ## 2. Python env (uv)
 

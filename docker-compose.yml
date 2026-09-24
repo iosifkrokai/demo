@@ -40,15 +40,21 @@ services:
       context: ./frontend
     container_name: grodno-frontend
     environment:
-      VITE_AGENT_URL: "http://localhost:8080"
-      VITE_VALHALLA_URL: "http://localhost:8002"
+      VITE_AGENT_URL: ""
+      VITE_VALHALLA_URL: ""
       SKIP_PREFLIGHT_CHECK: "true"
+      # Rendered into nginx.conf at container start (nginx templates + envsubst).
+      # 172.17.0.1 = the Docker host: the agent runs there via uvicorn, and on
+      # some hosts container→container traffic on the compose bridge is blocked,
+      # so Valhalla is reached through its published port too.
+      AGENT_UPSTREAM: "172.17.0.1:8080"
+      VALHALLA_UPSTREAM: "172.17.0.1:8002"
     ports:
       - "80:80"
     depends_on:
       - valhalla
     volumes:
-      - ./frontend/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./frontend/nginx.conf:/etc/nginx/templates/default.conf.template:ro
     restart: unless-stopped
 
   agent:

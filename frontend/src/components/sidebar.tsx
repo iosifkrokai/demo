@@ -34,9 +34,12 @@ import { router } from '@/routes';
 import { WaypointList } from './waypoint-list';
 import { forward_geocode } from '@/utils/nominatim';
 
+// Same-origin by default: the webapp's nginx proxies /routes/ to the agent
+// (see frontend/nginx.conf), so the UI keeps working when it is opened through
+// a port-forwarded URL (Codespaces, tunnels) where "localhost" would resolve to
+// the visitor's own machine. Set VITE_AGENT_URL only to point at a remote agent.
 const AGENT_URL =
-  (import.meta.env.VITE_AGENT_URL as string | undefined) ||
-  'http://localhost:8080';
+  (import.meta.env.VITE_AGENT_URL as string | undefined) ?? '';
 
 interface AgentPoint {
   id: number;
