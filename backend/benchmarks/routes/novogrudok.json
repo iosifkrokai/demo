@@ -1,0 +1,38 @@
+{
+  "name": "Новогрудок: Замковая гора и Старый город",
+  "source": "Wikivoyage — Novogrudok",
+  "query_ru": "пешеходный маршрут Новогрудок, замковая гора, средневековый замок, центр города",
+  "budget_minutes": 120,
+  "est_walk_minutes": 45,
+  "coords_note": "2026-09-24: every stop in this file originally carried a latitude ~+0.817\u00b0 too far north (centroid 54.4114 vs the real 53.594), which sent the benchmark's origin 91 km away and made the API answer 422. Coordinates below are the real Newogrudok POIs as stored in the places table (source_url in parentheses). Two stops with no counterpart in the base were swapped for the flagship sights of the same Wikivoyage walk.",
+  "stops": [
+    {
+      "name": "Замковая гора (Валы Новогрудского замка)",
+      "lat": 53.6013,
+      "lon": 25.8278,
+      "visit_minutes": 30,
+      "matched_place": "Новогрудский замок (руины) — source_url=region:novogrudok-castle"
+    },
+    {
+      "name": "Фарный костёл Преображения Господня (Новогрудок)",
+      "lat": 53.5959,
+      "lon": 25.8337,
+      "visit_minutes": 20,
+      "matched_place": "Фарный костёл Преображения Господня (Новогрудок) — region:novogrudok-farny"
+    },
+    {
+      "name": "Гора Миндовга (могила Миндовга)",
+      "lat": 53.6003,
+      "lon": 25.8351,
+      "visit_minutes": 15,
+      "matched_place": "Гора Миндовга — osm:node/2788680176"
+    },
+    {
+      "name": "Дом-музей Адама Мицкевича (Новогрудок)",
+      "lat": 53.5980,
+      "lon": 25.8330,
+      "visit_minutes": 20,
+      "matched_place": "Дом-музей Адама Мицкевича (Новогрудок) — region:novogrudok-mickie"
+    }
+  ]
+}
