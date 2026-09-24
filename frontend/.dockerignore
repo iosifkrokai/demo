@@ -1,4 +1,5 @@
-package-lock.json
+# NOTE: package-lock.json must NOT be ignored — the Dockerfile runs `npm ci`,
+# which requires the lockfile to exist inside the build context.
 yarn.lock
 
 # IDEs

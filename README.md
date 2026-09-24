@@ -14,30 +14,19 @@ curl -LsSf https://astral.sh/uv/install.sh | sh    # uv
 ```
 
 For network: outbound HTTPS to `download.geofabrik.de`, `nominatim.openstreetmap.org`,
-`tile.openstreetmap.org`, `api.deepinfra.com`. **DEEPINFRA_API_KEY is optional** —
-the pipeline falls back to a regex parser when missing.
+`tile.openstreetmap.org`, `overpass-api.de`, `openrouter.ai`. **OPENROUTER_API_KEY is
+optional** — without it the pipeline degrades to keyword-only retrieval (no embeddings,
+no Jev intent/rerank).
 
-## 1. Clone repo + web-app subdir
+## 1. Web-app subdir
 
-```bash
-git clone <repo-url> demo && cd demo
-git clone --depth 1 https://github.com/valhalla/web-app.git web-app-fresh
-# Pull our local customizations on top of the upstream clone
-cp web-app-fresh/.env web-app/.env       # baseline; we patch below
-cp -r web-app-fresh/node_modules web-app/ 2>/dev/null || true
-rm -rf web-app-fresh
-```
-
-If `web-app/` directory already ships with custom components (sidebar.tsx, waypoint-list.tsx,
-place-card-popup.tsx), keep what's in the repo — those replace the upstream equivalents.
-Don't let `web-app-fresh/` overwrite them.
-
-Then set `web-app/.env`:
+The webapp lives in `frontend/` (our customizations on top of valhalla/web-app — sidebar,
+waypoints, place cards). Create its `.env` before building the image:
 
 ```bash
-cat > web-app/.env <<'ENV'
+cat > frontend/.env <<'ENV'
 SKIP_PREFLIGHT_CHECK=true
-VITE_VALHALLA_URL=http://localhost
+VITE_VALHALLA_URL=http://localhost:8002
 VITE_NOMINATIM_URL=https://nominatim.openstreetmap.org
 VITE_TILE_SERVER_URL="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
 VITE_CENTER_COORDS="53.6772,23.8232"
@@ -48,36 +37,36 @@ ENV
 ```
 
 `VITE_*` vars are baked at image build time, so this file MUST exist before `docker compose build`.
+`frontend/.dockerignore` must NOT exclude `package-lock.json` — the Dockerfile runs `npm ci`,
+which fails without the lockfile in the build context.
 
 ## 2. Python env (uv)
 
 ```bash
-cd agent
-uv sync                    # installs runtime + dev (ruff/pyright/pytest)
-uv run python -c "from agent.main import app; print('OK')"
+cd backend
+uv sync                    # runtime + dev (ruff/pyright/pytest) into backend/.venv
+.venv/bin/python -c "from agent.main import app; print('OK')"
 ```
 
-Pinned Python is `3.12` (see `agent/.python-version`). `uv` resolves everything
-in `agent/pyproject.toml`; there is no `requirements.txt`.
+Pinned Python is `3.12`. `uv` resolves everything in `backend/pyproject.toml`;
+there is no `requirements.txt`.
 
 ## 3. Bring up Valhalla + Postgres (Docker)
 
 ```bash
 cd ..   # back to repo root
 
-# 3a. Download Belarus PBF + cut to Grodno bbox (~25 MB cut from ~580 MB)
-./scripts/extract_grodno_pbf.sh
-
-# 3b. Build & start db + valhalla (valhalla builds tiles on first start, ~5–10 min)
+# 3a. Build & start db + valhalla (valhalla builds tiles on first start, ~5–10 min
+#     for the whole Belarus PBF)
 docker compose up -d db valhalla
 
-# 3c. Wait for Valhalla readiness
+# 3b. Wait for Valhalla readiness
 until curl -fsS http://localhost:8002/status >/dev/null; do
     echo "waiting for valhalla..."; sleep 5
 done
 
-# 3d. Build & start the webapp
-docker compose up -d --build valhalla-app
+# 3c. Build & start the webapp
+docker compose up -d --build frontend
 ```
 
 UI: <http://localhost/>.
@@ -88,49 +77,52 @@ run it locally via `uvicorn` (step 5) so you can iterate without rebuilding imag
 ## 4. Seed the DB
 
 ```bash
-cd agent
-export DATABASE_URL=postgresql://grodno:grodno@localhost:5432/grodno
+cd backend
+export DATABASE_URL=postgresql://grodno:***@localhost:5432/grodno
+export OPENROUTER_API_KEY=sk-or-...        # required for embeddings
 
-# 4a. Scrape ~76 Grodno sights from planetabelarus.by
-uv run python ../scripts/parse_places.py
+# 4a. Curated places (city + voblast CSV) + embeddings for every row.
+#     Idempotent: upsert keyed on source_url.
+.venv/bin/python scripts/seed_region.py            # dry: prints the plan, writes nothing
+.venv/bin/python scripts/seed_region.py --embed
 
-# 4b. Compute embeddings (always). Categories are filled by 4c, not by LLM.
-uv run python ../scripts/enrich_places.py
-
-# 4c. Apply hand-curated ground truth — names/category/blurb/fun_fact.
-# MUST run last; it overwrites whatever 4a left in the DB.
-uv run python ../scripts/apply_curated.py --dry-run
-uv run python ../scripts/apply_curated.py
+# 4b. Optional: widen coverage with OSM POIs (~4.4k rows for the voblast)
+.venv/bin/python scripts/ingest_osm.py             # Overpass → data/places_osm_raw.csv (~3 min)
+.venv/bin/python scripts/load_osm.py --dry-run     # validate + print the plan
+.venv/bin/python scripts/load_osm.py               # upsert + embed
 ```
+
+`ingest_osm.py` also takes `--input-json <saved Overpass response>` (skip the network),
+`--district-mode nominatim` (real reverse geocoding, 1 req/s) and `--limit N`.
+`load_osm.py` takes `--dry-run`, `--limit`, `--no-embed`, `--path`.
 
 Spot-check:
 ```bash
-psql "$DATABASE_URL" -c "
+docker exec grodno-db psql -U grodno -d grodno -c "
 SELECT count(*) AS n,
        count(embedding) AS with_emb,
-       count(category) AS with_cat,
        count(blurb) AS with_blurb,
        count(fun_fact) AS with_fact
 FROM places;"
-psql "$DATABASE_URL" -c "SELECT id, name, category FROM places ORDER BY id LIMIT 10;"
 ```
 
-Expected: `n≈76`, `with_emb=76`, `with_cat=76`, `with_blurb=76`, `with_fact=76`.
+Legacy one-shot scrapers (`parse_places.py`, `enrich_places.py`, `apply_curated.py`) predate
+the `backend/` restructure and are not part of the current seed path.
 
 ## 5. Run the agent
 
 ```bash
-cd agent
-export DATABASE_URL=postgresql://grodno:grodno@localhost:5432/grodno
+cd backend
+export DATABASE_URL=postgresql://grodno:***@localhost:5432/grodno
 export VALHALLA_URL=http://localhost:8002
-export DEEPINFRA_API_KEY=sk-...        # optional, enables structured intent extraction
+export OPENROUTER_API_KEY=sk-or-...    # optional; without it the agent is keyword-only
 
-uv run uvicorn agent.main:app --host 0.0.0.0 --port 8080
+.venv/bin/python -m uvicorn agent.main:app --host 0.0.0.0 --port 8080
 ```
 
-First call takes longer: it downloads the embedding model (~470 MB) into
-`~/.cache/huggingface/` and the cross-encoder reranker (~2 GB) into the same
-cache. Subsequent starts are instant.
+No local models, no first-call download: embeddings run on OpenRouter
+(`openai/text-embedding-3-small`) and intent/rerank on the **Jev** typed-decision endpoint
+(`POST /api/v1/systemone`, `typesafe/jev-1.13`).
 
 ## 6. Smoke tests
 
@@ -144,104 +136,125 @@ curl -sX POST localhost:8080/routes/generate \
     -d '{"query":"Хочу погулять по замкам Гродно","time_budget_minutes":120}' \
     | jq '.points[] | {name, category, fun_fact}'
 
+# Named place + explicit start position (route starts at the given point)
+curl -sX POST localhost:8080/routes/generate \
+    -H 'content-type: application/json' \
+    -d '{"query":"Хочу к Мирскому замку","time_budget_minutes":150,
+         "origin":{"lat":53.4510,"lon":26.4722}}' \
+    | jq '.summary, (.points[] | .name)'
+
 # Re-route an explicit list
 curl -sX POST localhost:8080/routes/reroute \
     -H 'content-type: application/json' \
-    -d '{"point_ids":[97,98,100,101]}' \
+    -d '{"point_ids":[49,50,51]}' \
     | jq '.summary'
+```
 
-# Negative constraints
-curl -sX POST localhost:8080/routes/generate \
-    -H 'content-type: application/json' \
-    -d '{"query":"костёлы центра без музеев, 2 часа"}' \
-    | jq '.points[].category'
+## 6a. Golden-set benchmark
+
+`backend/benchmarks/routes/*.json` holds reference walks taken from Wikivoyage
+(Старый город, Мир, Новогрудок). The runner drives the live HTTP API and reports
+recall@K, precision, Kendall τ, walk-time delta and budget fit:
+
+```bash
+cd backend
+.venv/bin/python scripts/bench_routes.py --base-url http://localhost:8080
+# prints a table and writes backend/benchmarks/report.json + report.md
 ```
 
 ## 7. Dev workflow
 
 ```bash
-cd agent
+cd backend
 
 # Lint (auto-fix safe issues)
-uv run ruff check --fix .
+.venv/bin/ruff check --fix .
 
 # Format
-uv run ruff format .
+.venv/bin/ruff format .
 
 # Type-check (strict-ish, ~5 sec)
-uv run pyright
+.venv/bin/pyright
 
-# Tests (none yet — see TODO below)
-uv run pytest
+# Tests
+.venv/bin/python -m pytest -q
 ```
 
 CI equivalent (run before commit):
 ```bash
-uv run ruff check .
-uv run pyright
+cd backend && .venv/bin/ruff check . && .venv/bin/pyright
 ```
 
-## 8. Configuration knobs
+## 8. Configuration
 
-All via env vars, see `agent/config.py`:
+Environment carries secrets and addresses only (`agent/config.py`):
+`OPENROUTER_API_KEY`, `DATABASE_URL`, `VALHALLA_URL`, `AGENT_HOST`, `AGENT_PORT`.
 
-| Var | Default | Effect |
-|---|---|---|
-| `MMR_LAMBDA` | `0.7` | 1.0 = pure relevance, 0.0 = pure diversity |
-| `RRF_K` | `60` | Reciprocal Rank Fusion constant |
-| `RETRIEVAL_POOL_SIZE` | `50` | Candidates fetched into pool |
-| `RERANK_POOL_SIZE` | `30` | Cross-encoder input size |
-| `MMR_POOL_SIZE` | `12` | After MMR |
-| `ROUTE_MAX_STOPS` | `8` | Upper bound for the route |
-| `RERANK_BACKEND` | `bge` | `bge` / `off` |
-| `RERANK_ENABLED` | `1` | Master switch for rerank |
-| `GEMINI_MODEL` | `google/gemini-2.5-flash` | Intent extraction model |
-| `BGE_RERANK_MODEL` | `BAAI/bge-reranker-v2-m3` | Local reranker |
-| `NEGATIVE_FILTER_ENABLED` | `1` | Honour `categories_neg` from intent |
+Everything else is reviewable code in `agent/constants.py` — models, weights and limits:
+`EMBED_MODEL`, `JEV_MODEL`, `RRF_K`, `MMR_LAMBDA`, `RETRIEVAL_POOL_SIZE`,
+`RERANK_POOL_SIZE`, `MMR_POOL_SIZE`, `ROUTE_MAX_STOPS`, `GEO_FOCUS_KM`,
+`GEO_FOCUS_MAX_KM`, `MAX_WALK_LEG_KM` / `WALK_LEG_BUDGET_SHARE` (walkability),
+`NAME_MATCH_MIN_SIM` (named-place → must-visit threshold),
+`DUPLICATE_RADIUS_M` (same-POI radius; the curated row and an OSM row for the same
+sight must not both appear in one route), budget bounds and the category → visit-minutes
+table. Changing one is a code-review decision: edit → tests → commit.
+
+A named-place token becomes a **must-visit** only when it matches a POI *name* above
+`NAME_MATCH_MIN_SIM`; a token that only matches a town/district becomes an **area anchor**
+for the geo focus instead, so «замки Гродно» is not pinned to one arbitrary Grodno row.
 
 ## 9. Troubleshooting
 
-**"ConnectError" on `localhost:8002`.** Valhalla isn't ready. Poll `/status` until 200.
+**`503 (valhalla ... sources_to_targets failed after retries)`.** Valhalla 3.5.1 answers 500
+`Could not find candidate edge used for label` for matrix shapes with
+`len(sources) >= 6 AND len(targets) >= 7`. `agent/valhalla_client.py` chunks around it
+(`MATRIX_MAX_SOURCES` / `MATRIX_MAX_TARGETS`) with a per-pair `/route` fallback.
 
-**"relation 'places' does not exist".** `db/init.sql` only loads on FIRST start of the `db` container. If you already have a `pgdata` volume, run `db/migrate_add_facts.sql` manually:
-```bash
-docker exec grodno-db psql -U grodno -d grodno \
-    -c "ALTER TABLE places ADD COLUMN IF NOT EXISTS fun_fact TEXT;"
-docker exec grodno-db psql -U grodno -d grodno \
-    -c "ALTER TABLE places ADD COLUMN IF NOT EXISTS fun_facts TEXT;"
-docker exec grodno-db psql -U grodno -d grodno \
-    -c "ALTER TABLE places ADD COLUMN IF NOT EXISTS links TEXT;"
-```
+**Route has no polyline / `length_km: null`.** `/route` answers 500
+`Could not find candidate edge used for destination label` for some POI coordinates
+(e.g. 53.6845,23.8318). Fixed by sending `radius: 100` per location
+(`LOCATION_SNAP_RADIUS_M` in `valhalla_client.py`); `search_radius` / `street_side_tolerance`
+do NOT help.
 
-**MMR rerank gives all-same-category routes.** Drop `MMR_LAMBDA` to `0.5`, restart.
+**"relation 'places' does not exist".** `db/init.sql` only loads on FIRST start of the `db`
+container. With an existing `pgdata` volume, apply `db/migrations/*.sql` and
+`db/migrate_add_facts.sql` manually.
 
-**BGE download stalls.** HuggingFace is rate-limiting. Pre-download:
-```bash
-uv run python -c "from sentence_transformers import CrossEncoder; CrossEncoder('BAAI/bge-reranker-v2-m3')"
-```
+**Agent returns `503 UpstreamUnavailable` on every request.** Valhalla tile build didn't
+finish or the `pgdata` volume lost embeddings — re-run `scripts/seed_region.py --embed`.
+Check `docker logs grodno-valhalla`.
 
-**Agent returns `503 UpstreamUnavailable` on every request.** Valhalla tile build didn't finish or `pgdata` volume lost embeddings. Check `docker logs grodno-valhalla`.
+**Keyword-only results (no semantic search).** `OPENROUTER_API_KEY` is missing or the rows
+have `embedding IS NULL` — see the spot-check in section 4.
+
+**`ConnectError` on `localhost:8002`.** Valhalla isn't ready. Poll `/status` until 200.
+
+**Overpass 504 on the full-voblast ingest.** `ingest_osm.py` retries. Save one successful
+response and iterate with `--input-json <file>`.
 
 ## 10. Architecture
 
 ```
-User → Vite webapp (sidebar.tsx) → :8080 /routes/generate
-                                       ↓
-                          agent.main → agent.planner.Pipeline
-                                       ↓
-   ┌─ preprocess ─ intent (Gemini/DeepInfra) ─ resolve ─┐
-   │                                                     │
-   ├─ retrieve (multi-signal + RRF) ─ rerank (BGE) ──────┤
-   │                                                     │
-   ├─ diversity (MMR) ─ cost (Valhalla matrix) ─ optimize ┤
-   │                                                     │
-   └─ validate ─ render (Valhalla /route) ─ explain ──────┘
+User → Vite webapp (frontend/) → :8080 /routes/generate
+                                    ↓
+                       agent.main → agent.planner.Pipeline
+                                    ↓
+  ┌─ preprocess ─ intent (Jev typed decisions) ─ resolve ─┐
+  │                                                       │
+  ├─ retrieve (vector + keyword + must-visit, RRF) ─ rerank (Jev scores)
+  │                                                       │
+  ├─ geo-focus ─ diversity (MMR) ─ cost (Valhalla matrix) ─ optimize
+  │                                                       │
+  └─ validate ─ render (Valhalla /route) ─ explain ────────┘
 ```
 
-Files: `agent/planner/{preprocess,intent,resolve,retrieve,rerank,diversity,cost,optimize,validate,render,explain,pipeline}.py`.
+Files: `backend/agent/planner/{preprocess,intent,resolve,retrieve,rerank,diversity,cost,optimize,validate,render,explain,pipeline}.py`,
+clients in `backend/agent/{jev,valhalla_client,search}.py`, tunables in `backend/agent/constants.py`.
 
 ## Out of scope
 
 - No `/routes/ready` endpoint, no `ready_routes` table (no source for it).
-- No continuous ingest pipeline — `parse_places.py`, `enrich_places.py`, `apply_curated.py` are one-shot.
-- Local rerank is on CPU; turn on GPU image for ~5× speedup of cross-encoder.
+- No continuous ingest pipeline — `parse_places.py`, `enrich_places.py`, `apply_curated.py`,
+  `ingest_osm.py` and `load_osm.py` are one-shot.
+- No local ML models: embeddings, intent and rerank are OpenRouter calls (Jev is the
+  typed-decision model; there is no local cross-encoder any more).

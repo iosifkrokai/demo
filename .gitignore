@@ -22,5 +22,10 @@ frontend/tsconfig.tsbuildinfo
 
 # Misc
 cache/
+.cache/
 .legacy_backup/
 *.log
+
+# Generated benchmark output (regenerate with scripts/bench_routes.py)
+backend/benchmarks/report.json
+backend/benchmarks/report.md
