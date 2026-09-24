@@ -1,20 +1,26 @@
+# Valhalla tiles / OSM extracts (1.3 GB — never commit)
 valhalla-data/
-cache/
+
+# Python
 __pycache__/
 *.pyc
-.env
-
-# Python (uv)
 .venv/
 .python-version
-uv.lock
 .pyright/
 .ruff_cache/
 
-# Node (web-app)
+# Node (frontend)
 node_modules/
-dist/
-build/
+frontend/build/
+frontend/dist/
+frontend/tsconfig.tsbuildinfo
 
-# Local backups
+# Env & secrets
+.env
+.env.local
+.env.production.local
+
+# Misc
+cache/
 .legacy_backup/
+*.log

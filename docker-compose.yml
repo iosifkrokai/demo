@@ -1,16 +1,7 @@
 services:
-  pbf-sidecar:
-    image: python:3.12-alpine
-    container_name: grodno-pbf-sidecar
-    working_dir: /data
-    command: ["python", "-m", "http.server", "8001"]
-    volumes:
-      - ./valhalla-data:/data:ro
-    restart: unless-stopped
-
   db:
     build:
-      context: .
+      context: ./backend
       dockerfile: db/Dockerfile
     container_name: grodno-db
     environment:
@@ -19,7 +10,7 @@ services:
       POSTGRES_DB: grodno
     ports: ["5432:5432"]
     volumes:
-      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - ./backend/db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
       - pgdata:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U grodno -d grodno"]
@@ -30,15 +21,13 @@ services:
   valhalla:
     image: ghcr.io/nilsnolde/docker-valhalla/valhalla:latest
     container_name: grodno-valhalla
-    depends_on:
-      - pbf-sidecar
     restart: unless-stopped
     ports:
       - "8002:8002"
     environment:
-      tile_urls: http://pbf-sidecar:8001/grodno.osm.pbf
+      tile_urls: "https://download.geofabrik.de/europe/belarus-latest.osm.pbf"
     volumes:
-      - valhalla-data:/custom_files
+      - ./valhalla-data:/custom_files
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8002/status"]
       interval: 15s
@@ -46,41 +35,40 @@ services:
       retries: 30
       start_period: 30s
 
-  valhalla-app:
+  frontend:
     build:
-      context: ./web-app
-    container_name: grodno-valhalla-app
+      context: ./frontend
+    container_name: grodno-frontend
     environment:
-      VITE_AGENT_URL: "http://host.docker.internal:8080"
-      VITE_VALHALLA_URL: "http://valhalla:8002"
+      VITE_AGENT_URL: "http://localhost:8080"
+      VITE_VALHALLA_URL: "http://localhost:8002"
       SKIP_PREFLIGHT_CHECK: "true"
     ports:
       - "80:80"
     depends_on:
       - valhalla
     volumes:
-      - ./web-app/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./frontend/nginx.conf:/etc/nginx/conf.d/default.conf:ro
     restart: unless-stopped
 
-  # agent:
-  #   build:
-  #     context: .
-  #     dockerfile: agent/Dockerfile
-  #   container_name: grodno-agent
-  #   environment:
-  #     AGENT_HOST: "0.0.0.0"
-  #     AGENT_PORT: "8080"
-  #     DATABASE_URL: "postgresql://grodno:grodno@db:5432/grodno"
-  #     VALHALLA_URL: "http://valhalla:8002"
-  #     DEEPINFRA_API_KEY: "${DEEPINFRA_API_KEY:-}"
-  #     RERANK_ENABLED: "${RERANK_ENABLED:-1}"
-  #   ports:
-  #     - "8080:8080"
-  #   depends_on:
-  #     - db
-  #     - valhalla
-  #   restart: unless-stopped
+  agent:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: grodno-agent
+    environment:
+      AGENT_HOST: "0.0.0.0"
+      AGENT_PORT: "8080"
+      DATABASE_URL: "postgresql://grodno:grodno@db:5432/grodno"
+      VALHALLA_URL: "http://valhalla:8002"
+      OPENROUTER_API_KEY: "${OPENROUTER_API_KEY:-}"
+      RERANK_ENABLED: "${RERANK_ENABLED:-1}"
+    ports:
+      - "8080:8080"
+    depends_on:
+      - db
+      - valhalla
+    restart: unless-stopped
 
 volumes:
   pgdata:
-  valhalla-data:
