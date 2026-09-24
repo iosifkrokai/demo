@@ -23,13 +23,13 @@ Returns: RouteResponse (Pydantic) — what main.py serves over HTTP.
 from __future__ import annotations
 
 import logging
+import re as _re
 import time as _time
 
 import httpx
 import psycopg
 
 from .. import constants
-from ..config import settings
 from ..errors import (
     NoCandidatesFound,
     NoRoutePossible,
@@ -37,6 +37,7 @@ from ..errors import (
 )
 from ..models import (
     BudgetInfo,
+    Candidate,
     GenerateReq,
     LatLon,
     ParsedQuery,
@@ -44,9 +45,9 @@ from ..models import (
     RouteResponse,
     RouteSummary,
 )
+from ..search import fetch_points_by_ids
 from ..valhalla_client import ping as valhalla_ping
-from .cost import visit_time_minutes
-from .cost import compute_cost_matrix
+from .cost import compute_cost_matrix, visit_time_minutes
 from .diversity import mmr_select
 from .explain import explain as explain_route
 from .intent import extract_intent
@@ -69,7 +70,7 @@ def _openrouter_embed(texts: list[str]) -> list[list[float]]:
 
     with httpx.Client(timeout=30.0) as client:
         r = client.post(
-            f"https://openrouter.ai/api/v1/embeddings",
+            "https://openrouter.ai/api/v1/embeddings",
             headers={
                 "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json",
@@ -84,31 +85,45 @@ def _openrouter_embed(texts: list[str]) -> list[list[float]]:
         return [item["embedding"] for item in body["data"]]
 
 
-def _geo_focus(candidates: list, origin: LatLon | None = None) -> list:
+def _geo_focus(
+    candidates: list,
+    origin: LatLon | None = None,
+    anchor_id: int | None = None,
+) -> list:
     """Drop candidates too far from the anchor.
 
+    Anchor priority: tourist GPS > must-visit/named place > top-RRF candidate.
     Keyword-mode retrieval (no embeddings) can surface matching places from
-    across the whole voblast; a walking route must stay local. The anchor is
-    the tourist's position when known, else the highest-ranked candidate;
-    must-visit ids always survive.
+    across the whole voblast; a walking route must stay local.
     """
-    import math
 
     if not candidates:
         return []
     if origin is not None:
         anchor = origin
         dist = lambda c: _distance_from_origin_m(c, origin)
+    elif anchor_id is not None and any(c.id == anchor_id for c in candidates):
+        anchor = next(c for c in candidates if c.id == anchor_id)
+        dist = lambda c: _distance_m(c, anchor)
     else:
         anchor = max(candidates, key=lambda c: c.rrf_score)
         dist = lambda c: _distance_m(c, anchor)
     max_m = constants.GEO_FOCUS_KM * 1000
+
+    if origin is not None or anchor_id is not None:
+        # A known position (tourist GPS) or a named place anchors the walk:
+        # never inflate the radius here.  Doubling used to pull 50 km-away
+        # castles into "Мирский замок", and the optimizer then dropped
+        # everything but one stop because no leg was walkable.
+        keep = [c for c in candidates if c is anchor or dist(c) <= max_m]
+        return keep
+
     while True:
         keep = [
             c for c in candidates
             if c is anchor or dist(c) <= max_m
         ]
-        if len(keep) >= 3 or max_m > 200_000:
+        if len(keep) >= 3 or max_m > constants.GEO_FOCUS_MAX_KM * 1000:
             return keep
         max_m *= 2
 
@@ -130,6 +145,46 @@ def _distance_pt_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
 
 def _distance_from_origin_m(c, origin: LatLon) -> float:
     return _distance_pt_m(c.lat, c.lon, origin.lat, origin.lon)
+
+
+def _norm_name(name: str) -> str:
+    """Lowercase, drop parentheticals and punctuation — for POI-name matching."""
+    n = _re.sub(r"\([^)]*\)", " ", (name or "").lower())
+    n = _re.sub(r"[^0-9a-zа-яё]+", " ", n)
+    return " ".join(n.split())
+
+
+def _drop_duplicates(candidates: list[Candidate], radius_m: float) -> list[Candidate]:
+    """Drop places that sit on top of an already-kept, better-ranked place.
+
+    The base stores the same POI more than once whenever a curated row and an
+    OSM row disagree on the name or the precise coordinates ("Новый замок
+    (дворец Стефана Батория)" vs "Новый замок"; "Дом-музей Адама Мицкевича"
+    twice, 340 m apart), which put the same sight into a route twice.
+    Candidates arrive relevance-ordered, so the highest-ranked member of each
+    cluster wins.  A candidate is dropped when it is within `radius_m` of a
+    kept place, or when it carries the same normalised name and lies within
+    `constants.DUPLICATE_NAME_RADIUS_M`.
+    """
+    kept: list[Candidate] = []
+    for cand in candidates:
+        cand_name = _norm_name(cand.name)
+        duplicate = False
+        for k in kept:
+            dist = _distance_pt_m(cand.lat, cand.lon, k.lat, k.lon)
+            if dist < radius_m:
+                duplicate = True
+                break
+            if (
+                cand_name
+                and cand_name == _norm_name(k.name)
+                and dist < constants.DUPLICATE_NAME_RADIUS_M
+            ):
+                duplicate = True
+                break
+        if not duplicate:
+            kept.append(cand)
+    return kept
 
 
 class Pipeline:
@@ -166,12 +221,27 @@ class Pipeline:
         if not qvec:
             log.warning("no OPENROUTER_API_KEY — vector retrieval disabled, keyword mode")
 
+        # Anchor point for locality: the tourist's GPS start, else the row behind
+        # the named town (area_anchor), else the must-visit POI.  Retrieval uses
+        # it so the pool really contains places around that point.
+        geo_anchor = constraints.area_anchor or (
+            constraints.must_visit_ids[0] if constraints.must_visit_ids else None
+        )
+        near: tuple[float, float] | None = None
+        if req.origin is not None:
+            near = (req.origin.lat, req.origin.lon)
+        elif geo_anchor is not None:
+            anchor_rows = fetch_points_by_ids(self.db, [geo_anchor])
+            if anchor_rows:
+                near = (float(anchor_rows[0]["lat"]), float(anchor_rows[0]["lon"]))
+
         # 3. Retrieve
         candidates = retrieve(
             constraints,
             qvec,
             self.db,
             query_text=req.query,
+            near=near,
         )
         if not candidates:
             raise NoCandidatesFound(
@@ -182,10 +252,23 @@ class Pipeline:
         if api_key:
             candidates = rerank_pool(req.query, candidates, top_k=constants.RERANK_POOL_SIZE)
 
+        # 3.55 Physical duplicates: the same POI exists twice when the curated
+        # row and the OSM row disagree on the name ("Новый замок (дворец
+        # Стефана Батория)" vs "Новый замок").  Without this the route visits
+        # one castle twice under two names.  Candidates are relevance-ordered
+        # here, so the best-ranked row of each cluster survives.
+        candidates = _drop_duplicates(candidates, constants.DUPLICATE_RADIUS_M)
+
         # 3.6 Geographic focus: keep the route walkable — candidates beyond
         # GEO_FOCUS_KM from the tourist's position (or the top-scored hit when
         # position is unknown) are dropped (radius doubles if that leaves <3).
-        candidates = _geo_focus(candidates, origin=req.origin)
+        # Use area_anchor (town/district geo anchor) when available — this keeps
+        # the geo focus on the correct town without forcing an arbitrary POI as must-visit.
+        # Fall back to must_visit_ids only when there is no separate area anchor.
+        geo_anchor = constraints.area_anchor or (
+            constraints.must_visit_ids[0] if constraints.must_visit_ids else None
+        )
+        candidates = _geo_focus(candidates, origin=req.origin, anchor_id=geo_anchor)
         if len(candidates) < 2:
             raise NoCandidatesFound(
                 "все кандидаты слишком далеко друг от друга — уточните город или район"
@@ -402,6 +485,7 @@ class Pipeline:
                 "intent_latency_ms": intent.latency_ms,
                 "constraints": {
                     "must_visit_ids": constraints.must_visit_ids,
+                    "area_anchor": constraints.area_anchor,
                     "optional_categories": constraints.optional_categories,
                     "forbidden_categories": constraints.forbidden_categories,
                     "time_budget_minutes": constraints.time_budget_minutes,

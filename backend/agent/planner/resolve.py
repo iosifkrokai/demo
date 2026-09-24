@@ -3,7 +3,14 @@
 Merges IntentDecision with explicit client parameters:
   * Time budget: explicit client > LLM > default (clamped to [MIN, MAX]).
   * Bbox:        explicit client wins; otherwise None (whole Grodno).
-  * Named places → must_visit_ids via keyword search fallback.
+  * Named places → area_anchor (geo focus) or must_visit_ids (real POI name match).
+
+Rule for named-place resolution:
+  - A NAME match (similarity threshold MET) → the POI is a real place the user
+    explicitly asked for → must_visit_ids.  Example: "Мирскому замку" → Мирский замок.
+  - A TOWN / DISTRICT match only → the token names an area, not a specific POI →
+    area_anchor.  The pipeline uses it to set the geo focus; it does NOT force
+    a POI into the route.  Example: "Гродно" in "замки Гродно" → geo anchor only.
 
 Outputs ResolvedConstraints consumed by retrieve/optimize/etc.
 """
@@ -14,7 +21,7 @@ import psycopg
 
 from .. import constants
 from ..models import IntentResult, ResolvedConstraints
-from ..search import _keyword_search
+from ..search import _keyword_search, _name_match_search
 
 # Russian synonym expansion for retrieval — category → search keywords.
 CATEGORY_SYNONYMS: dict[str, list[str]] = {
@@ -59,8 +66,10 @@ def resolve(
         s, w, n, e = bbox
         bbox = (w, s, e, n)
 
-    # ── Named places → must_visit_ids ──
-    must_visit_ids = _resolve_named_places(d.named_places, db) if d.named_places else []
+    # ── Named places → must_visit_ids + area_anchor ──
+    #   must_visit_ids  : real POI name matches (definite places the user named)
+    #   area_anchor     : first town/district-only match (for geo focus), or None
+    must_visit_ids, area_anchor = _resolve_named_places(d.named_places, db)
 
     # ── Build must_visit_keywords (used by retrieval as a strong positive signal) ──
     must_visit_keywords = _expand_categories_to_keywords(d.categories_pos)
@@ -71,6 +80,7 @@ def resolve(
 
     return ResolvedConstraints(
         must_visit_ids=must_visit_ids,
+        area_anchor=area_anchor,
         optional_categories=list(d.categories_pos),
         forbidden_categories=list(d.categories_neg),
         forbidden_keywords=list(d.keywords_neg),
@@ -84,26 +94,120 @@ def resolve(
     )
 
 
-def _resolve_named_places(names: list[str], db: psycopg.Connection) -> list[int]:
-    """Match named place strings to place IDs via keyword search.
+def _is_location_suffix(name: str, query: str) -> bool:
+    """Return True if name ends with '(Location)' or is just the location name.
 
-    For each name:
-      1. Keyword search on `places.name` (handles 'горисполком', 'Аптека-музей').
-      2. Take the top-1 result.
-      3. Dedupe by id (preserve order).
+    E.g. name='Лютеранская кирха (Гродно)' and query='Гродно' → True.
+         name='Гродно' and query='Гродно' → True.
+    These are location rows (not specific POIs) and should become area_anchors.
     """
-    out: list[int] = []
+    q = query.strip()
+    if name.lower() == q:
+        return True
+    # Check for parenthetical location: "POI (Location)" pattern at the end
+    # " (Гродно)" has 8 chars
+    if len(q) >= 3:
+        suffix = f" ({q.lower()})"
+        if name.lower().endswith(suffix):
+            return True
+    return False
+
+
+def _resolve_named_places(
+    names: list[str], db: psycopg.Connection
+) -> tuple[list[int], int | None]:
+    """Match named place strings to place IDs, distinguishing POI names from areas.
+
+    Returns (must_visit_ids, area_anchor):
+      - must_visit_ids : POI-name matches only (NAME column similarity >= threshold)
+      - area_anchor     : first town/district-only match (for geo focus), or None
+
+    The heuristic:
+      1. Try NAME-only search (strict) → must_visit if similarity >= NAME_MATCH_MIN_SIM.
+      2. If no name match, try town/district search → area_anchor (not must_visit).
+    """
+    must_out: list[int] = []
     seen: set[int] = set()
+    area_anchor: int | None = None
+
     for name in names:
         if not name or not name.strip():
             continue
-        rows = _keyword_search(db, name, limit=3)
-        if rows:
-            top = rows[0]
-            if top["id"] not in seen:
+
+        # Step 1: name-only search — strict, high-quality matches only.
+        name_rows = _name_match_search(db, name, limit=3)
+        if name_rows:
+            top = name_rows[0]
+            sim = top.get("_name_sim", 0.0)
+            top_name = top.get("name", "")
+            # Skip if the name match is just a location suffix in parentheses
+            # (e.g. "Лютеранская кирха (Гродно)" matched by "Гродно").
+            # These are area names, not specific POIs — fall through to area check.
+            if _is_location_suffix(top_name, name):
+                pass  # don't add to must_visit; fall through to area check below
+            elif sim >= constants.NAME_MATCH_MIN_SIM and top["id"] not in seen:
                 seen.add(top["id"])
-                out.append(top["id"])
-    return out
+                must_out.append(top["id"])
+                continue  # resolved as a real POI; don't also use as area anchor
+
+        # Step 2: town/district search — area anchor only, NOT a must-visit.
+        # Only take the first town-match as the area anchor (preserve order).
+        if area_anchor is None:
+            town_rows = _keyword_search(db, name, limit=5)
+            for row in town_rows:
+                row_name = row.get("name", "")
+                # Skip a row that IS the location itself (a town/area row such as
+                # name="Гродно").  POIs whose name merely carries the town in
+                # parentheses ("Старый замок (Гродно)") are valid anchors — the
+                # anchor only sets the geo focus, it does not force the POI into
+                # the route, so a POI row is a fine anchor.
+                if row_name.strip().lower() == name.strip().lower():
+                    continue
+                if _is_town_or_district_match(row, name):
+                    if row["id"] not in seen:
+                        area_anchor = row["id"]
+                    break
+
+    return must_out, area_anchor
+
+
+def _word_boundary_match(text: str, query: str) -> bool:
+    """Return True if query appears as a standalone word in text.
+
+    Uses word-boundary regex to prevent "мир" matching inside "мискому".
+    Both text and query are lowercased by the caller.
+    """
+    import re as _re
+    if not text or not query:
+        return False
+    return _re.search(r"\b" + _re.escape(query) + r"\b", text) is not None
+
+
+def _is_town_or_district_match(row: dict, query: str) -> bool:
+    """Return True if the query matched on town or district.
+
+    Uses word-boundary regex for ALL three fields to prevent false matches:
+      - "Гродно" must NOT match district "Гродненский район" (substring).
+      - "Лидский" must NOT match name "Лидский замок" (word inside name).
+      - "Лидский" must match district "Лидский район" (standalone word).
+    """
+    name = (row.get("name") or "").lower()
+    town = (row.get("town") or "").lower()
+    district = (row.get("district") or "").lower()
+    q = query.lower()
+
+    # Town and district: word-boundary match (prevents "Гродно" matching "Гродненский").
+    if _word_boundary_match(town, q):
+        return True
+    if _word_boundary_match(district, q):
+        return True
+
+    # Name word-boundary check: prevents "Лидский" in "Лидский замок" from
+    # triggering a false town match.
+    if _word_boundary_match(name, q):
+        return False
+
+    return False
 
 
 def _expand_categories_to_keywords(categories: list[str]) -> list[str]:

@@ -12,11 +12,10 @@ with agent/agent.py (the old RoutePlanner). The new pipeline uses these too.
 from __future__ import annotations
 
 from typing import Literal
+
 from pydantic import BaseModel, Field, field_validator
 
 from . import constants
-from .config import settings
-
 
 # ============================================================================
 # HTTP — Requests
@@ -188,6 +187,7 @@ class IntentResult(BaseModel):
 
 class ResolvedConstraints(BaseModel):
     must_visit_ids: list[int] = []
+    area_anchor: int | None = None  # town/district-only geo anchor, not a POI
     optional_categories: list[str] = []
     forbidden_categories: list[str] = []
     forbidden_keywords: list[str] = []

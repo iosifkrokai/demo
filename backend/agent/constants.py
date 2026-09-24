@@ -77,3 +77,27 @@ VISIT_TIME_BY_CATEGORY: dict[str, int] = {
     "памятник": 10, "инфраструктура": 10,
 }
 VISIT_TIME_DEFAULT = 15
+
+# ── Walkability ──────────────────────────────────────────────────────────────
+# A pedestrian route is only useful if every leg is walkable.
+# MAX_WALK_LEG_KM — hard cap: a single leg longer than this is not acceptable.
+#   At 4 km/h, 2 km ≈ 30 min (WALK_LEG_BUDGET_SHARE of a 2-hour budget).
+#   We set the absolute ceiling at 5 km (≈75 min walk) to cover edge cases.
+MAX_WALK_LEG_KM = 5.0
+# Two rows closer than this are the same physical POI (a curated row plus an
+# OSM row with a different name) — keep only the best-ranked one per cluster.
+DUPLICATE_RADIUS_M = 150.0
+# Same again, but for rows carrying an identical normalised name yet imprecise
+# coordinates (a curated row and its OSM twin can sit a few hundred metres
+# apart).  Only an exact normalised-name match merges at this distance.
+DUPLICATE_NAME_RADIUS_M = 500.0
+
+# A leg longer than this share of the total budget is rejected (unless must-visit).
+WALK_LEG_BUDGET_SHARE = 0.25
+# Name-match similarity threshold for must_visit resolution.
+# A named-place token is promoted to must_visit only when the pg_trgm
+# similarity against the POI name (not town/district) exceeds this value.
+# 0.3 is conservative: it captures "Мирскому" → "Мирский замок" (substring
+# overlap) while filtering out generic tokens like "Гродно" matching any
+# Grodno POI by town name.
+NAME_MATCH_MIN_SIM = 0.3

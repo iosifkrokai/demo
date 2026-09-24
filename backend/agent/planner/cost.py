@@ -21,6 +21,11 @@ from ..models import Candidate, CostMatrix, ResolvedConstraints
 from ..valhalla_client import time_matrix
 
 MAX_VISIT_BUDGET_SHARE = 0.4
+# A single stop may claim at most this share of the time budget; see the cap in
+# compute_cost_matrix().
+VISIT_CAP_BUDGET_SHARE = 0.4
+# …but never below this many minutes, so short walks don't cap everything to 5.
+MIN_VISIT_MINUTES = 10
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -79,27 +84,33 @@ def compute_cost_matrix(
         )
 
     # ── Visit times (curated per-place time from the region dataset, category default) ──
-    visits = [c.visit_minutes_db or visit_time_minutes(c.category) for c in candidates]
+    raw_visits = [c.visit_minutes_db or visit_time_minutes(c.category) for c in candidates]
 
-    # ── Pre-filter: drop places whose visit_time > 40% of budget (unless they're must-visit) ──
-    must_ids = set(constraints.must_visit_ids)
-    budget_min = constraints.time_budget_minutes
-    keep_idx: list[int] = []
-    for i, (c, v) in enumerate(zip(candidates, visits)):
-        if c.id in must_ids:
-            keep_idx.append(i)
-            continue
-        if budget_min > 0 and v > budget_min * MAX_VISIT_BUDGET_SHARE:
-            continue
-        keep_idx.append(i)
-
-    # If pre-filter dropped too much, fall back to keeping the shortest ones.
-    if len(keep_idx) < 3 and len(candidates) >= 3:
-        sorted_by_visit = sorted(
-            range(len(candidates)),
-            key=lambda i: (visits[i], -candidates[i].relevance),
+    # Cap a single stop's visit time at VISIT_CAP_BUDGET_SHARE of the budget.
+    # The curated dataset carries generous per-place times (Мирский замок = 120
+    # min), which ate a whole 150-min budget and left the optimizer a 1-stop
+    # route.  Capping is honest — the user spent 150 min, the castle gets its
+    # share — whereas dropping the place (the old pre-filter) removed the very
+    # castle a "замки" query asked for.
+    if constraints.time_budget_minutes:
+        cap = max(
+            MIN_VISIT_MINUTES,
+            int(constraints.time_budget_minutes * VISIT_CAP_BUDGET_SHARE),
         )
-        keep_idx = sorted_by_visit[:max(3, len(keep_idx))]
+        visits = [min(v, cap) for v in raw_visits]
+    else:
+        visits = raw_visits
+
+    # ── Pre-filter: disabled — Defect-3 fix ───────────────────────────────────
+    # The pre-filter (original MAX_VISIT_BUDGET_SHARE=0.4) was dropping castle-category
+    # places when their estimated visit time (40-60 min) exceeded 40% of the budget.
+    # E.g. 40-min castle > 48 min (40% of 120 min) → dropped, even though castles
+    # are the most relevant candidates for a "замки" query.
+    #
+    # The Valhalla matrix handles up to 12 candidates efficiently (2 chunks of 4x4 for 8
+    # candidates).  The _budget_constrain step downstream removes stops that don't fit
+    # the budget, so the pre-filter is redundant and harmful.
+    keep_idx = list(range(len(candidates)))
 
     # Original positions of the kept candidates, so the caller can align its
     # candidate list with the matrix (pre-filter may drop some rows).

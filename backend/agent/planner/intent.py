@@ -19,6 +19,7 @@ degraded route is worse than an explicit error.
 
 from __future__ import annotations
 
+import re as _re
 import time
 
 from .. import constants, jev
@@ -82,12 +83,29 @@ _QUESTIONS: dict[str, dict] = {
             "any": "no era preference",
         },
     },
+    "mentions_named_place": {
+        "type": "noul",
+        "instructions": "Does the query explicitly name one specific place or town (proper noun, e.g. 'Мирский замок', 'Новогрудок', 'Коложская церковь')?",
+        "criteria": {
+            "true": "a proper name of a specific place/town is present",
+            "false": "no specific place named",
+        },
+    },
     "time_hours": {
         "type": "score",
         "instructions": "How many hours of sightseeing does the query budget (phrases like '3 часа', 'полдня', 'весь день')? Use 0 only if not mentioned.",
         "criteria": _TIME_LEVELS,
     },
 }
+
+# Stop-list of capitalised words that look like region/administrative names
+# but are not place names tourists would visit.  Kept in lower-case so the
+# comparison against `.lower()` tokens is correct.
+# Covers nominative, genitive, dative, instrumental, and prepositional forms.
+_PLACE_STOP_LIST: frozenset[str] = frozenset({
+    "гродненская", "гродненской", "гродненскому", "гродненском",
+    "область", "области", "областью", "областях",
+})
 
 
 def extract_intent(query: str) -> IntentResult:
@@ -123,13 +141,26 @@ def extract_intent(query: str) -> IntentResult:
     pos = [c for c in cat_pos if c in known]
     neg = [c for c in cat_neg if c in known]
 
+    # Proper-noun candidates for must-visit resolution: capitalised words
+    # inside the Russian query (works for toponyms and place names).
+    #
+    # Known limitation — sentence-initial verbs
+    # The regex [А-ЯЁ][а-яё\-]{2,} captures any capitalised ≥3-char word, so
+    # a query-initial verb ("Хочу к …") is included.  These tokens are
+    # harmless because _resolve_named_places calls _keyword_search per token;
+    # a verb returns no DB rows → the must_visit_ids list stays clean.
+    # The pipeline then falls back to top-RRF as the geo anchor, which is
+    # the correct behaviour for a discovery-style query with no named place.
+    tokens = _re.findall(r"[А-ЯЁ][а-яё\-]{2,}", query)
+    named = [t for t in tokens if t.lower() not in _PLACE_STOP_LIST]
+
     decision = IntentDecision(
         intent_type=itype,  # type: ignore[arg-type]
         categories_pos=pos,  # type: ignore[arg-type]
         categories_neg=neg,  # type: ignore[arg-type]
         keywords_pos=[],   # keyword signal comes from retrieval, not the LLM
         keywords_neg=[],
-        named_places=[],
+        named_places=named,
         narrative=[],
         time_budget_minutes=time_budget,
         era_hint=era,  # type: ignore[arg-type]

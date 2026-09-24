@@ -28,8 +28,8 @@ from .models import (
     ExplainReq,
     GenerateReq,
     HealthResponse,
-    RouteResponse,
     RerouteReq,
+    RouteResponse,
 )
 from .planner.pipeline import Pipeline
 

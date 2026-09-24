@@ -10,7 +10,39 @@ keeps the per-request cost at zero and ensures the user sees the truth.
 
 from __future__ import annotations
 
+from collections import Counter
+
 from ..models import Candidate
+
+
+def _area_name(route: list[Candidate]) -> str:
+    """Derive a human-readable area name from the route's stops.
+
+    Prefer district over town when all stops are in the same district
+    (e.g. "Лидский район" is more informative than "Лида").
+    If all stops share one town, use that.
+    """
+    if not route:
+        return "Гродно"
+
+    towns = [c.town for c in route if c.town]
+    districts = [c.district for c in route if c.district]
+
+    # If all stops share one district -> use the district.
+    if districts and len(set(districts)) == 1:
+        return districts[0]
+
+    # If all stops share one town -> use the town.
+    if towns and len(set(towns)) == 1:
+        return towns[0]
+
+    # Mixed area: take the most common town or fall back to "Гродно".
+    if towns:
+        most_common = Counter(towns).most_common(1)[0][0]
+        if most_common:
+            return most_common
+
+    return "Гродно"
 
 
 def explain(route: list[Candidate], trace: dict, walk_seconds: float) -> str:
@@ -19,8 +51,9 @@ def explain(route: list[Candidate], trace: dict, walk_seconds: float) -> str:
 
     n = len(route)
     walk_min = max(1, int(walk_seconds // 60))
+    area = _area_name(route)
     parts: list[str] = [
-        f"Пеший маршрут по Гродно: {n} остановок, ≈{walk_min} мин ходьбы."
+        f"Пеший маршрут по {area}: {n} остановок, ≈{walk_min} мин ходьбы."
     ]
 
     cats = [c.category for c in route if c.category]

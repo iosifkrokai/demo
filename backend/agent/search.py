@@ -10,6 +10,8 @@ Public surface:
 
 from __future__ import annotations
 
+import math
+import re
 from typing import Any
 
 import psycopg
@@ -65,7 +67,7 @@ def _keyword_search(
     breaks plain ILIKE ("новогрудка" vs "Новогрудок", "костёлы" vs "костёл").
     Requires the pg_trgm extension (db/migrations/0003_trgm_search.sql).
     """
-    import re
+
     words = re.findall(r"[а-яёa-z]{3,}\d*", query.lower())
     words = [w for w in words if len(w) >= 3]
     if not words:
@@ -79,6 +81,15 @@ def _keyword_search(
         ]
     )
     conditions = " OR ".join([per_word] * len(words))
+    # Rank by the best trigram similarity across the matched columns — the
+    # LIMIT must cut AFTER ranking, otherwise top-1 is a random row.
+    word_sim = [
+        "GREATEST(similarity(name, %s), word_similarity(%s, name), "
+        "similarity(town, %s), word_similarity(%s, town))"
+    ] * len(words)
+    # SUM across words: a row matching ALL query words outranks a row that
+    # matches only one word perfectly ("Мирский замок" > "Старый замок").
+    order_expr = "(" + ") + (".join(word_sim) + ")"
     params: list[Any] = []
     for w in words:
         params.extend([f"%{w}%"] * 3)
@@ -87,8 +98,12 @@ def _keyword_search(
         SELECT {CATEGORY_COLS}, 0.0 AS cosine_dist
           FROM places
          WHERE {conditions}
+         ORDER BY {order_expr} DESC
          LIMIT %s
     """
+    # ORDER BY consumes 4 params per word (similarity/word_similarity ×
+    # name/town) in word-major order: [w1,w1,w1,w1, w2,w2,w2,w2].
+    params.extend(w for w in words for _ in range(4))
     params.append(limit)
     with db.cursor() as cur:
         cur.execute(sql, params)
@@ -146,6 +161,39 @@ def fetch_points_by_ids(db: psycopg.Connection, ids: list[int]) -> list[dict[str
     return [by_id[i] for i in ids if i in by_id]
 
 
+def nearby_places(
+    db: psycopg.Connection,
+    lat: float,
+    lon: float,
+    radius_km: float = 12.0,
+    limit: int = 50,
+) -> list[dict[str, Any]]:
+    """Places within radius_km of (lat, lon), nearest first.
+
+    Retrieval is text-driven, so a query that names a town ("пешеходный
+    маршрут Новогрудок, замковая гора, ...") can surface one place from that
+    town and a dozen from elsewhere in the voblast.  When we know where the
+    tourist is (GPS) or which town they named, this signal guarantees the pool
+    actually contains places around that point.
+    """
+    dlat = radius_km / 111.0
+    dlon = radius_km / (111.0 * max(0.2, math.cos(math.radians(lat))))
+    with db.cursor() as cur:
+        cur.execute(
+            f"SELECT {CATEGORY_COLS} FROM places "
+            "WHERE lat BETWEEN %s AND %s AND lon BETWEEN %s AND %s "
+            "ORDER BY (lat - %s) * (lat - %s) + (lon - %s) * (lon - %s) "
+            "LIMIT %s",
+            (
+                lat - dlat, lat + dlat, lon - dlon, lon + dlon,
+                lat, lat, lon, lon,
+                limit,
+            ),
+        )
+        cols = [d.name for d in cur.description]
+        return [dict(zip(cols, r)) for r in cur.fetchall()]
+
+
 def fetch_embeddings(db: psycopg.Connection, ids: list[int]) -> dict[int, list[float]]:
     """Batch-load embeddings for MMR diversity step.
 
@@ -178,3 +226,52 @@ def fetch_embeddings(db: psycopg.Connection, ids: list[int]) -> dict[int, list[f
                 out[pid] = list(arr)
         return out
 
+
+
+def _name_match_search(
+    db: psycopg.Connection,
+    query: str,
+    limit: int = 5,
+) -> list[dict[str, Any]]:
+    """Search POIs by NAME only (no town/district), with trigram similarity.
+
+    Used by resolve._resolve_named_places to determine whether a named-place
+    token corresponds to a real tourist POI (must_visit) or just an area name.
+
+    Returns rows with an extra '_name_sim' float column (similarity score).
+    """
+
+    words = re.findall(r"[а-яёa-z]{2,}", query.lower())
+    words = [w for w in words if len(w) >= 2]
+    if not words:
+        return []
+
+    # Search on name only (ILIKE + trigram), not town/district.
+    per_word = "name ILIKE %s OR name %%> %s"
+    conditions = " OR ".join([per_word] * len(words))
+
+    word_sims = [
+        "GREATEST(similarity(name, %s), word_similarity(%s, name))"
+    ] * len(words)
+    order_expr = "(" + ") + (".join(word_sims) + ")"
+
+    params: list[Any] = []
+    for w in words:
+        params.extend([f"%{w}%", w])
+    for w in words:
+        params.extend([w, w])
+
+    sql = f"""
+        SELECT {CATEGORY_COLS},
+               ({order_expr}) AS _name_sim
+          FROM places
+         WHERE {conditions}
+         ORDER BY _name_sim DESC
+         LIMIT %s
+    """
+    params.append(limit)
+
+    with db.cursor() as cur:
+        cur.execute(sql, params)
+        cols = [d.name for d in cur.description]
+        return [dict(zip(cols, r)) for r in cur.fetchall()]

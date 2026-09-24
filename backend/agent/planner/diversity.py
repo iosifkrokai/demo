@@ -25,7 +25,6 @@ from __future__ import annotations
 import numpy as np
 
 from .. import constants
-from ..config import settings
 from ..models import Candidate, ResolvedConstraints
 from ..search import fetch_embeddings
 

@@ -16,6 +16,11 @@ locked to (0, n-1) which biased the route by ranking — this fixes that.
 
 Must-visit places are first-class: brute/regret modes enforce that they
 appear in the final route (and seed them at the start of the insertion).
+
+Budget-constrained greedy selection (Defect 3 fix):
+  After optimizing, _budget_constrain greedily removes stops whose addition
+  would exceed the time budget or violate the max-leg walkability constraint.
+  This prevents the pipeline from returning 10–28 h walks for 2-hour queries.
 """
 
 from __future__ import annotations
@@ -24,9 +29,12 @@ import random
 from itertools import permutations
 
 from .. import constants
-from ..config import settings
 from ..models import Candidate, CostMatrix, ResolvedConstraints
 from .cost import total_seconds, walk_cost
+
+# km/h pedestrian speed — used to convert walk time to distance for the
+# max-leg check (avoids calling Valhalla just for a distance estimate).
+WALK_KMH = 4.0
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -59,7 +67,89 @@ def optimize(
     else:
         order, info = _nn_2opt_multi(candidates, matrix, visits, budget_s, info)
 
+    # ── Defect 3 fix: budget-constrained greedy selection ─────────────────
+    # After optimization, greedily trim the route to fit inside the budget
+    # and respect the max-leg walkability constraint.  Must-visit places are
+    # protected; all other stops are dropped in reverse-relevance order when
+    # the budget is exceeded.
+    must_ids = set(constraints.must_visit_ids)
+    constrained, dropped = _budget_constrain(
+        candidates, order, matrix, visits, budget_s, must_ids
+    )
+    if constrained != list(range(n)):
+        new_order = [i for i in constrained if i < len(candidates)]
+        info = {**info, "stops_dropped": dropped, "order": new_order}
+        order = new_order
+
     return [candidates[i] for i in order], info
+
+
+def _budget_constrain(
+    candidates: list[Candidate],
+    order: list[int],
+    matrix: list[list[float]],
+    visits: list[int],
+    budget_s: int | None,
+    must_ids: set[int],
+) -> tuple[list[int], int]:
+    """Greedily trim `order` to fit inside the time budget and max-leg constraint.
+
+    Must-visit places are protected.  Other stops are considered for removal in
+    order of increasing relevance (least-relevant first), until both constraints
+    are satisfied or only must-visits remain.
+
+    Returns (trimmed_order, n_dropped).
+    """
+    if not order:
+        return order, 0
+
+    route = list(order)
+    must_idx_set = {i for i in route if candidates[i].id in must_ids}
+    dropped = 0
+
+    # Compute the maximum allowed walk time for a single leg.
+    max_leg_s = _max_leg_seconds(budget_s)
+
+    # Greedy removal loop.
+    while len(route) > 1:
+        total = total_seconds(route, matrix, visits)
+        max_leg = _max_leg(route, matrix)
+
+        # Stop if both constraints are satisfied.
+        budget_ok = budget_s is None or total <= budget_s
+        leg_ok = max_leg <= max_leg_s
+        if budget_ok and leg_ok:
+            break
+
+        # Find the least-relevant removable stop (prefer to drop non-must-visits).
+        removable = [i for i in route if i not in must_idx_set]
+        if not removable:
+            break  # only must-visits remain — can't trim further
+
+        # Drop the least-relevant stop.
+        removable.sort(key=lambda i: candidates[i].relevance)
+        to_remove = removable[0]
+        route.remove(to_remove)
+        dropped += 1
+
+    return route, dropped
+
+
+def _max_leg_seconds(budget_s: int | None) -> float:
+    """Maximum allowed walk time for a single leg, in seconds."""
+    if budget_s is None:
+        # No budget → use the absolute max in km converted to seconds.
+        return (constants.MAX_WALK_LEG_KM / WALK_KMH) * 3600
+    budget_share_s = budget_s * constants.WALK_LEG_BUDGET_SHARE
+    km_limit_s = (constants.MAX_WALK_LEG_KM / WALK_KMH) * 3600
+    return min(budget_share_s, km_limit_s)
+
+
+def _max_leg(route: list[int], matrix: list[list[float]]) -> float:
+    """Longest single walking leg in a route, in seconds."""
+    if len(route) < 2:
+        return 0.0
+    return max(matrix[a][b] for a, b in zip(route, route[1:]))
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -147,12 +237,17 @@ def _regret_insertion(
         route = list(must_idx)
         remaining = [i for i in range(n) if i not in must_idx]
     else:
-        # Seed with the most central place (lowest sum of distances).
-        seed = min(range(n), key=lambda i: sum(matrix[i]))
+        # Seed with the most relevant place (= the query's best match), not the
+        # most "central" one: with a pool that mixes the target town with far
+        # outliers, the central seed lands in the outlier cluster and every
+        # walkable insertion is then rejected, collapsing the route to 1 stop.
+        seed = max(range(n), key=lambda i: cands[i].relevance)
         route = [seed]
         remaining = [i for i in range(n) if i != seed]
 
     iterations = 0
+    skipped = 0
+    max_leg_s = _max_leg_seconds(budget_s)
     while remaining and len(route) < constants.ROUTE_MAX_STOPS:
         # Budget check: stop growing if even the cheapest single insertion exceeds.
         cur_cost = total_seconds(route, matrix, visits)
@@ -165,8 +260,15 @@ def _regret_insertion(
             insertion_costs: list[tuple[int, int]] = []  # (cost, position)
             for pos in range(len(route) + 1):
                 new_route = route[:pos] + [c] + route[pos:]
+                # Skip positions that make a single leg unwalkable: inserting
+                # first and repairing later means _budget_constrain deletes
+                # stops down to a 1-stop route.
+                if _max_leg(new_route, matrix) > max_leg_s:
+                    continue
                 cost = total_seconds(new_route, matrix, visits)
                 insertion_costs.append((cost, pos))
+            if not insertion_costs:
+                continue  # this candidate cannot be walked from anywhere yet
             insertion_costs.sort()
             regret = (
                 insertion_costs[1][0] - insertion_costs[0][0]
@@ -181,7 +283,14 @@ def _regret_insertion(
         # Only insert if it actually fits the budget.
         new_route = route[:pos] + [chosen] + route[pos:]
         if budget_s is not None and total_seconds(new_route, matrix, visits) > budget_s:
-            break
+            # This candidate does not fit right now — usually a place far
+            # outside the walkable cluster, picked first because regret ranks
+            # by insertion-gap rather than by cost.  Drop it from consideration
+            # and keep trying the rest; breaking here truncated every route to
+            # its seed (2 stops for a 3-hour budget).
+            remaining.remove(chosen)
+            skipped += 1
+            continue
         route = new_route
         remaining.remove(chosen)
         iterations += 1
@@ -190,6 +299,7 @@ def _regret_insertion(
         "algorithm": "regret_2",
         "order": route,
         "iterations": iterations,
+        "skipped_over_budget": skipped,
         "walk_seconds": walk_cost(route, matrix),
         "total_seconds": total_seconds(route, matrix, visits),
     })

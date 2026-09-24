@@ -16,20 +16,76 @@ is left as the rrf_score (downstream rerank overwrites it).
 
 from __future__ import annotations
 
+import re
 from collections import defaultdict
-from typing import Iterable
+from collections.abc import Iterable
 
 import psycopg
 
 from .. import constants
-from ..config import settings
 from ..models import Candidate, ResolvedConstraints
 from ..search import (
     _keyword_search,
     candidates_by_embedding,
     db_categories,
     fetch_points_by_ids,
+    nearby_places,
 )
+
+# Russian query category keywords → LLM category taxonomy.
+# When any of these words appear in the query text, the corresponding
+# category gets a boosted priority in RRF fusion (category-first retrieval).
+CATEGORY_KEYWORD_TO_LLM: dict[str, str] = {
+    "замок": "замок", "замки": "замок", "замка": "замок", "замкам": "замок", "замках": "замок",
+    "замком": "замок", "замку": "замок",
+    "костёл": "костёл", "костёлы": "костёл", "костела": "костёл",
+    "костелах": "костёл", "костел": "костёл",
+    "дворец": "дворец", "дворцы": "дворец", "дворца": "дворец",
+    "дворце": "дворец", "дворцов": "дворец",
+    "музей": "музей", "музеи": "музей", "музея": "музей",
+    "музее": "музей", "музеев": "музей",
+    "памятник": "памятник", "памятники": "памятник", "памятника": "памятник",
+    "парк": "парк", "парки": "парк", "парка": "парк",
+    "парке": "парк", "парков": "парк",
+    "монастырь": "монастырь", "монастыри": "монастырь",
+    "монастыря": "монастырь",
+    "церковь": "церковь", "церкви": "церковь", "церкви": "церковь",
+    "храм": "храм", "храмы": "храм",
+    "усадьба": "усадьба", "усадьбы": "усадьба",
+    "архитектура": "архитектура", "архитектурный": "архитектура",
+    "инфраструктура": "инфраструктура",
+    "крепость": "замок",
+}
+
+
+def _detect_category_keywords(query: str) -> list[str]:
+    """Extract LLM-category labels from query text.
+
+    This runs alongside the LLM intent extraction.  Even when the LLM
+    classifies the query as "themed" or "vague", explicit category words
+    like "замки" / "костёлы" / "дворцы" must still steer retrieval.
+    """
+    words = re.findall(r"[а-яё]{3,}", query.lower())
+    cats: list[str] = []
+    seen: set[str] = set()
+    for w in words:
+        llm_cat = CATEGORY_KEYWORD_TO_LLM.get(w)
+        if llm_cat and llm_cat not in seen:
+            seen.add(llm_cat)
+            cats.append(llm_cat)
+    return cats
+
+
+def _nearby_signal(
+    db: psycopg.Connection,
+    lat: float,
+    lon: float,
+    limit: int,
+) -> list[tuple[int, float]]:
+    """Places around a known point (tourist GPS or a named town)."""
+    rows = nearby_places(db, lat, lon, radius_km=constants.GEO_FOCUS_KM, limit=limit)
+    # RRF consumes the rank order, not the distance value.
+    return [(r["id"], 0.0) for r in rows]
 
 
 def retrieve(
@@ -37,6 +93,7 @@ def retrieve(
     query_embedding: list[float],
     db: psycopg.Connection,
     query_text: str = "",
+    near: tuple[float, float] | None = None,
 ) -> list[Candidate]:
     """Multi-signal → RRF → negative-filter → hydrate Candidate rows.
 
@@ -44,8 +101,15 @@ def retrieve(
     """
     pool_limit = constants.RETRIEVAL_POOL_SIZE
 
+    # Detect explicit category keywords in the raw query (for Defect 2 fix).
+    # These steer category-first retrieval even when the LLM intent is "themed".
+    explicit_cat_kw = _detect_category_keywords(query_text)
+    all_cats: list[str] = list({
+        *(constraints.optional_categories or []),
+        *explicit_cat_kw,
+    })
+
     # ── Signal 1: vector (skipped when no embedding service is configured) ──
-    # Without it, the keyword signal below carries the retrieval alone.
     vector_signal: list[tuple[int, float]] = []
     if query_embedding:
         vector_signal = _vector_signal(query_embedding, db, constraints, limit=pool_limit)
@@ -59,12 +123,37 @@ def retrieve(
 
     # ── Signal 4: category (boost by explicit category match) ──
     cat_signal: list[tuple[int, float]] = []
-    if constraints.optional_categories:
-        cat_signal = _category_signal(db, constraints, limit=pool_limit // 2)
+    if all_cats:
+        cat_signal = _category_signal(db, constraints, all_cats, limit=pool_limit // 2)
+
+    # ── Signal 4b: category-first retrieval (Defect 2 fix) ─────────────
+    # When the query contains explicit category keywords (e.g. "замки"),
+    # keyword search for those keywords returns places with the word in their
+    # name — not places of that category.  E.g. "замки" matches "Замковая гора"
+    # (not a castle) but misses "Лидский замок" (actual castle).
+    # Category-first retrieval directly queries by category, ensuring the right
+    # places surface even when keyword and vector signals are noisy.
+    cat_first_signal: list[tuple[int, float]] = []
+    if explicit_cat_kw:
+        # Primary category only (first keyword in query order) to avoid diluting
+        # with secondary categories.
+        primary_cat = [explicit_cat_kw[0]]
+        cat_first_signal = _category_signal(
+            db, constraints, primary_cat, limit=pool_limit
+        )
+
+    # ── Signal 5: locality (only when we know the tourist's point / town) ──
+    # A query naming a town often surfaces one place from that town and a
+    # dozen from elsewhere; without this the walkable candidate set can
+    # collapse to a single stop.
+    near_signal: list[tuple[int, float]] = []
+    if near is not None:
+        near_signal = _nearby_signal(db, near[0], near[1], limit=pool_limit)
 
     # ── RRF fusion ──
     fused = rrf_fuse(
-        [vector_signal, keyword_signal, must_signal, cat_signal],
+        [vector_signal, keyword_signal, must_signal, cat_signal, cat_first_signal,
+         near_signal],
         k=constants.RRF_K,
     )
 
@@ -148,17 +237,28 @@ def _keyword_signal(
 def _category_signal(
     db: psycopg.Connection,
     constraints: ResolvedConstraints,
+    categories: list[str],
     limit: int,
 ) -> list[tuple[int, float]]:
-    db_cats = db_categories(constraints.optional_categories)
+    """Return places matching the given categories, ordered by category priority.
+
+    When the query contains explicit category keywords (e.g. "замки"), those
+    categories come FIRST so they outrank secondary categories in RRF fusion.
+    """
+    db_cats = db_categories(categories)
     if not db_cats:
         return []
+    # Order by the category's position in the input list (primary first).
+    cat_order = {c: i for i, c in enumerate(categories)}
     with db.cursor() as cur:
         cur.execute(
-            "SELECT id FROM places WHERE category = ANY(%s) LIMIT %s",
+            "SELECT id, category FROM places WHERE category = ANY(%s) LIMIT %s",
             (db_cats, limit),
         )
-        return [(r[0], 0.0) for r in cur.fetchall()]
+        rows = cur.fetchall()
+    # Sort: primary categories first (lower rank → higher RRF score).
+    rows.sort(key=lambda r: cat_order.get(r[1], 99))
+    return [(r[0], 0.0) for r in rows]
 
 
 # ─────────────────────────────────────────────────────────────────────────────
