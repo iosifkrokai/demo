@@ -1,4 +1,12 @@
-"""DB query helpers for the agent."""
+"""DB query helpers for the agent.
+
+Public surface:
+  - candidates_by_embedding   — vector search (top-K by cosine)
+  - _keyword_search           — ILIKE-based name match (short-query fallback)
+  - fetch_points_by_ids       — hydrate Candidate objects from IDs
+  - fetch_embeddings          — batch load embeddings by ID (for MMR)
+  - db_categories             — map LLM categories to DB category values
+"""
 
 from __future__ import annotations
 
@@ -11,7 +19,6 @@ import psycopg
 # to several DB values because the DB taxonomy is finer-grained for cult
 # places.
 CATEGORY_TO_DB: dict[str, list[str]] = {
-    # the original 10 from llm.py
     "замок": ["замок"],
     "костёл": ["костёл"],
     "церковь": ["церковь"],
@@ -21,8 +28,7 @@ CATEGORY_TO_DB: dict[str, list[str]] = {
     "парк": ["парк"],
     "музей": ["музей"],
     "памятник": ["памятник"],
-    "городище": [],  # no gorodishche rows in curated set; placeholder
-    # extended mapping from curated categories the user might ask about
+    "городище": [],
     "храм": ["храм"],
     "архитектура": ["архитектура", "инфраструктура"],
     "инфраструктура": ["инфраструктура"],
@@ -48,19 +54,15 @@ def _keyword_search(
     """Exact + prefix keyword search on name column.
 
     Used as a hybrid fallback when the vector query is short (< 3 significant
-    words) — embedding models trained on sentences give poor results for 1-2 words
-    ("горисполком" vs "Здание Горисполкома"). ILIKE is fast enough on 76 rows.
+    words). ILIKE is fast enough on 76 rows.
     """
-    # Extract significant words (≥ 3 chars, Russian/Latin letters)
     import re
     words = re.findall(r"[а-яёa-z]{3,}", query.lower())
     if not words:
         return []
 
-    # Build ILIKE conditions: each word matches anywhere in name
     conditions = " OR ".join(["name ILIKE %s" for _ in words])
     params = [f"%{w}%" for w in words]
-    # Also try normalized form: replace common prefixes/variants
     sql = f"""
         SELECT id, name, category, lat, lon, blurb, fun_fact, fun_facts, links, 0.0 AS cosine_dist
           FROM places
@@ -79,26 +81,21 @@ def candidates_by_embedding(
     qvec: list[float],
     limit: int = 50,
     region_bbox: list[float] | None = None,
-    categories: list[str] | None = None,
 ) -> list[dict[str, Any]]:
     """Top-K by vector cosine distance. Returns rows with cosine_dist column.
 
-    Category filtering is intentionally skipped as a WHERE clause — the caller
-    applies it as a soft score boost in agent.py instead. This prevents the
-    bug where Qwen 1.5B mis-classifies short queries (e.g. "горисполком" →
-    "инфраструктура") and the WHERE filter discards the only relevant result.
-
-    Returns list of dicts with keys: id, name, category, lat, lon, blurb,
-    fun_fact, cosine_dist.
+    Note: category filtering is intentionally omitted — the caller applies
+    it as a soft score boost, not a WHERE clause. This prevents the bug
+    where a misclassified query drops the only relevant result.
     """
     bbox_clause = ""
     bbox_params: list[Any] = []
     if region_bbox and len(region_bbox) == 4:
-        w, s, e, n = region_bbox
+        # NOTE: caller passes [south, west, north, east]; ST_MakeEnvelope takes (W,S,E,N)
+        s, w, n, e = region_bbox
         bbox_clause = "   AND geom && ST_MakeEnvelope(%s, %s, %s, %s, 4326)"
         bbox_params = [w, s, e, n]
 
-    # qvec is used twice: in the cosine_dist expression and in ORDER BY
     sql = f"""
         SELECT id, name, category, lat, lon, blurb, fun_fact, fun_facts, links,
                embedding <=> %s::vector AS cosine_dist
@@ -127,3 +124,37 @@ def fetch_points_by_ids(db: psycopg.Connection, ids: list[int]) -> list[dict[str
         rows = [dict(zip(cols, r)) for r in cur.fetchall()]
     by_id = {r["id"]: r for r in rows}
     return [by_id[i] for i in ids if i in by_id]
+
+
+def fetch_embeddings(db: psycopg.Connection, ids: list[int]) -> dict[int, list[float]]:
+    """Batch-load embeddings for MMR diversity step.
+
+    Returns: {id: vector_as_list}. Missing IDs are silently skipped.
+    Caller should pass only IDs that have non-null embeddings (we filter
+    in the SQL WHERE clause just in case).
+    """
+    if not ids:
+        return {}
+    with db.cursor() as cur:
+        cur.execute(
+            "SELECT id, embedding::text FROM places "
+            "WHERE id = ANY(%s) AND embedding IS NOT NULL",
+            (ids,),
+        )
+        out: dict[int, list[float]] = {}
+        for pid, emb_text in cur.fetchall():
+            # pgvector returns '[0.1,0.2,...]' as text in some psycopg versions
+            if isinstance(emb_text, str):
+                emb_text = emb_text.strip("[]")
+                try:
+                    out[pid] = [float(x) for x in emb_text.split(",") if x.strip()]
+                except ValueError:
+                    continue
+            else:
+                # numpy array or list — convert via tolist if available
+                arr = emb_text
+                if hasattr(arr, "tolist"):
+                    arr = arr.tolist()
+                out[pid] = list(arr)
+        return out
+

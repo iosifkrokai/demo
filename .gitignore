@@ -1,6 +1,20 @@
 valhalla-data/
 cache/
-.venv/
 __pycache__/
 *.pyc
 .env
+
+# Python (uv)
+.venv/
+.python-version
+uv.lock
+.pyright/
+.ruff_cache/
+
+# Node (web-app)
+node_modules/
+dist/
+build/
+
+# Local backups
+.legacy_backup/

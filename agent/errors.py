@@ -8,8 +8,6 @@ class AgentError(Exception):
     http_status: int = 500
 
 
-class InvalidRequest(AgentError):
-    http_status = 422
 
 
 class NoCandidatesFound(AgentError):
@@ -25,6 +23,3 @@ class UpstreamUnavailable(AgentError):
     http_status = 503
 
 
-class ModelNotReady(AgentError):
-    """A heavy resource (LLM, embedder) has not loaded yet."""
-    http_status = 503

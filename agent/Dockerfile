@@ -1,26 +1,56 @@
-FROM python:3.12-slim
+# ─────────────────────────────────────────────────────────────────────────────
+# Agent container (FastAPI + Grodno planner).
+#
+# Layer caching strategy:
+#   1. Copy only pyproject.toml first (lockfile is optional on first build)
+#   2. uv lock + sync (deps layer cached until deps change)
+#   3. Copy source code last (invalidated on any .py change)
+#
+# uv is ~10× faster than pip and handles resolution in one step.
+# ─────────────────────────────────────────────────────────────────────────────
+
+FROM python:3.12-slim AS base
+
+# System deps: libgomp for onnxruntime (fastembed), curl for healthcheck.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgomp1 \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install uv (pinned for reproducibility — bump if you need newer).
+COPY --from=ghcr.io/astral-sh/uv:0.5.11 /uv /uvx /usr/local/bin/
 
 WORKDIR /app
 
-# Install system deps for fastembed (onnxruntime)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libgomp1 \
-    && rm -rf /var/lib/apt/lists/*
+# ── Layer 1: project metadata + deps (cache-friendly) ──
+# uv.lock is optional on first build; subsequent builds need it for --frozen.
+COPY pyproject.toml uv.lock* ./
 
-# Install Python deps
-COPY agent/requirements.txt /app/agent/requirements.txt
-RUN pip install --no-cache-dir -r /app/agent/requirements.txt
+# Generate lockfile if missing, then sync deps only (skip project install).
+# --no-dev: skip ruff/pyright/pytest at runtime.
+# --no-install-project: install deps first; project source comes in layer 2.
+RUN uv lock && \
+    uv sync --no-install-project --no-dev
 
-COPY agent/ /app/agent/
+# ── Layer 2: source code (changes often, cached separately) ──
+COPY . /app/agent/
 
-# Embedder model is downloaded at startup by fastembed (cached in /root/.cache)
-ENV PYTHONUNBUFFERED=1
-ENV AGENT_HOST=0.0.0.0
-ENV AGENT_PORT=8080
-ENV DATABASE_URL=postgresql://grodno:grodno@db:5432/grodno
-ENV VALHALLA_URL=http://valhalla:8002
-ENV DEEPINFRA_API_KEY=${DEEPINFRA_API_KEY:-}
+# Now install the project itself on top of the cached deps.
+RUN uv sync --no-dev
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    AGENT_HOST=0.0.0.0 \
+    AGENT_PORT=8080 \
+    DATABASE_URL=postgresql://grodno:grodno@db:5432/grodno \
+    VALHALLA_URL=http://valhalla:8002
 
 EXPOSE 8080
 
-CMD ["python", "-m", "agent.main"]
+# Healthcheck — docker compose / k8s rely on this.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD curl -fsS http://localhost:8080/health || exit 1
+
+# Use the venv uv created (uv sync → .venv by default).
+# --no-dev guarantees no ruff/pyright/pytest get loaded at runtime.
+CMD ["uv", "run", "--no-dev", "python", "-m", "agent.main"]

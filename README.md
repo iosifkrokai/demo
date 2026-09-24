@@ -1,134 +1,247 @@
 # Grodno walking-route POC
 
-Minimal POC: stand up Valhalla (routing engine + demo web-app) for the Grodno region,
-fill a Postgres/PostGIS/pgvector DB with sights scraped from planetabelarus.by, and serve a
-FastAPI agent that turns free-text Russian queries into pedestrian routes via the same Valhalla.
+Stack: **Valhalla** (routing engine) + **Postgres/PostGIS/pgvector** (places) +
+**FastAPI agent** (free-text Russian → pedestrian route) + **Vite webapp** (UI).
 
-The agent uses a **local GGUF model via llama-cpp-python** for query parsing — no API keys
-needed for the runtime. The parser + enrich steps are one-shot scripts.
-
-## One-time setup
-
-1. Install host prerequisites: `docker`, `docker compose`, `python3.11+`, `osmium-tool`,
-   `wget`. Build tools (`gcc`, `cmake`) recommended for llama-cpp-python fallbacks.
-   Python deps: `python3 -m venv .venv && . .venv/bin/activate && pip install -r agent/requirements.txt`.
-2. Clone the Valhalla demo app as `web-app/` and edit its `.env` (one-time):
-   ```bash
-   git clone --depth 1 https://github.com/valhalla/web-app.git web-app
-   ```
-   Then replace `web-app/.env` with:
-   ```
-   SKIP_PREFLIGHT_CHECK=true
-   VITE_VALHALLA_URL=http://localhost
-   VITE_NOMINATIM_URL=https://nominatim.openstreetmap.org
-   VITE_TILE_SERVER_URL="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
-   VITE_CENTER_COORDS="53.6772,23.8232"
-   VITE_DEFAULT_COSTING_MODEL=pedestrian
-   VITE_CLIENT_ID=grodno-poc
-   VITE_AGENT_URL=http://localhost:8080
-   ```
-   `VITE_*` vars are baked at image build time, so this file must exist before `docker compose build`.
-   The webapp ships with a custom `Sidebar` component (in `src/components/sidebar.tsx`) that
-   replaces the upstream `RoutePlanner` — it has a prompt at top, editable waypoints in the
-   middle, and a Nominatim-based manual-add field at the bottom. These files live only in
-   the working tree (the webapp clone has its own .git inside); they're not tracked in this
-   repo, so a fresh clone of the upstream won't have them.
-
-## Bring up the stack
+## 0. Prereqs (host)
 
 ```bash
-# 1. download Belarus PBF and cut to Grodno Oblast bbox
+# macOS
+brew install docker docker-compose colima osmium-tool wget uv postgresql@16 jq
+# Debian/Ubuntu
+sudo apt-get install -y docker.io docker-compose-plugin osmium-tool wget jq postgresql-client
+curl -LsSf https://astral.sh/uv/install.sh | sh    # uv
+```
+
+For network: outbound HTTPS to `download.geofabrik.de`, `nominatim.openstreetmap.org`,
+`tile.openstreetmap.org`, `api.deepinfra.com`. **DEEPINFRA_API_KEY is optional** —
+the pipeline falls back to a regex parser when missing.
+
+## 1. Clone repo + web-app subdir
+
+```bash
+git clone <repo-url> demo && cd demo
+git clone --depth 1 https://github.com/valhalla/web-app.git web-app-fresh
+# Pull our local customizations on top of the upstream clone
+cp web-app-fresh/.env web-app/.env       # baseline; we patch below
+cp -r web-app-fresh/node_modules web-app/ 2>/dev/null || true
+rm -rf web-app-fresh
+```
+
+If `web-app/` directory already ships with custom components (sidebar.tsx, waypoint-list.tsx,
+place-card-popup.tsx), keep what's in the repo — those replace the upstream equivalents.
+Don't let `web-app-fresh/` overwrite them.
+
+Then set `web-app/.env`:
+
+```bash
+cat > web-app/.env <<'ENV'
+SKIP_PREFLIGHT_CHECK=true
+VITE_VALHALLA_URL=http://localhost
+VITE_NOMINATIM_URL=https://nominatim.openstreetmap.org
+VITE_TILE_SERVER_URL="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+VITE_CENTER_COORDS="53.6772,23.8232"
+VITE_DEFAULT_COSTING_MODEL=pedestrian
+VITE_CLIENT_ID=grodno-poc
+VITE_AGENT_URL=http://localhost:8080
+ENV
+```
+
+`VITE_*` vars are baked at image build time, so this file MUST exist before `docker compose build`.
+
+## 2. Python env (uv)
+
+```bash
+cd agent
+uv sync                    # installs runtime + dev (ruff/pyright/pytest)
+uv run python -c "from agent.main import app; print('OK')"
+```
+
+Pinned Python is `3.12` (see `agent/.python-version`). `uv` resolves everything
+in `agent/pyproject.toml`; there is no `requirements.txt`.
+
+## 3. Bring up Valhalla + Postgres (Docker)
+
+```bash
+cd ..   # back to repo root
+
+# 3a. Download Belarus PBF + cut to Grodno bbox (~25 MB cut from ~580 MB)
 ./scripts/extract_grodno_pbf.sh
 
-# 2. bring up db + valhalla (builds tiles on first start, ~5–10 min)
+# 3b. Build & start db + valhalla (valhalla builds tiles on first start, ~5–10 min)
 docker compose up -d db valhalla
 
-# 3. wait for /status 200 (poll)
-until curl -fsS http://localhost:8002/status >/dev/null; do sleep 5; done
+# 3c. Wait for Valhalla readiness
+until curl -fsS http://localhost:8002/status >/dev/null; do
+    echo "waiting for valhalla..."; sleep 5
+done
 
-# 4. build & start the web-app
+# 3d. Build & start the webapp
 docker compose up -d --build valhalla-app
 ```
 
-Open `http://localhost/` in a browser. The left sidebar is the only UI for the POC:
-prompt at top, waypoint list in the middle (drag the `⠿` handle to reorder, or use
-`↑` / `↓`, or `✕` to delete), Nominatim-based manual-add at the bottom.
+UI: <http://localhost/>.
 
-## Fill the DB
+The **agent service is intentionally commented out** in `docker-compose.yml` —
+run it locally via `uvicorn` (step 5) so you can iterate without rebuilding images.
+
+## 4. Seed the DB
 
 ```bash
-. .venv/bin/activate
-python scripts/parse_places.py        # ~76 Grodno sights via server-side filter, 4 workers, 0.5s delay, ~20s
-export OPENAI_API_KEY=sk-...          # optional — without it, categories stay NULL
-python scripts/enrich_places.py       # embeddings always; categories only if OPENAI_API_KEY is set
-python scripts/apply_curated.py --dry-run   # preview what the curated CSV would change
-python scripts/apply_curated.py             # apply name/category/blurb/fun_fact (must run last)
+cd agent
+export DATABASE_URL=postgresql://grodno:grodno@localhost:5432/grodno
+
+# 4a. Scrape ~76 Grodno sights from planetabelarus.by
+uv run python ../scripts/parse_places.py
+
+# 4b. Compute embeddings (always). Categories are filled by 4c, not by LLM.
+uv run python ../scripts/enrich_places.py
+
+# 4c. Apply hand-curated ground truth — names/category/blurb/fun_fact.
+# MUST run last; it overwrites whatever 4a left in the DB.
+uv run python ../scripts/apply_curated.py --dry-run
+uv run python ../scripts/apply_curated.py
 ```
-
-`data/places_curated.csv` is the hand-curated source of truth and must be applied **after**
-the scraper and the enrich pass, otherwise scraped names win. See
-[`data/data_quality.md`](data/data_quality.md) for the rationale and for the review rule that
-applies to `fun_fact`.
-
-> `db/init.sql` only runs when the `pgdata` volume is created. If you are upgrading an
-> existing DB, add the newer columns by hand first:
-> `docker exec grodno-db psql -U grodno -d grodno -c "ALTER TABLE places ADD COLUMN IF NOT EXISTS fun_fact TEXT;"`
 
 Spot-check:
 ```bash
-psql "$DATABASE_URL" -c "SELECT count(*) AS n, count(embedding) AS with_emb, count(category) AS with_cat, count(fun_fact) AS with_fact FROM places;"
-psql "$DATABASE_URL" -c "SELECT name, lat, lon FROM places ORDER BY id LIMIT 10;"
+psql "$DATABASE_URL" -c "
+SELECT count(*) AS n,
+       count(embedding) AS with_emb,
+       count(category) AS with_cat,
+       count(blurb) AS with_blurb,
+       count(fun_fact) AS with_fact
+FROM places;"
+psql "$DATABASE_URL" -c "SELECT id, name, category FROM places ORDER BY id LIMIT 10;"
 ```
 
-## Run the agent
+Expected: `n≈76`, `with_emb=76`, `with_cat=76`, `with_blurb=76`, `with_fact=76`.
+
+## 5. Run the agent
 
 ```bash
+cd agent
 export DATABASE_URL=postgresql://grodno:grodno@localhost:5432/grodno
 export VALHALLA_URL=http://localhost:8002
-uvicorn agent.main:app --host 0.0.0.0 --port 8080
+export DEEPINFRA_API_KEY=sk-...        # optional, enables structured intent extraction
+
+uv run uvicorn agent.main:app --host 0.0.0.0 --port 8080
 ```
 
-On first start the agent will print:
-- `loading sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2 via fastembed (one-time)...`
-- `loading local LLM Qwen/Qwen2.5-1.5B-Instruct-GGUF / *q4_k_m.gguf (ctx=2048, threads=4)...`
+First call takes longer: it downloads the embedding model (~470 MB) into
+`~/.cache/huggingface/` and the cross-encoder reranker (~2 GB) into the same
+cache. Subsequent starts are instant.
 
-The first run downloads ~470 MB (embedding) + ~1 GB (LLM) into `~/.cache/`. Subsequent runs
-are instant. Override model/file/threads via env: `LLM_MODEL`, `LLM_FILE`, `LLM_CTX`, `LLM_THREADS`.
+## 6. Smoke tests
 
-Smoke test:
 ```bash
-curl -sX POST localhost:8080/routes/generate \
-  -H 'content-type: application/json' \
-  -d '{"query":"Хочу погулять по замкам Гродно","time_budget_minutes":120}' | jq '.points[] | {name, blurb, fun_fact}'
+# Health
+curl -fsS localhost:8080/health | jq
 
+# Generate a route
+curl -sX POST localhost:8080/routes/generate \
+    -H 'content-type: application/json' \
+    -d '{"query":"Хочу погулять по замкам Гродно","time_budget_minutes":120}' \
+    | jq '.points[] | {name, category, fun_fact}'
+
+# Re-route an explicit list
 curl -sX POST localhost:8080/routes/reroute \
-  -H 'content-type: application/json' \
-  -d '{"point_ids":[1,2,3,4]}' | jq .shape | head -c 200
+    -H 'content-type: application/json' \
+    -d '{"point_ids":[97,98,100,101]}' \
+    | jq '.summary'
+
+# Negative constraints
+curl -sX POST localhost:8080/routes/generate \
+    -H 'content-type: application/json' \
+    -d '{"query":"костёлы центра без музеев, 2 часа"}' \
+    | jq '.points[].category'
 ```
 
-Each point in a response carries `blurb`, `fun_fact` and `visit_minutes` straight from
-`places`. The webapp stores them in `directions-store.placeDetails` (keyed by `places.id`) and
-renders them next to the map markers: a permanent name+blurb caption under the marker, plus a
-card with the fun fact on click (`src/components/map/parts/place-marker-label.tsx`,
-`place-card-popup.tsx`).
+## 7. Dev workflow
 
-## Notes / troubleshooting
+```bash
+cd agent
 
-- **llama-cpp-python install.** Prebuilt wheels exist for Linux x86_64 / macOS arm64 / Win. If
-  `pip install` fails to find a wheel for your Python version, force a source build with:
-  `CMAKE_ARGS="-DGGML_NATIVE=off" pip install llama-cpp-python --no-binary :all:` (needs gcc + cmake).
-  Worst case the agent still starts — `parse_query()` falls back to a regex keyword parser when
-  llama-cpp-python is missing or model load fails.
-- **First LLM call is slow.** Qwen 1.5B q4 on CPU takes ~1–3 s for one short chat completion
-  (especially the first call, before kernel caches warm up). Acceptable for a POC.
-- **Categories column.** Without `OPENAI_API_KEY` set, `places.category` stays NULL. The agent
-  still works — it uses the category only as a soft score boost and to estimate per-stop visit
-  time — but curated categories noticeably improve relevance. `scripts/apply_curated.py` fills
-  them in without any API key.
+# Lint (auto-fix safe issues)
+uv run ruff check --fix .
+
+# Format
+uv run ruff format .
+
+# Type-check (strict-ish, ~5 sec)
+uv run pyright
+
+# Tests (none yet — see TODO below)
+uv run pytest
+```
+
+CI equivalent (run before commit):
+```bash
+uv run ruff check .
+uv run pyright
+```
+
+## 8. Configuration knobs
+
+All via env vars, see `agent/config.py`:
+
+| Var | Default | Effect |
+|---|---|---|
+| `MMR_LAMBDA` | `0.7` | 1.0 = pure relevance, 0.0 = pure diversity |
+| `RRF_K` | `60` | Reciprocal Rank Fusion constant |
+| `RETRIEVAL_POOL_SIZE` | `50` | Candidates fetched into pool |
+| `RERANK_POOL_SIZE` | `30` | Cross-encoder input size |
+| `MMR_POOL_SIZE` | `12` | After MMR |
+| `ROUTE_MAX_STOPS` | `8` | Upper bound for the route |
+| `RERANK_BACKEND` | `bge` | `bge` / `off` |
+| `RERANK_ENABLED` | `1` | Master switch for rerank |
+| `GEMINI_MODEL` | `google/gemini-2.5-flash` | Intent extraction model |
+| `BGE_RERANK_MODEL` | `BAAI/bge-reranker-v2-m3` | Local reranker |
+| `NEGATIVE_FILTER_ENABLED` | `1` | Honour `categories_neg` from intent |
+
+## 9. Troubleshooting
+
+**"ConnectError" on `localhost:8002`.** Valhalla isn't ready. Poll `/status` until 200.
+
+**"relation 'places' does not exist".** `db/init.sql` only loads on FIRST start of the `db` container. If you already have a `pgdata` volume, run `db/migrate_add_facts.sql` manually:
+```bash
+docker exec grodno-db psql -U grodno -d grodno \
+    -c "ALTER TABLE places ADD COLUMN IF NOT EXISTS fun_fact TEXT;"
+docker exec grodno-db psql -U grodno -d grodno \
+    -c "ALTER TABLE places ADD COLUMN IF NOT EXISTS fun_facts TEXT;"
+docker exec grodno-db psql -U grodno -d grodno \
+    -c "ALTER TABLE places ADD COLUMN IF NOT EXISTS links TEXT;"
+```
+
+**MMR rerank gives all-same-category routes.** Drop `MMR_LAMBDA` to `0.5`, restart.
+
+**BGE download stalls.** HuggingFace is rate-limiting. Pre-download:
+```bash
+uv run python -c "from sentence_transformers import CrossEncoder; CrossEncoder('BAAI/bge-reranker-v2-m3')"
+```
+
+**Agent returns `503 UpstreamUnavailable` on every request.** Valhalla tile build didn't finish or `pgdata` volume lost embeddings. Check `docker logs grodno-valhalla`.
+
+## 10. Architecture
+
+```
+User → Vite webapp (sidebar.tsx) → :8080 /routes/generate
+                                       ↓
+                          agent.main → agent.planner.Pipeline
+                                       ↓
+   ┌─ preprocess ─ intent (Gemini/DeepInfra) ─ resolve ─┐
+   │                                                     │
+   ├─ retrieve (multi-signal + RRF) ─ rerank (BGE) ──────┤
+   │                                                     │
+   ├─ diversity (MMR) ─ cost (Valhalla matrix) ─ optimize ┤
+   │                                                     │
+   └─ validate ─ render (Valhalla /route) ─ explain ──────┘
+```
+
+Files: `agent/planner/{preprocess,intent,resolve,retrieve,rerank,diversity,cost,optimize,validate,render,explain,pipeline}.py`.
 
 ## Out of scope
 
-- No `/routes/ready` endpoint and no `ready_routes` table (source site has no ordered-route pages).
-- No continuous pipeline — parser and enrich are one-shot scripts.
-- Local LLM only does query parsing; embedding search and routing use Valhalla + pgvector.
-- No multi-tab UI (the upstream isochrones / tiles tabs are not surfaced in the sidebar).
+- No `/routes/ready` endpoint, no `ready_routes` table (no source for it).
+- No continuous ingest pipeline — `parse_places.py`, `enrich_places.py`, `apply_curated.py` are one-shot.
+- Local rerank is on CPU; turn on GPU image for ~5× speedup of cross-encoder.
