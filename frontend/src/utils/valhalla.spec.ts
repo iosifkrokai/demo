@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Profile } from '@/stores/common-store';
 import type {
+  ActiveWaypoint,
   ActiveWaypoints,
   IsochronesRequestParams,
   Settings,
@@ -14,6 +15,8 @@ import {
   buildIsochronesRequest,
   makeContours,
   makeLocations,
+  chunkWaypoints,
+  VALHALLA_MAX_LOCATIONS,
   buildOptimizedRouteRequest,
   WAYPOINT_SNAP_RADIUS_M,
 } from './valhalla';
@@ -24,6 +27,47 @@ vi.mock('./polyline', () => ({
 }));
 
 import { decode } from './polyline';
+
+describe('chunkWaypoints', () => {
+  const wp = (i: number): ActiveWaypoint => ({
+    title: `stop ${i}`,
+    description: '',
+    selected: true,
+    displaylnglat: [23.8 + i / 100, 53.6 + i / 100],
+    sourcelnglat: [23.8 + i / 100, 53.6 + i / 100],
+    key: i,
+    addressindex: 0,
+  });
+  const points = (n: number) => Array.from({ length: n }, (_, i) => wp(i));
+
+  it('keeps a short list in a single request', () => {
+    expect(chunkWaypoints(points(5))).toHaveLength(1);
+    expect(chunkWaypoints(points(20))).toHaveLength(1);
+  });
+
+  it('splits longer lists into chained groups of at most 20 locations', () => {
+    // Valhalla errors out above 20 locations (error_code 150)
+    for (const total of [21, 29, 40]) {
+      const chunks = chunkWaypoints(points(total));
+      expect(chunks.length).toBeGreaterThan(1);
+      for (const chunk of chunks) {
+        expect(chunk.length).toBeLessThanOrEqual(VALHALLA_MAX_LOCATIONS);
+      }
+      // every stop is covered ...
+      const seen = new Set(chunks.flat().map((w) => w.title));
+      expect(seen.size).toBe(total);
+      // ... and consecutive chunks share their joint point, so the line is gapless
+      for (let i = 1; i < chunks.length; i += 1) {
+        const previousLast = chunks[i - 1]!.at(-1)?.title;
+        expect(chunks[i]![0]?.title).toBe(previousLast);
+      }
+    }
+  });
+
+  it('returns nothing for an empty list', () => {
+    expect(chunkWaypoints([])).toEqual([]);
+  });
+});
 
 describe('valhalla.ts', () => {
   const mockDecode = vi.mocked(decode);

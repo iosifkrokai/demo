@@ -32,6 +32,7 @@ export const WaypointList = ({ onChanged }: Props) => {
   const waypoints = useDirectionsStore((s) => s.waypoints);
   const setWaypoint = useDirectionsStore((s) => s.setWaypoint);
   const doRemoveWaypoint = useDirectionsStore((s) => s.doRemoveWaypoint);
+  const excludeStops = useDirectionsStore((s) => s.excludeStops);
   const { refetch } = useDirectionsQuery();
   const [dragIndex, setDragIndex] = useState<number | null>(null);
 
@@ -59,7 +60,11 @@ export const WaypointList = ({ onChanged }: Props) => {
   };
 
   const remove = (i: number) => {
+    // A stop deleted by hand is remembered: a later refinement («добавь ещё
+    // кофейню») must not quietly put the same place back on the route.
+    const placeId = waypoints[i]?.placeId;
     doRemoveWaypoint({ index: i });
+    if (placeId != null) excludeStops({ placeIds: [placeId] });
     onChanged();
     refetch();
   };

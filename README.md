@@ -18,36 +18,43 @@ For network: outbound HTTPS to `download.geofabrik.de`, `nominatim.openstreetmap
 optional** — without it the pipeline degrades to keyword-only retrieval (no embeddings,
 no Jev intent/rerank).
 
+## 0a. One command (fresh machine)
+
+```bash
+git clone <repo> && cd demo
+bash scripts/bootstrap.sh --check   # verify prerequisites, change nothing
+bash scripts/bootstrap.sh           # .env + compose + uv sync + all seeds
+```
+
+`bootstrap.sh` is idempotent (every seed upserts on `source_url`), skips the OSM
+ingest with `--skip-osm`, and prints the agent command at the end. Without
+`OPENROUTER_API_KEY` it seeds without embeddings and warns (keyword-only
+retrieval until you re-run the seeds with the key).
+
 ## 1. Web-app subdir
 
 The webapp lives in `frontend/` (our customizations on top of valhalla/web-app — sidebar,
-waypoints, place cards). Create its `.env` before building the image:
+waypoints, place cards). Copy the committed example to `.env` before building:
 
 ```bash
-cat > frontend/.env <<'ENV'
-SKIP_PREFLIGHT_CHECK=true
-# Leave the two URLs EMPTY: the UI then talks to the agent and to Valhalla on its
-# own origin, and nginx proxies /routes/* → agent, /route,/status,… → valhalla.
-# That is what makes the webapp work behind a forwarded port (Codespaces, tunnels).
-# Set a full URL only when the UI is served from another origin (`npm run dev`).
-VITE_AGENT_URL=
-VITE_VALHALLA_URL=
-VITE_NOMINATIM_URL=https://nominatim.openstreetmap.org
-VITE_TILE_SERVER_URL="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
-VITE_CENTER_COORDS="53.6772,23.8232"
-VITE_DEFAULT_COSTING_MODEL=pedestrian
-VITE_CLIENT_ID=grodno-poc
-ENV
+cp frontend/.env.example frontend/.env
 ```
+
+`.env` is gitignored, so a fresh clone has none; `frontend/.env.example` holds the
+defaults — both URLs empty, which is what makes the app work behind a forwarded port
+(Codespaces, tunnels): the UI talks to its own origin and nginx proxies `/routes/*` →
+agent, `/route`,`/status`,… → valhalla.
 
 `VITE_*` vars are baked at image build time, so this file MUST exist before `docker compose build`.
 `frontend/.dockerignore` must NOT exclude `package-lock.json` — the Dockerfile runs `npm ci`,
 which fails without the lockfile in the build context.
 
-Upstreams are rendered into nginx at container start from
-`AGENT_UPSTREAM` / `VALHALLA_UPSTREAM` (`docker-compose.yml`, default `172.17.0.1:…` = the
-Docker host). On a plain Docker host where container→container traffic is allowed you can
-use `agent:8080` / `valhalla:8002` instead.
+Upstreams are rendered into nginx at container start from `AGENT_UPSTREAM` /
+`VALHALLA_UPSTREAM` (`docker-compose.yml`). The default is `host.docker.internal:…` — the
+Docker host on Linux (via the `host-gateway` mapping in compose), macOS and Windows —
+because the agent runs there and some hosts block container→container traffic on the
+compose bridge. Where that traffic is allowed, override with
+`AGENT_UPSTREAM=agent:8080 VALHALLA_UPSTREAM=valhalla:8002`.
 
 ## 2. Python env (uv)
 
@@ -80,8 +87,10 @@ docker compose up -d --build frontend
 
 UI: <http://localhost/>.
 
-The **agent service is intentionally commented out** in `docker-compose.yml` —
-run it locally via `uvicorn` (step 5) so you can iterate without rebuilding images.
+The agent **is** defined as a compose service (`agent`, wired to `db:5432` / `valhalla:8002`)
+for a hands-off deployment, but the documented flow runs it from the checkout via `uvicorn`
+(step 5) on purpose: code edits then need no image rebuild. Use `docker compose up -d agent`
+when you want the container instead — it reads `OPENROUTER_API_KEY` from the environment.
 
 ## 4. Seed the DB
 
@@ -101,9 +110,18 @@ export OPENROUTER_API_KEY=sk-or-...        # required for embeddings
 .venv/bin/python scripts/load_osm.py               # upsert + embed
 ```
 
+```bash
+# 4c. Everyday POIs: cafes, restaurants, toilets, hotels (~1.8k rows for the voblast).
+#     These are what «добавь кофейню и туалет» pulls in, and they are placed
+#     AROUND the current route (500 m of its stops), not across the whole region.
+.venv/bin/python scripts/ingest_poi.py                        # Overpass → upsert + embed
+.venv/bin/python scripts/ingest_poi.py --dry-run --limit 5    # inspect, write nothing
+```
+
 `ingest_osm.py` also takes `--input-json <saved Overpass response>` (skip the network),
 `--district-mode nominatim` (real reverse geocoding, 1 req/s) and `--limit N`.
 `load_osm.py` takes `--dry-run`, `--limit`, `--no-embed`, `--path`.
+`ingest_poi.py` takes `--dry-run`, `--limit`, `--no-embed`, `--bbox`, `--input-json`.
 
 `--bbox` covers a slice of Lithuania and Poland, so every row is checked against
 `agent/geofence.py` (Natural Earth border polygon, `data/belarus_border.json`) before it
@@ -242,8 +260,10 @@ for the geo focus instead, so «замки Гродно» is not pinned to one a
 do NOT help.
 
 **"relation 'places' does not exist".** `db/init.sql` only loads on FIRST start of the `db`
-container. With an existing `pgdata` volume, apply `db/migrations/*.sql` and
-`db/migrate_add_facts.sql` manually.
+container. A fresh `pgdata` volume gets the complete current schema (extensions, columns,
+indexes) straight from `init.sql`; the files under `db/migrations/` are historical, all
+`IF NOT EXISTS`, and only matter for volumes created before `init.sql` caught up — apply
+`db/migrations/*.sql` and `db/migrate_add_facts.sql` by hand in that case.
 
 **Agent returns `503 UpstreamUnavailable` on every request.** Valhalla tile build didn't
 finish or the `pgdata` volume lost embeddings — re-run `scripts/seed_region.py --embed`.

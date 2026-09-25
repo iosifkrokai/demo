@@ -25,6 +25,9 @@ CategoryLiteral = Literal[
     "замок", "дворец", "усадьба", "костёл", "церковь", "монастырь",
     "храм", "музей", "архитектура", "парк", "памятник",
     "инфраструктура", "кладбище",
+    # everyday stops (OSM amenity/tourism POIs) — keep in sync with
+    # constants.CATEGORIES
+    "кафе", "ресторан", "туалет", "гостиница",
 ]
 
 EraLiteral = Literal["any", "pre1900", "soviet", "modern"]
@@ -40,6 +43,51 @@ class LatLon(BaseModel):
     """Tourist's current position (device geolocation)."""
     lat: float = Field(ge=44.0, le=62.0)   # sane bounds: Belarus ± margins
     lon: float = Field(ge=19.0, le=42.0)
+
+
+# ── Iterative refinement ("добавь кофейню и туалет") ─────────────────────────
+
+
+class ContextPoint(BaseModel):
+    """A stop the already-built route has, sent back on a refinement turn."""
+
+    id: int | None = None
+    name: str = Field(max_length=200)
+    lat: float
+    lon: float
+    # True for stops the user added or kept by hand: a refinement must keep them.
+    pinned: bool = False
+    # "mine" is the tourist's own position marking the route start.
+    source: Literal["agent", "user", "mine"] = "agent"
+
+
+class RouteContext(BaseModel):
+    """The route as it stands plus what the user asks to change about it.
+
+    `instruction` is the delta only ("добавь кофейню и туалет"), not the original
+    query: a refinement extracts intent from the delta, while `base_points` are
+    forced to survive it.
+    """
+
+    instruction: str | None = Field(default=None, max_length=500)
+    base_points: list[ContextPoint] = Field(default_factory=list)
+    # Stops the user deleted by hand — a refinement must not bring them back.
+    excluded_ids: list[int] = Field(default_factory=list)
+    revision: int = Field(default=0, ge=0)
+
+
+class RouteChange(BaseModel):
+    id: int | None = None
+    name: str
+    reason: str | None = None
+
+
+class RouteChanges(BaseModel):
+    """What a refinement did to the previous route — shown to the user honestly."""
+
+    added: list[RouteChange] = Field(default_factory=list)
+    removed: list[RouteChange] = Field(default_factory=list)
+    kept: int = 0
 
 
 class GenerateReq(BaseModel):
@@ -67,6 +115,11 @@ class GenerateReq(BaseModel):
     )
     allow_auto_relax: bool = Field(default=True)
     conversation_id: str | None = Field(default=None)
+    # Present on a refinement turn: the route as it stands (base_points), the
+    # stops the user deleted (excluded_ids) and the delta instruction. Absent on
+    # a first turn — and then the pipeline behaves exactly as before this field
+    # existed.
+    context: RouteContext | None = None
     user_interests: list[str] | None = Field(default=None)
     preferences: dict | None = Field(default=None)
 
@@ -145,6 +198,8 @@ class RouteResponse(BaseModel):
     # "auto", ...). The webapp mirrors it into its own profile so the line it
     # draws itself uses the same transport as the plan.
     costing: str | None = None
+    # Filled in on a refinement turn: what changed vs the route the user had.
+    changes: RouteChanges | None = None
     debug: dict | None = None
 
 

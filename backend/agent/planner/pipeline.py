@@ -44,10 +44,12 @@ from ..models import (
     ParsedQuery,
     Place,
     ResolvedConstraints,
+    RouteChange,
+    RouteChanges,
     RouteResponse,
     RouteSummary,
 )
-from ..search import fetch_points_by_ids
+from ..search import fetch_points_by_ids, nearby_places
 from ..valhalla_client import optimized_route as valhalla_optimized_route
 from ..valhalla_client import ping as valhalla_ping
 from .cost import (
@@ -64,7 +66,7 @@ from .preprocess import preprocess
 from .render import render
 from .rerank import rerank as rerank_pool
 from .resolve import resolve
-from .retrieve import retrieve
+from .retrieve import retrieve, _row_to_candidate
 from .validate import validate
 
 log = logging.getLogger(__name__)
@@ -178,6 +180,114 @@ def _norm_name(name: str) -> str:
     n = _re.sub(r"\([^)]*\)", " ", (name or "").lower())
     n = _re.sub(r"[^0-9a-zа-яё]+", " ", n)
     return " ".join(n.split())
+
+
+def _with_base_points(
+    candidates: list[Candidate],
+    rows: list[dict],
+    excluded: set[int],
+) -> tuple[list[Candidate], list[Candidate]]:
+    """Keep the stops the user already has through a refinement.
+
+    A refinement ("добавь кофейню и туалет") must ADD to the route: stops that
+    were fetched from the previous turn are re-added after every trim, so the
+    only way a stop disappears is an explicit request (excluded_ids) or
+    Valhalla's own verdict (no road connects it).
+
+    Returns the merged pool and the base candidates themselves.
+    """
+    base = [_row_to_candidate(r, 0.0) for r in rows if r["id"] not in excluded]
+    have = {c.id for c in candidates}
+    merged = list(candidates) + [b for b in base if b.id not in have]
+    return merged, base
+
+
+def _nearby_convenience(
+    db: psycopg.Connection,
+    base: list[Candidate],
+    wanted: set[str],
+    *,
+    radius_m: int = constants.CONVENIENCE_RADIUS_M,
+    max_added: int = constants.CONVENIENCE_MAX_ADDED,
+) -> list[Candidate]:
+    """Convenience stops (coffee, toilet, ...) that sit ON the route.
+
+    A refinement like «добавь кофейню и туалет» is not a new sightseeing quest:
+    the tourist wants a coffee within a short detour of the walk they already
+    have. So these are picked from the neighbourhood of the existing stops, not
+    from a relevance ranking that happily returns a café 12 km away.
+    """
+    found: dict[int, Candidate] = {}
+    per_stop: dict[int, int] = {}
+    for stop in base:
+        if per_stop.get(stop.id, 0) >= 2:
+            continue
+        rows = nearby_places(
+            db, stop.lat, stop.lon, radius_km=radius_m / 1000.0, limit=8
+        )
+        for row in rows:
+            cat = (row.get("category") or "").strip().lower()
+            if cat not in wanted or row["id"] in found:
+                continue
+            if row["id"] in {c.id for c in base}:
+                continue
+            found[row["id"]] = _row_to_candidate(row, 0.0)
+            per_stop[stop.id] = per_stop.get(stop.id, 0) + 1
+            if len(found) >= max_added:
+                return list(found.values())
+    return list(found.values())
+
+
+def _cap_for_valhalla(
+    candidates: list[Candidate],
+    base: list[Candidate],
+    limit: int = constants.VALHALLA_MAX_LOCATIONS,
+) -> list[Candidate]:
+    """Keep the ordering request inside Valhalla's location limit.
+
+    Valhalla answers /optimized_route with error 150 above 20 locations, which
+    the pipeline used to surface as «could not produce a route». Base stops come
+    first (they are what the user asked to keep), the rest in relevance order.
+    """
+    if len(candidates) <= limit:
+        return candidates
+    base_ids = {c.id for c in base}
+    ordered = [c for c in candidates if c.id in base_ids]
+    rest = [c for c in candidates if c.id not in base_ids]
+    rest.sort(key=lambda c: (c.rerank_score or 0.0, c.relevance), reverse=True)
+    return (ordered + rest)[:limit]
+
+
+def _context_changes(base: list[Candidate], route: list[Candidate]) -> RouteChanges:
+    """What a refinement did to the previous route — added / dropped / kept."""
+    base_ids = {c.id for c in base}
+    route_ids = {c.id for c in route}
+    return RouteChanges(
+        added=[
+            RouteChange(id=c.id, name=c.name)
+            for c in route
+            if c.id not in base_ids
+        ],
+        removed=[
+            RouteChange(
+                id=c.id,
+                name=c.name,
+                reason="не связано дорогами или не уложилось в лимит",
+            )
+            for c in base
+            if c.id not in route_ids
+        ],
+        kept=len(base_ids & route_ids),
+    )
+
+
+def _drop_excluded(candidates: list[Candidate], excluded_ids: set[int]) -> list[Candidate]:
+    """Drop candidates the user removed by hand.
+
+    A refinement turn carries the stops the user deleted; without this the same
+    POI returns on every rebuild and the deletion looks ignored.
+    """
+    return [c for c in candidates if c.id not in excluded_ids]
 
 
 def _drop_duplicates(candidates: list[Candidate], radius_m: float) -> list[Candidate]:
@@ -382,6 +492,16 @@ class Pipeline:
         # here, so the best-ranked row of each cluster survives.
         candidates = _drop_duplicates(candidates, constants.DUPLICATE_RADIUS_M)
 
+        # 3.57 A refinement must respect the user's own deletions: a stop removed
+        # by hand ("убери форт") may not come back just because it still matches
+        # the query. Applied to the pool only — pinned base points are handled
+        # separately, they are never dropped silently.
+        excluded = set(req.context.excluded_ids) if req.context else set()
+        if excluded:
+            before = len(candidates)
+            candidates = _drop_excluded(candidates, excluded)
+            log.info("context: dropped %d excluded stop(s)", before - len(candidates))
+
         # 3.6 Geographic focus: keep the route walkable — candidates beyond
         # GEO_FOCUS_KM from the tourist's position (or the top-scored hit when
         # position is unknown) are dropped (radius doubles if that leaves <3).
@@ -404,18 +524,93 @@ class Pipeline:
                 "все кандидаты слишком далеко друг от друга — уточните город или район"
             )
 
-        # 4. MMR diversity
-        mmr_pool_size = min(constants.MMR_POOL_SIZE, len(candidates))
-        candidates = mmr_select(
-            candidates,
-            n=mmr_pool_size,
-            db=self.db,
-            constraints=constraints,
-        )
+        # 4. MMR diversity — this is a *curation* step: it trims the candidate set
+        # to something that fits a walk. It belongs in the plan only when the
+        # user named a time budget. Without one they asked for everything ("все
+        # костёлы Гродненской области") and get every survivor, honestly long:
+        # a multi-day trip beats a silently trimmed dozen.
+        if constraints.time_budget_minutes:
+            candidates = mmr_select(
+                candidates,
+                n=min(constants.MMR_POOL_SIZE, len(candidates)),
+                db=self.db,
+                constraints=constraints,
+            )
+        else:
+            log.info("no time budget: skipping diversity trim, %d candidates", len(candidates))
         if len(candidates) < 2:
             raise NoCandidatesFound(
                 f"only {len(candidates)} candidate(s) survived diversity filter"
             )
+
+        # 4b. Refinement: the route the user already had is the starting point,
+        # so its stops go back into the pool after retrieval, geo focus and the
+        # diversity trim. Without this «добавь кофейню» quietly threw away the
+        # museums the user had just built.
+        base_candidates: list[Candidate] = []
+        if req.context and req.context.base_points:
+            base_ids = [p.id for p in req.context.base_points if p.id is not None]
+            base_rows = fetch_points_by_ids(self.db, base_ids) if base_ids else []
+
+            # A stop the tourist placed by hand (map click) carries no DB id.
+            # Match it to the nearest place so a refinement keeps it instead of
+            # quietly dropping what the user put there themselves.
+            manual = [
+                p
+                for p in req.context.base_points
+                if p.id is None and (p.pinned or p.source == "user")
+            ]
+            for point in manual:
+                near_rows = nearby_places(
+                    self.db, point.lat, point.lon, radius_km=0.06, limit=1
+                )
+                for row in near_rows:
+                    if row["id"] not in {r["id"] for r in base_rows}:
+                        base_rows.append(row)
+                        log.info(
+                            "context: hand-placed stop «%s» matched to «%s»",
+                            point.name, row["name"],
+                        )
+
+            if base_rows:
+                candidates, base_candidates = _with_base_points(
+                    candidates, base_rows, excluded
+                )
+                log.info(
+                    "context: %d base stop(s) from the previous route kept, %d new candidate(s) total",
+                    len(base_candidates), len(candidates),
+                )
+
+                # Convenience categories are chosen by proximity to the route:
+                # drop the motorway-side cafés retrieval scored highly but that
+                # sit kilometres away, and take the ones by the existing stops.
+                wanted = {
+                    c for c in constraints.optional_categories
+                    if c in constants.CONVENIENCE_CATEGORIES
+                }
+                if wanted:
+                    near = _nearby_convenience(self.db, base_candidates, wanted)
+                    near_ids = {c.id for c in near}
+                    base_id_set = {b.id for b in base_candidates}
+                    # Keep the stops of the current route, the convenience stops
+                    # that sit by it, and everything that is not itself a
+                    # convenience category (the museums stay, far cafés go).
+                    candidates = [
+                        c
+                        for c in candidates
+                        if c.id in base_id_set
+                        or c.id in near_ids
+                        or (c.category or "").strip().lower() not in wanted
+                    ]
+                    have = {c.id for c in candidates}
+                    candidates += [c for c in near if c.id not in have]
+                    log.info(
+                        "context: %d convenience stop(s) by the route for %s, %d candidate(s)",
+                        len(near), sorted(wanted), len(candidates),
+                    )
+
+                candidates = _cap_for_valhalla(candidates, base_candidates)
+                log.info("context: pool capped for Valhalla at %d candidate(s)", len(candidates))
 
         # Transport mode from the request (webapp profile picker); the
         # cost matrix AND the rendered shape must use the same costing.
@@ -462,8 +657,13 @@ class Pipeline:
             constraints.time_budget_minutes, intent.source,
         )
 
+        changes = (
+            _context_changes(base_candidates, plan.route) if base_candidates else None
+        )
+
         return self._build_response(
             intent=intent,
+            changes=changes,
             constraints=constraints,
             plan=plan,
             shape=shape,
@@ -481,7 +681,6 @@ class Pipeline:
             missing = set(point_ids) - {r["id"] for r in rows}
             raise NoCandidatesFound(f"unknown point_ids: {sorted(missing)}")
 
-        from .retrieve import _row_to_candidate
         candidates = [_row_to_candidate(r, 1.0) for r in rows]
         constraints = resolve(
             extract_intent("точки пользователя"),
@@ -518,6 +717,7 @@ class Pipeline:
                 )
                 for p in plan.route
             ],
+            changes=None,
             shape=shape,
             summary=RouteSummary(length_km=length_km, time_seconds=walk_s),
             costing=profile or "pedestrian",
@@ -533,7 +733,6 @@ class Pipeline:
             missing = set(point_ids) - {r["id"] for r in rows}
             raise NoCandidatesFound(f"unknown point_ids: {sorted(missing)}")
 
-        from .retrieve import _row_to_candidate
         cands = [_row_to_candidate(r, 1.0) for r in rows]
         trace = {"algorithm": "direct", "diversity": 1.0, "fits_budget": True}
         return explain_route(cands, trace, walk_seconds=0.0)
@@ -573,6 +772,7 @@ class Pipeline:
         intent,
         constraints,
         plan,
+        changes: RouteChanges | None,
         shape: dict,
         walk_s: float,
         length_km: float | None,
@@ -608,6 +808,7 @@ class Pipeline:
             ],
             shape=shape,
             summary=RouteSummary(length_km=length_km, time_seconds=walk_s),
+            changes=changes,
             costing=costing,
             budget=BudgetInfo(
                 budget_minutes=constraints.time_budget_minutes,

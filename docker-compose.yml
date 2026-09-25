@@ -47,12 +47,17 @@ services:
       # 172.17.0.1 = the Docker host: the agent runs there via uvicorn, and on
       # some hosts container→container traffic on the compose bridge is blocked,
       # so Valhalla is reached through its published port too.
-      AGENT_UPSTREAM: "172.17.0.1:8080"
-      VALHALLA_UPSTREAM: "172.17.0.1:8002"
+      # host.docker.internal = the Docker host on Linux, macOS and Windows
+      # (the extra_hosts mapping below provides it on Linux). On a host where
+      # container→container traffic is allowed, override with agent:8080 / valhalla:8002.
+      AGENT_UPSTREAM: "${AGENT_UPSTREAM:-host.docker.internal:8080}"
+      VALHALLA_UPSTREAM: "${VALHALLA_UPSTREAM:-host.docker.internal:8002}"
     ports:
       - "80:80"
     depends_on:
       - valhalla
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ./frontend/nginx.conf:/etc/nginx/templates/default.conf.template:ro
     restart: unless-stopped
@@ -65,7 +70,7 @@ services:
     environment:
       AGENT_HOST: "0.0.0.0"
       AGENT_PORT: "8080"
-      DATABASE_URL: "postgresql://grodno:grodno@db:5432/grodno"
+      DATABASE_URL: "postgresql://grodno:${POSTGRES_PASSWORD:-grodno}@db:5432/grodno"
       VALHALLA_URL: "http://valhalla:8002"
       OPENROUTER_API_KEY: "${OPENROUTER_API_KEY:-}"
       RERANK_ENABLED: "${RERANK_ENABLED:-1}"

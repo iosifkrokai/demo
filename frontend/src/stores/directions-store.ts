@@ -13,6 +13,9 @@ export interface Waypoint {
   // Set when the point came from the agent (or from a saved route): lets the
   // map look the place up in `placeDetails` to render its blurb / fun fact.
   placeId?: number;
+  // True for a stop the user placed or kept by hand (map click, typed address).
+  // A refinement ("add a café") must never drop a pinned stop.
+  pinned?: boolean;
 }
 
 /**
@@ -94,6 +97,28 @@ export interface PlaceDetails {
   district?: string | null;
 }
 
+/** One turn of the refinement log: what the user asked and what it changed. */
+export interface RefinementEntry {
+  id: string;
+  instruction: string;
+  added: string[];
+  removed: string[];
+  createdAt: number;
+}
+
+/**
+ * Everything a refinement turn can change. Snapshotted before each refine so
+ * "Отменить последнее уточнение" restores the previous route exactly.
+ */
+export interface RouteSnapshot {
+  waypoints: Waypoint[];
+  placeDetails: Record<number, PlaceDetails>;
+  excludedPlaceIds: number[];
+  refinementLog: RefinementEntry[];
+}
+
+const MAX_SNAPSHOTS = 10;
+
 const STORAGE_KEY = 'grodno-route-history';
 const MAX_HISTORY = 10;
 
@@ -153,6 +178,14 @@ export interface DirectionsState {
   routeHistory: RouteHistoryEntry[];
   // Curated info (blurb / fun fact) about agent-generated stops, by places.id.
   placeDetails: Record<number, PlaceDetails>;
+  // Stops the user deleted by hand. Sent back on a refinement so they do not
+  // reappear ("убери форт" must stay removed).
+  excludedPlaceIds: number[];
+  // Iterative refinement turns, oldest first — rendered as chips under the
+  // route summary so the user sees how the route got to its current state.
+  refinementLog: RefinementEntry[];
+  // Undo stack: one snapshot per refinement turn resp. manual edit batch.
+  routeSnapshots: RouteSnapshot[];
 }
 
 interface DirectionsActions {
@@ -190,6 +223,18 @@ interface DirectionsActions {
   clearHistory: () => void;
   loadHistory: () => void;
   setPlaceDetails: (details: Record<number, PlaceDetails>) => void;
+  // ── Iterative refinement ──
+  /** Remove stops by DB id and remember them as excluded from future turns. */
+  excludeStops: (params: { placeIds: number[] }) => void;
+  /** Un-exclude a stop (the user brought it back / asked for it explicitly). */
+  includeStop: (params: { placeId: number }) => void;
+  pushRefinement: (entry: Omit<RefinementEntry, 'id' | 'createdAt'>) => void;
+  /** Snapshot the route before a refine or a manual edit. */
+  snapshotRoute: () => void;
+  /** Restore the newest snapshot; no-op when the stack is empty. */
+  undoRefinement: () => void;
+  /** Full reset: stops, details, exclusions, log, history of edits, line. */
+  resetRoute: () => void;
 }
 
 type DirectionsStore = DirectionsState & DirectionsActions;
@@ -207,6 +252,9 @@ export const useDirectionsStore = create<DirectionsStore>()(
       activeRouteIndex: 0,
       routeHistory: loadHistoryFromStorage(),
       placeDetails: {},
+      excludedPlaceIds: [],
+      refinementLog: [],
+      routeSnapshots: [],
 
       updateInclineDecline: (inclineDeclineTotal) =>
         set(
@@ -503,6 +551,109 @@ export const useDirectionsStore = create<DirectionsStore>()(
           },
           undefined,
           'setPlaceDetails'
+        ),
+
+      excludeStops: ({ placeIds }) =>
+        set(
+          (state) => {
+            const drop = new Set(placeIds);
+            state.waypoints = state.waypoints.filter(
+              (wp) => wp.placeId === undefined || !drop.has(wp.placeId)
+            );
+            const excluded = new Set(state.excludedPlaceIds);
+            drop.forEach((id) => excluded.add(id));
+            state.excludedPlaceIds = [...excluded];
+            state.isOptimized = false;
+
+            if (!hasActiveRoute(state.waypoints)) {
+              state.successful = false;
+              state.results.data = null;
+            }
+          },
+          undefined,
+          'excludeStops'
+        ),
+
+      includeStop: ({ placeId }) =>
+        set(
+          (state) => {
+            state.excludedPlaceIds = state.excludedPlaceIds.filter(
+              (id) => id !== placeId
+            );
+          },
+          undefined,
+          'includeStop'
+        ),
+
+      pushRefinement: (entry) =>
+        set(
+          (state) => {
+            state.refinementLog = [
+              ...state.refinementLog,
+              {
+                ...entry,
+                id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+                createdAt: Date.now(),
+              },
+            ];
+          },
+          undefined,
+          'pushRefinement'
+        ),
+
+      snapshotRoute: () =>
+        set(
+          (state) => {
+            state.routeSnapshots = [
+              ...state.routeSnapshots,
+              {
+                waypoints: state.waypoints.map((wp) => ({
+                  ...wp,
+                  geocodeResults: wp.geocodeResults.map((r) => ({ ...r })),
+                })),
+                placeDetails: { ...state.placeDetails },
+                excludedPlaceIds: [...state.excludedPlaceIds],
+                refinementLog: [...state.refinementLog],
+              },
+            ].slice(-MAX_SNAPSHOTS);
+          },
+          undefined,
+          'snapshotRoute'
+        ),
+
+      undoRefinement: () =>
+        set(
+          (state) => {
+            const snap = state.routeSnapshots.at(-1);
+            if (!snap) {
+              return;
+            }
+            state.waypoints = snap.waypoints;
+            state.placeDetails = snap.placeDetails;
+            state.excludedPlaceIds = snap.excludedPlaceIds;
+            state.refinementLog = snap.refinementLog;
+            state.routeSnapshots = state.routeSnapshots.slice(0, -1);
+          },
+          undefined,
+          'undoRefinement'
+        ),
+
+      resetRoute: () =>
+        set(
+          (state) => {
+            state.waypoints = [...defaultWaypoints];
+            state.placeDetails = {};
+            state.excludedPlaceIds = [];
+            state.refinementLog = [];
+            state.routeSnapshots = [];
+            state.successful = false;
+            state.inclineDeclineTotal = undefined;
+            state.results = { data: null, show: { '0': true } };
+            state.activeRouteIndex = 0;
+            state.isOptimized = false;
+          },
+          undefined,
+          'resetRoute'
         ),
     })),
     { name: 'directions-store' }

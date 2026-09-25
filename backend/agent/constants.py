@@ -33,6 +33,9 @@ CATEGORIES = (
     "замок", "костёл", "церковь", "монастырь", "дворец", "усадьба",
     "парк", "музей", "памятник", "храм", "архитектура",
     "инфраструктура", "кладбище",
+    # Everyday stops a walk needs (coffee, toilet): OSM amenity/tourism POIs
+    # ingested by scripts/ingest_poi.py.
+    "кафе", "ресторан", "туалет", "гостиница",
 )
 
 # ── Retrieval / ranking ─────────────────────────────────────────────────────
@@ -40,6 +43,16 @@ CATEGORIES = (
 RRF_K = 60
 # MMR relevance/diversity trade-off (0=pure diversity, 1=pure relevance).
 MMR_LAMBDA = 0.7
+
+# Everyday stops a walk needs ("добавь кофейню и туалет"): these are picked by
+# PROXIMITY to the route, not by relevance — a coffee 12 km away is not a stop.
+CONVENIENCE_CATEGORIES = ("кафе", "ресторан", "туалет", "гостиница")
+CONVENIENCE_RADIUS_M = 500      # how far off the route a convenience stop may be
+CONVENIENCE_MAX_ADDED = 6       # at most this many convenience stops per refine
+# Valhalla rejects more than 20 locations per /route and /optimized_route call
+# (error_code 150). Keep the pool it sees inside that (the webapp chunks its own
+# drawing call, but the planner's ordering call is single-shot).
+VALHALLA_MAX_LOCATIONS = 20
 
 NEGATIVE_FILTER_ENABLED = True  # drop candidates matching forbidden categories
 RETRIEVAL_POOL_SIZE = 50   # candidates after RRF fusion

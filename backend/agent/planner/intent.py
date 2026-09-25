@@ -143,13 +143,15 @@ def extract_intent(query: str) -> IntentResult:
 
     answers = jev.ask(query, _QUESTIONS)
 
+    # A taxonomy entry the model did not answer about is simply "not mentioned"
+    # (the category list can grow between prompts; never crash on a missing key).
     cat_pos = [
         cat for cat in constants.CATEGORIES
-        if jev.noul(answers[f"cat_{cat}"]) >= _CAT_YES
+        if jev.noul(answers.get(f"cat_{cat}") or {"noul": 0.0}) >= _CAT_YES
     ]
     cat_neg = [
         cat for cat in constants.CATEGORIES
-        if jev.noul(answers[f"neg_{cat}"]) >= 0.7
+        if jev.noul(answers.get(f"neg_{cat}") or {"noul": 0.0}) >= 0.7
     ]
 
     hours = jev.score(answers["time_hours"])

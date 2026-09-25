@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Bike,
   Car,
   ChevronDown,
   ChevronUp,
   Clock,
-  Bike,
   Footprints,
   History,
   Loader2,
@@ -16,6 +16,7 @@ import {
   Send,
   Sparkles,
   Trash2,
+  Undo2,
   X,
 } from 'lucide-react';
 import { useNavigate } from '@tanstack/react-router';
@@ -37,6 +38,7 @@ import {
   type Waypoint,
 } from '@/stores/directions-store';
 import { useDirectionsQuery } from '@/hooks/use-directions-queries';
+import { GuidePanel, guideRouteKey, type GuideStop } from './guide-panel';
 import { WaypointList } from './waypoint-list';
 import { forward_geocode } from '@/utils/nominatim';
 
@@ -163,12 +165,21 @@ export const Sidebar = () => {
   );
   const waypoints = useDirectionsStore((s) => s.waypoints);
   const setPlaceDetails = useDirectionsStore((s) => s.setPlaceDetails);
+  const refinementLog = useDirectionsStore((s) => s.refinementLog);
+  const routeSnapshots = useDirectionsStore((s) => s.routeSnapshots);
+  const excludedPlaceIds = useDirectionsStore((s) => s.excludedPlaceIds);
+  const undoRefinement = useDirectionsStore((s) => s.undoRefinement);
+  const resetRoute = useDirectionsStore((s) => s.resetRoute);
+  const pushRefinement = useDirectionsStore((s) => s.pushRefinement);
   const { refetch: refetchDirections } = useDirectionsQuery();
 
   const resetSettings = useCommonStore((s) => s.resetSettings);
   const navigate = useNavigate({ from: '/$activeTab' });
 
   const [query, setQuery] = useState('');
+  // Mode 1 — planning (build/refine the route), mode 2 — the guide that walks it.
+  const [mode, setMode] = useState<'plan' | 'guide'>('plan');
+  const placeDetails = useDirectionsStore((s) => s.placeDetails);
   const [timeBudget, setTimeBudget] = useState(0); // 0 = без ограничения
   // '' = «как удобно»: no transport constraint, the agent picks the costing
   // (walking inside a town, driving across a region). Only an explicit pick —
@@ -198,6 +209,9 @@ export const Sidebar = () => {
   // the stops, the drawn line and the "в пути" time all follow the new costing.
   const lastQueryRef = useRef<string | null>(null);
   const replanRef = useRef<() => void>(() => {});
+  // Always-current transport: state can be stale inside async callbacks, the
+  // ref cannot. The plan body and the re-plan both read it.
+  const transportRef = useRef<'' | Profile>('');
 
   const [manualQuery, setManualQuery] = useState('');
   const [manualBusy, setManualBusy] = useState(false);
@@ -222,7 +236,9 @@ export const Sidebar = () => {
    * agent unless it told us a costing, and the webapp keeps its own default.
    */
   const setTransportEverywhere = useCallback(
-    (value: '' | Profile) => {
+    (value: '' | Profile, replan = true) => {
+      const changed = transportRef.current !== value;
+      transportRef.current = value;
       setTransport(value);
       if (value === '') return;
       setMirroredCosting(value);
@@ -230,7 +246,7 @@ export const Sidebar = () => {
       resetSettings(value);
       // A transport is a real constraint: re-plan with it instead of leaving a
       // walking route (and its travel time) on screen for a drive.
-      if (lastQueryRef.current) replanRef.current();
+      if (replan && changed && lastQueryRef.current) replanRef.current();
     },
     [resetSettings]
   );
@@ -260,16 +276,32 @@ export const Sidebar = () => {
         return null;
       }
       setGeoState('locating');
+      // The browser can neither grant nor deny (a permission prompt nobody
+      // answers, a headless context): getCurrentPosition then never calls back.
+      // Race it against our own timer so a query never hangs on geolocation.
+      const GEO_WAIT_MS = 8000;
       try {
-        const pos = await new Promise<GeolocationPosition>(
-          (resolve, reject) => {
-            navigator.geolocation.getCurrentPosition(resolve, reject, {
+        const pos = await new Promise<GeolocationPosition | null>((resolve) => {
+          const timer = setTimeout(() => resolve(null), GEO_WAIT_MS + 500);
+          const settle = (value: GeolocationPosition | null) => {
+            clearTimeout(timer);
+            resolve(value);
+          };
+          navigator.geolocation.getCurrentPosition(
+            (position) => settle(position),
+            () => settle(null),
+            {
               enableHighAccuracy: true,
-              timeout: 8000,
+              timeout: GEO_WAIT_MS,
               maximumAge: 60_000,
-            });
-          }
-        );
+            }
+          );
+        });
+        if (!pos) {
+          setGeoState('denied');
+          setGeoReason('не удалось определить');
+          return null;
+        }
         const coords = {
           lat: pos.coords.latitude,
           lon: pos.coords.longitude,
@@ -325,11 +357,67 @@ export const Sidebar = () => {
         time_budget_minutes?: number;
         profile?: string;
         origin?: { lat: number; lon: number };
+        context?: {
+          instruction: string;
+          revision: number;
+          excluded_ids: number[];
+          base_points: {
+            id: number | null;
+            name: string;
+            lat: number;
+            lon: number;
+            pinned: boolean;
+            source: 'agent' | 'user' | 'mine';
+          }[];
+        };
       } = { query: q };
       if (timeBudget >= 15) body.time_budget_minutes = timeBudget;
-      const chosen = TRANSPORT_OPTIONS.find((o) => o.value === transport);
+      const chosen = TRANSPORT_OPTIONS.find(
+        (o) => o.value === transportRef.current
+      );
       if (chosen?.costing) body.profile = chosen.costing;
       if (origin) body.origin = origin;
+
+      // Second and later turns are refinements: the agent receives the route as
+      // it stands — stops, hand-pinned flags, hand-deleted ids — plus the delta
+      // text, so «добавь кофейню» rebuilds on top of the current route instead
+      // of starting over. Snapshot first: that is what «отменить уточнение»
+      // rolls back to.
+      const prior = useDirectionsStore.getState();
+      const basePoints = prior.waypoints
+        .map((wp) => {
+          const geo =
+            wp.geocodeResults.find((g) => g.selected) ?? wp.geocodeResults[0];
+          if (!geo) return null;
+          // Older saved routes carry only displaylnglat; skip anything without
+          // usable coordinates rather than sending NaN to the agent.
+          const [lon, lat] = geo.sourcelnglat ?? geo.displaylnglat ?? [];
+          if (lat === undefined || lon === undefined) return null;
+          const isMe = wp.id === ME_WAYPOINT_ID;
+          return {
+            id: wp.placeId ?? null,
+            name: wp.userInput || geo.title || 'точка',
+            lat,
+            lon,
+            // A stop the user placed by hand (no placeId) survives any refine.
+            pinned: wp.pinned ?? (!isMe && wp.placeId == null),
+            source: (isMe ? 'mine' : wp.placeId == null ? 'user' : 'agent') as
+              | 'agent'
+              | 'user'
+              | 'mine',
+          };
+        })
+        .filter((p): p is NonNullable<typeof p> => p !== null);
+      const isRefinement = basePoints.some((p) => p.source !== 'mine');
+      if (isRefinement) {
+        prior.snapshotRoute();
+        body.context = {
+          instruction: q,
+          revision: prior.refinementLog.length + 1,
+          excluded_ids: prior.excludedPlaceIds,
+          base_points: basePoints,
+        };
+      }
 
       const r = await fetch(`${AGENT_URL}/routes/generate`, {
         method: 'POST',
@@ -353,9 +441,9 @@ export const Sidebar = () => {
 
       // The agent tells us which transport it planned for; adopt it (unless the
       // tourist picked one) so the map's own line uses the same costing.
-      if (!transport && data.costing) {
+      if (!transportRef.current && data.costing) {
         const match = TRANSPORT_OPTIONS.find((o) => o.costing === data.costing);
-        if (match) setTransportEverywhere(match.value);
+        if (match) setTransportEverywhere(match.value, false);
       }
 
       const start: Waypoint[] = origin
@@ -438,6 +526,33 @@ export const Sidebar = () => {
           district: p.district ?? null,
         })),
       });
+
+      // Tell the user what the refinement actually changed — a silent swap is
+      // what makes a replanned route feel random.
+      if (isRefinement) {
+        const beforeIds = new Set(
+          prior.waypoints
+            .map((wp) => wp.placeId)
+            .filter((v): v is number => v != null)
+        );
+        const afterIds = new Set(pts.map((p) => p.id));
+        pushRefinement({
+          instruction: q,
+          added: pts
+            .filter((pt) => !beforeIds.has(pt.id))
+            .map((pt) => pt.name)
+            .slice(0, 8),
+          removed: prior.waypoints
+            .filter(
+              (wp) =>
+                wp.id !== ME_WAYPOINT_ID &&
+                wp.placeId != null &&
+                !afterIds.has(wp.placeId)
+            )
+            .map((wp) => wp.userInput)
+            .slice(0, 8),
+        });
+      }
       setQuery('');
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -507,6 +622,35 @@ export const Sidebar = () => {
     }
   };
 
+  // The guide walks the same stops the planner built (the «моё местоположение»
+  // start is not a stop).
+  const guideStops = useMemo<GuideStop[]>(
+    () =>
+      waypoints
+        .filter((w) => w.id !== ME_WAYPOINT_ID)
+        .map((w): GuideStop | null => {
+          const geo =
+            w.geocodeResults.find((g) => g.selected) ?? w.geocodeResults[0];
+          const lnglat = geo?.sourcelnglat ?? geo?.displaylnglat;
+          if (!lnglat) return null;
+          const [lon, lat] = lnglat;
+          if (lat === undefined || lon === undefined) return null;
+          const details =
+            w.placeId != null ? placeDetails[w.placeId] : undefined;
+          return {
+            id: w.id,
+            name: w.userInput || geo?.title || `точка ${w.id}`,
+            lat,
+            lon,
+            placeId: w.placeId,
+            category: details?.category ?? null,
+            visitMinutes: details?.visitMinutes ?? null,
+          };
+        })
+        .filter((stop): stop is GuideStop => stop !== null),
+    [waypoints, placeDetails]
+  );
+
   const stopCount = waypoints.filter(
     (w) => w.id !== ME_WAYPOINT_ID && w.geocodeResults.length > 0
   ).length;
@@ -531,14 +675,45 @@ export const Sidebar = () => {
       >
         {/* pr-9 keeps the intro text clear of the absolutely-placed close
             button in the top-right corner. */}
-        <SheetHeader className="space-y-0.5 pr-9">
+        <SheetHeader className="space-y-0.5 pr-12">
           <SheetTitle className="flex items-center gap-2 text-base">
             <RouteIcon className="h-4 w-4 text-primary" />
             AI-гид по Гродно
           </SheetTitle>
           <p className="text-[11px] text-muted-foreground">
-            Опиши, что хочется посмотреть — соберу маршрут по реальным дорогам
+            {mode === 'plan'
+              ? 'Опиши, что хочется посмотреть — соберу маршрут по реальным дорогам'
+              : 'Веди по маршруту: отмечай пройденные остановки'}
           </p>
+          <div
+            role="tablist"
+            aria-label="режим"
+            className="mt-1 inline-flex rounded-lg border border-border/60 bg-muted/40 p-0.5"
+          >
+            {(
+              [
+                { value: 'plan', label: 'Планирование' },
+                { value: 'guide', label: 'Проводник' },
+              ] as const
+            ).map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                role="tab"
+                aria-selected={mode === option.value}
+                data-testid={`mode-${option.value}`}
+                onClick={() => setMode(option.value)}
+                className={[
+                  'rounded-md px-2.5 py-1 text-[11px] transition-colors',
+                  mode === option.value
+                    ? 'bg-background font-medium text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground',
+                ].join(' ')}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
           <Button
             type="button"
             variant="ghost"
@@ -552,237 +727,316 @@ export const Sidebar = () => {
           </Button>
         </SheetHeader>
 
-        {/* === Prompt === */}
-        <section className="rounded-xl border border-border/60 bg-card p-3 shadow-sm">
-          <div className="flex items-end gap-2">
-            <Textarea
-              ref={taRef}
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  submitPrompt();
-                }
-              }}
-              placeholder="прогулка по замкам Гродно"
-              className="min-h-9 flex-1 resize-none border-0 bg-transparent px-0 text-sm shadow-none focus-visible:ring-0"
-              rows={1}
-              disabled={busy}
-            />
-            <Button
-              type="button"
-              onClick={() => submitPrompt()}
-              disabled={busy || !query.trim()}
-              size="icon"
-              className="h-9 w-9 shrink-0"
-              aria-label="построить маршрут"
-            >
-              {busy ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Send className="h-4 w-4" />
-              )}
-            </Button>
-          </div>
+        {mode === 'guide' && (
+          // key: a rebuilt route remounts the guide, so the walk restarts
+          // instead of carrying progress from the route that no longer exists
+          <GuidePanel key={guideRouteKey(guideStops)} stops={guideStops} />
+        )}
 
-          {/* Constraints: time + transport. Both are the user's call — nothing
-              is invented for them. */}
-          <div className="mt-2.5 flex flex-col gap-2 text-xs">
-            <label className="flex items-center justify-between gap-2 text-muted-foreground">
-              <span className="flex items-center gap-1">
-                <Clock className="h-3 w-3" /> есть время
-              </span>
-              <select
-                value={timeBudget}
-                onChange={(e) => setTimeBudget(Number(e.target.value))}
-                disabled={busy}
-                className="h-8 rounded-md border border-border/60 bg-background px-1.5 text-xs font-medium text-foreground"
-              >
-                {TIME_BUDGET_OPTIONS.map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {o.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <div className="flex flex-col gap-1">
-              <span className="flex items-center gap-1 text-muted-foreground">
-                <Car className="h-3 w-3" /> на чём
-              </span>
-              <div className="flex gap-1">
-                {TRANSPORT_OPTIONS.map((o) => {
-                  const Icon = o.icon;
-                  const active = transport === o.value;
-                  return (
-                    <button
-                      key={o.value || 'any'}
-                      type="button"
-                      onClick={() => setTransportEverywhere(o.value)}
-                      disabled={busy}
-                      aria-pressed={active}
-                      title={o.label}
-                      data-testid={`transport-${o.value || 'any'}`}
-                      className={[
-                        'flex flex-1 items-center justify-center gap-1 rounded-md border px-1.5 py-1.5 text-[11px] transition-colors disabled:opacity-60',
-                        active
-                          ? 'border-primary/50 bg-primary/10 font-medium text-primary'
-                          : 'border-border/60 bg-background text-muted-foreground hover:border-primary/40 hover:bg-primary/5 hover:text-foreground',
-                      ].join(' ')}
-                    >
-                      <Icon className="h-3.5 w-3.5 shrink-0" />
-                      <span className="truncate">{o.label}</span>
-                    </button>
-                  );
-                })}
+        {mode === 'plan' && (
+          <>
+            {/* === Prompt === */}
+            <section className="rounded-xl border border-border/60 bg-card p-3 shadow-sm">
+              <div className="flex items-end gap-2">
+                <Textarea
+                  ref={taRef}
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      submitPrompt();
+                    }
+                  }}
+                  placeholder="прогулка по замкам Гродно"
+                  className="min-h-9 flex-1 resize-none border-0 bg-transparent px-0 text-sm shadow-none focus-visible:ring-0"
+                  rows={1}
+                  disabled={busy}
+                />
+                <Button
+                  type="button"
+                  onClick={() => submitPrompt()}
+                  disabled={busy || !query.trim()}
+                  size="icon"
+                  className="h-9 w-9 shrink-0"
+                  aria-label="построить маршрут"
+                >
+                  {busy ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Send className="h-4 w-4" />
+                  )}
+                </Button>
               </div>
-            </div>
-          </div>
 
-          <button
-            type="button"
-            onClick={() => void locateMe()}
-            disabled={geoState === 'locating'}
-            className="mt-2 flex w-full items-center gap-1.5 rounded-md border border-border/40 bg-background/60 px-2 py-1.5 text-left text-[11px] transition-colors hover:border-primary/40 hover:bg-primary/5 disabled:opacity-60"
-            title="переопределить, откуда начинается маршрут"
-          >
-            <LocateFixed
-              className={`h-3.5 w-3.5 shrink-0 ${
-                geoState === 'ok' ? 'text-emerald-600' : 'text-muted-foreground'
-              }`}
-            />
-            <span className={geoBadge.tone}>{geoBadge.text}</span>
-            <span className="ml-auto text-muted-foreground">
-              {geoState === 'locating' ? '…' : 'обновить'}
-            </span>
-          </button>
+              {/* Constraints: time + transport. Both are the user's call — nothing
+              is invented for them. */}
+              <div className="mt-2.5 flex flex-col gap-2 text-xs">
+                <label className="flex items-center justify-between gap-2 text-muted-foreground">
+                  <span className="flex items-center gap-1">
+                    <Clock className="h-3 w-3" /> есть время
+                  </span>
+                  <select
+                    value={timeBudget}
+                    onChange={(e) => setTimeBudget(Number(e.target.value))}
+                    disabled={busy}
+                    className="h-8 rounded-md border border-border/60 bg-background px-1.5 text-xs font-medium text-foreground"
+                  >
+                    {TIME_BUDGET_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
 
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            {SUGGESTIONS.map((s) => (
+                <div className="flex flex-col gap-1">
+                  <span className="flex items-center gap-1 text-muted-foreground">
+                    <Car className="h-3 w-3" /> на чём
+                  </span>
+                  <div className="flex gap-1">
+                    {TRANSPORT_OPTIONS.map((o) => {
+                      const Icon = o.icon;
+                      const active = transport === o.value;
+                      return (
+                        <button
+                          key={o.value || 'any'}
+                          type="button"
+                          onClick={() => setTransportEverywhere(o.value)}
+                          disabled={busy}
+                          aria-pressed={active}
+                          title={o.label}
+                          data-testid={`transport-${o.value || 'any'}`}
+                          className={[
+                            'flex flex-1 items-center justify-center gap-1 rounded-md border px-1.5 py-1.5 text-[11px] transition-colors disabled:opacity-60',
+                            active
+                              ? 'border-primary/50 bg-primary/10 font-medium text-primary'
+                              : 'border-border/60 bg-background text-muted-foreground hover:border-primary/40 hover:bg-primary/5 hover:text-foreground',
+                          ].join(' ')}
+                        >
+                          <Icon className="h-3.5 w-3.5 shrink-0" />
+                          <span className="truncate">{o.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
               <button
-                key={s}
                 type="button"
-                onClick={() => submitPrompt(s)}
-                disabled={busy}
-                className="rounded-full border border-border/60 bg-background px-2.5 py-0.5 text-xs text-muted-foreground transition-colors hover:border-primary/40 hover:bg-primary/5 hover:text-foreground disabled:opacity-50"
+                onClick={() => void locateMe()}
+                disabled={geoState === 'locating'}
+                className="mt-2 flex w-full items-center gap-1.5 rounded-md border border-border/40 bg-background/60 px-2 py-1.5 text-left text-[11px] transition-colors hover:border-primary/40 hover:bg-primary/5 disabled:opacity-60"
+                title="переопределить, откуда начинается маршрут"
               >
-                {s}
+                <LocateFixed
+                  className={`h-3.5 w-3.5 shrink-0 ${
+                    geoState === 'ok'
+                      ? 'text-emerald-600'
+                      : 'text-muted-foreground'
+                  }`}
+                />
+                <span className={geoBadge.tone}>{geoBadge.text}</span>
+                <span className="ml-auto text-muted-foreground">
+                  {geoState === 'locating' ? '…' : 'обновить'}
+                </span>
               </button>
-            ))}
-          </div>
-        </section>
 
-        {/* === Waypoints === */}
-        <section className="rounded-xl border border-border/60 bg-card p-3 shadow-sm">
-          <div className="mb-2 flex items-center justify-between text-xs uppercase tracking-wide text-muted-foreground">
-            <span className="flex items-center gap-1.5">
-              <MapPin className="h-3.5 w-3.5" />
-              Маршрут — {stopCount}{' '}
-              {stopCount === 1 ? 'точка' : stopCount < 5 ? 'точки' : 'точек'}
-            </span>
-            <button
-              type="button"
-              onClick={reset}
-              className="inline-flex items-center gap-1 text-xs normal-case text-muted-foreground hover:text-foreground"
-              title="очистить маршрут"
-            >
-              <RotateCcw className="h-3 w-3" />
-              сброс
-            </button>
-          </div>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {SUGGESTIONS.map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => submitPrompt(s)}
+                    disabled={busy}
+                    className="rounded-full border border-border/60 bg-background px-2.5 py-0.5 text-xs text-muted-foreground transition-colors hover:border-primary/40 hover:bg-primary/5 hover:text-foreground disabled:opacity-50"
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+            </section>
 
-          {summary && (
-            <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg bg-primary/5 px-2.5 py-2 text-[11px]">
-              {summary.km != null && (
-                <span className="flex items-center gap-1 font-medium text-foreground">
-                  <RouteIcon className="h-3 w-3 text-primary" />
-                  {fmtKm(summary.km)}
+            {/* === Waypoints === */}
+            <section className="rounded-xl border border-border/60 bg-card p-3 shadow-sm">
+              <div className="mb-2 flex items-center justify-between text-xs uppercase tracking-wide text-muted-foreground">
+                <span className="flex items-center gap-1.5">
+                  <MapPin className="h-3.5 w-3.5" />
+                  Маршрут — {stopCount}{' '}
+                  {stopCount === 1
+                    ? 'точка'
+                    : stopCount < 5
+                      ? 'точки'
+                      : 'точек'}
                 </span>
-              )}
-              <span className="flex items-center gap-1 text-muted-foreground">
-                <Clock className="h-3 w-3" />в пути ~
-                {fmtMin(summary.walkMinutes)}
-              </span>
-              <span className="text-muted-foreground">
-                осмотр ~{fmtMin(summary.visitMinutes)}
-              </span>
-              {!summary.fits && (
-                <span className="rounded-full bg-amber-500/15 px-1.5 py-0.5 font-medium text-amber-700">
-                  не влезло в лимит
-                </span>
-              )}
-              {summary.budgetMinutes ? (
-                <span className="text-muted-foreground">
-                  лимит {fmtMin(summary.budgetMinutes)}
-                </span>
-              ) : (
-                <span className="text-muted-foreground">без лимита</span>
-              )}
-            </div>
-          )}
+                <button
+                  type="button"
+                  onClick={reset}
+                  className="inline-flex items-center gap-1 text-xs normal-case text-muted-foreground hover:text-foreground"
+                  title="очистить маршрут"
+                >
+                  <RotateCcw className="h-3 w-3" />
+                  сброс
+                </button>
+              </div>
 
-          <WaypointList onChanged={() => setStatus(null)} />
-          {status && (
-            <div
-              className={[
-                'mt-2 rounded-md px-2 py-1 text-xs',
-                status.kind === 'ok'
-                  ? 'bg-primary/10 text-primary'
-                  : 'bg-destructive/10 text-destructive',
-              ].join(' ')}
-            >
-              {status.text}
-            </div>
-          )}
-        </section>
-
-        {/* === Manual add === */}
-        <section className="rounded-xl border border-dashed border-border/60 bg-card/50 p-3">
-          <div className="mb-2 text-xs uppercase tracking-wide text-muted-foreground">
-            Добавить точку
-          </div>
-          <div className="flex gap-2">
-            <Input
-              value={manualQuery}
-              onChange={(e) => setManualQuery(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  manualAdd();
-                }
-              }}
-              placeholder="Каложская церковь, Гродно"
-              className="h-9 flex-1 text-sm"
-              disabled={manualBusy}
-            />
-            <Button
-              type="button"
-              onClick={manualAdd}
-              disabled={manualBusy || !manualQuery.trim()}
-              size="icon"
-              className="h-9 w-9"
-              aria-label="добавить точку"
-            >
-              {manualBusy ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Plus className="h-4 w-4" />
+              {summary && (
+                <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg bg-primary/5 px-2.5 py-2 text-[11px]">
+                  {summary.km != null && (
+                    <span className="flex items-center gap-1 font-medium text-foreground">
+                      <RouteIcon className="h-3 w-3 text-primary" />
+                      {fmtKm(summary.km)}
+                    </span>
+                  )}
+                  <span className="flex items-center gap-1 text-muted-foreground">
+                    <Clock className="h-3 w-3" />в пути ~
+                    {fmtMin(summary.walkMinutes)}
+                  </span>
+                  <span className="text-muted-foreground">
+                    осмотр ~{fmtMin(summary.visitMinutes)}
+                  </span>
+                  {!summary.fits && (
+                    <span className="rounded-full bg-amber-500/15 px-1.5 py-0.5 font-medium text-amber-700">
+                      не влезло в лимит
+                    </span>
+                  )}
+                  {summary.budgetMinutes ? (
+                    <span className="text-muted-foreground">
+                      лимит {fmtMin(summary.budgetMinutes)}
+                    </span>
+                  ) : (
+                    <span className="text-muted-foreground">без лимита</span>
+                  )}
+                </div>
               )}
-            </Button>
-          </div>
-          {manualErr && (
-            <div className="mt-1.5 text-xs text-destructive">{manualErr}</div>
-          )}
-          <button
-            type="button"
-            onClick={addEmptyWaypointToEnd}
-            className="mt-2 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-          >
-            <ChevronDown className="h-3 w-3" /> пустая точка (выбрать кликом по
-            карте)
-          </button>
-        </section>
+
+              {refinementLog.length > 0 && (
+                <div className="mb-2 space-y-1.5">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {refinementLog.map((entry) => (
+                      <span
+                        key={entry.id}
+                        className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground"
+                        title={
+                          [
+                            entry.added.length
+                              ? `добавил: ${entry.added.join(', ')}`
+                              : '',
+                            entry.removed.length
+                              ? `убрал: ${entry.removed.join(', ')}`
+                              : '',
+                          ]
+                            .filter(Boolean)
+                            .join(' · ') || 'без изменений'
+                        }
+                      >
+                        {entry.instruction}
+                      </span>
+                    ))}
+                    {excludedPlaceIds.length > 0 && (
+                      <span className="rounded-full bg-destructive/10 px-2 py-0.5 text-[11px] text-destructive">
+                        убрано вручную: {excludedPlaceIds.length}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        undoRefinement();
+                        setStatus({
+                          kind: 'ok',
+                          text: 'вернул предыдущий маршрут',
+                        });
+                        refetchDirections();
+                      }}
+                      disabled={routeSnapshots.length === 0}
+                      className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-0.5 text-[11px] text-muted-foreground hover:text-foreground disabled:opacity-40"
+                    >
+                      <Undo2 className="h-3 w-3" />
+                      отменить уточнение
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        resetRoute();
+                        reset();
+                      }}
+                      className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-0.5 text-[11px] text-muted-foreground hover:text-foreground"
+                    >
+                      <RotateCcw className="h-3 w-3" />
+                      новый маршрут
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <WaypointList onChanged={() => setStatus(null)} />
+              {status && (
+                <div
+                  className={[
+                    'mt-2 rounded-md px-2 py-1 text-xs',
+                    status.kind === 'ok'
+                      ? 'bg-primary/10 text-primary'
+                      : 'bg-destructive/10 text-destructive',
+                  ].join(' ')}
+                >
+                  {status.text}
+                </div>
+              )}
+            </section>
+
+            {/* === Manual add === */}
+            <section className="rounded-xl border border-dashed border-border/60 bg-card/50 p-3">
+              <div className="mb-2 text-xs uppercase tracking-wide text-muted-foreground">
+                Добавить точку
+              </div>
+              <div className="flex gap-2">
+                <Input
+                  value={manualQuery}
+                  onChange={(e) => setManualQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      manualAdd();
+                    }
+                  }}
+                  placeholder="Каложская церковь, Гродно"
+                  className="h-9 flex-1 text-sm"
+                  disabled={manualBusy}
+                />
+                <Button
+                  type="button"
+                  onClick={manualAdd}
+                  disabled={manualBusy || !manualQuery.trim()}
+                  size="icon"
+                  className="h-9 w-9"
+                  aria-label="добавить точку"
+                >
+                  {manualBusy ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Plus className="h-4 w-4" />
+                  )}
+                </Button>
+              </div>
+              {manualErr && (
+                <div className="mt-1.5 text-xs text-destructive">
+                  {manualErr}
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={addEmptyWaypointToEnd}
+                className="mt-2 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+              >
+                <ChevronDown className="h-3 w-3" /> пустая точка (выбрать кликом
+                по карте)
+              </button>
+            </section>
+          </>
+        )}
 
         {/* === Route History === */}
         <section className="rounded-xl border border-border/60 bg-card p-3 shadow-sm">

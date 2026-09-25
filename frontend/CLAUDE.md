@@ -113,13 +113,54 @@ All build-time, prefixed `VITE_`. Defined in `.env`, typed in `src/vite-env.d.ts
 - **Docker** (`Dockerfile` + `docker-compose.yml`): node:24-alpine builder → nginx:1.29-alpine serving `./build` on port 80. Build-args do not pass through to Vite, so `.env` values are baked at image build time.
 - The `npm run deploy` script (`gh-pages`) is defined but **not** used by any workflow — production goes via rsync.
 
+## Grodno AI Guide integration
+
+The sidebar (`src/components/sidebar.tsx`) drives the Grodno FastAPI agent. The map (`src/components/map/index.tsx`) renders the route and place markers.
+
+### POST /routes/generate
+
+**Request body** — the sidebar sends these fields:
+
+| Field | Type | When sent |
+|---|---|---|
+| `query` | `string` | Always |
+| `time_budget_minutes` | `number` | Only when the user picked ≥ 15 min; absent or `0` = no limit |
+| `profile` | `string` (Valhalla costing name) | Only when the user explicitly picked a transport; `car` maps to `auto` |
+| `origin` | `{lat: number, lon: number}` | Browser geolocation coordinates, if available |
+
+**Response fields the UI consumes:**
+
+| Field | Used by |
+|---|---|
+| `points[]` | Converted to waypoints and rendered on the map with `placeId` linking each to its `PlaceDetails` |
+| `budget{}` | Displayed in the route summary strip |
+| `summary{length_km, time_seconds}` | Displayed in the route summary strip |
+| `costing` | If the user did not pick a transport, the UI adopts this costing and mirrors it into the URL `?profile=` param so the webapp's own `/route` request draws the line with the same costing |
+
+### "My location" waypoint
+
+The waypoint `id = 'me'` (`ME_WAYPOINT_ID`, exported from `stores/directions-store.ts`) marks the tourist's own position as the route start. It is:
+
+- inserted as the **first waypoint** (before any agent-generated stops)
+- drawn on the map as a **blue unnumbered pin** (the map skips it when assigning route-stop numbers)
+- **excluded from stop numbering** in both the waypoint list and the map marker layer
+- **re-planned** when the user picks a different transport (the sidebar re-submits the last query with the new `profile`)
+
+### Map click semantics
+
+- A **plain map click** (on empty ground): clears the active place card only. No coordinate popup, no Valhalla JSON popup — those were developer tools removed from the tourist-facing UI.
+- A **marker click**: opens `PlaceCardPopup` (blurb, fun facts, links). The handler sets `markerClickRef` before the delayed map-click handler fires; the ref is checked so the delayed handler does not close the card that was just opened.
+
+
+### Waypoint chunking for long routes
+
+Valhalla's `/route` endpoint rejects requests with more than 20 locations (error `150, "Exceeded max locations: 20"`). A region-wide agent plan can have 26–29 stops, so `useDirectionsQuery()` in `src/hooks/use-directions-queries.ts` calls `chunkWaypoints()` (`src/utils/valhalla.ts`, `VALHALLA_MAX_LOCATIONS`) to split the waypoints into chained groups of at most 20 that share their joint endpoint, fetches each chunk separately, and merges the legs, geometry, and summary into a single response. Without this split the stops render on the map with no connecting line.
+
+### No MMR trim without a time budget
+
+MMR diversity trimming in `backend/agent/planner/pipeline.py` runs **only when the user specified a time budget**. With no budget the pipeline passes every candidate that survived retrieval + rerank (today bounded by `RETRIEVAL_POOL_SIZE=50` and `RERANK_POOL_SIZE=30`) straight to optimization — producing an honestly long multi-day route rather than a silently trimmed dozen stops.
+
+Those two ceilings are deliberate and should **not** be raised to "return absolutely everything": a literal "give me every church in the voblast" request is rare, and lifting the caps costs paid rerank tokens per candidate plus a time matrix that grows into hours (29 stops already take ~25 s). The pipeline follows what the user actually asked for — a budget trims, no budget does not. Handling a genuinely exhaustive list is a catalogue feature (list grouped by town, route inside the chosen one), not a bigger pool.
+
 ## Working with this team
 
-- **Maintainability beats performance.** Don't micro-optimize at the cost of readable code; only reach for performance work when there's a (relevant) measurable problem.
-- **Value code elegance.** Prefer clear, concise solutions over clever ones; small, well-named units over sprawling abstractions.
-- **Variable names shouldn't be too generic.** Avoid `data`, `result`, `item`, `tmp` — pick names that say what the value actually is (`routeResponse`, `selectedWaypoint`, `decodedShape`).
-- **Test new features the way a user would.** After adding or changing a feature, exercise the 90th-percentile happy path in the running app (dev server + browser) — not exhaustively, but enough to confirm the feature actually works end-to-end. Typecheck and unit tests prove the code compiles, not that the feature behaves. If you can't run it (no browser available, etc.), say so explicitly instead of claiming success.
-- **Don't run the test suite unprompted.** Only run `vitest`, `playwright`, or `npm run check` when the user asks for it (or when it's the natural finish of a task that explicitly involves tests). After non-trivial changes, you're encouraged to _remind_ the user that tests are worth running — but leave the actual running to them. Typecheck (`tsc --noEmit`) is fine to run on your own as a sanity check.
-- **Keep this file (and other docs) current.** After non-trivial changes — new architectural pieces, store/route restructures, build/deploy changes, env-var additions — update `CLAUDE.md` and any other affected docs as part of the same change.
-- **Draft the commit message, but ask before committing.** Produce a descriptive but terse message yourself (concise over chatty, but the "why" should still be readable) — don't ask the user what to write. Do still ask before actually running `git commit`; as maintainers we prefer to approve the commit boundary ourselves. Commit messages are the one place we want AI-written prose in normal English; everything else AI writes (issue/PR bodies) goes in pirate english.
-- **Issue and PR descriptions: write in pirate english.** When asked to draft an issue or PR description, do not ask for confirmation — output it directly in pirate english (see https://www.polytranslator.com/pirate-english/ for the target style). This applies only to issue/PR body text; commit messages and code stay in normal English.

@@ -11,7 +11,7 @@ bench_routes.py — Golden-set evaluation for the Grodno route planner.
     .venv/bin/python -m scripts.bench_routes [--base-url http://localhost:8080] [--report-dir backend/benchmarks]
 
 Метрики:
-    recall@K      — доля эталонных стопов, покрытых нашим маршрутом (K ≤ 8, т.к. ROUTE_MAX_STOPS=8)
+    recall@K      — доля эталонных стопов, покрытых нашим маршрутом (K = все стопы эталона)
     precision     — доля наших стопов, присутствующих в эталоне
     kendall_tau   — τ на пересечении порядков (ручная реализация, без scipy)
     walk_diff     — (our_walk − est_walk) в минутах
@@ -101,8 +101,9 @@ def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
 # Two stops are considered the same if they are within this radius (km)
 MATCH_RADIUS_KM = 0.75  # ~750 m — generous for a pedestrian context
 
-# recall@K: max number of stops we could ever return
-MAX_K = 8  # mirrors ROUTE_MAX_STOPS in constants.py
+# recall@K is taken over the whole reference route (K = len(golden.stops)). The
+# old cap of 8 mirrored a ROUTE_MAX_STOPS constant that no longer exists and
+# would have let recall exceed 1.0 for longer references.
 
 
 def match_golden_to_ours(
@@ -264,8 +265,8 @@ def evaluate(golden: GoldenRoute, base_url: str) -> EvaluationResult:
     # ── recall@K ──────────────────────────────────────────────────────────
     matches = match_golden_to_ours(golden.stops, result.our_stops)
     covered = sum(1 for _, our_i in matches if our_i is not None)
-    k = min(len(golden.stops), MAX_K)
-    result.recall_at_k = covered / k if k > 0 else 0.0
+    k = len(golden.stops)
+    result.recall_at_k = min(covered / k, 1.0) if k > 0 else 0.0
 
     # ── precision ─────────────────────────────────────────────────────────
     golden_covered = {gi for gi, _ in matches if gi is not None}

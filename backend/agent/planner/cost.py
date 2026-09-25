@@ -47,6 +47,8 @@ def visit_time_minutes(category: str | None) -> int:
         "костёл": 20, "церковь": 20, "храм": 20,
         "архитектура": 20, "кладбище": 15,
         "памятник": 10, "инфраструктура": 10,
+        # everyday stops: a coffee and a toilet break are not sightseeing
+        "кафе": 40, "ресторан": 60, "туалет": 10, "гостиница": 10,
     }
     default = 15
     if not category:

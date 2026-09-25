@@ -17,6 +17,7 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from agent import constants
 from agent.models import Candidate, LatLon
 from agent.planner.intent import _PLACE_STOP_LIST
 from agent.planner.pipeline import _geo_focus
@@ -34,11 +35,7 @@ def _extract_named_place_tokens(query: str) -> list[str]:
 # jev.score reads answer["score"].  All answers include "confidence".
 
 def _mock_jev_ask(query: str, questions: dict) -> dict:
-    all_cats = [
-        "замок", "костёл", "церковь", "монастырь", "дворец", "усадьба",
-        "парк", "музей", "памятник", "храм", "архитектура",
-        "инфраструктура", "кладбище",
-    ]
+    all_cats = list(constants.CATEGORIES)
     return {
         **{f"cat_{cat}": {"noul": 0.0, "confidence": 0.9} for cat in all_cats},
         **{f"neg_{cat}": {"noul": 0.0, "confidence": 0.9} for cat in all_cats},
