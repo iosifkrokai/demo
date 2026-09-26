@@ -156,4 +156,65 @@
 - [ ] `agent/jev.py`, `JEV_MODEL`, `JEV_TIMEOUT_S`, литерал `"jev"`, поле в `/health` и упоминания в README/DEMO удалены.
 - [ ] После включения слоя замер повторён и число записано.
 
+## W18 — Инвентарь мёртвого кода (vulture + ручная перепроверка grep'ом)
+
+Метод: `uvx vulture agent scripts tests db --min-confidence 60` (224 строки) → отсев ложных срабатываний
+(поля Pydantic, фикстуры pytest, роуты FastAPI за декораторами, `model_config`) → каждый оставшийся
+кандидат перепроверен `grep` по `agent/ tests/ scripts/`. Счётчик «1» = единственное вхождение —
+это само определение, живого использования нет.
+
+**A. Модули вне пути запроса (см. W16, дополнено):**
+
+- `agent/planner/rerank.py` — импортируется **только тестом** (`tests/test_degraded_mode.py:54`).
+  Реранкер жил на JEV; после выпила JEV он возвращает пул как есть (`rerank.py:34`
+  «rerank: disabled (Jev removed)»). В `pipeline.py:297` осталась сортировка по `rerank_score`,
+  который теперь всегда `None`. Решение: удалить модуль и поле вместе с тестом, либо заменить
+  реранкер рабочей моделью — выбор фиксируем, «висящий» шаг в пайплайне не оставляем.
+- `agent/areas.py`, `agent/geofence.py`, `agent/tools.py`, `agent/planner/agent_interpret.py` — см. W16.
+
+**B. Мёртвые константы (`agent/constants.py`), только само определение:**
+
+`EMBED_DIM`, `ERA_HINTS`, `PARTY_TYPES`, `SEARCH_SCOPES`, `DEFAULT_BUDGET_MIN`, `GEO_FOCUS_MAX_KM`,
+`VISIT_TIME_DEFAULT`, `MAX_VISIT_BUDGET_SHARE`.
+
+Отдельно опасный случай: `MAX_VISIT_BUDGET_SHARE` определён **дважды** — `constants.py:63` и
+локально `cost.py:56 = 0.4`; живое значение берётся из локальной копии, а константа в `constants.py`
+только упоминается в комментарии. Это дрейф одной ручки в двух местах, а не просто мусор.
+
+**C. Мёртвые функции и параметры:**
+
+- `agent/valhalla_client.py:474 _is_snap_failure` — 1 вхождение.
+- `agent/planner/refine.py:195 is_noop` — 1 вхождение.
+- `agent/requirements.py:99 is_empty` — 1 вхождение.
+- `agent/planner/rerank.py:38 warmup`, параметр `top_k` в `rerank()` — 1 вхождение.
+- `scripts/bench_routes.py`: `REJECTION_STATUSES`, `READY_STATUSES`, `n_reference_weighted`,
+  `n_covered_weighted`, `n_pool_covered_in_route`, `n_defined`, `_results` — требуют отдельной
+  проверки, бенчмарочный отчёт мог использовать их через f-строки/локально.
+
+**D. Поля API, которые принимаются и молча игнорируются** (хуже мёртвого кода):
+
+`user_interests`, `conversation_id`, `allow_auto_relax` — 0 вхождений; `preferences` — объявлено,
+но пайплайн его не читает. Либо подключить, либо убрать из схемы запроса: принимать и не исполнять
+противоречит правилу проекта «не обещать невыполнимого».
+
+**E. Фронтенд (`npx knip`, RC=1).** Из вывода исключены примитивы `src/components/ui/*` (это
+дизайн-система, её поверхность не «мёртвая») и `src/routes.tsx` (роутер TanStack использует
+дерево в рантайме). Реальные кандидаты:
+
+- `src/utils/nominatim.ts` (`NOMINATIM_URL`, `NOMINATIME_URL_REVERSE` — опечатка в имени) —
+  остаток снятого геокодера.
+- `useForwardGeocodeDirections` (`hooks/use-directions-queries.ts`),
+  `useForwardGeocodeIsochrones` (`hooks/use-isochrones-queries.ts`).
+- `hooks/use-client-routes.ts`: `loadLocalRoutes`, `saveLocalRoutes`, `clearLocalRoutes`,
+  `describeClientError`; `hooks/use-client-preferences.ts`: `EMPTY_PREFERENCES`,
+  `loadLocalPreferences`, `saveLocalPreferences` — локальный откат клиентского слоя не подключён.
+- `api/client.ts`: `normalizePreferences`, `normalizeRouteList`.
+- `components/parts/guide-format.ts: formatDistanceRu` — остаток после перехода на `decimalRu`.
+- `utils/plural.ts: MINUTE_FORMS`, `utils/route-schemas.ts: VALID_TABS`/`SearchParamsSchema`,
+  `stores/directions-store.ts: defaultWaypoints` + типы, `components/parts/guide-mode.ts: GuideTravelModeId`.
+
+Уборка выполняется **после** потоков по JEV и по клиентскому фронтенду — они правят те же файлы,
+параллельная правка даст конфликты.
+
+
 
