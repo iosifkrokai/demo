@@ -8,14 +8,21 @@ The TypeSafe re-ranking cookbook validates this pattern: one question per
 query-candidate pair, batched in a single request — cheaper and faster
 than per-pair calls.
 
-No fallbacks: a Jev failure propagates (the pipeline skips rerank only
-when there is no API key at all — handled upstream).
+Degraded mode: with no OPENROUTER_API_KEY, or an upstream that times out
+or 5xx, the step is SKIPPED and the candidates come back in retrieval
+order. Re-ranking is a refinement of an order that is already usable, so
+losing it costs quality, not the request — one WARNING per call, never
+one per candidate.
 """
 
 from __future__ import annotations
 
+import logging as _logging
+
 from .. import constants, jev
 from ..models import Candidate
+
+log = _logging.getLogger(__name__)
 
 # Score criteria — 5 ordered levels.
 _LEVELS = [
@@ -29,9 +36,18 @@ _MAX_LEVEL = len(_LEVELS) - 1
 
 
 def rerank(query: str, candidates: list[Candidate], top_k: int) -> list[Candidate]:
-    """Score candidates against the query via one batched Jev call."""
+    """Score candidates against the query via one batched Jev call.
+
+    Returns the pool untouched (retrieval order, no top_k truncation) when
+    Jev cannot answer — see the module docstring.  Otherwise the scores
+    overwrite relevance and the pool is cut to top_k, exactly as before.
+    """
     if not candidates:
         return []
+
+    if not jev.available():
+        log.warning("rerank: no OPENROUTER_API_KEY — skipped, retrieval order kept")
+        return candidates
 
     places = [
         {"id": str(i), "name": c.name, "description": (c.blurb or "")[:200]}
@@ -50,7 +66,11 @@ def rerank(query: str, candidates: list[Candidate], top_k: int) -> list[Candidat
         for i, p in enumerate(places)
     }
 
-    answers = jev.ask(state, questions, model=constants.JEV_MODEL)
+    try:
+        answers = jev.ask(state, questions, model=constants.JEV_MODEL)
+    except jev.JevError as exc:
+        log.warning("rerank: Jev unavailable (%s) — skipped, retrieval order kept", exc)
+        return candidates
 
     for i, c in enumerate(candidates):
         raw = jev.score(answers[f"rel_{i}"])

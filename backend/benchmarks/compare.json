@@ -1,0 +1,173 @@
+{
+  "a": {
+    "dir": "/workspaces/demo/backend/benchmarks/snapshots/2026-09-26",
+    "schema": "bench_routes/snapshot/1",
+    "run_id": "20260926T132434-119240",
+    "started_at": "2026-09-26T13:24:34.479083+00:00",
+    "git_sha": "79de0ba",
+    "base_url": "http://localhost:8080",
+    "n_rows": 6,
+    "cases": [
+      "grodno_old_town",
+      "mir",
+      "novogrudok"
+    ],
+    "n_runs": 6,
+    "n_hard_failure_runs": 0,
+    "n_leg_sanity_defects": 0
+  },
+  "b": {
+    "dir": "/workspaces/demo/backend/benchmarks/snapshots/2026-09-26-b",
+    "schema": "bench_routes/snapshot/1",
+    "run_id": "20260926T132720-125542",
+    "started_at": "2026-09-26T13:27:20.553080+00:00",
+    "git_sha": "79de0ba",
+    "base_url": "http://localhost:8080",
+    "n_rows": 3,
+    "cases": [
+      "grodno_old_town",
+      "mir",
+      "novogrudok"
+    ],
+    "n_runs": 3,
+    "n_hard_failure_runs": 0,
+    "n_leg_sanity_defects": 1
+  },
+  "shared_cases": [
+    "grodno_old_town",
+    "mir",
+    "novogrudok"
+  ],
+  "only_in_a": [],
+  "only_in_b": [],
+  "bootstrap": {
+    "samples": 10000,
+    "seed": 20260926,
+    "alpha": 0.05,
+    "paired": true,
+    "unit": "case"
+  },
+  "reference_noise_floor": "recall 0.711 ± 0.150 over 9 runs (measured 2026-09-26)",
+  "metrics": [
+    {
+      "diff": -0.02499999999999991,
+      "lo": -0.19999999999999984,
+      "hi": 0.125,
+      "p": 0.806,
+      "n": 3,
+      "label": "Rec@K",
+      "mean_a": 0.6972222222222223,
+      "mean_b": 0.7222222222222222,
+      "n_paired": 3,
+      "noise_floor_a": 0.041666666666666664,
+      "noise_floor_b": null,
+      "noise_floor": 0.041666666666666664,
+      "exceeds_noise_floor": false
+    },
+    {
+      "diff": 0.12500000000000006,
+      "lo": 0.0,
+      "hi": 0.375,
+      "p": 0.6054,
+      "n": 3,
+      "label": "stage-1 pool proxy recall",
+      "mean_a": 0.5194444444444445,
+      "mean_b": 0.39444444444444443,
+      "n_paired": 3,
+      "noise_floor_a": 0.041666666666666664,
+      "noise_floor_b": null,
+      "noise_floor": 0.041666666666666664,
+      "exceeds_noise_floor": true
+    },
+    {
+      "diff": 0.0,
+      "lo": 0.0,
+      "hi": 0.0,
+      "p": 1.0,
+      "n": 3,
+      "label": "stage-2 recall | stage-1 hit",
+      "mean_a": 1.0,
+      "mean_b": 1.0,
+      "n_paired": 3,
+      "noise_floor_a": 0.0,
+      "noise_floor_b": null,
+      "noise_floor": 0.0,
+      "exceeds_noise_floor": false
+    },
+    {
+      "diff": -0.05555555555555569,
+      "lo": -0.16666666666666674,
+      "hi": 0.0,
+      "p": 0.5884,
+      "n": 3,
+      "label": "precision",
+      "mean_a": 0.7777777777777777,
+      "mean_b": 0.8333333333333334,
+      "n_paired": 3,
+      "noise_floor_a": 0.0,
+      "noise_floor_b": null,
+      "noise_floor": 0.0,
+      "exceeds_noise_floor": true
+    },
+    {
+      "diff": -0.8666666666666667,
+      "lo": null,
+      "hi": null,
+      "p": null,
+      "n": 1,
+      "label": "τ shared",
+      "mean_a": -0.6666666666666666,
+      "mean_b": 0.2,
+      "n_paired": 1,
+      "noise_floor_a": 0.0,
+      "noise_floor_b": null,
+      "noise_floor": 0.0,
+      "exceeds_noise_floor": true
+    },
+    {
+      "diff": 0.10484778986853585,
+      "lo": -0.09412995597706075,
+      "hi": 0.40867332558266833,
+      "p": 0.6054,
+      "n": 3,
+      "label": "detour km",
+      "mean_a": 0.16434866090950243,
+      "mean_b": 0.059500871040966574,
+      "n_paired": 3,
+      "noise_floor_a": 0.1074840949487184,
+      "noise_floor_b": null,
+      "noise_floor": 0.1074840949487184,
+      "exceeds_noise_floor": false
+    },
+    {
+      "diff": 2.7194583333333355,
+      "lo": 0.0,
+      "hi": 5.500716666666669,
+      "p": 0.078,
+      "n": 3,
+      "label": "Δwalk min",
+      "mean_a": -24.20963611111111,
+      "mean_b": -26.929094444444445,
+      "n_paired": 3,
+      "noise_floor_a": 0.5178583333333334,
+      "noise_floor_b": null,
+      "noise_floor": 0.5178583333333334,
+      "exceeds_noise_floor": true
+    },
+    {
+      "diff": 0.13523810277499537,
+      "lo": 0.0,
+      "hi": 0.29468021034007924,
+      "p": 0.078,
+      "n": 3,
+      "label": "max leg km",
+      "mean_a": 0.8103738121861909,
+      "mean_b": 0.6751357094111955,
+      "n_paired": 3,
+      "noise_floor_a": 0.01963012769869364,
+      "noise_floor_b": null,
+      "noise_floor": 0.01963012769869364,
+      "exceeds_noise_floor": true
+    }
+  ]
+}

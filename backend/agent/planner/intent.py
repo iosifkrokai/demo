@@ -13,8 +13,16 @@ criteria are written in English while the state (the user query) stays
 Russian — live-tested: "замки и костёлы Новогрудка" → castles 0.98,
 churches 0.94.
 
-No fallbacks by design: on failure the caller surfaces a 502 — a silently
-degraded route is worse than an explicit error.
+Degraded mode (no OpenRouter key, or an upstream that times out / 5xx)
+    The step falls back to `fallback_intent`: a deterministic, dependency-free
+    parse of the same query text.  It fills in only what the text itself says
+    — categories via the SAME shared keyword→category map retrieval uses
+    (planner/resolve.py `CATEGORY_SYNONYMS`, inverted — the taxonomy lives
+    in one place, never duplicated here), an explicit time budget
+    ("за 3 часа"), the named-place tokens that resolve through the DB, a
+    region-wide scope.  A degraded route is worse than a good model answer,
+    but it is never a failed request: with no key the agent still answers
+    every /routes/generate.
 """
 
 from __future__ import annotations
@@ -25,6 +33,8 @@ import time
 
 from .. import constants, jev
 from ..models import IntentDecision, IntentResult
+from .preprocess import WORD_RE
+from .resolve import CATEGORY_SYNONYMS
 
 log = _logging.getLogger(__name__)
 
@@ -137,11 +147,169 @@ _PLACE_STOP_LIST: frozenset[str] = frozenset({
 })
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Degraded mode — the same query, parsed without a model
+# ─────────────────────────────────────────────────────────────────────────────
+
+# An explicit duration in the query text.  The model-free path may only keep a
+# budget the user actually stated, so the patterns demand a number (or a
+# fixed-length phrase) — "на пару часов" or a bare "час" is ambiguous and is
+# treated as "no budget", exactly like a query that never mentions time.
+_FALLBACK_HOURS_RE = _re.compile(r"(\d{1,2})\s*(?:час\w*|ч(?![а-яё]))", _re.I)
+_FALLBACK_MINUTES_RE = _re.compile(r"(\d{1,3})\s*(?:минут\w*|мин(?![а-яё]))", _re.I)
+# Whole phrases that name a duration without a number.
+_FALLBACK_DAY_RE = _re.compile(
+    r"(?:весь|целый|полный|на\s+весь)\s+день|сутк\w*|пол\s*дня|полдня",
+    _re.I,
+)
+_FALLBACK_FULL_DAY_RE = _re.compile(r"(?:весь|целый|полный)\s+день|сутк\w*", _re.I)
+# How wide the ask is.  "region" is the only value the pipeline branches on
+# (it skips the geo focus and drives instead of walking), so the region words
+# are the ones worth reading off the text; "район" is reported as a district.
+_FALLBACK_REGION_RE = _re.compile(
+    r"област\w*|регион\w*|кра[йея]\b|по\s+все[йм][\w\s]*|всю\s+область",
+    _re.I,
+)
+_FALLBACK_DISTRICT_RE = _re.compile(r"район\w*", _re.I)
+
+
+def _named_place_tokens(query: str) -> list[str]:
+    """Proper-noun candidates for must-visit resolution: capitalised words
+    inside the Russian query (works for toponyms and place names).
+
+    Known limitation — sentence-initial verbs
+    The regex [А-ЯЁ][а-яё\\-]{2,} captures any capitalised ≥3-char word, so
+    a query-initial verb ("Хочу к …") is included.  These tokens are
+    harmless because _resolve_named_places calls _keyword_search per token;
+    a verb returns no DB rows → the must_visit_ids list stays clean.
+    The pipeline then falls back to top-RRF as the geo anchor, which is
+    the correct behaviour for a discovery-style query with no named place.
+    """
+    tokens = _re.findall(r"[А-ЯЁ][а-яё\-]{2,}", query)
+    return [t for t in tokens if t.lower() not in _PLACE_STOP_LIST]
+
+
+# The shared keyword→category taxonomy (resolve.CATEGORY_SYNONYMS), inverted:
+# every surface form the map knows → its category.  Multi-word retrieval
+# phrases ("гостевой дом") are skipped — the fallback matches query WORDS,
+# and a phrase is not a word.  A form listed under two categories would be
+# ambiguous; the map keeps them disjoint (asserted by the tests).
+_KEYWORD_TO_CATEGORY: dict[str, str] = {
+    form: cat
+    for cat, forms in CATEGORY_SYNONYMS.items()
+    for form in forms
+    if " " not in form
+}
+
+
+def _fallback_categories(query: str) -> list[str]:
+    """Categories the query text itself states, read off the shared map.
+
+    Deterministic word match on the lowercased query: «замкам» → "замок",
+    «костёлам» → "костёл", «кофейне» → "кафе".  A word the map does not
+    know simply yields nothing, so a themed query with no category word
+    returns an empty set — the honest answer, exactly like the model-free
+    scope/time handling (nothing stated → nothing invented).
+    """
+    cats: list[str] = []
+    seen: set[str] = set()
+    for word in _re.findall(r"[а-яё]+", query.lower()):
+        cat = _KEYWORD_TO_CATEGORY.get(word)
+        if cat and cat not in seen:
+            seen.add(cat)
+            cats.append(cat)
+    return cats
+
+
+def _fallback_time_budget(query: str) -> int | None:
+    """Minutes of sightseeing the query itself budgets, or None.
+
+    Only what the text states: "за 3 часа" → 180, "на 90 минут" → 90,
+    "на полдня" → 240, "на весь день" → 480.  resolve() clamps the result
+    to [MIN_BUDGET_MIN, MAX_BUDGET_MIN], so a wild number is bounded.
+    """
+    m = _FALLBACK_HOURS_RE.search(query)
+    if m:
+        return int(m.group(1)) * 60
+    m = _FALLBACK_MINUTES_RE.search(query)
+    if m:
+        return int(m.group(1))
+    if _FALLBACK_DAY_RE.search(query):
+        return 8 * 60 if _FALLBACK_FULL_DAY_RE.search(query) else 4 * 60
+    return None
+
+
+def _fallback_search_scope(query: str) -> str:
+    """town / district / region, read off the query text."""
+    if _FALLBACK_REGION_RE.search(query):
+        return "region"
+    if _FALLBACK_DISTRICT_RE.search(query):
+        return "district"
+    return "town"
+
+
+def fallback_intent(query: str) -> IntentResult:
+    """Model-free intent: everything the query text states, nothing invented.
+
+    Deliberately conservative, because a wrong guess is worse than an honest
+    default here:
+      * categories_pos comes from the SAME deterministic keyword→category map
+        retrieval uses (resolve.CATEGORY_SYNONYMS, inverted — see
+        _fallback_categories).  «замки Гродно» now retrieves castles in
+        degraded mode, not whatever bare keyword ILIKE happens to hit.
+        categories_neg stays EMPTY — exclusion ("без замков") is a judgement
+        call the text maps do not carry.
+      * named_places come from the same token regex the Jev path uses, so
+        they resolve through the DB exactly as before (must_visit_ids, and a
+        town-only match becomes the geo anchor).
+      * time_budget_minutes is kept only when the query states a duration.
+      * intent_type / party_type / era_hint are the neutral defaults: nothing
+        downstream branches on them (search_scope is the one that matters).
+    """
+    t0 = time.perf_counter()
+    d = IntentDecision(
+        # "vague" only for a query with no significant word at all ("?", "ааа");
+        # otherwise "discovery", the neutral default nothing branches on.
+        intent_type="vague" if not WORD_RE.search(query) else "discovery",
+        categories_pos=_fallback_categories(query),
+        categories_neg=[],
+        keywords_pos=[],
+        keywords_neg=[],
+        named_places=_named_place_tokens(query),
+        narrative=[],
+        time_budget_minutes=_fallback_time_budget(query),
+        era_hint="any",
+        party_type="solo",
+        search_scope=_fallback_search_scope(query),  # type: ignore[arg-type]
+    )
+    return IntentResult(
+        decision=d,
+        source="regex",  # no model was asked
+        confidence=0.0,
+        latency_ms=int((time.perf_counter() - t0) * 1000),
+        raw_response=None,
+    )
+
+
 def extract_intent(query: str) -> IntentResult:
-    """Typed intent decision in one Jev call. Raises on upstream failure."""
+    """Typed intent decision in one Jev call.
+
+    Degrades to `fallback_intent` (source="regex") when OpenRouter cannot
+    answer: no key, or an upstream failure.  With a key and a healthy
+    upstream the result is exactly what Jev returned.
+    """
     t0 = time.perf_counter()
 
-    answers = jev.ask(query, _QUESTIONS)
+    if not jev.available():
+        log.warning(
+            "intent: no OPENROUTER_API_KEY — deterministic fallback, map-based categories"
+        )
+        return fallback_intent(query)
+    try:
+        answers = jev.ask(query, _QUESTIONS)
+    except jev.JevError as exc:
+        log.warning("intent: Jev unavailable (%s) — deterministic fallback", exc)
+        return fallback_intent(query)
 
     # A taxonomy entry the model did not answer about is simply "not mentioned"
     # (the category list can grow between prompts; never crash on a missing key).
@@ -181,18 +349,9 @@ def extract_intent(query: str) -> IntentResult:
     pos = [c for c in cat_pos if c in known]
     neg = [c for c in cat_neg if c in known]
 
-    # Proper-noun candidates for must-visit resolution: capitalised words
-    # inside the Russian query (works for toponyms and place names).
-    #
-    # Known limitation — sentence-initial verbs
-    # The regex [А-ЯЁ][а-яё\-]{2,} captures any capitalised ≥3-char word, so
-    # a query-initial verb ("Хочу к …") is included.  These tokens are
-    # harmless because _resolve_named_places calls _keyword_search per token;
-    # a verb returns no DB rows → the must_visit_ids list stays clean.
-    # The pipeline then falls back to top-RRF as the geo anchor, which is
-    # the correct behaviour for a discovery-style query with no named place.
-    tokens = _re.findall(r"[А-ЯЁ][а-яё\-]{2,}", query)
-    named = [t for t in tokens if t.lower() not in _PLACE_STOP_LIST]
+    # Proper-noun candidates for must-visit resolution — same extraction the
+    # degraded path uses (see _named_place_tokens for the verb caveat).
+    named = _named_place_tokens(query)
 
     decision = IntentDecision(
         intent_type=itype,  # type: ignore[arg-type]

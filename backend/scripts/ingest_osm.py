@@ -8,8 +8,13 @@ Usage
     python backend/scripts/ingest_osm.py                          # full bbox
     python backend/scripts/ingest_osm.py --limit 50              # sample
     python backend/scripts/ingest_osm.py --dry-run               # mock fixture
-    python backend/scripts/ingest_osm.py --bbox 23.0 52.0 28.0 55.0
+    python backend/scripts/ingest_osm.py --bbox 23.0 52.0 28.0 55.0   # W S E N
     python backend/scripts/ingest_osm.py --output /tmp/test.csv
+
+Every bbox this script takes is (west, south, east, north) — the osmium order.
+Overpass QL wants the four values in the opposite-corner order
+(south, west, north, east); build_overpass_query() does that remap, and
+tests/test_ingest_osm_bbox.py pins it.
 
 Overpass endpoints are tried in order with exponential-backoff retry.
 Nominatim reverse lookups are rate-limited to 1 req/s and cached to
@@ -19,6 +24,7 @@ Exit codes: 0 = success, 1 = network/parse error.
 """
 
 import argparse
+import contextlib
 import csv
 import json
 import math
@@ -39,7 +45,10 @@ from agent.geofence import inside_project_area
 # Constants
 # ---------------------------------------------------------------------------
 
-DEFAULT_BBOX = (23.35, 52.75, 27.00, 54.80)  # Grodno region (W S E N)
+# Grodno region bbox in THIS SCRIPT's order (W, S, E, N) — same box as
+# agent/constants.py GRODNO_BBOX = {south: 52.75, west: 23.35, north: 54.80,
+# east: 27.00}. build_overpass_query() maps it into the query.
+DEFAULT_BBOX = (23.35, 52.75, 27.00, 54.80)  # W=23.35 S=52.75 E=27.00 N=54.80
 SCRIPT_DIR = Path(__file__).parent.resolve()
 CACHE_DIR = SCRIPT_DIR.parent / ".cache" / "nominatim"
 OUT_DIR = SCRIPT_DIR.parent / "data"
@@ -57,6 +66,10 @@ OVERPASS_ENDPOINTS = [
 # endpoints dead for the rest of the run instead of paying that cost again.
 OVERPASS_HTTP_TIMEOUT_S = 360.0
 
+# {south},{west},{north},{east} is the bbox order Overpass QL requires
+# ("southern-most latitude, western-most longitude, northern-most latitude,
+# eastern-most longitude" — Overpass QL, Global bounding box). Only
+# build_overpass_query() fills them in, from a (W, S, E, N) tuple.
 OVERPASS_QUERY = """
 [out:json][timeout:300];
 (
@@ -222,10 +235,8 @@ def nominatim_reverse(lat: float, lon: float, cache: dict) -> str | None:
     tile_path = nominatim_cache_path(lat, lon)
     tile_cache: dict = {}
     if tile_path.exists():
-        try:
+        with contextlib.suppress(Exception):
             tile_cache = json.loads(tile_path.read_text(encoding="utf-8"))
-        except Exception:
-            pass
 
     if str(key) in tile_cache:
         cache[key] = tile_cache[str(key)]
@@ -250,10 +261,8 @@ def nominatim_reverse(lat: float, lon: float, cache: dict) -> str | None:
 
     cache[key] = district
     tile_cache[str(key)] = district
-    try:
+    with contextlib.suppress(Exception):  # cache write is best-effort, never fatal
         tile_path.write_text(json.dumps(tile_cache, ensure_ascii=False), encoding="utf-8")
-    except Exception:
-        pass
 
     time.sleep(1.1)  # Nominatim rate limit: 1 req/s
     return district
@@ -287,7 +296,7 @@ def resolve_district(
     return f"{nearest} район"
 
 
-def tag_to_category(tags: dict) -> str | None:
+def tag_to_category(tags: dict) -> str | None:  # noqa: PLR0911, PLR0912 — flat tag dispatch
     """Map OSM tags → our category."""
     historic = tags.get("historic", "")
     tourism = tags.get("tourism", "")
@@ -421,16 +430,41 @@ def osm_element_to_row(element: dict) -> dict | None:
     }
 
 
+def build_overpass_query(bbox: tuple) -> str:
+    """Render OVERPASS_QUERY for `bbox`, which is (west, south, east, north).
+
+    The public order is (W, S, E, N) — the osmium order, and the one DEFAULT_BBOX,
+    --bbox and every doc example here use. Overpass QL wants the four values as
+    (south, west, north, east) inside the `(...)` filter, so the remap happens
+    here, once, and nowhere else.
+
+    The bound check is what keeps the swap loud. Reading the tuple as
+    (S, W, N, E) while everything else said (W, S, E, N) never raised: the
+    voblast box turned into a perfectly valid-looking box over the Indian Ocean
+    (S=23.35, W=52.75, N=27.00, E=54.80) and the ingest silently wrote an empty
+    CSV. A malformed box now fails at query-build time.
+    """
+    west, south, east, north = bbox
+    if not west < east:
+        raise ValueError(f"bbox west {west} must be < east {east} — order is (W, S, E, N)")
+    if not south < north:
+        raise ValueError(f"bbox south {south} must be < north {north} — order is (W, S, E, N)")
+    return OVERPASS_QUERY.format(south=south, west=west, north=north, east=east)
+
+
 def fetch_overpass(bbox: tuple, limit: int | None = None, dry_run: bool = False) -> list:
-    """Query Overpass API with retry+backoff, or return mock data. Returns None on total failure."""
+    """Query Overpass API with retry+backoff, or return mock data. Returns None on total failure.
+
+    `bbox` is (west, south, east, north) — see build_overpass_query for the
+    mapping onto Overpass's (south, west, north, east).
+    """
     if dry_run:
         elements = MOCK_OVERPASS_RESPONSE["elements"]
         if limit:
             elements = elements[:limit]
         return elements
 
-    south, west, north, east = bbox
-    query = OVERPASS_QUERY.format(south=south, west=west, north=north, east=east)
+    query = build_overpass_query(bbox)
 
     # A full-voblast run is heavy: measured 172 s / 6869 elements against
     # overpass-api.de. A 120 s client timeout cuts it off mid-flight and the
@@ -499,10 +533,13 @@ def write_csv(rows: list[dict], path: Path) -> None:
 # Main
 # ---------------------------------------------------------------------------
 
-def main() -> None:
+def build_parser() -> argparse.ArgumentParser:
+    """CLI definition, split out of main() so the flags can be tested offline."""
     parser = argparse.ArgumentParser(description="Ingest OSM POIs for Grodno region")
     parser.add_argument("--bbox", nargs=4, type=float, metavar=("W", "S", "E", "N"),
-                        help="Bounding box (west south east north)")
+                        help="Bounding box in (W, S, E, N) order: west, south, east, north. "
+                             "Remapped to Overpass's (S, W, N, E) when the query is built. "
+                             "Default: the whole voblast (23.35 52.75 27.00 54.80)")
     parser.add_argument("--limit", type=int, default=None,
                         help="Max elements to fetch (for testing)")
     parser.add_argument("--output", type=Path,
@@ -516,7 +553,11 @@ def main() -> None:
     parser.add_argument("--district-mode", choices=("raion", "nominatim"), default="raion",
                         help="raion = nearest raion centre (fast, offline); "
                              "nominatim = reverse-geocode each POI (1 req/s, ~40 min for the voblast)")
-    args = parser.parse_args()
+    return parser
+
+
+def main() -> None:
+    args = build_parser().parse_args()
 
     bbox = tuple(args.bbox) if args.bbox else DEFAULT_BBOX
     out_path = args.output or (OUT_DIR / "places_osm_raw.csv")

@@ -206,7 +206,7 @@ export const makeContours = ({
 // a castle centroid, a church set back from the street — makes the whole /route
 // call fail with {"error_code":499,"error":"Could not find candidate edge used
 // for destination label"}: points get drawn, no route line appears.
-export const WAYPOINT_SNAP_RADIUS_M = 100;
+export const WAYPOINT_SNAP_RADIUS_M = 500;
 
 export const makeLocations = (waypoints: ActiveWaypoint[]) => {
   const locations = [];

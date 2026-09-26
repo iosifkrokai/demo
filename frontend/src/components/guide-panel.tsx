@@ -1,11 +1,12 @@
-import {
-  ExternalLink,
-  Footprints,
-  MapPin,
-  Navigation,
-  RotateCcw,
-} from 'lucide-react';
+import { Footprints, LocateFixed, Navigation, RotateCcw } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+
+import { GuideEmpty } from './parts/guide-empty';
+import { fmtDist, metresBetween } from './parts/guide-format';
+import { GuideNextStop } from './parts/guide-next-stop';
+import { GuideProgress } from './parts/guide-progress';
+import { GuideRouteDone } from './parts/guide-route-done';
+import { GuideStopList } from './parts/guide-stop-list';
 
 /** One stop of the built route, as the guide walks it. */
 export interface GuideStop {
@@ -26,20 +27,8 @@ const STORAGE_KEY = 'grodno-guide-progress';
 /** You are "at" a stop when you are this close to it. */
 const ARRIVAL_RADIUS_M = 40;
 
-const fmtMin = (min: number) =>
-  min >= 60 ? `${Math.floor(min / 60)} ч ${min % 60} мин` : `${min} мин`;
-
-const fmtDist = (m: number) =>
-  m >= 1000 ? `${(m / 1000).toFixed(1)} км` : `${Math.round(m)} м`;
-
-const metresBetween = (
-  a: { lat: number; lon: number },
-  b: { lat: number; lon: number }
-) => {
-  const dLat = (a.lat - b.lat) * 111_320;
-  const dLon = (a.lon - b.lon) * 111_320 * Math.cos((a.lat * Math.PI) / 180);
-  return Math.hypot(dLat, dLon);
-};
+const mapsUrl = (lat: number, lon: number) =>
+  `https://www.google.com/maps/search/?api=1&query=${lat},${lon}`;
 
 /**
  * Fingerprint of the route the progress belongs to. The parent uses it as the
@@ -127,6 +116,10 @@ export const GuidePanel = ({ stops }: GuidePanelProps) => {
     () => stops.find((s) => !progress.visited.includes(s.id)) ?? null,
     [stops, progress.visited]
   );
+  const nextIndex = useMemo(
+    () => (nextStop ? stops.findIndex((s) => s.id === nextStop.id) : -1),
+    [stops, nextStop]
+  );
 
   // The geolocation callback needs the current stops without re-subscribing to
   // the watcher on every render (refs are written in effects, never while
@@ -167,7 +160,7 @@ export const GuidePanel = ({ stops }: GuidePanelProps) => {
       { enableHighAccuracy: true, maximumAge: 5_000, timeout: 15_000 }
     );
     return () => geo.clearWatch?.(watch);
-  }, [stopCount, toggle]);
+  }, [stopCount, key, toggle]);
 
   // Keep the screen awake while walking; browsers may refuse — that is fine.
   useEffect(() => {
@@ -195,138 +188,106 @@ export const GuidePanel = ({ stops }: GuidePanelProps) => {
   }, []);
 
   const done = progress.visited.length;
-  const metresLeft =
+  const nextDistance =
     nextStop && position ? metresBetween(position, nextStop) : null;
   const minutesLeft = stops
     .filter((s) => !progress.visited.includes(s.id))
     .reduce((sum, s) => sum + (s.visitMinutes ?? 0), 0);
 
+  const geoLine =
+    geoState === 'denied'
+      ? 'геолокация недоступна — отмечайте остановки вручную'
+      : geoState === 'idle'
+        ? 'определяю, где вы…'
+        : nextDistance != null
+          ? `до следующей ${fmtDist(nextDistance)}`
+          : 'вы на маршруте';
+
   if (stops.length === 0) {
     return (
-      <section
-        data-testid="guide-panel"
-        className="rounded-xl border border-border/60 bg-card p-3 text-[12px] text-muted-foreground shadow-sm"
-      >
-        Сначала соберите маршрут в режиме планирования — проводник ведёт по уже
-        построенному маршруту.
+      <section data-testid="guide-panel" className="flex flex-col gap-3">
+        <GuideHeader onReset={reset} />
+        <GuideEmpty />
       </section>
     );
   }
 
   return (
-    <section
-      data-testid="guide-panel"
-      className="space-y-2 rounded-xl border border-border/60 bg-card p-3 shadow-sm"
-    >
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-1.5 text-[12px] font-medium">
-          <Footprints className="h-3.5 w-3.5 text-primary" />
-          проводник
-        </div>
-        <button
-          type="button"
-          onClick={reset}
-          className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground"
-          title="начать маршрут заново"
-        >
-          <RotateCcw className="h-3 w-3" />
-          сбросить прогресс
-        </button>
-      </div>
+    <section data-testid="guide-panel" className="flex flex-col gap-3">
+      <GuideHeader onReset={reset} />
 
-      <div className="text-[11px] text-muted-foreground">
-        пройдено {done} из {stops.length}
-        {minutesLeft > 0 && ` · осталось осмотра ~${fmtMin(minutesLeft)}`}
-      </div>
-      <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-        <div
-          className="h-full rounded-full bg-primary transition-all"
-          style={{ width: `${Math.round((done / stops.length) * 100)}%` }}
+      {/* The next stop, or a quiet «all done» card once there is none. */}
+      {nextStop ? (
+        // key: remounting on a new stop replays the small fade+slide instead of
+        // swapping the text in place (DESIGN.md, Motion).
+        <GuideNextStop
+          key={nextStop.id}
+          number={nextIndex + 1}
+          name={nextStop.name}
+          category={nextStop.category ?? null}
+          visitMinutes={nextStop.visitMinutes ?? null}
+          distance={nextDistance}
+          mapsHref={mapsUrl(nextStop.lat, nextStop.lon)}
         />
-      </div>
-
-      <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-        <Navigation className="h-3 w-3" />
-        {geoState === 'denied'
-          ? 'геолокация недоступна — отмечайте остановки вручную'
-          : geoState === 'idle'
-            ? 'определяю, где вы…'
-            : metresLeft != null
-              ? `до следующей ${fmtDist(metresLeft)}`
-              : 'вы на маршруте'}
-      </div>
-
-      {nextStop && (
-        <div className="rounded-lg bg-primary/5 px-2.5 py-2">
-          <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
-            следующая остановка
-          </div>
-          <div className="text-[13px] font-medium">{nextStop.name}</div>
-          <div className="flex items-center justify-between gap-2">
-            {nextStop.category && (
-              <div className="text-[11px] text-muted-foreground">
-                {nextStop.category}
-              </div>
-            )}
-            <a
-              href={`https://www.google.com/maps/search/?api=1&query=${nextStop.lat},${nextStop.lon}`}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-1 text-[11px] text-primary hover:underline"
-            >
-              <ExternalLink className="h-3 w-3" />
-              открыть в картах
-            </a>
-          </div>
-        </div>
+      ) : (
+        <GuideRouteDone total={stops.length} />
       )}
 
-      <ol className="flex flex-col gap-0.5">
-        {stops.map((stop, i) => {
-          const isDone = progress.visited.includes(stop.id);
-          const isNext = nextStop?.id === stop.id;
-          return (
-            <li key={stop.id}>
-              <button
-                type="button"
-                data-testid={`guide-stop-${i + 1}`}
-                onClick={() => toggle(stop.id)}
-                className={[
-                  'flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-[12px]',
-                  isDone
-                    ? 'text-muted-foreground line-through'
-                    : 'hover:bg-muted',
-                  isNext ? 'bg-primary/5' : '',
-                ].join(' ')}
-              >
-                <span
-                  className={[
-                    'h-4 w-4 shrink-0 rounded-full text-center text-[9px] font-medium leading-4',
-                    isDone
-                      ? 'bg-muted text-muted-foreground'
-                      : 'bg-primary/10 text-primary',
-                  ].join(' ')}
-                >
-                  {i + 1}
-                </span>
-                <span className="truncate">{stop.name}</span>
-                {isNext && metresLeft != null ? (
-                  <span className="ml-auto flex shrink-0 items-center gap-0.5 text-[10px] text-primary">
-                    <MapPin className="h-3 w-3" />
-                    {fmtDist(metresLeft)}
-                  </span>
-                ) : (
-                  stop.visitMinutes != null && (
-                    <span className="ml-auto shrink-0 text-[10px] text-muted-foreground">
-                      ~{stop.visitMinutes} мин
-                    </span>
-                  )
-                )}
-              </button>
-            </li>
-          );
-        })}
-      </ol>
+      <GuideProgress
+        done={done}
+        total={stops.length}
+        minutesLeft={minutesLeft}
+      />
+
+      <p
+        data-testid="guide-geo-status"
+        className="flex items-center gap-1.5 text-[12px] text-muted-foreground"
+      >
+        {geoState === 'denied' ? (
+          <LocateFixed className="h-3.5 w-3.5" />
+        ) : (
+          <Navigation className="h-3.5 w-3.5" />
+        )}
+        {geoLine}
+      </p>
+
+      <GuideStopList
+        stops={stops}
+        visited={progress.visited}
+        nextId={nextStop?.id ?? null}
+        nextDistance={nextDistance}
+        onToggle={toggle}
+      />
     </section>
   );
 };
+
+interface GuideHeaderProps {
+  onReset: () => void;
+}
+
+/** Panel title + the one destructive control, kept quiet on purpose. */
+const GuideHeader = ({ onReset }: GuideHeaderProps) => (
+  <div className="flex items-center justify-between gap-2">
+    <div className="flex items-center gap-2">
+      <span className="flex size-8 items-center justify-center rounded-full bg-primary/10 text-primary">
+        <Footprints className="h-4 w-4" />
+      </span>
+      <div>
+        <div className="text-[15px] font-semibold leading-tight">Проводник</div>
+        <div className="text-[12px] text-muted-foreground">
+          идём по маршруту остановка за остановкой
+        </div>
+      </div>
+    </div>
+    <button
+      type="button"
+      onClick={onReset}
+      title="начать маршрут заново"
+      className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-[12px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+    >
+      <RotateCcw className="h-3.5 w-3.5" />
+      сбросить прогресс
+    </button>
+  </div>
+);

@@ -7,15 +7,23 @@ Steps in order:
   0  preprocess         query → PreprocessedQuery
   1  extract_intent     query → IntentResult
   2  resolve            IntentResult + client params → ResolvedConstraints
-  -- embed query         text → vec (OpenRouter)
+  -- embed query         text → vec (OpenRouter; skipped when unavailable)
   3  retrieve           vec + constraints → list[Candidate] (RRF-fused)
-  3.5 rerank            candidates → top-K (OpenRouter rerank)
+  3.5 rerank            candidates → top-K (Jev; skipped when unavailable)
   4  diversity          candidates → top-N (MMR)
   5  cost               candidates + constraints → CostMatrix
   6  optimize           candidates + cost → ordered list (3 modes)
   7  validate           ordered + cost → ValidatedPlan
   8  render             ValidatedPlan → shape + summary (Valhalla /route)
   9  explain            ValidatedPlan + summary → human-readable string
+
+Degraded mode (no OPENROUTER_API_KEY, or OpenRouter unreachable)
+    The three OpenRouter steps each degrade on their own and log ONE warning
+    naming the reason: intent falls back to a deterministic parse
+    (planner/intent.py `fallback_intent`), the vector signal is dropped so
+    retrieval runs on keywords + categories alone, and rerank keeps the
+    retrieval order.  A route request still returns points; /health keeps
+    reporting `llm`/`embedder` as false because no key is held.
 
 Returns: RouteResponse (Pydantic) — what main.py serves over HTTP.
 """
@@ -29,7 +37,7 @@ import time as _time
 import httpx
 import psycopg
 
-from .. import constants
+from .. import constants, jev
 from ..errors import (
     NoCandidatesFound,
     NoRoutePossible,
@@ -73,26 +81,44 @@ log = logging.getLogger(__name__)
 
 
 def _openrouter_embed(texts: list[str]) -> list[list[float]]:
-    """Call OpenRouter embeddings API. Returns list of embedding vectors."""
-    api_key = __import__("os").environ.get("OPENROUTER_API_KEY")
-    if not api_key:
-        raise RuntimeError("OPENROUTER_API_KEY not set")
+    """Call OpenRouter embeddings API. Returns list of embedding vectors.
 
-    with httpx.Client(timeout=30.0) as client:
-        r = client.post(
-            "https://openrouter.ai/api/v1/embeddings",
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": constants.EMBED_MODEL,
-                "input": texts,
-            },
-        )
-        r.raise_for_status()
-        body = r.json()
-        return [item["embedding"] for item in body["data"]]
+    Returns [] when OpenRouter is not usable — no key, or a request that
+    times out / 5xx — which is the signal for keyword-only retrieval.  One
+    WARNING per call, naming the reason, so a log reader can tell "no key"
+    apart from "key but upstream down".
+    """
+    api_key = jev.api_key()
+    if not api_key:
+        log.warning("embed: no OPENROUTER_API_KEY — keyword-only retrieval")
+        return []
+
+    try:
+        with httpx.Client(timeout=30.0) as client:
+            r = client.post(
+                "https://openrouter.ai/api/v1/embeddings",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": constants.EMBED_MODEL,
+                    "input": texts,
+                },
+            )
+            r.raise_for_status()
+            body = r.json()
+            return [item["embedding"] for item in body["data"]]
+    except httpx.HTTPError as exc:
+        # Timeout, connect error, 4xx/5xx — OpenRouter is not answering.
+        log.warning("embed: OpenRouter unreachable (%s) — keyword-only retrieval", exc)
+        return []
+    except (KeyError, IndexError, TypeError, ValueError) as exc:
+        # A 200 whose body carries no usable vectors (not JSON, missing
+        # "data", a string where an item belongs) is the same situation from
+        # the caller's side: no vector, keep going without one.
+        log.warning("embed: unusable embeddings response (%s) — keyword-only retrieval", exc)
+        return []
 
 
 def _geo_focus(
@@ -447,12 +473,11 @@ class Pipeline:
             db=self.db,
         )
 
-        # Embed query (OpenRouter). Without an API key the pipeline degrades
-        # gracefully: retrieval falls back to the keyword signal only.
-        api_key = __import__("os").environ.get("OPENROUTER_API_KEY")
-        qvec = _openrouter_embed([req.query])[0] if api_key else []
-        if not qvec:
-            log.warning("no OPENROUTER_API_KEY — vector retrieval disabled, keyword mode")
+        # Embed query (OpenRouter). Without an API key — or when the call
+        # fails — the pipeline degrades gracefully: retrieval falls back to
+        # the keyword signal only and the route is still built.
+        vecs = _openrouter_embed([req.query])
+        qvec: list[float] = vecs[0] if vecs else []
 
         # Anchor point for locality: the tourist's GPS start, else the row behind
         # the named town (area_anchor), else the must-visit POI.  Retrieval uses
@@ -481,9 +506,9 @@ class Pipeline:
                 "no candidates matched the query — попробуйте другую формулировку"
             )
 
-        # 3.5 Rerank (OpenRouter) — needs the API key; skipped in keyword mode.
-        if api_key:
-            candidates = rerank_pool(req.query, candidates, top_k=constants.RERANK_POOL_SIZE)
+        # 3.5 Rerank (Jev) — skipped in keyword mode; rerank() decides and
+        # returns the pool in retrieval order when OpenRouter cannot answer.
+        candidates = rerank_pool(req.query, candidates, top_k=constants.RERANK_POOL_SIZE)
 
         # 3.55 Physical duplicates: the same POI exists twice when the curated
         # row and the OSM row disagree on the name ("Новый замок (дворец
@@ -752,7 +777,7 @@ class Pipeline:
         except Exception:
             valhalla_ok = False
 
-        openrouter_ok = bool(__import__("os").environ.get("OPENROUTER_API_KEY"))
+        openrouter_ok = bool(jev.api_key())
 
         return {
             "status": "ok" if (db_ok and valhalla_ok and openrouter_ok) else "degraded",

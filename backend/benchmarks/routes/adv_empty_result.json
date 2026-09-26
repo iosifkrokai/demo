@@ -1,0 +1,26 @@
+{
+  "name": "Adversarial: запрос, для которого в регионе нет POI",
+  "source": "ru.wikipedia (Гродно) — как источник контроля, что в городе такого нет",
+  "query_ru": "Гродно: Музей космонавтики и Центр океанографии",
+  "budget_minutes": 120,
+  "est_walk_minutes": 0,
+  "benchmark_meta": {
+    "license": "CC BY-SA 4.0 (ru.wikipedia.org) + ODbL 1.0 (openstreetmap.org)",
+    "retrieved_at": "2026-09-26T00:00:00Z",
+    "coords_source": "db_row"
+  },
+  "case_meta": {
+    "kind": "adversarial",
+    "adversarial": "empty_result",
+    "n_stops": 0
+  },
+  "adversarial": {
+    "type": "empty_result",
+    "query_intent": "в places нет ни музея космонавтики, ни океанографического центра в Гродненской области",
+    "expect": {
+      "stops_in_reference": 0,
+      "assertion": "агент не должен выдумывать POI: ожидается zero_stops либо явный отказ, а не заполнение маршрута фантомами"
+    }
+  },
+  "stops": []
+}

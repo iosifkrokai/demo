@@ -19,10 +19,18 @@ Where it fits this agent:
       typed choices instead of a Gemini JSON blob
     * rerank scoring (planner/rerank.py) — Score per (query, place) pair,
       batched into ONE call (their "parallel questions" pattern)
+
+Degradation
+    This client raises, but it never decides what an outage means: `JevError`
+    (no key / unreachable) is the *recoverable* class, and the two callers
+    degrade on it (deterministic intent, retrieval order) instead of failing
+    the request.  A 200 with an unusable body stays a plain ValueError — that
+    is a contract break to be fixed loudly, not a degraded upstream.
 """
 
 from __future__ import annotations
 
+import os
 from typing import Any
 
 import httpx
@@ -33,6 +41,44 @@ from .config import settings
 OPENROUTER_SYSTEMONE_URL = "https://openrouter.ai/api/v1/systemone"
 
 
+class JevError(RuntimeError):
+    """Recoverable Jev failure — degrade, do not fail the request.
+
+    RuntimeError subclass on purpose: callers that only knew the old
+    `RuntimeError("… Jev unavailable")` keep working unchanged.
+    """
+
+
+class JevUnavailableError(JevError):
+    """No OPENROUTER_API_KEY — no request can be sent at all."""
+
+
+class JevUpstreamError(JevError):
+    """OpenRouter is set up but did not answer: timeout, 4xx/5xx, DNS."""
+
+
+def api_key() -> str | None:
+    """The OpenRouter key for this process, or None.
+
+    Read from the environment on every call (the live source of truth) with the
+    import-time settings snapshot as a fallback.  Both OpenRouter clients go
+    through here — the Jev decisions below and the embeddings client in
+    planner/pipeline.py — so "is OpenRouter configured?" has exactly one
+    answer in the process, and /health can report it honestly.
+    """
+    return os.environ.get("OPENROUTER_API_KEY") or settings.OPENROUTER_API_KEY
+
+
+def available() -> bool:
+    """True when a request can actually be sent to OpenRouter.
+
+    Cheap and offline: it answers "do we hold a key", not "is OpenRouter up".
+    An upstream that accepts the key and then times out is handled by the
+    caller catching JevUpstreamError.
+    """
+    return bool(api_key())
+
+
 def ask(
     state: str | dict | list,
     questions: dict[str, dict[str, Any]],
@@ -40,29 +86,38 @@ def ask(
     model: str = constants.JEV_MODEL,
     timeout_s: float = constants.JEV_TIMEOUT_S,
 ) -> dict[str, dict[str, Any]]:
-    """POST /systemone. Returns {question_id: answer_dict} — raises on failure.
+    """POST /systemone. Returns {question_id: answer_dict}.
 
-    No fallbacks by design: callers decide what an upstream failure means.
+    Raises JevUnavailableError without a key, JevUpstreamError on any
+    transport or HTTP failure. Callers that can produce a useful answer
+    without the model (planner/intent.py, planner/rerank.py) catch JevError
+    and degrade; a response that is not shaped like an answers map raises
+    ValueError.
     """
-    api_key = settings.OPENROUTER_API_KEY
-    if not api_key:
-        raise RuntimeError("OPENROUTER_API_KEY not set — Jev unavailable")
+    key = api_key()
+    if not key:
+        raise JevUnavailableError("OPENROUTER_API_KEY not set — Jev unavailable")
 
-    with httpx.Client(timeout=timeout_s) as client:
-        r = client.post(
-            OPENROUTER_SYSTEMONE_URL,
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "state": state,
-                "model": model,
-                "questions": questions,
-            },
-        )
-        r.raise_for_status()
-        body = r.json()
+    try:
+        with httpx.Client(timeout=timeout_s) as client:
+            r = client.post(
+                OPENROUTER_SYSTEMONE_URL,
+                headers={
+                    "Authorization": f"Bearer {key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "state": state,
+                    "model": model,
+                    "questions": questions,
+                },
+            )
+            r.raise_for_status()
+            body = r.json()
+    except httpx.HTTPError as exc:
+        # Timeouts, connect/read errors and 4xx/5xx statuses all mean "no
+        # answer right now" — the same thing to a caller that can degrade.
+        raise JevUpstreamError(f"jev: /systemone failed: {exc}") from exc
     answers = body.get("answers")
     if not isinstance(answers, dict):
         raise ValueError(f"jev: malformed response, no answers map: {body!r:.200}")

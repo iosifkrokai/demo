@@ -10,8 +10,16 @@ Four parallel signals feed into a Reciprocal Rank Fusion:
 Negative filter is applied AFTER fusion — places matching
 forbidden_categories or forbidden_keywords are dropped before hydration.
 
+Degraded mode: the vector signal is skipped whenever the caller passes an
+empty `query_embedding` — no OPENROUTER_API_KEY, or an OpenRouter that
+failed (see planner/pipeline.py `_openrouter_embed`).  The remaining five
+signals are enough to build a route: explicit category words in the query
+still drive category-first retrieval, and named places still resolve
+through must_visit_ids / the geo anchor.
+
 Output: list of Candidate with `rrf_score` populated. The relevance field
-is left as the rrf_score (downstream rerank overwrites it).
+is left as the rrf_score (downstream rerank overwrites it, or leaves the
+retrieval order alone when Jev is unavailable).
 """
 
 from __future__ import annotations

@@ -1,0 +1,841 @@
+{
+  "schema": "bench_routes/report/2",
+  "mode": "replay",
+  "generated_at": "2026-09-26T13:27:20.553080+00:00",
+  "n_routes": 3,
+  "repeat": 1,
+  "n_runs": 3,
+  "snapshot": {
+    "dir": "/workspaces/demo/backend/benchmarks/snapshots/2026-09-26-b",
+    "schema": "bench_routes/snapshot/1",
+    "run_id": "20260926T132720-125542",
+    "started_at": "2026-09-26T13:27:20.553080+00:00",
+    "git_sha": "79de0ba",
+    "base_url": "http://localhost:8080",
+    "n_rows": 3,
+    "cases": [
+      "grodno_old_town",
+      "mir",
+      "novogrudok"
+    ]
+  },
+  "bootstrap": {
+    "samples": 10000,
+    "seed": 20260926,
+    "alpha": 0.05,
+    "resample": "cases"
+  },
+  "metric_notes": {
+    "kendall_tau": "tau-b, our stop order vs the reference walk order, restricted to the stops shared by both (n/a below 3 shared stops). The reference walk is the shortest open path over the reference stops' own coordinates, NOT the order the stops appear in the Wikivoyage-derived .json file.",
+    "detour_km": "our walk length minus the reference walk length, both measured as haversine sums so the two sides are comparable.",
+    "spread": "half-range (max - min) / 2 over the runs of a route",
+    "stage_split": "The API does not expose the pre-rerank candidate pool, and the benchmark has no database access offline, so stage-1 is a PROXY: for each graded reference stop, is any returned stop within 250 m of it. That is an upper bound on pool recall. stage-2 recall is conditional on a stage-1 hit.",
+    "grades": "grade weights {'must-see': 3.0, 'nice-to-have': 1.0, 'available': 0.0}; an ungraded stop counts as 'must-see'.",
+    "max_leg_km": "trace.max_leg_seconds converted at the route's own average speed; a value over MAX_WALK_LEG_KM=5.0 is a leg-sanity defect. The straight-line maximum is kept as an offline lower bound.",
+    "n_unreachable_legs": "lower bound: the UNREACHABLE_S sentinel saturates the trace but the matrix itself is not shipped, so the exact hop count is not recoverable offline.",
+    "duplicates": "same POI twice inside one route: <150 m (any name), identical normalised name <500 m, or name token overlap >= 0.6 <1000 m",
+    "hard_failures": "gated kinds ['api_error', 'geometry_missing', 'http_status', 'unreachable_leg', 'zero_stops'] are dropped from every quality mean and reported outside every score; leg-sanity defects (duplicate_stop, leg_over_cap) stay in the means and are counted."
+  },
+  "per_case_scores": {
+    "grodno_old_town": {
+      "recall_at_k": 1.0,
+      "stage.recall": 0.6,
+      "stage.route_recall_given_pool": 1.0,
+      "precision": 0.8333333333333334,
+      "kendall_tau": 0.2,
+      "detour_km": 0.8105493245398234,
+      "walk_diff_min": -9.763183333333338,
+      "leg.max_leg_km": 1.0504738381205956,
+      "latency_s": 27.675
+    },
+    "mir": {
+      "recall_at_k": 0.6666666666666666,
+      "stage.recall": 0.3333333333333333,
+      "stage.route_recall_given_pool": 1.0,
+      "precision": 0.6666666666666666,
+      "kendall_tau": null,
+      "detour_km": -0.016864431274159042,
+      "walk_diff_min": -39.8737,
+      "leg.max_leg_km": 0.5789122257260533,
+      "latency_s": 6.853
+    },
+    "novogrudok": {
+      "recall_at_k": 0.5,
+      "stage.recall": 0.25,
+      "stage.route_recall_given_pool": 1.0,
+      "precision": 1.0,
+      "kendall_tau": null,
+      "detour_km": -0.6151822801427647,
+      "walk_diff_min": -31.150399999999998,
+      "leg.max_leg_km": 0.3960210643869377,
+      "latency_s": 7.556
+    }
+  },
+  "overall": {
+    "recall_at_k": {
+      "mean": 0.7222,
+      "lo": 0.5,
+      "hi": 1.0,
+      "n": 3,
+      "label": "Rec@K (750 m greedy)"
+    },
+    "stage.recall": {
+      "mean": 0.3944,
+      "lo": 0.25,
+      "hi": 0.6,
+      "n": 3,
+      "label": "stage-1 pool proxy recall (250 m)"
+    },
+    "stage.route_recall_given_pool": {
+      "mean": 1.0,
+      "lo": 1.0,
+      "hi": 1.0,
+      "n": 3,
+      "label": "stage-2 recall | stage-1 hit"
+    },
+    "precision": {
+      "mean": 0.8333,
+      "lo": 0.6667,
+      "hi": 1.0,
+      "n": 3,
+      "label": "precision"
+    },
+    "kendall_tau": {
+      "mean": 0.2,
+      "lo": 0.2,
+      "hi": 0.2,
+      "n": 1,
+      "label": "τ shared (vs reference walk)"
+    },
+    "detour_km": {
+      "mean": 0.0595,
+      "lo": -0.6152,
+      "hi": 0.8105,
+      "n": 3,
+      "label": "detour km"
+    },
+    "walk_diff_min": {
+      "mean": -26.9291,
+      "lo": -39.8737,
+      "hi": -9.7632,
+      "n": 3,
+      "label": "Δwalk min"
+    },
+    "leg.max_leg_km": {
+      "mean": 0.6751,
+      "lo": 0.396,
+      "hi": 1.0505,
+      "n": 3,
+      "label": "max leg km (from trace)"
+    },
+    "latency_s": {
+      "mean": 14.028,
+      "lo": 6.853,
+      "hi": 27.675,
+      "n": 3,
+      "label": "latency s"
+    }
+  },
+  "noise_floor": {
+    "computed": {
+      "recall_at_k": {
+        "label": "Rec@K (750 m greedy)",
+        "mean_within_case_spread": null,
+        "mean_within_case_std": null,
+        "n_cases_with_repeats": 0
+      },
+      "stage.recall": {
+        "label": "stage-1 pool proxy recall (250 m)",
+        "mean_within_case_spread": null,
+        "mean_within_case_std": null,
+        "n_cases_with_repeats": 0
+      },
+      "stage.route_recall_given_pool": {
+        "label": "stage-2 recall | stage-1 hit",
+        "mean_within_case_spread": null,
+        "mean_within_case_std": null,
+        "n_cases_with_repeats": 0
+      },
+      "precision": {
+        "label": "precision",
+        "mean_within_case_spread": null,
+        "mean_within_case_std": null,
+        "n_cases_with_repeats": 0
+      },
+      "kendall_tau": {
+        "label": "τ shared (vs reference walk)",
+        "mean_within_case_spread": null,
+        "mean_within_case_std": null,
+        "n_cases_with_repeats": 0
+      },
+      "detour_km": {
+        "label": "detour km",
+        "mean_within_case_spread": null,
+        "mean_within_case_std": null,
+        "n_cases_with_repeats": 0
+      },
+      "walk_diff_min": {
+        "label": "Δwalk min",
+        "mean_within_case_spread": null,
+        "mean_within_case_std": null,
+        "n_cases_with_repeats": 0
+      },
+      "leg.max_leg_km": {
+        "label": "max leg km (from trace)",
+        "mean_within_case_spread": null,
+        "mean_within_case_std": null,
+        "n_cases_with_repeats": 0
+      },
+      "latency_s": {
+        "label": "latency s",
+        "mean_within_case_spread": null,
+        "mean_within_case_std": null,
+        "n_cases_with_repeats": 0
+      }
+    },
+    "reference_measurement": "recall 0.711 ± 0.150 over 9 runs (measured 2026-09-26)"
+  },
+  "hard_failures": {
+    "total_runs": 3,
+    "n_failed_runs": 0,
+    "gated_runs": 0,
+    "by_kind": {
+      "duplicate_stop": 1
+    },
+    "leg_sanity_defects": 1,
+    "gated": [],
+    "details": [
+      {
+        "case": "grodno_old_town",
+        "repeat": 1,
+        "kind": "duplicate_stop",
+        "detail": "1 duplicate pair(s): Костёл Обретения Святого Креста и монастырь бернардинцев ~ Монастырь бернардинцев и костёл Обретения Креста (745 m, same_name_near)",
+        "gated": false
+      }
+    ]
+  },
+  "metrics_drift_vs_snapshot": [],
+  "results": [
+    {
+      "case": "grodno_old_town",
+      "route": "Гродно: Старый город (Фарный)",
+      "source": "Wikivoyage — Grodno",
+      "query_ru": "исторический пешеходный маршрут по старому Гродно, кафедральный костёл, советская улица, набережная Немана",
+      "repeat": 1,
+      "recall_at_k": {
+        "mean": 1.0,
+        "spread": 0.0,
+        "std": null,
+        "min": 1.0,
+        "max": 1.0,
+        "n": 1
+      },
+      "precision": {
+        "mean": 0.8333,
+        "spread": 0.0,
+        "std": null,
+        "min": 0.8333,
+        "max": 0.8333,
+        "n": 1
+      },
+      "kendall_tau": {
+        "mean": 0.2,
+        "spread": 0.0,
+        "std": null,
+        "min": 0.2,
+        "max": 0.2,
+        "n": 1
+      },
+      "tau_shared_stops": {
+        "mean": 5.0,
+        "spread": 0.0,
+        "std": null,
+        "min": 5.0,
+        "max": 5.0,
+        "n": 1
+      },
+      "detour_km": {
+        "mean": 0.8105,
+        "spread": 0.0,
+        "std": null,
+        "min": 0.8105,
+        "max": 0.8105,
+        "n": 1
+      },
+      "our_walk_km": {
+        "mean": 2.4791,
+        "spread": 0.0,
+        "std": null,
+        "min": 2.4791,
+        "max": 2.4791,
+        "n": 1
+      },
+      "our_walk_km_net": {
+        "mean": 5.022,
+        "spread": 0.0,
+        "std": null,
+        "min": 5.022,
+        "max": 5.022,
+        "n": 1
+      },
+      "ref_walk_km": {
+        "mean": 1.6686,
+        "spread": 0.0,
+        "std": null,
+        "min": 1.6686,
+        "max": 1.6686,
+        "n": 1
+      },
+      "walk_diff_min": {
+        "mean": -9.7632,
+        "spread": 0.0,
+        "std": null,
+        "min": -9.7632,
+        "max": -9.7632,
+        "n": 1
+      },
+      "budget_fit": "1/1",
+      "latency_s": {
+        "mean": 27.675,
+        "spread": 0.0,
+        "std": null,
+        "min": 27.675,
+        "max": 27.675,
+        "n": 1
+      },
+      "case_scores": {
+        "recall_at_k": 1.0,
+        "stage.recall": 0.6,
+        "stage.route_recall_given_pool": 1.0,
+        "precision": 0.8333333333333334,
+        "kendall_tau": 0.2,
+        "detour_km": 0.8105493245398234,
+        "walk_diff_min": -9.763183333333338,
+        "leg.max_leg_km": 1.0504738381205956,
+        "latency_s": 27.675
+      },
+      "stage_split": {
+        "pool_exposed": false,
+        "pool_source": "route_points",
+        "pool_size": 6,
+        "proxy_radius_m": 250.0,
+        "n_reference": 5,
+        "n_reference_weighted": 15.0,
+        "n_covered": 3,
+        "n_covered_weighted": 9.0,
+        "recall": 0.6,
+        "recall_weighted": 0.6,
+        "route_recall_given_pool": 1.0,
+        "n_pool_covered_in_route": 3
+      },
+      "leg_sanity": {
+        "n_stops": 6,
+        "max_leg_seconds": 756.0,
+        "avg_speed_kmh": 5.002256372002837,
+        "max_leg_km": 1.0504738381205956,
+        "max_leg_km_straight": 1.0544870290554804,
+        "over_cap": false,
+        "unreachable_sentinel": false,
+        "n_unreachable_legs": 0,
+        "duplicate_pairs": [
+          {
+            "our_stop_indices": [
+              1,
+              4
+            ],
+            "names": [
+              "Костёл Обретения Святого Креста и монастырь бернардинцев",
+              "Монастырь бернардинцев и костёл Обретения Креста"
+            ],
+            "place_ids": [
+              4587,
+              57
+            ],
+            "dist_m": 744.9,
+            "name_similarity": 0.857,
+            "rule": "same_name_near"
+          }
+        ],
+        "n_duplicate_stops": 1,
+        "geometry_missing": false
+      },
+      "failures": [
+        {
+          "kind": "duplicate_stop",
+          "detail": "1 duplicate pair(s): Костёл Обретения Святого Креста и монастырь бернардинцев ~ Монастырь бернардинцев и костёл Обретения Креста (745 m, same_name_near)",
+          "gated": false
+        }
+      ],
+      "api_error": null,
+      "runs": [
+        {
+          "repeat": 1,
+          "ts": "2026-09-26T13:27:48.248782+00:00",
+          "http_status": 200,
+          "intent_source": "jev",
+          "candidate_ids_source": "route_points",
+          "recall_at_k": 1.0,
+          "precision": 0.8333,
+          "kendall_tau": 0.2,
+          "shared_stops": 5,
+          "stage1_pool_recall": 0.6,
+          "stage2_recall_given_pool": 1.0,
+          "detour_km": 0.810549,
+          "our_walk_km": 2.479102,
+          "ref_walk_km": 1.668553,
+          "walk_diff_min": -9.76,
+          "budget_fit": true,
+          "latency_s": 27.675,
+          "hard_failure": false,
+          "failures": [
+            {
+              "kind": "duplicate_stop",
+              "detail": "1 duplicate pair(s): Костёл Обретения Святого Креста и монастырь бернардинцев ~ Монастырь бернардинцев и костёл Обретения Креста (745 m, same_name_near)",
+              "gated": false
+            }
+          ],
+          "leg_sanity": {
+            "n_stops": 6,
+            "max_leg_seconds": 756.0,
+            "avg_speed_kmh": 5.002256372002837,
+            "max_leg_km": 1.0504738381205956,
+            "max_leg_km_straight": 1.0544870290554804,
+            "over_cap": false,
+            "unreachable_sentinel": false,
+            "n_unreachable_legs": 0,
+            "duplicate_pairs": [
+              {
+                "our_stop_indices": [
+                  1,
+                  4
+                ],
+                "names": [
+                  "Костёл Обретения Святого Креста и монастырь бернардинцев",
+                  "Монастырь бернардинцев и костёл Обретения Креста"
+                ],
+                "place_ids": [
+                  4587,
+                  57
+                ],
+                "dist_m": 744.9,
+                "name_similarity": 0.857,
+                "rule": "same_name_near"
+              }
+            ],
+            "n_duplicate_stops": 1,
+            "geometry_missing": false
+          },
+          "our_stops": [
+            {
+              "id": 4416,
+              "name": "Костёл Девы Марии Ангельской и кляштор францисканцев",
+              "lat": 53.671985,
+              "lon": 23.822247,
+              "visit_minutes": 20
+            },
+            {
+              "id": 4587,
+              "name": "Костёл Обретения Святого Креста и монастырь бернардинцев",
+              "lat": 53.67481,
+              "lon": 23.830602,
+              "visit_minutes": 20
+            },
+            {
+              "id": 7116,
+              "name": "Гасцюем",
+              "lat": 53.6766465,
+              "lon": 23.8278436,
+              "visit_minutes": 10
+            },
+            {
+              "id": 64,
+              "name": "Улица Советская (старый город)",
+              "lat": 53.6798,
+              "lon": 23.8279,
+              "visit_minutes": 40
+            },
+            {
+              "id": 57,
+              "name": "Монастырь бернардинцев и костёл Обретения Креста",
+              "lat": 53.6813,
+              "lon": 23.8278,
+              "visit_minutes": 35
+            },
+            {
+              "id": 592,
+              "name": "Историческая застройка ул. Ожешко",
+              "lat": 53.685169,
+              "lon": 23.842419,
+              "visit_minutes": 20
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case": "mir",
+      "route": "Мир: замковый комплекс и исторический центр",
+      "source": "Wikivoyage — Mir Castle",
+      "query_ru": "пешеходный маршрут Мир, Мирский замок, исторический центр местечка",
+      "repeat": 1,
+      "recall_at_k": {
+        "mean": 0.6667,
+        "spread": 0.0,
+        "std": null,
+        "min": 0.6667,
+        "max": 0.6667,
+        "n": 1
+      },
+      "precision": {
+        "mean": 0.6667,
+        "spread": 0.0,
+        "std": null,
+        "min": 0.6667,
+        "max": 0.6667,
+        "n": 1
+      },
+      "kendall_tau": {
+        "mean": null,
+        "spread": null,
+        "min": null,
+        "max": null,
+        "n": 0
+      },
+      "tau_shared_stops": {
+        "mean": 2.0,
+        "spread": 0.0,
+        "std": null,
+        "min": 2.0,
+        "max": 2.0,
+        "n": 1
+      },
+      "detour_km": {
+        "mean": -0.0169,
+        "spread": 0.0,
+        "std": null,
+        "min": -0.0169,
+        "max": -0.0169,
+        "n": 1
+      },
+      "our_walk_km": {
+        "mean": 0.7782,
+        "spread": 0.0,
+        "std": null,
+        "min": 0.7782,
+        "max": 0.7782,
+        "n": 1
+      },
+      "our_walk_km_net": {
+        "mean": 1.263,
+        "spread": 0.0,
+        "std": null,
+        "min": 1.263,
+        "max": 1.263,
+        "n": 1
+      },
+      "ref_walk_km": {
+        "mean": 0.795,
+        "spread": 0.0,
+        "std": null,
+        "min": 0.795,
+        "max": 0.795,
+        "n": 1
+      },
+      "walk_diff_min": {
+        "mean": -39.8737,
+        "spread": 0.0,
+        "std": null,
+        "min": -39.8737,
+        "max": -39.8737,
+        "n": 1
+      },
+      "budget_fit": "1/1",
+      "latency_s": {
+        "mean": 6.853,
+        "spread": 0.0,
+        "std": null,
+        "min": 6.853,
+        "max": 6.853,
+        "n": 1
+      },
+      "case_scores": {
+        "recall_at_k": 0.6666666666666666,
+        "stage.recall": 0.3333333333333333,
+        "stage.route_recall_given_pool": 1.0,
+        "precision": 0.6666666666666666,
+        "kendall_tau": null,
+        "detour_km": -0.016864431274159042,
+        "walk_diff_min": -39.8737,
+        "leg.max_leg_km": 0.5789122257260533,
+        "latency_s": 6.853
+      },
+      "stage_split": {
+        "pool_exposed": false,
+        "pool_source": "route_points",
+        "pool_size": 3,
+        "proxy_radius_m": 250.0,
+        "n_reference": 3,
+        "n_reference_weighted": 9.0,
+        "n_covered": 1,
+        "n_covered_weighted": 3.0,
+        "recall": 0.3333333333333333,
+        "recall_weighted": 0.3333333333333333,
+        "route_recall_given_pool": 1.0,
+        "n_pool_covered_in_route": 1
+      },
+      "leg_sanity": {
+        "n_stops": 3,
+        "max_leg_seconds": 416.0,
+        "avg_speed_kmh": 5.009817338013923,
+        "max_leg_km": 0.5789122257260533,
+        "max_leg_km_straight": 0.5122812876897441,
+        "over_cap": false,
+        "unreachable_sentinel": false,
+        "n_unreachable_legs": 0,
+        "duplicate_pairs": [],
+        "n_duplicate_stops": 0,
+        "geometry_missing": false
+      },
+      "failures": [],
+      "api_error": null,
+      "runs": [
+        {
+          "repeat": 1,
+          "ts": "2026-09-26T13:27:55.116585+00:00",
+          "http_status": 200,
+          "intent_source": "jev",
+          "candidate_ids_source": "route_points",
+          "recall_at_k": 0.6667,
+          "precision": 0.6667,
+          "kendall_tau": null,
+          "shared_stops": 2,
+          "stage1_pool_recall": 0.333333,
+          "stage2_recall_given_pool": 1.0,
+          "detour_km": -0.016864,
+          "our_walk_km": 0.778185,
+          "ref_walk_km": 0.79505,
+          "walk_diff_min": -39.87,
+          "budget_fit": true,
+          "latency_s": 6.853,
+          "hard_failure": false,
+          "failures": [],
+          "leg_sanity": {
+            "n_stops": 3,
+            "max_leg_seconds": 416.0,
+            "avg_speed_kmh": 5.009817338013923,
+            "max_leg_km": 0.5789122257260533,
+            "max_leg_km_straight": 0.5122812876897441,
+            "over_cap": false,
+            "unreachable_sentinel": false,
+            "n_unreachable_legs": 0,
+            "duplicate_pairs": [],
+            "n_duplicate_stops": 0,
+            "geometry_missing": false
+          },
+          "our_stops": [
+            {
+              "id": 38,
+              "name": "Мирский замок",
+              "lat": 53.4517,
+              "lon": 26.4736,
+              "visit_minutes": 120
+            },
+            {
+              "id": 6910,
+              "name": "Дорога замков",
+              "lat": 53.4527138,
+              "lon": 26.4660531,
+              "visit_minutes": 40
+            },
+            {
+              "id": 7064,
+              "name": "Мірскі Пасад",
+              "lat": 53.4549646,
+              "lon": 26.4646967,
+              "visit_minutes": 10
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case": "novogrudok",
+      "route": "Новогрудок: Замковая гора и Старый город",
+      "source": "Wikivoyage — Novogrudok",
+      "query_ru": "пешеходный маршрут Новогрудок, замковая гора, средневековый замок, центр города",
+      "repeat": 1,
+      "recall_at_k": {
+        "mean": 0.5,
+        "spread": 0.0,
+        "std": null,
+        "min": 0.5,
+        "max": 0.5,
+        "n": 1
+      },
+      "precision": {
+        "mean": 1.0,
+        "spread": 0.0,
+        "std": null,
+        "min": 1.0,
+        "max": 1.0,
+        "n": 1
+      },
+      "kendall_tau": {
+        "mean": null,
+        "spread": null,
+        "min": null,
+        "max": null,
+        "n": 0
+      },
+      "tau_shared_stops": {
+        "mean": 2.0,
+        "spread": 0.0,
+        "std": null,
+        "min": 2.0,
+        "max": 2.0,
+        "n": 1
+      },
+      "detour_km": {
+        "mean": -0.6152,
+        "spread": 0.0,
+        "std": null,
+        "min": -0.6152,
+        "max": -0.6152,
+        "n": 1
+      },
+      "our_walk_km": {
+        "mean": 0.4081,
+        "spread": 0.0,
+        "std": null,
+        "min": 0.4081,
+        "max": 0.4081,
+        "n": 1
+      },
+      "our_walk_km_net": {
+        "mean": 1.127,
+        "spread": 0.0,
+        "std": null,
+        "min": 1.127,
+        "max": 1.127,
+        "n": 1
+      },
+      "ref_walk_km": {
+        "mean": 1.0233,
+        "spread": 0.0,
+        "std": null,
+        "min": 1.0233,
+        "max": 1.0233,
+        "n": 1
+      },
+      "walk_diff_min": {
+        "mean": -31.1504,
+        "spread": 0.0,
+        "std": null,
+        "min": -31.1504,
+        "max": -31.1504,
+        "n": 1
+      },
+      "budget_fit": "1/1",
+      "latency_s": {
+        "mean": 7.556,
+        "spread": 0.0,
+        "std": null,
+        "min": 7.556,
+        "max": 7.556,
+        "n": 1
+      },
+      "case_scores": {
+        "recall_at_k": 0.5,
+        "stage.recall": 0.25,
+        "stage.route_recall_given_pool": 1.0,
+        "precision": 1.0,
+        "kendall_tau": null,
+        "detour_km": -0.6151822801427647,
+        "walk_diff_min": -31.150399999999998,
+        "leg.max_leg_km": 0.3960210643869377,
+        "latency_s": 7.556
+      },
+      "stage_split": {
+        "pool_exposed": false,
+        "pool_source": "route_points",
+        "pool_size": 2,
+        "proxy_radius_m": 250.0,
+        "n_reference": 4,
+        "n_reference_weighted": 12.0,
+        "n_covered": 1,
+        "n_covered_weighted": 3.0,
+        "recall": 0.25,
+        "recall_weighted": 0.25,
+        "route_recall_given_pool": 1.0,
+        "n_pool_covered_in_route": 1
+      },
+      "leg_sanity": {
+        "n_stops": 2,
+        "max_leg_seconds": 292.0,
+        "avg_speed_kmh": 4.882451478743068,
+        "max_leg_km": 0.3960210643869377,
+        "max_leg_km_straight": 0.40807951010318305,
+        "over_cap": false,
+        "unreachable_sentinel": false,
+        "n_unreachable_legs": 0,
+        "duplicate_pairs": [],
+        "n_duplicate_stops": 0,
+        "geometry_missing": false
+      },
+      "failures": [],
+      "api_error": null,
+      "runs": [
+        {
+          "repeat": 1,
+          "ts": "2026-09-26T13:28:02.675312+00:00",
+          "http_status": 200,
+          "intent_source": "jev",
+          "candidate_ids_source": "route_points",
+          "recall_at_k": 0.5,
+          "precision": 1.0,
+          "kendall_tau": null,
+          "shared_stops": 2,
+          "stage1_pool_recall": 0.25,
+          "stage2_recall_given_pool": 1.0,
+          "detour_km": -0.615182,
+          "our_walk_km": 0.40808,
+          "ref_walk_km": 1.023262,
+          "walk_diff_min": -31.15,
+          "budget_fit": true,
+          "latency_s": 7.556,
+          "hard_failure": false,
+          "failures": [],
+          "leg_sanity": {
+            "n_stops": 2,
+            "max_leg_seconds": 292.0,
+            "avg_speed_kmh": 4.882451478743068,
+            "max_leg_km": 0.3960210643869377,
+            "max_leg_km_straight": 0.40807951010318305,
+            "over_cap": false,
+            "unreachable_sentinel": false,
+            "n_unreachable_legs": 0,
+            "duplicate_pairs": [],
+            "n_duplicate_stops": 0,
+            "geometry_missing": false
+          },
+          "our_stops": [
+            {
+              "id": 7327,
+              "name": "Старый город",
+              "lat": 53.5984852,
+              "lon": 25.8238317,
+              "visit_minutes": 40
+            },
+            {
+              "id": 5,
+              "name": "Новогрудский замок (руины)",
+              "lat": 53.6013,
+              "lon": 25.8278,
+              "visit_minutes": 60
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

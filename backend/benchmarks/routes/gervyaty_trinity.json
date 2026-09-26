@@ -1,0 +1,57 @@
+{
+  "name": "Гервяты: костёл Пресвятой Троицы и мельница",
+  "source": "ru.wikipedia (Костёл Пресвятой Троицы (Гервяты) / Гервяты) + OSM",
+  "query_ru": "пешеходный маршрут по Гервятам: костёл Пресвятой Троицы, водяная мельница, памятник погибшим землякам",
+  "budget_minutes": 120,
+  "est_walk_minutes": 25,
+  "benchmark_meta": {
+    "license": "CC BY-SA 4.0 (ru.wikipedia.org) + ODbL 1.0 (openstreetmap.org)",
+    "retrieved_at": "2026-09-26T00:00:00Z",
+    "coords_source": "db_row"
+  },
+  "case_meta": {
+    "kind": "town",
+    "town": "Гервяты",
+    "n_stops": 3,
+    "coords_note": "OSM way/154222632 (54.6872,26.1441) совпадает со статьёй ru.wikipedia «Гервяты» (54.6925,26.14111). Curated-сид region:gerviaty-church (54.352,26.015) отброшен — сбит на 37 км."
+  },
+  "stops": [
+    {
+      "name": "Костёл Пресвятой Троицы",
+      "place_id": 3316,
+      "lat": 54.687226,
+      "lon": 26.144083,
+      "grade": "must-see",
+      "source_urls": [
+        "https://ru.wikipedia.org/wiki/Костёл_Пресвятой_Троицы_(Гервяты)",
+        "https://www.openstreetmap.org/way/154222632"
+      ],
+      "visit_minutes": 30,
+      "grade_reason": "назван в статье ru.wikipedia и в объекте OSM (2 независимых источника)"
+    },
+    {
+      "name": "Водяная мельница (XIX в.)",
+      "place_id": 3354,
+      "lat": 54.686038,
+      "lon": 26.14484,
+      "grade": "nice-to-have",
+      "source_urls": [
+        "https://www.openstreetmap.org/way/173871684"
+      ],
+      "visit_minutes": 15,
+      "grade_reason": "назван в одном источнике"
+    },
+    {
+      "name": "Погибшим землякам",
+      "place_id": 485,
+      "lat": 54.687885,
+      "lon": 26.145219,
+      "grade": "available",
+      "source_urls": [
+        "https://www.openstreetmap.org/node/1887930690"
+      ],
+      "visit_minutes": 10,
+      "grade_reason": "в таблице places, в проверенных источниках не назван — grade 0"
+    }
+  ]
+}

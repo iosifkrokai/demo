@@ -1,18 +1,30 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, cleanup } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
-const mockSetWaypoint = vi.hoisted(() => vi.fn());
-const mockSetPlaceDetails = vi.hoisted(() => vi.fn());
+const mockStoreState = vi.hoisted(() => ({
+  waypoints: [] as Record<string, unknown>[],
+  placeDetails: {} as Record<string, unknown>,
+  routeHistory: [] as unknown[],
+  refinementLog: [] as unknown[],
+  routeSnapshots: [] as unknown[],
+  excludedPlaceIds: [] as number[],
+  setWaypoint: vi.fn(),
+  setPlaceDetails: vi.fn(),
+  addEmptyWaypointToEnd: vi.fn(),
+  addToHistory: vi.fn(),
+  removeFromHistory: vi.fn(),
+  clearHistory: vi.fn(),
+  snapshotRoute: vi.fn(),
+  undoRefinement: vi.fn(),
+  resetRoute: vi.fn(),
+  pushRefinement: vi.fn(),
+}));
+const mockSetWaypoint = mockStoreState.setWaypoint;
 const mockRefetch = vi.hoisted(() => vi.fn());
 const mockGetState = vi.hoisted(() =>
   // Loose return type: individual tests swap in different store shapes.
-  vi.fn((): Record<string, unknown> => ({
-    waypoints: [],
-    refinementLog: [],
-    excludedPlaceIds: [],
-    snapshotRoute: vi.fn(),
-  }))
+  vi.fn((): Record<string, unknown> => mockStoreState)
 );
 const mockNavigate = vi.hoisted(() => vi.fn());
 const mockResetSettings = vi.hoisted(() => vi.fn());
@@ -34,26 +46,7 @@ vi.mock('@/stores/directions-store', () => ({
   ME_WAYPOINT_ID: 'me',
   useDirectionsStore: Object.assign(
     (selector: (s: Record<string, unknown>) => unknown) =>
-      selector({
-        waypoints: [],
-        placeDetails: {},
-        setWaypoint: mockSetWaypoint,
-        setPlaceDetails: mockSetPlaceDetails,
-        addEmptyWaypointToEnd: vi.fn(),
-        routeHistory: [],
-        addToHistory: vi.fn(),
-        removeFromHistory: vi.fn(),
-        clearHistory: vi.fn(),
-        // refinement context (phase 0/1): the sidebar renders the log and reads
-        // these on submit, so the double has to carry them.
-        refinementLog: [],
-        routeSnapshots: [],
-        excludedPlaceIds: [],
-        snapshotRoute: vi.fn(),
-        undoRefinement: vi.fn(),
-        resetRoute: vi.fn(),
-        pushRefinement: vi.fn(),
-      }),
+      selector(mockStoreState),
     { getState: mockGetState }
   ),
 }));
@@ -68,7 +61,10 @@ vi.mock('./waypoint-list', () => ({
 }));
 
 vi.mock('@/utils/nominatim', () => ({
-  forward_geocode: vi.fn(async () => ({ data: [] })),
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- the test reads calls[i][1]
+  forward_geocode: vi.fn(async (_url: string, _init: RequestInit) => ({
+    data: [],
+  })),
 }));
 
 import { Sidebar } from './sidebar';
@@ -108,6 +104,28 @@ const AGENT_ANSWER = {
   },
 };
 
+/**
+ * The ask field. Its placeholder is part of the empty state's contract, so the
+ * empty-state test asserts it; the queries go through the stable label instead.
+ */
+const askField = () =>
+  screen.getByRole('textbox', { name: 'что хотите посмотреть' });
+
+/** The sticky footer's main action. */
+const buildButton = () =>
+  screen.getByRole('button', { name: /построить маршрут/i });
+
+/** A fetch that answers with `AGENT_ANSWER` and records every body sent. */
+const agentFetch = () => {
+  const sentBodies: Array<Record<string, unknown>> = [];
+  const fetchMock = vi.fn(async (_url: string, init: RequestInit) => {
+    sentBodies.push(JSON.parse(String(init.body)));
+    return { ok: true, json: async () => AGENT_ANSWER };
+  });
+  vi.stubGlobal('fetch', fetchMock);
+  return { fetchMock, sentBodies, body: (i: number) => sentBodies[i] ?? {} };
+};
+
 describe('Sidebar', () => {
   beforeEach(() => {
     vi.stubGlobal('navigator', {
@@ -117,9 +135,25 @@ describe('Sidebar', () => {
     mockGetCurrentPosition.mockImplementation((ok: (p: unknown) => void) => {
       ok({ coords: { latitude: 53.7, longitude: 23.8 } });
     });
+    // A fresh store per test: the panel reads it through the same selectors the
+    // real one uses, and a test that swapped the shape must not leak it.
+    mockStoreState.waypoints = [];
+    mockStoreState.placeDetails = {};
+    mockStoreState.refinementLog = [];
+    mockStoreState.routeSnapshots = [];
+    mockStoreState.excludedPlaceIds = [];
+    // Writing the waypoints back into the double is what makes a reset visible.
+    mockStoreState.setWaypoint.mockImplementation(
+      (next: Record<string, unknown>[]) => {
+        mockStoreState.waypoints = next;
+      }
+    );
+    mockGetState.mockReturnValue(mockStoreState);
   });
 
   afterEach(() => {
+    // A worker shares one jsdom document between its files: unmount by hand.
+    cleanup();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
@@ -136,21 +170,19 @@ describe('Sidebar', () => {
   });
 
   it('sends the chosen transport and my coordinates to the agent', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- the test reads calls[i][1]
     const fetchMock = vi.fn(async (_url: string, _init: RequestInit) => ({
       ok: true,
       json: async () => AGENT_ANSWER,
     }));
     vi.stubGlobal('fetch', fetchMock);
 
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     render(<Sidebar />);
 
     await user.click(screen.getByTestId('transport-car'));
-    await user.type(
-      screen.getByPlaceholderText('прогулка по замкам Гродно'),
-      'замки Гродно'
-    );
-    await user.click(screen.getByLabelText('построить маршрут'));
+    await user.type(askField(), 'замки Гродно');
+    await user.click(buildButton());
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
     const body = JSON.parse(String(fetchMock.mock.calls[0]![1].body));
@@ -160,20 +192,18 @@ describe('Sidebar', () => {
   });
 
   it('sends no transport at all when the tourist did not pick one', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- the test reads calls[i][1]
     const fetchMock = vi.fn(async (_url: string, _init: RequestInit) => ({
       ok: true,
       json: async () => AGENT_ANSWER,
     }));
     vi.stubGlobal('fetch', fetchMock);
 
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     render(<Sidebar />);
 
-    await user.type(
-      screen.getByPlaceholderText('прогулка по замкам Гродно'),
-      'замки Гродно'
-    );
-    await user.click(screen.getByLabelText('построить маршрут'));
+    await user.type(askField(), 'замки Гродно');
+    await user.click(buildButton());
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
     const body = JSON.parse(String(fetchMock.mock.calls[0]![1].body));
@@ -182,20 +212,18 @@ describe('Sidebar', () => {
   });
 
   it('adopts the costing the agent planned with when transport is "как удобно"', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- the test reads calls[i][1]
     const fetchMock = vi.fn(async (_url: string, _init: RequestInit) => ({
       ok: true,
       json: async () => AGENT_ANSWER,
     }));
     vi.stubGlobal('fetch', fetchMock);
 
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     render(<Sidebar />);
 
-    await user.type(
-      screen.getByPlaceholderText('прогулка по замкам Гродно'),
-      'костёлы области'
-    );
-    await user.click(screen.getByLabelText('построить маршрут'));
+    await user.type(askField(), 'костёлы области');
+    await user.click(buildButton());
 
     await waitFor(() => expect(mockResetSettings).toHaveBeenCalledWith('car'));
     // the URL profile follows, so the line the webapp draws uses "auto" too
@@ -208,20 +236,18 @@ describe('Sidebar', () => {
     mockGetCurrentPosition.mockImplementation((_ok, fail) =>
       fail?.({ code: 1, message: 'denied' })
     );
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- the test reads calls[i][1]
     const fetchMock = vi.fn(async (_url: string, _init: RequestInit) => ({
       ok: true,
       json: async () => AGENT_ANSWER,
     }));
     vi.stubGlobal('fetch', fetchMock);
 
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     render(<Sidebar />);
 
-    await user.type(
-      screen.getByPlaceholderText('прогулка по замкам Гродно'),
-      'замки Гродно'
-    );
-    await user.click(screen.getByLabelText('построить маршрут'));
+    await user.type(askField(), 'замки Гродно');
+    await user.click(buildButton());
 
     // geolocation is a nice-to-have: a refusal must not block the plan
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
@@ -232,20 +258,18 @@ describe('Sidebar', () => {
 
   it('re-plans the route when the transport changes', async () => {
     // the agent planned on foot, so picking "машина" is a real change
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- the test reads calls[i][1]
     const fetchMock = vi.fn(async (_url: string, _init: RequestInit) => ({
       ok: true,
       json: async () => ({ ...AGENT_ANSWER, costing: 'pedestrian' }),
     }));
     vi.stubGlobal('fetch', fetchMock);
 
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     render(<Sidebar />);
 
-    await user.type(
-      screen.getByPlaceholderText('прогулка по замкам Гродно'),
-      'замки Гродно'
-    );
-    await user.click(screen.getByLabelText('построить маршрут'));
+    await user.type(askField(), 'замки Гродно');
+    await user.click(buildButton());
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
 
     // switching the transport must not leave the walking plan (and its travel
@@ -259,20 +283,18 @@ describe('Sidebar', () => {
   });
 
   it('starts the planned route at my position and numbers the stops from 1', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- the test reads calls[i][1]
     const fetchMock = vi.fn(async (_url: string, _init: RequestInit) => ({
       ok: true,
       json: async () => AGENT_ANSWER,
     }));
     vi.stubGlobal('fetch', fetchMock);
 
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     render(<Sidebar />);
 
-    await user.type(
-      screen.getByPlaceholderText('прогулка по замкам Гродно'),
-      'замки Гродно'
-    );
-    await user.click(screen.getByLabelText('построить маршрут'));
+    await user.type(askField(), 'замки Гродно');
+    await user.click(buildButton());
 
     await waitFor(() =>
       expect(mockSetWaypoint.mock.calls.length).toBeGreaterThanOrEqual(2)
@@ -292,14 +314,11 @@ describe('Sidebar', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     render(<Sidebar />);
 
-    await user.type(
-      screen.getByPlaceholderText('прогулка по замкам Гродно'),
-      'музеи Гродно'
-    );
-    await user.click(screen.getByLabelText('построить маршрут'));
+    await user.type(askField(), 'музеи Гродно');
+    await user.click(buildButton());
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
 
     // From here the route exists: a second submit is a refinement and must
@@ -337,11 +356,8 @@ describe('Sidebar', () => {
       snapshotRoute: snapshot,
     });
 
-    await user.type(
-      screen.getByPlaceholderText('прогулка по замкам Гродно'),
-      'добавь кофейню и туалет'
-    );
-    await user.click(screen.getByLabelText('построить маршрут'));
+    await user.type(askField(), 'добавь кофейню и туалет');
+    await user.click(buildButton());
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
 
     const body = JSON.parse(sentBodies[1]!);
@@ -356,7 +372,7 @@ describe('Sidebar', () => {
   });
 
   it('switches to the guide mode and back', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     render(<Sidebar />);
 
     expect(screen.queryByTestId('guide-panel')).toBeNull();
@@ -370,8 +386,190 @@ describe('Sidebar', () => {
 
     await user.click(screen.getByTestId('mode-plan'));
     expect(screen.queryByTestId('guide-panel')).toBeNull();
+    expect(buildButton()).toBeInTheDocument();
+  });
+
+  // ── The redesign (DESIGN.md phases 1–2) ────────────────────────────────────
+
+  it('keeps the close button out of the title’s way', () => {
+    render(<Sidebar />);
+
+    // It sits in the header's flex row, never absolutely placed over the text.
     expect(
-      screen.getByLabelText('построить маршрут')
+      screen.getByRole('button', { name: 'закрыть панель' }).className
+    ).not.toMatch(/absolute/);
+    expect(screen.getByText('AI-гид по Гродно')).toBeInTheDocument();
+  });
+
+  it('never leaves the panel blank: empty state, hint chips, disabled CTA', () => {
+    render(<Sidebar />);
+
+    expect(screen.getByTestId('plan-empty')).toBeInTheDocument();
+    expect(
+      screen.getByText(/Здесь появятся остановки маршрута/i)
     ).toBeInTheDocument();
+    // the ask field says what to type (DESIGN.md)
+    expect(
+      screen.getByPlaceholderText('Что хотите посмотреть? …')
+    ).toBeInTheDocument();
+    for (const hint of ['замки', 'костёлы', 'монастыри', 'где поесть']) {
+      expect(screen.getByRole('button', { name: hint })).toBeInTheDocument();
+    }
+    // nothing typed yet → nothing to build
+    expect(buildButton()).toBeDisabled();
+  });
+
+  it('fills the query from a hint chip and submits on Enter', async () => {
+    const { fetchMock, body } = agentFetch();
+
+    const user = userEvent.setup({ delay: null });
+    render(<Sidebar />);
+
+    await user.click(screen.getByTestId('hint-замки'));
+    // the chip only fills the field — the tourist still decides when to go
+    expect(askField()).toHaveValue('замки');
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    await user.type(askField(), '{Enter}');
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(body(0).query).toBe('замки');
+  });
+
+  it('sends the time budget the tourist picked', async () => {
+    const { fetchMock, body } = agentFetch();
+
+    const user = userEvent.setup({ delay: null });
+    render(<Sidebar />);
+
+    await user.click(screen.getByRole('button', { name: '2 ч' }));
+    expect(screen.getByRole('button', { name: '2 ч' })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+    await user.type(askField(), 'замки Гродно');
+    await user.click(buildButton());
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(body(0).time_budget_minutes).toBe(120);
+  });
+
+  it('leaves the budget out of the body for «без ограничения»', async () => {
+    const { fetchMock, body } = agentFetch();
+
+    const user = userEvent.setup({ delay: null });
+    render(<Sidebar />);
+
+    // pick a budget and change your mind: the field is absent, not 0
+    await user.click(screen.getByRole('button', { name: '2 ч' }));
+    await user.click(screen.getByRole('button', { name: 'без ограничения' }));
+    expect(
+      screen.getByRole('button', { name: 'без ограничения' })
+    ).toHaveAttribute('aria-pressed', 'true');
+
+    await user.type(askField(), 'замки Гродно');
+    await user.click(buildButton());
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect('time_budget_minutes' in body(0)).toBe(false);
+  });
+
+  it('shows the route summary numbers the answer came with', async () => {
+    const { fetchMock } = agentFetch();
+
+    const user = userEvent.setup({ delay: null });
+    render(<Sidebar />);
+
+    await user.type(askField(), 'замки Гродно');
+    await user.click(buildButton());
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+
+    const tile = (label: string) => screen.getByText(label).parentElement;
+    // summary.length_km, summary.time_seconds
+    expect(tile('точек')).toHaveTextContent('2');
+    expect(tile('длина')).toHaveTextContent('1.5 км');
+    expect(tile('мин в пути')).toHaveTextContent('15');
+    // budget.* on the line under the tiles
+    expect(screen.getByText(/в пути ~15 мин/)).toBeInTheDocument();
+    expect(screen.getByText(/осмотр ~1 ч 10 мин/)).toBeInTheDocument();
+    expect(screen.getByText('без лимита')).toBeInTheDocument();
+    // the ask field becomes the refinement input — one field, not two
+    expect(askField()).toHaveAttribute(
+      'placeholder',
+      'Что уточнить? «добавь кофейню»'
+    );
+  });
+
+  it('replaces the stops with skeleton rows while the agent is thinking', async () => {
+    let answer: (value: unknown) => void = () => undefined;
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- the test reads calls[i][1]
+    const fetchMock = vi.fn(async (_url: string, _init: RequestInit) => ({
+      ok: true,
+      json: () =>
+        new Promise((resolve) => {
+          answer = resolve;
+        }),
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const user = userEvent.setup({ delay: null });
+    render(<Sidebar />);
+
+    await user.type(askField(), 'замки Гродно');
+    await user.click(buildButton());
+
+    expect(await screen.findByTestId('stops-skeleton')).toBeInTheDocument();
+    expect(screen.getByTestId('summary-skeleton')).toBeInTheDocument();
+    // the main action says it is working, and cannot be pressed twice
+    expect(
+      screen.getByRole('button', { name: /Строю маршрут/i })
+    ).toBeDisabled();
+
+    answer(AGENT_ANSWER);
+    await waitFor(() =>
+      expect(screen.queryByTestId('stops-skeleton')).toBeNull()
+    );
+  });
+
+  it('lists the stops and the way out of a refinement once a route exists', async () => {
+    const { fetchMock } = agentFetch();
+    mockStoreState.waypoints = [
+      { id: 'me', userInput: 'Моё местоположение', geocodeResults: [{}] },
+      { id: '0', userInput: 'Старый замок', placeId: 11, geocodeResults: [{}] },
+    ];
+    mockStoreState.excludedPlaceIds = [17, 18];
+
+    const user = userEvent.setup({ delay: null });
+    render(<Sidebar />);
+
+    expect(screen.getByTestId('waypoint-list')).toBeInTheDocument();
+    expect(screen.getByTestId('excluded-chip')).toHaveTextContent(
+      'убрано вручную: 2'
+    );
+    // nothing was refined yet, so there is nothing to roll back
+    expect(
+      screen.getByRole('button', { name: /отменить уточнение/i })
+    ).toBeDisabled();
+    expect(
+      screen.getByRole('button', { name: /новый маршрут/i })
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /новый маршрут/i }));
+    expect(mockStoreState.resetRoute).toHaveBeenCalled();
+    // the route is emptied: no agent stop is left on it any more
+    expect(
+      mockStoreState.waypoints.filter((wp) => wp.placeId != null)
+    ).toHaveLength(0);
+
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('switches the sheet between its two snap points', async () => {
+    const user = userEvent.setup({ delay: null });
+    render(<Sidebar />);
+
+    const peek = screen.getByRole('button', { name: 'развернуть панель' });
+    expect(peek).toHaveAttribute('aria-expanded', 'false');
+    await user.click(peek);
+    expect(
+      screen.getByRole('button', { name: 'свернуть панель' })
+    ).toHaveAttribute('aria-expanded', 'true');
   });
 });

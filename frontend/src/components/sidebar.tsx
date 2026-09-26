@@ -3,8 +3,8 @@ import {
   Bike,
   Car,
   ChevronDown,
-  ChevronUp,
   Clock,
+  Compass,
   Footprints,
   History,
   Loader2,
@@ -13,20 +13,21 @@ import {
   Plus,
   RotateCcw,
   Route as RouteIcon,
-  Send,
+  Search,
   Sparkles,
   Trash2,
   Undo2,
   X,
 } from 'lucide-react';
 import { useNavigate } from '@tanstack/react-router';
+import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import {
   Sheet,
   SheetContent,
-  SheetHeader,
+  SheetDescription,
   SheetTitle,
 } from '@/components/ui/sheet';
 import { useCommonStore, type Profile } from '@/stores/common-store';
@@ -40,6 +41,16 @@ import {
 import { useDirectionsQuery } from '@/hooks/use-directions-queries';
 import { GuidePanel, guideRouteKey, type GuideStop } from './guide-panel';
 import { WaypointList } from './waypoint-list';
+import { Chip } from './parts/chip';
+import { Segmented, type SegmentedItem } from './parts/segmented';
+import { StatTile, StatTiles } from './parts/stat-tiles';
+import { StopsSkeleton, SummarySkeleton } from './parts/skeletons';
+import {
+  PANEL_SHEET_CLASS,
+  SHEET_SNAP_CLASS,
+  SheetDragHandle,
+  useSheetSnap,
+} from './parts/sheet-snap';
 import { forward_geocode } from '@/utils/nominatim';
 
 // Same-origin by default: the webapp's nginx proxies /routes/ to the agent
@@ -73,16 +84,16 @@ interface AgentBudget {
   fits: boolean;
 }
 
+/**
+ * Time presets. 0 = «без ограничения»: no `time_budget_minutes` is sent at all
+ * and the agent builds the full route. Anything >= 15 min is a real constraint.
+ */
 const TIME_BUDGET_OPTIONS = [
-  // 0 = the user set no limit: nothing is sent, the agent builds the full route.
-  { value: 0, label: 'без ограничения' },
+  { value: 30, label: '30 мин' },
   { value: 60, label: '1 ч' },
-  { value: 90, label: '1.5 ч' },
   { value: 120, label: '2 ч' },
-  { value: 180, label: '3 ч' },
   { value: 240, label: 'полдня' },
-  { value: 360, label: '6 ч' },
-  { value: 480, label: 'весь день' },
+  { value: 0, label: 'без ограничения' },
 ];
 
 /**
@@ -90,14 +101,9 @@ const TIME_BUDGET_OPTIONS = [
  * agent picks the costing that fits the query (a walk inside a town, a drive
  * across the область). Picking one sends it — transport is a real constraint.
  */
-const TRANSPORT_OPTIONS: Array<{
-  value: '' | Profile;
-  label: string;
-  icon: typeof Footprints;
-  /** costing name the agent understands */
-  costing?: string;
-}> = [
-  { value: '', label: 'как удобно', icon: Sparkles },
+const TRANSPORT_OPTIONS: Array<
+  SegmentedItem<'' | Profile> & { costing?: string }
+> = [
   {
     value: 'pedestrian',
     label: 'пешком',
@@ -106,16 +112,19 @@ const TRANSPORT_OPTIONS: Array<{
   },
   { value: 'bicycle', label: 'велосипед', icon: Bike, costing: 'bicycle' },
   { value: 'car', label: 'машина', icon: Car, costing: 'auto' },
+  { value: '', label: 'как удобно', icon: Sparkles },
 ];
 
-const SUGGESTIONS = [
-  'интересные музеи и галереи',
-  'прогулка по замкам',
-  'костёлы и храмы',
-  'неман и набережная',
-  'дворцы и усадьбы',
-  'история Гродно',
+const MODES: SegmentedItem<'plan' | 'guide'>[] = [
+  { value: 'plan', label: 'Планирование' },
+  { value: 'guide', label: 'Проводник' },
 ];
+
+/** Placeholder of the ask field. Also what the empty state tells the user. */
+const QUERY_PLACEHOLDER = 'Что хотите посмотреть? …';
+
+/** One-tap starters: they fill the ask field, the tourist decides when to go. */
+const HINT_CHIPS = ['замки', 'костёлы', 'монастыри', 'где поесть'];
 
 const fmtMin = (m: number) => {
   const mins = Math.max(0, Math.round(m));
@@ -148,13 +157,16 @@ const meWaypoint = (lat: number, lon: number): Waypoint => {
 };
 
 /**
- * Left sidebar that replaces the upstream RoutePlanner:
- *   1. prompt — textarea + time budget + transport; on submit hits
+ * The planning panel that replaces the upstream RoutePlanner:
+ *   1. ask — the query field, time budget, transport; on submit it hits
  *      /routes/generate and pushes the agent's ordered points into the
  *      directions store (with my own position as the start when known).
- *   2. waypoints — WaypointList (drag/drop, up/down, delete).
+ *   2. waypoints — WaypointList (drag/drop, remove, pin).
  *   3. manual add — small Nominatim lookup → append to the list.
  *   4. history — previous routes, restored with their descriptions.
+ *
+ * Layout follows DESIGN.md: a 380px column on desktop, a bottom sheet with two
+ * snap points under 768px, header and main action outside the scroll area.
  */
 export const Sidebar = () => {
   const panelOpen = useCommonStore((s) => s.directionsPanelOpen);
@@ -199,6 +211,9 @@ export const Sidebar = () => {
   const [summary, setSummary] = useState<{
     stops: number;
     km: number | null;
+    /** summary.time_seconds — the time actually spent on the legs. */
+    travelMinutes: number;
+    /** budget.walk_minutes — the agent's own estimate of the walking time. */
     walkMinutes: number;
     visitMinutes: number;
     budgetMinutes: number | null;
@@ -222,6 +237,7 @@ export const Sidebar = () => {
   const removeFromHistory = useDirectionsStore((s) => s.removeFromHistory);
   const clearHistory = useDirectionsStore((s) => s.clearHistory);
 
+  const { snap, handleProps } = useSheetSnap();
   const taRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -493,13 +509,13 @@ export const Sidebar = () => {
       const visitMins =
         data.budget?.visit_minutes ??
         pts.reduce((s, p) => s + (p.visit_minutes ?? 15), 0);
-      const walkMins =
-        data.budget?.walk_minutes ??
-        Math.round((data.summary?.time_seconds ?? 0) / 60);
+      const travelMins = Math.round((data.summary?.time_seconds ?? 0) / 60);
+      const walkMins = data.budget?.walk_minutes ?? travelMins;
       lastQueryRef.current = q;
       setSummary({
         stops: pts.length,
         km: data.summary?.length_km ?? null,
+        travelMinutes: travelMins,
         walkMinutes: walkMins,
         visitMinutes: visitMins,
         budgetMinutes: data.budget?.budget_minutes ?? null,
@@ -654,6 +670,7 @@ export const Sidebar = () => {
   const stopCount = waypoints.filter(
     (w) => w.id !== ME_WAYPOINT_ID && w.geocodeResults.length > 0
   ).length;
+  const hasRoute = stopCount > 0;
   const geoBadge = useMemo(() => {
     switch (geoState) {
       case 'ok':
@@ -671,457 +688,530 @@ export const Sidebar = () => {
     <Sheet open={panelOpen} modal={false}>
       <SheetContent
         side="left"
-        className="flex w-[380px] flex-col gap-3 overflow-y-auto px-3 py-3 sm:max-w-[unset]"
+        className={cn(PANEL_SHEET_CLASS, SHEET_SNAP_CLASS[snap])}
       >
-        {/* pr-9 keeps the intro text clear of the absolutely-placed close
-            button in the top-right corner. */}
-        <SheetHeader className="space-y-0.5 pr-12">
-          <SheetTitle className="flex items-center gap-2 text-base">
-            <RouteIcon className="h-4 w-4 text-primary" />
-            AI-гид по Гродно
-          </SheetTitle>
-          <p className="text-[11px] text-muted-foreground">
-            {mode === 'plan'
-              ? 'Опиши, что хочется посмотреть — соберу маршрут по реальным дорогам'
-              : 'Веди по маршруту: отмечай пройденные остановки'}
-          </p>
-          <div
-            role="tablist"
-            aria-label="режим"
-            className="mt-1 inline-flex rounded-lg border border-border/60 bg-muted/40 p-0.5"
-          >
-            {(
-              [
-                { value: 'plan', label: 'Планирование' },
-                { value: 'guide', label: 'Проводник' },
-              ] as const
-            ).map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                role="tab"
-                aria-selected={mode === option.value}
-                data-testid={`mode-${option.value}`}
-                onClick={() => setMode(option.value)}
-                className={[
-                  'rounded-md px-2.5 py-1 text-[11px] transition-colors',
-                  mode === option.value
-                    ? 'bg-background font-medium text-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground',
-                ].join(' ')}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            onClick={toggle}
-            className="absolute right-3 top-3"
-            aria-label="закрыть"
-            title="закрыть панель"
-          >
-            <ChevronUp className="size-4" />
-          </Button>
-        </SheetHeader>
-
-        {mode === 'guide' && (
-          // key: a rebuilt route remounts the guide, so the walk restarts
-          // instead of carrying progress from the route that no longer exists
-          <GuidePanel key={guideRouteKey(guideStops)} stops={guideStops} />
-        )}
-
-        {mode === 'plan' && (
-          <>
-            {/* === Prompt === */}
-            <section className="rounded-xl border border-border/60 bg-card p-3 shadow-sm">
-              <div className="flex items-end gap-2">
-                <Textarea
-                  ref={taRef}
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
-                      submitPrompt();
-                    }
-                  }}
-                  placeholder="прогулка по замкам Гродно"
-                  className="min-h-9 flex-1 resize-none border-0 bg-transparent px-0 text-sm shadow-none focus-visible:ring-0"
-                  rows={1}
-                  disabled={busy}
-                />
-                <Button
-                  type="button"
-                  onClick={() => submitPrompt()}
-                  disabled={busy || !query.trim()}
-                  size="icon"
-                  className="h-9 w-9 shrink-0"
-                  aria-label="построить маршрут"
-                >
-                  {busy ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Send className="h-4 w-4" />
-                  )}
-                </Button>
-              </div>
-
-              {/* Constraints: time + transport. Both are the user's call — nothing
-              is invented for them. */}
-              <div className="mt-2.5 flex flex-col gap-2 text-xs">
-                <label className="flex items-center justify-between gap-2 text-muted-foreground">
-                  <span className="flex items-center gap-1">
-                    <Clock className="h-3 w-3" /> есть время
-                  </span>
-                  <select
-                    value={timeBudget}
-                    onChange={(e) => setTimeBudget(Number(e.target.value))}
-                    disabled={busy}
-                    className="h-8 rounded-md border border-border/60 bg-background px-1.5 text-xs font-medium text-foreground"
-                  >
-                    {TIME_BUDGET_OPTIONS.map((o) => (
-                      <option key={o.value} value={o.value}>
-                        {o.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <div className="flex flex-col gap-1">
-                  <span className="flex items-center gap-1 text-muted-foreground">
-                    <Car className="h-3 w-3" /> на чём
-                  </span>
-                  <div className="flex gap-1">
-                    {TRANSPORT_OPTIONS.map((o) => {
-                      const Icon = o.icon;
-                      const active = transport === o.value;
-                      return (
-                        <button
-                          key={o.value || 'any'}
-                          type="button"
-                          onClick={() => setTransportEverywhere(o.value)}
-                          disabled={busy}
-                          aria-pressed={active}
-                          title={o.label}
-                          data-testid={`transport-${o.value || 'any'}`}
-                          className={[
-                            'flex flex-1 items-center justify-center gap-1 rounded-md border px-1.5 py-1.5 text-[11px] transition-colors disabled:opacity-60',
-                            active
-                              ? 'border-primary/50 bg-primary/10 font-medium text-primary'
-                              : 'border-border/60 bg-background text-muted-foreground hover:border-primary/40 hover:bg-primary/5 hover:text-foreground',
-                          ].join(' ')}
-                        >
-                          <Icon className="h-3.5 w-3.5 shrink-0" />
-                          <span className="truncate">{o.label}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-
+        <div className="flex h-full min-h-0 flex-col">
+          {/* ── Header: mode switch, title, quiet close row. All three sit in
+              normal flow, so nothing can ever slide under the close button. ── */}
+          <header className="shrink-0 border-b border-border px-4 pb-2.5">
+            <SheetDragHandle snap={snap} handleProps={handleProps} />
+            <div className="flex items-center gap-2">
+              <Segmented
+                items={MODES}
+                value={mode}
+                onChange={setMode}
+                label="режим"
+                className="min-w-0 flex-1"
+                testId={(value) => `mode-${value}`}
+              />
               <button
                 type="button"
-                onClick={() => void locateMe()}
-                disabled={geoState === 'locating'}
-                className="mt-2 flex w-full items-center gap-1.5 rounded-md border border-border/40 bg-background/60 px-2 py-1.5 text-left text-[11px] transition-colors hover:border-primary/40 hover:bg-primary/5 disabled:opacity-60"
-                title="переопределить, откуда начинается маршрут"
+                onClick={toggle}
+                aria-label="закрыть панель"
+                title="закрыть панель"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
               >
-                <LocateFixed
-                  className={`h-3.5 w-3.5 shrink-0 ${
-                    geoState === 'ok'
-                      ? 'text-emerald-600'
-                      : 'text-muted-foreground'
-                  }`}
-                />
-                <span className={geoBadge.tone}>{geoBadge.text}</span>
-                <span className="ml-auto text-muted-foreground">
-                  {geoState === 'locating' ? '…' : 'обновить'}
-                </span>
+                <X className="h-4 w-4" aria-hidden="true" />
               </button>
-
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                {SUGGESTIONS.map((s) => (
-                  <button
-                    key={s}
-                    type="button"
-                    onClick={() => submitPrompt(s)}
-                    disabled={busy}
-                    className="rounded-full border border-border/60 bg-background px-2.5 py-0.5 text-xs text-muted-foreground transition-colors hover:border-primary/40 hover:bg-primary/5 hover:text-foreground disabled:opacity-50"
-                  >
-                    {s}
-                  </button>
-                ))}
+            </div>
+            <div className="mt-2.5 flex min-w-0 items-center gap-2">
+              <RouteIcon
+                className="h-4 w-4 shrink-0 text-primary"
+                aria-hidden="true"
+              />
+              <div className="min-w-0">
+                <SheetTitle className="truncate text-[15px]">
+                  AI-гид по Гродно
+                </SheetTitle>
+                {/* Radix wants a description for the dialog; the visible line
+                    below is the same sentence, so keep it out of the a11y tree. */}
+                <SheetDescription className="sr-only">
+                  Планировщик маршрутов по Гродно и области
+                </SheetDescription>
+                <p className="truncate text-[12px] text-muted-foreground">
+                  {mode === 'plan'
+                    ? 'Опишите, что хочется посмотреть — соберу маршрут по реальным дорогам'
+                    : 'Ведите по маршруту: отмечайте пройденные остановки'}
+                </p>
               </div>
-            </section>
+            </div>
+          </header>
 
-            {/* === Waypoints === */}
-            <section className="rounded-xl border border-border/60 bg-card p-3 shadow-sm">
-              <div className="mb-2 flex items-center justify-between text-xs uppercase tracking-wide text-muted-foreground">
-                <span className="flex items-center gap-1.5">
-                  <MapPin className="h-3.5 w-3.5" />
-                  Маршрут — {stopCount}{' '}
-                  {stopCount === 1
-                    ? 'точка'
-                    : stopCount < 5
-                      ? 'точки'
-                      : 'точек'}
-                </span>
-                <button
-                  type="button"
-                  onClick={reset}
-                  className="inline-flex items-center gap-1 text-xs normal-case text-muted-foreground hover:text-foreground"
-                  title="очистить маршрут"
-                >
-                  <RotateCcw className="h-3 w-3" />
-                  сброс
-                </button>
-              </div>
-
-              {summary && (
-                <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg bg-primary/5 px-2.5 py-2 text-[11px]">
-                  {summary.km != null && (
-                    <span className="flex items-center gap-1 font-medium text-foreground">
-                      <RouteIcon className="h-3 w-3 text-primary" />
-                      {fmtKm(summary.km)}
-                    </span>
-                  )}
-                  <span className="flex items-center gap-1 text-muted-foreground">
-                    <Clock className="h-3 w-3" />в пути ~
-                    {fmtMin(summary.walkMinutes)}
-                  </span>
-                  <span className="text-muted-foreground">
-                    осмотр ~{fmtMin(summary.visitMinutes)}
-                  </span>
-                  {!summary.fits && (
-                    <span className="rounded-full bg-amber-500/15 px-1.5 py-0.5 font-medium text-amber-700">
-                      не влезло в лимит
-                    </span>
-                  )}
-                  {summary.budgetMinutes ? (
-                    <span className="text-muted-foreground">
-                      лимит {fmtMin(summary.budgetMinutes)}
-                    </span>
-                  ) : (
-                    <span className="text-muted-foreground">без лимита</span>
-                  )}
-                </div>
-              )}
-
-              {refinementLog.length > 0 && (
-                <div className="mb-2 space-y-1.5">
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    {refinementLog.map((entry) => (
-                      <span
-                        key={entry.id}
-                        className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground"
-                        title={
-                          [
-                            entry.added.length
-                              ? `добавил: ${entry.added.join(', ')}`
-                              : '',
-                            entry.removed.length
-                              ? `убрал: ${entry.removed.join(', ')}`
-                              : '',
-                          ]
-                            .filter(Boolean)
-                            .join(' · ') || 'без изменений'
+          {/* ── Body: the only part that scrolls. ── */}
+          <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 py-3">
+            {mode === 'guide' ? (
+              // key: a rebuilt route remounts the guide, so the walk restarts
+              // instead of carrying progress from the route that no longer exists
+              <GuidePanel key={guideRouteKey(guideStops)} stops={guideStops} />
+            ) : (
+              <>
+                {/* === Ask === */}
+                <section className="flex flex-col gap-2">
+                  <div className="rounded-2xl border border-border bg-card px-3 py-2.5 shadow-[0_1px_2px_rgba(0,0,0,0.06)] transition-colors focus-within:border-ring">
+                    <div className="flex items-start gap-2">
+                      <Search
+                        className="mt-1 h-4 w-4 shrink-0 text-muted-foreground"
+                        aria-hidden="true"
+                      />
+                      <Textarea
+                        ref={taRef}
+                        value={query}
+                        onChange={(e) => setQuery(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && !e.shiftKey) {
+                            e.preventDefault();
+                            submitPrompt();
+                          }
+                        }}
+                        placeholder={
+                          hasRoute
+                            ? 'Что уточнить? «добавь кофейню»'
+                            : QUERY_PLACEHOLDER
                         }
+                        aria-label="что хотите посмотреть"
+                        className="min-h-9 flex-1 resize-none border-0 bg-transparent p-0 text-[15px] leading-[1.45] shadow-none focus-visible:ring-0"
+                        rows={1}
+                        disabled={busy}
+                      />
+                    </div>
+                  </div>
+                  <div
+                    role="group"
+                    aria-label="подсказки"
+                    className="flex flex-wrap gap-1.5"
+                  >
+                    {HINT_CHIPS.map((hint) => (
+                      <Chip
+                        key={hint}
+                        onClick={() => {
+                          setQuery(hint);
+                          taRef.current?.focus();
+                        }}
+                        data-testid={`hint-${hint}`}
                       >
-                        {entry.instruction}
-                      </span>
+                        {hint}
+                      </Chip>
                     ))}
-                    {excludedPlaceIds.length > 0 && (
-                      <span className="rounded-full bg-destructive/10 px-2 py-0.5 text-[11px] text-destructive">
-                        убрано вручную: {excludedPlaceIds.length}
-                      </span>
+                  </div>
+                </section>
+
+                {/* === Constraints: time + transport. Both are the user's call —
+                    nothing is invented for them. === */}
+                <section className="flex flex-col gap-2.5">
+                  <div className="flex flex-col gap-1.5">
+                    <span
+                      id="time-budget-label"
+                      className="text-[12px] text-muted-foreground"
+                    >
+                      сколько есть времени
+                    </span>
+                    <div
+                      role="group"
+                      aria-labelledby="time-budget-label"
+                      className="flex flex-wrap gap-1.5"
+                    >
+                      {TIME_BUDGET_OPTIONS.map((option) => (
+                        <Chip
+                          key={option.value}
+                          selected={timeBudget === option.value}
+                          onClick={() => setTimeBudget(option.value)}
+                          data-testid={`budget-${option.value}`}
+                        >
+                          {option.label}
+                        </Chip>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <span className="text-[12px] text-muted-foreground">
+                      на чём
+                    </span>
+                    <Segmented
+                      items={TRANSPORT_OPTIONS}
+                      value={transport}
+                      onChange={setTransportEverywhere}
+                      label="на чём"
+                      stacked
+                      disabled={busy}
+                      testId={(value) => `transport-${value || 'any'}`}
+                    />
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => void locateMe()}
+                    disabled={geoState === 'locating'}
+                    className="flex w-full items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-[12px] transition-colors hover:bg-muted disabled:opacity-60"
+                    title="переопределить, откуда начинается маршрут"
+                  >
+                    <LocateFixed
+                      className={
+                        geoState === 'ok'
+                          ? 'h-3.5 w-3.5 shrink-0 text-emerald-600'
+                          : 'h-3.5 w-3.5 shrink-0 text-muted-foreground'
+                      }
+                    />
+                    <span className={`truncate ${geoBadge.tone}`}>
+                      {geoBadge.text}
+                    </span>
+                    <span className="ml-auto shrink-0 text-muted-foreground">
+                      {geoState === 'locating' ? '…' : 'обновить'}
+                    </span>
+                  </button>
+                </section>
+
+                {/* === Route === */}
+                <section className="flex flex-col gap-2.5">
+                  {hasRoute && (
+                    <div className="flex items-center justify-between gap-2">
+                      <h2 className="text-[13px] font-semibold">Маршрут</h2>
+                      <button
+                        type="button"
+                        onClick={reset}
+                        className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-[12px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                        title="очистить маршрут"
+                      >
+                        <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
+                        сброс
+                      </button>
+                    </div>
+                  )}
+
+                  {summary ? (
+                    <>
+                      <StatTiles>
+                        <StatTile value={summary.stops} label="точек" />
+                        <StatTile
+                          value={summary.km != null ? fmtKm(summary.km) : '—'}
+                          label="длина"
+                        />
+                        <StatTile
+                          value={summary.travelMinutes}
+                          label="мин в пути"
+                        />
+                      </StatTiles>
+                      <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-muted-foreground">
+                        <span className="inline-flex items-center gap-1">
+                          <Clock className="h-3.5 w-3.5" aria-hidden="true" />
+                          {`в пути ~${fmtMin(summary.walkMinutes)}`}
+                        </span>
+                        <span>{`осмотр ~${fmtMin(summary.visitMinutes)}`}</span>
+                        <span>
+                          {summary.budgetMinutes
+                            ? `лимит ${fmtMin(summary.budgetMinutes)}`
+                            : 'без лимита'}
+                        </span>
+                        {!summary.fits && (
+                          <span className="rounded-full bg-amber-500/15 px-2 py-0.5 font-medium text-amber-700">
+                            не влезло в лимит
+                          </span>
+                        )}
+                      </p>
+                    </>
+                  ) : (
+                    busy && <SummarySkeleton />
+                  )}
+
+                  {busy ? (
+                    <StopsSkeleton />
+                  ) : hasRoute ? (
+                    <WaypointList onChanged={() => setStatus(null)} />
+                  ) : (
+                    /* Never a bare blank panel: say what to do instead. The hint
+                       chips under the ask field are the empty state's chips. */
+                    <div
+                      data-testid="plan-empty"
+                      className="flex flex-col items-center gap-2 rounded-2xl border border-border bg-card px-4 py-7 text-center"
+                    >
+                      <Compass
+                        className="h-7 w-7 text-muted-foreground"
+                        aria-hidden="true"
+                      />
+                      <p className="text-[13px] text-muted-foreground">
+                        Здесь появятся остановки маршрута — или соберите его из
+                        точек вручную
+                      </p>
+                    </div>
+                  )}
+
+                  {status && (
+                    <div
+                      className={[
+                        'rounded-xl px-3 py-2 text-[12px]',
+                        status.kind === 'ok'
+                          ? 'bg-primary/10 text-primary'
+                          : 'bg-destructive/10 text-destructive',
+                      ].join(' ')}
+                    >
+                      {status.text}
+                    </div>
+                  )}
+
+                  {/* What the refinement turns changed, and the two ways out of
+                      them. Stays visible for the whole route, not just while
+                      there is a log: the manual deletions outlive it. */}
+                  {hasRoute && (
+                    <div className="flex flex-col gap-2 rounded-2xl border border-border bg-card p-3">
+                      {(refinementLog.length > 0 ||
+                        excludedPlaceIds.length > 0) && (
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {refinementLog.map((entry) => (
+                            <span
+                              key={entry.id}
+                              className="inline-flex flex-wrap items-center gap-1"
+                            >
+                              <span
+                                title={
+                                  [
+                                    entry.added.length
+                                      ? `добавил: ${entry.added.join(', ')}`
+                                      : '',
+                                    entry.removed.length
+                                      ? `убрал: ${entry.removed.join(', ')}`
+                                      : '',
+                                  ]
+                                    .filter(Boolean)
+                                    .join(' · ') || 'без изменений'
+                                }
+                                className="rounded-full border border-border bg-muted px-2.5 py-0.5 text-[12px] text-muted-foreground"
+                              >
+                                {entry.instruction}
+                              </span>
+                              {entry.added.length > 0 && (
+                                <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[12px] text-primary">
+                                  добавлено {entry.added.length}
+                                </span>
+                              )}
+                              {entry.removed.length > 0 && (
+                                <span className="rounded-full bg-muted px-2 py-0.5 text-[12px] text-muted-foreground">
+                                  убрано {entry.removed.length}
+                                </span>
+                              )}
+                              {entry.added.length === 0 &&
+                                entry.removed.length === 0 && (
+                                  <span className="rounded-full bg-muted px-2 py-0.5 text-[12px] text-muted-foreground">
+                                    без изменений
+                                  </span>
+                                )}
+                            </span>
+                          ))}
+                          {excludedPlaceIds.length > 0 && (
+                            <span
+                              data-testid="excluded-chip"
+                              className="rounded-full bg-destructive/10 px-2.5 py-0.5 text-[12px] text-destructive"
+                            >
+                              убрано вручную: {excludedPlaceIds.length}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                      <div className="flex items-center gap-2">
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          onClick={() => {
+                            undoRefinement();
+                            setStatus({
+                              kind: 'ok',
+                              text: 'вернул предыдущий маршрут',
+                            });
+                            refetchDirections();
+                          }}
+                          disabled={routeSnapshots.length === 0}
+                          className="h-9 rounded-full px-3 text-[13px] disabled:opacity-40"
+                        >
+                          <Undo2 className="h-3.5 w-3.5" aria-hidden="true" />
+                          отменить уточнение
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          onClick={() => {
+                            resetRoute();
+                            reset();
+                          }}
+                          className="h-9 rounded-full px-3 text-[13px] font-normal text-muted-foreground hover:text-foreground"
+                        >
+                          <RotateCcw
+                            className="h-3.5 w-3.5"
+                            aria-hidden="true"
+                          />
+                          новый маршрут
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </section>
+
+                {/* === Manual add === */}
+                <section className="flex flex-col gap-2 rounded-2xl border border-border bg-card p-3 shadow-[0_1px_2px_rgba(0,0,0,0.06)]">
+                  <h2 className="text-[13px] font-semibold">Добавить точку</h2>
+                  <div className="flex gap-2">
+                    <Input
+                      value={manualQuery}
+                      onChange={(e) => setManualQuery(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          manualAdd();
+                        }
+                      }}
+                      placeholder="Каложская церковь, Гродно"
+                      aria-label="добавить точку в маршрут"
+                      className="h-10 flex-1 text-[14px]"
+                      disabled={manualBusy}
+                    />
+                    <Button
+                      type="button"
+                      onClick={manualAdd}
+                      disabled={manualBusy || !manualQuery.trim()}
+                      size="icon"
+                      className="h-10 w-10 shrink-0 rounded-full"
+                      aria-label="найти и добавить точку"
+                    >
+                      {manualBusy ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Plus className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </div>
+                  {manualErr && (
+                    <p className="text-[12px] text-destructive">{manualErr}</p>
+                  )}
+                  <button
+                    type="button"
+                    onClick={addEmptyWaypointToEnd}
+                    className="inline-flex items-center gap-1 self-start rounded-full px-2 py-1 text-[12px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  >
+                    <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />{' '}
+                    пустая точка (выбрать кликом по карте)
+                  </button>
+                </section>
+
+                {/* === Route History === */}
+                <section className="flex flex-col gap-2 rounded-2xl border border-border bg-card p-3 shadow-[0_1px_2px_rgba(0,0,0,0.06)]">
+                  <div className="flex items-center justify-between gap-2">
+                    <h2 className="flex items-center gap-1.5 text-[13px] font-semibold">
+                      <History
+                        className="h-3.5 w-3.5 text-muted-foreground"
+                        aria-hidden="true"
+                      />
+                      История
+                      {routeHistory.length > 0 && (
+                        <span className="rounded-full bg-muted px-1.5 py-0.5 text-[11px] font-normal text-muted-foreground">
+                          {routeHistory.length}
+                        </span>
+                      )}
+                    </h2>
+                    {routeHistory.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={clearHistory}
+                        className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-[12px] text-muted-foreground transition-colors hover:bg-muted hover:text-destructive"
+                        title="очистить историю"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                        очистить
+                      </button>
                     )}
                   </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        undoRefinement();
-                        setStatus({
-                          kind: 'ok',
-                          text: 'вернул предыдущий маршрут',
-                        });
-                        refetchDirections();
-                      }}
-                      disabled={routeSnapshots.length === 0}
-                      className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-0.5 text-[11px] text-muted-foreground hover:text-foreground disabled:opacity-40"
-                    >
-                      <Undo2 className="h-3 w-3" />
-                      отменить уточнение
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        resetRoute();
-                        reset();
-                      }}
-                      className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-0.5 text-[11px] text-muted-foreground hover:text-foreground"
-                    >
-                      <RotateCcw className="h-3 w-3" />
-                      новый маршрут
-                    </button>
-                  </div>
-                </div>
-              )}
 
-              <WaypointList onChanged={() => setStatus(null)} />
-              {status && (
-                <div
-                  className={[
-                    'mt-2 rounded-md px-2 py-1 text-xs',
-                    status.kind === 'ok'
-                      ? 'bg-primary/10 text-primary'
-                      : 'bg-destructive/10 text-destructive',
-                  ].join(' ')}
-                >
-                  {status.text}
-                </div>
-              )}
-            </section>
-
-            {/* === Manual add === */}
-            <section className="rounded-xl border border-dashed border-border/60 bg-card/50 p-3">
-              <div className="mb-2 text-xs uppercase tracking-wide text-muted-foreground">
-                Добавить точку
-              </div>
-              <div className="flex gap-2">
-                <Input
-                  value={manualQuery}
-                  onChange={(e) => setManualQuery(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      manualAdd();
-                    }
-                  }}
-                  placeholder="Каложская церковь, Гродно"
-                  className="h-9 flex-1 text-sm"
-                  disabled={manualBusy}
-                />
-                <Button
-                  type="button"
-                  onClick={manualAdd}
-                  disabled={manualBusy || !manualQuery.trim()}
-                  size="icon"
-                  className="h-9 w-9"
-                  aria-label="добавить точку"
-                >
-                  {manualBusy ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
+                  {routeHistory.length === 0 ? (
+                    <p className="text-[12px] text-muted-foreground">
+                      Построенные маршруты появятся здесь
+                    </p>
                   ) : (
-                    <Plus className="h-4 w-4" />
+                    <div className="flex flex-col gap-1.5">
+                      {routeHistory.map((entry) => (
+                        <HistoryItem
+                          key={entry.id}
+                          entry={entry}
+                          onLoad={() => {
+                            const restored: Waypoint[] = entry.places.map(
+                              (p, i) => ({
+                                id: i.toString(),
+                                userInput: p.name,
+                                placeId: p.id,
+                                geocodeResults: [
+                                  {
+                                    title: p.name,
+                                    description: p.category ?? undefined,
+                                    selected: true,
+                                    displaylnglat: [p.lon, p.lat] as [
+                                      number,
+                                      number,
+                                    ],
+                                    sourcelnglat: [p.lon, p.lat] as [
+                                      number,
+                                      number,
+                                    ],
+                                    key: i,
+                                    addressindex: 0,
+                                  },
+                                ],
+                              })
+                            );
+                            setWaypoint(
+                              me
+                                ? [meWaypoint(me.lat, me.lon), ...restored]
+                                : restored
+                            );
+                            setPlaceDetails(
+                              Object.fromEntries(
+                                entry.places.map((p) => [
+                                  p.id,
+                                  {
+                                    name: p.name,
+                                    category: p.category,
+                                    blurb: p.blurb ?? null,
+                                    funFact: p.funFact ?? null,
+                                    funFacts: p.funFacts ?? [],
+                                    links: p.links ?? [],
+                                    visitMinutes: p.visitMinutes ?? null,
+                                    openingHours: p.openingHours ?? null,
+                                    ticketPrice: p.ticketPrice ?? null,
+                                    town: p.town ?? null,
+                                    district: p.district ?? null,
+                                  } satisfies PlaceDetails,
+                                ])
+                              )
+                            );
+                            setSummary(null);
+                            refetchDirections();
+                          }}
+                          onRemove={() => removeFromHistory(entry.id)}
+                        />
+                      ))}
+                    </div>
                   )}
-                </Button>
-              </div>
-              {manualErr && (
-                <div className="mt-1.5 text-xs text-destructive">
-                  {manualErr}
-                </div>
-              )}
-              <button
-                type="button"
-                onClick={addEmptyWaypointToEnd}
-                className="mt-2 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-              >
-                <ChevronDown className="h-3 w-3" /> пустая точка (выбрать кликом
-                по карте)
-              </button>
-            </section>
-          </>
-        )}
-
-        {/* === Route History === */}
-        <section className="rounded-xl border border-border/60 bg-card p-3 shadow-sm">
-          <div className="mb-2 flex items-center justify-between">
-            <div className="flex items-center gap-1.5 text-xs uppercase tracking-wide text-muted-foreground">
-              <History className="h-3.5 w-3.5" />
-              История
-              {routeHistory.length > 0 && (
-                <span className="ml-1 rounded-full bg-muted px-1.5 py-0.5 text-[10px]">
-                  {routeHistory.length}
-                </span>
-              )}
-            </div>
-            {routeHistory.length > 0 && (
-              <button
-                type="button"
-                onClick={clearHistory}
-                className="inline-flex items-center gap-1 text-[10px] text-muted-foreground hover:text-destructive"
-                title="очистить историю"
-              >
-                <Trash2 className="h-3 w-3" />
-                очистить
-              </button>
+                </section>
+              </>
             )}
           </div>
 
-          {routeHistory.length === 0 ? (
-            <p className="text-xs text-muted-foreground/60">
-              Построенные маршруты появятся здесь
-            </p>
-          ) : (
-            <div className="flex flex-col gap-1.5">
-              {routeHistory.map((entry) => (
-                <HistoryItem
-                  key={entry.id}
-                  entry={entry}
-                  onLoad={() => {
-                    const restored: Waypoint[] = entry.places.map((p, i) => ({
-                      id: i.toString(),
-                      userInput: p.name,
-                      placeId: p.id,
-                      geocodeResults: [
-                        {
-                          title: p.name,
-                          description: p.category ?? undefined,
-                          selected: true,
-                          displaylnglat: [p.lon, p.lat] as [number, number],
-                          sourcelnglat: [p.lon, p.lat] as [number, number],
-                          key: i,
-                          addressindex: 0,
-                        },
-                      ],
-                    }));
-                    setWaypoint(
-                      me ? [meWaypoint(me.lat, me.lon), ...restored] : restored
-                    );
-                    setPlaceDetails(
-                      Object.fromEntries(
-                        entry.places.map((p) => [
-                          p.id,
-                          {
-                            name: p.name,
-                            category: p.category,
-                            blurb: p.blurb ?? null,
-                            funFact: p.funFact ?? null,
-                            funFacts: p.funFacts ?? [],
-                            links: p.links ?? [],
-                            visitMinutes: p.visitMinutes ?? null,
-                            openingHours: p.openingHours ?? null,
-                            ticketPrice: p.ticketPrice ?? null,
-                            town: p.town ?? null,
-                            district: p.district ?? null,
-                          } satisfies PlaceDetails,
-                        ])
-                      )
-                    );
-                    setSummary(null);
-                    refetchDirections();
-                  }}
-                  onRemove={() => removeFromHistory(entry.id)}
-                />
-              ))}
-            </div>
+          {/* ── Sticky footer: the one action the panel exists for. Outside the
+              scroll area, so it is reachable at either snap point. ── */}
+          {mode === 'plan' && (
+            <footer className="shrink-0 border-t border-border bg-background px-4 py-3">
+              <Button
+                type="button"
+                onClick={() => submitPrompt()}
+                disabled={busy || !query.trim()}
+                className="h-12 w-full rounded-xl bg-primary text-[15px] font-semibold text-primary-foreground transition hover:bg-primary hover:brightness-[0.97] active:scale-[0.99] motion-reduce:active:scale-100 disabled:opacity-40"
+              >
+                {busy && (
+                  <Loader2
+                    className="h-4 w-4 animate-spin"
+                    aria-hidden="true"
+                  />
+                )}
+                {busy ? 'Строю маршрут…' : 'Построить маршрут'}
+              </Button>
+            </footer>
           )}
-        </section>
+        </div>
       </SheetContent>
     </Sheet>
   );
@@ -1138,12 +1228,12 @@ const HistoryItem = ({ entry, onLoad, onRemove }: HistoryItemProps) => {
   const [expanded, setExpanded] = useState(false);
 
   return (
-    <div className="group rounded-lg border border-border/40 bg-background/50 p-2 text-xs">
+    <div className="rounded-xl border border-border p-2.5 text-[13px]">
       <div className="flex items-center justify-between gap-2">
         <button
           type="button"
           onClick={onLoad}
-          className="flex-1 truncate text-left font-medium hover:text-primary"
+          className="min-w-0 flex-1 truncate text-left font-medium transition-colors hover:text-primary"
           title={entry.query}
         >
           {entry.query.length > 35
@@ -1151,8 +1241,8 @@ const HistoryItem = ({ entry, onLoad, onRemove }: HistoryItemProps) => {
             : entry.query}
         </button>
         <div className="flex shrink-0 items-center gap-1">
-          <span className="flex items-center gap-0.5 text-muted-foreground">
-            <Clock className="h-3 w-3" />
+          <span className="flex items-center gap-0.5 text-[12px] text-muted-foreground">
+            <Clock className="h-3.5 w-3.5" aria-hidden="true" />
             {entry.timeBudget <= 0 ? 'без лимита' : fmtMin(entry.timeBudget)}
           </span>
           <button
@@ -1161,38 +1251,42 @@ const HistoryItem = ({ entry, onLoad, onRemove }: HistoryItemProps) => {
               e.stopPropagation();
               onRemove();
             }}
-            className="opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
+            className="flex h-6 w-6 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-destructive"
             title="удалить"
+            aria-label="удалить из истории"
           >
-            <X className="h-3 w-3" />
+            <X className="h-3.5 w-3.5" aria-hidden="true" />
           </button>
         </div>
       </div>
       <button
         type="button"
         onClick={() => setExpanded(!expanded)}
-        className="mt-1 flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground"
+        className="mt-1 inline-flex items-center gap-1 text-[12px] text-muted-foreground transition-colors hover:text-foreground"
       >
-        <MapPin className="h-3 w-3" />
+        <MapPin className="h-3.5 w-3.5" aria-hidden="true" />
         {entry.places.length} мест
         <ChevronDown
-          className={`h-3 w-3 transition-transform ${expanded ? 'rotate-180' : ''}`}
+          className={`h-3.5 w-3.5 transition-transform ${
+            expanded ? 'rotate-180' : ''
+          }`}
+          aria-hidden="true"
         />
       </button>
       {expanded && (
-        <div className="mt-1.5 flex flex-col gap-0.5 pl-4">
+        <ol className="mt-1.5 flex flex-col gap-0.5 pl-4">
           {entry.places.map((p, i) => (
-            <div
+            <li
               key={p.id}
-              className="flex items-center gap-1.5 text-[11px] text-muted-foreground"
+              className="flex items-center gap-1.5 text-[12px] text-muted-foreground"
             >
-              <span className="h-4 w-4 rounded-full bg-primary/10 text-center text-[9px] font-medium leading-4 text-primary">
+              <span className="h-4 w-4 rounded-full bg-muted text-center text-[11px] font-semibold leading-4 text-foreground">
                 {i + 1}
               </span>
               <span className="truncate">{p.name}</span>
-            </div>
+            </li>
           ))}
-        </div>
+        </ol>
       )}
     </div>
   );

@@ -1,0 +1,91 @@
+{
+  "name": "Гродно: Советская + уточнение «добавь кофейню и туалет»",
+  "source": "ru.wikipedia (Улица Советская (Гродно) / Аптека-музей) + OSM",
+  "query_ru": "Гродно, улица Советская и Городница, 2 часа",
+  "budget_minutes": 120,
+  "est_walk_minutes": 25,
+  "benchmark_meta": {
+    "license": "CC BY-SA 4.0 (ru.wikipedia.org) + ODbL 1.0 (openstreetmap.org)",
+    "retrieved_at": "2026-09-26T00:00:00Z",
+    "coords_source": "db_row"
+  },
+  "case_meta": {
+    "kind": "refine",
+    "n_stops": 4
+  },
+  "refinement": {
+    "instruction": "добавь кофейню и туалет",
+    "must_keep_place_ids": [
+      64,
+      59,
+      55,
+      52
+    ],
+    "must_keep_names": [
+      "Улица Советская (старый город)",
+      "Аптека-музей на Советской",
+      "Ансамбль Городницы (резиденция Тызенгауза)",
+      "Фарный костёл Святого Франциска Ксаверия"
+    ],
+    "expect_added_categories": [
+      "кафе",
+      "туалет"
+    ],
+    "expect_removed_place_ids": [],
+    "convenience_radius_m": 500
+  },
+  "stops": [
+    {
+      "name": "Улица Советская (старый город)",
+      "place_id": 64,
+      "lat": 53.6798,
+      "lon": 23.8279,
+      "grade": "must-see",
+      "source_urls": [
+        "https://ru.wikipedia.org/wiki/Улица_Советская_(Гродно)",
+        "https://www.openstreetmap.org/node/2788680554"
+      ],
+      "visit_minutes": 40,
+      "grade_reason": "назван в статье ru.wikipedia и в объекте OSM (2 независимых источника)"
+    },
+    {
+      "name": "Аптека-музей на Советской",
+      "place_id": 59,
+      "lat": 53.6789,
+      "lon": 23.8273,
+      "grade": "must-see",
+      "source_urls": [
+        "https://ru.wikipedia.org/wiki/Аптека-музей",
+        "https://www.openstreetmap.org/node/320409653"
+      ],
+      "visit_minutes": 30,
+      "grade_reason": "назван в статье ru.wikipedia и в объекте OSM (2 независимых источника)"
+    },
+    {
+      "name": "Ансамбль Городницы (резиденция Тызенгауза)",
+      "place_id": 55,
+      "lat": 53.6849,
+      "lon": 23.831,
+      "grade": "must-see",
+      "source_urls": [
+        "https://ru.wikipedia.org/wiki/Городница_(Гродно)",
+        "https://www.openstreetmap.org/way/29125034"
+      ],
+      "visit_minutes": 45,
+      "grade_reason": "назван в статье ru.wikipedia и в объекте OSM (2 независимых источника)"
+    },
+    {
+      "name": "Фарный костёл Святого Франциска Ксаверия",
+      "place_id": 52,
+      "lat": 53.6787,
+      "lon": 23.8279,
+      "grade": "nice-to-have",
+      "source_urls": [
+        "https://ru.wikipedia.org/wiki/Фарный_костёл_Святого_Франциска_Ксаверия",
+        "https://www.openstreetmap.org/way/29125106"
+      ],
+      "visit_minutes": 30,
+      "grade_reason": "назван в одном источнике"
+    }
+  ]
+}

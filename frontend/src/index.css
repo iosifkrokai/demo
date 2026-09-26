@@ -8,6 +8,9 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+  /* DESIGN.md: "rounded-2xl -> 24px". Tailwind's default --radius-2xl is 1rem
+     (16px), which would collapse 2xl onto the 16px base, so set it explicitly. */
+  --radius-2xl: calc(var(--radius) + 8px);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -42,72 +45,82 @@
 }
 
 :root {
-  --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.129 0.042 264.695);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.129 0.042 264.695);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.129 0.042 264.695);
-  --primary: oklch(0.208 0.042 265.755);
-  --primary-foreground: oklch(0.984 0.003 247.858);
-  --secondary: oklch(0.968 0.007 247.896);
-  --secondary-foreground: oklch(0.208 0.042 265.755);
-  --muted: oklch(0.968 0.007 247.896);
-  --muted-foreground: oklch(0.554 0.046 257.417);
-  --accent: oklch(0.968 0.007 247.896);
-  --accent-foreground: oklch(0.208 0.042 265.755);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.929 0.013 255.508);
-  --input: oklch(0.929 0.013 255.508);
-  --ring: oklch(0.704 0.04 256.788);
+  /* DESIGN.md — warm, light, generous. 16px base radius. */
+  --radius: 1rem;
+  --background: #ffffff;
+  --foreground: #222222;
+  --card: #ffffff;
+  --card-foreground: #222222;
+  --popover: #ffffff;
+  --popover-foreground: #222222;
+  --primary: #ff385c;
+  --primary-foreground: #ffffff;
+  --secondary: #f7f7f7;
+  --secondary-foreground: #222222;
+  --muted: #f7f7f7;
+  --muted-foreground: #717171;
+  --accent: #f7f7f7;
+  --accent-foreground: #222222;
+  --destructive: #c13515;
+  --border: #ebebeb;
+  --input: #ebebeb;
+  --ring: #ff385c;
   --chart-1: oklch(0.646 0.222 41.116);
   --chart-2: oklch(0.6 0.118 184.704);
   --chart-3: oklch(0.398 0.07 227.392);
   --chart-4: oklch(0.828 0.189 84.429);
   --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: oklch(0.984 0.003 247.858);
-  --sidebar-foreground: oklch(0.129 0.042 264.695);
-  --sidebar-primary: oklch(0.208 0.042 265.755);
-  --sidebar-primary-foreground: oklch(0.984 0.003 247.858);
-  --sidebar-accent: oklch(0.968 0.007 247.896);
-  --sidebar-accent-foreground: oklch(0.208 0.042 265.755);
-  --sidebar-border: oklch(0.929 0.013 255.508);
-  --sidebar-ring: oklch(0.704 0.04 256.788);
+  --sidebar: #ffffff;
+  --sidebar-foreground: #222222;
+  --sidebar-primary: #ff385c;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #f7f7f7;
+  --sidebar-accent-foreground: #222222;
+  --sidebar-border: #ebebeb;
+  --sidebar-ring: #ff385c;
+  /* DESIGN.md shadows, single source for the .shadow-* utilities below. */
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 6%);
+  --shadow-float: 0 8px 28px rgb(0 0 0 / 12%);
+  --shadow-sheet: 0 -8px 28px rgb(0 0 0 / 12%);
 }
 
 .dark {
-  --background: oklch(0.129 0.042 264.695);
-  --foreground: oklch(0.984 0.003 247.858);
-  --card: oklch(0.208 0.042 265.755);
-  --card-foreground: oklch(0.984 0.003 247.858);
-  --popover: oklch(0.208 0.042 265.755);
-  --popover-foreground: oklch(0.984 0.003 247.858);
-  --primary: oklch(0.929 0.013 255.508);
-  --primary-foreground: oklch(0.208 0.042 265.755);
-  --secondary: oklch(0.279 0.041 260.031);
-  --secondary-foreground: oklch(0.984 0.003 247.858);
-  --muted: oklch(0.279 0.041 260.031);
-  --muted-foreground: oklch(0.704 0.04 256.788);
-  --accent: oklch(0.279 0.041 260.031);
-  --accent-foreground: oklch(0.984 0.003 247.858);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.551 0.027 264.364);
+  /* Same hues as :root, inverted for a dark canvas. The accent stays #ff385c. */
+  --background: #222222;
+  --foreground: #ffffff;
+  --card: #333333;
+  --card-foreground: #ffffff;
+  --popover: #333333;
+  --popover-foreground: #ffffff;
+  --primary: #ff385c;
+  --primary-foreground: #ffffff;
+  --secondary: #3a3a3a;
+  --secondary-foreground: #ffffff;
+  --muted: #3a3a3a;
+  --muted-foreground: #adadad;
+  --accent: #3a3a3a;
+  --accent-foreground: #ffffff;
+  --destructive: #ff5a5f;
+  --border: #3d3d3d;
+  --input: #4a4a4a;
+  --ring: #ff385c;
   --chart-1: oklch(0.488 0.243 264.376);
   --chart-2: oklch(0.696 0.17 162.48);
   --chart-3: oklch(0.769 0.188 70.08);
   --chart-4: oklch(0.627 0.265 303.9);
   --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.208 0.042 265.755);
-  --sidebar-foreground: oklch(0.984 0.003 247.858);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.984 0.003 247.858);
-  --sidebar-accent: oklch(0.279 0.041 260.031);
-  --sidebar-accent-foreground: oklch(0.984 0.003 247.858);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.551 0.027 264.364);
+  --sidebar: #1a1a1a;
+  --sidebar-foreground: #ffffff;
+  --sidebar-primary: #ff385c;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #3a3a3a;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: #3d3d3d;
+  --sidebar-ring: #ff385c;
+  /* Same geometry as :root; deeper shadow to read on a dark canvas. */
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 30%);
+  --shadow-float: 0 8px 28px rgb(0 0 0 / 45%);
+  --shadow-sheet: 0 -8px 28px rgb(0 0 0 / 45%);
 }
 
 body {
@@ -115,6 +128,10 @@ body {
   font-family:
     -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu',
     'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+  /* DESIGN.md type: base 15px, leading 1.45, tracking -0.01em. */
+  font-size: 15px;
+  line-height: 1.45;
+  letter-spacing: -0.01em;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -137,8 +154,73 @@ body {
   }
 }
 
+/* Map popups float above the map: DESIGN.md floating shadow + 24px corners.
+   `!important` is required: maplibre-gl.css ships its own .maplibregl-popup-content
+   later in the bundle and would otherwise win the cascade. */
 .maplibregl-popup-content {
-  @apply !rounded-2xl !shadow-xl !p-0;
+  @apply !rounded-2xl !p-0;
+  box-shadow: var(--shadow-float) !important;
+  background-color: var(--card) !important;
+  color: var(--card-foreground);
+}
+
+/* ---------------------------------------------------------------------------
+   Reusable utilities DESIGN.md implies but Tailwind's scale does not ship.
+   Kept in @layer utilities so a Tailwind utility of the same name still wins
+   by source order.
+--------------------------------------------------------------------------- */
+@layer utilities {
+  /* Card at rest: shadow-[0_1px_2px_rgba(0,0,0,0.06)] + border border-border */
+  .shadow-card {
+    box-shadow: var(--shadow-card);
+  }
+
+  /* Floating surfaces: popups, dropdowns, sticky CTA. */
+  .shadow-float {
+    box-shadow: var(--shadow-float);
+  }
+
+  /* Mobile bottom sheet: the same shadow, cast upward. */
+  .shadow-sheet {
+    box-shadow: var(--shadow-sheet);
+  }
+
+  /* Appearance: opacity 0->1 + translateY(6px)->0. 180ms ease-out, no bounce. */
+  .animate-appear {
+    animation: grodno-appear 180ms ease-out both;
+  }
+}
+
+@keyframes grodno-appear {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* DESIGN.md motion: respect prefers-reduced-motion -> no translate/scale,
+   opacity only. Durations are collapsed rather than transform:none, because a
+   blanket transform reset would break maplibre marker positioning. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .animate-appear {
+    animation-name: none !important;
+    opacity: 1 !important;
+  }
 }
 
 i.help.grey.icon {

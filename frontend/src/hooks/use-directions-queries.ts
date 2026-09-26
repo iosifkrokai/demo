@@ -135,14 +135,65 @@ async function fetchDirections() {
   const currentProfile = (profile || 'bicycle') as Profile;
   const chunks = chunkWaypoints(activeWaypoints);
 
+  // One merged response with the first chunk's metadata: everything downstream
+  // (route features, summary strip, zoom-to-route) keeps working unchanged.
+  const mergeParts = (parts: ParsedDirectionsGeometry[]) => {
+    const legs: { shape: string }[] = [];
+    const decodedGeometry: number[][] = [];
+    let length = 0;
+    let time = 0;
+    for (const part of parts) {
+      legs.push(...part.trip.legs);
+      decodedGeometry.push(...parseDirectionsGeometry(part));
+      length += part.trip.summary.length;
+      time += part.trip.summary.time;
+    }
+    return {
+      ...parts[0],
+      trip: {
+        ...parts[0]!.trip,
+        legs,
+        summary: { ...parts[0]!.trip.summary, length, time },
+        warnings: [],
+      },
+      decodedGeometry,
+    } as unknown as ParsedDirectionsGeometry;
+  };
+
   if (chunks.length === 1) {
-    return await requestRoute(
-      activeWaypoints,
-      currentProfile,
-      rawSettings,
-      dateTime,
-      language
-    );
+    try {
+      return await requestRoute(
+        activeWaypoints,
+        currentProfile,
+        rawSettings,
+        dateTime,
+        language
+      );
+    } catch (error) {
+      // A single stop can sit on an edge island — a fort in a field, a gated
+      // courtyard — and Valhalla then answers 499 ("Could not find candidate
+      // edge used for destination label") for the WHOLE request, so the map
+      // loses the line entirely. Walking the stops pairwise keeps every leg
+      // that does route; the unreachable one simply leaves a gap.
+      const legs: ParsedDirectionsGeometry[] = [];
+      for (let i = 0; i < activeWaypoints.length - 1; i++) {
+        try {
+          legs.push(
+            await requestRoute(
+              [activeWaypoints[i]!, activeWaypoints[i + 1]!],
+              currentProfile,
+              rawSettings,
+              dateTime,
+              language
+            )
+          );
+        } catch {
+          // unreachable on foot: skip this leg, keep the rest of the route
+        }
+      }
+      if (!legs.length) throw error;
+      return mergeParts(legs);
+    }
   }
 
   const parts = [];
@@ -152,29 +203,7 @@ async function fetchDirections() {
     );
   }
 
-  const legs: { shape: string }[] = [];
-  const decodedGeometry: number[][] = [];
-  let length = 0;
-  let time = 0;
-  for (const part of parts) {
-    legs.push(...part.trip.legs);
-    decodedGeometry.push(...parseDirectionsGeometry(part));
-    length += part.trip.summary.length;
-    time += part.trip.summary.time;
-  }
-
-  // One merged response with the first chunk's metadata: everything downstream
-  // (route features, summary strip, zoom-to-route) keeps working unchanged.
-  return {
-    ...parts[0],
-    trip: {
-      ...parts[0]!.trip,
-      legs,
-      summary: { ...parts[0]!.trip.summary, length, time },
-      warnings: [],
-    },
-    decodedGeometry,
-  } as unknown as ParsedDirectionsGeometry;
+  return mergeParts(parts);
 }
 
 export function useDirectionsQuery() {

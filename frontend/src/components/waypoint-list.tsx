@@ -1,29 +1,24 @@
 import { useState } from 'react';
-import {
-  ArrowDown,
-  ArrowUp,
-  GripVertical,
-  LocateFixed,
-  MapPin,
-  X,
-} from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { GripVertical, Pin, Trash2 } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import {
   ME_WAYPOINT_ID,
   useDirectionsStore,
   type Waypoint,
 } from '@/stores/directions-store';
 import { useDirectionsQuery } from '@/hooks/use-directions-queries';
+import { PlaceIcon } from './parts/place-icon';
 
 interface Props {
   onChanged: () => void; // called after any local mutation that needs a route refetch
 }
 
 /**
- * List of waypoints with full edit controls:
- *   - drag handle (HTML5 native drag-drop, vertical list reorder)
- *   - up / down arrow buttons (alternative to drag)
- *   - x (delete) — preserves a minimum of 2 waypoints (Valhalla needs at least that)
+ * The stops timeline: numbered circles joined by a hairline, the stop's category
+ * and name, how long it is worth staying for, and — on hover — remove / pin.
+ *
+ * Reordering is drag (HTML5 native) with the arrow keys on the drag handle as
+ * the keyboard equivalent, so nothing is mouse-only.
  *
  * Reads from useDirectionsStore; mutates via setWaypoint / doRemoveWaypoint and
  * asks the parent to refetch the route.
@@ -33,6 +28,7 @@ export const WaypointList = ({ onChanged }: Props) => {
   const setWaypoint = useDirectionsStore((s) => s.setWaypoint);
   const doRemoveWaypoint = useDirectionsStore((s) => s.doRemoveWaypoint);
   const excludeStops = useDirectionsStore((s) => s.excludeStops);
+  const placeDetails = useDirectionsStore((s) => s.placeDetails);
   const { refetch } = useDirectionsQuery();
   const [dragIndex, setDragIndex] = useState<number | null>(null);
 
@@ -69,6 +65,20 @@ export const WaypointList = ({ onChanged }: Props) => {
     refetch();
   };
 
+  /**
+   * Pin a stop so the next refinement keeps it: `pinned` is what the sidebar
+   * sends in `context.base_points`. Only the flag changes — the line on the map
+   * does not, so there is nothing to refetch.
+   */
+  const togglePin = (i: number) => {
+    setWaypoint(
+      waypoints.map((wp, idx) =>
+        idx === i ? { ...wp, pinned: !wp.pinned } : wp
+      )
+    );
+    onChanged();
+  };
+
   const nameOf = (wp: Waypoint): string => {
     const sel =
       wp.geocodeResults.find((r) => r.selected) ?? wp.geocodeResults[0];
@@ -80,7 +90,7 @@ export const WaypointList = ({ onChanged }: Props) => {
   }
 
   return (
-    <ol className="flex flex-col gap-1.5">
+    <ol className="flex flex-col">
       {waypoints.map((wp, i) => {
         // "my location" is the start, not a stop: it takes no number, so the
         // tourist's stops stay numbered 1..N exactly as on the map.
@@ -88,9 +98,14 @@ export const WaypointList = ({ onChanged }: Props) => {
         const stopNumber =
           waypoints.slice(0, i).filter((w) => w.id !== ME_WAYPOINT_ID).length +
           1;
+        const isLast = i === waypoints.length - 1;
         const isDragging = dragIndex === i;
         const isDragTarget =
           dragIndex !== null && dragIndex !== i && i === (dragIndex ?? -1) + 1;
+        const name = nameOf(wp);
+        const details =
+          wp.placeId != null ? placeDetails[wp.placeId] : undefined;
+        const visitMinutes = details?.visitMinutes ?? null;
         return (
           <li
             key={wp.id}
@@ -113,72 +128,99 @@ export const WaypointList = ({ onChanged }: Props) => {
               if (!Number.isFinite(from)) return;
               move(from, i);
             }}
-            className={[
-              'flex items-center gap-2 rounded-lg border bg-card px-2 py-1.5 text-sm transition-opacity',
-              isDragging ? 'opacity-40' : '',
-              isDragTarget
-                ? 'border-primary/60 ring-1 ring-primary/30'
-                : 'border-border/60',
-            ].join(' ')}
+            className={cn(
+              'group flex min-h-[52px] items-center gap-2 rounded-xl px-1.5 transition-colors hover:bg-muted',
+              isDragging && 'opacity-40',
+              isDragTarget && 'bg-muted ring-1 ring-primary/40'
+            )}
           >
-            <span
-              className="cursor-grab text-muted-foreground active:cursor-grabbing"
-              aria-label="перетащить"
-              title="перетащить"
+            <button
+              type="button"
+              className="shrink-0 cursor-grab text-muted-foreground active:cursor-grabbing"
+              aria-label={`переместить: ${name}`}
+              title="перетащить · стрелки вверх/вниз"
+              onKeyDown={(e) => {
+                if (e.key === 'ArrowUp' && i > 0) {
+                  e.preventDefault();
+                  move(i, i - 1);
+                } else if (e.key === 'ArrowDown' && i < waypoints.length - 1) {
+                  e.preventDefault();
+                  move(i, i + 1);
+                }
+              }}
             >
-              <GripVertical className="h-4 w-4" />
+              <GripVertical className="h-4 w-4" aria-hidden="true" />
+            </button>
+
+            {/* The number column carries the 1px timeline rule between rows. */}
+            <div className="relative flex w-6 shrink-0 self-stretch items-center justify-center">
+              {!isLast && (
+                <span
+                  aria-hidden="true"
+                  className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border"
+                />
+              )}
+              {isMe ? (
+                <span
+                  aria-label="старт маршрута"
+                  title="старт"
+                  className="relative h-2.5 w-2.5 rounded-full bg-sky-500 ring-4 ring-card"
+                />
+              ) : (
+                <span
+                  className="relative flex h-6 w-6 items-center justify-center rounded-full bg-muted text-[11px] font-semibold text-foreground"
+                  title={`остановка ${stopNumber}`}
+                >
+                  {stopNumber}
+                </span>
+              )}
+            </div>
+
+            <PlaceIcon category={details?.category} />
+
+            <span className="min-w-0 flex-1 truncate text-[14px]" title={name}>
+              {name}
             </span>
-            <span
-              className={[
-                'flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-medium',
-                isMe
-                  ? 'bg-sky-500/15 text-sky-600'
-                  : 'bg-primary/10 text-primary',
-              ].join(' ')}
-              title={isMe ? 'старт' : `остановка ${stopNumber}`}
-            >
-              {isMe ? <LocateFixed className="h-3.5 w-3.5" /> : stopNumber}
-            </span>
-            <MapPin className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-            <span className="min-w-0 flex-1 truncate" title={nameOf(wp)}>
-              {nameOf(wp)}
-            </span>
-            <div className="flex shrink-0 items-center gap-0.5">
-              <Button
+
+            {visitMinutes != null && (
+              <span className="shrink-0 text-[12px] text-muted-foreground">
+                ~{visitMinutes} мин
+              </span>
+            )}
+
+            {/* Always reachable on touch (no hover), revealed on hover on desktop. */}
+            <div className="flex shrink-0 items-center gap-0.5 transition-opacity md:opacity-0 md:group-focus-within:opacity-100 md:group-hover:opacity-100">
+              <button
                 type="button"
-                size="icon"
-                variant="ghost"
-                className="h-7 w-7"
-                disabled={i === 0}
-                onClick={() => move(i, i - 1)}
-                aria-label="вверх"
-                title="вверх"
+                onClick={() => togglePin(i)}
+                aria-pressed={wp.pinned === true}
+                aria-label={wp.pinned ? 'открепить' : 'закрепить'}
+                title={
+                  wp.pinned
+                    ? 'уточнение не будет убирать эту точку'
+                    : 'закрепить: уточнение не уберёт эту точку'
+                }
+                className={cn(
+                  'flex h-7 w-7 items-center justify-center rounded-full transition-colors hover:bg-muted',
+                  wp.pinned
+                    ? 'text-primary'
+                    : 'text-muted-foreground hover:text-foreground'
+                )}
               >
-                <ArrowUp className="h-3.5 w-3.5" />
-              </Button>
-              <Button
+                <Pin
+                  className={cn('h-3.5 w-3.5', wp.pinned && 'fill-current')}
+                  aria-hidden="true"
+                />
+              </button>
+              <button
                 type="button"
-                size="icon"
-                variant="ghost"
-                className="h-7 w-7"
-                disabled={i === waypoints.length - 1}
-                onClick={() => move(i, i + 1)}
-                aria-label="вниз"
-                title="вниз"
-              >
-                <ArrowDown className="h-3.5 w-3.5" />
-              </Button>
-              <Button
-                type="button"
-                size="icon"
-                variant="ghost"
-                className="h-7 w-7 text-muted-foreground hover:text-destructive"
                 onClick={() => remove(i)}
                 aria-label="удалить"
                 title="удалить"
+                className="flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-destructive"
               >
-                <X className="h-3.5 w-3.5" />
-              </Button>
+                <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+              </button>
             </div>
           </li>
         );

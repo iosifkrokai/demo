@@ -1,0 +1,178 @@
+{
+  "name": "Гродно: весь старый город без ограничения по времени",
+  "source": "ru.wikipedia (Гродно) + OSM",
+  "query_ru": "Гродно, старый город, без ограничения по времени: покажи всё, что стоит посмотреть пешком",
+  "budget_minutes": 480,
+  "est_walk_minutes": 95,
+  "benchmark_meta": {
+    "license": "CC BY-SA 4.0 (ru.wikipedia.org) + ODbL 1.0 (openstreetmap.org)",
+    "retrieved_at": "2026-09-26T00:00:00Z",
+    "coords_source": "db_row"
+  },
+  "case_meta": {
+    "kind": "no_budget",
+    "budget_note": "пользователь не задал ограничения по времени; 480 = MAX_BUDGET_MIN, потолок агента, а не требование маршрута",
+    "n_stops": 12,
+    "expect": {
+      "stops_dropped": 0,
+      "note": "эталон требует, чтобы ни одна остановка не была молча выкинута из-за бюджета"
+    }
+  },
+  "stops": [
+    {
+      "name": "Фарный костёл Святого Франциска Ксаверия",
+      "place_id": 52,
+      "lat": 53.6787,
+      "lon": 23.8279,
+      "grade": "must-see",
+      "source_urls": [
+        "https://ru.wikipedia.org/wiki/Фарный_костёл_Святого_Франциска_Ксаверия",
+        "https://www.openstreetmap.org/way/29125106"
+      ],
+      "visit_minutes": 30,
+      "grade_reason": "назван в статье ru.wikipedia и в объекте OSM (2 независимых источника)"
+    },
+    {
+      "name": "Старый замок (Гродно)",
+      "place_id": 49,
+      "lat": 53.6791,
+      "lon": 23.8216,
+      "grade": "must-see",
+      "source_urls": [
+        "https://ru.wikipedia.org/wiki/Гродненский_старый_замок",
+        "https://www.openstreetmap.org/relation/18245978"
+      ],
+      "visit_minutes": 90,
+      "grade_reason": "назван в статье ru.wikipedia и в объекте OSM (2 независимых источника)"
+    },
+    {
+      "name": "Новый замок (дворец Стефана Батория)",
+      "place_id": 50,
+      "lat": 53.6799,
+      "lon": 23.8223,
+      "grade": "must-see",
+      "source_urls": [
+        "https://ru.wikipedia.org/wiki/Новый_замок_(Гродно)",
+        "https://www.openstreetmap.org/way/29125034"
+      ],
+      "visit_minutes": 60,
+      "grade_reason": "назван в статье ru.wikipedia и в объекте OSM (2 независимых источника)"
+    },
+    {
+      "name": "Улица Советская (старый город)",
+      "place_id": 64,
+      "lat": 53.6798,
+      "lon": 23.8279,
+      "grade": "must-see",
+      "source_urls": [
+        "https://ru.wikipedia.org/wiki/Улица_Советская_(Гродно)",
+        "https://www.openstreetmap.org/node/2788680554"
+      ],
+      "visit_minutes": 40,
+      "grade_reason": "назван в статье ru.wikipedia и в объекте OSM (2 независимых источника)"
+    },
+    {
+      "name": "Ансамбль Городницы (резиденция Тызенгауза)",
+      "place_id": 55,
+      "lat": 53.6849,
+      "lon": 23.831,
+      "grade": "must-see",
+      "source_urls": [
+        "https://ru.wikipedia.org/wiki/Городница_(Гродно)",
+        "https://www.openstreetmap.org/way/29125034"
+      ],
+      "visit_minutes": 45,
+      "grade_reason": "назван в статье ru.wikipedia и в объекте OSM (2 независимых источника)"
+    },
+    {
+      "name": "Парк Жилибера",
+      "place_id": 62,
+      "lat": 53.6862,
+      "lon": 23.8268,
+      "grade": "must-see",
+      "source_urls": [
+        "https://ru.wikipedia.org/wiki/Гродно",
+        "https://ru.wikipedia.org/wiki/Городница_(Гродно)"
+      ],
+      "visit_minutes": 45,
+      "grade_reason": "назван в статье ru.wikipedia и в объекте OSM (2 независимых источника)"
+    },
+    {
+      "name": "Свято-Покровский кафедральный собор",
+      "place_id": 66,
+      "lat": 53.6811,
+      "lon": 23.8266,
+      "grade": "nice-to-have",
+      "source_urls": [
+        "https://ru.wikipedia.org/wiki/Свято-Покровский_кафедральный_собор_(Гродно)"
+      ],
+      "visit_minutes": 25,
+      "grade_reason": "назван в одном источнике"
+    },
+    {
+      "name": "Монастырь бригиток",
+      "place_id": 58,
+      "lat": 53.6822,
+      "lon": 23.8234,
+      "grade": "nice-to-have",
+      "source_urls": [
+        "https://ru.wikipedia.org/wiki/Монастырь_бригиток_(Гродно)",
+        "https://ru.wikipedia.org/wiki/Гродно"
+      ],
+      "visit_minutes": 25,
+      "grade_reason": "назван в одном источнике"
+    },
+    {
+      "name": "Большая хоральная синагога",
+      "place_id": 53,
+      "lat": 53.6799,
+      "lon": 23.8251,
+      "grade": "nice-to-have",
+      "source_urls": [
+        "https://ru.wikipedia.org/wiki/Большая_хоральная_синагога_(Гродно)",
+        "https://www.openstreetmap.org/way/29125014"
+      ],
+      "visit_minutes": 20,
+      "grade_reason": "назван в одном источнике"
+    },
+    {
+      "name": "Музей истории города Гродно",
+      "place_id": 60,
+      "lat": 53.6783,
+      "lon": 23.8265,
+      "grade": "nice-to-have",
+      "source_urls": [
+        "https://ru.wikipedia.org/wiki/Гродно",
+        "https://www.openstreetmap.org/way/1102852544"
+      ],
+      "visit_minutes": 45,
+      "grade_reason": "назван в одном источнике"
+    },
+    {
+      "name": "Аптека-музей на Советской",
+      "place_id": 59,
+      "lat": 53.6789,
+      "lon": 23.8273,
+      "grade": "nice-to-have",
+      "source_urls": [
+        "https://ru.wikipedia.org/wiki/Аптека-музей",
+        "https://www.openstreetmap.org/node/320409653"
+      ],
+      "visit_minutes": 30,
+      "grade_reason": "назван в одном источнике"
+    },
+    {
+      "name": "Дом-музей Элизы Ожешко",
+      "place_id": 61,
+      "lat": 53.6779,
+      "lon": 23.8242,
+      "grade": "nice-to-have",
+      "source_urls": [
+        "https://ru.wikipedia.org/wiki/Дом-музей_Элизы_Ожешко",
+        "https://www.openstreetmap.org/node/2268463173"
+      ],
+      "visit_minutes": 40,
+      "grade_reason": "назван в одном источнике"
+    }
+  ]
+}

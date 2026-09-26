@@ -5,6 +5,7 @@ import {
   waitFor,
   fireEvent,
   act,
+  within,
 } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MapComponent } from './index';
@@ -216,12 +217,6 @@ vi.mock('./parts/isochrone-locations', () => ({
   )),
 }));
 
-vi.mock('./parts/heightgraph-hover-marker', () => ({
-  HeightgraphHoverMarker: vi.fn(() => (
-    <div data-testid="heightgraph-hover-marker">Hover Marker</div>
-  )),
-}));
-
 vi.mock('./parts/brand-logos', () => ({
   BrandLogos: vi.fn(() => <div data-testid="brand-logos">Logos</div>),
 }));
@@ -365,43 +360,33 @@ describe('MapComponent', () => {
     expect(screen.getByTestId('brand-logos')).toBeInTheDocument();
   });
 
-  it('should render heightgraph hover marker', () => {
-    render(<MapComponent />);
-    expect(screen.getByTestId('heightgraph-hover-marker')).toBeInTheDocument();
-  });
-
-  it('should render Open in OpenStreetMap button', () => {
-    render(<MapComponent />);
-    expect(
-      screen.getByRole('button', { name: 'Open on osm.org' })
-    ).toBeInTheDocument();
-  });
-
-  it('should have Open in OpenStreetMap button that can be clicked', async () => {
-    const user = userEvent.setup();
-    render(<MapComponent />);
-
-    const osmButton = screen.getByRole('button', {
-      name: 'Open on osm.org',
-    });
-    expect(osmButton).toBeInTheDocument();
-
-    await user.click(osmButton);
-  });
-
   it('should render left-side Directions shortcut button', () => {
     render(<MapComponent />);
     expect(screen.getByTestId('tab-directions-button')).toBeInTheDocument();
   });
 
-  it('should render left-side Isochrones shortcut button', () => {
+  // The upstream map put four more controls on the canvas: an elevation
+  // profile overlay (HeightGraph + its hover marker, fed by a Valhalla /height
+  // request), an "Open on osm.org" button, and Isochrones/Tiles shortcuts that
+  // jumped to the three-panel RoutePlanner. This fork replaced that planner
+  // with the tourist Sidebar — one planning panel, no tab strip — and dropped
+  // the map chrome that only made sense with it. Nothing renders
+  // HeightGraph/HeightgraphHoverMarker any more, and the two remaining tabs
+  // have no panel to open, so the map keeps a single shortcut to the live
+  // Directions panel. This test pins that contract.
+  it('should render no map controls beyond the Directions panel shortcut', () => {
     render(<MapComponent />);
-    expect(screen.getByTestId('tab-isochrones-button')).toBeInTheDocument();
-  });
 
-  it('should render left-side Tiles shortcut button', () => {
-    render(<MapComponent />);
-    expect(screen.getByTestId('tab-tiles-button')).toBeInTheDocument();
+    const shortcuts = screen.getByLabelText('Panel shortcuts');
+    expect(within(shortcuts).getAllByRole('button')).toHaveLength(1);
+
+    expect(screen.queryByTestId('heightgraph-toggle')).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId('heightgraph-hover-marker')
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Open on osm.org' })
+    ).not.toBeInTheDocument();
   });
 
   it('should call navigate when Directions shortcut button is clicked', async () => {
@@ -446,13 +431,6 @@ describe('MapComponent', () => {
       expect(screen.getByTestId('popup')).toBeInTheDocument();
       expect(screen.getByTestId('map-context-menu')).toBeInTheDocument();
     });
-  });
-
-  it('should show heightgraph toggle but disabled when directions are not successful', () => {
-    render(<MapComponent />);
-    const toggle = screen.getByTestId('heightgraph-toggle');
-    expect(toggle).toBeInTheDocument();
-    expect(toggle).toBeDisabled();
   });
 
   it('should set initial view state from getInitialMapPosition', () => {

@@ -29,3 +29,14 @@ cache/
 # Generated benchmark output (regenerate with scripts/bench_routes.py)
 backend/benchmarks/report.json
 backend/benchmarks/report.md
+
+# Рабочие артефакты прогонов: логи агентов, записи демо, скачанные страницы
+tmp-fresh-pgdata/
+tmp-fresh-valhalla/
+cache/logs/
+cache/video/
+cache/headcheck/
+cache/*.log
+cache/*.json
+cache/research/pages/
+cache/research/raw/

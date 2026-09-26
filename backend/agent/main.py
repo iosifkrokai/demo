@@ -8,22 +8,30 @@ agent.planner.pipeline.Pipeline (one orchestrator class). Endpoints:
     POST /routes/reroute      body: RerouteReq   -> RouteResponse
     POST /routes/explain      body: ExplainReq   -> {explanation: str}
 
-All models use OpenRouter (embeddings + intent + rerank). No local ML models.
+Embeddings, intent and rerank come from OpenRouter through a single
+OPENROUTER_API_KEY.  With no key — or an upstream that times out — the
+planner degrades to keyword-only retrieval instead of failing; see
+agent/planner/pipeline.py.  `_call` is the last-resort net: an upstream
+error that somehow escaped the degradation paths is reported as a 503
+with a readable detail, never as a bare 500.
 """
 
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from contextlib import asynccontextmanager
+from typing import Any
 
 import psycopg
 import uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from . import constants
+from . import constants, jev
 from .config import settings
 from .errors import AgentError
+from .jev import JevError
 from .models import (
     ExplainReq,
     GenerateReq,
@@ -50,7 +58,12 @@ async def lifespan(_: FastAPI):
     app.state.planner = Pipeline(db=db)
     log.info("agent ready (OpenRouter: embed=%s, jev=%s, key=%s)",
              constants.EMBED_MODEL, constants.JEV_MODEL,
-             "set" if settings.OPENROUTER_API_KEY else "MISSING")
+             "set" if jev.available() else "MISSING")
+    if not jev.available():
+        log.warning(
+            "no OPENROUTER_API_KEY — degraded keyword-only mode: no embeddings, "
+            + "deterministic intent, no Jev rerank (routes are still built)"
+        )
     yield
     db.close()
 
@@ -73,28 +86,38 @@ app.add_middleware(
 )
 
 
+def _call(fn: Callable[[], Any], **kwargs: Any) -> Any:
+    """Run a planner call and map its failures onto HTTP.
+
+    AgentError carries the status the planner chose (404 / 422 / 503).  A
+    JevError that got here means the degraded paths did not cover it: report
+    it as 503 with the reason, so an OpenRouter outage can never reach the
+    client as an opaque 500.  Anything else is a real bug and stays a 500.
+    """
+    try:
+        return fn(**kwargs)
+    except AgentError as e:
+        raise HTTPException(status_code=e.http_status, detail=str(e)) from e
+    except JevError as e:
+        log.warning("openrouter error escaped the planner: %s", e)
+        raise HTTPException(
+            status_code=503, detail=f"OpenRouter unavailable: {e}",
+        ) from e
+
+
 @app.post("/routes/generate", response_model=RouteResponse)
 def generate(req: GenerateReq) -> RouteResponse:
-    try:
-        return app.state.planner.generate(req)
-    except AgentError as e:
-        raise HTTPException(status_code=e.http_status, detail=str(e))
+    return _call(app.state.planner.generate, req=req)
 
 
 @app.post("/routes/reroute", response_model=RouteResponse)
 def reroute(req: RerouteReq) -> RouteResponse:
-    try:
-        return app.state.planner.reroute(req.point_ids, req.profile)
-    except AgentError as e:
-        raise HTTPException(status_code=e.http_status, detail=str(e))
+    return _call(app.state.planner.reroute, point_ids=req.point_ids, profile=req.profile)
 
 
 @app.post("/routes/explain")
 def explain(req: ExplainReq) -> dict:
-    try:
-        return {"explanation": app.state.planner.explain_route(req.point_ids)}
-    except AgentError as e:
-        raise HTTPException(status_code=e.http_status, detail=str(e))
+    return {"explanation": _call(app.state.planner.explain_route, point_ids=req.point_ids)}
 
 
 @app.get("/health", response_model=HealthResponse)

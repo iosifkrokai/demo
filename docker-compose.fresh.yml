@@ -1,0 +1,43 @@
+# Compose OVERRIDE for the throwaway `grodno-fresh` project (fresh-machine smoke test).
+#
+#   docker compose -p grodno-fresh -f docker-compose.yml -f docker-compose.fresh.yml up -d db
+#   docker compose -p grodno-fresh -f docker-compose.yml -f docker-compose.fresh.yml up -d --build frontend
+#
+# Never run these WITHOUT `-p grodno-fresh`: the base compose file is the live
+# environment (grodno-db / grodno-valhalla / grodno-frontend, volume demo_pgdata).
+#
+# - valhalla is NOT part of this override: the frontend is pointed at the LIVE
+#   valhalla (host.docker.internal:8002) and the live agent (host.docker.internal:8080).
+# - postgres data goes to ./tmp-fresh-pgdata (bind mount), NOT the live `pgdata` volume.
+# - container_name is overridden because the base file pins grodno-db / grodno-frontend.
+# - depends_on: [valhalla] is reset so `up frontend` does not try to create a second
+#   grodno-valhalla (fixed container_name in the base file → name collision with live).
+services:
+  db:
+    container_name: grodno-fresh-db
+    ports: !override
+      - "55432:5432"
+    volumes: !override
+      - ./backend/db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - ./tmp-fresh-pgdata:/var/lib/postgresql/data
+
+  frontend:
+    container_name: grodno-fresh-frontend
+    ports: !override
+      - "8081:80"
+    depends_on: !reset []
+    environment:
+      AGENT_UPSTREAM: "host.docker.internal:8080"
+      # host.docker.internal:8002 does NOT work from a foreign compose project in
+      # THIS environment: stale iptables-legacy rules (FORWARD policy DROP, rules
+      # only for docker0) kill forwarded packets from any newer bridge. Attaching
+      # the fresh frontend to the default docker0 bridge makes the host-gateway
+      # path work again (proven: docker0 -> 172.17.0.1:{8002,8080} = 200) without
+      # touching the firewall or any live container. Compose cannot join the
+      # default bridge itself (no service aliases there), so the attach is done
+      # manually after `up -d`:
+      #   docker network connect bridge grodno-fresh-frontend
+      VALHALLA_UPSTREAM: "host.docker.internal:8002"
+    networks: !override
+      default:
+        aliases: []
