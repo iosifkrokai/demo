@@ -46,18 +46,28 @@ try {
   const built = await text();
   log('маршрут:', built.slice(built.indexOf('точек') - 30, built.indexOf('точек') + 120));
 
-  // Переключаемся в проводник
-  await page.getByRole('button', { name: 'Проводник', exact: true }).click();
+  // Переключаемся в проводник (кнопка сегмента: у радиокнопок нет роли button с этим именем)
+  await page.locator('button:has-text("Проводник")').first().click();
   await page.waitForTimeout(2500);
   const guide = await text();
   log('проводник:', guide.slice(guide.indexOf('следующая остановка'), guide.indexOf('следующая остановка') + 110));
 
+  // Пролистываем список остановок, чтобы он попал в кадр
+  const list = page.locator('div:has-text("сбросить прогресс")').last();
+  await list.hover().catch(() => {});
+  await page.mouse.wheel(0, 420);
+  await page.waitForTimeout(1800);
+  await page.mouse.wheel(0, -420);
+  await page.waitForTimeout(800);
+
   // Отмечаем первую остановку пройденной
-  const done = page.getByRole('button', { name: /пройдена|отметить/i }).first();
+  const done = page.locator('button:has-text("пройдена"), button:has-text("Пройти"), button:has-text("отметить")').first();
   if (await done.count()) {
     await done.click();
     await page.waitForTimeout(2200);
     log('после отметки:', (await text()).match(/пройдено \d+ из \d+/)?.[0]);
+  } else {
+    log('кнопки ручной отметки не нашлось — показываем список');
   }
 
   // Уточнение (лучшая попытка: если поле недоступно — просто продолжаем)
