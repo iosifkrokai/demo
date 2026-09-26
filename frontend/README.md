@@ -1,80 +1,114 @@
-# Valhalla Demo App
+# Grodno Guide — frontend
 
-<img width="2253" height="1303" alt="image" src="https://github.com/user-attachments/assets/00f43ea8-51df-4319-ad31-4feadf0024c1" />
+Vite 7 + React 18 + TypeScript webapp for the Grodno walking-route POC.
+Built on top of the [valhalla/web-app](https://github.com/valhalla/valhalla/tree/master/web-app)
+upstream; our additions live alongside the upstream code without forking its primitives.
 
-This is the ReactJS demo web app running on https://valhalla.openstreetmap.de. It provides routing and isochrones with a magnitude of options and makes requests to [Valhalla](https://github.com/valhalla/valhalla), an open source routing engine and accompanying libraries for use with OpenStreetMap data.
+Visual design tokens and component patterns are documented in `DESIGN.md`.
+
+## What this app does
+
+The user describes a walk (in Russian or English), picks a time budget and transport
+mode, and the app calls the FastAPI agent (`/routes/generate`) to build a pedestrian
+route over real Valhalla road data. The UI then shows:
+
+- **Sidebar / Planning panel** — free-text query input, time and transport chips,
+  quick-query hints, stop list with categories and visit times, route summary stats.
+- **Guide panel** — step-by-step walker mode: next stop card, progress counter,
+  manual "done" button, "open in maps" link.
+- **Map** — MapLibre GL, numbered stop markers, route polyline from Valhalla.
+
+nginx in the frontend container proxies:
+- `POST /routes/*` → agent :8080
+- `/route`, `/status`, `/isochrone`, `/locate`, `/height`, `/tile` → Valhalla :8002
 
 ## Commands
 
-### `npm install`
+```bash
+# Install dependencies
+npm install
 
-Install the dependencies.
+# Dev server with hot reload (Vite, http://localhost:5173)
+npm run dev
 
-### `npm run start`
+# Type-check
+npm run typecheck
 
-Runs the app in hot-reload mode on [http://localhost:3000](http://localhost:3000) to view changes in the browser.
+# Lint
+npm run lint
 
-### `npm run build`
+# Unit tests (Vitest)
+npm test
 
-Builds and bundles the minified app for production to the `./build` folder.
+# Production build
+npm run build
+```
 
-Your app is ready to be deployed!
+## Environment
+
+Copy the example before building or running `docker compose build`:
+
+```bash
+cp .env.example .env
+```
+
+`VITE_AGENT_URL` and `VITE_VALHALLA_URL` default to empty string (the app talks to its
+own nginx origin). Set them only when running the dev server against a remote stack.
+
+`VITE_*` vars are baked into the JS bundle at build time by Vite — changing `.env`
+after a build has no effect until the next build.
+
+## Docker
+
+The container is built and started from the repo root:
+
+```bash
+# Build and start (requires .env to exist — see above)
+docker compose up -d --build frontend
+```
+
+`nginx.conf` is mounted as a template; at container start `envsubst` renders
+`AGENT_UPSTREAM` and `VALHALLA_UPSTREAM` into it. Default values point to
+`host.docker.internal:8080` / `host.docker.internal:8002` (the host, so the
+agent can run outside compose). See `docker-compose.yml` for the full
+environment and `extra_hosts` setup.
+
+## Key source files
+
+| Path | Purpose |
+|---|---|
+| `src/components/sidebar.tsx` | Planning panel: query input, filters, stop list |
+| `src/components/guide-panel.tsx` | Walker mode: next stop, progress, manual advance |
+| `src/components/parts/segmented.tsx` | Segmented control (Planning / Guide) |
+| `src/components/parts/guide-*.tsx` | Guide sub-components |
+| `src/components/map/index.tsx` | MapLibre map + stop markers + route line |
+| `src/index.css` | Design tokens (colours, radius, shadows) |
+| `DESIGN.md` | Visual spec: tokens, component patterns, motion |
 
 ## Testing
 
-[![Tests and Linting](https://github.com/valhalla/web-app/actions/workflows/playwright.yml/badge.svg)](https://github.com/valhalla/web-app/actions/workflows/playwright.yml)
-
-This project includes end-to-end tests using [Playwright](https://playwright.dev/) to ensure the application works correctly across different scenarios.
-
-### Unit Tests
-
 ```bash
+# Unit tests
 npm test
-```
 
-### End-to-End Tests
+# Type-check only
+npm run typecheck
 
-First install the browser(s) you want to use:
-
-```bash
-# Install all browsers
-npx playwright install
-
-# Or install only what you need
+# End-to-end (requires a running stack)
 npx playwright install chromium
-npx playwright install firefox
-```
-
-```bash
-# Run all e2e tests (both chromium and firefox)
 npm run test:e2e
-
-# Run tests for a specific browser
-npm run test:e2e -- --project=chromium
-npm run test:e2e -- --project=firefox
-
-# Run tests with visible browser (useful for debugging)
-npm run test:e2e:headed -- --project=firefox
-
-# Open Playwright Test UI for interactive testing
-npm run test:e2e:ui
 ```
 
-Tests automatically start the development server if it's not already running.
+Tests live alongside source files as `*.spec.tsx` (Vitest convention, see
+`frontend/CLAUDE.md`).
 
-## Get started with Docker
+## Plan of record
 
-```bash
-git clone https://github.com/nilsnolde/valhalla-app.git
-cd valhalla-app
-docker compose up --build
-```
+Active workstreams that affect this frontend:
 
-## Customization
+- **W5** — extended sidebar filters (group composition, hard/soft services, interests)
+- **W6** — pedestrian Guide panel: turn-by-turn manoeuvres, off-route handling
+- **W7** — RU/EN i18n layer (i18next/react-i18next)
 
-Edit `.env` to manage
-
-- Nominatim API server
-- Valhalla API server
-- Tile server
-- Map start location
+See `docs/specs/002-grodno-guide-rebuild/plan.md` and `tasks.md` for the current state.
+Design constraints: `docs/specs/constitution.md`.
