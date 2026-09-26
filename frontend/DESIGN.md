@@ -93,6 +93,26 @@ token to `:root` first.
   as a truncated string.
 - **Loading**: skeleton rows (`animate-pulse rounded-xl bg-muted h-12`) — not a spinner in the middle.
 
+## Guide (Проводник): transport and visit time
+
+- **The guide speaks the transport's language.** Turn instructions and the ETA speed already come from
+  the route itself (Valhalla costing + route summary), so they follow the plan; the guide's own voice
+  must match them. `guideModeFor(costing)` in `parts/guide-mode.ts` is the single source:
+  - `pedestrian`, or any costing nobody stated → foot: «идти ~14 мин», footprints, «пройдено»,
+    no vehicle note on arrival;
+  - `bicycle` → bike: «ехать ~14 мин», bike icon, «проехано»;
+  - `auto`/`car`/`truck`/`bus`/motor\* → car: «ехать», car icon, «проехано», plus the arrival line
+    «припаркуйтесь у остановки».
+  Never hardcode «идти»/«пройдено» in a guide component — read it from the mode object.
+- **Visit time is the tourist's number, not ours.** The dataset estimate (`visitMinutes` from the
+  taxonomy) is presented as approximate: «≈ 40 мин», and opening it says «обычно здесь оставляют ≈ 40
+  мин». One tap gives −/+ in 10-minute steps (5…480) and a reset back to the estimate. Their number is
+  stored per route (`utils/visit-time.ts`, localStorage `grodno-guide-visit-minutes`) and every total
+  that depends on visit length («осталось осмотра», «с дорогой осталось») is computed from it. With
+  neither an estimate nor their number the row shows nothing — never an invented duration.
+- Visit time is its own control, never nested inside the row's tap target: a button inside a button is
+  invalid HTML and swallows the tap that marks the stop.
+
 ## Motion
 
 - 150–200ms, `ease-out`. Appearance: `opacity 0→1` + `translateY(6px)→0`. No bounce, no scale >1.02.

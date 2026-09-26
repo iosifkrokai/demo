@@ -56,6 +56,20 @@ export const VisitTimeEditor = ({
       role="group"
       aria-label="время осмотра"
     >
+      {/* Open: − [число] + ↻ — the number is the chip itself, so it is not
+          repeated next to it. */}
+      {open && (
+        <button
+          type="button"
+          onClick={() => step(-VISIT_STEP)}
+          aria-label={`убавить время осмотра на ${VISIT_STEP} минут`}
+          data-testid="visit-time-minus"
+          className="flex h-6 w-6 items-center justify-center rounded-full border border-border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        >
+          <Minus className="h-3.5 w-3.5" aria-hidden="true" />
+        </button>
+      )}
+
       <button
         type="button"
         aria-expanded={open}
@@ -68,27 +82,12 @@ export const VisitTimeEditor = ({
         className={buttonClass}
         data-testid="visit-time-chip"
       >
-        <Clock className="h-3.5 w-3.5" aria-hidden="true" />
+        {!open && <Clock className="h-3.5 w-3.5" aria-hidden="true" />}
         {value == null ? `≈ ${shown} мин` : `${shown} мин`}
       </button>
 
       {open && (
-        <span className="inline-flex items-center gap-1">
-          <button
-            type="button"
-            onClick={() => step(-VISIT_STEP)}
-            aria-label={`убавить время осмотра на ${VISIT_STEP} минут`}
-            data-testid="visit-time-minus"
-            className="flex h-6 w-6 items-center justify-center rounded-full border border-border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-          >
-            <Minus className="h-3.5 w-3.5" aria-hidden="true" />
-          </button>
-          <span
-            className="min-w-[3.5ch] text-center text-meta font-medium"
-            data-testid="visit-time-value"
-          >
-            {shown} мин
-          </span>
+        <>
           <button
             type="button"
             onClick={() => step(VISIT_STEP)}
@@ -111,13 +110,12 @@ export const VisitTimeEditor = ({
               <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
             </button>
           )}
-        </span>
-      )}
-
-      {open && value == null && hasEstimate && (
-        <span className="text-meta text-muted-foreground">
-          обычно здесь оставляют ≈ {estimate} мин
-        </span>
+          {value == null && hasEstimate && (
+            <span className="text-meta text-muted-foreground">
+              обычно здесь оставляют ≈ {estimate} мин
+            </span>
+          )}
+        </>
       )}
     </span>
   );

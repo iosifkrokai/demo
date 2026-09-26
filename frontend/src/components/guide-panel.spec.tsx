@@ -2,6 +2,7 @@ import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import {
   act,
   cleanup,
+  fireEvent,
   render,
   screen,
   waitFor,
@@ -276,7 +277,29 @@ describe('GuidePanel', () => {
     expect(within(card).getByText('1')).toBeInTheDocument();
     expect(within(card).getByText('Монастырь бригиток')).toBeInTheDocument();
     expect(within(card).getByText('монастырь')).toBeInTheDocument();
-    expect(within(card).getByText(/осмотр 30 мин/i)).toBeInTheDocument();
+    // The visit time is the dataset's estimate, so it is offered as approximate
+    // and stays editable: «≈ 30 мин», not a claim about this visit.
+    expect(within(card).getByTestId('visit-time-chip')).toHaveTextContent(
+      '≈ 30 мин'
+    );
+  });
+
+  it('lets the tourist set their own time at a stop, and keeps it for the totals', () => {
+    stubGeolocation(null);
+    render(<GuidePanel stops={STOPS} />);
+
+    const card = screen.getByTestId('guide-next-stop');
+    fireEvent.click(within(card).getByTestId('visit-time-chip'));
+    fireEvent.click(within(card).getByTestId('visit-time-plus'));
+
+    // Their number replaces the estimate and drops the «≈».
+    expect(within(card).getByTestId('visit-time-chip')).toHaveTextContent(
+      '40 мин'
+    );
+    // 40 (chosen) + 40 (the other stop) = 1 ч 20 мин of visits still ahead.
+    expect(screen.getByTestId('guide-minutes-left')).toHaveTextContent(
+      'осталось осмотра ~1 ч 20 мин'
+    );
   });
 
   it('shows how far the next stop is and walks the card forward', () => {
@@ -625,7 +648,7 @@ describe('GuidePanel · режим движения', () => {
       /по линии пройдено 0 м/
     );
     expect(screen.getByTestId('guide-line-progress')).toHaveTextContent(
-      /осталось \d+\.\d км|осталось \d+ м/
+      /осталось \d+[.,]\d км|осталось \d+ м/
     );
     expect(
       screen.getByRole('progressbar', { name: /прогресс/i })

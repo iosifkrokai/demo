@@ -1,25 +1,29 @@
 import { fmtDist, fmtMin } from './guide-format';
+import { DEFAULT_TRAVEL_MODE, type GuideTravelMode } from './guide-mode';
 
 interface GuideProgressProps {
   done: number;
   total: number;
-  /** Visit minutes still ahead — the agent's own estimate, shown as «~». */
+  /** Visit minutes still ahead — estimates and the tourist's own numbers. */
   minutesLeft: number;
   /** Metres of the route line walked so far (null when there is no line). */
   metresDone?: number | null;
   /** Total length of the route line in metres (null when there is no line). */
   metresTotal?: number | null;
-  /** Walking time + visits still ahead, on top of the visit minutes. */
+  /** Travel time + visits still ahead, on top of the visit minutes. */
   remainingMinutes?: number | null;
+  /** «пройдено» on foot, «проехано» by bike or car. */
+  mode?: GuideTravelMode;
 }
 
 /**
  * «пройдено 3 из 7» + a slim bar, per DESIGN.md: the number that matters
  * stays big, everything around it stays quiet.
  *
- * With a route line the bar tracks the metres actually walked (done part vs
+ * With a route line the bar tracks the metres actually travelled (done part vs
  * remaining) instead of the stop count, and says so in words underneath —
- * stops are a coarse ruler, the line is the real one.
+ * stops are a coarse ruler, the line is the real one. The words follow the
+ * transport: nothing is «пройдено» from the driver's seat.
  */
 export const GuideProgress = ({
   done,
@@ -28,6 +32,7 @@ export const GuideProgress = ({
   metresDone,
   metresTotal,
   remainingMinutes,
+  mode = DEFAULT_TRAVEL_MODE,
 }: GuideProgressProps) => {
   const stopPercent = total === 0 ? 0 : Math.round((done / total) * 100);
   const hasLine = metresTotal != null && metresTotal > 0 && metresDone != null;
@@ -36,12 +41,14 @@ export const GuideProgress = ({
     : null;
   const percent = linePercent ?? stopPercent;
   const remaining = hasLine ? Math.max(0, metresTotal - metresDone) : null;
+  const doneWord = mode.doneWord;
+  const lineLabel = mode.id === 'foot' ? 'по линии' : 'по маршруту';
 
   return (
     <div>
       <div className="flex items-baseline justify-between gap-2">
         <span className="text-body font-semibold">
-          пройдено {done} из {total}
+          {doneWord} {done} из {total}
         </span>
         {minutesLeft > 0 && (
           <span
@@ -67,8 +74,8 @@ export const GuideProgress = ({
         aria-valuemax={total}
         aria-valuetext={
           linePercent != null
-            ? `пройдено ${linePercent}% линии`
-            : `пройдено ${done} из ${total}`
+            ? `${doneWord} ${linePercent}% линии`
+            : `${doneWord} ${done} из ${total}`
         }
         aria-label="прогресс маршрута"
         data-testid="guide-progress-bar"
@@ -84,7 +91,9 @@ export const GuideProgress = ({
           data-testid="guide-line-progress"
           className="mt-1.5 flex items-baseline justify-between gap-2 text-meta text-muted-foreground"
         >
-          <span>по линии пройдено {fmtDist(metresDone)}</span>
+          <span>
+            {lineLabel} {doneWord} {fmtDist(metresDone)}
+          </span>
           <span>осталось {fmtDist(remaining)}</span>
         </div>
       )}

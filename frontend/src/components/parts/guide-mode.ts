@@ -35,6 +35,12 @@ const FOOT: GuideTravelMode = {
   icon: Footprints,
 };
 
+/**
+ * Walking is the product's default: what a route without a stated transport
+ * honestly means, and the wording the guide falls back to.
+ */
+export const DEFAULT_TRAVEL_MODE = FOOT;
+
 const BIKE: GuideTravelMode = {
   id: 'bike',
   verb: 'ехать',

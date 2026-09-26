@@ -21,9 +21,16 @@ import {
   type Waypoint,
 } from '@/stores/directions-store';
 import { getManeuverIcon } from '@/utils/get-maneuver-icon';
+import {
+  loadVisitOverrides,
+  saveVisitOverrides,
+  visitMinutesFor,
+  type VisitOverrides,
+} from '@/utils/visit-time';
 
 import { GuideEmpty } from './parts/guide-empty';
 import { fmtDist, metresBetween } from './parts/guide-format';
+import { guideModeFor } from './parts/guide-mode';
 import { GuideNextStop } from './parts/guide-next-stop';
 import { GuideProgress } from './parts/guide-progress';
 import { GuideRouteDone } from './parts/guide-route-done';
@@ -62,6 +69,13 @@ interface GuidePanelProps {
   onReroute?: () => void;
   suggestions?: GuideSuggestion[];
   onAddSuggestion?: (id: string) => void;
+  /**
+   * The transport the plan was built for (Valhalla costing): «pedestrian»,
+   * «bicycle», «auto» — or nothing while it is unknown, which the guide reads
+   * as walking. The turn instructions already arrive in the costing's own
+   * language; this makes the guide's own voice match them.
+   */
+  transport?: string | null;
 }
 
 const STORAGE_KEY = 'grodno-guide-progress';
@@ -298,8 +312,49 @@ export const GuidePanel = ({
   onReroute,
   suggestions = [],
   onAddSuggestion,
+  transport = null,
 }: GuidePanelProps) => {
   const key = useMemo(() => guideRouteKey(stops), [stops]);
+  /** How the guide speaks about movement: on foot, on a bike, or driving. */
+  const travel = useMemo(() => guideModeFor(transport), [transport]);
+  const [visitOverrides, setVisitOverrides] = useState<VisitOverrides>(() =>
+    loadVisitOverrides(key)
+  );
+  /** A rebuilt route remounts the panel, but a key change also resets this. */
+  useEffect(() => {
+    setVisitOverrides(loadVisitOverrides(key));
+  }, [key]);
+  const setStopVisitMinutes = useCallback(
+    (id: string, minutes: number | null) => {
+      setVisitOverrides((prev) => {
+        const next = { ...prev };
+        if (minutes == null) delete next[id];
+        else next[id] = minutes;
+        saveVisitOverrides(key, next);
+        return next;
+      });
+    },
+    [key]
+  );
+  /** The tourist's own minutes win over the dataset's estimate. */
+  const visitMinutesOf = useCallback(
+    (stop: GuideStop) =>
+      visitMinutesFor(stop.id, stop.visitMinutes, visitOverrides),
+    [visitOverrides]
+  );
+  /** What the timeline rows show: the effective minutes and the raw estimate. */
+  const listStops = useMemo(
+    () =>
+      stops.map((stop) => ({
+        id: stop.id,
+        name: stop.name,
+        category: stop.category ?? null,
+        visitMinutes: visitMinutesOf(stop),
+        visitOverride: visitOverrides[stop.id] ?? null,
+        estimateMinutes: stop.visitMinutes ?? null,
+      })),
+    [stops, visitMinutesOf, visitOverrides]
+  );
   const [progress, setProgress] = useState<StoredProgress>(() =>
     loadProgress(key)
   );
@@ -512,7 +567,9 @@ export const GuidePanel = ({
 
   const walkSeconds =
     speed && remainingToNext != null ? remainingToNext / speed : null;
-  const walkMinutes =
+  // Travel time, not walking time: `speed` is Valhalla's own for this route, so
+  // on a bike or in a car this is already the right number.
+  const travelMinutes =
     walkSeconds != null && walkSeconds > 0
       ? Math.max(1, Math.round(walkSeconds / 60))
       : null;
@@ -530,7 +587,7 @@ export const GuidePanel = ({
   const done = effectiveVisited.length;
   const minutesLeft = stops
     .filter((s) => !effectiveVisited.includes(s.id))
-    .reduce((sum, s) => sum + (s.visitMinutes ?? 0), 0);
+    .reduce((sum, s) => sum + (visitMinutesOf(s) ?? 0), 0);
   const totalVisitLeft = minutesLeft;
   const remainingMinutes = useMemo(() => {
     if (walkSeconds == null && totalVisitLeft === 0) return null;
@@ -673,10 +730,16 @@ export const GuidePanel = ({
             number={nextIndex + 1}
             name={nextStop.name}
             category={nextStop.category ?? null}
-            visitMinutes={nextStop.visitMinutes ?? null}
+            visitMinutes={visitMinutesOf(nextStop)}
+            visitOverride={visitOverrides[nextStop.id] ?? null}
+            estimateMinutes={nextStop.visitMinutes ?? null}
+            onVisitMinutesChange={(minutes) =>
+              setStopVisitMinutes(nextStop.id, minutes)
+            }
             distance={toNextMetres}
-            walkMinutes={walkMinutes}
+            travelMinutes={travelMinutes}
             etaLabel={etaLabel}
+            mode={travel}
             mapsHref={mapsUrl(nextStop.lat, nextStop.lon)}
           />
         ) : (
@@ -690,6 +753,7 @@ export const GuidePanel = ({
           metresDone={metresDone}
           metresTotal={metresTotal}
           remainingMinutes={remainingMinutes}
+          mode={travel}
         />
 
         <p
@@ -730,11 +794,12 @@ export const GuidePanel = ({
         )}
 
         <GuideStopList
-          stops={stops}
+          stops={listStops}
           visited={effectiveVisited}
           nextId={nextStop?.id ?? null}
           nextDistance={toNextMetres}
           onToggle={toggle}
+          onVisitMinutesChange={setStopVisitMinutes}
           collapsible
           defaultOpen={false}
         />
@@ -763,10 +828,16 @@ export const GuidePanel = ({
           number={nextIndex + 1}
           name={nextStop.name}
           category={nextStop.category ?? null}
-          visitMinutes={nextStop.visitMinutes ?? null}
+          visitMinutes={visitMinutesOf(nextStop)}
+          visitOverride={visitOverrides[nextStop.id] ?? null}
+          estimateMinutes={nextStop.visitMinutes ?? null}
+          onVisitMinutesChange={(minutes) =>
+            setStopVisitMinutes(nextStop.id, minutes)
+          }
           distance={toNextMetres}
-          walkMinutes={walkMinutes}
+          travelMinutes={travelMinutes}
           etaLabel={etaLabel}
+          mode={travel}
           mapsHref={mapsUrl(nextStop.lat, nextStop.lon)}
         />
       ) : (
@@ -780,6 +851,7 @@ export const GuidePanel = ({
         metresDone={metresDone}
         metresTotal={metresTotal}
         remainingMinutes={remainingMinutes}
+        mode={travel}
       />
 
       <p
@@ -791,11 +863,12 @@ export const GuidePanel = ({
       </p>
 
       <GuideStopList
-        stops={stops}
+        stops={listStops}
         visited={effectiveVisited}
         nextId={nextStop?.id ?? null}
         nextDistance={toNextMetres}
         onToggle={toggle}
+        onVisitMinutesChange={setStopVisitMinutes}
       />
 
       <button

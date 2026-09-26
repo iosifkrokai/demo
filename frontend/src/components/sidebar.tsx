@@ -43,6 +43,7 @@ import {
 } from '@/stores/directions-store';
 import { useDirectionsQuery } from '@/hooks/use-directions-queries';
 import { GuidePanel, guideRouteKey, type GuideStop } from './guide-panel';
+import { guideModeFor } from './parts/guide-mode';
 import { WaypointList } from './waypoint-list';
 import { Chip } from './parts/chip';
 import { Segmented, type SegmentedItem } from './parts/segmented';
@@ -955,7 +956,9 @@ export const Sidebar = () => {
                 <p className="truncate text-meta text-muted-foreground">
                   {mode === 'plan'
                     ? 'Опишите запрос — соберу маршрут по дорогам'
-                    : 'Отмечайте пройденные остановки'}
+                    : guideModeFor(transport).id === 'foot'
+                      ? 'Отмечайте пройденные остановки'
+                      : 'Отмечайте посещённые остановки'}
                 </p>
               </div>
             </div>
@@ -966,7 +969,11 @@ export const Sidebar = () => {
             {mode === 'guide' ? (
               // key: a rebuilt route remounts the guide, so the walk restarts
               // instead of carrying progress from the route that no longer exists
-              <GuidePanel key={guideRouteKey(guideStops)} stops={guideStops} />
+              <GuidePanel
+                key={guideRouteKey(guideStops)}
+                stops={guideStops}
+                transport={transport}
+              />
             ) : (
               <>
                 {/* === Ask === */}
