@@ -123,6 +123,27 @@ class GenerateReq(BaseModel):
     user_interests: list[str] | None = Field(default=None)
     preferences: dict | None = Field(default=None)
 
+    # ── Explicit filters (spec 002) ─────────────────────────────────────────
+    # Anything the tourist set with a visible control. Explicit values win over
+    # a guess made from `query`; a genuine conflict is a clarification, not a
+    # silent override.
+    locale: Literal["ru", "en"] = "ru"
+    party_adults: int | None = Field(default=None, ge=0, le=50)
+    # Count only. Ages are never invented: an age the user did not name stays
+    # absent and the route must not pretend to know it.
+    party_children: int | None = Field(default=None, ge=0, le=20)
+    party_children_ages: list[int] = Field(default_factory=list)
+    mobility: list[str] = Field(default_factory=list)
+    # Category codes the route MUST serve ("туалет" = a toilet is mandatory).
+    hard_services: list[str] = Field(default_factory=list)
+    # Category codes the tourist would like more of (soft).
+    interests: list[str] = Field(default_factory=list)
+    # Category codes to keep out of the route.
+    avoid: list[str] = Field(default_factory=list)
+    # "route" = an itinerary; "catalogue" = a grouped list of places to choose from.
+    result_mode: Literal["route", "catalogue"] = "route"
+    round_trip: bool = False
+
     @field_validator("query")
     @classmethod
     def _strip_query(cls, v: str) -> str:

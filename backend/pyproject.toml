@@ -23,6 +23,11 @@ dependencies = [
     "httpx>=0.27",
     # Validation
     "pydantic>=2.7",
+    # Agent framework — bounded tool-using interpretation layer (spec 002 §4.2).
+    # slim + the openrouter extra (the provider is built on the openai SDK);
+    # nothing else is pulled in. Without it the agent path degrades to the
+    # deterministic reading instead of failing, so the pin can be conservative.
+    "pydantic-ai-slim[openrouter]>=1.0,<2",
     # ML — embeddings + cross-encoder rerank
     "numpy>=1.26",                  # MMR diversity step
 ]

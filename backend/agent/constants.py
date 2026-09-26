@@ -10,6 +10,8 @@ Tuning here is a code review decision: change → tests → commit.
 
 from __future__ import annotations
 
+from . import taxonomy
+
 # ── ML models (OpenRouter) ──────────────────────────────────────────────────
 # Jev: TypeSafe System One decision model — typed answers (noul/choice/score),
 # no text generation. Used for intent classification and rerank scoring.
@@ -27,16 +29,10 @@ PARTY_TYPES = ("solo", "family", "couple", "group")
 # Area width of a request, decided by the intent model (not by keyword matching).
 SEARCH_SCOPES = ("town", "district", "region")
 
-# Category taxonomy — mirrors data/*.csv `category` column and the
-# visit-time table in planner/cost.py.
-CATEGORIES = (
-    "замок", "костёл", "церковь", "монастырь", "дворец", "усадьба",
-    "парк", "музей", "памятник", "храм", "архитектура",
-    "инфраструктура", "кладбище",
-    # Everyday stops a walk needs (coffee, toilet): OSM amenity/tourism POIs
-    # ingested by scripts/ingest_poi.py.
-    "кафе", "ресторан", "туалет", "гостиница",
-)
+# Category taxonomy — the canonical codes live in data/taxonomy.csv and are
+# read through agent/taxonomy.py. Nothing here is a second list: import a code
+# from taxonomy instead of adding one to this tuple.
+CATEGORIES = taxonomy.all_codes()
 
 # ── Retrieval / ranking ─────────────────────────────────────────────────────
 # Reciprocal Rank Fusion constant (standard 60 — Cormack et al.).
@@ -46,7 +42,11 @@ MMR_LAMBDA = 0.7
 
 # Everyday stops a walk needs ("добавь кофейню и туалет"): these are picked by
 # PROXIMITY to the route, not by relevance — a coffee 12 km away is not a stop.
-CONVENIENCE_CATEGORIES = ("кафе", "ресторан", "туалет", "гостиница")
+# Defined as "every service-role category" so a new service code is added once,
+# in taxonomy.csv, and appears here automatically.
+CONVENIENCE_CATEGORIES = tuple(
+    cat.code for cat in taxonomy.all_categories() if cat.role == "service"
+)
 CONVENIENCE_RADIUS_M = 500      # how far off the route a convenience stop may be
 CONVENIENCE_MAX_ADDED = 6       # at most this many convenience stops per refine
 # Valhalla rejects more than 20 locations per /route and /optimized_route call
@@ -98,12 +98,11 @@ VALHALLA_MAX_RETRIES = 2
 GRODNO_BBOX = {"south": 52.75, "west": 23.35, "north": 54.80, "east": 27.00}
 
 # ── Visit-time defaults by category (minutes) ───────────────────────────────
+# Derived from the taxonomy so a category's visit time is defined in exactly
+# one place (data/taxonomy.csv). VISIT_TIME_DEFAULT still covers rows whose
+# category is unknown/legacy free text.
 VISIT_TIME_BY_CATEGORY: dict[str, int] = {
-    "замок": 40, "музей": 40, "монастырь": 30,
-    "дворец": 30, "усадьба": 30, "парк": 30,
-    "костёл": 20, "церковь": 20, "храм": 20,
-    "архитектура": 20, "кладбище": 15,
-    "памятник": 10, "инфраструктура": 10,
+    cat.code: cat.visit_minutes for cat in taxonomy.all_categories()
 }
 VISIT_TIME_DEFAULT = 15
 

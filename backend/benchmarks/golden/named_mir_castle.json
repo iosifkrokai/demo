@@ -1,0 +1,22 @@
+{
+  "id": "named_mir_castle",
+  "locale": "ru",
+  "query": "Мирский замок и прогулка по посёлку Мир",
+  "filters": {
+    "party_children": null,
+    "hard_services": [],
+    "interests": ["замок"],
+    "avoid": [],
+    "time_budget_minutes": 180,
+    "origin": {"lat": 53.451, "lon": 26.4722},
+    "result_mode": "route"
+  },
+  "expectations": {
+    "must_contain_categories": ["замок"],
+    "must_not_contain_categories": [],
+    "must_contain_names": ["Мир"],
+    "expected_status": ["ready"],
+    "max_total_minutes": 180,
+    "in_region": true
+  }
+}

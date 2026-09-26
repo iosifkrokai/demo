@@ -64,10 +64,11 @@ def test_first_radius_is_used_when_it_works(monkeypatch):
         return TRIP
 
     monkeypatch.setattr(vc, "_request_with_retry", fake)
-    shape, summary = vc.route_through([GRODNO, NEW_CASTLE, OLD_TOWN])
+    result = vc.route_through([GRODNO, NEW_CASTLE, OLD_TOWN])
 
-    assert shape["type"] == "LineString"
-    assert summary["length"] == 1.2
+    assert result.status == vc.RouteStatus.USABLE
+    assert result.shape["type"] == "LineString"
+    assert result.summary["length"] == 1.2
     assert len(seen) == 1
     assert _radii_of(seen[0]) == [vc.LOCATION_SNAP_RADIUS_M] * 3
 
@@ -85,9 +86,10 @@ def test_snap_failure_retries_with_a_wider_radius(monkeypatch):
         return TRIP
 
     monkeypatch.setattr(vc, "_request_with_retry", fake)
-    shape, _ = vc.route_through([GRODNO, NEW_CASTLE, OLD_TOWN])
+    result = vc.route_through([GRODNO, NEW_CASTLE, OLD_TOWN])
 
-    assert shape["coordinates"], "expected a shape once snapping succeeded"
+    assert result.status == vc.RouteStatus.USABLE
+    assert result.shape["coordinates"], "expected a shape once snapping succeeded"
     assert radii_tried == [vc.ROUTE_SNAP_RADII_M[0], vc.ROUTE_SNAP_RADII_M[1]]
 
 
@@ -101,8 +103,8 @@ def test_non_snap_error_is_not_retried(monkeypatch):
         raise UpstreamUnavailable("valhalla GET /route failed after retries: connect timeout")
 
     monkeypatch.setattr(vc, "_request_with_retry", fake)
-    with pytest.raises(UpstreamUnavailable):
-        vc.route_through([GRODNO, NEW_CASTLE, OLD_TOWN])
+    result = vc.route_through([GRODNO, NEW_CASTLE, OLD_TOWN])
+    assert result.status == vc.RouteStatus.SERVICE_UNAVAILABLE
     assert calls["n"] == 1, "a plain upstream error must not fan out into radius retries"
 
 
@@ -126,9 +128,10 @@ def test_unsnappable_stop_is_dropped_before_routing(monkeypatch):
         return TRIP
 
     monkeypatch.setattr(vc, "_request_with_retry", fake)
-    shape, _ = vc.route_through([GRODNO, NEW_CASTLE, OLD_TOWN])
+    result = vc.route_through([GRODNO, NEW_CASTLE, OLD_TOWN])
 
-    assert shape["coordinates"], "expected the tour to survive without that stop"
+    assert result.status == vc.RouteStatus.USABLE
+    assert result.shape["coordinates"], "expected the tour to survive without that stop"
     assert len(routed) == 1, "no radius ladder needed once the bad stop is gone"
     assert len(routed[0]) == 2, "the unsnappable middle stop should be gone"
     # the survivors are the /locate-snapped coordinates, not the raw POI points
@@ -147,9 +150,10 @@ def test_unsnappable_endpoint_is_dropped_too(monkeypatch):
         return TRIP
 
     monkeypatch.setattr(vc, "_request_with_retry", fake)
-    shape, _ = vc.route_through([GRODNO, NEW_CASTLE, OLD_TOWN])
+    result = vc.route_through([GRODNO, NEW_CASTLE, OLD_TOWN])
 
-    assert shape["coordinates"], "a bad endpoint must not kill the route"
+    assert result.status == vc.RouteStatus.USABLE
+    assert result.shape["coordinates"], "a bad endpoint must not kill the route"
 
 
 def test_single_routable_pair_still_builds(monkeypatch):
@@ -164,7 +168,10 @@ def test_single_routable_pair_still_builds(monkeypatch):
         return TRIP
 
     monkeypatch.setattr(vc, "_request_with_retry", fake)
-    assert vc.route_through([GRODNO, NEW_CASTLE, OLD_TOWN]) == ({}, None)
+    result = vc.route_through([GRODNO, NEW_CASTLE, OLD_TOWN])
+    assert result.status == vc.RouteStatus.NO_ROUTE_EXISTS
+    assert result.shape == {}
+    assert result.summary is None
 
 
 def test_fewer_than_two_locations_is_a_noop(monkeypatch):
@@ -172,4 +179,7 @@ def test_fewer_than_two_locations_is_a_noop(monkeypatch):
         raise AssertionError("must not call Valhalla with a single location")
 
     monkeypatch.setattr(vc, "_request_with_retry", fake)
-    assert vc.route_through([GRODNO]) == ({}, None)
+    result = vc.route_through([GRODNO])
+    assert result.status == vc.RouteStatus.NO_ROUTE_EXISTS
+    assert result.shape == {}
+    assert result.summary is None

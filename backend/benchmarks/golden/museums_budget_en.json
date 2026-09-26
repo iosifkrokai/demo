@@ -1,0 +1,22 @@
+{
+  "id": "museums_budget_en",
+  "locale": "en",
+  "query": "Grodno museums for two hours",
+  "parity_group": "museums_budget",
+  "filters": {
+    "party_children": null,
+    "hard_services": [],
+    "interests": ["музей"],
+    "avoid": [],
+    "time_budget_minutes": 120,
+    "origin": {"lat": 53.6778, "lon": 23.8295},
+    "result_mode": "route"
+  },
+  "expectations": {
+    "must_contain_categories": ["музей"],
+    "must_not_contain_categories": [],
+    "expected_status": ["ready", "needs_clarification", "infeasible"],
+    "max_total_minutes": 120,
+    "in_region": true
+  }
+}

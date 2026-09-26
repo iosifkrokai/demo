@@ -1,0 +1,21 @@
+{
+  "id": "avoid_temples",
+  "locale": "ru",
+  "query": "семейная прогулка по Гродно без храмов и костёлов: парк и зоопарк",
+  "filters": {
+    "party_children": 2,
+    "hard_services": [],
+    "interests": ["парк"],
+    "avoid": ["храм", "костёл", "церковь", "монастырь"],
+    "time_budget_minutes": 180,
+    "origin": {"lat": 53.6778, "lon": 23.8295},
+    "result_mode": "route"
+  },
+  "expectations": {
+    "must_contain_categories": ["парк"],
+    "must_not_contain_categories": ["храм", "костёл", "церковь", "монастырь"],
+    "expected_status": ["ready", "needs_clarification"],
+    "max_total_minutes": 180,
+    "in_region": true
+  }
+}

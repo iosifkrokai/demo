@@ -58,10 +58,20 @@ def optimize(
     must_idx = [i for i, c in enumerate(candidates) if c.id in constraints.must_visit_ids]
 
     if n < 2:
-        return list(candidates), {**info, "algorithm": "direct"}
+        return list(candidates), _report_missing_must(
+            {**info, "algorithm": "direct", "order": list(range(n))},
+            list(range(n)),
+            candidates,
+            constraints,
+        )
     if n == 2:
         order = [0, 1] if not must_idx else (must_idx + [i for i in range(2) if i not in must_idx])
-        return [candidates[i] for i in order], {**info, "algorithm": "direct", "order": order}
+        return [candidates[i] for i in order], _report_missing_must(
+            {**info, "algorithm": "direct", "order": order},
+            order,
+            candidates,
+            constraints,
+        )
 
     if n <= 6:
         order, info = _brute_open(
@@ -90,7 +100,35 @@ def optimize(
         info = {**info, "stops_dropped": dropped, "order": new_order}
         order = new_order
 
+    info = _report_missing_must(info, order, candidates, constraints)
     return [candidates[i] for i in order], info
+
+
+def _report_missing_must(
+    info: dict,
+    order: list[int],
+    candidates: list[Candidate],
+    constraints: ResolvedConstraints,
+) -> dict:
+    """Record must-visit ids absent from the final route instead of losing them.
+
+    ``_budget_constrain`` protects must-visits, but a mandatory id may never
+    have reached the pool (dropped upstream as unreachable or outside the
+    area). Returning a route that quietly omits it is the defect; we surface
+    ``missing_must_visit_ids`` in ``info`` so the verifier can mark the
+    requirement unmet/infeasible.
+    """
+    if not constraints.must_visit_ids:
+        return info
+    final_ids = {candidates[i].id for i in order if 0 <= i < len(candidates)}
+    missing = [
+        mid
+        for mid in dict.fromkeys(constraints.must_visit_ids)
+        if mid not in final_ids
+    ]
+    if missing:
+        return {**info, "missing_must_visit_ids": missing}
+    return info
 
 
 def _budget_constrain(

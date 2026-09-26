@@ -1,7 +1,7 @@
 """Thin Valhalla HTTP client with retries + matrix support.
 
 Two operations:
-  - route_through(locations): GET /route → (shape, summary)
+  - route_through(locations): GET /route → RouteResult(status, shape, summary, maneuvers, language)
   - time_matrix(sources, targets): GET /sources_to_targets → NxM seconds/seconds matrix
 
 The matrix is what the planner uses to pick a better ordering than the
@@ -15,6 +15,8 @@ import json
 import logging
 import time as _time
 from collections.abc import Iterable, Iterator
+from dataclasses import dataclass
+from enum import Enum
 
 import httpx
 
@@ -57,6 +59,34 @@ SNAP_ERROR_MARKERS = ("candidate edge", "for destination label", "for origin lab
 # gets the same treatment as a snap failure: widen the radius, then drop it.
 NO_PATH_MARKERS = ("no path could be found", "error_code\":442")
 ROUTE_FAILURE_MARKERS = SNAP_ERROR_MARKERS + NO_PATH_MARKERS
+
+
+# ── Typed result system ────────────────────────────────────────────────────────
+class RouteStatus(Enum):
+    """Machine-readable status codes for route results."""
+    USABLE = "usable"
+    NO_ROUTE_EXISTS = "no_route_exists"
+    SERVICE_UNAVAILABLE = "service_unavailable"
+    EMPTY_GEOMETRY = "empty_geometry"
+
+
+@dataclass
+class RouteResult:
+    """Typed result from Valhalla route operations."""
+    status: RouteStatus
+    shape: dict
+    summary: dict | None
+    maneuvers: list[dict] | None = None
+    language: str | None = None
+
+
+def is_unreachable_time(seconds: float) -> bool:
+    """Check if a time value represents an unreachable pair.
+
+    Encapsulates the UNREACHABLE_S sentinel so callers don't need to remember
+    the magic constant.
+    """
+    return seconds == float(constants.UNREACHABLE_S)
 
 
 # ── Matrix chunking limits ──────────────────────────────────────────────────
@@ -502,14 +532,42 @@ def _drop_unsnappable(locations: list[dict], costing: str, timeout: float | None
     return keep
 
 
-def _trip_to_shape(body: dict) -> tuple[dict, dict | None]:
+def _trip_to_shape(body: dict, language: str | None = None) -> RouteResult:
+    """Convert Valhalla trip response to typed RouteResult."""
     if "trip" not in body:
-        return {}, None
+        return RouteResult(
+            status=RouteStatus.EMPTY_GEOMETRY,
+            shape={},
+            summary=None,
+            maneuvers=None,
+            language=language,
+        )
     trip = body["trip"]
     coords: list[list[float]] = []
+    maneuvers: list[dict] = []
     for leg in trip.get("legs", []):
         coords.extend(_decode_polyline(leg.get("shape", "")))
-    return {"type": "LineString", "coordinates": coords}, trip.get("summary")
+        maneuvers.extend(leg.get("maneuvers", []))
+    
+    shape = {"type": "LineString", "coordinates": coords}
+    summary = trip.get("summary")
+    
+    if not coords:
+        return RouteResult(
+            status=RouteStatus.EMPTY_GEOMETRY,
+            shape=shape,
+            summary=summary,
+            maneuvers=maneuvers,
+            language=language,
+        )
+    
+    return RouteResult(
+        status=RouteStatus.USABLE,
+        shape=shape,
+        summary=summary,
+        maneuvers=maneuvers,
+        language=language,
+    )
 
 
 def _route_request(
@@ -570,8 +628,8 @@ def optimized_route(
         idx = loc.get("original_index")
         if idx is not None and int(idx) not in order:
             order.append(int(idx))
-    shape, summary = _trip_to_shape(body)
-    return order, shape, summary
+    result = _trip_to_shape(body, language)
+    return order, result.shape, result.summary
 
 
 def route_through(
@@ -579,12 +637,14 @@ def route_through(
     costing: str = "pedestrian",
     language: str = "ru",
     timeout: float | None = None,
-):
+) -> RouteResult:
     """Call GET /route. Locations are [{lat, lon, type}], first/last 'break'.
 
-    Returns:
-        shape   — GeoJSON LineString geometry for the trip (or {} on failure).
-        summary — Valhalla trip.summary dict (km, seconds) or None.
+    Returns RouteResult with explicit status codes:
+    - USABLE: valid route with geometry
+    - NO_ROUTE_EXISTS: no route can be built between these points
+    - SERVICE_UNAVAILABLE: Valhalla service unavailable/timeout
+    - EMPTY_GEOMETRY: route returned but has no geometry
 
     A stop that cannot be snapped to the walking graph is retried with a wider
     radius; if even 5 km is not enough it is dropped from the polyline (logged),
@@ -595,7 +655,13 @@ def route_through(
     """
     locs = [dict(loc) for loc in locations]
     if len(locs) < 2:
-        return {}, None
+        return RouteResult(
+            status=RouteStatus.NO_ROUTE_EXISTS,
+            shape={},
+            summary=None,
+            maneuvers=None,
+            language=language,
+        )
     # Feed Valhalla points that sit ON its graph — a POI a few hundred metres off
     # the pedestrian network otherwise 500s the whole tour.
     locs = snap_locations(locs, costing, timeout)
@@ -608,7 +674,13 @@ def route_through(
     locs = _drop_unsnappable(locs, costing, timeout)
     if len(locs) < 2:
         logger.warning("route: fewer than 2 of the stops can be snapped — no route")
-        return {}, None
+        return RouteResult(
+            status=RouteStatus.NO_ROUTE_EXISTS,
+            shape={},
+            summary=None,
+            maneuvers=None,
+            language=language,
+        )
 
     last_exc: Exception | None = None
     for radius in ROUTE_SNAP_RADII_M:
@@ -616,10 +688,16 @@ def route_through(
             body = _route_request(locs, costing, language, timeout, radius)
         except UpstreamUnavailable as exc:
             if not _is_route_failure(exc):
-                raise
+                return RouteResult(
+                    status=RouteStatus.SERVICE_UNAVAILABLE,
+                    shape={},
+                    summary=None,
+                    maneuvers=None,
+                    language=language,
+                )
             last_exc = exc
             continue
-        return _trip_to_shape(body)
+        return _trip_to_shape(body, language)
 
     # Every radius failed for the stops that /locate said were fine → find the
     # culprit: try the route without each stop in turn and take the first that
@@ -634,7 +712,13 @@ def route_through(
             last_exc = exc
             continue
         logger.warning("route: dropped 1 stop that kept failing, built with %d", len(subset))
-        return _trip_to_shape(body)
+        return _trip_to_shape(body, language)
 
     logger.warning("route: no routable pair among %d stops (%s)", len(locs), last_exc)
-    return {}, None
+    return RouteResult(
+        status=RouteStatus.NO_ROUTE_EXISTS,
+        shape={},
+        summary=None,
+        maneuvers=None,
+        language=language,
+    )

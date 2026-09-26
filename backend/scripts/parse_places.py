@@ -28,6 +28,7 @@ Coordinates come from the page's inline JS `const initialCenter = [LON, LAT];`
 import hashlib
 import os
 import re
+import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -38,6 +39,9 @@ import psycopg
 import requests
 from bs4 import BeautifulSoup
 from requests.adapters import HTTPAdapter
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from agent.geofence import inside_project_area
 
 BASE = "https://planetabelarus.by"
 GRODNO_LISTING = f"{BASE}/sights/filter/location-is-0000000275/apply/"
@@ -146,6 +150,10 @@ def parse_detail(url: str, html: str):
     if not m:
         return None
     lon, lat = float(m.group(1)), float(m.group(2))
+    # CMS location filters are metadata, not geographic proof. Reject misplaced
+    # detail pages before they can be upserted (including NaN/Infinity values).
+    if not inside_project_area(lat, lon):
+        return None
 
     return {
         "name": name,

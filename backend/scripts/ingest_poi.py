@@ -51,6 +51,7 @@ from ingest_osm import (
     resolve_district,
 )
 
+from agent.config import DSN
 from agent.geofence import inside_project_area
 
 # ---------------------------------------------------------------------------
@@ -59,8 +60,6 @@ from agent.geofence import inside_project_area
 
 # Grodno region bbox (S W N E) — same box as agent/constants.py GRODNO_BBOX.
 DEFAULT_BBOX = (52.75, 23.35, 54.80, 27.00)
-
-DSN = os.environ.get("DATABASE_URL", "postgresql://grodno:***@localhost:5432/grodno")
 
 # source_url prefix for every row this script writes.
 SOURCE_PREFIX = "osm_poi:"

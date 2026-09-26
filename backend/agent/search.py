@@ -5,7 +5,7 @@ Public surface:
   - _keyword_search           — ILIKE-based name match (short-query fallback)
   - fetch_points_by_ids       — hydrate Candidate objects from IDs
   - fetch_embeddings          — batch load embeddings by ID (for MMR)
-  - db_categories             — map LLM categories to DB category values
+  - db_categories             — map query categories to DB category values
 """
 
 from __future__ import annotations
@@ -16,36 +16,18 @@ from typing import Any
 
 import psycopg
 
-# LLM-extracted categories (agent/llm.py taxonomy) -> DB category values
-# (the curated taxonomy in data/places_curated.csv). A query category maps
-# to several DB values because the DB taxonomy is finer-grained for cult
-# places.
-CATEGORY_TO_DB: dict[str, list[str]] = {
-    "замок": ["замок"],
-    "костёл": ["костёл"],
-    "церковь": ["церковь"],
-    "монастырь": ["монастырь"],
-    "дворец": ["дворец", "усадьба"],
-    "усадьба": ["усадьба", "дворец"],
-    "парк": ["парк"],
-    "музей": ["музей"],
-    "памятник": ["памятник"],
-    "городище": [],
-    "храм": ["храм"],
-    "архитектура": ["архитектура", "инфраструктура"],
-    "инфраструктура": ["инфраструктура"],
-    "кладбище": ["кладбище"],
-}
+from .taxonomy import db_values
 
 
 def db_categories(categories: list[str]) -> list[str]:
-    """Flatten LLM categories into distinct DB category values."""
-    out: list[str] = []
-    for c in categories or []:
-        for db_cat in CATEGORY_TO_DB.get(c, []):
-            if db_cat not in out:
-                out.append(db_cat)
-    return out
+    """Map query categories (codes, aliases, any inflection) to DB values.
+
+    Thin wrapper over ``taxonomy.db_values`` — the canonical taxonomy is the
+    only place a category is defined, so this module keeps no second map.
+    Unknown categories resolve to nothing and are dropped (an unknown model
+    category must not widen the SQL filter).
+    """
+    return db_values(categories)
 
 
 CATEGORY_COLS = "id, name, category, lat, lon, blurb, fun_fact, fun_facts, links, " \

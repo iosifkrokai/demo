@@ -1,0 +1,21 @@
+{
+  "id": "castles_half_day",
+  "locale": "ru",
+  "query": "замки Гродненской области на полдня",
+  "filters": {
+    "party_children": null,
+    "hard_services": [],
+    "interests": ["замок"],
+    "avoid": [],
+    "time_budget_minutes": 240,
+    "origin": {"lat": 53.6778, "lon": 23.8295},
+    "result_mode": "route"
+  },
+  "expectations": {
+    "must_contain_categories": ["замок"],
+    "must_not_contain_categories": [],
+    "expected_status": ["ready", "needs_clarification", "infeasible"],
+    "max_total_minutes": 240,
+    "in_region": true
+  }
+}

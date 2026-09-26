@@ -26,6 +26,19 @@ Three modes, one metric implementation:
            paired bootstrap over the cases the two snapshots share, per metric,
            with a p-value and the noise floor next to every delta.
 
+  GOLDEN   .venv/bin/python scripts/bench_routes.py --golden
+           scores the REQUIREMENT set (benchmarks/golden/*.json) instead of the
+           reference walks: PASS/FAIL per case with a machine-readable reason
+           (missing mandatory category, forbidden category present, out-of-region
+           point, over budget, wrong status, RU/EN parity mismatch, ...) and an
+           aggregate compliance rate. `--replay-golden <snapshot dir>` re-scores
+           recorded responses offline. Neither mode fabricates anything: they
+           exit 2 with a clear message when the backend or Valhalla is down.
+
+The reference walks (benchmarks/routes/*.json) and the requirement cases
+(benchmarks/golden/*.json) are different benchmarks that share this file and no
+metric — see benchmarks/golden/README.md.
+
 SNAPSHOT FORMAT (one JSONL file, `rows.jsonl`; first line is the run meta):
 
     {"record": "meta",  "schema": ..., "run_id": ..., "started_at": ...,
@@ -135,8 +148,62 @@ from pathlib import Path
 
 BACKEND = Path(__file__).parent.parent.resolve()
 BENCH_ROUTES = BACKEND / "benchmarks" / "routes"
+BENCH_GOLDEN = BACKEND / "benchmarks" / "golden"
 BENCH_OUT = BACKEND / "benchmarks"
 BENCH_SNAPSHOTS = BENCH_OUT / "snapshots"
+
+# ── response status vocabulary ───────────────────────────────────────────────
+#
+# The API does not expose a top-level plan status yet (RouteResponse carries
+# parsed/points/shape/summary/budget/debug — no `status`, no `requirements`), so
+# the compliance scorer DERIVES one from what it can observe and records where
+# the status came from (`status_source`) rather than pretending the API said it.
+# A real `status` field or a `requirements[]` list wins the moment the API ships
+# one — see derive_status().
+STATUSES = frozenset(
+    {"ready", "catalogue", "degraded", "pending", "infeasible", "rejected",
+     "needs_clarification", "error"}
+)
+# Rejection-like statuses: an empty plan can satisfy these.
+REJECTION_STATUSES = frozenset({"rejected", "infeasible", "needs_clarification"})
+READY_STATUSES = frozenset({"ready", "catalogue", "degraded"})
+
+# Machine-readable compliance failure reasons. One per distinct way a plan can
+# violate a request. The report aggregates and prints by these codes, never by
+# prose, so a CI diff of two runs compares like with like.
+CHECK_API_ERROR = "api_error"
+CHECK_WRONG_STATUS = "wrong_status"
+CHECK_TOO_FEW_PLACES = "too_few_places"
+CHECK_MISSING_MANDATORY_CATEGORY = "missing_mandatory_category"
+CHECK_FORBIDDEN_CATEGORY_PRESENT = "forbidden_category_present"
+CHECK_MISSING_NAMED_PLACE = "missing_named_place"
+CHECK_OUT_OF_REGION_POINT = "out_of_region_point"
+CHECK_OVER_BUDGET = "over_budget"
+CHECK_RESULT_MODE = "result_mode_mismatch"
+CHECK_PARITY = "ru_en_parity_mismatch"
+
+# Fixed priority: when several checks fail, `reason` is the first one here. The
+# order is "the request was never answered" → "the answer is the wrong KIND of
+# answer" → "the answer breaks a stated condition", most-structural first.
+CHECK_PRIORITY: tuple[str, ...] = (
+    CHECK_API_ERROR,
+    CHECK_WRONG_STATUS,
+    CHECK_TOO_FEW_PLACES,
+    CHECK_MISSING_MANDATORY_CATEGORY,
+    CHECK_FORBIDDEN_CATEGORY_PRESENT,
+    CHECK_MISSING_NAMED_PLACE,
+    CHECK_OUT_OF_REGION_POINT,
+    CHECK_OVER_BUDGET,
+    CHECK_RESULT_MODE,
+)
+
+# Canonical domain codes (agent/constants.CATEGORIES) are the contract between
+# UI, planner and data. A golden file may only name a code from this set: a
+# typo'd code would otherwise silently grade nothing. Defined after the agent
+# import below, because the set comes from the agent itself.
+CANONICAL_CATEGORIES: dict[str, str] = {}
+CANONICAL_CODES_NORM: frozenset[str] = frozenset()
+
 
 # The routing constants below (UNREACHABLE_S, the duplicate radii, the leg cap)
 # are read from the agent rather than copied, so a benchmark can never grade the
@@ -146,6 +213,13 @@ if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 
 from agent import constants as agent_constants  # noqa: E402
+from agent.geofence import inside_project_area  # noqa: E402
+
+CANONICAL_CATEGORIES = {
+    canonical.strip().lower().replace("ё", "е"): canonical
+    for canonical in agent_constants.CATEGORIES
+}
+CANONICAL_CODES_NORM = frozenset(CANONICAL_CATEGORIES)
 
 # ── harness constants ────────────────────────────────────────────────────────
 
@@ -153,6 +227,7 @@ UNREACHABLE_S = float(agent_constants.UNREACHABLE_S)
 MAX_WALK_LEG_KM = float(agent_constants.MAX_WALK_LEG_KM)
 DUPLICATE_RADIUS_M = float(agent_constants.DUPLICATE_RADIUS_M)
 DUPLICATE_NAME_RADIUS_M = float(agent_constants.DUPLICATE_NAME_RADIUS_M)
+GRODNO_BBOX = dict(agent_constants.GRODNO_BBOX)
 
 # Radius of the stage-1 pool proxy. Deliberately far below MATCH_RADIUS_KM:
 # 250 m is the scale at which two rows are the same physical place (the agent
@@ -192,10 +267,19 @@ BOOTSTRAP_SEED = 20260926
 BOOTSTRAP_ALPHA = 0.05
 
 REQUEST_TIMEOUT_S = 120.0
+# The /health probe is a preflight, not a measurement: short, so a dead stack
+# fails in seconds instead of hanging the run.
+HEALTH_TIMEOUT_S = 5.0
 
 SNAPSHOT_SCHEMA = "bench_routes/snapshot/1"
 ROW_SCHEMA = "bench_routes/row/1"
 REPORT_SCHEMA = "bench_routes/report/2"
+# The golden set snapshots into its OWN file, so a golden run can never be
+# replayed by the route harness (or the other way round): the two row shapes
+# grade different things and mixing them would silently rescore nothing.
+GOLDEN_SNAPSHOT_FILE = "golden_rows.jsonl"
+GOLDEN_SNAPSHOT_SCHEMA = "bench_routes/golden_snapshot/1"
+GOLDEN_ROW_SCHEMA = "bench_routes/golden_row/1"
 
 # The noise floor measured on this pipeline before the harness existed. Printed
 # next to the computed one so a delta can be judged against a number that did
@@ -313,6 +397,58 @@ class Failure:
 
     def as_dict(self) -> dict:
         return {"kind": self.kind, "detail": self.detail, "gated": self.gated}
+
+
+@dataclass
+class GoldenCase:
+    """One requirement-compliance case from benchmarks/golden/*.json."""
+
+    id: str
+    locale: str
+    query: str
+    filters: dict
+    expectations: dict
+    parity_group: str | None = None
+    path: Path | None = None
+
+
+@dataclass
+class ComplianceVerdict:
+    """PASS/FAIL for one golden case (or parity group) against a plan response.
+
+    `reason` is machine-readable and stable: "ok", or one of the CHECK_* codes.
+    `detail` is the human sentence the report prints beside it. `checks` holds
+    one entry per check actually performed, so a reader sees every condition that
+    was evaluated — including the ones a response could not prove, which are
+    marked `unverified` rather than silently passed.
+    """
+
+    case_id: str
+    passed: bool
+    reason: str
+    detail: str = ""
+    status: str | None = None
+    status_source: str | None = None
+    checks: dict = field(default_factory=dict)
+
+    @property
+    def failed_checks(self) -> list[str]:
+        return [k for k, v in self.checks.items() if v.get("ok") is False]
+
+    @property
+    def unverified_checks(self) -> list[str]:
+        return [k for k, v in self.checks.items() if v.get("unverified")]
+
+    def as_dict(self) -> dict:
+        return {
+            "case_id": self.case_id,
+            "passed": self.passed,
+            "reason": self.reason,
+            "detail": self.detail,
+            "status": self.status,
+            "status_source": self.status_source,
+            "checks": self.checks,
+        }
 
 
 @dataclass
@@ -2215,6 +2351,1388 @@ def load_golden_map() -> dict[str, GoldenRoute]:
     return {r.case: r for r in load_golden_routes(BENCH_ROUTES)}
 
 
+# ── golden requirement compliance ────────────────────────────────────────────
+#
+# routes/*.json are REFERENCE WALKS: stops, and the order a good answer visits
+# them in, graded on geometry (recall, tau, detour). golden/*.json are
+# REQUIREMENT CASES: what the tourist asked for, and what must be true of ANY
+# acceptable answer. They share no file and no metric — a route can score a
+# perfect recall while quietly dropping the mandatory toilet, which is exactly
+# the defect class this set exists to catch. Spec §9 says so in one line: the
+# old benchmark measured points, never conditions.
+#
+# SCHEMA — the loader below IS the schema. It refuses unknown keys, so a case
+# cannot carry an expectation that nothing checks; prose copy:
+# benchmarks/golden/README.md.
+#
+#   id             file stem; must match the file name
+#   locale         "ru" | "en" — the language `query` is written in
+#   query          the text POSTed to /routes/generate (3..500 chars)
+#   parity_group   cases sharing it are the SAME request in another locale
+#   filters{}      explicit UI filters, mapped 1:1 onto GenerateReq:
+#                    party_children       int|null
+#                    hard_services        [code]           (hard)
+#                    interests            [code]           (soft)
+#                    avoid                [code]
+#                    time_budget_minutes  int|null
+#                    origin               {lat, lon}|null
+#                    result_mode          "route"|"catalogue"
+#   expectations{} machine-checkable conditions:
+#                    must_contain_categories     [code]  each must appear
+#                    must_not_contain_categories [code]  none may appear
+#                    must_contain_names          [str]   (optional)
+#                    expected_status             [status] non-empty
+#                    expected_result_mode        route|catalogue (optional)
+#                    max_total_minutes           int|null, null = no cap
+#                    in_region                   every point in Grodno ADM1
+#                    allow_empty                 may the plan be empty?
+#                    min_places                  floor on stops (optional)
+#                    status_note                 documentation (optional)
+#
+# Category values are always CANONICAL CODES (agent/constants.CATEGORIES), never
+# natural language: an EN case still carries "туалет", because the codes are the
+# contract between the UI, the planner and the data.
+
+GOLDEN_REQUIRED_TOP = frozenset({"id", "locale", "query", "filters", "expectations"})
+GOLDEN_OPTIONAL_TOP = frozenset({"parity_group"})
+GOLDEN_FILTER_KEYS = frozenset({
+    "party_children", "hard_services", "interests", "avoid",
+    "time_budget_minutes", "origin", "result_mode",
+})
+GOLDEN_REQUIRED_EXPECTATIONS = frozenset({
+    "must_contain_categories", "must_not_contain_categories", "expected_status",
+    "max_total_minutes", "in_region",
+})
+GOLDEN_OPTIONAL_EXPECTATIONS = frozenset({
+    "must_contain_names", "expected_result_mode", "allow_empty", "min_places",
+    "status_note",
+})
+GOLDEN_EXPECTATION_KEYS = GOLDEN_REQUIRED_EXPECTATIONS | GOLDEN_OPTIONAL_EXPECTATIONS
+
+LOCALES = ("ru", "en")
+RESULT_MODES = ("route", "catalogue")
+_CYRILLIC_RE = re.compile(r"[а-яё]", re.IGNORECASE)
+# GenerateReq's own bounds for LatLon and time_budget_minutes, so a golden origin
+# or budget that the API would reject is a schema error here, not a 422 later.
+ORIGIN_BOUNDS = {"lat": (44.0, 62.0), "lon": (19.0, 42.0)}
+
+
+class GoldenCaseError(ValueError):
+    """A golden case that does not satisfy the documented schema."""
+
+
+def _is_num(value) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def _norm_code(value) -> str:
+    """Canonical-code normalisation: lowercase, trimmed, ё folded to е."""
+    return str(value or "").strip().lower().replace("ё", "е")
+
+
+def _validate_code_list(name: str, values, errs: list[str]) -> None:
+    if not isinstance(values, list):
+        errs.append(f"{name}: must be a list of category codes")
+        return
+    for value in values:
+        if not isinstance(value, str) or not value.strip():
+            errs.append(f"{name}: entries must be non-empty strings")
+        elif _norm_code(value) not in CANONICAL_CODES_NORM:
+            errs.append(
+                f"{name}: {value!r} is not a canonical category code "
+                f"(see agent/constants.CATEGORIES)"
+            )
+
+
+def validate_golden_case(data, path: Path | None = None) -> list[str]:
+    """Every way one golden case violates the schema, as strings. [] == valid."""
+    where = path.name if path is not None else "<memory>"
+    errs: list[str] = []
+    if not isinstance(data, dict):
+        return [f"{where}: top level must be an object"]
+
+    unknown_top = set(data) - GOLDEN_REQUIRED_TOP - GOLDEN_OPTIONAL_TOP
+    for key in sorted(unknown_top):
+        errs.append(f"{where}: unknown top-level key {key!r}")
+    for key in sorted(GOLDEN_REQUIRED_TOP - set(data)):
+        errs.append(f"{where}: missing required key {key!r}")
+
+    case_id = data.get("id")
+    if not isinstance(case_id, str) or not case_id.strip():
+        errs.append(f"{where}: id must be a non-empty string")
+    elif path is not None and case_id != path.stem:
+        errs.append(f"{where}: id {case_id!r} must equal the file name {path.stem!r}")
+
+    locale = data.get("locale")
+    if locale not in LOCALES:
+        errs.append(f"{where}: locale must be one of {list(LOCALES)}, got {locale!r}")
+
+    query = data.get("query")
+    if not isinstance(query, str) or not (3 <= len(query.strip()) <= 500):
+        errs.append(f"{where}: query must be a string of 3..500 characters")
+    elif locale in LOCALES:
+        # A pair is only a parity pair if the two queries are actually written in
+        # the two languages: an "en" case with a Russian query would silently
+        # measure the same locale twice.
+        has_cyrillic = bool(_CYRILLIC_RE.search(query))
+        if locale == "en" and has_cyrillic:
+            errs.append(f"{where}: locale is 'en' but the query contains Cyrillic")
+        if locale == "ru" and not has_cyrillic:
+            errs.append(f"{where}: locale is 'ru' but the query contains no Cyrillic")
+
+    group = data.get("parity_group")
+    if group is not None and (not isinstance(group, str) or not group.strip()):
+        errs.append(f"{where}: parity_group must be a non-empty string when present")
+
+    filters = data.get("filters")
+    if not isinstance(filters, dict):
+        errs.append(f"{where}: filters must be an object")
+    else:
+        for key in sorted(set(filters) - GOLDEN_FILTER_KEYS):
+            errs.append(f"{where}: unknown filters key {key!r}")
+        for key in sorted(GOLDEN_FILTER_KEYS - set(filters)):
+            errs.append(f"{where}: missing filters key {key!r}")
+        children = filters.get("party_children")
+        if children is not None and not (
+            isinstance(children, int) and not isinstance(children, bool)
+            and 0 <= children <= 20
+        ):
+            errs.append(f"{where}: party_children must be null or an int in 0..20")
+        for key in ("hard_services", "interests", "avoid"):
+            if key in filters:
+                _validate_code_list(f"{where}: filters.{key}", filters[key], errs)
+        hard = {_norm_code(c) for c in filters.get("hard_services") or []}
+        avoid = {_norm_code(c) for c in filters.get("avoid") or []}
+        interests = {_norm_code(c) for c in filters.get("interests") or []}
+        both = hard & avoid
+        if both:
+            errs.append(
+                f"{where}: filters.hard_services and filters.avoid overlap "
+                f"({sorted(both)}) — a code cannot be mandatory and forbidden"
+            )
+        if interests & avoid:
+            errs.append(
+                f"{where}: filters.interests and filters.avoid overlap "
+                f"({sorted(interests & avoid)})"
+            )
+        budget = filters.get("time_budget_minutes")
+        if budget is not None and not (
+            isinstance(budget, int) and not isinstance(budget, bool) and budget >= 0
+        ):
+            errs.append(f"{where}: filters.time_budget_minutes must be null or an int >= 0")
+        elif budget is not None and budget > int(agent_constants.MAX_BUDGET_MIN):
+            errs.append(
+                f"{where}: filters.time_budget_minutes {budget} exceeds the API "
+                f"maximum {agent_constants.MAX_BUDGET_MIN}"
+            )
+        origin = filters.get("origin")
+        if origin is not None:
+            if not isinstance(origin, dict) or set(origin) != {"lat", "lon"}:
+                errs.append(f"{where}: filters.origin must be null or {{lat, lon}}")
+            else:
+                for axis, (lo, hi) in ORIGIN_BOUNDS.items():
+                    value = origin.get(axis)
+                    if not _is_num(value) or not (lo <= value <= hi):
+                        errs.append(
+                            f"{where}: filters.origin.{axis} must be a number in "
+                            f"{lo}..{hi}, got {value!r}"
+                        )
+        if filters.get("result_mode") not in RESULT_MODES:
+            errs.append(
+                f"{where}: filters.result_mode must be one of {list(RESULT_MODES)}, "
+                f"got {filters.get('result_mode')!r}"
+            )
+
+    exp = data.get("expectations")
+    if not isinstance(exp, dict):
+        errs.append(f"{where}: expectations must be an object")
+    else:
+        for key in sorted(set(exp) - GOLDEN_EXPECTATION_KEYS):
+            errs.append(f"{where}: unknown expectations key {key!r}")
+        for key in sorted(GOLDEN_REQUIRED_EXPECTATIONS - set(exp)):
+            errs.append(f"{where}: missing expectations key {key!r}")
+        for key in ("must_contain_categories", "must_not_contain_categories"):
+            if key in exp:
+                _validate_code_list(f"{where}: expectations.{key}", exp[key], errs)
+        names = exp.get("must_contain_names")
+        if names is not None and (
+            not isinstance(names, list)
+            or not names
+            or any(not isinstance(n, str) or not n.strip() for n in names)
+        ):
+            errs.append(
+                f"{where}: expectations.must_contain_names must be a non-empty "
+                "list of non-empty strings when present"
+            )
+        statuses = exp.get("expected_status")
+        if not isinstance(statuses, list) or not statuses:
+            errs.append(f"{where}: expectations.expected_status must be a non-empty list")
+        else:
+            for status in statuses:
+                if status not in STATUSES:
+                    errs.append(
+                        f"{where}: expectations.expected_status {status!r} is not one "
+                        f"of {sorted(STATUSES)}"
+                    )
+        mode = exp.get("expected_result_mode")
+        if mode is not None and mode not in RESULT_MODES:
+            errs.append(f"{where}: expectations.expected_result_mode must be {RESULT_MODES}")
+        cap = exp.get("max_total_minutes")
+        if cap is not None and not (
+            isinstance(cap, int) and not isinstance(cap, bool) and cap > 0
+        ):
+            errs.append(f"{where}: expectations.max_total_minutes must be null or int > 0")
+        elif (
+            cap is not None
+            and isinstance(filters, dict)
+            and isinstance(filters.get("time_budget_minutes"), int)
+            and cap > filters["time_budget_minutes"]
+        ):
+            errs.append(
+                f"{where}: expectations.max_total_minutes {cap} exceeds the stated "
+                f"budget {filters['time_budget_minutes']} — the cap would never bind"
+            )
+        if not isinstance(exp.get("in_region"), bool):
+            errs.append(f"{where}: expectations.in_region must be a boolean")
+        if "allow_empty" in exp and not isinstance(exp["allow_empty"], bool):
+            errs.append(f"{where}: expectations.allow_empty must be a boolean")
+        min_places = exp.get("min_places")
+        if min_places is not None and not (
+            isinstance(min_places, int) and not isinstance(min_places, bool) and min_places >= 0
+        ):
+            errs.append(f"{where}: expectations.min_places must be null or an int >= 0")
+        elif min_places is not None and not exp.get("allow_empty") and min_places == 0:
+            errs.append(
+                f"{where}: expectations.min_places 0 with allow_empty false — an "
+                "empty plan would pass; say allow_empty: true instead"
+            )
+        if exp.get("status_note") is not None and not isinstance(exp["status_note"], str):
+            errs.append(f"{where}: expectations.status_note must be a string")
+    return errs
+
+
+def golden_case_from_dict(data: dict, path: Path | None = None) -> GoldenCase:
+    """Build a GoldenCase from validated data (validate first, or it raises)."""
+    errs = validate_golden_case(data, path)
+    if errs:
+        raise GoldenCaseError("; ".join(errs))
+    return GoldenCase(
+        id=data["id"],
+        locale=data["locale"],
+        query=data["query"],
+        filters=dict(data["filters"]),
+        expectations=dict(data["expectations"]),
+        parity_group=data.get("parity_group"),
+        path=path,
+    )
+
+
+def load_golden_cases(directory: Path | None = None) -> list[GoldenCase]:
+    """Load and validate every case in benchmarks/golden (never silently skips)."""
+    directory = Path(directory) if directory is not None else BENCH_GOLDEN
+    files = sorted(directory.glob("*.json"))
+    if not files:
+        raise GoldenCaseError(f"no golden cases in {directory}")
+    cases: list[GoldenCase] = []
+    problems: list[str] = []
+    for path in files:
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            problems.append(f"{path.name}: invalid JSON ({exc})")
+            continue
+        errs = validate_golden_case(data, path)
+        if errs:
+            problems.extend(errs)
+        else:
+            cases.append(golden_case_from_dict(data, path))
+    groups = validate_parity_groups(cases)
+    problems.extend(groups)
+    if problems:
+        raise GoldenCaseError(
+            f"{len(problems)} golden-schema violation(s):" + "".join(f"\n  - {p}" for p in problems)
+        )
+    return cases
+
+
+def golden_by_id(cases: list[GoldenCase]) -> dict[str, GoldenCase]:
+    return {c.id: c for c in cases}
+
+
+def _parity_signature(case: GoldenCase) -> tuple:
+    """What must be identical across a parity group: filters and conditions.
+
+    `status_note` is documentation and may be written per locale; everything
+    else — the stated conditions and the machine-checkable expectations — has to
+    be the same, or the pair is not the same request in two languages.
+    """
+    exp = {k: v for k, v in case.expectations.items() if k != "status_note"}
+    return (
+        json.dumps(case.filters, sort_keys=True, ensure_ascii=False),
+        json.dumps(exp, sort_keys=True, ensure_ascii=False),
+    )
+
+
+def validate_parity_groups(cases: list[GoldenCase]) -> list[str]:
+    """A parity group must really be ONE request expressed in RU and EN."""
+    errs: list[str] = []
+    groups: dict[str, list[GoldenCase]] = {}
+    for case in cases:
+        if case.parity_group:
+            groups.setdefault(case.parity_group, []).append(case)
+    for name, members in sorted(groups.items()):
+        locales = sorted(c.locale for c in members)
+        if locales != sorted(LOCALES):
+            errs.append(
+                f"parity_group {name!r}: must hold exactly one case per locale "
+                f"({list(LOCALES)}), got {locales}"
+            )
+        signatures = {_parity_signature(c) for c in members}
+        if len(signatures) > 1:
+            detail = "; ".join(
+                f"{c.locale}={_parity_signature(c)[0]}|{_parity_signature(c)[1]}"
+                for c in sorted(members, key=lambda c: c.locale)
+            )
+            errs.append(
+                f"parity_group {name!r}: the filters/expectations differ between "
+                f"locales — this is not the same request ({detail})"
+            )
+        queries = [c.query for c in members]
+        if len(set(queries)) != len(queries):
+            errs.append(f"parity_group {name!r}: two locales carry the same query text")
+    return errs
+
+
+def parity_groups(cases: list[GoldenCase]) -> dict[str, list[GoldenCase]]:
+    out: dict[str, list[GoldenCase]] = {}
+    for case in cases:
+        if case.parity_group:
+            out.setdefault(case.parity_group, []).append(case)
+    return out
+
+
+# ── response status, derived from what the API actually exposes ──────────────
+
+def _status_from_requirements(requirements: list) -> str:
+    """Mirror of planner/verify.py::overall_status over a public requirements list.
+
+    The planner's own ordering, restated here so the benchmark can grade a
+    response WITHOUT importing the planner (the script stays stdlib + two
+    dependency-free agent modules). A real top-level `status` still wins in
+    derive_status — this is the fallback for an API that ships `requirements[]`
+    before it ships a status field.
+    """
+    hard = [
+        r for r in requirements
+        if isinstance(r, dict) and r.get("strength") == "hard"
+    ]
+    states = {str(r.get("status")) for r in hard}
+    if "unmet" in states:
+        return "infeasible"
+    if "uncertain" in states:
+        return "degraded"
+    if "pending" in states:
+        return "pending"
+    return "ready"
+
+
+def derive_status(
+    raw: dict | None,
+    *,
+    http_status: int | None = None,
+    api_error: str | None = None,
+) -> tuple[str, str]:
+    """(status, source) for one response, using the best evidence available.
+
+    Precedence — and `source` records which rung was used, because a derived
+    status must never be presented as something the API said:
+
+      1. a transport/HTTP failure            → "rejected" (4xx) / "error" (5xx)
+      2. response["status"]                  → the API's own verdict
+      3. response["requirements"]            → verify.py::overall_status
+      4. a 200 with no points                → "infeasible"
+      5. a 200 with points                   → "ready"
+    """
+    if api_error or (http_status is not None and http_status >= 400):
+        code = int(http_status or 0)
+        if 400 <= code < 500:
+            return "rejected", "http_status"
+        return "error", "api_error" if api_error else "http_status"
+    raw = raw or {}
+    explicit = raw.get("status")
+    if isinstance(explicit, str) and explicit.strip():
+        return explicit.strip().lower(), "response.status"
+    requirements = raw.get("requirements")
+    if isinstance(requirements, list) and requirements:
+        return _status_from_requirements(requirements), "response.requirements"
+    if not (raw.get("points") or []):
+        return "infeasible", "derived:empty_plan"
+    return "ready", "derived:points"
+
+
+# ── the checks ───────────────────────────────────────────────────────────────
+
+def codes_in_name(name: str) -> set[str]:
+    """Canonical category codes occurring as a word in a POI name."""
+    # ё and е are the same letter for matching purposes: the canonical code
+    # "костёл" arrives here as "костел" after _norm_code, so the name has to be
+    # normalised the same way or a "Костёл" would never be credited.
+    tokens = {t.replace("ё", "е") for t in _norm_name(name).split()}
+    return {code for code in CANONICAL_CODES_NORM if code in tokens}
+
+
+def _canon_codes(codes) -> list[str]:
+    """Canonical spelling of normalised codes, for anything a human reads."""
+    return [CANONICAL_CATEGORIES.get(c, c) for c in codes]
+
+
+def stop_category_codes(stop: dict) -> set[str]:
+    """The canonical codes one returned stop counts as.
+
+    The point's own `category` is authoritative. Only when the API returned no
+    category at all does the name get a vote — otherwise a stop legitimately
+    named "Туалет у кафе" would read as a forbidden cafe and fail a good plan.
+    """
+    category = _norm_code(stop.get("category"))
+    if category:
+        return {category}
+    return codes_in_name(stop.get("name", ""))
+
+
+def _ok(detail: str = "", **extra) -> dict:
+    return {"ok": True, "detail": detail, **extra}
+
+
+def _fail(detail: str, **extra) -> dict:
+    return {"ok": False, "detail": detail, **extra}
+
+
+def _unverified(detail: str, **extra) -> dict:
+    return {"ok": True, "unverified": True, "detail": detail, **extra}
+
+
+def response_total_minutes(raw: dict | None, points: list[dict]) -> float | None:
+    """Total route minutes: `budget.total_minutes`, or walk + visits as a fallback.
+
+    The API reports its own total; when a response predates that block the total
+    is recomputed from the summary and the per-stop visit times rather than
+    skipped, so an over-budget route cannot hide behind a missing field.
+    """
+    raw = raw or {}
+    budget = raw.get("budget") or {}
+    total = budget.get("total_minutes")
+    if _is_num(total):
+        return float(total)
+    summary = raw.get("summary") or {}
+    walk_s = summary.get("time_seconds")
+    visits = sum(
+        p.get("visit_minutes") or 0 for p in points if _is_num(p.get("visit_minutes"))
+    )
+    if _is_num(walk_s):
+        return float(walk_s) / 60.0 + float(visits)
+    return None
+
+
+def evaluate_compliance(
+    case: GoldenCase,
+    raw: dict | None,
+    *,
+    http_status: int | None = None,
+    api_error: str | None = None,
+) -> ComplianceVerdict:
+    """Every expectation of one golden case against one response.
+
+    Pure: no clock, no RNG, no I/O. `reason` is the first failed check in
+    CHECK_PRIORITY (the same response therefore always produces the same code),
+    or "ok".
+    """
+    exp = case.expectations
+    raw = raw or {}
+    points = [p for p in (raw.get("points") or []) if isinstance(p, dict)]
+    status, source = derive_status(raw, http_status=http_status, api_error=api_error)
+    checks: dict[str, dict] = {}
+
+    expected_status = [str(s).strip().lower() for s in exp["expected_status"]]
+    checks[CHECK_WRONG_STATUS] = (
+        _ok(f"{status} ({source}) is in {expected_status}")
+        if status in expected_status
+        else _fail(f"status {status} ({source}) is not one of {expected_status}")
+    )
+    if status == "error":
+        checks[CHECK_API_ERROR] = _fail(
+            api_error or f"the backend failed with HTTP {http_status} — no plan"
+        )
+    elif api_error or (http_status is not None and http_status >= 400):
+        # A 4xx is the API answering the question honestly ("no route for this
+        # request"), not a fault. Whether that answer is acceptable is decided
+        # by the status check; here it is recorded as a refusal, not a failure.
+        checks[CHECK_API_ERROR] = _ok(
+            f"the backend refused the request (HTTP {http_status}) — an honest "
+            f"refusal, judged by the status check"
+        )
+    else:
+        checks[CHECK_API_ERROR] = _ok("the backend answered with a plan")
+
+    allow_empty = bool(exp.get("allow_empty"))
+    min_places = exp.get("min_places")
+    if min_places is None:
+        min_places = 0 if allow_empty else 1
+    if len(points) < min_places:
+        detail = f"{len(points)} stop(s) returned, at least {min_places} required"
+        if not points and allow_empty:
+            detail = "empty plan, which this case allows"
+        checks[CHECK_TOO_FEW_PLACES] = (
+            _ok(detail) if len(points) >= min_places else _fail(detail)
+        )
+    else:
+        checks[CHECK_TOO_FEW_PLACES] = _ok(
+            f"{len(points)} stop(s) returned (>= {min_places})"
+        )
+
+    seen: set[str] = set()
+    for stop in points:
+        seen |= stop_category_codes(stop)
+    wanted = [_norm_code(c) for c in exp["must_contain_categories"]]
+    missing = [c for c in wanted if c not in seen]
+    # `missing`/`seen` are carried as data, not only as prose: the parity check
+    # compares the mandatory-category OUTCOME per code across locales, and it
+    # cannot re-derive it from a sentence.
+    category_evidence = {
+        "missing": _canon_codes(missing),
+        "seen": sorted(_canon_codes(seen)),
+    }
+    checks[CHECK_MISSING_MANDATORY_CATEGORY] = (
+        _ok(f"every mandatory category is present {_canon_codes(wanted)}", **category_evidence)
+        if not missing
+        else _fail(
+            f"missing mandatory category(ies) {category_evidence['missing']}"
+            f"; the plan has {category_evidence['seen'] or 'no categories'}",
+            **category_evidence,
+        )
+    )
+    forbidden = [_norm_code(c) for c in exp["must_not_contain_categories"]]
+    present = [c for c in forbidden if c in seen]
+    checks[CHECK_FORBIDDEN_CATEGORY_PRESENT] = (
+        _ok(f"no forbidden category present {_canon_codes(forbidden)}")
+        if not present
+        else _fail(
+            f"forbidden category(ies) present "
+            f"{[CANONICAL_CATEGORIES.get(c, c) for c in present]}"
+        )
+    )
+
+    names = exp.get("must_contain_names") or []
+    if names:
+        missing_names = [
+            n for n in names
+            if not any(_norm_code(n) in _norm_name(p.get("name", "")) for p in points)
+        ]
+        checks[CHECK_MISSING_NAMED_PLACE] = (
+            _ok(f"every named place is on the plan {names}")
+            if not missing_names
+            else _fail(
+                f"missing named place(s) {missing_names}; plan names "
+                f"{[p.get('name') for p in points][:6]}"
+            )
+        )
+
+    if exp.get("in_region"):
+        offenders: list[str] = []
+        for stop in points:
+            lat, lon = stop.get("lat"), stop.get("lon")
+            if not (_is_num(lat) and _is_num(lon)):
+                offenders.append(f"{stop.get('name')!r} has no coordinates")
+            elif not inside_project_area(float(lat), float(lon)):
+                offenders.append(
+                    f"{stop.get('name')!r} at {lat:.4f},{lon:.4f} is outside "
+                    "Grodno ADM1"
+                )
+        checks[CHECK_OUT_OF_REGION_POINT] = (
+            _ok(f"all {len(points)} point(s) inside Grodno ADM1")
+            if not offenders
+            else _fail("; ".join(offenders[:4]))
+        )
+
+    cap = exp.get("max_total_minutes")
+    if cap is None:
+        checks[CHECK_OVER_BUDGET] = _ok("no time cap in this case")
+    else:
+        total = response_total_minutes(raw, points)
+        if total is None:
+            checks[CHECK_OVER_BUDGET] = _unverified(
+                f"cap {cap} min stated but the response reports no total"
+            )
+        elif total > cap + 1e-9:
+            checks[CHECK_OVER_BUDGET] = _fail(
+                f"total {total:.1f} min exceeds the {cap} min cap"
+            )
+        else:
+            checks[CHECK_OVER_BUDGET] = _ok(f"total {total:.1f} min <= {cap} min cap")
+
+    expected_mode = exp.get("expected_result_mode")
+    if expected_mode is None:
+        checks[CHECK_RESULT_MODE] = _ok("no result mode expected")
+    else:
+        actual = _norm_code(raw.get("result_mode") or raw.get("mode"))
+        if actual:
+            checks[CHECK_RESULT_MODE] = (
+                _ok(f"result_mode {actual}")
+                if actual == _norm_code(expected_mode)
+                else _fail(f"result_mode {actual} != expected {expected_mode}")
+            )
+        else:
+            checks[CHECK_RESULT_MODE] = _unverified(
+                f"expected result_mode {expected_mode}, but the response carries no "
+                "result_mode marker (the API does not expose one yet)"
+            )
+
+    failed = [code for code in CHECK_PRIORITY if checks.get(code, {}).get("ok") is False]
+    reason = failed[0] if failed else "ok"
+    detail = checks[reason]["detail"] if failed else ""
+    return ComplianceVerdict(
+        case_id=case.id,
+        passed=not failed,
+        reason=reason,
+        detail=detail,
+        status=status,
+        status_source=source,
+        checks=checks,
+    )
+
+
+# ── RU/EN parity, measured on the responses, not only on the files ───────────
+
+def parity_verdict(
+    group: str,
+    members: list[GoldenCase],
+    verdicts: dict[str, ComplianceVerdict],
+) -> ComplianceVerdict:
+    """Did the same request in RU and EN get the same KIND of answer?
+
+    Compared across the locales: the derived status, the set of failed checks,
+    and whether each mandatory category was satisfied. The full stop list is
+    deliberately NOT compared — the two runs pick different stops, and demanding
+    identical routes would make the check noise instead of a contract. What must
+    not differ is whether the conditions of the request survived.
+    """
+    case_id = f"parity:{group}"
+    missing = [c.id for c in members if c.id not in verdicts]
+    if missing:
+        return ComplianceVerdict(
+            case_id=case_id,
+            passed=False,
+            reason=CHECK_PARITY,
+            detail=f"no verdict for {missing} — the group was not fully run",
+        )
+    parts: dict[str, tuple] = {}
+    for case in sorted(members, key=lambda c: c.locale):
+        verdict = verdicts[case.id]
+        # Per-code, from the data the scorer recorded — not one flag for all of
+        # them, which would report a partial failure as a total one.
+        missing_codes = set(
+            (verdict.checks.get(CHECK_MISSING_MANDATORY_CATEGORY) or {}).get("missing") or []
+        )
+        parts[case.locale] = (
+            verdict.status,
+            tuple(sorted(verdict.failed_checks)),
+            tuple(
+                sorted(
+                    f"{code}={'present' if code not in missing_codes else 'MISSING'}"
+                    for code in case.expectations["must_contain_categories"]
+                )
+            ),
+        )
+    distinct = set(parts.values())
+    ok = len(distinct) == 1
+
+    def render(locale: str) -> str:
+        status, failed, mandatory = parts[locale]
+        return (
+            f"{locale}: status={status}, failed={', '.join(failed) or 'none'}, "
+            f"mandatory={', '.join(mandatory) or 'n/a'}"
+        )
+
+    detail = "; ".join(render(loc) for loc in sorted(parts))
+    status = next(iter(parts.values()))[0]
+    return ComplianceVerdict(
+        case_id=case_id,
+        passed=ok,
+        reason="ok" if ok else CHECK_PARITY,
+        detail=detail if ok else f"RU/EN parity mismatch — {detail}",
+        status=status,
+        status_source="parity",
+        checks={CHECK_PARITY: _ok(detail) if ok else _fail(detail)},
+    )
+
+
+# ── aggregate ────────────────────────────────────────────────────────────────
+
+def compliance_summary(
+    cases: list[GoldenCase],
+    verdicts: dict[str, ComplianceVerdict],
+    parity: list[ComplianceVerdict] | None = None,
+) -> dict:
+    """Per-case PASS/FAIL plus the aggregate rate over cases AND parity groups.
+
+    The rate is over UNITS: every golden case is one unit, every parity group is
+    one more, because a matched pair that disagrees between locales is a defect
+    even when both locales individually satisfy their file.
+    """
+    parity = parity or []
+    case_verdicts = [verdicts[c.id] for c in cases if c.id in verdicts]
+    unrun = [c.id for c in cases if c.id not in verdicts]
+    n_passed = sum(1 for v in case_verdicts if v.passed)
+    n_parity_passed = sum(1 for v in parity if v.passed)
+    units = len(case_verdicts) + len(parity)
+    passed_units = n_passed + n_parity_passed
+    by_reason: dict[str, int] = {}
+    for verdict in [*case_verdicts, *parity]:
+        if not verdict.passed:
+            by_reason[verdict.reason] = by_reason.get(verdict.reason, 0) + 1
+    unverified = sorted({
+        f"{v.case_id}:{code}"
+        for v in case_verdicts
+        for code in v.unverified_checks
+    })
+    return {
+        "n_cases": len(case_verdicts),
+        "n_cases_passed": n_passed,
+        "n_cases_failed": len(case_verdicts) - n_passed,
+        "n_parity_groups": len(parity),
+        "n_parity_passed": n_parity_passed,
+        "n_units": units,
+        "n_units_passed": passed_units,
+        "compliance_rate": (passed_units / units) if units else None,
+        "case_pass_rate": (n_passed / len(case_verdicts)) if case_verdicts else None,
+        "failures_by_reason": dict(sorted(by_reason.items())),
+        "unverified_checks": unverified,
+        "cases_not_run": unrun,
+        "cases": [v.as_dict() for v in case_verdicts],
+        "parity": [v.as_dict() for v in parity],
+    }
+
+
+# ── golden I/O: request building, printing, reports ──────────────────────────
+
+def build_golden_request(case: GoldenCase) -> dict:
+    """The exact body one golden case sends: the query plus its explicit filters.
+
+    The filters go on the wire as GenerateReq fields, not as prose: that is what
+    makes a case testable at all (spec 002 made them part of the request), and
+    what lets an EN case carry Russian category codes without a translation step.
+    """
+    filters = case.filters
+    payload: dict = {
+        "query": case.query,
+        "locale": case.locale,
+        "party_children": filters.get("party_children"),
+        "hard_services": list(filters.get("hard_services") or []),
+        "interests": list(filters.get("interests") or []),
+        "avoid": list(filters.get("avoid") or []),
+        "time_budget_minutes": filters.get("time_budget_minutes"),
+        "result_mode": filters.get("result_mode") or "route",
+    }
+    origin = filters.get("origin")
+    if origin:
+        payload["origin"] = {"lat": origin["lat"], "lon": origin["lon"]}
+    return payload
+
+
+@dataclass
+class GoldenRun:
+    """One (case, repeat) of a golden run — what the report and the snapshot store."""
+
+    case: GoldenCase
+    repeat: int
+    request: dict
+    http_status: int | None = None
+    api_error: str | None = None
+    response: dict | None = None
+    latency_s: float = 0.0
+    verdict: ComplianceVerdict | None = None
+    ts: str | None = None
+    git_sha: str | None = None
+
+
+def summarise_repeats(case: GoldenCase, runs: list[GoldenRun]) -> ComplianceVerdict:
+    """One verdict per case over its repeats: PASS only when every repeat passed.
+
+    With --repeat > 1 a condition that survives one run out of N is a flake, not
+    a pass, so the case fails and the report names the repeat that failed. The
+    deterministic default is one repeat.
+    """
+    verdicts = [r.verdict for r in runs if r.verdict is not None]
+    if not verdicts:
+        return ComplianceVerdict(
+            case_id=case.id,
+            passed=False,
+            reason=CHECK_API_ERROR,
+            detail="no run produced a verdict",
+        )
+    failing = [v for v in verdicts if not v.passed]
+    merged = dict(verdicts[0].checks)
+    for verdict in verdicts[1:]:
+        for code, check in verdict.checks.items():
+            if check.get("ok") is False and merged.get(code, {}).get("ok") is not False:
+                merged[code] = check
+    if not failing:
+        return ComplianceVerdict(
+            case_id=case.id,
+            passed=True,
+            reason="ok",
+            detail=f"{len(verdicts)}/{len(verdicts)} repeat(s) passed",
+            status=verdicts[0].status,
+            status_source=verdicts[0].status_source,
+            checks=merged,
+        )
+    first = failing[0]
+    return ComplianceVerdict(
+        case_id=case.id,
+        passed=False,
+        reason=first.reason,
+        detail=(
+            f"{len(verdicts) - len(failing)}/{len(verdicts)} repeat(s) passed; "
+            f"repeat failed with {first.reason}: {first.detail}"
+        ),
+        status=first.status,
+        status_source=first.status_source,
+        checks=merged,
+    )
+
+
+def run_golden(cases: list[GoldenCase], base_url: str, repeat: int) -> list[GoldenRun]:
+    """Call the agent once per (case, repeat) and score each response.
+
+    It writes nothing: the snapshot is one file with two record kinds, so
+    `write_golden_snapshot` owns it and is called once, after the run.
+    """
+    git_sha = _git_sha()
+    runs: list[GoldenRun] = []
+    for case in cases:
+        print(f"\n▶ {case.id}  [{case.locale}]")
+        print(f"  query  : {case.query}")
+        print(f"  filters: {json.dumps(case.filters, ensure_ascii=False)}")
+        for i in range(repeat):
+            request = build_golden_request(case)
+            t0 = time.monotonic()
+            status: int | None = None
+            raw: dict | None = None
+            err: str | None = None
+            try:
+                status, raw = post_generate(base_url, request)
+            except urllib.error.HTTPError as exc:
+                status = exc.code
+                err = _http_error_detail(exc)
+            except urllib.error.URLError as exc:
+                err = str(exc)
+            latency = time.monotonic() - t0
+            verdict = evaluate_compliance(
+                case, raw, http_status=status, api_error=err
+            )
+            run = GoldenRun(
+                case=case,
+                repeat=i + 1,
+                request=request,
+                http_status=status,
+                api_error=err,
+                response=raw,
+                latency_s=latency,
+                verdict=verdict,
+                ts=datetime.now(UTC).isoformat(),
+                git_sha=git_sha,
+            )
+            runs.append(run)
+            print(
+                f"  run {i + 1}/{repeat}: {'PASS' if verdict.passed else 'FAIL'} "
+                f"[{verdict.reason}] status={verdict.status} ({verdict.status_source}) "
+                f"stops={len((raw or {}).get('points') or [])} lat={latency:.2f}s"
+            )
+            if not verdict.passed:
+                print(f"      ✗ {verdict.detail}")
+            for code in verdict.unverified_checks:
+                print(f"      ? {code}: {verdict.checks[code]['detail']}")
+    return runs
+
+
+def make_golden_row(run: GoldenRun, base_url: str) -> dict:
+    return {
+        "record": "golden_row",
+        "schema": GOLDEN_ROW_SCHEMA,
+        "case": run.case.id,
+        "locale": run.case.locale,
+        "repeat": run.repeat,
+        "ts": run.ts,
+        "git_sha": run.git_sha,
+        "base_url": base_url,
+        "request": run.request,
+        "http_status": run.http_status,
+        "api_error": run.api_error,
+        "response": run.response,
+        "latency_s": _r(run.latency_s, 3),
+    }
+
+
+def golden_snapshot_meta(
+    cases: list[GoldenCase], base_url: str, repeat: int, *, git_sha: str | None = None
+) -> dict:
+    """The provenance header of a golden snapshot, written by both entry points."""
+    return {
+        "record": "meta",
+        "schema": GOLDEN_SNAPSHOT_SCHEMA,
+        "run_id": _run_id(),
+        "started_at": datetime.now(UTC).isoformat(),
+        "git_sha": git_sha if git_sha is not None else _git_sha(),
+        "base_url": base_url,
+        "repeat": repeat,
+        "cases": [c.id for c in cases],
+        "bench_version": REPORT_SCHEMA,
+    }
+
+
+def write_golden_snapshot(
+    runs: list[GoldenRun],
+    snapshot_dir: Path,
+    base_url: str,
+    *,
+    append: bool = True,
+    meta: dict | None = None,
+) -> Path:
+    """Write the golden snapshot (one meta record + one row per run).
+
+    The snapshot is the only record of what the API actually answered, so it is
+    written once, after the run, by this function — meta first, then the rows
+    that `load_golden_snapshot` / `rescore_golden_rows` replay offline.
+    """
+    snapshot_dir.mkdir(parents=True, exist_ok=True)
+    path = snapshot_dir / GOLDEN_SNAPSHOT_FILE
+    cases = [run.case for run in runs]
+    header = meta or golden_snapshot_meta(
+        cases, base_url, max((r.repeat for r in runs), default=1)
+    )
+    with path.open("a" if append else "w", encoding="utf-8") as fh:
+        fh.write(json.dumps(header, ensure_ascii=False) + "\n")
+        for run in runs:
+            fh.write(json.dumps(make_golden_row(run, base_url), ensure_ascii=False) + "\n")
+    return path
+
+
+def load_golden_snapshot(snapshot_dir: Path) -> tuple[dict, list[dict]]:
+    """Read golden_rows.jsonl → (meta, rows). Never touches the network."""
+    path = Path(snapshot_dir) / GOLDEN_SNAPSHOT_FILE
+    if not path.exists():
+        raise FileNotFoundError(
+            f"no {GOLDEN_SNAPSHOT_FILE} in {snapshot_dir} "
+            f"(a golden snapshot holds that file plus the reports)"
+        )
+    meta: dict = {}
+    rows: list[dict] = []
+    with path.open(encoding="utf-8") as fh:
+        for line in fh:
+            line = line.strip()
+            if not line:
+                continue
+            rec = json.loads(line)
+            if rec.get("record") == "meta":
+                meta = meta or rec
+            elif rec.get("record") == "golden_row":
+                rows.append(rec)
+    if not rows:
+        raise ValueError(f"{snapshot_dir} holds no golden rows")
+    rows.sort(key=lambda r: (str(r.get("case")), int(r.get("repeat", 0))))
+    return meta, rows
+
+
+def rescore_golden_rows(
+    rows: list[dict], cases: list[GoldenCase], base_url: str
+) -> list[GoldenRun]:
+    """Recompute every verdict offline: no agent, no Valhalla, no clock."""
+    by_id = golden_by_id(cases)
+    out: list[GoldenRun] = []
+    for row in rows:
+        case = by_id.get(str(row.get("case")))
+        if case is None:
+            raise SystemExit(
+                f"golden snapshot references case {row.get('case')!r} but "
+                f"{BENCH_GOLDEN}/{(row.get('case') or '')}.json does not exist — "
+                "cannot rescore"
+            )
+        verdict = evaluate_compliance(
+            case,
+            row.get("response"),
+            http_status=row.get("http_status"),
+            api_error=row.get("api_error"),
+        )
+        out.append(GoldenRun(
+            case=case,
+            repeat=int(row.get("repeat", 1)),
+            request=row.get("request") or {},
+            http_status=row.get("http_status"),
+            api_error=row.get("api_error"),
+            response=row.get("response"),
+            latency_s=float(row.get("latency_s") or 0.0),
+            verdict=verdict,
+            ts=row.get("ts"),
+            git_sha=row.get("git_sha"),
+        ))
+    return out
+
+
+def golden_verdicts(runs: list[GoldenRun], cases: list[GoldenCase]) -> tuple[
+    dict[str, ComplianceVerdict], list[ComplianceVerdict]
+]:
+    """Per-case verdicts (merged over repeats) + one verdict per parity group."""
+    by_case: dict[str, list[GoldenRun]] = {}
+    for run in runs:
+        by_case.setdefault(run.case.id, []).append(run)
+    verdicts = {
+        case.id: summarise_repeats(case, sorted(by_case.get(case.id, []), key=lambda r: r.repeat))
+        for case in cases
+        if by_case.get(case.id)
+    }
+    parity = [
+        parity_verdict(name, members, verdicts)
+        for name, members in sorted(parity_groups(cases).items())
+    ]
+    return verdicts, parity
+
+
+def print_compliance_table(
+    cases: list[GoldenCase],
+    verdicts: dict[str, ComplianceVerdict],
+    parity: list[ComplianceVerdict],
+    summary: dict,
+) -> None:
+    width = 78
+    print()
+    print("═" * width)
+    print("GOLDEN SET — requirement compliance (per case, machine-readable reason)")
+    print("═" * width)
+    print(f"{'case':<32} {'loc':<4} {'verdict':<7} {'status':<18} reason")
+    print("─" * width)
+    for case in cases:
+        verdict = verdicts.get(case.id)
+        if verdict is None:
+            print(f"{case.id:<32} {case.locale:<4} {'NOT RUN':<7} {'—':<18} —")
+            continue
+        mark = "PASS" if verdict.passed else "FAIL"
+        print(
+            f"{case.id:<32} {case.locale:<4} {mark:<7} "
+            f"{(verdict.status or '—'):<18} {verdict.reason}"
+        )
+        if not verdict.passed:
+            print(f"{'':<44}└ {verdict.detail}")
+        for code in verdict.unverified_checks:
+            print(f"{'':<44}? {code}: {verdict.checks[code]['detail']}")
+    for verdict in parity:
+        mark = "PASS" if verdict.passed else "FAIL"
+        print(f"{verdict.case_id:<32} {'ru/en':<4} {mark:<7} {'—':<18} {verdict.reason}")
+        print(f"{'':<44}└ {verdict.detail}")
+    print("─" * width)
+    rate = summary["compliance_rate"]
+    print(
+        f"cases: {summary['n_cases_passed']}/{summary['n_cases']} passed · "
+        f"parity groups: {summary['n_parity_passed']}/{summary['n_parity_groups']} passed"
+    )
+    print(
+        f"COMPLIANCE RATE: {'n/a' if rate is None else f'{rate:.3f}'} "
+        f"({summary['n_units_passed']}/{summary['n_units']} units; a unit is one "
+        "case or one parity group)"
+    )
+    if summary["failures_by_reason"]:
+        print(
+            "failures by reason: "
+            + ", ".join(f"{k}={v}" for k, v in summary["failures_by_reason"].items())
+        )
+    if summary["unverified_checks"]:
+        print(
+            f"unverifiable checks (the current API cannot answer them): "
+            f"{', '.join(summary['unverified_checks'])}"
+        )
+    print("═" * width)
+    print()
+
+
+def write_compliance_reports(
+    out_dir: Path,
+    *,
+    mode: str,
+    generated_at: str,
+    base_url: str,
+    snapshot: dict,
+    cases: list[GoldenCase],
+    runs: list[GoldenRun],
+    summary: dict,
+) -> None:
+    """compliance.json + compliance.md + compliance.metrics.jsonl (one line/case)."""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    per_case: dict[str, list[GoldenRun]] = {}
+    for run in runs:
+        per_case.setdefault(run.case.id, []).append(run)
+
+    payload = {
+        "schema": REPORT_SCHEMA,
+        "mode": mode,
+        "generated_at": generated_at,
+        "base_url": base_url,
+        "snapshot": snapshot,
+        "summary": summary,
+        "cases": [
+            {
+                "id": case.id,
+                "locale": case.locale,
+                "query": case.query,
+                "parity_group": case.parity_group,
+                "filters": case.filters,
+                "expectations": case.expectations,
+                "runs": [
+                    {
+                        "repeat": run.repeat,
+                        "http_status": run.http_status,
+                        "api_error": run.api_error,
+                        "latency_s": _r(run.latency_s, 3),
+                        "total_minutes": _r(
+                            response_total_minutes(
+                                run.response,
+                                [p for p in ((run.response or {}).get("points") or [])
+                                 if isinstance(p, dict)],
+                            ),
+                            2,
+                        ),
+                        "n_stops": len((run.response or {}).get("points") or []),
+                        "verdict": run.verdict.as_dict() if run.verdict else None,
+                    }
+                    for run in sorted(per_case.get(case.id, []), key=lambda r: r.repeat)
+                ],
+            }
+            for case in cases
+        ],
+    }
+    (out_dir / "compliance.json").write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    lines = [
+        json.dumps(
+            {
+                "case": v["case_id"],
+                "passed": v["passed"],
+                "reason": v["reason"],
+                "status": v["status"],
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+        )
+        for v in summary["cases"]
+    ]
+    lines.append(json.dumps(
+        {
+            "case": "__overall__",
+            "compliance_rate": _r(summary["compliance_rate"]),
+            "n_units": summary["n_units"],
+            "n_units_passed": summary["n_units_passed"],
+            "failures_by_reason": summary["failures_by_reason"],
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+    ))
+    (out_dir / "compliance.metrics.jsonl").write_text(
+        "\n".join(lines) + "\n", encoding="utf-8"
+    )
+
+    md = [
+        "# Golden-set compliance report",
+        "",
+        f"**Mode:** `{mode}` · **Generated:** {generated_at} · **API:** `{base_url}`",
+        "",
+        "This measures whether the CONDITIONS of a request survived, not how close "
+        "the route came to a reference walk. A case passes only if every "
+        "machine-checkable expectation of its file holds; a parity group passes "
+        "only if RU and EN got the same kind of answer.",
+        "",
+        f"**Compliance rate: "
+        f"{'n/a' if summary['compliance_rate'] is None else format(summary['compliance_rate'], '.3f')}** "
+        f"({summary['n_units_passed']}/{summary['n_units']} units)",
+        "",
+        "| case | locale | verdict | status | reason | detail |",
+        "|---|---|---|---|---|---|",
+    ]
+    for entry in summary["cases"]:
+        md.append(
+            f"| {entry['case_id']} | — | {'PASS' if entry['passed'] else 'FAIL'} | "
+            f"{entry['status']} | {entry['reason']} | {entry['detail']} |"
+        )
+    for entry in summary["parity"]:
+        md.append(
+            f"| {entry['case_id']} | ru/en | {'PASS' if entry['passed'] else 'FAIL'} | "
+            f"{entry['status']} | {entry['reason']} | {entry['detail']} |"
+        )
+    if summary["failures_by_reason"]:
+        md += ["", "## Failures by reason", ""]
+        md += [f"- `{k}`: {v}" for k, v in summary["failures_by_reason"].items()]
+    if summary["unverified_checks"]:
+        md += [
+            "",
+            "## Checks the current API cannot answer",
+            "",
+            "These are recorded as unverified rather than passed or failed, "
+            "because the response carries no field to decide them:",
+            "",
+        ]
+        md += [f"- `{c}`" for c in summary["unverified_checks"]]
+    (out_dir / "compliance.md").write_text("\n".join(md) + "\n", encoding="utf-8")
+
+
+# ── honesty gate: no backend (or no Valhalla) means no report ────────────────
+
+def fetch_health(base_url: str, timeout: float = HEALTH_TIMEOUT_S) -> dict:
+    """GET /health → dict. Raises on transport failure (caller decides)."""
+    req = urllib.request.Request(
+        f"{base_url}/health",
+        headers={"Accept": "application/json"},
+        method="GET",
+    )
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        return json.loads(resp.read().decode("utf-8"))
+
+
+def preflight_or_exit(base_url: str) -> dict:
+    """Refuse to benchmark a backend that is not there.
+
+    A benchmark that cannot reach the stack must not write a report: an empty
+    table reads exactly like a bad result, and a saved file outlives the
+    terminal that would have explained it. Exit code 2 (distinct from 1, which
+    is the --strict / --min-compliance gate), with the reason on stderr.
+    """
+    try:
+        health = fetch_health(base_url)
+    except urllib.error.HTTPError as exc:
+        _no_report(f"backend answered /health with HTTP {exc.code} at {base_url}")
+    except urllib.error.URLError as exc:
+        _no_report(f"backend not reachable at {base_url} ({exc.reason})")
+    except (TimeoutError, OSError, ValueError) as exc:
+        _no_report(f"backend /health at {base_url} failed ({type(exc).__name__}: {exc})")
+    if not health.get("db"):
+        _no_report(
+            f"backend is up at {base_url} but its database is not reachable "
+            "(/health db=false) — every route would come back empty"
+        )
+    if not health.get("valhalla"):
+        _no_report(
+            f"Valhalla is not reachable through the backend at {base_url} "
+            "(/health valhalla=false) — route geometry and leg times would be fake"
+        )
+    if not health.get("llm") and not health.get("embedder"):
+        print(
+            "warning: no LLM/embedder key configured (/health llm=false): the "
+            "pipeline will run its deterministic fallback, so this run does not "
+            "measure the intent layer.",
+            file=sys.stderr,
+        )
+    return health
+
+
+def _no_report(message: str) -> None:
+    print(f"bench_routes: {message}", file=sys.stderr)
+    print(
+        "bench_routes: refusing to run — a report written without a live backend "
+        "would be a fabricated measurement, not a benchmark.",
+        file=sys.stderr,
+    )
+    sys.exit(2)
+
+
+# ── golden modes ─────────────────────────────────────────────────────────────
+
+def _golden_output(args) -> tuple[list[GoldenRun], list[GoldenCase], Path, dict, str]:
+    cases = load_golden_cases(Path(args.golden_dir) if args.golden_dir else BENCH_GOLDEN)
+    if args.case:
+        wanted = set(args.case)
+        cases = [c for c in cases if c.id in wanted]
+        missing = wanted - {c.id for c in cases}
+        if missing:
+            print(f"No golden case for: {sorted(missing)}", file=sys.stderr)
+            sys.exit(1)
+    if args.snapshot is None:
+        snapshot_dir: Path | None = None
+    elif args.snapshot:
+        snapshot_dir = Path(args.snapshot)
+    else:
+        snapshot_dir = default_snapshot_dir()
+    print("Golden compliance run — live")
+    print(f"API base URL: {args.base_url}")
+    print(f"Cases: {len(cases)} · runs per case: {args.repeat}")
+    print(f"Snapshot: {snapshot_dir}" if snapshot_dir else "Snapshot: off")
+    out_dir = Path(args.report_dir) if args.report_dir else BENCH_OUT
+    print(f"Reports will be written to: {out_dir}")
+    runs = run_golden(cases, args.base_url, args.repeat)
+    if snapshot_dir is not None:
+        write_golden_snapshot(runs, snapshot_dir, args.base_url, append=args.append)
+        print(f"  golden snapshot → {snapshot_dir / GOLDEN_SNAPSHOT_FILE}")
+    return runs, cases, out_dir, {"dir": str(snapshot_dir) if snapshot_dir else None}, "golden-live"
+
+
+def _replay_golden_output(args) -> tuple[list[GoldenRun], list[GoldenCase], Path, dict, str]:
+    snapshot_dir = Path(args.replay_golden)
+    print(f"Golden replay — {snapshot_dir} (offline: no agent, no Valhalla, no clock)")
+    cases = load_golden_cases(Path(args.golden_dir) if args.golden_dir else BENCH_GOLDEN)
+    meta, rows = load_golden_snapshot(snapshot_dir)
+    print(f"Snapshot: {len(rows)} row(s), cases {meta.get('cases')}, "
+          f"git {meta.get('git_sha')}, taken {meta.get('started_at')}")
+    runs = rescore_golden_rows(rows, cases, str(meta.get("base_url") or "http://replay"))
+    return (
+        runs,
+        cases,
+        Path(args.report_dir) if args.report_dir else snapshot_dir,
+        {
+            "dir": str(snapshot_dir),
+            "n_rows": len(rows),
+            "git_sha": meta.get("git_sha"),
+            "generated_at": meta.get("started_at"),
+        },
+        "golden-replay",
+    )
+
+
+def emit_golden(args, out: tuple) -> None:
+    runs, cases, out_dir, snapshot, mode = out
+    verdicts, parity = golden_verdicts(runs, cases)
+    summary = compliance_summary(cases, verdicts, parity)
+    print_compliance_table(cases, verdicts, parity, summary)
+    write_compliance_reports(
+        out_dir,
+        mode=mode,
+        generated_at=(
+            datetime.now(UTC).isoformat()
+            if mode == "golden-live"
+            else str(snapshot.get("generated_at") or "replay")
+        ),
+        base_url=args.base_url,
+        snapshot=snapshot,
+        cases=cases,
+        runs=runs,
+        summary=summary,
+    )
+    print(f"  compliance report → {out_dir / 'compliance.json'}")
+    print(f"  compliance report → {out_dir / 'compliance.md'}")
+    print(f"  compliance JSONL  → {out_dir / 'compliance.metrics.jsonl'}")
+
+    rate = summary["compliance_rate"]
+    if args.min_compliance is not None:
+        if rate is None or rate + 1e-9 < args.min_compliance:
+            print(
+                f"--min-compliance {args.min_compliance}: measured "
+                f"{'n/a' if rate is None else f'{rate:.3f}'}",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+    if args.strict and (summary["n_cases_failed"] or summary["n_parity_passed"] != summary["n_parity_groups"]):
+        print(
+            f"--strict: {summary['n_cases_failed']} golden case(s) failed, "
+            f"{summary['n_parity_groups'] - summary['n_parity_passed']} parity group(s) failed",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+
 # ── modes ───────────────────────────────────────────────────────────────────
 
 def run_live(
@@ -2593,9 +4111,46 @@ def build_parser() -> argparse.ArgumentParser:
              f"(default: {BOOTSTRAP_SEED})",
     )
     parser.add_argument(
+        "--golden",
+        action="store_true",
+        help=(
+            "Score the REQUIREMENT-COMPLIANCE set (benchmarks/golden/*.json) "
+            "instead of the reference walks: per-case PASS/FAIL with a "
+            "machine-readable reason plus an aggregate compliance rate. Needs a "
+            "live backend and Valhalla; refuses to write a report without them."
+        ),
+    )
+    parser.add_argument(
+        "--golden-dir",
+        default=None,
+        metavar="DIR",
+        help="Directory of golden cases (default: backend/benchmarks/golden)",
+    )
+    parser.add_argument(
+        "--replay-golden",
+        metavar="DIR",
+        help=(
+            "Rescore a recorded golden run (DIR/golden_rows.jsonl) offline — no "
+            "agent, no Valhalla, no clock."
+        ),
+    )
+    parser.add_argument(
+        "--min-compliance",
+        type=float,
+        default=None,
+        metavar="FLOAT",
+        help=(
+            "Golden mode: exit 1 when the compliance rate is below FLOAT "
+            "(e.g. 0.9). Unset: the rate is reported, not gated."
+        ),
+    )
+    parser.add_argument(
         "--strict",
         action="store_true",
-        help="Exit 1 when any hard failure was recorded (CI gate)",
+        help=(
+            "Exit 1 when any hard failure was recorded (route mode) or any "
+            "golden case / parity group failed (golden mode)"
+        ),
     )
     return parser
 
@@ -2641,6 +4196,9 @@ def _live_output(args, routes: list[GoldenRoute]) -> RunOutput:
     print(f"Runs per case: {args.repeat}")
     print(f"Snapshot: {snapshot_dir}" if snapshot_dir else "Snapshot: off")
     print(f"Reports will be written to: {args.report_dir or BENCH_OUT}")
+    # No backend, no report: a live run that cannot reach the stack must fail
+    # loudly BEFORE it writes anything that could be mistaken for a measurement.
+    preflight_or_exit(args.base_url)
     groups, meta = run_live(
         routes, args.base_url, args.repeat, snapshot_dir, args.append
     )
@@ -2720,6 +4278,8 @@ def main() -> None:
         parser.error("--repeat must be >= 1")
     if args.bootstrap < 1:
         parser.error("--bootstrap must be >= 1")
+    if args.min_compliance is not None and not (0.0 <= args.min_compliance <= 1.0):
+        parser.error("--min-compliance must be between 0.0 and 1.0")
 
     if args.compare:
         dir_a, dir_b = (Path(p) for p in args.compare)
@@ -2727,6 +4287,16 @@ def main() -> None:
         print_compare(cmp)
         out_dir = Path(args.report_dir) if args.report_dir else BENCH_OUT
         write_compare_report(cmp, out_dir)
+        return
+
+    # The golden modes are offline-capable on replay and gated on a live stack
+    # otherwise; neither path can write a report it could not produce.
+    if args.replay_golden:
+        emit_golden(args, _replay_golden_output(args))
+        return
+    if args.golden:
+        preflight_or_exit(args.base_url)
+        emit_golden(args, _golden_output(args))
         return
 
     out = _replay_output(args) if args.replay else _live_output(args, _select_routes(args))

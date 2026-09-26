@@ -30,8 +30,15 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from agent import constants, jev
 from agent.config import settings
+from agent.models import GenerateReq
 from agent.planner import intent as intent_mod
-from agent.planner.intent import _KEYWORD_TO_CATEGORY, extract_intent, fallback_intent
+from agent.planner.intent import (
+    _KEYWORD_TO_CATEGORY,
+    _SURFACE_FORMS,
+    build_requirements,
+    extract_intent,
+    fallback_intent,
+)
 from agent.planner.resolve import CATEGORY_SYNONYMS
 
 QUERY = "Хочу погулять по замкам Гродно"
@@ -215,6 +222,18 @@ class TestFallbackCategories:
                 assert form not in seen, f"{form!r} under both {seen.get(form)} and {cat}"
                 seen[form] = cat
 
+    def test_grodno_family_toilet_query_extracts_toilet_category(self, no_key, monkeypatch):
+        """Grodno family query with toilet phrase extracts туалет as optional
+        category and does not make sightseeing categories exclusive."""
+        monkeypatch.setattr(jev, "ask", _explode)
+        query = "Гродно семья чтобы туалеты по пути были"
+        d = extract_intent(query).decision
+        assert "туалет" in d.categories_pos, "туалет category should be extracted"
+        # Sightseeing categories must not be forced exclusive (not in categories_neg)
+        sightseeing = {"замок", "костёл", "церковь", "монастырь", "дворец", "усадьба",
+                       "парк", "музей", "памятник", "храм", "архитектура", "инфраструктура", "кладбище"}
+        assert not (sightseeing & set(d.categories_neg)), "sightseeing categories must not be exclusive"
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Time budget: only what the query itself states
@@ -263,6 +282,83 @@ class TestFallbackNamedPlaces:
         assert "Гродно" in d.named_places
         # Region names are still filtered out (same regex as the Jev path).
         assert fallback_intent("достопримечательности Гродненской области").decision.named_places == []
+
+    def test_discovery_query_pins_no_categories_named_place_town_scope_no_budget(self, no_key):
+        """A pure discovery query like «достопримечательности Гродно» has no
+        category keywords, extracts the named place, defaults to town scope,
+        discovery intent, and invents no time budget."""
+        d = fallback_intent("достопримечательности Гродно").decision
+        assert d.categories_pos == []
+        assert "Гродно" in d.named_places
+        assert d.search_scope == "town"
+        assert d.intent_type == "discovery"
+        assert d.time_budget_minutes is None
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# English in the degraded path: the shared map is RU *and* EN
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestFallbackEnglish:
+
+    def test_english_categories_resolve_through_the_shared_map(self, no_key):
+        """The no-LLM path used to drop an English query entirely — «castles»
+        now reads off the same taxonomy the Russian forms do."""
+        assert "замок" in fallback_intent("castles in Grodno").decision.categories_pos
+        assert "костёл" in fallback_intent("cathedrals of Grodno").decision.categories_pos
+        assert "туалет" in fallback_intent("a walk with a toilet on the way").decision.categories_pos
+        assert "кафе" in fallback_intent("coffee near the old town").decision.categories_pos
+
+    def test_english_word_numeral_budget(self, no_key):
+        assert fallback_intent("a walk for two hours").decision.time_budget_minutes == 120
+
+    def test_english_still_extracts_nothing_when_nothing_is_stated(self, no_key):
+        assert fallback_intent("what to see").decision.categories_pos == []
+
+    def test_surface_map_keeps_russian_registrations(self):
+        """A form both maps carry ("wc") must keep its Russian registration, and
+        every Russian taxonomy form must stay reachable."""
+        for form, cat in _KEYWORD_TO_CATEGORY.items():
+            assert _SURFACE_FORMS[form] == cat
+        assert set(constants.CATEGORIES) <= set(_SURFACE_FORMS.values())
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# The requirements entry point in the degraded path (spec 002 §4.1/§4.2)
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestDegradedRequirements:
+
+    def test_query_that_used_to_be_lost_now_reads_fully(self, no_key):
+        """The measured bug, verbatim: solo party, no budget, no area."""
+        q = "Погулять по старому Гродно с двумя детьми, туалет по пути, на два часа"
+        tr = build_requirements(q, GenerateReq(query=q))
+        assert tr.source == "fallback"
+        assert tr.party.children == 2
+        assert tr.party.children_ages == []
+        assert tr.budget_minutes == 120
+        assert "grodno-old-town" in tr.areas
+        assert "туалет" in tr.soft_service_codes()
+
+    def test_english_equivalents_produce_the_same_shape(self, no_key):
+        q = "Walk around old Grodno with two children, toilet on the way, for two hours"
+        tr = build_requirements(q, GenerateReq(query=q, locale="en"))
+        assert tr.source == "fallback"
+        assert tr.party.children == 2
+        assert tr.budget_minutes == 120
+        assert "grodno-old-town" in tr.areas
+        assert tr.source == "fallback"
+
+    def test_unprovable_request_is_an_unknown_not_a_requirement(self, no_key):
+        q = "прогулка без лестниц по старому городу"
+        tr = build_requirements(q, GenerateReq(query=q))
+        assert "step_free" in tr.unknowns
+        assert all(r.status != "satisfied" for r in tr.requirements)
+
+    def test_fallback_is_not_used_when_a_stubbed_llm_answers(self, with_key, monkeypatch):
+        monkeypatch.setattr(jev, "ask", _mock_jev_ask)
+        tr = build_requirements("что посмотреть в Гродно", GenerateReq(query="что посмотреть в Гродно"))
+        assert tr.source == "llm"
 
 
 # ─────────────────────────────────────────────────────────────────────────────

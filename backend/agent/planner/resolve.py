@@ -116,15 +116,76 @@ CATEGORY_SYNONYMS: dict[str, list[str]] = {
         "обед", "обеда", "обеду", "обедом", "обеде",
     ],
     "туалет": [
-        "туалет", "туалета", "туалету", "туалетом", "туалете", "туалетов",
+        "туалет", "туалета", "туалету", "туалетом", "туалете", "туалеты", "туалетов",
         "уборная", "уборной", "уборную", "уборною",
+        "санузел", "санузла", "санузлу", "санузлом", "санузле",
+        "санузлы", "санузлов", "санузлам", "санузами", "санузах",
         "wc",
+        "чтобы туалеты по пути были",
     ],
     "гостиница": [
         "гостиница", "гостиницы", "гостиницу", "гостинице", "гостиницей",
         "отель", "отеля", "отелю", "отелем", "отеле", "отелей",
         "хостел", "хостела", "хостелу", "хостелом", "хостеле",
         "гостевой дом",
+    ],
+}
+
+# English surface forms, same shape and same keys as CATEGORY_SYNONYMS.
+#
+# Spec 002 makes the product RU/EN, and the deterministic (no-LLM) fallback has
+# to read an English query too.  This map lives HERE, next to CATEGORY_SYNONYMS,
+# so the taxonomy is still one file per concern: the eventual W1 `taxonomy.py`
+# becomes the single source and this map is folded into it.  Forms are
+# lower-case; a form that names an ambiguous concept is mapped to the generic
+# code ("church" → церковь, not the Catholic костёл).
+CATEGORY_SYNONYMS_EN: dict[str, list[str]] = {
+    "замок": [
+        "castle", "castles", "fortress", "fortresses", "citadel", "citadels",
+        "stronghold", "strongholds", "keep",
+    ],
+    "костёл": ["cathedral", "cathedrals"],
+    "церковь": ["church", "churches"],
+    "монастырь": [
+        "monastery", "monasteries", "convent", "convents", "abbey", "abbeys",
+        "friary",
+    ],
+    "дворец": ["palace", "palaces"],
+    "усадьба": [
+        "estate", "estates", "manor", "manors", "mansion", "mansions",
+        "residence", "residences", "homestead",
+    ],
+    "парк": ["park", "parks", "garden", "gardens"],
+    "музей": ["museum", "museums", "gallery", "galleries"],
+    "памятник": [
+        "monument", "monuments", "memorial", "memorials", "statue", "statues",
+    ],
+    "храм": [
+        "temple", "temples", "synagogue", "synagogues", "chapel", "chapels",
+        "shrine", "shrines",
+    ],
+    "архитектура": [
+        "architecture", "building", "buildings", "theater", "theatre",
+    ],
+    "инфраструктура": [
+        "bridge", "bridges", "embankment", "tower", "towers", "lock", "locks",
+        "waterfront",
+    ],
+    "кладбище": ["cemetery", "cemeteries", "graveyard", "necropolis"],
+    "кафе": [
+        "cafe", "cafes", "café", "cafés", "coffee", "cafeteria", "cafeterias",
+        "coffeehouse",
+    ],
+    "ресторан": [
+        "restaurant", "restaurants", "canteen", "canteens", "lunch", "dinner",
+        "dining", "eat",
+    ],
+    "туалет": [
+        "toilet", "toilets", "restroom", "restrooms", "wc", "bathroom",
+        "bathrooms", "lavatory",
+    ],
+    "гостиница": [
+        "hotel", "hotels", "hostel", "hostels", "inn", "inns", "lodging",
     ],
 }
 

@@ -30,11 +30,13 @@ from __future__ import annotations
 import logging as _logging
 import re as _re
 import time
+from dataclasses import dataclass, field
 
 from .. import constants, jev
-from ..models import IntentDecision, IntentResult
+from ..models import GenerateReq, IntentDecision, IntentResult
+from ..requirements import PartyComposition, Requirement, TripRequirements
 from .preprocess import WORD_RE
-from .resolve import CATEGORY_SYNONYMS
+from .resolve import CATEGORY_SYNONYMS, CATEGORY_SYNONYMS_EN
 
 log = _logging.getLogger(__name__)
 
@@ -155,14 +157,43 @@ _PLACE_STOP_LIST: frozenset[str] = frozenset({
 # budget the user actually stated, so the patterns demand a number (or a
 # fixed-length phrase) — "на пару часов" or a bare "час" is ambiguous and is
 # treated as "no budget", exactly like a query that never mentions time.
-_FALLBACK_HOURS_RE = _re.compile(r"(\d{1,2})\s*(?:час\w*|ч(?![а-яё]))", _re.I)
-_FALLBACK_MINUTES_RE = _re.compile(r"(\d{1,3})\s*(?:минут\w*|мин(?![а-яё]))", _re.I)
+# Russian writes small durations as words ("на два часа"), English as words too
+# ("for two hours"), so the number may be a digit OR a number word.
+_HOUR_WORDS: dict[str, float] = {
+    "один": 1, "одна": 1, "одного": 1, "одну": 1,
+    "два": 2, "две": 2, "двоих": 2, "двух": 2,
+    "три": 3, "трое": 3, "трёх": 3, "трех": 3,
+    "четыре": 4, "четверо": 4, "четырёх": 4, "четырех": 4,
+    "пять": 5, "пятеро": 5, "шесть": 6, "семь": 7, "восемь": 8, "девять": 9,
+    "десять": 10, "полтора": 1.5, "полторы": 1.5,
+    "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6,
+    "seven": 7, "eight": 8, "nine": 9, "ten": 10,
+}
+_HOUR_WORD_ALT = "|".join(
+    _re.escape(w) for w in sorted(_HOUR_WORDS, key=len, reverse=True)
+)
+
+_FALLBACK_HOURS_RE = _re.compile(
+    r"(\d{1,2})\s*(?:час\w*|ч(?![а-яё])|hours?\b|hrs?\b|h\b)", _re.I
+)
+_FALLBACK_HOURS_WORD_RE = _re.compile(
+    r"\b(" + _HOUR_WORD_ALT + r")\s*(?:час\w*|hours?\b|hrs?\b)", _re.I
+)
+_FALLBACK_MINUTES_RE = _re.compile(
+    r"(\d{1,3})\s*(?:минут\w*|мин(?![а-яё])|minutes?\b|mins?\b)", _re.I
+)
 # Whole phrases that name a duration without a number.
 _FALLBACK_DAY_RE = _re.compile(
-    r"(?:весь|целый|полный|на\s+весь)\s+день|сутк\w*|пол\s*дня|полдня",
+    r"(?:весь|целый|полный|на\s+весь)\s+день|сутк\w*|пол\s*дня|полдня|"
+    r"\b(?:whole|full|all)\s+day|half\s+a?\s*day|"
+    r"половин\w*\s+дня",
     _re.I,
 )
-_FALLBACK_FULL_DAY_RE = _re.compile(r"(?:весь|целый|полный)\s+день|сутк\w*", _re.I)
+_FALLBACK_FULL_DAY_RE = _re.compile(
+    r"(?:весь|целый|полный|на\s+весь)\s+день|сутк\w*|"
+    r"\b(?:whole|full|all)\s+day",
+    _re.I,
+)
 # How wide the ask is.  "region" is the only value the pipeline branches on
 # (it skips the geo focus and drives instead of walking), so the region words
 # are the ones worth reading off the text; "район" is reported as a district.
@@ -201,20 +232,32 @@ _KEYWORD_TO_CATEGORY: dict[str, str] = {
     if " " not in form
 }
 
+# The same inversion, Russian AND English (spec 002 is RU/EN): the fallback has
+# to read an English query without a model too.  RU forms are registered first,
+# so a form both maps carry (e.g. "wc") keeps its Russian registration.
+_SURFACE_FORMS: dict[str, str] = dict(_KEYWORD_TO_CATEGORY)
+for _form, _cat in (
+    (form, cat)
+    for cat, forms in CATEGORY_SYNONYMS_EN.items()
+    for form in forms
+    if " " not in form
+):
+    _SURFACE_FORMS.setdefault(_form, _cat)
+
 
 def _fallback_categories(query: str) -> list[str]:
     """Categories the query text itself states, read off the shared map.
 
     Deterministic word match on the lowercased query: «замкам» → "замок",
-    «костёлам» → "костёл", «кофейне» → "кафе".  A word the map does not
-    know simply yields nothing, so a themed query with no category word
-    returns an empty set — the honest answer, exactly like the model-free
-    scope/time handling (nothing stated → nothing invented).
+    «костёлам» → "костёл", «кофейне» → "кафе", "castles" → "замок".  A word
+    the map does not know simply yields nothing, so a themed query with no
+    category word returns an empty set — the honest answer, exactly like the
+    model-free scope/time handling (nothing stated → nothing invented).
     """
     cats: list[str] = []
     seen: set[str] = set()
-    for word in _re.findall(r"[а-яё]+", query.lower()):
-        cat = _KEYWORD_TO_CATEGORY.get(word)
+    for word in _re.findall(r"[а-яёa-z]+", query.lower()):
+        cat = _SURFACE_FORMS.get(word)
         if cat and cat not in seen:
             seen.add(cat)
             cats.append(cat)
@@ -224,13 +267,17 @@ def _fallback_categories(query: str) -> list[str]:
 def _fallback_time_budget(query: str) -> int | None:
     """Minutes of sightseeing the query itself budgets, or None.
 
-    Only what the text states: "за 3 часа" → 180, "на 90 минут" → 90,
-    "на полдня" → 240, "на весь день" → 480.  resolve() clamps the result
-    to [MIN_BUDGET_MIN, MAX_BUDGET_MIN], so a wild number is bounded.
+    Only what the text states: "за 3 часа" → 180, "на два часа" → 120,
+    "for two hours" → 120, "на 90 минут" → 90, "на полдня" → 240,
+    "на весь день" → 480.  resolve() clamps the result to
+    [MIN_BUDGET_MIN, MAX_BUDGET_MIN], so a wild number is bounded.
     """
     m = _FALLBACK_HOURS_RE.search(query)
     if m:
         return int(m.group(1)) * 60
+    m = _FALLBACK_HOURS_WORD_RE.search(query)
+    if m:
+        return round(_HOUR_WORDS[m.group(1).lower()] * 60)
     m = _FALLBACK_MINUTES_RE.search(query)
     if m:
         return int(m.group(1))
@@ -377,4 +424,591 @@ def extract_intent(query: str) -> IntentResult:
         ),
         latency_ms=int((time.perf_counter() - t0) * 1000),
         raw_response=answers,
+    )
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# W2 — TripRequirements: the single interpretation entry point
+# ═════════════════════════════════════════════════════════════════════════════
+#
+# `build_requirements(query, req)` is the ONE place that turns a tourist's free
+# text plus the explicit UI filters into the frozen `TripRequirements` contract.
+# It never touches the DB: named places and area slugs are names here, and the
+# resolve stage grounds them.  Two readings are possible and both produce the
+# same shape:
+#
+#   * LLM available — Jev's typed categories (planner/intent.extract_intent) are
+#     merged over the deterministic reading, which supplies provenance spans and
+#     the party/budget/area facts the typed model cannot give (a count, not
+#     "family").  source="llm" (or "mixed" with UI filters).
+#   * No key / upstream down — the deterministic reading alone.  source =
+#     "fallback" (or "explicit" when only UI filters produced requirements).
+#
+# Rule: nothing is invented.  "двое детей" is a count of 2 with NO age; "без
+# лестниц" is an unknown (there is no step-free graph to prove it), never a
+# satisfied requirement.  The UI's explicit values win over any text guess.
+
+# Everyday stops are services; everything else stated in the text is a theme.
+_SERVICE_CODES = frozenset(constants.CONVENIENCE_CATEGORIES)
+
+# A query-initial capitalised word is usually a verb ("Погулять", "Walk") — not
+# a place.  These are filtered out of must-visit candidates by name; the DB
+# would reject them anyway, but a clean name list is what the UI shows.
+_RU_NAME_STOP = _PLACE_STOP_LIST | frozenset({
+    "хочу", "хотелось", "погулять", "гулять", "пойдём", "пойдем", "посмотреть",
+    "показать", "посетить", "найти", "сходить", "пройти", "прогуляться",
+    "поехать", "съездить", "проехать", "составить", "подскажи", "расскажи",
+    "организуй", "маршрут", "прогулка", "прогулку", "тур", "экскурсия",
+    "экскурсию", "дай", "сделай", "можно",
+})
+_EN_NAME_STOP = frozenset({
+    "walk", "walks", "wander", "stroll", "go", "visit", "visits", "see", "show",
+    "find", "plan", "make", "want", "would", "like", "need", "needs", "please",
+    "the", "a", "an", "i", "we", "my", "our", "and", "with", "for", "around",
+    "in", "to", "from", "on", "at", "of", "old", "new", "day", "days", "trip",
+    "route", "tour", "guide", "family", "kids", "children", "child", "nice",
+    "good", "short", "long", "two", "three", "hour", "hours",
+})
+
+# Number words for a stated party size (RU has collective/case forms).
+_COUNT_WORDS: dict[str, float] = {
+    **_HOUR_WORDS,
+    "двое": 2, "двоих": 2, "двумя": 2, "трое": 3, "тремя": 3, "троих": 3,
+    "четверо": 4, "четырьмя": 4, "четверых": 4, "пятеро": 5, "шестеро": 6,
+    "семеро": 7, "одним": 1, "одной": 1, "both": 2, "a": 1, "an": 1,
+}
+_COUNT_WORD_ALT = "|".join(
+    _re.escape(w) for w in sorted(_COUNT_WORDS, key=len, reverse=True)
+)
+
+# Children / adults, RU and EN.  Only a COUNT is read; an age is a separate,
+# explicitly-stated fact (see _AGE_RE) and is never derived from the count.
+_RU_CHILD_RE = _re.compile(
+    r"(?:с\s+)?(?P<num>\d{1,2}|" + _COUNT_WORD_ALT + r")\s*"
+    r"(?:дет\w*|ребёнк\w*|ребенк\w*|малыш\w*|ребятишк\w*)",
+    _re.I,
+)
+_EN_CHILD_RE = _re.compile(
+    r"(?:with\s+)?(?P<num>\d{1,2}|" + _COUNT_WORD_ALT + r")\s*"
+    r"(?:children|child|kids?|daughters?|sons?|babies|baby|infants?)",
+    _re.I,
+)
+_RU_ADULT_RE = _re.compile(
+    r"(?P<num>\d{1,2}|" + _COUNT_WORD_ALT + r")\s*(?:взросл\w*)", _re.I
+)
+_EN_ADULT_RE = _re.compile(
+    r"(?P<num>\d{1,2}|" + _COUNT_WORD_ALT + r")\s*(?:adults?|grown[\s-]?ups?)", _re.I
+)
+_CHILD_WORD_RE = _re.compile(
+    r"дет\w*|ребёнк\w*|ребенк\w*|малыш\w*|child\w*|kid\w*|daughters?|sons?|baby|infant",
+    _re.I,
+)
+# "детям 5 и 8 лет", "6 years old".  Anchored on an age word, so it can never
+# fire on "2 часа" / "3 stops".
+_AGE_RE = _re.compile(
+    r"((?:\d{1,2}\s*(?:,|и|and)?\s*){1,4})\s*"
+    r"(?:лет\b|год\b|года\b|years?\s*old|y\.?o\.?)",
+    _re.I,
+)
+
+# A stated party property that the text itself states (never inferred from the
+# party size — a family of four is not automatically "with a stroller").
+_MOBILITY_MARKERS: list[tuple[_re.Pattern, str]] = [
+    (_re.compile(
+        r"инвалидн\w*\s+коляск|кресл\w*[\s-]*коляск|wheelchair|"
+        r"безбарьерн\w*|без\s+барьер\w*",
+        _re.I,
+    ), "wheelchair"),
+    (_re.compile(r"коляск\w*|stroller|pram|pushchair|buggy", _re.I), "stroller"),
+    (_re.compile(r"пожил\w*|престарел\w*|elderly|senior", _re.I), "elderly"),
+]
+
+# Things the request asks for that the system cannot represent or prove with
+# the data it has.  These are surfaced to the user; they are NEVER satisfied
+# requirements ("без лестниц" without a step-free graph).
+_UNKNOWN_MARKERS: list[tuple[_re.Pattern, str]] = [
+    (_re.compile(
+        r"без\s+лестниц|без\s+ступен\w*|без\s+подъ[её]м\w*|безбарьерн\w*|"
+        r"step[\s-]?free|without\s+stairs|no\s+stairs",
+        _re.I,
+    ), "step_free"),
+    (_re.compile(
+        r"доступн\w*\s+для\s+коляск|инвалидн\w*\s+коляск|"
+        r"wheelchair[\s-]?accessible|accessib\w*\s+for\s+wheelchair",
+        _re.I,
+    ), "wheelchair_accessible"),
+    (_re.compile(
+        r"открыт\w*\s+сейчас|сейчас\s+открыт\w*|open\s+now|currently\s+open",
+        _re.I,
+    ), "opening_hours"),
+]
+
+# An obligation ("туалет обязательно", "must have a toilet") makes a service
+# HARD; a wish ("кафе если по пути", "maybe a café") keeps it SOFT.
+_OBLIGATION_RE = _re.compile(
+    r"обязательн\w*|непременн\w*|необходим\w*|"
+    r"\bнужен\b|\bнужна\b|\bнужно\b|\bнужны\b|"
+    r"\bдолжен\b|\bдолжна\b|\bдолжно\b|\bдолжны\b|"
+    r"\bmust\b|\brequired\b|definitely|\bshould\s+be\b|"
+    r"нельзя\s+без",
+    _re.I,
+)
+# A restriction removes a category from the route ("без замков", "not museums").
+_AVOID_RE = _re.compile(
+    r"\bбез\b|\bкроме\b|не\s+надо|не\s+хочу|не\s+нужн\w*|"
+    r"\bavoid\b|\bexcept\b|\bexcluding\b|\bwithout\b|\bno\s+\w+",
+    _re.I,
+)
+
+# A verified area the request is restricted to.  Slugs come from ONE controlled
+# table (no areas DB exists yet); "старый город" must bind to a known area, not
+# to the adjective "старый" and a random radius (spec §4.3).
+_AREA_PATTERNS: list[tuple[str, _re.Pattern]] = [
+    (
+        "grodno-old-town",
+        _re.compile(
+            r"стар\w*\s+(?:город\w*|гродн\w*)|"
+            r"old\s+(?:town|grodno)|historic\s+(?:centre|center)",
+            _re.I,
+        ),
+    ),
+]
+
+_TERM_RE = _re.compile(r"[а-яёa-z]+")
+
+
+@dataclass
+class _Reading:
+    """One reading of the query text — the deterministic parse plus, when the
+    model is available, the categories Jev typed on top of it."""
+
+    source: str
+    requirements: list[Requirement] = field(default_factory=list)
+    adults: int | None = None
+    children: int | None = None
+    children_ages: list[int] = field(default_factory=list)
+    mobility: list[str] = field(default_factory=list)
+    time_budget: int | None = None
+    areas: list[str] = field(default_factory=list)
+    unknowns: list[str] = field(default_factory=list)
+
+
+def _clause_containing(query: str, idx: int) -> str:
+    """The comma/sentence fragment that contains `idx` — the provenance span.
+
+    "туалет обязательно" is a fragment of "…, туалет обязательно, …", and that
+    fragment — not the whole query — is what `Requirement.text` records.
+    """
+    delims = ".,;:!?—–\n"
+    start = 0
+    for i in range(idx - 1, -1, -1):
+        if query[i] in delims:
+            start = i + 1
+            break
+    end = len(query)
+    for i in range(idx, len(query)):
+        if query[i] in delims:
+            end = i
+            break
+    return query[start:end].strip()
+
+
+def _iter_terms(query: str):
+    """Yield (category, start, end) for every taxonomy word in the query."""
+    for m in _TERM_RE.finditer(query.lower()):
+        cat = _SURFACE_FORMS.get(m.group(0))
+        if cat is not None:
+            yield cat, m.start(), m.end()
+
+
+def _classify_term(cat: str, clause: str) -> tuple[str, str]:
+    """(kind, strength) for one stated category, judged from its own fragment."""
+    low = clause.lower()
+    if _AVOID_RE.search(low):
+        return "avoid", "hard"
+    if cat in _SERVICE_CODES:
+        return "service", ("hard" if _OBLIGATION_RE.search(low) else "soft")
+    return "interest", "soft"
+
+
+def _text_requirements(query: str) -> list[Requirement]:
+    """Requirements the text itself states, each with its provenance span."""
+    reqs: list[Requirement] = []
+    seen: set[tuple[str, str | None]] = set()
+    for cat, start, _end in _iter_terms(query):
+        kind, strength = _classify_term(cat, _clause_containing(query, start))
+        key = (kind, cat)
+        if key in seen:
+            continue
+        seen.add(key)
+        reqs.append(
+            Requirement(
+                kind=kind,  # type: ignore[arg-type]
+                strength=strength,  # type: ignore[arg-type]
+                code=cat,
+                label=cat,
+                text=_clause_containing(query, start) or None,
+                source="text",
+            )
+        )
+    return reqs
+
+
+def _count_value(token: str) -> int | None:
+    token = token.strip().lower()
+    if token.isdigit():
+        return int(token)
+    value = _COUNT_WORDS.get(token)
+    return int(value) if value is not None else None
+
+
+def _match_count(query: str, rx: _re.Pattern) -> int | None:
+    m = rx.search(query)
+    if not m:
+        return None
+    return _count_value(m.group("num"))
+
+
+def _children_ages(query: str) -> list[int]:
+    """Ages the user actually named (0 < age ≤ 17) — never a guess."""
+    if not _CHILD_WORD_RE.search(query):
+        return []
+    out: list[int] = []
+    for m in _AGE_RE.finditer(query):
+        for token in _re.findall(r"\d{1,2}", m.group(1)):
+            age = int(token)
+            if 0 < age <= 17 and age not in out:
+                out.append(age)
+    return out
+
+
+def _mobility_from_text(query: str) -> list[str]:
+    out: list[str] = []
+    for rx, code in _MOBILITY_MARKERS:
+        if rx.search(query) and code not in out:
+            out.append(code)
+    return out
+
+
+def _unknowns_from_text(query: str) -> list[str]:
+    out: list[str] = []
+    for rx, code in _UNKNOWN_MARKERS:
+        if rx.search(query) and code not in out:
+            out.append(code)
+    return out
+
+
+def _named_tokens(query: str) -> list[str]:
+    """Proper-noun candidates, RU and EN, minus query verbs / area names.
+
+    RU uses the same token regex the Jev path uses (`_named_place_tokens`), then
+    drops sentence-initial verbs; EN adds capitalised Latin words minus common
+    query words. Debate about a token's identity is not settled here — the
+    resolve stage matches it against the DB.
+    """
+    out: list[str] = []
+    seen: set[str] = set()
+    for token in _named_place_tokens(query):
+        low = token.lower()
+        # A taxonomy word ("Замки") or a query verb ("Погулять") is not a place.
+        if low in _RU_NAME_STOP or low in _SURFACE_FORMS or low in seen:
+            continue
+        seen.add(low)
+        out.append(token)
+    for token in _re.findall(r"\b[A-Z][a-z]{2,}\b", query):
+        low = token.lower()
+        if low in _EN_NAME_STOP or low in _SURFACE_FORMS or low in seen:
+            continue
+        seen.add(low)
+        out.append(token)
+    return out
+
+
+def _is_grodno(text: str) -> bool:
+    """True when a token/query names Grodno in either script."""
+    low = text.lower()
+    return "гродн" in low or "grodn" in low
+
+
+def _areas_from_text(query: str) -> list[str]:
+    """Controlled area slugs the text names — never a bare adjective.
+
+    "старый город" binds to Grodno's old town only when the query is about
+    Grodno (or names no other town): «Лида, замок и старый город» must not be
+    restricted to a Grodno area just because it contains the words "старый
+    город".
+    """
+    other_towns = [n for n in _named_tokens(query) if not _is_grodno(n)]
+    out: list[str] = []
+    for slug, rx in _AREA_PATTERNS:
+        if not rx.search(query) or slug in out:
+            continue
+        if slug == "grodno-old-town" and other_towns and not _is_grodno(query):
+            continue
+        out.append(slug)
+    return out
+
+
+def _party_from_text(query: str) -> tuple[int | None, int | None, list[int], list[str]]:
+    children = _match_count(query, _RU_CHILD_RE)
+    if children is None:
+        children = _match_count(query, _EN_CHILD_RE)
+    if children is not None and not (0 <= children <= 20):
+        children = None
+    ages = _children_ages(query)
+    if children is None and ages:
+        # "с детьми 5 и 9 лет" enumerates the children — the count is the number
+        # of ages the user stated, not a guess.
+        children = len(ages)
+    adults = _match_count(query, _RU_ADULT_RE)
+    if adults is None:
+        adults = _match_count(query, _EN_ADULT_RE)
+    if adults is not None and not (0 <= adults <= 50):
+        adults = None
+    return (
+        adults,
+        children,
+        ages,
+        _mobility_from_text(query),
+    )
+
+
+def _fallback_reading(query: str, _locale: str) -> _Reading:
+    """Everything the query text states, without a model — nothing invented."""
+    adults, children, ages, mobility = _party_from_text(query)
+    return _Reading(
+        source="fallback",
+        requirements=_text_requirements(query),
+        adults=adults,
+        children=children,
+        children_ages=ages,
+        mobility=mobility,
+        time_budget=_fallback_time_budget(query),
+        areas=_areas_from_text(query),
+        unknowns=_unknowns_from_text(query),
+    )
+
+
+def _clause_for_category(query: str, cat: str) -> str:
+    for found, start, _end in _iter_terms(query):
+        if found == cat:
+            return _clause_containing(query, start)
+    return ""
+
+
+def _llm_reading(query: str, locale: str) -> _Reading:
+    """The deterministic reading plus the categories Jev typed on top.
+
+    The typed model decides *which* categories a query is about (including
+    phrasings the word map misses); the deterministic pass keeps provenance and
+    the party/budget/area facts that a typed choice cannot express.  A Jev
+    outage degrades to the plain fallback — never to an exception.
+    """
+    base = _fallback_reading(query, locale)
+    try:
+        intent = extract_intent(query)
+    except jev.JevError:
+        log.warning("requirements: Jev unavailable — deterministic reading")
+        return base
+    if intent.source != "jev":
+        # extract_intent degrades internally on an upstream outage; that is the
+        # same situation as no key — the requirements come from the text alone.
+        log.info("requirements: intent source=%s — deterministic reading", intent.source)
+        return base
+
+    d = intent.decision
+    conf = max(0.0, min(1.0, round(intent.confidence, 3)))
+    reqs = list(base.requirements)
+    seen = {(r.kind, r.code) for r in reqs}
+
+    for cat in d.categories_pos:
+        kind = "service" if cat in _SERVICE_CODES else "interest"
+        clause = _clause_for_category(query, cat)
+        if kind == "service":
+            strength = "hard" if _OBLIGATION_RE.search(clause.lower()) else "soft"
+        else:
+            strength = "soft"
+        if (kind, cat) in seen:
+            continue
+        seen.add((kind, cat))
+        reqs.append(
+            Requirement(
+                kind=kind,  # type: ignore[arg-type]
+                strength=strength,  # type: ignore[arg-type]
+                code=cat,
+                label=cat,
+                text=clause or None,
+                source="text",
+                confidence=conf,
+            )
+        )
+
+    for cat in d.categories_neg:
+        if ("avoid", cat) in seen:
+            continue
+        seen.add(("avoid", cat))
+        clause = _clause_for_category(query, cat)
+        reqs.append(
+            Requirement(
+                kind="avoid",
+                strength="hard",
+                code=cat,
+                label=cat,
+                text=clause or None,
+                source="text",
+                confidence=conf,
+            )
+        )
+
+    budget = base.time_budget if base.time_budget is not None else d.time_budget_minutes
+    return _Reading(
+        source="llm",
+        requirements=reqs,
+        adults=base.adults,
+        children=base.children,
+        children_ages=base.children_ages,
+        mobility=base.mobility,
+        time_budget=budget,
+        areas=base.areas,
+        unknowns=base.unknowns,
+    )
+
+
+def _read_text(query: str, locale: str) -> _Reading:
+    """LLM reading when OpenRouter can answer, deterministic reading otherwise."""
+    if jev.available():
+        return _llm_reading(query, locale)
+    log.info("requirements: no OPENROUTER_API_KEY — deterministic reading")
+    return _fallback_reading(query, locale)
+
+
+def _ui_requirements(req: GenerateReq) -> list[Requirement]:
+    """Requirements the tourist set with a visible control (source="ui")."""
+    out: list[Requirement] = []
+    for code in req.hard_services:
+        out.append(
+            Requirement(kind="service", strength="hard", code=code, label=code, source="ui")
+        )
+    for code in req.interests:
+        out.append(
+            Requirement(kind="interest", strength="soft", code=code, label=code, source="ui")
+        )
+    for code in req.avoid:
+        out.append(
+            Requirement(kind="avoid", strength="hard", code=code, label=code, source="ui")
+        )
+    return out
+
+
+def _ui_used(req: GenerateReq, ui_reqs: list[Requirement]) -> bool:
+    """True when an explicit control contributed anything to the request.
+
+    `time_budget_minutes == 0` is the selector's "без ограничения" value, the
+    same as an absent field; it does not count as an explicit choice.
+    """
+    return bool(ui_reqs) or (
+        req.party_adults is not None
+        or req.party_children is not None
+        or bool(req.party_children_ages)
+        or bool(req.mobility)
+        or req.time_budget_minutes not in (None, 0)
+    )
+
+
+def _merge_requirements(
+    ui_reqs: list[Requirement], text_reqs: list[Requirement]
+) -> tuple[list[Requirement], set[tuple[str, str | None]]]:
+    """UI requirements first (they win); a text reading cannot duplicate them."""
+    merged = list(ui_reqs)
+    claimed = {(r.kind, r.code or r.name) for r in ui_reqs}
+    for r in text_reqs:
+        key = (r.kind, r.code or r.name)
+        if key in claimed:
+            continue
+        claimed.add(key)
+        merged.append(r)
+    return merged, claimed
+
+
+def build_requirements(query: str, req: GenerateReq) -> TripRequirements:
+    """Interpret one request into the frozen `TripRequirements` contract.
+
+    Single entry point for "what did the tourist ask for".  Works RU and EN,
+    with the LLM present and in the degraded no-key path; explicit UI filters
+    always win over a text reading, and nothing the data cannot prove is
+    presented as satisfied (it goes to `unknowns` instead).
+    """
+    locale = req.locale
+    reading = _read_text(query, locale)
+
+    # ── Requirements: UI first (it wins), then the text reading ──
+    ui_reqs = _ui_requirements(req)
+    requirements, claimed = _merge_requirements(ui_reqs, reading.requirements)
+
+    # Named places the user asked for: names now, grounded to IDs in resolve().
+    for name in _named_tokens(query):
+        key = ("must_visit", name)
+        if key in claimed:
+            continue
+        claimed.add(key)
+        requirements.append(
+            Requirement(kind="must_visit", name=name, label=name, text=name, source="text")
+        )
+
+    # ── Party: explicit values win; ages are never invented ──
+    children = req.party_children if req.party_children is not None else reading.children
+    adults = req.party_adults if req.party_adults is not None else reading.adults
+    ages = (
+        list(req.party_children_ages)
+        if req.party_children_ages
+        else list(reading.children_ages)
+    )
+    mobility: list[str] = []
+    for code in list(req.mobility) + list(reading.mobility):
+        if code and code not in mobility:
+            mobility.append(code)
+
+    # ── Budget: the UI selector wins, including "0 = без ограничения" ──
+    if req.time_budget_minutes is not None:
+        budget = req.time_budget_minutes or None
+    else:
+        budget = reading.time_budget
+    if budget is not None:
+        budget = max(constants.MIN_BUDGET_MIN, min(budget, constants.MAX_BUDGET_MIN))
+
+    # ── Unknowns: what cannot be proven is named, never promised ──
+    unknowns = list(reading.unknowns)
+    if "wheelchair" in mobility and "wheelchair_accessible" not in unknowns:
+        unknowns.append("wheelchair_accessible")
+
+    # ── How the requirements were obtained ──
+    ui_used = _ui_used(req, ui_reqs)
+    if reading.source == "llm" and ui_used:
+        source: str = "mixed"
+    elif reading.source == "llm":
+        source = "llm"
+    elif ui_used:
+        source = "explicit"
+    else:
+        source = "fallback"
+
+    return TripRequirements(
+        locale=locale,
+        raw_query=query,
+        party=PartyComposition(
+            adults=adults,
+            children=children,
+            children_ages=ages,
+            mobility=mobility,
+        ),
+        budget_minutes=budget,
+        costing=req.profile,
+        origin_lat=req.origin.lat if req.origin is not None else None,
+        origin_lon=req.origin.lon if req.origin is not None else None,
+        areas=reading.areas,
+        result_mode=req.result_mode,
+        round_trip=req.round_trip,
+        requirements=requirements,
+        unknowns=unknowns,
+        source=source,  # type: ignore[arg-type]
     )

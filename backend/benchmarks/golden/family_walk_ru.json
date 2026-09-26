@@ -1,0 +1,22 @@
+{
+  "id": "family_walk_ru",
+  "locale": "ru",
+  "query": "старый Гродно, двое детей, два часа, туалет обязателен, кафе если по пути",
+  "parity_group": "family_walk",
+  "filters": {
+    "party_children": 2,
+    "hard_services": ["туалет"],
+    "interests": ["кафе"],
+    "avoid": [],
+    "time_budget_minutes": 120,
+    "origin": {"lat": 53.6778, "lon": 23.8295},
+    "result_mode": "route"
+  },
+  "expectations": {
+    "must_contain_categories": ["туалет"],
+    "must_not_contain_categories": [],
+    "expected_status": ["ready", "needs_clarification", "infeasible"],
+    "max_total_minutes": 120,
+    "in_region": true
+  }
+}

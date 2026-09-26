@@ -37,7 +37,7 @@
   "stops": [
     {
       "name": "Лидский замок",
-      "place_id": 1,
+      "place_id": 19,
       "lat": 53.8845,
       "lon": 25.2925,
       "grade": "must-see",
@@ -51,7 +51,7 @@
     },
     {
       "name": "Фарный костёл Воздвижения Святого Креста (Лида)",
-      "place_id": 2,
+      "place_id": 20,
       "lat": 53.8833,
       "lon": 25.2861,
       "grade": "nice-to-have",
@@ -64,7 +64,7 @@
     },
     {
       "name": "Лютеранская кирха (Лида)",
-      "place_id": 3,
+      "place_id": 21,
       "lat": 53.8861,
       "lon": 25.2903,
       "grade": "nice-to-have",
@@ -77,7 +77,7 @@
     },
     {
       "name": "Синагога (Лида)",
-      "place_id": 4,
+      "place_id": 22,
       "lat": 53.8836,
       "lon": 25.2884,
       "grade": "nice-to-have",

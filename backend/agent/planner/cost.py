@@ -17,11 +17,41 @@ comes from this function and pipeline.py needs it for the Place response.
 from __future__ import annotations
 
 import math
+from collections.abc import Collection
+from dataclasses import dataclass
 
 from .. import constants
 from ..errors import UpstreamUnavailable
 from ..models import Candidate, CostMatrix, ResolvedConstraints
 from ..valhalla_client import snap_locations, time_matrix
+
+# Machine reason codes for prune_unroutable_stops (localized by the API layer).
+REASON_UNROUTABLE_LEG = "unroutable_leg"
+REASON_MUST_VISIT_UNROUTABLE = "must_visit_unroutable"
+
+
+@dataclass(frozen=True)
+class PrunedStop:
+    """A stop flagged by prune_unroutable_stops, with a machine reason.
+
+    Not every entry was *removed*: a mandatory stop whose incoming leg cannot
+    be routed is kept on the route and reported with
+    ``reason == "must_visit_unroutable"``. ``.id`` / ``.name`` proxy the
+    candidate so existing logging (``", ".join(c.name for c in report)``) and
+    tests keep working.
+    """
+
+    candidate: Candidate
+    reason: str
+
+    @property
+    def id(self) -> int:
+        return self.candidate.id
+
+    @property
+    def name(self) -> str:
+        return self.candidate.name
+
 
 MAX_VISIT_BUDGET_SHARE = 0.4
 # A single stop may claim at most this share of the time budget; see the cap in
@@ -186,7 +216,8 @@ def prune_unroutable_stops(
     route: list[Candidate],
     candidates: list[Candidate],
     cost: CostMatrix,
-) -> tuple[list[Candidate], list[Candidate]]:
+    must_visit_ids: Collection[int] | None = None,
+) -> tuple[list[Candidate], list[PrunedStop]]:
     """Drop stops whose hop from the previous stop Valhalla cannot route at all.
 
     The matrix already carries Valhalla's own verdict for every pair: an
@@ -196,13 +227,26 @@ def prune_unroutable_stops(
     its neighbour, unreachable from everything else. Ordering such a stop into
     the tour makes /route answer 400 and the UI draw points with no line.
 
-    Returns (kept_route, dropped) — no extra Valhalla calls.
+    MUST-VISIT STOPS ARE NEVER DROPPED. When the leg into a mandatory stop is
+    unroutable the stop stays on the route and is *reported* with the machine
+    reason ``must_visit_unroutable``; the verifier then marks the requirement
+    unmet/infeasible. Silently removing something the tourist demanded is
+    exactly the failure this guards against.
+
+    Returns ``(kept_route, report)`` where each entry of ``report`` is a
+    ``PrunedStop`` carrying the candidate and a machine ``reason``
+    (``unroutable_leg`` for a dropped optional stop, ``must_visit_unroutable``
+    for a kept mandatory one) — no extra Valhalla calls.
+
+    ``must_visit_ids`` is optional only so existing callers keep working;
+    integration passes ``constraints.must_visit_ids``.
     """
     if len(route) < 3:
         return route, []
     index = {c.id: i for i, c in enumerate(candidates)}
+    must = set(must_visit_ids or ())
     keep = list(route)
-    dropped: list[Candidate] = []
+    report: list[PrunedStop] = []
 
     def leg_bad(a: Candidate, b: Candidate) -> bool:
         i, j = index.get(a.id), index.get(b.id)
@@ -215,13 +259,21 @@ def prune_unroutable_stops(
     while changed and len(keep) >= 3:
         changed = False
         for i in range(len(keep) - 1):
-            if leg_bad(keep[i], keep[i + 1]):
-                # The hop into stop i+1 is impossible → that stop cannot be
-                # visited in this order.
-                dropped.append(keep.pop(i + 1))
-                changed = True
-                break
-    return keep, dropped
+            if not leg_bad(keep[i], keep[i + 1]):
+                continue
+            nxt = keep[i + 1]
+            if nxt.id in must:
+                # Mandatory: never silently removed — keep it and say why.
+                if not any(p.candidate.id == nxt.id for p in report):
+                    report.append(PrunedStop(nxt, REASON_MUST_VISIT_UNROUTABLE))
+                continue
+            # The hop into stop i+1 is impossible → that stop cannot be visited
+            # in this order.
+            report.append(PrunedStop(nxt, REASON_UNROUTABLE_LEG))
+            keep.pop(i + 1)
+            changed = True
+            break
+    return keep, report
 
 
 def walk_cost(order: list[int], matrix: list[list[float]]) -> float:

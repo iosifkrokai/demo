@@ -122,11 +122,20 @@ def test_render_falls_back_to_legs_when_the_tour_is_refused(monkeypatch):
         locs = list(locations)
         calls.append(locs)
         if len(locs) > 2:  # the whole-tour request is the one Valhalla refuses
-            return {}, None
-        return {"type": "LineString", "coordinates": [[23.9, 53.0], [23.91, 53.01]]}, {
-            "length": 1.5,
-            "time": 300.0,
-        }
+            return vc.RouteResult(
+                status=vc.RouteStatus.NO_ROUTE_EXISTS,
+                shape={},
+                summary=None,
+                maneuvers=None,
+                language=language,
+            )
+        return vc.RouteResult(
+            status=vc.RouteStatus.USABLE,
+            shape={"type": "LineString", "coordinates": [[23.9, 53.0], [23.91, 53.01]]},
+            summary={"length": 1.5, "time": 300.0},
+            maneuvers=None,
+            language=language,
+        )
 
     monkeypatch.setattr(render_mod, "route_through", fake_route_through)
     route = [
@@ -135,9 +144,10 @@ def test_render_falls_back_to_legs_when_the_tour_is_refused(monkeypatch):
         _candidate(3, 53.02, 23.92),
     ]
 
-    shape, summary = render_mod.render(route, costing="auto")
+    shape, summary, status = render_mod.render(route, costing="auto")
 
     assert len(calls) == 3, "one whole-tour attempt + two legs"
+    assert status == "usable", "the per-leg fallback still yields a drawable route"
     assert len(shape["coordinates"]) == 4
     assert summary["length"] == 3.0
     assert summary["time"] == 600.0
@@ -173,7 +183,7 @@ def test_route_through_drops_the_island_stop_instead_of_raising(monkeypatch):
     monkeypatch.setattr(vc, "snap_locations", lambda locs, costing, timeout=None: list(locs))
     monkeypatch.setattr(vc, "_snappable", lambda loc, costing, timeout: True)
 
-    shape, _ = vc.route_through(
+    result = vc.route_through(
         [
             {"lat": MAINLAND[0], "lon": MAINLAND[1], "type": "break"},
             {"lat": ISLAND[0], "lon": ISLAND[1], "type": "via"},
@@ -182,6 +192,7 @@ def test_route_through_drops_the_island_stop_instead_of_raising(monkeypatch):
         costing="auto",
     )
 
-    assert shape, "the tour still gets drawn without the island stop"
+    assert result.status == vc.RouteStatus.USABLE
+    assert result.shape, "the tour still gets drawn without the island stop"
     assert routed_sizes[0] == 3, "first try has all three stops"
     assert 2 in routed_sizes[1:], "then the island stop is dropped and it routes"

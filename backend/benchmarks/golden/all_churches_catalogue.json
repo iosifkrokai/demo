@@ -1,0 +1,24 @@
+{
+  "id": "all_churches_catalogue",
+  "locale": "ru",
+  "query": "все костёлы и церкви Гродненской области",
+  "filters": {
+    "party_children": null,
+    "hard_services": [],
+    "interests": ["костёл", "церковь"],
+    "avoid": [],
+    "time_budget_minutes": null,
+    "origin": null,
+    "result_mode": "catalogue"
+  },
+  "expectations": {
+    "must_contain_categories": ["костёл", "церковь"],
+    "must_not_contain_categories": [],
+    "expected_status": ["ready", "catalogue"],
+    "expected_result_mode": "catalogue",
+    "max_total_minutes": null,
+    "in_region": true,
+    "min_places": 10,
+    "status_note": "«все костёлы и церкви Гродненской области» — это каталог, а не прогулка: запрос называет ОБА кода (костёл и церковь) и требует области, поэтому оба должны присутствовать, а минимальное число мест взято заведомо выше одной короткой прогулки (в области их десятки). API пока не отдаёт ни result_mode, ни status, поэтому ожидание catalogue и expected_result_mode отмечаются как непроверяемые, а не как пройденные."
+  }
+}

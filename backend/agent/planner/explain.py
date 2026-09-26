@@ -4,8 +4,10 @@ No LLM — assemble the trace into a short Russian description. The webapp
 surfaces this in the route summary; clients can hide it for compact view.
 
 The explanation is purely deterministic and reflects exactly what the
-pipeline did (which categories, what algorithm, any auto-relax). This
-keeps the per-request cost at zero and ensures the user sees the truth.
+pipeline did (which categories, what algorithm, any auto-relax) and, when the
+verifier ran, the satisfied / unmet / uncertain breakdown of the user's own
+requirements. This keeps the per-request cost at zero and ensures the user
+sees the truth.
 """
 
 from __future__ import annotations
@@ -13,6 +15,8 @@ from __future__ import annotations
 from collections import Counter
 
 from ..models import Candidate
+from ..requirements import TripRequirements
+from .verify import verify_summary
 
 
 def _area_name(route: list[Candidate]) -> str:
@@ -50,11 +54,51 @@ def _area_name(route: list[Candidate]) -> str:
     return "Гродно"
 
 
+def _requirements_section(
+    trace: dict, requirements: TripRequirements | None
+) -> list[str]:
+    """The satisfied / unmet / uncertain breakdown, from the verifier.
+
+    Prefers the live ``requirements`` object when one is passed (statuses were
+    written by ``verify``), else the snapshot ``validate`` stored in the trace.
+    Returns an empty list when the verifier never ran, so callers that do not
+    use requirements get byte-for-byte the old explanation.
+    """
+    if requirements is not None and requirements.requirements:
+        summary = verify_summary(requirements)
+    else:
+        summary = trace.get("requirement_summary")
+    if not summary:
+        return []
+
+    lines: list[str] = []
+    labels = (
+        ("satisfied", "✔", "выполнено"),
+        ("unmet", "✘", "не выполнено"),
+        ("uncertain", "?", "неизвестно"),
+    )
+    for key, mark, ru in labels:
+        items = summary.get(key) or []
+        if items:
+            lines.append(f"{mark} {ru}: {', '.join(items)}")
+
+    status = summary.get("status")
+    if status == "infeasible":
+        lines.append("⚠ Обязательное условие выполнить не удалось.")
+    elif status == "degraded":
+        lines.append("⚠ Часть условий не подтверждена данными.")
+
+    if not lines:
+        return []
+    return ["", "Условия запроса:", *lines]
+
+
 def explain(
     route: list[Candidate],
     trace: dict,
     walk_seconds: float,
     costing: str = "pedestrian",
+    requirements: TripRequirements | None = None,
 ) -> str:
     if not route:
         return "Маршрут не удалось построить."
@@ -91,6 +135,8 @@ def explain(
 
     if not trace.get("fits_budget", True):
         parts.append("⚠ Маршрут слегка выходит за заявленный бюджет.")
+
+    parts.extend(_requirements_section(trace, requirements))
 
     div = trace.get("diversity", 1.0)
     if n >= 3 and div < 0.4:

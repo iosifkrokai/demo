@@ -1,0 +1,23 @@
+{
+  "id": "vague_no_anchor",
+  "locale": "ru",
+  "query": "что-нибудь интересное",
+  "filters": {
+    "party_children": null,
+    "hard_services": [],
+    "interests": [],
+    "avoid": [],
+    "time_budget_minutes": null,
+    "origin": null,
+    "result_mode": "route"
+  },
+  "expectations": {
+    "must_contain_categories": [],
+    "must_not_contain_categories": [],
+    "expected_status": ["needs_clarification", "ready"],
+    "max_total_minutes": null,
+    "in_region": true,
+    "allow_empty": true,
+    "status_note": "«что-нибудь интересное» без якоря: честных исходов два — уточняющий вопрос (нет плана) или маршрут по умолчанию, целиком внутри области. В API сейчас нет ни status, ни needs_clarification, поэтому набор ожиданий включает оба исхода, а не только недостижимый; зубцы случая — in_region (нет выдуманных точек за областью) и отсутствие фиктивного статуса."
+  }
+}

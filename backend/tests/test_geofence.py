@@ -10,6 +10,7 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from agent import areas
 from agent.geofence import inside_belarus, inside_project_area
 
 INSIDE = [
@@ -58,3 +59,12 @@ def test_border_keep_list_covers_verified_belarusian_pois():
 def test_project_area_still_rejects_foreign_points():
     for name, lat, lon in OUTSIDE:
         assert not inside_project_area(lat, lon), f"{name} must stay outside"
+
+
+def test_project_area_predicate_is_delegated_to_areas_module():
+    """inside_project_area must be agent.areas.in_project_area's single shared
+    predicate (one implementation for import and query), not a second copy."""
+    for name, lat, lon in INSIDE:
+        assert inside_project_area(lat, lon) == areas.in_project_area(lat, lon), name
+    for name, lat, lon in OUTSIDE:
+        assert inside_project_area(lat, lon) == areas.in_project_area(lat, lon), name

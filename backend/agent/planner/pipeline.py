@@ -435,7 +435,11 @@ def _render_tour(
     instead of a 500 for a tour that was planned fine.
     """
     try:
-        return render(route, costing=costing, origin=origin)
+        shape, summary, status = render(route, costing=costing, origin=origin)
+        # Log status for monitoring, but don't fail the request
+        if status != "usable":
+            log.info("render returned status: %s", status)
+        return shape, summary
     except UpstreamUnavailable as exc:
         log.warning("render failed (%s) — answering without geometry", exc)
         return {}, {}

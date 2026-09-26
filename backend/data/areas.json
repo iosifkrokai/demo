@@ -1,0 +1,384 @@
+{
+  "version": 1,
+  "description": "Versioned named areas for the Grodno Guide. Single source for area resolution (RU/EN names + aliases) and for the project-area geofence predicate (agent.areas.in_project_area, re-exported by agent.geofence.inside_project_area). Geometry is referenced from the border files in this directory, never duplicated and never invented: areas whose boundary polygon does not exist in backend/data/ carry geometry=null, and containment for them is unknown (agent.areas.area_contains returns None) — an explicit unknown, never a silent default.",
+  "notes": [
+    "District names are taken verbatim from the district column of places_region.csv; English district names are literal translations of the official Russian names.",
+    "grodno-oblast geometry is the geoBoundaries ADM1 polygon (grodno_border.json, Creative Commons Attribution 3.0), loaded at runtime from that file.",
+    "Boundary exceptions (points treated as inside the project area although they fall outside a border polygon) are the documented keep-list in belarus_border_keep.json; they are loaded into the grodno-oblast definition at runtime."
+  ],
+  "areas": [
+    {
+      "slug": "grodno-oblast",
+      "kind": "region",
+      "name_ru": "Гродненская область",
+      "name_en": "Grodno Region",
+      "aliases": {
+        "ru": [
+          "Гродненская область",
+          "Гродненской области"
+        ],
+        "en": [
+          "Grodno Region",
+          "Grodno Oblast",
+          "Grodno Voblast"
+        ]
+      },
+      "geometry": {
+        "source": "grodno_border.json",
+        "ring_count": 1,
+        "point_count": 1091,
+        "license": "Creative Commons Attribution 3.0 License",
+        "attribution": "geoBoundaries, CIESIN (BY-HR ADM1 Grodno)",
+        "source_url": "https://github.com/wmgeolab/geoBoundaries/raw/9469f09/releaseData/gbOpen/BLR/ADM1/geoBoundaries-BLR-ADM1.geojson"
+      },
+      "is_project_area": true
+    },
+    {
+      "slug": "grodno-city",
+      "kind": "city",
+      "name_ru": "Гродно",
+      "name_en": "Grodno",
+      "aliases": {
+        "ru": [
+          "Гродно",
+          "Город Гродно",
+          "Гродно (город)"
+        ],
+        "en": [
+          "Grodno",
+          "Grodno City",
+          "City of Grodno"
+        ]
+      },
+      "geometry": null,
+      "geometry_note": "No boundary polygon for this area exists in backend/data/. The area is defined for alias anchoring only; geometric containment is unavailable (agent.areas.area_contains returns None), never a silent default.",
+      "evidence": "district column value 'Гродно (город)' in places_grodno_city.csv"
+    },
+    {
+      "slug": "grodno-old-town",
+      "kind": "city-quarter",
+      "name_ru": "Старый город",
+      "name_en": "Old Town",
+      "aliases": {
+        "ru": [
+          "Старый город",
+          "Старый Гродно",
+          "Старый город Гродно"
+        ],
+        "en": [
+          "Old Town",
+          "Old Grodno",
+          "Old Town Grodno"
+        ]
+      },
+      "geometry": null,
+      "geometry_note": "No boundary polygon for this area exists in backend/data/. The area is defined for alias anchoring only; geometric containment is unavailable (agent.areas.area_contains returns None), never a silent default. 'старый Гродно' must anchor to a verified area (spec 002 §4.3)."
+    },
+    {
+      "slug": "berestovitsa-district",
+      "kind": "district",
+      "name_ru": "Берестовицкий район",
+      "name_en": "Berestovitsa District",
+      "aliases": {
+        "ru": [
+          "Берестовицкий район",
+          "Берестовицкий"
+        ],
+        "en": [
+          "Berestovitsa District"
+        ]
+      },
+      "geometry": null,
+      "geometry_note": "No boundary polygon for this area exists in backend/data/. The area is defined for alias anchoring only; geometric containment is unavailable (agent.areas.area_contains returns None), never a silent default.",
+      "evidence": "district column of places_region.csv"
+    },
+    {
+      "slug": "volkovysk-district",
+      "kind": "district",
+      "name_ru": "Волковыскский район",
+      "name_en": "Volkovysk District",
+      "aliases": {
+        "ru": [
+          "Волковыскский район",
+          "Волковыскский"
+        ],
+        "en": [
+          "Volkovysk District"
+        ]
+      },
+      "geometry": null,
+      "geometry_note": "No boundary polygon for this area exists in backend/data/. The area is defined for alias anchoring only; geometric containment is unavailable (agent.areas.area_contains returns None), never a silent default.",
+      "evidence": "district column of places_region.csv"
+    },
+    {
+      "slug": "voronovo-district",
+      "kind": "district",
+      "name_ru": "Вороновский район",
+      "name_en": "Voronovo District",
+      "aliases": {
+        "ru": [
+          "Вороновский район",
+          "Вороновский"
+        ],
+        "en": [
+          "Voronovo District"
+        ]
+      },
+      "geometry": null,
+      "geometry_note": "No boundary polygon for this area exists in backend/data/. The area is defined for alias anchoring only; geometric containment is unavailable (agent.areas.area_contains returns None), never a silent default.",
+      "evidence": "district column of places_region.csv"
+    },
+    {
+      "slug": "grodno-district",
+      "kind": "district",
+      "name_ru": "Гродненский район",
+      "name_en": "Grodno District",
+      "aliases": {
+        "ru": [
+          "Гродненский район",
+          "Гродненский"
+        ],
+        "en": [
+          "Grodno District"
+        ]
+      },
+      "geometry": null,
+      "geometry_note": "No boundary polygon for this area exists in backend/data/. The area is defined for alias anchoring only; geometric containment is unavailable (agent.areas.area_contains returns None), never a silent default.",
+      "evidence": "district column of places_region.csv"
+    },
+    {
+      "slug": "dyatlovo-district",
+      "kind": "district",
+      "name_ru": "Дятловский район",
+      "name_en": "Dyatlovo District",
+      "aliases": {
+        "ru": [
+          "Дятловский район",
+          "Дятловский"
+        ],
+        "en": [
+          "Dyatlovo District"
+        ]
+      },
+      "geometry": null,
+      "geometry_note": "No boundary polygon for this area exists in backend/data/. The area is defined for alias anchoring only; geometric containment is unavailable (agent.areas.area_contains returns None), never a silent default.",
+      "evidence": "district column of places_region.csv"
+    },
+    {
+      "slug": "zelva-district",
+      "kind": "district",
+      "name_ru": "Зельвенский район",
+      "name_en": "Zelva District",
+      "aliases": {
+        "ru": [
+          "Зельвенский район",
+          "Зельвенский"
+        ],
+        "en": [
+          "Zelva District"
+        ]
+      },
+      "geometry": null,
+      "geometry_note": "No boundary polygon for this area exists in backend/data/. The area is defined for alias anchoring only; geometric containment is unavailable (agent.areas.area_contains returns None), never a silent default.",
+      "evidence": "district column of places_region.csv"
+    },
+    {
+      "slug": "ivye-district",
+      "kind": "district",
+      "name_ru": "Ивьевский район",
+      "name_en": "Ivye District",
+      "aliases": {
+        "ru": [
+          "Ивьевский район",
+          "Ивьевский"
+        ],
+        "en": [
+          "Ivye District"
+        ]
+      },
+      "geometry": null,
+      "geometry_note": "No boundary polygon for this area exists in backend/data/. The area is defined for alias anchoring only; geometric containment is unavailable (agent.areas.area_contains returns None), never a silent default.",
+      "evidence": "district column of places_region.csv"
+    },
+    {
+      "slug": "korelichi-district",
+      "kind": "district",
+      "name_ru": "Кореличский район",
+      "name_en": "Korelichi District",
+      "aliases": {
+        "ru": [
+          "Кореличский район",
+          "Кореличский"
+        ],
+        "en": [
+          "Korelichi District"
+        ]
+      },
+      "geometry": null,
+      "geometry_note": "No boundary polygon for this area exists in backend/data/. The area is defined for alias anchoring only; geometric containment is unavailable (agent.areas.area_contains returns None), never a silent default.",
+      "evidence": "district column of places_region.csv"
+    },
+    {
+      "slug": "lida-district",
+      "kind": "district",
+      "name_ru": "Лидский район",
+      "name_en": "Lida District",
+      "aliases": {
+        "ru": [
+          "Лидский район",
+          "Лидский"
+        ],
+        "en": [
+          "Lida District"
+        ]
+      },
+      "geometry": null,
+      "geometry_note": "No boundary polygon for this area exists in backend/data/. The area is defined for alias anchoring only; geometric containment is unavailable (agent.areas.area_contains returns None), never a silent default.",
+      "evidence": "district column of places_region.csv"
+    },
+    {
+      "slug": "mosty-district",
+      "kind": "district",
+      "name_ru": "Мостовский район",
+      "name_en": "Mosty District",
+      "aliases": {
+        "ru": [
+          "Мостовский район",
+          "Мостовский"
+        ],
+        "en": [
+          "Mosty District"
+        ]
+      },
+      "geometry": null,
+      "geometry_note": "No boundary polygon for this area exists in backend/data/. The area is defined for alias anchoring only; geometric containment is unavailable (agent.areas.area_contains returns None), never a silent default.",
+      "evidence": "district column of places_region.csv"
+    },
+    {
+      "slug": "novogrudok-district",
+      "kind": "district",
+      "name_ru": "Новогрудский район",
+      "name_en": "Novogrudok District",
+      "aliases": {
+        "ru": [
+          "Новогрудский район",
+          "Новогрудский"
+        ],
+        "en": [
+          "Novogrudok District"
+        ]
+      },
+      "geometry": null,
+      "geometry_note": "No boundary polygon for this area exists in backend/data/. The area is defined for alias anchoring only; geometric containment is unavailable (agent.areas.area_contains returns None), never a silent default.",
+      "evidence": "district column of places_region.csv"
+    },
+    {
+      "slug": "ostrovets-district",
+      "kind": "district",
+      "name_ru": "Островецкий район",
+      "name_en": "Ostrovets District",
+      "aliases": {
+        "ru": [
+          "Островецкий район",
+          "Островецкий"
+        ],
+        "en": [
+          "Ostrovets District"
+        ]
+      },
+      "geometry": null,
+      "geometry_note": "No boundary polygon for this area exists in backend/data/. The area is defined for alias anchoring only; geometric containment is unavailable (agent.areas.area_contains returns None), never a silent default.",
+      "evidence": "district column of places_region.csv"
+    },
+    {
+      "slug": "oshmyany-district",
+      "kind": "district",
+      "name_ru": "Ошмянский район",
+      "name_en": "Oshmyany District",
+      "aliases": {
+        "ru": [
+          "Ошмянский район",
+          "Ошмянский"
+        ],
+        "en": [
+          "Oshmyany District"
+        ]
+      },
+      "geometry": null,
+      "geometry_note": "No boundary polygon for this area exists in backend/data/. The area is defined for alias anchoring only; geometric containment is unavailable (agent.areas.area_contains returns None), never a silent default.",
+      "evidence": "district column of places_region.csv"
+    },
+    {
+      "slug": "svislach-district",
+      "kind": "district",
+      "name_ru": "Свислочский район",
+      "name_en": "Svislach District",
+      "aliases": {
+        "ru": [
+          "Свислочский район",
+          "Свислочский"
+        ],
+        "en": [
+          "Svislach District"
+        ]
+      },
+      "geometry": null,
+      "geometry_note": "No boundary polygon for this area exists in backend/data/. The area is defined for alias anchoring only; geometric containment is unavailable (agent.areas.area_contains returns None), never a silent default.",
+      "evidence": "district column of places_region.csv"
+    },
+    {
+      "slug": "slonim-district",
+      "kind": "district",
+      "name_ru": "Слонимский район",
+      "name_en": "Slonim District",
+      "aliases": {
+        "ru": [
+          "Слонимский район",
+          "Слонимский"
+        ],
+        "en": [
+          "Slonim District"
+        ]
+      },
+      "geometry": null,
+      "geometry_note": "No boundary polygon for this area exists in backend/data/. The area is defined for alias anchoring only; geometric containment is unavailable (agent.areas.area_contains returns None), never a silent default.",
+      "evidence": "district column of places_region.csv"
+    },
+    {
+      "slug": "smorgon-district",
+      "kind": "district",
+      "name_ru": "Сморгонский район",
+      "name_en": "Smorgon District",
+      "aliases": {
+        "ru": [
+          "Сморгонский район",
+          "Сморгонский"
+        ],
+        "en": [
+          "Smorgon District"
+        ]
+      },
+      "geometry": null,
+      "geometry_note": "No boundary polygon for this area exists in backend/data/. The area is defined for alias anchoring only; geometric containment is unavailable (agent.areas.area_contains returns None), never a silent default.",
+      "evidence": "district column of places_region.csv"
+    },
+    {
+      "slug": "shchuchyn-district",
+      "kind": "district",
+      "name_ru": "Щучинский район",
+      "name_en": "Shchuchyn District",
+      "aliases": {
+        "ru": [
+          "Щучинский район",
+          "Щучинский"
+        ],
+        "en": [
+          "Shchuchyn District"
+        ]
+      },
+      "geometry": null,
+      "geometry_note": "No boundary polygon for this area exists in backend/data/. The area is defined for alias anchoring only; geometric containment is unavailable (agent.areas.area_contains returns None), never a silent default.",
+      "evidence": "district column of places_region.csv"
+    }
+  ]
+}

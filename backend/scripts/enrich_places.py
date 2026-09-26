@@ -1,11 +1,13 @@
 """One-shot enrichment: assigns category (Jev typed decisions) + embedding (OpenRouter).
 
-# Categories are NOT auto-reassigned: the curated ground truth lives in
-# data/places_curated.csv (76 rows manually labelled) and is written by
-# scripts/apply_curated.py (name/category/blurb/fun_fact). This script fills in
-# what the CSV does not cover: the category guess and the embedding vector.
-#
-# NOTE (legacy): Categories used to be (re-)assigned on every run for ALL rows.
+# Curated data wins. The curated ground truth lives in data/places_curated.csv
+# (76 rows manually labelled) and is written by scripts/apply_curated.py, while
+# the hand-authored city/region CSVs are written by scripts/seed_region.py.
+# Both are marked on places.category_source ('curated' / 'dataset'). This script
+# classifies ONLY rows still marked 'auto', so automatic classification can never
+# overwrite a hand-labelled category — enforced here (the WHERE guards below),
+# by scripts/seed_all.py (which never lets an automatic writer through), and by
+# the places_guard_curated_category trigger added in db/migrations/0004.
 # Detects changes by recomputing a small md5 of (name||blurb||description).
 
 OpenRouter:
@@ -130,10 +132,11 @@ def fetch_pending(cur, sql: str) -> list[dict]:
 
 def main() -> None:
     with psycopg.connect(DSN) as conn, conn.cursor() as cur:
-        # === Pass 1: categories ===
+        # === Pass 1: categories (only rows that are not hand-curated) ===
         rows = fetch_pending(
             cur,
-            "SELECT id, name, description FROM places ORDER BY id",
+            "SELECT id, name, description FROM places "
+            "WHERE COALESCE(category_source, 'auto') = 'auto' ORDER BY id",
         )
         if rows:
             print(f"  classifying {len(rows)} rows with Jev...", flush=True)
@@ -147,7 +150,8 @@ def main() -> None:
                 if cat:
                     n_llm += 1
                 cur.execute(
-                    "UPDATE places SET category = %s WHERE id = %s",
+                    "UPDATE places SET category = %s "
+                    "WHERE id = %s AND COALESCE(category_source, 'auto') = 'auto'",
                     (cat or "другое", row["id"]),
                 )
             conn.commit()

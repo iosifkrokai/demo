@@ -31,6 +31,9 @@ from typing import Any
 
 import psycopg
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from agent.geofence import inside_project_area
+
 # ---------------------------------------------------------------------------
 # Constants — mirrors seed_region.py
 # ---------------------------------------------------------------------------
@@ -115,8 +118,12 @@ def validate(row: dict) -> list[str]:
         problems.append(f"category {row['category']!r} not in taxonomy")
     try:
         lat, lon = float(row["lat"]), float(row["lon"])
-    except ValueError:
+    except (ValueError, TypeError):
         return ["lat/lon not numeric"]
+    if not (math.isfinite(lat) and math.isfinite(lon)):
+        return ["lat/lon not finite"]
+    if not inside_project_area(lat, lon):
+        problems.append("coordinates outside Grodno region")
     if not (BBOX["south"] <= lat <= BBOX["north"]):
         problems.append(f"lat {lat} outside bbox {BBOX}")
     if not (BBOX["west"] <= lon <= BBOX["east"]):
@@ -285,12 +292,11 @@ def main() -> None:
     invalid: list[tuple[str, str, list[str]]] = []
     valid: list[dict] = []
     for raw in rows:
-        norm = normalize(raw)
         problems = validate(raw)
         if problems:
-            invalid.append((norm["name"], norm["source_url"], problems))
+            invalid.append((raw["name"], raw["source_url"], problems))
         else:
-            valid.append(norm)
+            valid.append(normalize(raw))
 
     if invalid:
         for name, url, problems in invalid:

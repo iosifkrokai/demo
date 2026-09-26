@@ -13,12 +13,16 @@ from __future__ import annotations
 
 import csv
 import json
+import math
 import os
 import sys
 import time
 from pathlib import Path
 
 import psycopg
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from agent.geofence import inside_project_area
 
 BACKEND = Path(__file__).resolve().parents[1]  # backend/scripts/*.py -> backend/
 DATASETS = [
@@ -27,9 +31,8 @@ DATASETS = [
 ]
 DSN = os.environ.get("DATABASE_URL", "postgresql://grodno:grodno@localhost:5432/grodno")
 
-# Region bbox — mirrors settings.GRODNO_BBOX in agent/config.py and
-# scripts/extract_grodno_pbf.sh. Seed refuses rows outside it.
-BBOX = {"south": 52.75, "west": 23.35, "north": 54.80, "east": 30.75}
+# Fast bounding pre-check; the ADM1 polygon below makes the actual decision.
+BBOX = {"south": 52.75, "west": 23.35, "north": 54.80, "east": 27.00}
 
 TAXONOMY = {
     "замок", "костёл", "церковь", "монастырь", "дворец", "усадьба",
@@ -81,8 +84,12 @@ def validate(row: dict) -> list[str]:
         problems.append(f"category {row['category']!r} not in taxonomy")
     try:
         lat, lon = float(row["lat"]), float(row["lon"])
-    except ValueError:
+    except (ValueError, TypeError):
         return ["lat/lon not numeric"]
+    if not (math.isfinite(lat) and math.isfinite(lon)):
+        return ["lat/lon not finite"]
+    if not inside_project_area(lat, lon):
+        problems.append("coordinates outside Grodno region")
     if not (BBOX["south"] <= lat <= BBOX["north"]):
         problems.append(f"lat {lat} outside bbox")
     if not (BBOX["west"] <= lon <= BBOX["east"]):
@@ -94,7 +101,9 @@ def validate(row: dict) -> list[str]:
         problems.append(f"bad JSON ({e})")
     if not row["source_url"].startswith(("region:", "city:")):
         problems.append("source_url must be a 'region:'/'city:' key")
-    if not isinstance(row["visit_minutes"], int):
+    try:
+        int(row["visit_minutes"])
+    except (ValueError, TypeError):
         problems.append(f"visit_minutes {row['visit_minutes']!r} not an int")
     return problems
 
@@ -165,7 +174,7 @@ def main() -> None:
 
     rows: list[dict] = []
     for path, prefix in DATASETS:
-        dataset_rows = [normalize(r) for r in read_rows(path)]
+        dataset_rows = read_rows(path)
         for r in dataset_rows:
             if not r["source_url"].startswith(prefix):
                 raise SystemExit(
@@ -181,6 +190,7 @@ def main() -> None:
             print(f"  INVALID {name}: {'; '.join(problems)}")
         raise SystemExit("dataset failed validation — fix data/*.csv")
 
+    rows = [normalize(r) for r in rows]
     districts = {r["district"] for r in rows}
     print(f"{len(rows)} rows total, {len(districts)} districts")
 
