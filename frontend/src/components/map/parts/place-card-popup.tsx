@@ -1,8 +1,16 @@
-import { ExternalLink, Lightbulb, Clock, MapPin, Ticket, X } from 'lucide-react';
+import {
+  ExternalLink,
+  Lightbulb,
+  Clock,
+  MapPin,
+  Ticket,
+  X,
+} from 'lucide-react';
 import { Popup } from 'react-map-gl/maplibre';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import type { PlaceDetails } from '@/stores/directions-store';
+import { fmtMin } from '@/components/parts/guide-format';
 
 interface PlaceCardPopupProps {
   lng: number;
@@ -66,7 +74,7 @@ export function PlaceCardPopup({
           )}
           {details.visitMinutes != null && (
             <Badge variant="outline" className="gap-1">
-              <Clock className="size-3" />~{details.visitMinutes} мин
+              <Clock className="size-3" />~{fmtMin(details.visitMinutes)}
             </Badge>
           )}
         </div>
@@ -92,9 +100,7 @@ export function PlaceCardPopup({
             {(details.town || details.district) && (
               <div className="flex items-center gap-1.5">
                 <MapPin className="size-3 shrink-0" />
-                {[details.town, details.district]
-                  .filter(Boolean)
-                  .join(', ')}
+                {[details.town, details.district].filter(Boolean).join(', ')}
               </div>
             )}
           </div>

@@ -44,8 +44,10 @@ import {
 import { useDirectionsQuery } from '@/hooks/use-directions-queries';
 import { GuidePanel, guideRouteKey, type GuideStop } from './guide-panel';
 import { guideModeFor } from './parts/guide-mode';
+import { decimalRu } from '@/utils/plural';
 import { WaypointList } from './waypoint-list';
 import { Chip } from './parts/chip';
+import { agentErrorMessage } from './parts/guide-format';
 import { Segmented, type SegmentedItem } from './parts/segmented';
 import { StatTile, StatTiles } from './parts/stat-tiles';
 import { StopsSkeleton, SummarySkeleton } from './parts/skeletons';
@@ -231,8 +233,9 @@ const fmtMin = (m: number) => {
     : `${mins} мин`;
 };
 
+/** «1,3 км» — Russian uses a comma as the decimal separator, never a dot. */
 const fmtKm = (km: number) =>
-  km >= 10 ? `${Math.round(km)} км` : `${km.toFixed(1)} км`;
+  km >= 10 ? `${Math.round(km)} км` : `${decimalRu(km)} км`;
 
 /** A waypoint that simply says "I am here". */
 const meWaypoint = (lat: number, lon: number): Waypoint => {
@@ -655,10 +658,9 @@ export const Sidebar = () => {
         body: JSON.stringify(body),
       });
       if (!r.ok) {
-        // Status only: raw JSON/detail from the agent is not actionable in the UI.
-        throw new Error(
-          `агент ответил ошибкой ${r.status} — попробуйте ещё раз`
-        );
+        // A 404 here means the app is talking to the wrong server, not that
+        // nothing was found — say that instead of blaming the query.
+        throw new Error(agentErrorMessage(r.status));
       }
       const data = (await r.json()) as {
         points?: AgentPoint[];
@@ -1331,7 +1333,13 @@ export const Sidebar = () => {
                   {summary ? (
                     <>
                       <StatTiles>
-                        <StatTile value={summary.stops} label="точек" />
+                        {/* The tile inflects the noun itself: «2 точки», not
+                            «2 точек» — the count is right there. */}
+                        <StatTile
+                          value={summary.stops}
+                          count={summary.stops}
+                          unit="points"
+                        />
                         <StatTile
                           value={summary.km != null ? fmtKm(summary.km) : '—'}
                           label="длина"

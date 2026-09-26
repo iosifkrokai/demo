@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { GripVertical, Pin, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -7,11 +7,29 @@ import {
   type Waypoint,
 } from '@/stores/directions-store';
 import { useDirectionsQuery } from '@/hooks/use-directions-queries';
+import { useVisitOverrides } from '@/hooks/use-visit-overrides';
 import { PlaceIcon } from './parts/place-icon';
+import { VisitTimeEditor } from './parts/visit-time-editor';
 
 interface Props {
   onChanged: () => void; // called after any local mutation that needs a route refetch
 }
+
+/**
+ * Which route the visit times belong to. Built from the set of stops, not their
+ * order, so dragging a row around does not throw the tourist's numbers away;
+ * a route rebuilt from other places gets its own saved times.
+ */
+export const plannerVisitKey = (waypoints: Waypoint[]): string =>
+  `planner:${waypoints
+    .filter((wp) => wp.id !== ME_WAYPOINT_ID)
+    .map((wp) => (wp.placeId != null ? `p${wp.placeId}` : `w${wp.id}`))
+    .sort()
+    .join(',')}`;
+
+/** The key a stop's time is stored under: its place, its slot as a fallback. */
+const stopTimeId = (wp: Waypoint): string =>
+  wp.placeId != null ? String(wp.placeId) : wp.id;
 
 /**
  * The stops timeline: numbered circles joined by a hairline, the stop's category
@@ -31,6 +49,9 @@ export const WaypointList = ({ onChanged }: Props) => {
   const placeDetails = useDirectionsStore((s) => s.placeDetails);
   const { refetch } = useDirectionsQuery();
   const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const routeKey = useMemo(() => plannerVisitKey(waypoints), [waypoints]);
+  const { overrides, setVisitMinutes, effectiveMinutesFor } =
+    useVisitOverrides(routeKey);
 
   const update = (next: Waypoint[]) => {
     setWaypoint(next);
@@ -105,7 +126,11 @@ export const WaypointList = ({ onChanged }: Props) => {
         const name = nameOf(wp);
         const details =
           wp.placeId != null ? placeDetails[wp.placeId] : undefined;
-        const visitMinutes = details?.visitMinutes ?? null;
+        // The dataset's estimate is only a hint: the editor shows it with a
+        // «≈», and the tourist's own number takes over the moment they set it.
+        const timeId = stopTimeId(wp);
+        const estimate = details?.visitMinutes ?? null;
+        const effective = effectiveMinutesFor(timeId, estimate);
         return (
           <li
             key={wp.id}
@@ -182,10 +207,13 @@ export const WaypointList = ({ onChanged }: Props) => {
               {name}
             </span>
 
-            {visitMinutes != null && (
-              <span className="shrink-0 text-meta text-muted-foreground">
-                ~{visitMinutes} мин
-              </span>
+            {effective != null && (
+              <VisitTimeEditor
+                compact
+                estimate={estimate}
+                value={overrides[timeId] ?? null}
+                onChange={(minutes) => setVisitMinutes(timeId, minutes)}
+              />
             )}
 
             {/* Always reachable on touch (no hover), revealed on hover on desktop. */}

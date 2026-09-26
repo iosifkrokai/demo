@@ -488,9 +488,10 @@ describe('Sidebar', () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
 
     const tile = (label: string) => screen.getByText(label).parentElement;
-    // summary.length_km, summary.time_seconds
-    expect(tile('точек')).toHaveTextContent('2');
-    expect(tile('длина')).toHaveTextContent('1.5 км');
+    // The count tile inflects its own noun: 2 → «2 точки», never «2 точек».
+    expect(tile('точки')).toHaveTextContent('2');
+    // …and distances use the Russian decimal comma.
+    expect(tile('длина')).toHaveTextContent('1,5 км');
     expect(tile('мин в пути')).toHaveTextContent('15');
     // budget.* on the line under the tiles
     expect(screen.getByText(/в пути ~15 мин/)).toBeInTheDocument();

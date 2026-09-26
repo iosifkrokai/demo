@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { MarkerIcon } from './marker-icon';
+import { MarkerIcon, markerColorForStop } from './marker-icon';
 
 describe('MarkerIcon', () => {
   it('should render without crashing', () => {
@@ -41,47 +41,66 @@ describe('MarkerIcon', () => {
     expect(numberDiv).not.toBeInTheDocument();
   });
 
-  describe('color variants', () => {
-    it('should apply green color class by default', () => {
+  describe('color variants — role colours, one meaning each', () => {
+    it('defaults to the quiet intermediate stop', () => {
       const { container } = render(<MarkerIcon />);
 
       const wrapper = container.firstChild;
-      expect(wrapper).toHaveClass('[&_path]:fill-[#28a745]');
+      expect(wrapper).toHaveClass('[&_path]:fill-[#717171]');
     });
 
-    it('should apply green color class when color is green', () => {
-      const { container } = render(<MarkerIcon color="green" />);
+    it('marks the first stop as ink', () => {
+      const { container } = render(<MarkerIcon color="start" />);
 
-      const wrapper = container.firstChild;
-      expect(wrapper).toHaveClass('[&_path]:fill-[#28a745]');
+      expect(container.firstChild).toHaveClass('[&_path]:fill-[#222222]');
     });
 
-    it('should apply purple color class when color is purple', () => {
-      const { container } = render(<MarkerIcon color="purple" />);
+    it('marks the last stop with the accent, never an error red', () => {
+      const { container } = render(<MarkerIcon color="finish" />);
 
-      const wrapper = container.firstChild;
-      expect(wrapper).toHaveClass('[&_path]:fill-[#6f42c1]');
+      expect(container.firstChild).toHaveClass('[&_path]:fill-[#ff385c]');
+      expect(container.firstChild).not.toHaveClass('[&_path]:fill-[#dc3545]');
     });
 
-    it('should apply blue color class when color is blue', () => {
-      const { container } = render(<MarkerIcon color="blue" />);
+    it('keeps the tourist and an isochrone centre outside the role scheme', () => {
+      const { container } = render(<MarkerIcon color="me" />);
+      expect(container.firstChild).toHaveClass('[&_path]:fill-[#007bff]');
 
-      const wrapper = container.firstChild;
-      expect(wrapper).toHaveClass('[&_path]:fill-[#007bff]');
+      const { container: iso } = render(<MarkerIcon color="iso" />);
+      expect(iso.firstChild).toHaveClass('[&_path]:fill-[#6f42c1]');
     });
 
-    it('should apply red color class when color is red', () => {
-      const { container } = render(<MarkerIcon color="red" />);
+    it('maps every legacy alias onto its role colour', () => {
+      const fillOf = (color: Parameters<typeof MarkerIcon>[0]['color']) => {
+        const { container, unmount } = render(<MarkerIcon color={color} />);
+        const cls = (container.firstChild as HTMLElement).className;
+        unmount();
+        return cls;
+      };
 
-      const wrapper = container.firstChild;
-      expect(wrapper).toHaveClass('[&_path]:fill-[#dc3545]');
+      expect(fillOf('green')).toBe(fillOf('start'));
+      expect(fillOf('grey')).toBe(fillOf('via'));
+      expect(fillOf('red')).toBe(fillOf('finish'));
+      expect(fillOf('blue')).toBe(fillOf('me'));
+      expect(fillOf('purple')).toBe(fillOf('iso'));
+    });
+  });
+
+  describe('markerColorForStop', () => {
+    it('gives start / intermediate / finish for a route', () => {
+      expect(markerColorForStop(0, 4)).toBe('start');
+      expect(markerColorForStop(1, 4)).toBe('via');
+      expect(markerColorForStop(2, 4)).toBe('via');
+      expect(markerColorForStop(3, 4)).toBe('finish');
     });
 
-    it('should apply grey color class when color is grey', () => {
-      const { container } = render(<MarkerIcon color="grey" />);
+    it('does not call a lone stop a finish', () => {
+      expect(markerColorForStop(0, 1)).toBe('start');
+    });
 
-      const wrapper = container.firstChild;
-      expect(wrapper).toHaveClass('[&_path]:fill-[#6c757d]');
+    it('does not call the first of two stops a finish', () => {
+      expect(markerColorForStop(0, 2)).toBe('start');
+      expect(markerColorForStop(1, 2)).toBe('finish');
     });
   });
 

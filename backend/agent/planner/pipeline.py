@@ -57,7 +57,7 @@ from ..models import (
     RouteResponse,
     RouteSummary,
 )
-from ..search import fetch_points_by_ids, nearby_places
+from ..search import fetch_points_by_ids, nearby_places, _name_match_search
 from ..valhalla_client import optimized_route as valhalla_optimized_route
 from ..valhalla_client import ping as valhalla_ping
 from .cost import (
@@ -71,6 +71,13 @@ from .explain import explain as explain_route
 from .intent import extract_intent
 from .optimize import optimize
 from .preprocess import preprocess
+from .refine import (
+    interpret_refinement,
+    is_excluded_category,
+    reason_text,
+    reorder_stops,
+    visit_minutes_of,
+)
 from .render import render
 from .rerank import rerank as rerank_pool
 from .resolve import resolve
@@ -349,6 +356,57 @@ def _drop_duplicates(candidates: list[Candidate], radius_m: float) -> list[Candi
     return kept
 
 
+def _synthetic_cost(
+    candidates: list[Candidate], costing: str = "pedestrian"
+) -> CostMatrix:
+    """A straight-line cost matrix for when Valhalla cannot answer.
+
+    A refinement must still return the route the user has: if the road matrix
+    is unavailable we fall back to great-circle legs and the taxonomy's visit
+    estimates, instead of turning the request into a 422/503.
+    """
+    speed_ms = 1.3 if costing == "pedestrian" else 8.0
+    n = len(candidates)
+    matrix = [[0.0] * n for _ in range(n)]
+    for i in range(n):
+        for j in range(n):
+            if i != j:
+                matrix[i][j] = _distance_m(candidates[i], candidates[j]) / speed_ms
+    return CostMatrix(
+        walk_seconds=matrix,
+        visit_minutes=[visit_minutes_of(c) for c in candidates],
+        indices=list(range(n)),
+    )
+
+
+def _refinement_cost(
+    route: list[Candidate], constraints: ResolvedConstraints, costing: str
+) -> tuple[list[Candidate], CostMatrix]:
+    """Best-effort cost matrix for a refinement route.
+
+    Never raises and never drops a stop the user kept: if the road matrix
+    pre-filter would remove one of them, fall back to straight-line legs so the
+    base points survive into the refinement (the 422 this contract fixes).
+    """
+    base_ids = {c.id for c in route}
+    try:
+        cost = compute_cost_matrix(route, constraints, costing=costing)
+    except (UpstreamUnavailable, NoRoutePossible):
+        return route, _synthetic_cost(route, costing)
+
+    if cost.indices != list(range(len(route))):
+        aligned = [route[i] for i in cost.indices]
+        if not base_ids <= {c.id for c in aligned}:
+            return route, _synthetic_cost(route, costing)
+        route = aligned
+        cost = CostMatrix(
+            walk_seconds=cost.walk_seconds,
+            visit_minutes=cost.visit_minutes,
+            indices=list(range(len(route))),
+        )
+    return route, cost
+
+
 def _build_cost(
     candidates: list[Candidate], constraints: ResolvedConstraints, costing: str
 ) -> tuple[list[Candidate], CostMatrix]:
@@ -457,6 +515,15 @@ class Pipeline:
 
     def generate(self, req: GenerateReq) -> RouteResponse:
         t0 = _time.perf_counter()
+
+        # A refinement turn is not a new plan: the route the user already has is
+        # the input.  Handled before retrieval so a delta instruction can never
+        # be turned into a fresh region-wide route — and so the base points
+        # cannot be lost on the way (the 422 this contract fixes).
+        if req.context and req.context.base_points:
+            base = self._refinement_base(req.context)
+            if base:
+                return self._generate_refinement(req, base, t0)
 
         # 0. Preprocess
         pre = preprocess(req.query)
@@ -572,74 +639,11 @@ class Pipeline:
                 f"only {len(candidates)} candidate(s) survived diversity filter"
             )
 
-        # 4b. Refinement: the route the user already had is the starting point,
-        # so its stops go back into the pool after retrieval, geo focus and the
-        # diversity trim. Without this «добавь кофейню» quietly threw away the
-        # museums the user had just built.
+        # 4b. Refinement turns are handled before retrieval (see the top of
+        # generate()).  Reaching here means either a first turn (no context) or
+        # a context whose base points could not be resolved — in both cases
+        # there is no previous route to preserve.
         base_candidates: list[Candidate] = []
-        if req.context and req.context.base_points:
-            base_ids = [p.id for p in req.context.base_points if p.id is not None]
-            base_rows = fetch_points_by_ids(self.db, base_ids) if base_ids else []
-
-            # A stop the tourist placed by hand (map click) carries no DB id.
-            # Match it to the nearest place so a refinement keeps it instead of
-            # quietly dropping what the user put there themselves.
-            manual = [
-                p
-                for p in req.context.base_points
-                if p.id is None and (p.pinned or p.source == "user")
-            ]
-            for point in manual:
-                near_rows = nearby_places(
-                    self.db, point.lat, point.lon, radius_km=0.06, limit=1
-                )
-                for row in near_rows:
-                    if row["id"] not in {r["id"] for r in base_rows}:
-                        base_rows.append(row)
-                        log.info(
-                            "context: hand-placed stop «%s» matched to «%s»",
-                            point.name, row["name"],
-                        )
-
-            if base_rows:
-                candidates, base_candidates = _with_base_points(
-                    candidates, base_rows, excluded
-                )
-                log.info(
-                    "context: %d base stop(s) from the previous route kept, %d new candidate(s) total",
-                    len(base_candidates), len(candidates),
-                )
-
-                # Convenience categories are chosen by proximity to the route:
-                # drop the motorway-side cafés retrieval scored highly but that
-                # sit kilometres away, and take the ones by the existing stops.
-                wanted = {
-                    c for c in constraints.optional_categories
-                    if c in constants.CONVENIENCE_CATEGORIES
-                }
-                if wanted:
-                    near = _nearby_convenience(self.db, base_candidates, wanted)
-                    near_ids = {c.id for c in near}
-                    base_id_set = {b.id for b in base_candidates}
-                    # Keep the stops of the current route, the convenience stops
-                    # that sit by it, and everything that is not itself a
-                    # convenience category (the museums stay, far cafés go).
-                    candidates = [
-                        c
-                        for c in candidates
-                        if c.id in base_id_set
-                        or c.id in near_ids
-                        or (c.category or "").strip().lower() not in wanted
-                    ]
-                    have = {c.id for c in candidates}
-                    candidates += [c for c in near if c.id not in have]
-                    log.info(
-                        "context: %d convenience stop(s) by the route for %s, %d candidate(s)",
-                        len(near), sorted(wanted), len(candidates),
-                    )
-
-                candidates = _cap_for_valhalla(candidates, base_candidates)
-                log.info("context: pool capped for Valhalla at %d candidate(s)", len(candidates))
 
         # Transport mode from the request (webapp profile picker); the
         # cost matrix AND the rendered shape must use the same costing.
@@ -794,6 +798,236 @@ class Pipeline:
     # ------------------------------------------------------------------
     # Internals
     # ------------------------------------------------------------------
+
+    def _refinement_base(self, ctx) -> list[Candidate]:
+        """The previous route's stops, as Candidate objects.
+
+        IDs come straight from the DB (stable identity), and a hand-placed
+        stop (map click, no DB id) is matched to the nearest place so a
+        refinement keeps what the user put there themselves.  Excluded ids are
+        filtered by the caller (they are an explicit removal, and the changes
+        report still has to name them).
+        """
+        base_ids = [p.id for p in ctx.base_points if p.id is not None]
+        base_rows = fetch_points_by_ids(self.db, base_ids) if base_ids else []
+
+        manual = [
+            p
+            for p in ctx.base_points
+            if p.id is None and (p.pinned or p.source == "user")
+        ]
+        for point in manual:
+            try:
+                near_rows = nearby_places(
+                    self.db, point.lat, point.lon, radius_km=0.06, limit=1
+                )
+            except Exception as exc:  # a hand-placed stop is best-effort
+                log.warning("context: hand-placed stop lookup failed: %s", exc)
+                continue
+            for row in near_rows:
+                if row["id"] not in {r["id"] for r in base_rows}:
+                    base_rows.append(row)
+                    log.info(
+                        "context: hand-placed stop «%s» matched to «%s»",
+                        point.name, row["name"],
+                    )
+
+        seen: set[int] = set()
+        base: list[Candidate] = []
+        for row in base_rows:
+            if row["id"] in seen:
+                continue
+            seen.add(row["id"])
+            base.append(_row_to_candidate(row, 0.0))
+        return base
+
+    def _refinement_removals(
+        self,
+        directive,
+        base: list[Candidate],
+        excluded: set[int],
+    ) -> set[int]:
+        """Stop ids the instruction asks to remove, on top of excluded_ids.
+
+        Applied for every operation: an instruction that both adds and removes
+        ("добавь кафе и убери музеи") must still drop the museums.  A named stop
+        ("убери форт") is matched against the previous route by normalised name;
+        an excluded category ("без музеев") by canonical taxonomy code.
+        """
+        removed = set(excluded)
+
+        for stop in base:
+            if is_excluded_category(stop, directive.exclude_categories):
+                removed.add(stop.id)
+
+        for name in directive.remove_names:
+            norm = _norm_name(name)
+            if not norm:
+                continue
+            for stop in base:
+                if norm in _norm_name(stop.name):
+                    removed.add(stop.id)
+        return removed
+
+    def _refinement_additions(
+        self, directive, base: list[Candidate]
+    ) -> list[Candidate]:
+        """Stops the instruction asks to ADD, taken near the route.
+
+        Convenience categories (a café, a toilet) come from the neighbourhood
+        of the existing stops, not from a relevance ranking that happily returns
+        one 12 km away.  Requested sight categories are looked for a little
+        further out, and explicitly named places are resolved in the DB.
+        """
+        found: dict[int, Candidate] = {}
+        base_ids = {c.id for c in base}
+
+        try:
+            convenience = {
+                c for c in directive.add_categories
+                if c in constants.CONVENIENCE_CATEGORIES
+            }
+            if convenience:
+                for c in _nearby_convenience(self.db, base, convenience):
+                    found[c.id] = c
+
+            sights = {
+                c for c in directive.add_categories
+                if c not in constants.CONVENIENCE_CATEGORIES
+            }
+            if sights:
+                for c in _nearby_convenience(
+                    self.db, base, sights,
+                    radius_m=constants.CONVENIENCE_RADIUS_M * 4,
+                    max_added=constants.CONVENIENCE_MAX_ADDED,
+                ):
+                    found.setdefault(c.id, c)
+        except Exception as exc:  # DB/nearby lookup is best-effort
+            log.warning("refinement: nearby add lookup failed: %s", exc)
+
+        for name in directive.add_names:
+            try:
+                rows = _name_match_search(self.db, name, limit=1)
+            except Exception as exc:
+                log.warning("refinement: named add lookup failed: %s", exc)
+                continue
+            for row in rows:
+                if row["id"] in base_ids or row["id"] in found:
+                    continue
+                found[row["id"]] = _row_to_candidate(row, 0.0)
+
+        return [c for c in found.values() if c.id not in base_ids]
+
+    def _generate_refinement(
+        self, req: GenerateReq, base: list[Candidate], t0: float
+    ) -> RouteResponse:
+        """Apply ONE refinement operation to the route the user already has.
+
+        The base stops are the route.  They are kept unless the instruction
+        explicitly removes/excludes them; the operation either reorders them,
+        adds to them, or is refused with a machine reason code and the route is
+        returned untouched.  Never 422: the base points always survive.
+        """
+        ctx = req.context
+        assert ctx is not None
+        instruction = (ctx.instruction or "").strip()
+        excluded = set(ctx.excluded_ids or [])
+        directive = interpret_refinement(instruction)
+
+        removed = self._refinement_removals(directive, base, excluded)
+        kept = [c for c in base if c.id not in removed]
+
+        additions: list[Candidate] = []
+        if directive.operation == "reorder":
+            route = reorder_stops(
+                kept,
+                by=directive.reorder_by or "visit_minutes",
+                descending=directive.descending,
+                origin=req.origin,
+            )
+            algorithm = f"refinement_reorder_{directive.reorder_by}"
+        elif directive.operation == "add":
+            additions = self._refinement_additions(directive, kept)
+            have = {c.id for c in kept}
+            route = list(kept) + [c for c in additions if c.id not in have]
+            route = _cap_for_valhalla(route, kept)
+            algorithm = "refinement_add"
+        else:
+            # none / remove / unsupported: the previous route, minus explicit
+            # removals.  An unsupported instruction changes nothing else.
+            route = list(kept)
+            algorithm = "refinement_keep"
+
+        info: dict = {
+            "algorithm": algorithm,
+            "order": list(range(len(route))),
+            "refinement_operation": directive.operation,
+        }
+
+        intent = extract_intent(instruction or req.query)
+        constraints = resolve(
+            intent,
+            explicit_time_budget=req.time_budget_minutes,
+            explicit_bbox=req.region_bbox,
+            db=self.db,
+        )
+        costing = req.profile or "pedestrian"
+
+        # The cost matrix is best-effort; the base points survive regardless.
+        route, cost = _refinement_cost(route, constraints, costing)
+
+        plan = validate(route, cost, constraints, info)
+        shape, summary = _render_tour(route, costing=costing, origin=req.origin)
+
+        walk_s = float(summary.get("time", 0.0)) if summary else 0.0
+        if walk_s == 0.0 and plan.walk_seconds > 0:
+            walk_s = plan.walk_seconds
+        length_km = summary.get("length") if summary else None
+
+        if directive.operation == "unsupported":
+            explanation = directive.detail or reason_text(directive.reason_code or "")
+        else:
+            explanation = explain_route(route, plan.trace, walk_s, costing)
+
+        changes = _context_changes(base, route)
+
+        ms = int((_time.perf_counter() - t0) * 1000)
+        log.info(
+            "pipeline.refine op=%s reason=%s ms=%d base=%d route=%d added=%d",
+            directive.operation, directive.reason_code, ms,
+            len(base), len(route), len(additions),
+        )
+
+        resp = self._build_response(
+            intent=intent,
+            constraints=constraints,
+            plan=plan,
+            changes=changes,
+            shape=shape,
+            walk_s=walk_s,
+            length_km=length_km,
+            explanation=explanation,
+            costing=costing,
+        )
+        # Machine-readable refinement outcome; the human text is a fallback for
+        # the UI, the reason code is the contract.
+        resp.debug = dict(resp.debug or {})
+        resp.debug["refinement"] = {
+            "operation": directive.operation,
+            "supported": directive.supported,
+            "reason_code": directive.reason_code,
+            "detail": directive.detail,
+            "instruction": instruction or None,
+            "revision": ctx.revision,
+            "reorder_by": directive.reorder_by,
+            "descending": directive.descending,
+            "add_categories": list(directive.add_categories),
+            "exclude_categories": list(directive.exclude_categories),
+            "remove_names": list(directive.remove_names),
+            "base_stops": len(base),
+            "kept": changes.kept,
+        }
+        return resp
 
     def _build_response(
         self,

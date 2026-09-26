@@ -34,10 +34,10 @@ describe('GuideProgress', () => {
 
     // Done part vs remaining, in words, straight off the line.
     expect(screen.getByTestId('guide-line-progress')).toHaveTextContent(
-      'по линии пройдено 1.5 км'
+      'по линии пройдено 1,5 км'
     );
     expect(screen.getByTestId('guide-line-progress')).toHaveTextContent(
-      'осталось 4.5 км'
+      'осталось 4,5 км'
     );
     // The bar follows the line (25 %), not the stop count (25 % here too).
     expect(screen.getByRole('progressbar')).toHaveAttribute(
