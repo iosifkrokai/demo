@@ -11,6 +11,20 @@
   /* DESIGN.md: "rounded-2xl -> 24px". Tailwind's default --radius-2xl is 1rem
      (16px), which would collapse 2xl onto the 16px base, so set it explicitly. */
   --radius-2xl: calc(var(--radius) + 8px);
+  /* DESIGN.md type scale: one size per role. Components use these names instead
+     of inventing text-[13px]/text-[14px]; nothing renders below 11px. */
+  --text-badge: 11px;
+  --text-badge--line-height: 1.3;
+  --text-meta: 12px;
+  --text-meta--line-height: 1.45;
+  --text-label: 13px;
+  --text-label--line-height: 1.45;
+  --text-body: 15px;
+  --text-body--line-height: 1.45;
+  --text-title: 16px;
+  --text-title--line-height: 1.35;
+  --text-stat: 19px;
+  --text-stat--line-height: 1.2;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -225,22 +239,6 @@ body {
 
 i.help.grey.icon {
   color: #9943f5 !important;
-}
-
-.fossgis-logo {
-  background-image: url('images/fossgis.png');
-  height: 31px;
-  width: 150px;
-  background-position: center;
-  background-repeat: no-repeat;
-}
-
-.valhalla-logo {
-  background-image: url('images/valhalla.png');
-  height: 100px;
-  width: 100px;
-  background-position: center;
-  background-repeat: no-repeat;
 }
 
 .ui.checkbox label,

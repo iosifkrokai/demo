@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="AI-гид по Гродно">
+  <rect width="64" height="64" rx="14" fill="#ff385c" />
+  <path
+    d="M32 12c-7.2 0-13 5.8-13 13 0 9.4 13 27 13 27s13-17.6 13-27c0-7.2-5.8-13-13-13z"
+    fill="#ffffff"
+  />
+  <circle cx="32" cy="25" r="5.2" fill="#ff385c" />
+</svg>

@@ -1,7 +1,11 @@
 # Grodno walking-route POC
 
 Stack: **Valhalla** (routing engine) + **Postgres/PostGIS/pgvector** (places) +
-**FastAPI agent** (free-text Russian → pedestrian route) + **Vite webapp** (UI).
+**FastAPI agent** (free-text RU/EN → pedestrian route) + **Vite webapp** (UI).
+
+**Plan of record:** `docs/specs/002-grodno-guide-rebuild/` (spec, plan, tasks) and
+`docs/specs/constitution.md`. Six workstreams are currently in progress there; this
+README describes what is shipped and running today.
 
 ## 0. Prereqs (host)
 
@@ -16,7 +20,7 @@ curl -LsSf https://astral.sh/uv/install.sh | sh    # uv
 For network: outbound HTTPS to `download.geofabrik.de`, `nominatim.openstreetmap.org`,
 `tile.openstreetmap.org`, `overpass-api.de`, `openrouter.ai`. **OPENROUTER_API_KEY is
 optional** — without it the pipeline degrades to keyword-only retrieval (no embeddings,
-no Jev intent/rerank).
+no Jev intent/rerank); routes are still built via a deterministic regex/keyword fallback.
 
 ## 0a. One command (fresh machine)
 
@@ -33,8 +37,9 @@ retrieval until you re-run the seeds with the key).
 
 ## 1. Web-app subdir
 
-The webapp lives in `frontend/` (our customizations on top of valhalla/web-app — sidebar,
-waypoints, place cards). Copy the committed example to `.env` before building:
+The webapp lives in `frontend/` (sidebar, waypoints, place cards, guide panel — built
+on top of the MapLibre/Valhalla web-app upstream). Copy the committed example to `.env`
+before building:
 
 ```bash
 cp frontend/.env.example frontend/.env
@@ -43,18 +48,18 @@ cp frontend/.env.example frontend/.env
 `.env` is gitignored, so a fresh clone has none; `frontend/.env.example` holds the
 defaults — both URLs empty, which is what makes the app work behind a forwarded port
 (Codespaces, tunnels): the UI talks to its own origin and nginx proxies `/routes/*` →
-agent, `/route`,`/status`,… → valhalla.
+agent, `/route`, `/status`, `/isochrone`, … → Valhalla.
 
-`VITE_*` vars are baked at image build time, so this file MUST exist before `docker compose build`.
-`frontend/.dockerignore` must NOT exclude `package-lock.json` — the Dockerfile runs `npm ci`,
-which fails without the lockfile in the build context.
+`VITE_*` vars are baked at image build time, so this file MUST exist before
+`docker compose build`. `frontend/.dockerignore` must NOT exclude `package-lock.json` —
+the Dockerfile runs `npm ci`, which fails without the lockfile in the build context.
 
-Upstreams are rendered into nginx at container start from `AGENT_UPSTREAM` /
-`VALHALLA_UPSTREAM` (`docker-compose.yml`). The default is `host.docker.internal:…` — the
-Docker host on Linux (via the `host-gateway` mapping in compose), macOS and Windows —
-because the agent runs there and some hosts block container→container traffic on the
-compose bridge. Where that traffic is allowed, override with
-`AGENT_UPSTREAM=agent:8080 VALHALLA_UPSTREAM=valhalla:8002`.
+Upstreams are rendered into `frontend/nginx.conf` at container start from
+`AGENT_UPSTREAM` / `VALHALLA_UPSTREAM` (`docker-compose.yml`). The default is
+`host.docker.internal:…` — the Docker host on Linux (via the `host-gateway` mapping in
+compose), macOS and Windows — because the agent runs there and some hosts block
+container→container traffic on the compose bridge. Where that traffic is allowed,
+override with `AGENT_UPSTREAM=agent:8080 VALHALLA_UPSTREAM=valhalla:8002`.
 
 ## 2. Python env (uv)
 
@@ -87,17 +92,18 @@ docker compose up -d --build frontend
 
 UI: <http://localhost/>.
 
-The agent **is** defined as a compose service (`agent`, wired to `db:5432` / `valhalla:8002`)
-for a hands-off deployment, but the documented flow runs it from the checkout via `uvicorn`
-(step 5) on purpose: code edits then need no image rebuild. Use `docker compose up -d agent`
-when you want the container instead — it reads `OPENROUTER_API_KEY` from the environment.
+The agent **is** defined as a compose service (`agent`, wired to `db:5432` /
+`valhalla:8002`) for a hands-off deployment, but the documented flow runs it from the
+checkout via `uvicorn` (step 5) on purpose: code edits then need no image rebuild.
+Use `docker compose up -d agent` when you want the container instead — it reads
+`OPENROUTER_API_KEY` from the environment.
 
 ## 4. Seed the DB
 
 ```bash
 cd backend
-export DATABASE_URL=postgresql://grodno:***@localhost:5432/grodno
-export OPENROUTER_API_KEY=sk-or-...        # required for embeddings
+export DATABASE_URL=postgresql://grodno:grodno@localhost:5432/grodno
+export OPENROUTER_API_KEY=sk-or-...        # required for embeddings; omit for keyword-only
 
 # 4a. Curated places (city + voblast CSV) + embeddings for every row.
 #     Idempotent: upsert keyed on source_url.
@@ -111,9 +117,9 @@ export OPENROUTER_API_KEY=sk-or-...        # required for embeddings
 ```
 
 ```bash
-# 4c. Everyday POIs: cafes, restaurants, toilets, hotels (~1.8k rows for the voblast).
-#     These are what «добавь кофейню и туалет» pulls in, and they are placed
-#     AROUND the current route (500 m of its stops), not across the whole region.
+# 4c. Everyday POIs: cafes, restaurants, toilets, hotels.
+#     These are placed AROUND the current route (500 m of its stops),
+#     not across the whole region (see CONVENIENCE_RADIUS_M in agent/constants.py).
 .venv/bin/python scripts/ingest_poi.py                        # Overpass → upsert + embed
 .venv/bin/python scripts/ingest_poi.py --dry-run --limit 5    # inspect, write nothing
 ```
@@ -123,21 +129,20 @@ export OPENROUTER_API_KEY=sk-or-...        # required for embeddings
 `load_osm.py` takes `--dry-run`, `--limit`, `--no-embed`, `--path`.
 `ingest_poi.py` takes `--dry-run`, `--limit`, `--no-embed`, `--bbox`, `--input-json`.
 
-`--bbox` covers a slice of Lithuania and Poland, so every row is checked against
-`agent/geofence.py` (Natural Earth border polygon, `data/belarus_border.json`) before it
-is written. Without that filter Vilnius landmarks land in the table labelled
-"Островецкий район" and come back for Grodno queries — a DB filled before the filter
-existed is cleaned with:
+The Overpass bbox covers a slice of Lithuania and Poland, so every row is checked against
+`agent.geofence.inside_project_area` (Grodno ADM1 polygon, `data/grodno_border.json`)
+before it is written. A DB filled before the filter existed is cleaned with:
 
 ```bash
-export DATABASE_URL=postgresql://grodno:...@localhost:5432/grodno
+export DATABASE_URL=postgresql://grodno:grodno@localhost:5432/grodno
 .venv/bin/python scripts/purge_foreign_places.py           # dry run
 .venv/bin/python scripts/purge_foreign_places.py --apply
 ```
 
-A dozen Belarusian POIs sit just outside the simplified polygon; they are listed
-explicitly in `data/belarus_border_keep.json` (each verified with Nominatim), so ingest
-and purge agree on the same set.
+A handful of POIs sit just outside the ADM1 polygon but are verifiably inside the
+region; they are listed in `data/belarus_border_keep.json` (each verified with
+Nominatim) and treated as exceptions by `inside_project_area`, so ingest and purge
+agree on the same set.
 
 Spot-check:
 ```bash
@@ -156,16 +161,20 @@ the `backend/` restructure and are not part of the current seed path.
 
 ```bash
 cd backend
-export DATABASE_URL=postgresql://grodno:***@localhost:5432/grodno
+export DATABASE_URL=postgresql://grodno:grodno@localhost:5432/grodno
 export VALHALLA_URL=http://localhost:8002
 export OPENROUTER_API_KEY=sk-or-...    # optional; without it the agent is keyword-only
 
 .venv/bin/python -m uvicorn agent.main:app --host 0.0.0.0 --port 8080
 ```
 
-No local models, no first-call download: embeddings run on OpenRouter
-(`openai/text-embedding-3-small`) and intent/rerank on the **Jev** typed-decision endpoint
-(`POST /api/v1/systemone`, `typesafe/jev-1.13`).
+Without `OPENROUTER_API_KEY`: embeddings are skipped, intent falls back to a
+deterministic regex/keyword parse (same CATEGORY_SYNONYMS map as retrieval), and Jev
+rerank is skipped. Routes are still built; `/health` reports `"llm": false`.
+
+With key: embeddings via OpenRouter (`openai/text-embedding-3-small`, 1536 dims) and
+intent/rerank via the Jev typed-decision endpoint (`POST /api/v1/systemone`,
+`typesafe/jev-1.13`). No local models, no first-call download.
 
 ## 6. Smoke tests
 
@@ -173,7 +182,7 @@ No local models, no first-call download: embeddings run on OpenRouter
 # Health
 curl -fsS localhost:8080/health | jq
 
-# Generate a route
+# Generate a route (Russian query)
 curl -sX POST localhost:8080/routes/generate \
     -H 'content-type: application/json' \
     -d '{"query":"Хочу погулять по замкам Гродно","time_budget_minutes":120}' \
@@ -195,9 +204,8 @@ curl -sX POST localhost:8080/routes/reroute \
 
 ## 6a. Golden-set benchmark
 
-`backend/benchmarks/routes/*.json` holds reference walks taken from Wikivoyage
-(Старый город, Мир, Новогрудок). The runner drives the live HTTP API and reports
-recall@K, precision, Kendall τ, walk-time delta and budget fit:
+`backend/benchmarks/routes/*.json` holds reference walks. The runner drives the live
+HTTP API:
 
 ```bash
 cd backend
@@ -235,12 +243,13 @@ Environment carries secrets and addresses only (`agent/config.py`):
 
 Everything else is reviewable code in `agent/constants.py` — models, weights and limits:
 `EMBED_MODEL`, `JEV_MODEL`, `RRF_K`, `MMR_LAMBDA`, `RETRIEVAL_POOL_SIZE`,
-`RERANK_POOL_SIZE`, `MMR_POOL_SIZE`, `ROUTE_MAX_STOPS`, `GEO_FOCUS_KM`,
-`GEO_FOCUS_MAX_KM`, `MAX_WALK_LEG_KM` / `WALK_LEG_BUDGET_SHARE` (walkability),
+`RERANK_POOL_SIZE`, `MMR_POOL_SIZE`, `GEO_FOCUS_KM`, `GEO_FOCUS_MAX_KM`,
+`GEO_FOCUS_DISCOVERY_MAX_KM`, `MAX_WALK_LEG_KM` / `WALK_LEG_BUDGET_SHARE` (walkability),
 `NAME_MATCH_MIN_SIM` (named-place → must-visit threshold),
-`DUPLICATE_RADIUS_M` (same-POI radius; the curated row and an OSM row for the same
-sight must not both appear in one route), budget bounds and the category → visit-minutes
-table. Changing one is a code-review decision: edit → tests → commit.
+`DUPLICATE_RADIUS_M` / `DUPLICATE_NAME_RADIUS_M` (same-POI deduplication),
+`CONVENIENCE_RADIUS_M` / `CONVENIENCE_MAX_ADDED`, `VALHALLA_MAX_LOCATIONS`,
+budget bounds, and the category → visit-minutes table. Changing one is a code-review
+decision: edit → tests → commit.
 
 A named-place token becomes a **must-visit** only when it matches a POI *name* above
 `NAME_MATCH_MIN_SIM`; a token that only matches a town/district becomes an **area anchor**
@@ -248,29 +257,28 @@ for the geo focus instead, so «замки Гродно» is not pinned to one a
 
 ## 9. Troubleshooting
 
-**`503 (valhalla ... sources_to_targets failed after retries)`.** Valhalla 3.5.1 answers 500
-`Could not find candidate edge used for label` for matrix shapes with
+**`503 (valhalla ... sources_to_targets failed after retries)`.** Valhalla 3.5.1 answers
+500 `Could not find candidate edge used for label` for matrix shapes with
 `len(sources) >= 6 AND len(targets) >= 7`. `agent/valhalla_client.py` chunks around it
 (`MATRIX_MAX_SOURCES` / `MATRIX_MAX_TARGETS`) with a per-pair `/route` fallback.
 
 **Route has no polyline / `length_km: null`.** `/route` answers 500
-`Could not find candidate edge used for destination label` for some POI coordinates
-(e.g. 53.6845,23.8318). Fixed by sending `radius: 100` per location
-(`LOCATION_SNAP_RADIUS_M` in `valhalla_client.py`); `search_radius` / `street_side_tolerance`
-do NOT help.
+`Could not find candidate edge used for destination label` for some POI coordinates.
+Fixed by sending `radius: 100` per location (`LOCATION_SNAP_RADIUS_M` in
+`valhalla_client.py`); `search_radius` / `street_side_tolerance` do NOT help.
 
-**"relation 'places' does not exist".** `db/init.sql` only loads on FIRST start of the `db`
-container. A fresh `pgdata` volume gets the complete current schema (extensions, columns,
-indexes) straight from `init.sql`; the files under `db/migrations/` are historical, all
-`IF NOT EXISTS`, and only matter for volumes created before `init.sql` caught up — apply
-`db/migrations/*.sql` and `db/migrate_add_facts.sql` by hand in that case.
+**"relation 'places' does not exist".** `db/init.sql` only loads on FIRST start of the
+`db` container. A fresh `pgdata` volume gets the complete current schema straight from
+`init.sql`; the files under `db/migrations/` are historical (`IF NOT EXISTS`) and only
+matter for volumes created before `init.sql` caught up.
 
 **Agent returns `503 UpstreamUnavailable` on every request.** Valhalla tile build didn't
 finish or the `pgdata` volume lost embeddings — re-run `scripts/seed_region.py --embed`.
 Check `docker logs grodno-valhalla`.
 
-**Keyword-only results (no semantic search).** `OPENROUTER_API_KEY` is missing or the rows
-have `embedding IS NULL` — see the spot-check in section 4.
+**Keyword-only results (no semantic search).** `OPENROUTER_API_KEY` is missing or the
+rows have `embedding IS NULL` — see the spot-check in section 4. `/health` reports
+`"llm": false` in this state.
 
 **`ConnectError` on `localhost:8002`.** Valhalla isn't ready. Poll `/status` until 200.
 
@@ -280,26 +288,59 @@ response and iterate with `--input-json <file>`.
 ## 10. Architecture
 
 ```
-User → Vite webapp (frontend/) → :8080 /routes/generate
-                                    ↓
-                       agent.main → agent.planner.Pipeline
-                                    ↓
-  ┌─ preprocess ─ intent (Jev typed decisions) ─ resolve ─┐
-  │                                                       │
-  ├─ retrieve (vector + keyword + must-visit, RRF) ─ rerank (Jev scores)
-  │                                                       │
-  ├─ geo-focus ─ diversity (MMR) ─ cost (Valhalla matrix) ─ optimize
-  │                                                       │
-  └─ validate ─ render (Valhalla /route) ─ explain ────────┘
+Browser → nginx :80  (frontend container)
+  │
+  ├─ /routes/*  → proxy → agent :8080
+  │                           │
+  │               agent.main → agent.planner.Pipeline
+  │                           │
+  │  ┌─ preprocess ─ intent (Jev typed decisions; regex/keyword fallback) ─ resolve ─┐
+  │  │                                                                               │
+  │  ├─ retrieve (vector + keyword + must-visit, RRF fusion) ─ rerank (Jev scores) ──┤
+  │  │                                                                               │
+  │  ├─ geo-focus ─ diversity (MMR) ─ cost (Valhalla matrix) ─ optimize ────────────┤
+  │  │                                                                               │
+  │  └─ validate ─ render (Valhalla /route) ─ explain ─────────────────────────────-┘
+  │
+  └─ /route, /status, /isochrone, /locate, /height, /tile
+          → proxy → valhalla :8002
 ```
 
-Files: `backend/agent/planner/{preprocess,intent,resolve,retrieve,rerank,diversity,cost,optimize,validate,render,explain,pipeline}.py`,
+nginx rule: `location /routes/` proxies the whole prefix to the agent; individual
+Valhalla paths are matched by the regex `^/(route|isochrone|optimized_route|status|locate|height|tile)$`
+(see `frontend/nginx.conf`).
+
+Planner files: `backend/agent/planner/{preprocess,intent,resolve,retrieve,rerank,diversity,cost,optimize,validate,render,explain,pipeline}.py`,
 clients in `backend/agent/{jev,valhalla_client,search}.py`, tunables in `backend/agent/constants.py`.
+
+## 11. What is not verified / not promised
+
+The following are **not guaranteed** by this system and should not be shown to users as
+confirmed facts:
+
+- **Opening hours.** `ingest_poi.py` stores raw OSM `opening_hours` strings as
+  harvested; they are not verified against live data and may be stale or absent.
+- **Ticket prices and admission fees.** OSM `charge`/`fee` tags are stored as-is,
+  without verification against the venue's current policy.
+- **Step-free / wheelchair access.** The pedestrian route uses Valhalla's default
+  pedestrian profile; there is no audit of kerbs, ramps or lift availability in the
+  road graph or the POI dataset.
+- **Bus schedules and ticket purchase.** No transit data (GTFS or otherwise) is
+  ingested; there is no "buy a ticket" feature and no live schedule information.
+- **Coordinates are reference points.** A POI coordinate is the stored geocoded
+  position; it may not correspond to the accessible entrance.
+
+See `docs/specs/constitution.md` §7: opening-hours and prices in the dataset are
+advisory (`source_url` points to the verifiable source); they must be confirmed before
+use.
 
 ## Out of scope
 
-- No `/routes/ready` endpoint, no `ready_routes` table (no source for it).
-- No continuous ingest pipeline — `parse_places.py`, `enrich_places.py`, `apply_curated.py`,
-  `ingest_osm.py` and `load_osm.py` are one-shot.
-- No local ML models: embeddings, intent and rerank are OpenRouter calls (Jev is the
-  typed-decision model; there is no local cross-encoder any more).
+- No `/routes/ready` endpoint, no `ready_routes` table.
+- No continuous ingest pipeline — `ingest_osm.py`, `load_osm.py` and `ingest_poi.py`
+  are one-shot CLI scripts; `parse_places.py`, `enrich_places.py`, `apply_curated.py`
+  predate the current structure and are not part of the active seed path.
+- No local ML models: embeddings, intent and rerank are OpenRouter calls.
+- `planner/verify.py` (independent post-route verifier against `TripRequirements`) is
+  planned in workstream W3 of `docs/specs/002-grodno-guide-rebuild/` but not yet
+  merged.

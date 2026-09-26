@@ -23,6 +23,10 @@ function getBaseUrl() {
 
 export default defineConfig({
   base: getBaseUrl(),
+  // ONE env file for the whole project: the root .env, shared with the backend
+  // and docker compose. Vite resolves envDir relative to this config's root
+  // (frontend/), so '..' points at the repo root.
+  envDir: '..',
   plugins: [
     react(),
     svgr({
@@ -40,6 +44,24 @@ export default defineConfig({
     host: '0.0.0.0',
     port: 3000,
     open: true,
+    // Mirror the production nginx routes (see nginx.conf) so the dev server is
+    // same-origin exactly like the deployed app: the UI calls /routes/* with no
+    // VITE_AGENT_URL, and this proxy forwards to the locally running agent.
+    // Without it every build attempt 404s against the Vite server.
+    proxy: {
+      '/routes': {
+        target: process.env.VITE_DEV_AGENT_TARGET || 'http://localhost:8080',
+        changeOrigin: true,
+      },
+      // Valhalla endpoints the map talks to directly (route, status, ...).
+      // The trailing (?|\$) matters: these URLs carry a ?json=... query, and a
+      // \$-anchored pattern silently misses them — Vite then answers with
+      // index.html and the map loses its route line with no visible error.
+      '^/(route|isochrone|optimized_route|status|locate|height|tile)(\\?|$)': {
+        target: process.env.VITE_DEV_VALHALLA_TARGET || 'http://localhost:8002',
+        changeOrigin: true,
+      },
+    },
   },
   build: {
     outDir: 'build',

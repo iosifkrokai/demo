@@ -38,10 +38,17 @@ services:
   frontend:
     build:
       context: ./frontend
+      # Baked into the bundle by Vite; all values come from the single root .env.
+      args:
+        VITE_AGENT_URL: "${VITE_AGENT_URL:-}"
+        VITE_VALHALLA_URL: "${VITE_VALHALLA_URL:-}"
+        VITE_NOMINATIM_URL: "${VITE_NOMINATIM_URL:-}"
+        VITE_TILE_SERVER_URL: "${VITE_TILE_SERVER_URL:-}"
+        VITE_CENTER_COORDS: "${VITE_CENTER_COORDS:-}"
+        VITE_DEFAULT_COSTING_MODEL: "${VITE_DEFAULT_COSTING_MODEL:-}"
+        VITE_CLIENT_ID: "${VITE_CLIENT_ID:-}"
     container_name: grodno-frontend
     environment:
-      VITE_AGENT_URL: ""
-      VITE_VALHALLA_URL: ""
       SKIP_PREFLIGHT_CHECK: "true"
       # Rendered into nginx.conf at container start (nginx templates + envsubst).
       # 172.17.0.1 = the Docker host: the agent runs there via uvicorn, and on
@@ -67,12 +74,15 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: grodno-agent
+    # The single project env file — the same one the frontend and local runs use.
+    env_file:
+      - .env
     environment:
       AGENT_HOST: "0.0.0.0"
       AGENT_PORT: "8080"
-      DATABASE_URL: "postgresql://grodno:${POSTGRES_PASSWORD:-grodno}@db:5432/grodno"
+      # Container-internal hosts override the host-side values from .env.
+      DATABASE_URL: "postgresql://${POSTGRES_USER:-grodno}:${POSTGRES_PASSWORD:-grodno}@db:5432/${POSTGRES_DB:-grodno}"
       VALHALLA_URL: "http://valhalla:8002"
-      OPENROUTER_API_KEY: "${OPENROUTER_API_KEY:-}"
       RERANK_ENABLED: "${RERANK_ENABLED:-1}"
     ports:
       - "8080:8080"

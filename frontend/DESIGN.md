@@ -40,10 +40,36 @@ Shadows (Tailwind's scale is fine; these are the intended ones):
 
 ## Type
 
-- Base 15px, `leading-[1.45]`, `tracking-[-0.01em]`.
-- Section title 15–16px `font-semibold`; card title 13px `font-semibold`.
-- Meta/labels 12–13px `text-muted-foreground`. Never smaller than 11px.
-- Numbers that matter (km, minutes, stop count) are 18–20px `font-semibold` and sit in stat tiles.
+One size per role, exposed as `--text-*` theme tokens in `src/index.css`. Use the class, never an
+arbitrary value (`text-[13px]`) and never a Tailwind default (`text-sm`, `text-xs`): those were the
+main source of drift, and the audit found nine competing sizes across the panel.
+
+| Class | Size | Role |
+|---|---|---|
+| `text-badge` | 11px | counters, numeric badges. **Floor — nothing renders smaller.** |
+| `text-meta` | 12px | meta lines, section labels, helper copy |
+| `text-label` | 13px | card titles, chips, control labels |
+| `text-body` | 15px | body copy, inputs, buttons (the base size) |
+| `text-title` | 16px | panel/section titles |
+| `text-stat` | 19px | numbers that matter (km, minutes, stop count) in stat tiles |
+
+All sizes carry `leading-[1.45]` except `text-title` (1.35) and `text-stat` (1.2). Body keeps
+`tracking-[-0.01em]`. Weights are unchanged: titles `font-semibold`, chips `font-medium`.
+
+## Radius and elevation
+
+Four radius steps, no others:
+
+| Class | Use |
+|---|---|
+| `rounded-full` | chips, pills, icon buttons, progress bars, avatars |
+| `rounded-lg` | small inner surfaces (toggles, swatches, inline code) |
+| `rounded-xl` | primary buttons, list rows, inputs |
+| `rounded-2xl` | cards, panels, popups; `rounded-t-3xl` for the mobile sheet |
+
+Shadows are only the three tokens — `shadow-card`, `shadow-float`, `shadow-sheet`. An arbitrary
+`shadow-[...]` in a component is a review failure; if a new elevation is genuinely needed, add a
+token to `:root` first.
 
 ## Components (patterns to reuse, not reinvite)
 
@@ -58,11 +84,13 @@ Shadows (Tailwind's scale is fine; these are the intended ones):
 - **Card**: `rounded-2xl border border-border bg-card p-4 shadow-[0_1px_2px_rgba(0,0,0,0.06)]`.
 - **Stat tile**: card with a 18–20px number + 12px muted label, three in a row (`grid-cols-3 gap-2`).
 - **Stop row** (timeline): 52px tall, `rounded-xl hover:bg-muted`, leading 24px circle with the stop
-  number (`bg-muted text-[11px] font-semibold`), a category icon/emoji, name `text-[14px]`, meta on the
+  number (`bg-muted text-badge font-semibold`), a category icon/emoji, name `text-label`, meta on the
   right; hover reveals icon buttons (remove, pin). Drag handle on the left, `cursor-grab`.
 - **Timeline guide line**: 1px `bg-border` between the numbered circles.
-- **Empty state**: centred muted icon + one line of what to type (`Что хотите посмотреть? …`), plus
-  3 hint chips. Never a bare blank panel.
+- **Empty state**: centred muted icon + one line of what will happen here, plus the hint chips
+  (`замки`, `костёлы`, `монастыри`, `где поесть`). Never a bare blank panel. The ask field's
+  placeholder is the question itself (`Что хотите посмотреть?`) — no trailing ellipsis, which reads
+  as a truncated string.
 - **Loading**: skeleton rows (`animate-pulse rounded-xl bg-muted h-12`) — not a spinner in the middle.
 
 ## Motion

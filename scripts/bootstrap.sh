@@ -43,14 +43,20 @@ command -v uv >/dev/null || { echo "uv is missing: curl -LsSf https://astral.sh/
 command -v curl >/dev/null || { echo "curl is missing" >&2; exit 1; }
 echo "docker, docker compose, uv, curl: ok"
 
-# ── 2. frontend/.env ───────────────────────────────────────────────────────────
-say "frontend/.env"
-if [ ! -f frontend/.env ]; then
-    cp frontend/.env.example frontend/.env
-    echo "created frontend/.env from .env.example (VITE_* are baked at build time)"
+# ── 2. .env (one file for backend + frontend) ──────────────────────────────────
+say ".env"
+if [ ! -f .env ]; then
+    cp .env.example .env
+    echo "created .env from .env.example — backend and frontend read this single file"
 else
-    echo "frontend/.env already exists"
+    echo ".env already exists"
 fi
+
+# Everything below (and the agent you start later) reads this one file.
+set -a
+# shellcheck disable=SC1091
+. ./.env
+set +a
 
 # Seeding needs these; the agent itself degrades to keyword-only without a key.
 DATABASE_URL="${DATABASE_URL:-postgresql://grodno:grodno@localhost:5432/grodno}"
@@ -124,9 +130,9 @@ docker exec grodno-db psql -U grodno -d grodno -tAc \
 say "next: run the agent from the checkout"
 cat <<EOF
 cd backend
-export DATABASE_URL='$DATABASE_URL'
+set -a; . ../.env; set +a          # the single project env file
 export VALHALLA_URL='http://localhost:8002'
-export OPENROUTER_API_KEY='<your key>'
+export DATABASE_URL="postgresql://\${POSTGRES_USER:-grodno}:\${POSTGRES_PASSWORD:-grodno}@localhost:5432/\${POSTGRES_DB:-grodno}"
 .venv/bin/python -m uvicorn agent.main:app --host 0.0.0.0 --port 8080
 
 # health, then a smoke route:
