@@ -9,6 +9,7 @@ import {
 } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MapComponent } from './index';
+import type { ParsedDirectionsGeometry } from '@/components/types';
 
 const mockToast = vi.hoisted(() => ({
   error: vi.fn(),
@@ -146,16 +147,28 @@ vi.mock('@/stores/common-store', () => ({
   }),
 }));
 
+// The map reads waypoints, place details and the stored route result from the
+// directions store; a test swaps the whole state through `mockDirectionsState`.
+const mockDirectionsState = vi.hoisted(() => ({
+  current: {
+    waypoints: [] as unknown[],
+    // Typed through the contract so a case can install an agent or client route
+    // with its provenance fields (spec 002).
+    results: {
+      data: null as import('@/components/types').ParsedDirectionsGeometry | null,
+      show: {} as Record<string, boolean>,
+    },
+    successful: false,
+    placeDetails: {} as Record<number, unknown>,
+    activeRouteIndex: 0,
+  },
+}));
+
 vi.mock('@/stores/directions-store', () => ({
-  useDirectionsStore: vi.fn((selector) => {
-    const state = {
-      waypoints: [],
-      results: { data: null, show: {} },
-      successful: false,
-      updateInclineDecline: vi.fn(),
-    };
-    return selector(state);
-  }),
+  ME_WAYPOINT_ID: 'me',
+  useDirectionsStore: vi.fn((selector) =>
+    selector(mockDirectionsState.current)
+  ),
 }));
 
 vi.mock('@/stores/isochrones-store', () => ({
@@ -195,9 +208,16 @@ vi.mock('./draw-control', () => ({
   DrawControl: vi.fn(() => <div data-testid="draw-control">Draw Control</div>),
 }));
 
-vi.mock('./parts/route-lines', () => ({
-  RouteLines: vi.fn(() => <div data-testid="route-lines">Route Lines</div>),
-}));
+vi.mock('./parts/route-lines', async () => {
+  const actual =
+    await vi.importActual<typeof import('./parts/route-lines')>(
+      './parts/route-lines'
+    );
+  return {
+    ...actual,
+    RouteLines: vi.fn(() => <div data-testid="route-lines">Route Lines</div>),
+  };
+});
 
 vi.mock('./parts/highlight-segment', () => ({
   HighlightSegment: vi.fn(() => (
@@ -215,10 +235,6 @@ vi.mock('./parts/isochrone-locations', () => ({
   IsochroneLocations: vi.fn(() => (
     <div data-testid="isochrone-locations">Locations</div>
   )),
-}));
-
-vi.mock('./parts/brand-logos', () => ({
-  BrandLogos: vi.fn(() => <div data-testid="brand-logos">Logos</div>),
 }));
 
 vi.mock('./parts/tool-button', () => ({
@@ -300,6 +316,13 @@ describe('MapComponent', () => {
     );
 
     vi.clearAllMocks();
+    mockDirectionsState.current = {
+      waypoints: [],
+      results: { data: null, show: {} },
+      successful: false,
+      placeDetails: {},
+      activeRouteIndex: 0,
+    };
   });
 
   afterEach(() => {
@@ -353,11 +376,6 @@ describe('MapComponent', () => {
   it('should render isochrone locations component', () => {
     render(<MapComponent />);
     expect(screen.getByTestId('isochrone-locations')).toBeInTheDocument();
-  });
-
-  it('should render brand logos', () => {
-    render(<MapComponent />);
-    expect(screen.getByTestId('brand-logos')).toBeInTheDocument();
   });
 
   it('should render left-side Directions shortcut button', () => {
@@ -489,7 +507,7 @@ describe('MapComponent', () => {
       await user.click(screen.getByTestId('trigger-geolocate-error'));
 
       expect(mockToast.error).toHaveBeenCalledWith(
-        "We couldn't get your location. Please try again."
+        'Не удалось определить ваше местоположение. Попробуйте ещё раз.'
       );
     });
 
@@ -502,7 +520,7 @@ describe('MapComponent', () => {
       );
 
       expect(mockToast.error).toHaveBeenCalledWith(
-        "We couldn't get your location. Please check your browser settings and allow location access."
+        'Не удалось определить ваше местоположение. Проверьте настройки браузера и разрешите доступ к геолокации.'
       );
     });
   });
@@ -654,6 +672,158 @@ describe('MapComponent', () => {
       expect(screen.queryByTestId('map-info-popup')).not.toBeInTheDocument();
 
       vi.useRealTimers();
+    });
+  });
+
+  describe('route provenance (spec 002 §7 — one route, one source)', () => {
+    /**
+     * The map only reads the geometry, the summary and the provenance fields, so
+     * these fixtures carry a deliberately partial Valhalla trip: the single cast
+     * inside this helper is preferred over fabricating ten trip fields the
+     * assertion never touches.
+     */
+    const routeFixture = (over: {
+      decodedGeometry: number[][];
+      summary?: { length: number; time: number };
+      source: 'agent' | 'client';
+      hasVerifiedLine: boolean;
+    }): ParsedDirectionsGeometry =>
+      ({
+        id: 'test-route',
+        decodedGeometry: over.decodedGeometry,
+        trip: { legs: [], summary: over.summary ?? { length: 0, time: 0 } },
+        source: over.source,
+        hasVerifiedLine: over.hasVerifiedLine,
+      }) as unknown as ParsedDirectionsGeometry;
+
+    const agentRoute = routeFixture({
+      decodedGeometry: [
+        [53.9, 23.8],
+        [53.91, 23.81],
+      ],
+      summary: { length: 7.5, time: 1800 },
+      source: 'agent',
+      hasVerifiedLine: true,
+    });
+
+    it('states that the line on screen is the verified agent plan', () => {
+      mockDirectionsState.current = {
+        ...mockDirectionsState.current,
+        results: { data: agentRoute, show: { '0': true } },
+        successful: true,
+      };
+
+      render(<MapComponent />);
+
+      const chip = screen.getByTestId('route-provenance');
+      expect(chip).toHaveAttribute('data-provenance', 'agent');
+      expect(chip).toHaveAttribute('data-verified-line', 'true');
+      expect(chip).toHaveTextContent('проверенного плана агента');
+    });
+
+    it('states that a hand-built route is drawn by the app itself', () => {
+      mockDirectionsState.current = {
+        ...mockDirectionsState.current,
+        results: {
+          data: routeFixture({
+            decodedGeometry: [
+              [53.9, 23.8],
+              [53.91, 23.81],
+            ],
+            summary: { length: 3, time: 600 },
+            source: 'client',
+            hasVerifiedLine: true,
+          }),
+          show: { '0': true },
+        },
+        successful: true,
+      };
+
+      render(<MapComponent />);
+
+      const chip = screen.getByTestId('route-provenance');
+      expect(chip).toHaveAttribute('data-provenance', 'client');
+      expect(chip).toHaveTextContent('построена в приложении');
+    });
+
+    it('says "no verified line" instead of showing a different one', () => {
+      mockDirectionsState.current = {
+        ...mockDirectionsState.current,
+        results: {
+          data: routeFixture({
+            decodedGeometry: [],
+            summary: { length: 0, time: 0 },
+            source: 'agent',
+            hasVerifiedLine: false,
+          }),
+          show: { '0': true },
+        },
+        successful: true,
+      };
+
+      render(<MapComponent />);
+
+      const chip = screen.getByTestId('route-provenance');
+      expect(chip).toHaveAttribute('data-provenance', 'agent');
+      expect(chip).toHaveAttribute('data-verified-line', 'false');
+      expect(chip).toHaveTextContent('без проверенной линии');
+    });
+
+    it('shows no provenance while there is no route', () => {
+      render(<MapComponent />);
+
+      expect(screen.queryByTestId('route-provenance')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('route stop numbering', () => {
+    const stop = (id: string, name: string, lng: number, lat: number) => ({
+      id,
+      userInput: name,
+      placeId: 42,
+      geocodeResults: [
+        {
+          title: name,
+          selected: true,
+          displaylnglat: [lng, lat],
+          sourcelnglat: [lng, lat],
+          key: 0,
+          addressindex: 0,
+        },
+      ],
+    });
+
+    it('numbers the stops from 1 and leaves "my location" unnumbered', () => {
+      mockDirectionsState.current = {
+        ...mockDirectionsState.current,
+        waypoints: [
+          {
+            id: 'me',
+            userInput: 'Моё местоположение',
+            geocodeResults: [
+              {
+                title: 'Моё местоположение',
+                selected: true,
+                displaylnglat: [23.8, 53.9],
+                sourcelnglat: [23.8, 53.9],
+                key: 0,
+                addressindex: 0,
+              },
+            ],
+          },
+          stop('0', 'Костёл', 23.81, 53.91),
+          stop('1', 'Замок', 23.82, 53.92),
+        ],
+      };
+
+      render(<MapComponent />);
+
+      expect(screen.getAllByTestId('marker')).toHaveLength(3);
+      expect(screen.getByLabelText('Старт')).toBeInTheDocument();
+      expect(screen.getByLabelText('Точка 1')).toBeInTheDocument();
+      expect(screen.getByLabelText('Точка 2')).toBeInTheDocument();
+      // The route start never takes a stop number.
+      expect(screen.queryByLabelText('Точка 3')).not.toBeInTheDocument();
     });
   });
 

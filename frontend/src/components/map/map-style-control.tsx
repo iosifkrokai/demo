@@ -67,7 +67,7 @@ const MapStyleOption = memo(
           />
         </div>
         <div
-          className={`mt-1.5 text-center text-[13px] ${
+          className={`mt-1.5 text-center text-label ${
             isSelected
               ? 'font-bold text-primary'
               : 'font-normal text-muted-foreground'
@@ -132,7 +132,7 @@ export const MapStyleControl = ({
         <PopoverTrigger asChild>
           <ControlButton title="Map Styles" icon={<LayersIcon size={17} />} />
         </PopoverTrigger>
-        <PopoverContent className="mt-1 mr-2 rounded-md animate-in fade-in-0 zoom-in-95 w-[266px]">
+        <PopoverContent className="mt-1 mr-2 rounded-lg animate-in fade-in-0 zoom-in-95 w-[266px]">
           <div className="space-y-2">
             <div className="flex flex-col gap-2.5">
               {mapOptions.map((mapOption) => (

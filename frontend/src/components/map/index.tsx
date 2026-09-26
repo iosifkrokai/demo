@@ -32,12 +32,15 @@ import {
   DOUBLE_TAP_THRESHOLD_MS,
 } from './constants';
 import type { MapStyleType } from './types';
-import { RouteLines } from './parts/route-lines';
+import {
+  isMissingVerifiedLine,
+  routeProvenance,
+  RouteLines,
+} from './parts/route-lines';
 import { HighlightSegment } from './parts/highlight-segment';
 import { IsochronePolygons } from './parts/isochrone-polygons';
 import { IsochroneLocations } from './parts/isochrone-locations';
 import { RouteHoverPopup } from './parts/route-hover-popup';
-import { BrandLogos } from './parts/brand-logos';
 import { MapContextMenu } from './parts/map-context-menu';
 import { TilesInfoPopup } from './parts/tiles-info-popup';
 import {
@@ -99,9 +102,16 @@ export const MapComponent = () => {
   } | null>(null);
   const waypoints = useDirectionsStore((state) => state.waypoints);
   const placeDetails = useDirectionsStore((state) => state.placeDetails);
+  const routeResult = useDirectionsStore((state) => state.results.data);
   const setActiveRouteIndex = useDirectionsStore(
     (state) => state.setActiveRouteIndex
   );
+
+  // Which line is on screen, stated on the map: the plan the backend verified,
+  // or the one this app routed for a hand-built route. An agent route without a
+  // verified line says so instead of showing a substitute.
+  const provenance = routeProvenance(routeResult);
+  const missingVerifiedLine = isMissingVerifiedLine(routeResult);
 
   const { refetch: refetchDirections } = useDirectionsQuery();
   const { refetch: refetchIsochrones } = useIsochronesQuery();
@@ -726,10 +736,11 @@ export const MapComponent = () => {
   }, []);
 
   const handleGeolocateError = useCallback((error: GeolocateErrorEvent) => {
-    let defaultMessage = "We couldn't get your location. Please try again.";
+    let defaultMessage =
+      'Не удалось определить ваше местоположение. Попробуйте ещё раз.';
     if (error.PERMISSION_DENIED) {
       defaultMessage =
-        "We couldn't get your location. Please check your browser settings and allow location access.";
+        'Не удалось определить ваше местоположение. Проверьте настройки браузера и разрешите доступ к геолокации.';
     }
 
     toast.error(defaultMessage);
@@ -871,7 +882,6 @@ export const MapComponent = () => {
           </Popup>
         )}
 
-        <BrandLogos />
       </Map>
 
       <div
@@ -887,6 +897,22 @@ export const MapComponent = () => {
           data-testid="tab-directions-button"
         />
       </div>
+
+      {provenance && (
+        <div
+          role="status"
+          data-testid="route-provenance"
+          data-provenance={provenance}
+          data-verified-line={missingVerifiedLine ? 'false' : 'true'}
+          className="absolute top-20 left-4 z-10 max-w-[calc(100vw-2rem)] rounded-full border border-border bg-card px-3 py-1.5 text-meta text-muted-foreground shadow-card"
+        >
+          {missingVerifiedLine
+            ? 'Агент вернул остановки без проверенной линии — линия не показана'
+            : provenance === 'agent'
+              ? 'Линия маршрута — из проверенного плана агента'
+              : 'Линия маршрута — построена в приложении'}
+        </div>
+      )}
     </>
   );
 };

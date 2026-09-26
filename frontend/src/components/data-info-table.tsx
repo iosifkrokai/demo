@@ -62,10 +62,10 @@ export const DataInfoTable = () => {
   });
 
   if (isLoading) {
-    return <p className="text-muted-foreground text-sm">Loading…</p>;
+    return <p className="text-muted-foreground text-body">Loading…</p>;
   }
   if (isError || !status) {
-    return <p className="text-destructive text-sm">Failed to load status</p>;
+    return <p className="text-destructive text-body">Failed to load status</p>;
   }
 
   const parsedVersion = parseVersion(status.version);

@@ -88,7 +88,7 @@ export const EditStylesDialog = ({
             <FieldLabel htmlFor="style-json">Style JSON</FieldLabel>
             <Textarea
               id="style-json"
-              className="flex-1 min-h-[300px] max-h-[50vh] font-mono text-sm resize-none"
+              className="flex-1 min-h-[300px] max-h-[50vh] font-mono text-body resize-none"
               value={jsonText}
               onChange={(e) => {
                 setJsonText(e.target.value);

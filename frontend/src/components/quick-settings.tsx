@@ -228,7 +228,7 @@ export const QuickSettings = ({
         icon={Settings}
         open={open}
         onOpenChange={setOpen}
-        className="bg-muted/60 rounded-md px-3 py-2"
+        className="bg-muted/60 rounded-lg px-3 py-2"
       >
         <div className="space-y-1.25">
           <div className="flex flex-wrap items-center gap-2 py-1">

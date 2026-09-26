@@ -23,7 +23,7 @@ export const PANEL_SHEET_CLASS = [
   // mobile: bottom sheet
   'inset-x-0 bottom-0 top-auto w-full sm:max-w-none',
   'rounded-t-3xl border-t border-border',
-  'shadow-[0_-8px_28px_rgba(0,0,0,0.12)]',
+  'shadow-sheet',
   'transition-[height] duration-200 ease-out motion-reduce:transition-none',
   'data-[state=open]:slide-in-from-bottom data-[state=closed]:slide-out-to-bottom',
   // desktop: 360–400px column

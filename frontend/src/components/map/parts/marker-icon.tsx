@@ -42,7 +42,7 @@ export function MarkerIcon({ color, number, className }: MarkerIconProps) {
         />
       </svg>
       {number && (
-        <div className="absolute top-2 left-0 w-[35px] text-center text-white font-bold text-base pointer-events-none">
+        <div className="absolute top-2 left-0 w-[35px] text-center text-white font-bold text-body pointer-events-none">
           {number}
         </div>
       )}

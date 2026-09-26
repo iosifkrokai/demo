@@ -68,7 +68,7 @@ export const RouteCard = ({
     <>
       <div
         className={cn(
-          'flex flex-col gap-2.5 border rounded-md p-2 cursor-pointer transition-colors',
+          'flex flex-col gap-2.5 border rounded-lg p-2 cursor-pointer transition-colors',
           'focus-within:bg-muted/50 hover:bg-muted/50',
           showManeuvers ? 'bg-muted/50' : 'bg-background',
           isActive && 'border-l-4 border-l-primary'

@@ -13,14 +13,14 @@ export const StatTile = ({ value, label, className }: StatTileProps) => (
   <div
     className={cn(
       'rounded-xl border border-border bg-card px-2 py-2.5 text-center',
-      'shadow-[0_1px_2px_rgba(0,0,0,0.06)]',
+      'shadow-card',
       className
     )}
   >
-    <div className="text-[19px] font-semibold leading-tight text-foreground">
+    <div className="text-stat font-semibold leading-tight text-foreground">
       {value}
     </div>
-    <div className="mt-0.5 text-[12px] text-muted-foreground">{label}</div>
+    <div className="mt-0.5 text-meta text-muted-foreground">{label}</div>
   </div>
 );
 

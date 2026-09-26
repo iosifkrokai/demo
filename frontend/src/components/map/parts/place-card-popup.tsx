@@ -53,7 +53,7 @@ export function PlaceCardPopup({
         </Button>
 
         {/* Header: name + category */}
-        <div className="pr-6 text-sm font-semibold leading-tight">
+        <div className="pr-6 text-body font-semibold leading-tight">
           {details.name}
         </div>
 
@@ -76,7 +76,7 @@ export function PlaceCardPopup({
           details.ticketPrice ||
           details.town ||
           details.district) && (
-          <div className="flex flex-col gap-1 text-xs text-muted-foreground">
+          <div className="flex flex-col gap-1 text-meta text-muted-foreground">
             {details.openingHours && (
               <div className="flex items-center gap-1.5">
                 <Clock className="size-3 shrink-0" />
@@ -102,29 +102,29 @@ export function PlaceCardPopup({
 
         {/* Description */}
         {details.blurb && (
-          <p className="text-xs leading-snug text-muted-foreground">
+          <p className="text-meta leading-snug text-muted-foreground">
             {details.blurb}
           </p>
         )}
 
         {/* Primary fun fact */}
         {details.funFact && (
-          <div className="flex gap-1.5 rounded-md bg-primary/5 p-2">
+          <div className="flex gap-1.5 rounded-lg bg-primary/5 p-2">
             <Lightbulb className="mt-0.5 size-3.5 shrink-0 text-primary" />
-            <p className="text-xs leading-snug">{details.funFact}</p>
+            <p className="text-meta leading-snug">{details.funFact}</p>
           </div>
         )}
 
         {/* Extra facts */}
         {hasExtraFacts && (
           <div className="flex flex-col gap-1.5 border-l-2 border-primary/20 pl-3">
-            <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+            <span className="text-badge uppercase tracking-wide text-muted-foreground">
               Ещё факты
             </span>
             {details.funFacts!.slice(0, 3).map((fact, i) => (
               <div key={i} className="flex items-start gap-1.5">
                 <span className="mt-1 size-1.5 shrink-0 rounded-full bg-primary/40" />
-                <p className="text-xs leading-snug text-muted-foreground">
+                <p className="text-meta leading-snug text-muted-foreground">
                   {fact}
                 </p>
               </div>
@@ -135,7 +135,7 @@ export function PlaceCardPopup({
         {/* Links */}
         {hasLinks && (
           <div className="flex flex-col gap-1">
-            <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+            <span className="text-badge uppercase tracking-wide text-muted-foreground">
               Почитать
             </span>
             <div className="flex flex-col gap-0.5">
@@ -145,7 +145,7 @@ export function PlaceCardPopup({
                   href={link.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center gap-1.5 text-xs text-primary hover:underline"
+                  className="flex items-center gap-1.5 text-meta text-primary hover:underline"
                 >
                   <ExternalLink className="size-3 shrink-0" />
                   <span className="truncate">{link.title}</span>

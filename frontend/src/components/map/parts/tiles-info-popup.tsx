@@ -39,21 +39,21 @@ export function TilesInfoPopup({ features, onClose }: TilesInfoPopupProps) {
             className="border-b border-border pb-3 last:border-b-0 last:pb-0"
           >
             <div className="flex items-center gap-2 mb-2">
-              <div className="p-1.5 rounded-md bg-primary/10">
+              <div className="p-1.5 rounded-lg bg-primary/10">
                 <Icon className="size-3.5 text-primary" />
               </div>
-              <span className="font-semibold text-sm">
+              <span className="font-semibold text-body">
                 {layerType} {features.length > 1 ? index + 1 : ''}
               </span>
             </div>
 
             {Object.keys(properties).length === 0 ? (
-              <span className="text-xs text-muted-foreground italic">
+              <span className="text-meta text-muted-foreground italic">
                 No properties available
               </span>
             ) : (
-              <div className="rounded-md border border-border overflow-hidden">
-                <table className="w-full text-xs">
+              <div className="rounded-lg border border-border overflow-hidden">
+                <table className="w-full text-meta">
                   <tbody>
                     {Object.entries(properties).map(([key, value], idx) => (
                       <tr

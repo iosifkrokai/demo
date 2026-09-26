@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { App } from './app';
 
 vi.mock('react-map-gl/maplibre', () => ({
@@ -12,12 +13,8 @@ vi.mock('./components/map', () => ({
   MapComponent: () => <div data-testid="map-component">MapComponent</div>,
 }));
 
-vi.mock('./components/route-planner', () => ({
-  RoutePlanner: () => <div data-testid="route-planner">RoutePlanner</div>,
-}));
-
-vi.mock('./components/settings-panel/settings-panel', () => ({
-  SettingsPanel: () => <div data-testid="settings-panel">SettingsPanel</div>,
+vi.mock('./components/sidebar', () => ({
+  Sidebar: () => <div data-testid="sidebar">Sidebar</div>,
 }));
 
 vi.mock('@/components/ui/sonner', () => ({
@@ -32,33 +29,39 @@ vi.mock('@/components/ui/sonner', () => ({
   ),
 }));
 
+// App renders panels that read server state through react-query, so the tree
+// only mounts inside a provider — same as index.tsx does in the running app.
+const renderApp = () =>
+  render(
+    <QueryClientProvider
+      client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+    >
+      <App />
+    </QueryClientProvider>
+  );
+
 describe('App', () => {
   it('should render without crashing', () => {
-    expect(() => render(<App />)).not.toThrow();
+    expect(() => renderApp()).not.toThrow();
   });
 
   it('should render MapProvider as wrapper', () => {
-    render(<App />);
+    renderApp();
     expect(screen.getByTestId('map-provider')).toBeInTheDocument();
   });
 
   it('should render MapComponent', () => {
-    render(<App />);
+    renderApp();
     expect(screen.getByTestId('map-component')).toBeInTheDocument();
   });
 
-  it('should render RoutePlanner', () => {
-    render(<App />);
-    expect(screen.getByTestId('route-planner')).toBeInTheDocument();
-  });
-
-  it('should render SettingsPanel', () => {
-    render(<App />);
-    expect(screen.getByTestId('settings-panel')).toBeInTheDocument();
+  it('should render Sidebar', () => {
+    renderApp();
+    expect(screen.getByTestId('sidebar')).toBeInTheDocument();
   });
 
   it('should render Toaster with correct props', () => {
-    render(<App />);
+    renderApp();
     const toaster = screen.getByTestId('toaster');
     expect(toaster).toBeInTheDocument();
     expect(toaster).toHaveAttribute('data-position', 'bottom-center');
@@ -66,11 +69,10 @@ describe('App', () => {
   });
 
   it('should render all components inside MapProvider', () => {
-    render(<App />);
+    renderApp();
     const mapProvider = screen.getByTestId('map-provider');
     expect(mapProvider).toContainElement(screen.getByTestId('map-component'));
-    expect(mapProvider).toContainElement(screen.getByTestId('route-planner'));
-    expect(mapProvider).toContainElement(screen.getByTestId('settings-panel'));
+    expect(mapProvider).toContainElement(screen.getByTestId('sidebar'));
     expect(mapProvider).toContainElement(screen.getByTestId('toaster'));
   });
 });

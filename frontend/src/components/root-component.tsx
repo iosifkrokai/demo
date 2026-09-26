@@ -1,8 +1,14 @@
 import { Outlet } from '@tanstack/react-router';
-import { lazy, Suspense, useEffect } from 'react';
-import { toast } from 'sonner';
+import { lazy, Suspense } from 'react';
 
-const TanStackDevtools = import.meta.env.DEV
+/**
+ * Devtools are opt-in: they used to mount (and open a panel) over the map in
+ * every dev run, which reads as a broken overlay for anyone looking at the app.
+ * Start the dev server with VITE_DEVTOOLS=1 when you actually want them.
+ */
+const DEVTOOLS_ENABLED = import.meta.env.DEV && import.meta.env.VITE_DEVTOOLS === '1';
+
+const TanStackDevtools = DEVTOOLS_ENABLED
   ? lazy(() =>
       import('@tanstack/react-devtools').then((mod) => ({
         default: mod.TanStackDevtools,
@@ -10,7 +16,7 @@ const TanStackDevtools = import.meta.env.DEV
     )
   : () => null;
 
-const ReactQueryDevtoolsPanel = import.meta.env.DEV
+const ReactQueryDevtoolsPanel = DEVTOOLS_ENABLED
   ? lazy(() =>
       import('@tanstack/react-query-devtools').then((mod) => ({
         default: mod.ReactQueryDevtoolsPanel,
@@ -18,7 +24,7 @@ const ReactQueryDevtoolsPanel = import.meta.env.DEV
     )
   : () => null;
 
-const TanStackRouterDevtoolsPanel = import.meta.env.DEV
+const TanStackRouterDevtoolsPanel = DEVTOOLS_ENABLED
   ? lazy(() =>
       import('@tanstack/react-router-devtools').then((mod) => ({
         default: mod.TanStackRouterDevtoolsPanel,
@@ -27,17 +33,10 @@ const TanStackRouterDevtoolsPanel = import.meta.env.DEV
   : () => null;
 
 export const RootComponent = () => {
-  useEffect(() => {
-    toast.success(
-      'Welcome to Valhalla! Global Routing Service - funded by FOSSGIS e.V.',
-      { position: 'bottom-center', duration: 5000, closeButton: true }
-    );
-  }, []);
-
   return (
     <>
       <Outlet />
-      {import.meta.env.DEV && (
+      {DEVTOOLS_ENABLED && (
         <Suspense fallback={null}>
           <TanStackDevtools
             plugins={[
@@ -48,7 +47,7 @@ export const RootComponent = () => {
                     <ReactQueryDevtoolsPanel />
                   </Suspense>
                 ),
-                defaultOpen: true,
+                defaultOpen: false,
               },
               {
                 name: 'TanStack Router',

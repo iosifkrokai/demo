@@ -142,7 +142,7 @@ export const CustomLayerEditor = ({
               MapLibre layer definition
             </a>{' '}
             as JSON. Use{' '}
-            <code className="text-xs bg-muted px-1 rounded">
+            <code className="text-meta bg-muted px-1 rounded">
               valhalla-tiles
             </code>{' '}
             as the source to visualize Valhalla tile attributes.
@@ -150,7 +150,7 @@ export const CustomLayerEditor = ({
         </DialogHeader>
 
         <Textarea
-          className="font-mono text-xs min-h-40 flex-1 resize-none overflow-y-auto"
+          className="font-mono text-meta min-h-40 flex-1 resize-none overflow-y-auto"
           placeholder={EXAMPLE_LAYER}
           value={jsonValue}
           onChange={(e) => {
@@ -160,7 +160,7 @@ export const CustomLayerEditor = ({
           spellCheck={false}
         />
 
-        {error && <p className="text-sm text-destructive">{error}</p>}
+        {error && <p className="text-body text-destructive">{error}</p>}
 
         <DialogFooter>
           <Button variant="outline" onClick={() => handleOpenChange(false)}>

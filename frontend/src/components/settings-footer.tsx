@@ -1,6 +1,6 @@
 export const SettingsFooter = () => {
   return (
-    <small className="text-xs">
+    <small className="text-meta">
       Calculations by{' '}
       <a
         className="font-medium text-primary underline underline-offset-3"

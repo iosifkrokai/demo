@@ -240,10 +240,10 @@ export const TilesControl = () => {
     <div className="flex flex-col gap-3 flex-1 overflow-hidden min-h-0">
       <ValhallaLayersToggle customLayers={customLayers} />
 
-      <div className="flex items-center justify-between gap-3 p-3 bg-muted/50 rounded-md">
+      <div className="flex items-center justify-between gap-3 p-3 bg-muted/50 rounded-lg">
         <Label
           htmlFor="mvt-debug-toggle"
-          className="text-sm font-medium cursor-pointer"
+          className="text-body font-medium cursor-pointer"
         >
           MVT Debug
         </Label>
@@ -271,7 +271,7 @@ export const TilesControl = () => {
             >
               <div
                 className={cn(
-                  'flex items-center gap-2 p-2 bg-muted/50 rounded-md',
+                  'flex items-center gap-2 p-2 bg-muted/50 rounded-lg',
                   isValhallaGroup(sourceLayer) &&
                     'border-l-2 border-l-green-600'
                 )}
@@ -282,8 +282,8 @@ export const TilesControl = () => {
                   ) : (
                     <ChevronRight className="size-4" />
                   )}
-                  <span className="font-medium text-sm">{sourceLayer}</span>
-                  <span className="text-xs text-muted-foreground ml-1">
+                  <span className="font-medium text-body">{sourceLayer}</span>
+                  <span className="text-meta text-muted-foreground ml-1">
                     ({groupLayers.length})
                   </span>
                 </CollapsibleTrigger>
@@ -302,14 +302,14 @@ export const TilesControl = () => {
                   {groupLayers.map((layer) => (
                     <div
                       key={layer.id}
-                      className="flex items-center justify-between p-2 rounded-md hover:bg-muted/30"
+                      className="flex items-center justify-between p-2 rounded-lg hover:bg-muted/30"
                     >
                       <Label
                         htmlFor={layer.id}
-                        className="text-sm cursor-pointer flex-1"
+                        className="text-body cursor-pointer flex-1"
                       >
                         {layer.id}
-                        <span className="text-xs text-muted-foreground ml-2">
+                        <span className="text-meta text-muted-foreground ml-2">
                           ({layer.type})
                         </span>
                       </Label>
@@ -331,11 +331,11 @@ export const TilesControl = () => {
         {groupedLayers.ungrouped.map((layer) => (
           <div
             key={layer.id}
-            className="flex items-center justify-between p-2 rounded-md hover:bg-muted/30"
+            className="flex items-center justify-between p-2 rounded-lg hover:bg-muted/30"
           >
-            <Label htmlFor={layer.id} className="text-sm cursor-pointer flex-1">
+            <Label htmlFor={layer.id} className="text-body cursor-pointer flex-1">
               {layer.id}
-              <span className="text-xs text-muted-foreground ml-2">
+              <span className="text-meta text-muted-foreground ml-2">
                 ({layer.type})
               </span>
             </Label>
@@ -357,20 +357,20 @@ export const TilesControl = () => {
 
         {customLayers.length > 0 && (
           <div className="flex flex-col gap-1">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide px-1 pt-2">
+            <p className="text-meta font-semibold text-muted-foreground uppercase tracking-wide px-1 pt-2">
               Custom Layers
             </p>
             {customLayers.map(({ layer, visible }) => (
               <div
                 key={layer.id}
-                className="flex items-center justify-between p-2 rounded-md hover:bg-muted/30 border-l-2 border-l-blue-500"
+                className="flex items-center justify-between p-2 rounded-lg hover:bg-muted/30 border-l-2 border-l-blue-500"
               >
                 <Label
                   htmlFor={`custom-${layer.id}`}
-                  className="text-sm cursor-pointer flex-1 truncate min-w-0 mr-2"
+                  className="text-body cursor-pointer flex-1 truncate min-w-0 mr-2"
                 >
                   {layer.id}
-                  <span className="text-xs text-muted-foreground ml-2">
+                  <span className="text-meta text-muted-foreground ml-2">
                     ({layer.type})
                   </span>
                 </Label>

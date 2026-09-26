@@ -20,10 +20,132 @@ import { filterProfileSettings } from '@/utils/filter-profile-settings';
 import { getDirectionsLanguage } from '@/utils/directions-language';
 import { useCommonStore, type Profile } from '@/stores/common-store';
 import { useDirectionsStore, type Waypoint } from '@/stores/directions-store';
+import {
+  hasUsableLine,
+  type ProvenancedRoute,
+} from '@/components/map/parts/route-lines';
 import { router } from '@/routes';
 
 const getActiveWaypoints = (waypoints: Waypoint[]): ActiveWaypoint[] =>
   waypoints.flatMap((wp) => wp.geocodeResults.filter((r) => r.selected));
+
+// ── Agent route hand-over (spec 002 §7: one route, one source) ──────────────
+//
+// The backend answers POST /routes/generate with the plan it verified: ordered
+// `points`, a GeoJSON `shape` and the `summary` of exactly that line. Before
+// this, the map threw that geometry away and asked Valhalla for a second one —
+// which can disagree with the stops the backend verified.
+//
+// Whoever performs the request hands the verified line over here (the sidebar
+// does, right after /routes/generate: `setAgentRoute({ shape, summary, costing })`).
+// The map then draws that line and nothing else.
+
+export interface AgentRoute {
+  /** `shape` from the agent: `{ type: 'LineString', coordinates: [[lat, lon], …] }`. */
+  shape?: { type?: string; coordinates?: number[][] } | null;
+  /** `summary` from the agent — the length/time of the verified line itself. */
+  summary?: { length_km?: number | null; time_seconds?: number | null } | null;
+  costing?: string | null;
+}
+
+interface RegisteredAgentRoute extends AgentRoute {
+  /** The stops the line was verified for, so a stale hand-over cannot be used. */
+  stops: [number, number][];
+}
+
+let agentRoute: RegisteredAgentRoute | null = null;
+
+const activeStopCoordinates = (): [number, number][] =>
+  getActiveWaypoints(useDirectionsStore.getState().waypoints).map(
+    (a) => a.displaylnglat
+  );
+
+/**
+ * Hand the agent's verified line over to the map, or `null` to clear it (a
+ * reset, an undo, a hand-built route).
+ */
+export function setAgentRoute(route: AgentRoute | null) {
+  agentRoute = route ? { ...route, stops: activeStopCoordinates() } : null;
+}
+
+/** The agent line, but only while the stops on screen are still the ones it was verified for. */
+const verifiedAgentRoute = (
+  activeWaypoints: ActiveWaypoint[]
+): AgentRoute | null => {
+  if (!agentRoute) return null;
+  const current = activeWaypoints.map((a) => a.displaylnglat);
+  if (current.length !== agentRoute.stops.length) return null;
+  const sameStops = current.every(([lng, lat], i) => {
+    const [agentLng, agentLat] = agentRoute!.stops[i]!;
+    return Math.abs(lng - agentLng) < 1e-6 && Math.abs(lat - agentLat) < 1e-6;
+  });
+  return sameStops ? agentRoute : null;
+};
+
+const agentCoordinates = (route: AgentRoute): number[][] =>
+  (route.shape?.coordinates ?? []).filter(
+    (c) =>
+      Array.isArray(c) &&
+      c.length >= 2 &&
+      Number.isFinite(c[0]) &&
+      Number.isFinite(c[1])
+  );
+
+const boundsOf = (coordinates: number[][]) => {
+  const bounds = { min_lat: 0, min_lon: 0, max_lat: 0, max_lon: 0 };
+  for (const [lat = 0, lon = 0] of coordinates) {
+    bounds.min_lat = Math.min(bounds.min_lat, lat);
+    bounds.max_lat = Math.max(bounds.max_lat, lat);
+    bounds.min_lon = Math.min(bounds.min_lon, lon);
+    bounds.max_lon = Math.max(bounds.max_lon, lon);
+  }
+  return bounds;
+};
+
+/**
+ * The agent's verified line as a route result. `hasVerifiedLine` is false when
+ * the agent could not draw one — the stops still show, the line does not, and
+ * nothing is substituted for it.
+ */
+function buildAgentRoute(route: AgentRoute): ProvenancedRoute {
+  const decodedGeometry = agentCoordinates(route);
+  const hasGeometry = decodedGeometry.length > 1;
+
+  return {
+    id: 'agent_route',
+    // The agent answers with one ordered line, not alternatives.
+    trip: {
+      locations: [],
+      legs: [],
+      summary: {
+        ...boundsOf(decodedGeometry),
+        has_time_restrictions: false,
+        has_toll: false,
+        has_highway: false,
+        has_ferry: false,
+        // The summary of the line that is on screen, in the units the rest of
+        // the app expects: kilometres and seconds.
+        length: route.summary?.length_km ?? 0,
+        time: route.summary?.time_seconds ?? 0,
+        cost: 0,
+      },
+      status: hasGeometry ? 0 : -1,
+      status_message: hasGeometry ? 'ok' : 'no verified geometry',
+      units: 'km',
+      language: 'ru',
+    },
+    decodedGeometry,
+    source: 'agent',
+    hasVerifiedLine: hasGeometry,
+  };
+}
+
+/** A line this app asked Valhalla for: only ever for a hand-built route. */
+const asClientRoute = (data: ParsedDirectionsGeometry): ProvenancedRoute => ({
+  ...data,
+  source: 'client',
+  hasVerifiedLine: true,
+});
 
 async function requestRoute(
   activeWaypoints: ActiveWaypoint[],
@@ -120,6 +242,10 @@ async function requestRoute(
  * request at 20 locations, so a longer list (a region-wide plan from the agent)
  * is fetched as chained chunks and merged into one response — otherwise the
  * stops would appear on the map with no line between them.
+ *
+ * That chunking is a client-side concern and applies to routes the tourist
+ * builds by hand. An agent route is not re-routed here at all: the line the
+ * backend verified is the line that gets drawn.
  */
 async function fetchDirections() {
   const waypoints = useDirectionsStore.getState().waypoints;
@@ -129,6 +255,23 @@ async function fetchDirections() {
   const activeWaypoints = getActiveWaypoints(waypoints);
   if (activeWaypoints.length < 2) {
     return null;
+  }
+
+  // The verified agent line wins, whenever one was handed over for exactly
+  // these stops. No second geometry, no second costing, no disagreement with
+  // the plan the backend checked.
+  const agentRoute = verifiedAgentRoute(activeWaypoints);
+  if (agentRoute) {
+    const agentResult = buildAgentRoute(agentRoute);
+    if (!agentResult.hasVerifiedLine) {
+      toast.warning('Нет проверенной линии', {
+        description:
+          'Агент вернул остановки без геометрии — показываем точки без линии.',
+        position: 'bottom-center',
+        closeButton: true,
+      });
+    }
+    return agentResult;
   }
 
   const language = getDirectionsLanguage();
@@ -148,6 +291,8 @@ async function fetchDirections() {
       length += part.trip.summary.length;
       time += part.trip.summary.time;
     }
+    // The merged summary is the sum of the legs that were actually fetched, so
+    // it describes the line on screen — including any leg Valhalla refused.
     return {
       ...parts[0],
       trip: {
@@ -157,17 +302,21 @@ async function fetchDirections() {
         warnings: [],
       },
       decodedGeometry,
-    } as unknown as ParsedDirectionsGeometry;
+      source: 'client',
+      hasVerifiedLine: true,
+    } as unknown as ProvenancedRoute;
   };
 
   if (chunks.length === 1) {
     try {
-      return await requestRoute(
-        activeWaypoints,
-        currentProfile,
-        rawSettings,
-        dateTime,
-        language
+      return asClientRoute(
+        await requestRoute(
+          activeWaypoints,
+          currentProfile,
+          rawSettings,
+          dateTime,
+          language
+        )
       );
     } catch (error) {
       // A single stop can sit on an edge island — a fort in a field, a gated
@@ -222,7 +371,11 @@ export function useDirectionsQuery() {
         const data = await fetchDirections();
         if (data) {
           receiveRouteResults({ data });
-          zoomTo(data.decodedGeometry);
+          // Nothing to fit the bounds to when the agent route carries no line:
+          // leave the map where the tourist put it, with the stops on it.
+          if (hasUsableLine(data)) {
+            zoomTo(data.decodedGeometry);
+          }
         }
         return data;
       } catch (error) {

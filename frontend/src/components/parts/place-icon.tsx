@@ -52,7 +52,7 @@ export const PlaceIcon = ({ category, className }: PlaceIconProps) => {
     <span
       aria-hidden="true"
       title={category ?? undefined}
-      className={cn('shrink-0 text-[15px] leading-none', className)}
+      className={cn('shrink-0 text-body leading-none', className)}
     >
       {emoji}
     </span>

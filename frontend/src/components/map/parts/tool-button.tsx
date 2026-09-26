@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { cn } from '@/lib/utils';
 
 interface ToolButtonProps {
   title: string;
@@ -27,14 +28,17 @@ export function ToolButton({
       onClick={onClick}
       disabled={disabled}
       data-testid={testId}
-      className={className}
+      className={cn(
+        'outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#ff385c]',
+        className
+      )}
       style={{
-        width: '42px',
-        height: '42px',
-        backgroundColor: active ? '#e0f2fe' : '#ffffff',
+        width: '44px',
+        height: '44px',
+        backgroundColor: active ? '#ffe4ea' : '#ffffff',
         borderRadius: '4px',
         boxShadow: active
-          ? '0 0 0 2px #3b82f6'
+          ? '0 0 0 2px #ff385c'
           : '0 0 0 2px rgba(0,0,0,0.1)',
         border: 'none',
         cursor: disabled ? 'default' : 'pointer',

@@ -100,10 +100,10 @@ export const ValhallaLayersToggle = ({
   }
 
   return (
-    <div className="flex items-center justify-between gap-3 p-3 bg-muted/50 rounded-md">
+    <div className="flex items-center justify-between gap-3 p-3 bg-muted/50 rounded-lg">
       <Label
         htmlFor="valhalla-layers-toggle"
-        className="text-sm font-medium cursor-pointer"
+        className="text-body font-medium cursor-pointer"
       >
         Show Valhalla layers
       </Label>

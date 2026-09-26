@@ -117,4 +117,22 @@ describe('ToolButton', () => {
 
     expect(onClick).not.toHaveBeenCalled();
   });
+
+  it('should expose a coral focus-visible outline affordance', () => {
+    render(
+      <ToolButton title="Test" icon={<span>icon</span>} onClick={vi.fn()} />
+    );
+    const button = screen.getByRole('button', { name: 'Test' });
+    expect(button.className).toMatch(/focus-visible:outline/);
+    expect(button.className).toContain('#ff385c');
+  });
+
+  it('should have a hit area of at least 44x44 CSS pixels', () => {
+    render(
+      <ToolButton title="Test" icon={<span>icon</span>} onClick={vi.fn()} />
+    );
+    const button = screen.getByRole('button', { name: 'Test' });
+    expect(button.style.width).toBe('44px');
+    expect(button.style.height).toBe('44px');
+  });
 });

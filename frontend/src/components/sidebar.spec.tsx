@@ -5,6 +5,11 @@ import userEvent from '@testing-library/user-event';
 const mockStoreState = vi.hoisted(() => ({
   waypoints: [] as Record<string, unknown>[],
   placeDetails: {} as Record<string, unknown>,
+  // The guide (W6) reads its line from here; the real store defaults to this.
+  results: { data: null, show: {} } as {
+    data: unknown;
+    show: Record<string, boolean>;
+  },
   routeHistory: [] as unknown[],
   refinementLog: [] as unknown[],
   routeSnapshots: [] as unknown[],
@@ -139,6 +144,7 @@ describe('Sidebar', () => {
     // real one uses, and a test that swapped the shape must not leak it.
     mockStoreState.waypoints = [];
     mockStoreState.placeDetails = {};
+    mockStoreState.results = { data: null, show: {} };
     mockStoreState.refinementLog = [];
     mockStoreState.routeSnapshots = [];
     mockStoreState.excludedPlaceIds = [];
@@ -410,7 +416,7 @@ describe('Sidebar', () => {
     ).toBeInTheDocument();
     // the ask field says what to type (DESIGN.md)
     expect(
-      screen.getByPlaceholderText('Что хотите посмотреть? …')
+      screen.getByPlaceholderText('Что хотите посмотреть?')
     ).toBeInTheDocument();
     for (const hint of ['замки', 'костёлы', 'монастыри', 'где поесть']) {
       expect(screen.getByRole('button', { name: hint })).toBeInTheDocument();
@@ -528,6 +534,77 @@ describe('Sidebar', () => {
     );
   });
 
+  it('announces route-building progress politely and errors as alerts', async () => {
+    let fail: (reason?: unknown) => void = () => undefined;
+    // No parameters on purpose: the test only needs the pending promise it can reject.
+    const fetchMock = vi.fn(
+      () =>
+        new Promise((_resolve, reject) => {
+          fail = reject;
+        })
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const user = userEvent.setup({ delay: null });
+    render(<Sidebar />);
+
+    await user.type(askField(), 'замки Гродно');
+    await user.click(buildButton());
+
+    // Busy label is mirrored into a polite live region for screen readers
+    const announcement = await screen.findByText('Строю маршрут…', {
+      selector: '[aria-live="polite"]',
+    });
+    expect(announcement).toHaveAttribute('aria-live', 'polite');
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    fail(new Error('агент недоступен'));
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'агент недоступен'
+    );
+  });
+
+  it('shows a Russian network hint instead of browser “Failed to fetch”', async () => {
+    const fetchMock = vi.fn(async () => {
+      throw new TypeError('Failed to fetch');
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const user = userEvent.setup({ delay: null });
+    render(<Sidebar />);
+
+    await user.type(askField(), 'замки Гродно');
+    await user.click(buildButton());
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'нет связи с агентом — проверьте сеть и попробуйте ещё раз'
+    );
+    expect(screen.queryByText(/Failed to fetch/i)).toBeNull();
+  });
+
+  it('shows a Russian HTTP error with the status, not raw JSON', async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: false,
+      status: 503,
+      text: async () =>
+        JSON.stringify({ detail: 'upstream Valhalla timed out' }),
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const user = userEvent.setup({ delay: null });
+    render(<Sidebar />);
+
+    await user.type(askField(), 'замки Гродно');
+    await user.click(buildButton());
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(
+      'агент ответил ошибкой 503 — попробуйте ещё раз'
+    );
+    expect(alert).not.toHaveTextContent('upstream Valhalla');
+    expect(alert).not.toHaveTextContent('detail');
+  });
+
   it('lists the stops and the way out of a refinement once a route exists', async () => {
     const { fetchMock } = agentFetch();
     mockStoreState.waypoints = [
@@ -571,5 +648,346 @@ describe('Sidebar', () => {
     expect(
       screen.getByRole('button', { name: 'свернуть панель' })
     ).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('warns amber when the query asks for a toilet but none is in the route', async () => {
+    const { fetchMock } = agentFetch();
+
+    const user = userEvent.setup({ delay: null });
+    render(<Sidebar />);
+
+    await user.type(askField(), 'замки и санузел');
+    await user.click(buildButton());
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+
+    // Route still lands: warning is non-blocking, no fabricated toilet stop.
+    expect(
+      await screen.findByTestId('toilet-missing-warning')
+    ).toHaveTextContent(
+      'В базе не нашлось туалетов — маршрут построен без них.'
+    );
+    expect(screen.getByTestId('toilet-missing-warning')).toHaveAttribute(
+      'role',
+      'status'
+    );
+    const planned = mockSetWaypoint.mock.calls.at(-1)?.[0] as Array<{
+      placeId?: number;
+      userInput?: string;
+    }>;
+    expect(planned).toHaveLength(3); // me + 2 agent stops, no invented toilet
+    expect(planned?.map((w) => w.userInput)).toEqual([
+      'Моё местоположение',
+      'Старый замок',
+      'Новый замок',
+    ]);
+  });
+
+  it('skips the toilet warning when a returned stop has category туалет', async () => {
+    const withToilet = {
+      ...AGENT_ANSWER,
+      points: [
+        ...AGENT_ANSWER.points,
+        {
+          id: 99,
+          name: 'Туалет у замка',
+          category: 'туалет',
+          lat: 53.6775,
+          lon: 23.823,
+          visit_minutes: 5,
+        },
+      ],
+    };
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => withToilet,
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const user = userEvent.setup({ delay: null });
+    render(<Sidebar />);
+
+    await user.type(askField(), 'замки и туалет');
+    await user.click(buildButton());
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+
+    await waitFor(() =>
+      expect(mockSetWaypoint.mock.calls.length).toBeGreaterThanOrEqual(2)
+    );
+    expect(screen.queryByTestId('toilet-missing-warning')).toBeNull();
+    expect(screen.queryByText(/В базе не нашлось туалетов/i)).toBeNull();
+  });
+
+  it('does not warn about missing toilets for a generic sightseeing query', async () => {
+    // AGENT_ANSWER stops are замок/дворец — no туалет category — but the ask
+    // never mentioned toilet/санузел, so the warning must stay dark.
+    const { fetchMock } = agentFetch();
+
+    const user = userEvent.setup({ delay: null });
+    render(<Sidebar />);
+
+    await user.type(askField(), 'замки и дворцы Гродно');
+    await user.click(buildButton());
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+
+    await waitFor(() =>
+      expect(mockSetWaypoint.mock.calls.length).toBeGreaterThanOrEqual(2)
+    );
+    expect(screen.queryByTestId('toilet-missing-warning')).toBeNull();
+    expect(screen.queryByText(/В базе не нашлось туалетов/i)).toBeNull();
+  });
+
+  it('shows the error alert, not the toilet warning, when generate fails', async () => {
+    // Boundary: a toilet ask must not leak the amber "missing toilet" status
+    // when /routes/generate itself fails — only the normal error alert.
+    const fetchMock = vi.fn(async () => ({
+      ok: false,
+      status: 503,
+      text: async () =>
+        JSON.stringify({ detail: 'upstream Valhalla timed out' }),
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const user = userEvent.setup({ delay: null });
+    render(<Sidebar />);
+
+    await user.type(askField(), 'замки и туалет');
+    await user.click(buildButton());
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(
+      'агент ответил ошибкой 503 — попробуйте ещё раз'
+    );
+    expect(screen.queryByTestId('toilet-missing-warning')).toBeNull();
+    expect(screen.queryByText(/В базе не нашлось туалетов/i)).toBeNull();
+  });
+
+  // ── Advanced filters (spec 002, W5) ────────────────────────────────────────
+
+  /** The advanced block is behind «ещё фильтры» — open it the way a user does. */
+  const openAdvanced = async (user: ReturnType<typeof userEvent.setup>) => {
+    const toggle = screen.getByTestId('more-filters');
+    if (toggle.getAttribute('aria-expanded') !== 'true') {
+      await user.click(toggle);
+    }
+    return screen.getByTestId('advanced-filters');
+  };
+
+  it('keeps the advanced filters closed until «ещё фильтры» is asked for', async () => {
+    const user = userEvent.setup({ delay: null });
+    render(<Sidebar />);
+
+    // Progressive disclosure: time and transport are visible, the rest is not.
+    expect(screen.getByRole('button', { name: '2 ч' })).toBeInTheDocument();
+    expect(screen.getByTestId('transport-car')).toBeInTheDocument();
+    expect(screen.queryByTestId('advanced-filters')).toBeNull();
+    expect(screen.getByTestId('more-filters')).toHaveAttribute(
+      'aria-expanded',
+      'false'
+    );
+
+    await user.click(screen.getByTestId('more-filters'));
+    expect(screen.getByTestId('advanced-filters')).toBeInTheDocument();
+    expect(screen.getByTestId('more-filters')).toHaveAttribute(
+      'aria-expanded',
+      'true'
+    );
+    // the new controls live inside it
+    expect(screen.getByTestId('party-children-inc')).toBeInTheDocument();
+    expect(screen.getByTestId('amenity-туалет-hard')).toBeInTheDocument();
+    expect(screen.getByTestId('result-mode-catalogue')).toBeInTheDocument();
+  });
+
+  it('sends nothing for the new fields while they are left alone', async () => {
+    const { fetchMock, body } = agentFetch();
+
+    const user = userEvent.setup({ delay: null });
+    render(<Sidebar />);
+
+    await user.type(askField(), 'замки Гродно');
+    await user.click(buildButton());
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+
+    // "send nothing when not chosen" — as with time and transport.
+    for (const field of [
+      'party_adults',
+      'party_children',
+      'party_children_ages',
+      'hard_services',
+      'interests',
+      'avoid',
+      'result_mode',
+      'round_trip',
+      'mobility',
+      'locale',
+    ]) {
+      expect(field in body(0)).toBe(false);
+    }
+  });
+
+  it('sends the party, mandatory amenities, interests, mode and round trip', async () => {
+    const { fetchMock, body } = agentFetch();
+
+    const user = userEvent.setup({ delay: null });
+    render(<Sidebar />);
+
+    await openAdvanced(user);
+    // 2 adults, 1 child, ages named by hand (never inferred)
+    await user.click(screen.getByTestId('party-adults-inc'));
+    await user.click(screen.getByTestId('party-adults-inc'));
+    await user.click(screen.getByTestId('party-children-inc'));
+    await user.type(screen.getByTestId('children-ages'), '4, 7');
+    // туалет обязателен, кафе желательно, интерес — замки
+    await user.click(screen.getByTestId('amenity-туалет-hard'));
+    await user.click(screen.getByTestId('amenity-кафе-soft'));
+    await user.click(screen.getByTestId('interest-замок'));
+    await user.click(screen.getByTestId('avoid-кладбище'));
+    await user.click(screen.getByTestId('result-mode-catalogue'));
+    await user.click(screen.getByTestId('round-trip'));
+
+    await user.type(askField(), 'старый Гродно');
+    await user.click(buildButton());
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+
+    expect(body(0).party_adults).toBe(2);
+    expect(body(0).party_children).toBe(1);
+    expect(body(0).party_children_ages).toEqual([4, 7]);
+    expect(body(0).hard_services).toEqual(['туалет']);
+    // a soft amenity joins the interests it is: one list to the agent
+    expect(body(0).interests).toEqual(['замок', 'кафе']);
+    expect(body(0).avoid).toEqual(['кладбище']);
+    expect(body(0).result_mode).toBe('catalogue');
+    expect(body(0).round_trip).toBe(true);
+    expect(body(0).query).toBe('старый Гродно');
+  });
+
+  it('steps the party back to unset instead of inventing a group', async () => {
+    const { fetchMock, body } = agentFetch();
+
+    const user = userEvent.setup({ delay: null });
+    render(<Sidebar />);
+
+    await openAdvanced(user);
+    await user.click(screen.getByTestId('party-children-inc'));
+    expect(screen.getByTestId('party-children-value')).toHaveTextContent('1');
+    // stepping below one clears the count: "not said" is not "0 children"
+    await user.click(screen.getByTestId('party-children-dec'));
+    expect(screen.getByTestId('party-children-value')).toHaveTextContent('—');
+
+    await user.type(askField(), 'замки Гродно');
+    await user.click(buildButton());
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect('party_children' in body(0)).toBe(false);
+  });
+
+  it('summarises the chosen filters and says they outrank the text query', async () => {
+    const user = userEvent.setup({ delay: null });
+    render(<Sidebar />);
+
+    // nothing chosen yet → no summary to show
+    expect(screen.queryByTestId('filters-summary')).toBeNull();
+
+    await openAdvanced(user);
+    await user.click(screen.getByTestId('amenity-туалет-hard'));
+    await user.click(screen.getByTestId('result-mode-catalogue'));
+    await user.click(screen.getByTestId('more-filters')); // close again
+    expect(screen.queryByTestId('advanced-filters')).toBeNull();
+
+    // the summary stays visible with the panel closed
+    const summary = screen.getByTestId('filters-summary');
+    expect(summary).toHaveTextContent('обязательно: туалет');
+    expect(summary).toHaveTextContent('каталог мест');
+
+    // a conflict with the typed request is shown, not silently resolved
+    await user.type(askField(), 'замки без туалета');
+    expect(screen.getByTestId('filters-precedence')).toHaveTextContent(
+      /поверх текста запроса/
+    );
+  });
+
+  it('keeps the chosen filters on a refinement turn', async () => {
+    const sentBodies: string[] = [];
+    const fetchMock = vi.fn(async (_url: string, init: RequestInit) => {
+      sentBodies.push(String(init.body));
+      return { ok: true, json: async () => AGENT_ANSWER };
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const user = userEvent.setup({ delay: null });
+    render(<Sidebar />);
+
+    await openAdvanced(user);
+    await user.click(screen.getByTestId('party-children-inc'));
+    await user.click(screen.getByTestId('amenity-туалет-hard'));
+    await user.click(screen.getByTestId('result-mode-catalogue'));
+
+    await user.type(askField(), 'музеи Гродно');
+    await user.click(buildButton());
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(JSON.parse(sentBodies[0]!).hard_services).toEqual(['туалет']);
+
+    // From here the route exists: the second submit is a refinement.
+    mockGetState.mockReturnValue({
+      waypoints: [
+        {
+          id: 'me',
+          userInput: 'моё местоположение',
+          geocodeResults: [
+            {
+              title: 'me',
+              sourcelnglat: [23.8, 53.7],
+              displaylnglat: [23.8, 53.7],
+            },
+          ],
+        },
+        {
+          id: '0',
+          userInput: 'Старый замок',
+          placeId: 11,
+          geocodeResults: [
+            {
+              title: 'Старый замок',
+              selected: true,
+              sourcelnglat: [23.8222, 53.6772],
+              displaylnglat: [23.8222, 53.6772],
+            },
+          ],
+        },
+      ],
+      refinementLog: [],
+      excludedPlaceIds: [],
+      snapshotRoute: vi.fn(),
+    });
+
+    await user.type(askField(), 'добавь кофейню');
+    await user.click(buildButton());
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+
+    const body = JSON.parse(sentBodies[1]!);
+    // the refinement carries the route context AND the surviving filters
+    expect(body.context).toBeDefined();
+    expect(body.party_children).toBe(1);
+    expect(body.hard_services).toEqual(['туалет']);
+    expect(body.result_mode).toBe('catalogue');
+  });
+
+  it('warns about a missing toilet when «туалет» was marked mandatory', async () => {
+    const { fetchMock } = agentFetch();
+
+    const user = userEvent.setup({ delay: null });
+    render(<Sidebar />);
+
+    await openAdvanced(user);
+    await user.click(screen.getByTestId('amenity-туалет-hard'));
+
+    // the text never mentions a toilet — the explicit filter does
+    await user.type(askField(), 'замки Гродно');
+    await user.click(buildButton());
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+
+    expect(
+      await screen.findByTestId('toilet-missing-warning')
+    ).toHaveTextContent(
+      'В базе не нашлось туалетов — маршрут построен без них.'
+    );
   });
 });

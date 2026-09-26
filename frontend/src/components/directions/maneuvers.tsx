@@ -49,7 +49,7 @@ export const Maneuvers = ({ legs, index }: ManeuversProps) => {
         leg.maneuvers.map((mnv, j) => (
           <React.Fragment key={j}>
             <div
-              className="flex border justify-between rounded-md p-2 bg-background items-center"
+              className="flex border justify-between rounded-lg p-2 bg-background items-center"
               onMouseEnter={() =>
                 highlightMnv(
                   startIndices[i]! + mnv.begin_shape_index,

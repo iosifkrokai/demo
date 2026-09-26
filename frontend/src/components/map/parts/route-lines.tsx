@@ -5,6 +5,62 @@ import { routeObjects } from '../constants';
 import type { Feature, FeatureCollection, LineString } from 'geojson';
 import type { ParsedDirectionsGeometry } from '@/components/types';
 
+/**
+ * Where the line on screen came from (spec 002 §7 — one route, one source).
+ *
+ * `agent`  — the geometry the backend verified for the plan it returned. It is
+ *            the authoritative line: never a second, independently routed one.
+ * `client` — this webapp's own Valhalla `/route` request, used only for a route
+ *            the tourist builds by hand (map click, typed address, dragged stop).
+ */
+export type RouteProvenance = 'agent' | 'client';
+
+/**
+ * A route result plus the provenance of the geometry it carries.
+ *
+ * Declared here rather than in `components/types.ts` — that file belongs to
+ * another workstream; this is the map-owned definition of what it draws.
+ */
+export interface ProvenancedRoute extends ParsedDirectionsGeometry {
+  source: RouteProvenance;
+  /**
+   * False when an agent route is on screen but arrived without usable geometry:
+   * the line is then deliberately absent instead of being silently replaced by
+   * a client-side one (spec 002 §4.4 — an empty shape is not navigation).
+   */
+  hasVerifiedLine: boolean;
+}
+
+/** Provenance of a stored result. A result without one predates the flag: client. */
+export const routeProvenance = (
+  data: ParsedDirectionsGeometry | null | undefined
+): RouteProvenance | null => {
+  if (data == null) return null;
+  return (data as Partial<ProvenancedRoute>).source ?? 'client';
+};
+
+/**
+ * True when the stored result actually has a line to draw: at least two points,
+ * and — for an agent route — geometry the backend actually produced.
+ */
+export const hasUsableLine = (
+  data: ParsedDirectionsGeometry | null | undefined
+): boolean => {
+  if (data == null) return false;
+  if ((data as Partial<ProvenancedRoute>).hasVerifiedLine === false) {
+    return false;
+  }
+  return (data.decodedGeometry?.length ?? 0) > 1;
+};
+
+/**
+ * An agent route is on screen but its verified line is not: the honest "no line"
+ * state. The map says so instead of quietly drawing a different geometry.
+ */
+export const isMissingVerifiedLine = (
+  data: ParsedDirectionsGeometry | null | undefined
+): boolean => routeProvenance(data) === 'agent' && !hasUsableLine(data);
+
 export function RouteLines() {
   const directionResults = useDirectionsStore((state) => state.results);
   const directionsSuccessful = useDirectionsStore((state) => state.successful);
@@ -18,7 +74,13 @@ export function RouteLines() {
     const hasNoData = Object.keys(directionResults.data).length === 0;
     if (hasNoData) return null;
 
+    // No usable line: draw nothing. For an agent route this is the honest
+    // "no verified line" state — the map states it in words instead of putting a
+    // second, differently routed line on screen.
+    if (!hasUsableLine(directionResults.data)) return null;
+
     const response = directionResults.data;
+    const provenance = routeProvenance(response);
     const showRoutes = directionResults.show || {};
     const features: Feature<LineString>[] = [];
 
@@ -41,6 +103,7 @@ export function RouteLines() {
             type: 'alternate',
             routeIndex: i + 1,
             summary,
+            provenance,
           },
         });
       });
@@ -62,6 +125,7 @@ export function RouteLines() {
           type: 'main',
           routeIndex: 0,
           summary,
+          provenance,
         },
       });
     }

@@ -138,7 +138,7 @@ export const Waypoints = () => {
         icon={Settings}
         open={settingsOpen}
         onOpenChange={setSettingsOpen}
-        className="bg-muted/60 rounded-md px-3 py-2"
+        className="bg-muted/60 rounded-lg px-3 py-2"
       >
         <SliderSetting
           id="maxRange"

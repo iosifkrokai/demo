@@ -168,7 +168,7 @@ export const WaypointList = ({ onChanged }: Props) => {
                 />
               ) : (
                 <span
-                  className="relative flex h-6 w-6 items-center justify-center rounded-full bg-muted text-[11px] font-semibold text-foreground"
+                  className="relative flex h-6 w-6 items-center justify-center rounded-full bg-muted text-badge font-semibold text-foreground"
                   title={`остановка ${stopNumber}`}
                 >
                   {stopNumber}
@@ -178,12 +178,12 @@ export const WaypointList = ({ onChanged }: Props) => {
 
             <PlaceIcon category={details?.category} />
 
-            <span className="min-w-0 flex-1 truncate text-[14px]" title={name}>
+            <span className="min-w-0 flex-1 truncate text-body" title={name}>
               {name}
             </span>
 
             {visitMinutes != null && (
-              <span className="shrink-0 text-[12px] text-muted-foreground">
+              <span className="shrink-0 text-meta text-muted-foreground">
                 ~{visitMinutes} мин
               </span>
             )}

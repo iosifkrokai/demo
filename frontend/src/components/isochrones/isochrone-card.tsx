@@ -48,7 +48,7 @@ export const IsochroneCard = ({ data, showOnMap }: IsochronesCardProps) => {
   return (
     <div
       className={cn(
-        'flex flex-col gap-2.5 border rounded-md p-2',
+        'flex flex-col gap-2.5 border rounded-lg p-2',
         'focus-within:bg-muted/50 hover:bg-muted/50'
       )}
     >
@@ -104,7 +104,7 @@ export const IsochroneCard = ({ data, showOnMap }: IsochronesCardProps) => {
               .filter((feature) => !feature.properties?.type)
               .map((feature, key) => {
                 return (
-                  <div className="flex gap-3 border rounded-md p-2" key={key}>
+                  <div className="flex gap-3 border rounded-lg p-2" key={key}>
                     <MetricItem
                       variant="outline"
                       icon={ClockIcon}

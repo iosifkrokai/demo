@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { Dispatch, SetStateAction } from 'react';
 import {
   Bike,
   Car,
@@ -10,10 +11,12 @@ import {
   Loader2,
   LocateFixed,
   MapPin,
+  Minus,
   Plus,
   RotateCcw,
   Route as RouteIcon,
   Search,
+  SlidersHorizontal,
   Sparkles,
   Trash2,
   Undo2,
@@ -45,6 +48,7 @@ import { Chip } from './parts/chip';
 import { Segmented, type SegmentedItem } from './parts/segmented';
 import { StatTile, StatTiles } from './parts/stat-tiles';
 import { StopsSkeleton, SummarySkeleton } from './parts/skeletons';
+import type { AmenityStrength, ResultMode } from './types';
 import {
   PANEL_SHEET_CLASS,
   SHEET_SNAP_CLASS,
@@ -121,10 +125,103 @@ const MODES: SegmentedItem<'plan' | 'guide'>[] = [
 ];
 
 /** Placeholder of the ask field. Also what the empty state tells the user. */
-const QUERY_PLACEHOLDER = 'Что хотите посмотреть? …';
+const QUERY_PLACEHOLDER = 'Что хотите посмотреть?';
 
 /** One-tap starters: they fill the ask field, the tourist decides when to go. */
 const HINT_CHIPS = ['замки', 'костёлы', 'монастыри', 'где поесть'];
+
+/**
+ * Options of the advanced filters. `code` is the canonical backend category
+ * code (backend/agent/constants.CATEGORIES) — the value that goes to the
+ * agent. The Russian label lives here only so W7 can centralize all strings
+ * later; the sidebar keeps no translation dictionary of its own.
+ */
+interface FilterOption {
+  code: string;
+  label: string;
+}
+
+/** Result type: a ready itinerary, or a grouped catalogue to choose from. */
+const RESULT_MODE_OPTIONS: SegmentedItem<ResultMode>[] = [
+  { value: 'route', label: 'маршрут' },
+  { value: 'catalogue', label: 'каталог' },
+];
+
+/** Themes: what the tourist wants more of (soft — they never force a detour). */
+const INTEREST_OPTIONS: readonly FilterOption[] = [
+  { code: 'замок', label: 'замки' },
+  { code: 'костёл', label: 'костёлы' },
+  { code: 'церковь', label: 'церкви' },
+  { code: 'монастырь', label: 'монастыри' },
+  { code: 'музей', label: 'музеи' },
+  { code: 'усадьба', label: 'усадьбы' },
+  { code: 'парк', label: 'парки' },
+  { code: 'памятник', label: 'памятники' },
+];
+
+/**
+ * Amenities a walk may need, each with a strength: «обязательно» goes out as a
+ * hard service the route must serve, «желательно» as a soft interest.
+ */
+const AMENITY_OPTIONS: readonly FilterOption[] = [
+  { code: 'туалет', label: 'туалет' },
+  { code: 'кафе', label: 'кафе / перерыв' },
+];
+
+/** Categories to keep out of the route. */
+const AVOID_OPTIONS: readonly FilterOption[] = [
+  { code: 'кладбище', label: 'кладбища' },
+  { code: 'инфраструктура', label: 'инфраструктура' },
+  { code: 'гостиница', label: 'гостиницы' },
+];
+
+const ALL_FILTER_OPTIONS: readonly FilterOption[] = [
+  ...INTEREST_OPTIONS,
+  ...AMENITY_OPTIONS,
+  ...AVOID_OPTIONS,
+];
+
+const filterLabel = (code: string): string =>
+  ALL_FILTER_OPTIONS.find((o) => o.code === code)?.label ?? code;
+
+/**
+ * Ages the tourist actually typed ("4, 7" → [4, 7]). Free text is parsed for
+ * digits only: an age nobody named stays absent, it is never invented (spec §7,
+ * "возраст только если известен").
+ */
+const parseChildAges = (raw: string): number[] =>
+  raw
+    .split(/[^0-9]+/)
+    .map((part) => Number.parseInt(part, 10))
+    .filter((age) => Number.isInteger(age) && age >= 0 && age <= 18);
+
+/**
+ * Map a /routes/generate failure to a short Russian line the tourist can act on.
+ * Client-thrown Russian messages (validation) pass through unchanged; browser
+ * English like "Failed to fetch" and raw backend JSON bodies do not.
+ */
+const routeSubmitErrorText = (err: unknown): string => {
+  if (!(err instanceof Error)) return String(err);
+  const msg = err.message;
+  // fetch() network failures: Chromium "Failed to fetch", Firefox NetworkError,
+  // Safari "Load failed". TypeError is the usual name for those.
+  if (
+    msg === 'Failed to fetch' ||
+    msg === 'Load failed' ||
+    msg === 'NetworkError when attempting to fetch resource.' ||
+    err.name === 'TypeError'
+  ) {
+    return 'нет связи с агентом — проверьте сеть и попробуйте ещё раз';
+  }
+  return msg;
+};
+
+/** The tourist asked for a toilet stop — RU туалет / санузел, or English toilet. */
+const queryAsksForToilet = (q: string): boolean =>
+  /туалет|санузел|toilet/i.test(q);
+
+const TOILET_MISSING_WARNING =
+  'В базе не нашлось туалетов — маршрут построен без них.';
 
 const fmtMin = (m: number) => {
   const mins = Math.max(0, Math.round(m));
@@ -198,6 +295,24 @@ export const Sidebar = () => {
   // or the costing the agent answers with — is a real constraint.
   const [transport, setTransport] = useState<'' | Profile>('');
   const [mirroredCosting, setMirroredCosting] = useState<Profile | null>(null);
+
+  // ── Advanced filters (spec 002) ──────────────────────────────────────────
+  // Progressive disclosure: the panel stays closed until asked for, and every
+  // value starts "not chosen" so nothing is invented for the tourist.
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  // null = the tourist did not say. Adults/children are quantities, not ages:
+  // an age only travels when it was typed (see parseChildAges).
+  const [partyAdults, setPartyAdults] = useState<number | null>(null);
+  const [partyChildren, setPartyChildren] = useState<number | null>(null);
+  const [childrenAgesText, setChildrenAgesText] = useState('');
+  // «обязательно» → hard_services, «желательно» → interests. Absent = off.
+  const [amenities, setAmenities] = useState<Record<string, AmenityStrength>>(
+    {}
+  );
+  const [interests, setInterests] = useState<string[]>([]);
+  const [avoid, setAvoid] = useState<string[]>([]);
+  const [resultMode, setResultMode] = useState<ResultMode>('route');
+  const [roundTrip, setRoundTrip] = useState(false);
   const [me, setMe] = useState<{ lat: number; lon: number } | null>(null);
   const [geoState, setGeoState] = useState<
     'idle' | 'locating' | 'ok' | 'denied'
@@ -205,7 +320,7 @@ export const Sidebar = () => {
   const [geoReason, setGeoReason] = useState('');
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<{
-    kind: 'ok' | 'err';
+    kind: 'ok' | 'err' | 'warn';
     text: string;
   } | null>(null);
   const [summary, setSummary] = useState<{
@@ -353,6 +468,82 @@ export const Sidebar = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Ages the tourist named, in order, deduplicated. Empty = unknown, and then
+  // `party_children_ages` is not sent at all.
+  const childrenAges = useMemo(
+    () => [...new Set(parseChildAges(childrenAgesText))],
+    [childrenAgesText]
+  );
+  const hardServices = useMemo(
+    () =>
+      AMENITY_OPTIONS.filter((o) => amenities[o.code] === 'hard').map(
+        (o) => o.code
+      ),
+    [amenities]
+  );
+  const softAmenities = useMemo(
+    () =>
+      AMENITY_OPTIONS.filter((o) => amenities[o.code] === 'soft').map(
+        (o) => o.code
+      ),
+    [amenities]
+  );
+  // Soft amenities are interests like any theme: one list goes to the agent.
+  const interestCodes = useMemo(
+    () => [...interests, ...softAmenities],
+    [interests, softAmenities]
+  );
+
+  /**
+   * One line per condition the tourist actually set — the summary the panel
+   * shows so no filter is applied invisibly. Its length is also the badge on
+   * «ещё фильтры».
+   */
+  const filterSummary = useMemo(() => {
+    const out: string[] = [];
+    if (partyAdults != null) out.push(`${partyAdults} взр.`);
+    if (partyChildren != null)
+      out.push(partyChildren === 1 ? '1 ребёнок' : `${partyChildren} детей`);
+    if (childrenAges.length > 0) out.push(`возраст ${childrenAges.join(', ')}`);
+    for (const code of hardServices)
+      out.push(`обязательно: ${filterLabel(code)}`);
+    for (const code of softAmenities)
+      out.push(`желательно: ${filterLabel(code)}`);
+    for (const code of interests) out.push(`интерес: ${filterLabel(code)}`);
+    for (const code of avoid) out.push(`без ${filterLabel(code)}`);
+    if (resultMode === 'catalogue') out.push('каталог мест');
+    if (roundTrip) out.push('круговой маршрут');
+    return out;
+  }, [
+    partyAdults,
+    partyChildren,
+    childrenAges,
+    hardServices,
+    softAmenities,
+    interests,
+    avoid,
+    resultMode,
+    roundTrip,
+  ]);
+
+  /** Flip a code in a multi-select list. */
+  const toggleCode = (
+    setter: Dispatch<SetStateAction<string[]>>,
+    code: string
+  ) =>
+    setter((prev) =>
+      prev.includes(code) ? prev.filter((c) => c !== code) : [...prev, code]
+    );
+
+  /** Click the strength a row already has to clear it — off is a valid state. */
+  const toggleAmenity = (code: string, next: AmenityStrength) =>
+    setAmenities((prev) => {
+      const copy = { ...prev };
+      if (copy[code] === next) delete copy[code];
+      else copy[code] = next;
+      return copy;
+    });
+
   const submitPrompt = async (text?: string) => {
     const q = (text ?? query).trim();
     if (!q || busy) return;
@@ -373,6 +564,16 @@ export const Sidebar = () => {
         time_budget_minutes?: number;
         profile?: string;
         origin?: { lat: number; lon: number };
+        // ── Explicit filters (spec 002) — each one is present only when the
+        // tourist actually chose it; an absent field means "no constraint".
+        party_adults?: number;
+        party_children?: number;
+        party_children_ages?: number[];
+        hard_services?: string[];
+        interests?: string[];
+        avoid?: string[];
+        result_mode?: ResultMode;
+        round_trip?: boolean;
         context?: {
           instruction: string;
           revision: number;
@@ -393,6 +594,18 @@ export const Sidebar = () => {
       );
       if (chosen?.costing) body.profile = chosen.costing;
       if (origin) body.origin = origin;
+
+      // Party: counts only, and ages only when they were typed. «не указано»
+      // (null) sends nothing rather than inventing a group.
+      if (partyAdults != null) body.party_adults = partyAdults;
+      if (partyChildren != null) body.party_children = partyChildren;
+      if (childrenAges.length > 0) body.party_children_ages = childrenAges;
+      if (hardServices.length > 0) body.hard_services = hardServices;
+      if (interestCodes.length > 0) body.interests = interestCodes;
+      if (avoid.length > 0) body.avoid = avoid;
+      // «маршрут» is the backend default: only a catalogue changes the answer.
+      if (resultMode === 'catalogue') body.result_mode = resultMode;
+      if (roundTrip) body.round_trip = true;
 
       // Second and later turns are refinements: the agent receives the route as
       // it stands — stops, hand-pinned flags, hand-deleted ids — plus the delta
@@ -441,8 +654,10 @@ export const Sidebar = () => {
         body: JSON.stringify(body),
       });
       if (!r.ok) {
-        const errBody = await r.text().catch(() => '');
-        throw new Error(`агент ${r.status}: ${errBody.slice(0, 160)}`);
+        // Status only: raw JSON/detail from the agent is not actionable in the UI.
+        throw new Error(
+          `агент ответил ошибкой ${r.status} — попробуйте ещё раз`
+        );
       }
       const data = (await r.json()) as {
         points?: AgentPoint[];
@@ -569,10 +784,19 @@ export const Sidebar = () => {
             .slice(0, 8),
         });
       }
+
+      // Non-blocking: the route stands; only say the toilet ask could not be met.
+      // Either the text asked for it or the tourist marked «туалет» обязательным.
+      if (
+        (queryAsksForToilet(q) || hardServices.includes('туалет')) &&
+        !pts.some((p) => p.category === 'туалет')
+      ) {
+        setStatus({ kind: 'warn', text: TOILET_MISSING_WARNING });
+      }
+
       setQuery('');
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      setStatus({ kind: 'err', text: msg });
+      setStatus({ kind: 'err', text: routeSubmitErrorText(e) });
     } finally {
       setBusy(false);
     }
@@ -720,7 +944,7 @@ export const Sidebar = () => {
                 aria-hidden="true"
               />
               <div className="min-w-0">
-                <SheetTitle className="truncate text-[15px]">
+                <SheetTitle className="truncate text-body">
                   AI-гид по Гродно
                 </SheetTitle>
                 {/* Radix wants a description for the dialog; the visible line
@@ -728,17 +952,17 @@ export const Sidebar = () => {
                 <SheetDescription className="sr-only">
                   Планировщик маршрутов по Гродно и области
                 </SheetDescription>
-                <p className="truncate text-[12px] text-muted-foreground">
+                <p className="truncate text-meta text-muted-foreground">
                   {mode === 'plan'
-                    ? 'Опишите, что хочется посмотреть — соберу маршрут по реальным дорогам'
-                    : 'Ведите по маршруту: отмечайте пройденные остановки'}
+                    ? 'Опишите запрос — соберу маршрут по дорогам'
+                    : 'Отмечайте пройденные остановки'}
                 </p>
               </div>
             </div>
           </header>
 
           {/* ── Body: the only part that scrolls. ── */}
-          <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 py-3">
+          <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 pb-6 pt-3">
             {mode === 'guide' ? (
               // key: a rebuilt route remounts the guide, so the walk restarts
               // instead of carrying progress from the route that no longer exists
@@ -747,10 +971,10 @@ export const Sidebar = () => {
               <>
                 {/* === Ask === */}
                 <section className="flex flex-col gap-2">
-                  <div className="rounded-2xl border border-border bg-card px-3 py-2.5 shadow-[0_1px_2px_rgba(0,0,0,0.06)] transition-colors focus-within:border-ring">
-                    <div className="flex items-start gap-2">
+                  <div className="rounded-2xl border border-border bg-card px-3 py-2.5 shadow-card transition-colors focus-within:border-ring">
+                    <div className="flex items-center gap-2.5">
                       <Search
-                        className="mt-1 h-4 w-4 shrink-0 text-muted-foreground"
+                        className="h-[18px] w-[18px] shrink-0 text-muted-foreground"
                         aria-hidden="true"
                       />
                       <Textarea
@@ -769,7 +993,7 @@ export const Sidebar = () => {
                             : QUERY_PLACEHOLDER
                         }
                         aria-label="что хотите посмотреть"
-                        className="min-h-9 flex-1 resize-none border-0 bg-transparent p-0 text-[15px] leading-[1.45] shadow-none focus-visible:ring-0"
+                        className="min-h-0 flex-1 resize-none border-0 bg-transparent p-0 text-body leading-6 shadow-none focus-visible:ring-0"
                         rows={1}
                         disabled={busy}
                       />
@@ -801,7 +1025,7 @@ export const Sidebar = () => {
                   <div className="flex flex-col gap-1.5">
                     <span
                       id="time-budget-label"
-                      className="text-[12px] text-muted-foreground"
+                      className="text-meta text-muted-foreground"
                     >
                       сколько есть времени
                     </span>
@@ -824,7 +1048,7 @@ export const Sidebar = () => {
                   </div>
 
                   <div className="flex flex-col gap-1.5">
-                    <span className="text-[12px] text-muted-foreground">
+                    <span className="text-meta text-muted-foreground">
                       на чём
                     </span>
                     <Segmented
@@ -842,7 +1066,7 @@ export const Sidebar = () => {
                     type="button"
                     onClick={() => void locateMe()}
                     disabled={geoState === 'locating'}
-                    className="flex w-full items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-[12px] transition-colors hover:bg-muted disabled:opacity-60"
+                    className="flex w-full items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-meta transition-colors hover:bg-muted disabled:opacity-60"
                     title="переопределить, откуда начинается маршрут"
                   >
                     <LocateFixed
@@ -859,17 +1083,236 @@ export const Sidebar = () => {
                       {geoState === 'locating' ? '…' : 'обновить'}
                     </span>
                   </button>
+
+                  {/* Progressive disclosure (spec 002): the two controls above
+                      are always visible; everything else waits behind this. */}
+                  <button
+                    type="button"
+                    data-testid="more-filters"
+                    aria-expanded={advancedOpen}
+                    aria-controls="advanced-filters"
+                    onClick={() => setAdvancedOpen((v) => !v)}
+                    className="flex w-full items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-meta transition-colors hover:bg-muted"
+                  >
+                    <SlidersHorizontal
+                      className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+                      aria-hidden="true"
+                    />
+                    <span>ещё фильтры</span>
+                    {filterSummary.length > 0 && (
+                      <span
+                        data-testid="filters-count"
+                        className="rounded-full bg-muted px-1.5 py-0.5 text-badge font-semibold text-foreground"
+                      >
+                        {filterSummary.length}
+                      </span>
+                    )}
+                    <ChevronDown
+                      className={cn(
+                        'ml-auto h-3.5 w-3.5 text-muted-foreground transition-transform',
+                        advancedOpen && 'rotate-180'
+                      )}
+                      aria-hidden="true"
+                    />
+                  </button>
+
+                  {/* The summary is always visible once anything is chosen, so
+                      no condition is applied invisibly. */}
+                  {filterSummary.length > 0 && (
+                    <div
+                      data-testid="filters-summary"
+                      role="status"
+                      className="flex flex-wrap items-center gap-1 rounded-xl bg-muted px-3 py-2 text-meta text-muted-foreground"
+                    >
+                      <span>учитываю:</span>
+                      {filterSummary.map((item) => (
+                        <span
+                          key={item}
+                          className="rounded-full bg-card px-2 py-0.5 text-foreground"
+                        >
+                          {item}
+                        </span>
+                      ))}
+                      {query.trim() !== '' && (
+                        <span
+                          data-testid="filters-precedence"
+                          className="basis-full pt-0.5"
+                        >
+                          применю фильтры поверх текста запроса — они важнее
+                        </span>
+                      )}
+                    </div>
+                  )}
+
+                  {advancedOpen && (
+                    <div
+                      id="advanced-filters"
+                      data-testid="advanced-filters"
+                      className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-3"
+                    >
+                      {/* Party: counts, plus ages only when they were typed. */}
+                      <div className="flex flex-col gap-1.5">
+                        <span className="text-meta text-muted-foreground">
+                          кто идёт
+                        </span>
+                        <Stepper
+                          label="взрослые"
+                          testId="party-adults"
+                          value={partyAdults}
+                          min={1}
+                          max={50}
+                          onChange={setPartyAdults}
+                        />
+                        <Stepper
+                          label="дети"
+                          testId="party-children"
+                          value={partyChildren}
+                          min={1}
+                          max={20}
+                          onChange={setPartyChildren}
+                        />
+                        {partyChildren != null && partyChildren > 0 && (
+                          <div className="flex flex-col gap-1">
+                            <label
+                              htmlFor="children-ages"
+                              className="text-meta text-muted-foreground"
+                            >
+                              возраст детей, если знаете
+                            </label>
+                            <Input
+                              id="children-ages"
+                              data-testid="children-ages"
+                              value={childrenAgesText}
+                              onChange={(e) =>
+                                setChildrenAgesText(e.target.value)
+                              }
+                              placeholder="4, 7"
+                              className="h-9 text-label"
+                            />
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Amenities, each «обязательно» or «желательно». */}
+                      <div className="flex flex-col gap-1.5">
+                        <span className="text-meta text-muted-foreground">
+                          удобства в пути
+                        </span>
+                        {AMENITY_OPTIONS.map((option) => (
+                          <div
+                            key={option.code}
+                            className="flex items-center gap-2"
+                          >
+                            <span className="text-label">{option.label}</span>
+                            <div className="ml-auto flex gap-1">
+                              <Chip
+                                selected={amenities[option.code] === 'hard'}
+                                onClick={() =>
+                                  toggleAmenity(option.code, 'hard')
+                                }
+                                data-testid={`amenity-${option.code}-hard`}
+                                className="h-7 px-2 text-meta"
+                              >
+                                обязательно
+                              </Chip>
+                              <Chip
+                                selected={amenities[option.code] === 'soft'}
+                                onClick={() =>
+                                  toggleAmenity(option.code, 'soft')
+                                }
+                                data-testid={`amenity-${option.code}-soft`}
+                                className="h-7 px-2 text-meta"
+                              >
+                                желательно
+                              </Chip>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Themes: soft by nature, they never force a detour. */}
+                      <div className="flex flex-col gap-1.5">
+                        <span className="text-meta text-muted-foreground">
+                          интересы
+                        </span>
+                        <div
+                          role="group"
+                          aria-label="интересы"
+                          className="flex flex-wrap gap-1.5"
+                        >
+                          {INTEREST_OPTIONS.map((option) => (
+                            <Chip
+                              key={option.code}
+                              selected={interests.includes(option.code)}
+                              onClick={() =>
+                                toggleCode(setInterests, option.code)
+                              }
+                              data-testid={`interest-${option.code}`}
+                            >
+                              {option.label}
+                            </Chip>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Keep out. */}
+                      <div className="flex flex-col gap-1.5">
+                        <span className="text-meta text-muted-foreground">
+                          избегать
+                        </span>
+                        <div
+                          role="group"
+                          aria-label="избегать"
+                          className="flex flex-wrap gap-1.5"
+                        >
+                          {AVOID_OPTIONS.map((option) => (
+                            <Chip
+                              key={option.code}
+                              selected={avoid.includes(option.code)}
+                              onClick={() => toggleCode(setAvoid, option.code)}
+                              data-testid={`avoid-${option.code}`}
+                            >
+                              {option.label}
+                            </Chip>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* What to return, and whether to come back to the start. */}
+                      <div className="flex flex-col gap-1.5">
+                        <span className="text-meta text-muted-foreground">
+                          что показать
+                        </span>
+                        <Segmented
+                          items={RESULT_MODE_OPTIONS}
+                          value={resultMode}
+                          onChange={setResultMode}
+                          label="тип результата"
+                          disabled={busy}
+                          testId={(value) => `result-mode-${value}`}
+                        />
+                        <Chip
+                          selected={roundTrip}
+                          onClick={() => setRoundTrip((v) => !v)}
+                          data-testid="round-trip"
+                          className="mt-0.5 self-start"
+                        >
+                          круговой маршрут
+                        </Chip>
+                      </div>
+                    </div>
+                  )}
                 </section>
 
                 {/* === Route === */}
                 <section className="flex flex-col gap-2.5">
                   {hasRoute && (
                     <div className="flex items-center justify-between gap-2">
-                      <h2 className="text-[13px] font-semibold">Маршрут</h2>
+                      <h2 className="text-label font-semibold">Маршрут</h2>
                       <button
                         type="button"
                         onClick={reset}
-                        className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-[12px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                        className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-meta text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                         title="очистить маршрут"
                       >
                         <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
@@ -891,7 +1334,7 @@ export const Sidebar = () => {
                           label="мин в пути"
                         />
                       </StatTiles>
-                      <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-muted-foreground">
+                      <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-meta text-muted-foreground">
                         <span className="inline-flex items-center gap-1">
                           <Clock className="h-3.5 w-3.5" aria-hidden="true" />
                           {`в пути ~${fmtMin(summary.walkMinutes)}`}
@@ -928,7 +1371,7 @@ export const Sidebar = () => {
                         className="h-7 w-7 text-muted-foreground"
                         aria-hidden="true"
                       />
-                      <p className="text-[13px] text-muted-foreground">
+                      <p className="text-label text-muted-foreground">
                         Здесь появятся остановки маршрута — или соберите его из
                         точек вручную
                       </p>
@@ -937,11 +1380,20 @@ export const Sidebar = () => {
 
                   {status && (
                     <div
+                      role={status.kind === 'err' ? 'alert' : 'status'}
+                      aria-live={status.kind === 'err' ? 'assertive' : 'polite'}
+                      data-testid={
+                        status.kind === 'warn'
+                          ? 'toilet-missing-warning'
+                          : undefined
+                      }
                       className={[
-                        'rounded-xl px-3 py-2 text-[12px]',
+                        'rounded-xl px-3 py-2 text-meta',
                         status.kind === 'ok'
                           ? 'bg-primary/10 text-primary'
-                          : 'bg-destructive/10 text-destructive',
+                          : status.kind === 'warn'
+                            ? 'bg-amber-500/15 text-amber-800'
+                            : 'bg-destructive/10 text-destructive',
                       ].join(' ')}
                     >
                       {status.text}
@@ -974,23 +1426,23 @@ export const Sidebar = () => {
                                     .filter(Boolean)
                                     .join(' · ') || 'без изменений'
                                 }
-                                className="rounded-full border border-border bg-muted px-2.5 py-0.5 text-[12px] text-muted-foreground"
+                                className="rounded-full border border-border bg-muted px-2.5 py-0.5 text-meta text-muted-foreground"
                               >
                                 {entry.instruction}
                               </span>
                               {entry.added.length > 0 && (
-                                <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[12px] text-primary">
+                                <span className="rounded-full bg-primary/10 px-2 py-0.5 text-meta text-primary">
                                   добавлено {entry.added.length}
                                 </span>
                               )}
                               {entry.removed.length > 0 && (
-                                <span className="rounded-full bg-muted px-2 py-0.5 text-[12px] text-muted-foreground">
+                                <span className="rounded-full bg-muted px-2 py-0.5 text-meta text-muted-foreground">
                                   убрано {entry.removed.length}
                                 </span>
                               )}
                               {entry.added.length === 0 &&
                                 entry.removed.length === 0 && (
-                                  <span className="rounded-full bg-muted px-2 py-0.5 text-[12px] text-muted-foreground">
+                                  <span className="rounded-full bg-muted px-2 py-0.5 text-meta text-muted-foreground">
                                     без изменений
                                   </span>
                                 )}
@@ -999,7 +1451,7 @@ export const Sidebar = () => {
                           {excludedPlaceIds.length > 0 && (
                             <span
                               data-testid="excluded-chip"
-                              className="rounded-full bg-destructive/10 px-2.5 py-0.5 text-[12px] text-destructive"
+                              className="rounded-full bg-destructive/10 px-2.5 py-0.5 text-meta text-destructive"
                             >
                               убрано вручную: {excludedPlaceIds.length}
                             </span>
@@ -1019,7 +1471,7 @@ export const Sidebar = () => {
                             refetchDirections();
                           }}
                           disabled={routeSnapshots.length === 0}
-                          className="h-9 rounded-full px-3 text-[13px] disabled:opacity-40"
+                          className="h-9 rounded-full px-3 text-label disabled:opacity-40"
                         >
                           <Undo2 className="h-3.5 w-3.5" aria-hidden="true" />
                           отменить уточнение
@@ -1031,7 +1483,7 @@ export const Sidebar = () => {
                             resetRoute();
                             reset();
                           }}
-                          className="h-9 rounded-full px-3 text-[13px] font-normal text-muted-foreground hover:text-foreground"
+                          className="h-9 rounded-full px-3 text-label font-normal text-muted-foreground hover:text-foreground"
                         >
                           <RotateCcw
                             className="h-3.5 w-3.5"
@@ -1045,8 +1497,8 @@ export const Sidebar = () => {
                 </section>
 
                 {/* === Manual add === */}
-                <section className="flex flex-col gap-2 rounded-2xl border border-border bg-card p-3 shadow-[0_1px_2px_rgba(0,0,0,0.06)]">
-                  <h2 className="text-[13px] font-semibold">Добавить точку</h2>
+                <section className="flex flex-col gap-2 rounded-2xl border border-border bg-card p-3 shadow-card">
+                  <h2 className="text-label font-semibold">Добавить точку</h2>
                   <div className="flex gap-2">
                     <Input
                       value={manualQuery}
@@ -1059,7 +1511,7 @@ export const Sidebar = () => {
                       }}
                       placeholder="Каложская церковь, Гродно"
                       aria-label="добавить точку в маршрут"
-                      className="h-10 flex-1 text-[14px]"
+                      className="h-10 flex-1 text-body"
                       disabled={manualBusy}
                     />
                     <Button
@@ -1078,12 +1530,12 @@ export const Sidebar = () => {
                     </Button>
                   </div>
                   {manualErr && (
-                    <p className="text-[12px] text-destructive">{manualErr}</p>
+                    <p className="text-meta text-destructive">{manualErr}</p>
                   )}
                   <button
                     type="button"
                     onClick={addEmptyWaypointToEnd}
-                    className="inline-flex items-center gap-1 self-start rounded-full px-2 py-1 text-[12px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                    className="inline-flex items-center gap-1 self-start rounded-full px-2 py-1 text-meta text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                   >
                     <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />{' '}
                     пустая точка (выбрать кликом по карте)
@@ -1091,16 +1543,16 @@ export const Sidebar = () => {
                 </section>
 
                 {/* === Route History === */}
-                <section className="flex flex-col gap-2 rounded-2xl border border-border bg-card p-3 shadow-[0_1px_2px_rgba(0,0,0,0.06)]">
+                <section className="flex flex-col gap-2 rounded-2xl border border-border bg-card p-3 shadow-card">
                   <div className="flex items-center justify-between gap-2">
-                    <h2 className="flex items-center gap-1.5 text-[13px] font-semibold">
+                    <h2 className="flex items-center gap-1.5 text-label font-semibold">
                       <History
                         className="h-3.5 w-3.5 text-muted-foreground"
                         aria-hidden="true"
                       />
                       История
                       {routeHistory.length > 0 && (
-                        <span className="rounded-full bg-muted px-1.5 py-0.5 text-[11px] font-normal text-muted-foreground">
+                        <span className="rounded-full bg-muted px-1.5 py-0.5 text-badge font-normal text-muted-foreground">
                           {routeHistory.length}
                         </span>
                       )}
@@ -1109,7 +1561,7 @@ export const Sidebar = () => {
                       <button
                         type="button"
                         onClick={clearHistory}
-                        className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-[12px] text-muted-foreground transition-colors hover:bg-muted hover:text-destructive"
+                        className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-meta text-muted-foreground transition-colors hover:bg-muted hover:text-destructive"
                         title="очистить историю"
                       >
                         <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
@@ -1119,7 +1571,7 @@ export const Sidebar = () => {
                   </div>
 
                   {routeHistory.length === 0 ? (
-                    <p className="text-[12px] text-muted-foreground">
+                    <p className="text-meta text-muted-foreground">
                       Построенные маршруты появятся здесь
                     </p>
                   ) : (
@@ -1195,11 +1647,15 @@ export const Sidebar = () => {
               scroll area, so it is reachable at either snap point. ── */}
           {mode === 'plan' && (
             <footer className="shrink-0 border-t border-border bg-background px-4 py-3">
+              {/* Polite live region: button text alone is not reliably announced. */}
+              <span className="sr-only" aria-live="polite" aria-atomic="true">
+                {busy ? 'Строю маршрут…' : ''}
+              </span>
               <Button
                 type="button"
                 onClick={() => submitPrompt()}
                 disabled={busy || !query.trim()}
-                className="h-12 w-full rounded-xl bg-primary text-[15px] font-semibold text-primary-foreground transition hover:bg-primary hover:brightness-[0.97] active:scale-[0.99] motion-reduce:active:scale-100 disabled:opacity-40"
+                className="h-12 w-full rounded-xl bg-primary text-body font-semibold text-primary-foreground transition hover:bg-primary hover:brightness-[0.97] active:scale-[0.99] motion-reduce:active:scale-100 disabled:opacity-40"
               >
                 {busy && (
                   <Loader2
@@ -1217,6 +1673,64 @@ export const Sidebar = () => {
   );
 };
 
+// Party size stepper
+interface StepperProps {
+  label: string;
+  testId: string;
+  /** null = the tourist has not named a number yet. */
+  value: number | null;
+  min: number;
+  max: number;
+  onChange: (next: number | null) => void;
+}
+
+/**
+ * A small −/+ stepper for a party count. It starts unset («—»): a number the
+ * tourist never picked must not go to the agent, and stepping one below the
+ * minimum clears the field instead of inventing a 0-person group.
+ */
+const Stepper = ({
+  label,
+  testId,
+  value,
+  min,
+  max,
+  onChange,
+}: StepperProps) => (
+  <div className="flex items-center gap-2">
+    <span className="text-label">{label}</span>
+    <div className="ml-auto flex items-center gap-1">
+      <button
+        type="button"
+        aria-label={`убавить: ${label}`}
+        data-testid={`${testId}-dec`}
+        disabled={value == null}
+        onClick={() =>
+          onChange(value == null || value <= min ? null : value - 1)
+        }
+        className="flex h-7 w-7 items-center justify-center rounded-full border border-border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-40"
+      >
+        <Minus className="h-3.5 w-3.5" aria-hidden="true" />
+      </button>
+      <span
+        data-testid={`${testId}-value`}
+        className="w-5 text-center text-label font-semibold tabular-nums"
+      >
+        {value ?? '—'}
+      </span>
+      <button
+        type="button"
+        aria-label={`прибавить: ${label}`}
+        data-testid={`${testId}-inc`}
+        onClick={() => onChange(value == null ? min : Math.min(value + 1, max))}
+        className="flex h-7 w-7 items-center justify-center rounded-full border border-border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+      >
+        <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+      </button>
+    </div>
+  </div>
+);
+
 // History item component
 interface HistoryItemProps {
   entry: RouteHistoryEntry;
@@ -1228,7 +1742,7 @@ const HistoryItem = ({ entry, onLoad, onRemove }: HistoryItemProps) => {
   const [expanded, setExpanded] = useState(false);
 
   return (
-    <div className="rounded-xl border border-border p-2.5 text-[13px]">
+    <div className="rounded-xl border border-border p-2.5 text-label">
       <div className="flex items-center justify-between gap-2">
         <button
           type="button"
@@ -1241,7 +1755,7 @@ const HistoryItem = ({ entry, onLoad, onRemove }: HistoryItemProps) => {
             : entry.query}
         </button>
         <div className="flex shrink-0 items-center gap-1">
-          <span className="flex items-center gap-0.5 text-[12px] text-muted-foreground">
+          <span className="flex items-center gap-0.5 text-meta text-muted-foreground">
             <Clock className="h-3.5 w-3.5" aria-hidden="true" />
             {entry.timeBudget <= 0 ? 'без лимита' : fmtMin(entry.timeBudget)}
           </span>
@@ -1262,7 +1776,7 @@ const HistoryItem = ({ entry, onLoad, onRemove }: HistoryItemProps) => {
       <button
         type="button"
         onClick={() => setExpanded(!expanded)}
-        className="mt-1 inline-flex items-center gap-1 text-[12px] text-muted-foreground transition-colors hover:text-foreground"
+        className="mt-1 inline-flex items-center gap-1 text-meta text-muted-foreground transition-colors hover:text-foreground"
       >
         <MapPin className="h-3.5 w-3.5" aria-hidden="true" />
         {entry.places.length} мест
@@ -1278,9 +1792,9 @@ const HistoryItem = ({ entry, onLoad, onRemove }: HistoryItemProps) => {
           {entry.places.map((p, i) => (
             <li
               key={p.id}
-              className="flex items-center gap-1.5 text-[12px] text-muted-foreground"
+              className="flex items-center gap-1.5 text-meta text-muted-foreground"
             >
-              <span className="h-4 w-4 rounded-full bg-muted text-center text-[11px] font-semibold leading-4 text-foreground">
+              <span className="h-4 w-4 rounded-full bg-muted text-center text-badge font-semibold leading-4 text-foreground">
                 {i + 1}
               </span>
               <span className="truncate">{p.name}</span>

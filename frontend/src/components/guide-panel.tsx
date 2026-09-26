@@ -1,5 +1,26 @@
-import { Footprints, LocateFixed, Navigation, RotateCcw } from 'lucide-react';
+import {
+  Flag,
+  Footprints,
+  LocateFixed,
+  MapPin,
+  Navigation,
+  Play,
+  RotateCcw,
+  TriangleAlert,
+  WifiOff,
+} from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+
+import type {
+  ActiveWaypoint,
+  ParsedDirectionsGeometry,
+} from '@/components/types';
+import {
+  ME_WAYPOINT_ID,
+  useDirectionsStore,
+  type Waypoint,
+} from '@/stores/directions-store';
+import { getManeuverIcon } from '@/utils/get-maneuver-icon';
 
 import { GuideEmpty } from './parts/guide-empty';
 import { fmtDist, metresBetween } from './parts/guide-format';
@@ -19,13 +40,43 @@ export interface GuideStop {
   visitMinutes?: number | null;
 }
 
+/**
+ * A contextual POI offered along the way. Purely a proposal: the panel never
+ * edits the route on its own — «добавить» only hands the choice to the caller,
+ * and skipping one leaves the route untouched.
+ */
+export interface GuideSuggestion {
+  id: string;
+  name: string;
+  /** «отклонение 4 мин», «на маршруте» — why it is being offered. */
+  detail: string;
+}
+
 interface GuidePanelProps {
   stops: GuideStop[];
+  /**
+   * Off-route re-plan override. The integration layer can wire this to
+   * `POST /reroute`; without it the panel re-requests the same stops from the
+   * current position through the existing directions query (see `reroute()`).
+   */
+  onReroute?: () => void;
+  suggestions?: GuideSuggestion[];
+  onAddSuggestion?: (id: string) => void;
 }
 
 const STORAGE_KEY = 'grodno-guide-progress';
 /** You are "at" a stop when you are this close to it. */
 const ARRIVAL_RADIUS_M = 40;
+/** Above this accuracy the fix is too coarse for a confident «через 30 м». */
+const WEAK_ACCURACY_M = 50;
+/** A fix older than this is treated as lost, not as a position. */
+const STALE_FIX_MS = 20_000;
+/** Beyond this distance from the line the tourist is off route. */
+const OFF_ROUTE_M = 60;
+/** Consecutive off-route fixes before the prompt appears (kills GPS flicker). */
+const OFF_ROUTE_FIXES = 2;
+/** How far the walk may slide back before we freeze progress (jump guard). */
+const BACKWARD_TOLERANCE_M = 15;
 
 const mapsUrl = (lat: number, lon: number) =>
   `https://www.google.com/maps/search/?api=1&query=${lat},${lon}`;
@@ -69,28 +120,233 @@ const saveProgress = (progress: StoredProgress) => {
   }
 };
 
+// ── Geometry ────────────────────────────────────────────────────────────────
+//
+// Everything below works on the line Valhalla returned for this route (the
+// same response the map draws), never on a second request. When there is no
+// line yet — a route without geometry — the guide falls back to straight-line
+// distances between stops and simply shows no turn-by-turn banner.
+
+interface LatLon {
+  lat: number;
+  lon: number;
+}
+
+interface Fix extends LatLon {
+  /** Metres of 68 % confidence; null when the browser did not say. */
+  accuracy: number | null;
+  at: number;
+}
+
+type FixQuality = 'unavailable' | 'waiting' | 'stale' | 'poor' | 'good';
+
+interface LineGeometry {
+  points: LatLon[];
+  /** Cumulative metres at each vertex. */
+  cum: number[];
+  total: number;
+}
+
+interface GuideManeuver {
+  key: string;
+  type: number;
+  instruction: string;
+  /** Metres from the start of the line to the manoeuvre's begin point. */
+  along: number;
+}
+
+const buildLine = (
+  data: ParsedDirectionsGeometry | null
+): LineGeometry | null => {
+  const raw = data?.decodedGeometry;
+  if (!raw || raw.length < 2) return null;
+  const points: LatLon[] = [];
+  for (const c of raw) {
+    const lat = c[0];
+    const lon = c[1];
+    if (
+      typeof lat !== 'number' ||
+      typeof lon !== 'number' ||
+      !Number.isFinite(lat) ||
+      !Number.isFinite(lon)
+    ) {
+      continue;
+    }
+    points.push({ lat, lon });
+  }
+  if (points.length < 2) return null;
+  const cum = [0];
+  for (let i = 1; i < points.length; i++) {
+    cum.push((cum[i - 1] ?? 0) + metresBetween(points[i - 1]!, points[i]!));
+  }
+  const total = cum[cum.length - 1] ?? 0;
+  return total > 0 ? { points, cum, total } : null;
+};
+
+/**
+ * Project `p` onto the segment a→b in a local metre plane. Good enough at
+ * neighbourhood scale and cheaper than turf, which we do not need here.
+ */
+const projectOnSegment = (p: LatLon, a: LatLon, b: LatLon) => {
+  const latRef = (((a.lat + b.lat) / 2) * Math.PI) / 180;
+  const kx = 111_320 * Math.cos(latRef);
+  const ky = 111_320;
+  const ax = a.lon * kx;
+  const ay = a.lat * ky;
+  const bx = b.lon * kx;
+  const by = b.lat * ky;
+  const px = p.lon * kx;
+  const py = p.lat * ky;
+  const dx = bx - ax;
+  const dy = by - ay;
+  const len2 = dx * dx + dy * dy;
+  const t =
+    len2 === 0
+      ? 0
+      : Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / len2));
+  const cx = ax + t * dx;
+  const cy = ay + t * dy;
+  return { t, dist: Math.hypot(px - cx, py - cy), along: t * Math.sqrt(len2) };
+};
+
+/** Where the tourist is on the line + how far the line is from them. */
+const locateOnLine = (p: LatLon, line: LineGeometry) => {
+  let along = 0;
+  let offRoute = Number.POSITIVE_INFINITY;
+  for (let i = 1; i < line.points.length; i++) {
+    const a = line.points[i - 1]!;
+    const b = line.points[i]!;
+    const pr = projectOnSegment(p, a, b);
+    if (pr.dist < offRoute) {
+      offRoute = pr.dist;
+      along = (line.cum[i - 1] ?? 0) + pr.along;
+    }
+  }
+  return { along, offRoute };
+};
+
+const buildManeuvers = (
+  data: ParsedDirectionsGeometry | null,
+  line: LineGeometry | null
+): GuideManeuver[] => {
+  if (!data || !line) return [];
+  const legs = data.trip?.legs ?? [];
+  const out: GuideManeuver[] = [];
+  let base = 0;
+  legs.forEach((leg, legIndex) => {
+    const legBase = base;
+    const maneuvers = leg.maneuvers ?? [];
+    maneuvers.forEach((mnv, j) => {
+      const index = legBase + (mnv.begin_shape_index ?? 0);
+      const clamped = Math.min(Math.max(index, 0), line.cum.length - 1);
+      out.push({
+        key: `${legIndex}-${j}`,
+        type: mnv.type,
+        instruction: mnv.instruction,
+        along: line.cum[clamped] ?? 0,
+      });
+    });
+    const last = maneuvers[maneuvers.length - 1];
+    base = legBase + (last ? (last.end_shape_index ?? 0) : 0);
+  });
+  return out.sort((a, b) => a.along - b.along);
+};
+
+/** «14:35» in the device's local time — ETA is an estimate, so minutes only. */
+const fmtClock = (ms: number) => {
+  const d = new Date(ms);
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+};
+
+/** A waypoint that simply says «я здесь» — mirrors sidebar's meWaypoint. */
+const meWaypoint = (lat: number, lon: number): Waypoint => {
+  const lngLat: [number, number] = [lon, lat];
+  const result: ActiveWaypoint = {
+    title: 'Моё местоположение',
+    description: 'старт маршрута',
+    selected: true,
+    displaylnglat: lngLat,
+    sourcelnglat: lngLat,
+    key: 0,
+    addressindex: 0,
+  };
+  return {
+    id: ME_WAYPOINT_ID,
+    userInput: 'Моё местоположение',
+    geocodeResults: [result],
+  };
+};
+
 /**
  * Mode 2 — the guide: walk the route stop by stop.
  *
- * Geolocation follows the tourist and marks a stop once they are within 40 m of
- * it, progress survives a reload as long as the route is unchanged, and every
- * stop can be opened in a maps app. Without geolocation it degrades to tapping
- * the stops by hand.
+ * Review (before «Начать маршрут») shows the plan: the next stop, the progress
+ * and the full stop list. Movement mode is the navigator: a large next manoeuvre
+ * with its distance, the next-stop card with an ETA, progress along the route
+ * line (walked part vs remaining) and an expandable stop list.
+ *
+ * Honesty rules, from the spec:
+ *  - a poor or stale fix suppresses the confident «через 30 м» — the turn is
+ *    announced without a number, and stops are not auto-completed;
+ *  - denied geolocation leaves manual progression (`я на месте` and every row);
+ *  - off route, the panel offers to re-plan from the current position, keeping
+ *    every stop (mandatory points are never dropped by the re-plan);
+ *  - suggestions are proposals that never change the route by themselves.
  */
-export const GuidePanel = ({ stops }: GuidePanelProps) => {
+export const GuidePanel = ({
+  stops,
+  onReroute,
+  suggestions = [],
+  onAddSuggestion,
+}: GuidePanelProps) => {
   const key = useMemo(() => guideRouteKey(stops), [stops]);
   const [progress, setProgress] = useState<StoredProgress>(() =>
     loadProgress(key)
   );
-  const [position, setPosition] = useState<{ lat: number; lon: number } | null>(
-    null
-  );
+  const [mode, setMode] = useState<'review' | 'moving'>('review');
+  const [fix, setFix] = useState<Fix | null>(null);
   const [geoState, setGeoState] = useState<'idle' | 'ok' | 'denied'>(() =>
     typeof navigator === 'undefined' || !('geolocation' in navigator)
       ? 'denied'
       : 'idle'
   );
+  const [now, setNow] = useState(() => Date.now());
+  const [traveled, setTraveled] = useState(0);
+  const [offRoute, setOffRoute] = useState(false);
+  const [skippedSuggestions, setSkippedSuggestions] = useState<string[]>([]);
   const wakeLockRef = useRef<{ release: () => Promise<void> } | null>(null);
+  const offRouteFixesRef = useRef(0);
+
+  const routeData = useDirectionsStore((state) => state.results.data);
+
+  // The route the map draws: one line, one set of manoeuvres.
+  const line = useMemo(() => buildLine(routeData), [routeData]);
+  const maneuvers = useMemo(
+    () => buildManeuvers(routeData, line),
+    [routeData, line]
+  );
+  const summary = routeData?.trip?.summary ?? null;
+  /** Metres per second along the route, straight from Valhalla's own numbers. */
+  const speed = useMemo(() => {
+    if (!summary || !(summary.length > 0) || !(summary.time > 0)) return null;
+    return (summary.length * 1000) / summary.time;
+  }, [summary]);
+
+  const setVisited = useCallback(
+    (id: string, value: boolean) => {
+      setProgress((prev) => {
+        const has = prev.visited.includes(id);
+        if (has === value) return prev;
+        const visited = value
+          ? [...prev.visited, id]
+          : prev.visited.filter((v) => v !== id);
+        const next = { ...prev, route: key, visited };
+        saveProgress(next);
+        return next;
+      });
+    },
+    [key]
+  );
 
   const toggle = useCallback(
     (id: string) => {
@@ -110,60 +366,223 @@ export const GuidePanel = ({ stops }: GuidePanelProps) => {
     const fresh = { route: key, visited: [], startedAt: Date.now() };
     setProgress(fresh);
     saveProgress(fresh);
+    setTraveled(0);
+    offRouteFixesRef.current = 0;
+    setOffRoute(false);
   }, [key]);
 
-  const nextStop = useMemo(
-    () => stops.find((s) => !progress.visited.includes(s.id)) ?? null,
-    [stops, progress.visited]
-  );
-  const nextIndex = useMemo(
-    () => (nextStop ? stops.findIndex((s) => s.id === nextStop.id) : -1),
-    [stops, nextStop]
-  );
-
-  // The geolocation callback needs the current stops without re-subscribing to
-  // the watcher on every render (refs are written in effects, never while
-  // rendering).
-  const stopsRef = useRef(stops);
-  useEffect(() => {
-    stopsRef.current = stops;
-  }, [stops]);
-
   const stopCount = stops.length;
+
+  // ── Geolocation: keep watching as long as we are moving ──────────────────
   useEffect(() => {
     if (stopCount === 0) return;
     const geo = navigator.geolocation;
     if (!geo?.watchPosition) return;
     const watch = geo.watchPosition(
       (pos) => {
-        const here = { lat: pos.coords.latitude, lon: pos.coords.longitude };
         setGeoState('ok');
-        setPosition(here);
-        // Standing at the next stop means that stop is done (tap undoes it).
-        setProgress((prev) => {
-          const upcoming = stopsRef.current.find(
-            (stop) => !prev.visited.includes(stop.id)
-          );
-          if (!upcoming || metresBetween(here, upcoming) > ARRIVAL_RADIUS_M) {
-            return prev;
-          }
-          const next = {
-            ...prev,
-            route: key,
-            visited: [...prev.visited, upcoming.id],
-          };
-          saveProgress(next);
-          return next;
+        setFix({
+          lat: pos.coords.latitude,
+          lon: pos.coords.longitude,
+          accuracy:
+            typeof pos.coords.accuracy === 'number'
+              ? pos.coords.accuracy
+              : null,
+          at: typeof pos.timestamp === 'number' ? pos.timestamp : Date.now(),
         });
       },
       () => setGeoState('denied'),
       { enableHighAccuracy: true, maximumAge: 5_000, timeout: 15_000 }
     );
     return () => geo.clearWatch?.(watch);
-  }, [stopCount, key, toggle]);
+  }, [stopCount]);
+
+  // Staleness only matters while walking: a fix that stops updating must not
+  // keep looking like a live position.
+  useEffect(() => {
+    if (mode !== 'moving') return;
+    const timer = window.setInterval(() => setNow(Date.now()), 5_000);
+    return () => window.clearInterval(timer);
+  }, [mode]);
+
+  const quality = useMemo<FixQuality>(() => {
+    if (geoState === 'denied') return 'unavailable';
+    if (geoState === 'idle' || !fix) return 'waiting';
+    if (now - fix.at > STALE_FIX_MS) return 'stale';
+    if (fix.accuracy != null && fix.accuracy > WEAK_ACCURACY_M) return 'poor';
+    return 'good';
+  }, [geoState, fix, now]);
+
+  /** Only a good fix earns an exact «через 30 м». */
+  const precise = quality === 'good';
+
+  // ── Stops the tourist is standing at count as walked ─────────────────────
+  //
+  // Derived, never stored: a fix worth trusting completes the upcoming stop,
+  // and stepping on to the next one completes that as well. A weak fix never
+  // reaches this branch, so a bad signal cannot silently tick stops off.
+  const effectiveVisited = useMemo(() => {
+    const seen = new Set(progress.visited);
+    if (precise && fix) {
+      for (const stop of stops) {
+        if (seen.has(stop.id)) continue;
+        if (metresBetween(fix, stop) > ARRIVAL_RADIUS_M) break;
+        seen.add(stop.id);
+      }
+    }
+    return stops.filter((s) => seen.has(s.id)).map((s) => s.id);
+  }, [progress.visited, stops, fix, precise]);
+
+  const nextStop = useMemo(
+    () => stops.find((s) => !effectiveVisited.includes(s.id)) ?? null,
+    [stops, effectiveVisited]
+  );
+  const nextIndex = useMemo(
+    () => (nextStop ? stops.findIndex((s) => s.id === nextStop.id) : -1),
+    [stops, nextStop]
+  );
+
+  // ── Progress along the line, frozen against backward jumps ───────────────
+  const located = useMemo(
+    () => (fix && line ? locateOnLine(fix, line) : null),
+    [fix, line]
+  );
+
+  // ── Off route, but only after it persists across fixes ───────────────────
+  //
+  // Both effects mirror an external stream (the device's GPS fixes) rather than
+  // deriving from props, which is exactly what setState-in-effect is for.
+  /* eslint-disable react-hooks/set-state-in-effect -- GPS-derived state, not derived-from-render state */
+  useEffect(() => {
+    if (!precise || !located) return;
+    setTraveled((prev) => Math.max(prev, located.along - BACKWARD_TOLERANCE_M));
+  }, [precise, located]);
+
+  useEffect(() => {
+    if (mode !== 'moving' || !precise || !located || !fix) {
+      offRouteFixesRef.current = 0;
+      setOffRoute(false);
+      return;
+    }
+    // Standing at a POI a few metres off the line is not "off route".
+    const atStop = nextStop
+      ? metresBetween(fix, nextStop) <= ARRIVAL_RADIUS_M * 2
+      : false;
+    if (located.offRoute > OFF_ROUTE_M && !atStop) {
+      offRouteFixesRef.current += 1;
+      if (offRouteFixesRef.current >= OFF_ROUTE_FIXES) setOffRoute(true);
+    } else {
+      offRouteFixesRef.current = 0;
+      setOffRoute(false);
+    }
+  }, [mode, precise, located, fix, nextStop]);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
+  // ── Active manoeuvre + remaining line progress ───────────────────────────
+  // The turn ahead of the (frozen) progress point; a weak fix never advances
+  // this, because `traveled` only moves on a trusted fix.
+  const activeManeuver = useMemo(
+    () => maneuvers.find((m) => m.along > traveled + 5) ?? null,
+    [maneuvers, traveled]
+  );
+
+  const maneuverDistance =
+    precise && activeManeuver
+      ? Math.max(0, activeManeuver.along - traveled)
+      : null;
+
+  const nextAlong = useMemo(() => {
+    if (!line || !nextStop) return null;
+    return locateOnLine(nextStop, line).along;
+  }, [line, nextStop]);
+
+  const toNextMetres = nextStop
+    ? precise && fix
+      ? metresBetween(fix, nextStop)
+      : null
+    : null;
+
+  /** Line-based distance still ahead — falls back to the straight line. */
+  const remainingToNext =
+    nextAlong != null
+      ? Math.max(0, nextAlong - traveled)
+      : precise && fix && nextStop
+        ? metresBetween(fix, nextStop)
+        : null;
+
+  const walkSeconds =
+    speed && remainingToNext != null ? remainingToNext / speed : null;
+  const walkMinutes =
+    walkSeconds != null && walkSeconds > 0
+      ? Math.max(1, Math.round(walkSeconds / 60))
+      : null;
+
+  // ETA is a pure function of the ticking clock (`now`) and the route's own
+  // speed — no clock read during render, no state of its own.
+  const etaLabel =
+    walkSeconds != null && precise
+      ? `≈ ${fmtClock(now + walkSeconds * 1000)}`
+      : null;
+
+  const metresDone = line ? Math.min(traveled, line.total) : null;
+  const metresTotal = line ? line.total : null;
+
+  const done = effectiveVisited.length;
+  const minutesLeft = stops
+    .filter((s) => !effectiveVisited.includes(s.id))
+    .reduce((sum, s) => sum + (s.visitMinutes ?? 0), 0);
+  const totalVisitLeft = minutesLeft;
+  const remainingMinutes = useMemo(() => {
+    if (walkSeconds == null && totalVisitLeft === 0) return null;
+    const walk = walkSeconds != null ? walkSeconds / 60 : 0;
+    return Math.round(walk + totalVisitLeft);
+  }, [walkSeconds, totalVisitLeft]);
+
+  // ── The announcement, throttled: a new turn, or the distance in 50 m steps.
+  // Derived, so re-renders that change nothing announce nothing.
+  const announcement = !activeManeuver
+    ? ''
+    : precise && maneuverDistance != null
+      ? `Через ${fmtDist(Math.round(maneuverDistance / 50) * 50)}: ${activeManeuver.instruction}`
+      : activeManeuver.instruction;
+
+  // ── Re-plan from where the tourist stands, keeping every stop ────────────
+  //
+  // The panel does not fetch routes: it moves the «моё местоположение» start to
+  // the current fix (so the next plan begins here) and asks the integration
+  // layer to re-plan — either through the `onReroute` prop or, when nothing is
+  // wired, by emitting `grodno:guide-reroute` with the position. Either way the
+  // stops (incl. mandatory ones) are left untouched.
+  const reroute = useCallback(() => {
+    const store = useDirectionsStore.getState();
+    if (fix) {
+      const mine = meWaypoint(fix.lat, fix.lon);
+      const hasMe = store.waypoints.some((w) => w.id === ME_WAYPOINT_ID);
+      store.setWaypoint(
+        hasMe
+          ? store.waypoints.map((w) => (w.id === ME_WAYPOINT_ID ? mine : w))
+          : [mine, ...store.waypoints]
+      );
+    }
+    setTraveled(0);
+    offRouteFixesRef.current = 0;
+    setOffRoute(false);
+    onReroute?.();
+    try {
+      window.dispatchEvent(
+        new CustomEvent('grodno:guide-reroute', {
+          detail: fix ? { lat: fix.lat, lon: fix.lon } : null,
+        })
+      );
+    } catch {
+      // No CustomEvent (a bare render) — the store update above already moved
+      // the start of the next plan.
+    }
+  }, [onReroute, fix]);
 
   // Keep the screen awake while walking; browsers may refuse — that is fine.
   useEffect(() => {
+    if (mode !== 'moving') return;
     const nav = navigator as Navigator & {
       wakeLock?: {
         request: (type: 'screen') => Promise<{ release: () => Promise<void> }>;
@@ -185,23 +604,24 @@ export const GuidePanel = ({ stops }: GuidePanelProps) => {
       void wakeLockRef.current?.release().catch(() => undefined);
       wakeLockRef.current = null;
     };
-  }, []);
+  }, [mode]);
 
-  const done = progress.visited.length;
-  const nextDistance =
-    nextStop && position ? metresBetween(position, nextStop) : null;
-  const minutesLeft = stops
-    .filter((s) => !progress.visited.includes(s.id))
-    .reduce((sum, s) => sum + (s.visitMinutes ?? 0), 0);
+  const geoLine = useMemo(() => {
+    if (quality === 'unavailable')
+      return 'геолокация недоступна — отмечайте остановки вручную';
+    if (quality === 'waiting') return 'определяю, где вы…';
+    if (quality === 'stale')
+      return 'сигнал GPS потерян — отмечайте остановки вручную';
+    if (quality === 'poor')
+      return `GPS неточный (±${Math.round(fix?.accuracy ?? 0)} м) — подсказки приблизительные`;
+    return toNextMetres != null
+      ? `до следующей ${fmtDist(toNextMetres)}`
+      : 'вы на маршруте';
+  }, [quality, fix, toNextMetres]);
 
-  const geoLine =
-    geoState === 'denied'
-      ? 'геолокация недоступна — отмечайте остановки вручную'
-      : geoState === 'idle'
-        ? 'определяю, где вы…'
-        : nextDistance != null
-          ? `до следующей ${fmtDist(nextDistance)}`
-          : 'вы на маршруте';
+  const activeSuggestions = suggestions.filter(
+    (s) => !skippedSuggestions.includes(s.id)
+  );
 
   if (stops.length === 0) {
     return (
@@ -212,8 +632,126 @@ export const GuidePanel = ({ stops }: GuidePanelProps) => {
     );
   }
 
+  if (mode === 'moving') {
+    const ManeuverIcon = activeManeuver
+      ? getManeuverIcon(activeManeuver.type)
+      : Footprints;
+    return (
+      <section
+        data-testid="guide-panel"
+        data-mode="moving"
+        className="flex min-h-full flex-col gap-3"
+      >
+        {/* The turn the tourist is walking into — the one big thing on screen. */}
+        <ManeuverBanner
+          instruction={
+            activeManeuver?.instruction ??
+            (nextStop
+              ? `Идите к остановке «${nextStop.name}»`
+              : 'Идите по маршруту')
+          }
+          Icon={ManeuverIcon}
+          distance={maneuverDistance}
+          precise={precise}
+          quality={quality}
+        />
+
+        {offRoute && (
+          <OffRoutePrompt
+            metres={located ? Math.round(located.offRoute) : null}
+            onReroute={reroute}
+            onDismiss={() => {
+              offRouteFixesRef.current = 0;
+              setOffRoute(false);
+            }}
+          />
+        )}
+
+        {nextStop ? (
+          <GuideNextStop
+            key={nextStop.id}
+            number={nextIndex + 1}
+            name={nextStop.name}
+            category={nextStop.category ?? null}
+            visitMinutes={nextStop.visitMinutes ?? null}
+            distance={toNextMetres}
+            walkMinutes={walkMinutes}
+            etaLabel={etaLabel}
+            mapsHref={mapsUrl(nextStop.lat, nextStop.lon)}
+          />
+        ) : (
+          <GuideRouteDone total={stops.length} />
+        )}
+
+        <GuideProgress
+          done={done}
+          total={stops.length}
+          minutesLeft={minutesLeft}
+          metresDone={metresDone}
+          metresTotal={metresTotal}
+          remainingMinutes={remainingMinutes}
+        />
+
+        <p
+          data-testid="guide-geo-status"
+          className="flex items-center gap-1.5 text-meta text-muted-foreground"
+        >
+          <QualityIcon quality={quality} />
+          {geoLine}
+        </p>
+
+        <div className="flex gap-2">
+          <button
+            type="button"
+            data-testid="guide-advance"
+            onClick={() => nextStop && setVisited(nextStop.id, true)}
+            disabled={!nextStop}
+            className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-primary font-semibold text-primary-foreground transition hover:brightness-[0.97] active:scale-[0.99] disabled:opacity-40"
+          >
+            <MapPin className="h-4 w-4" />я на месте
+          </button>
+          <button
+            type="button"
+            data-testid="guide-finish"
+            onClick={() => setMode('review')}
+            className="flex h-12 items-center justify-center gap-2 rounded-xl bg-secondary px-4 font-semibold text-secondary-foreground transition hover:brightness-[0.97] active:scale-[0.99]"
+          >
+            <Flag className="h-4 w-4" />
+            завершить
+          </button>
+        </div>
+
+        {activeSuggestions.length > 0 && (
+          <SuggestionList
+            suggestions={activeSuggestions}
+            onAdd={(id) => onAddSuggestion?.(id)}
+            onSkip={(id) => setSkippedSuggestions((prev) => [...prev, id])}
+          />
+        )}
+
+        <GuideStopList
+          stops={stops}
+          visited={effectiveVisited}
+          nextId={nextStop?.id ?? null}
+          nextDistance={toNextMetres}
+          onToggle={toggle}
+          collapsible
+          defaultOpen={false}
+        />
+
+        <p aria-live="polite" role="status" className="sr-only">
+          {announcement}
+        </p>
+      </section>
+    );
+  }
+
   return (
-    <section data-testid="guide-panel" className="flex flex-col gap-3">
+    <section
+      data-testid="guide-panel"
+      data-mode="review"
+      className="flex flex-col gap-3"
+    >
       <GuideHeader onReset={reset} />
 
       {/* The next stop, or a quiet «all done» card once there is none. */}
@@ -226,7 +764,9 @@ export const GuidePanel = ({ stops }: GuidePanelProps) => {
           name={nextStop.name}
           category={nextStop.category ?? null}
           visitMinutes={nextStop.visitMinutes ?? null}
-          distance={nextDistance}
+          distance={toNextMetres}
+          walkMinutes={walkMinutes}
+          etaLabel={etaLabel}
           mapsHref={mapsUrl(nextStop.lat, nextStop.lon)}
         />
       ) : (
@@ -237,29 +777,202 @@ export const GuidePanel = ({ stops }: GuidePanelProps) => {
         done={done}
         total={stops.length}
         minutesLeft={minutesLeft}
+        metresDone={metresDone}
+        metresTotal={metresTotal}
+        remainingMinutes={remainingMinutes}
       />
 
       <p
         data-testid="guide-geo-status"
-        className="flex items-center gap-1.5 text-[12px] text-muted-foreground"
+        className="flex items-center gap-1.5 text-meta text-muted-foreground"
       >
-        {geoState === 'denied' ? (
-          <LocateFixed className="h-3.5 w-3.5" />
-        ) : (
-          <Navigation className="h-3.5 w-3.5" />
-        )}
+        <QualityIcon quality={quality} />
         {geoLine}
       </p>
 
       <GuideStopList
         stops={stops}
-        visited={progress.visited}
+        visited={effectiveVisited}
         nextId={nextStop?.id ?? null}
-        nextDistance={nextDistance}
+        nextDistance={toNextMetres}
         onToggle={toggle}
       />
+
+      <button
+        type="button"
+        data-testid="guide-start"
+        onClick={() => setMode('moving')}
+        disabled={!nextStop}
+        className="flex h-12 items-center justify-center gap-2 rounded-xl bg-primary font-semibold text-primary-foreground transition hover:brightness-[0.97] active:scale-[0.99] disabled:opacity-40"
+      >
+        <Play className="h-4 w-4" />
+        начать маршрут
+      </button>
     </section>
   );
+};
+
+// ── Parts local to the panel ────────────────────────────────────────────────
+
+interface ManeuverBannerProps {
+  instruction: string;
+  Icon: ReturnType<typeof getManeuverIcon>;
+  distance: number | null;
+  precise: boolean;
+  quality: FixQuality;
+}
+
+/**
+ * The big arrow: what to do next, and how far — but only when the fix can
+ * carry a number. A weak signal gets the instruction without the metres.
+ */
+const ManeuverBanner = ({
+  instruction,
+  Icon,
+  distance,
+  precise,
+  quality,
+}: ManeuverBannerProps) => (
+  <div
+    data-testid="guide-maneuver"
+    className="sticky top-0 z-10 rounded-2xl border border-border bg-card p-4 shadow-float"
+  >
+    <div className="flex items-start gap-3">
+      <span className="flex size-12 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
+        <Icon className="size-6" aria-hidden="true" />
+      </span>
+      <div className="min-w-0 flex-1">
+        <div
+          data-testid="guide-maneuver-instruction"
+          className="text-stat font-semibold leading-tight"
+        >
+          {instruction}
+        </div>
+        <div className="mt-1 text-label text-muted-foreground">
+          {precise && distance != null ? (
+            <span data-testid="guide-maneuver-distance">
+              через {fmtDist(distance)}
+            </span>
+          ) : (
+            <span data-testid="guide-maneuver-unprecise">
+              {quality === 'unavailable'
+                ? 'сигнала нет — идите по линии маршрута'
+                : 'расстояние скрыто: сигнал GPS неточный'}
+            </span>
+          )}
+        </div>
+      </div>
+    </div>
+  </div>
+);
+
+interface OffRoutePromptProps {
+  metres: number | null;
+  onReroute: () => void;
+  onDismiss: () => void;
+}
+
+/** Offered when the tourist has clearly left the line — never silently. */
+const OffRoutePrompt = ({
+  metres,
+  onReroute,
+  onDismiss,
+}: OffRoutePromptProps) => (
+  <div
+    data-testid="guide-off-route"
+    role="alert"
+    className="rounded-2xl border border-border bg-card p-4 shadow-card"
+  >
+    <div className="flex items-start gap-3">
+      <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+        <TriangleAlert className="h-5 w-5" aria-hidden="true" />
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="text-body font-semibold leading-tight">
+          вы сошли с маршрута
+        </div>
+        <p className="mt-0.5 text-label text-muted-foreground">
+          {metres != null ? `вы в ~${fmtDist(metres)} от линии. ` : ''}
+          Перестроим от вас — остановки и обязательные точки сохранятся.
+        </p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button
+            type="button"
+            data-testid="guide-reroute"
+            onClick={onReroute}
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-primary px-4 text-body font-semibold text-primary-foreground transition hover:brightness-[0.97] active:scale-[0.99]"
+          >
+            <Navigation className="h-4 w-4" />
+            перестроить от меня
+          </button>
+          <button
+            type="button"
+            data-testid="guide-on-route"
+            onClick={onDismiss}
+            className="inline-flex h-10 items-center justify-center rounded-xl px-4 text-body text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          >
+            я на маршруте
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+);
+
+interface SuggestionListProps {
+  suggestions: GuideSuggestion[];
+  onAdd: (id: string) => void;
+  onSkip: (id: string) => void;
+}
+
+/** Contextual POIs. Adding one hands the choice on; it never edits the route. */
+const SuggestionList = ({
+  suggestions,
+  onAdd,
+  onSkip,
+}: SuggestionListProps) => (
+  <div
+    data-testid="guide-suggestions"
+    className="rounded-2xl border border-border bg-card p-3 shadow-card"
+  >
+    <div className="px-1 text-meta font-medium text-muted-foreground">
+      по пути — предложения, маршрут не меняют
+    </div>
+    {suggestions.map((s) => (
+      <div key={s.id} className="mt-2 flex items-center gap-2 px-1">
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-body">{s.name}</div>
+          <div className="text-meta text-muted-foreground">{s.detail}</div>
+        </div>
+        <button
+          type="button"
+          data-testid={`guide-suggestion-add-${s.id}`}
+          onClick={() => onAdd(s.id)}
+          className="h-8 shrink-0 rounded-full border border-border px-3 text-meta transition-colors hover:bg-muted"
+        >
+          добавить
+        </button>
+        <button
+          type="button"
+          data-testid={`guide-suggestion-skip-${s.id}`}
+          onClick={() => onSkip(s.id)}
+          className="h-8 shrink-0 rounded-full px-2 text-meta text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        >
+          не надо
+        </button>
+      </div>
+    ))}
+  </div>
+);
+
+const QualityIcon = ({ quality }: { quality: FixQuality }) => {
+  if (quality === 'unavailable' || quality === 'stale') {
+    return <WifiOff className="h-3.5 w-3.5" aria-hidden="true" />;
+  }
+  if (quality === 'waiting' || quality === 'poor') {
+    return <LocateFixed className="h-3.5 w-3.5" aria-hidden="true" />;
+  }
+  return <Navigation className="h-3.5 w-3.5" aria-hidden="true" />;
 };
 
 interface GuideHeaderProps {
@@ -274,8 +987,8 @@ const GuideHeader = ({ onReset }: GuideHeaderProps) => (
         <Footprints className="h-4 w-4" />
       </span>
       <div>
-        <div className="text-[15px] font-semibold leading-tight">Проводник</div>
-        <div className="text-[12px] text-muted-foreground">
+        <div className="text-body font-semibold leading-tight">Проводник</div>
+        <div className="text-meta text-muted-foreground">
           идём по маршруту остановка за остановкой
         </div>
       </div>
@@ -284,7 +997,7 @@ const GuideHeader = ({ onReset }: GuideHeaderProps) => (
       type="button"
       onClick={onReset}
       title="начать маршрут заново"
-      className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-[12px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+      className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-meta text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
     >
       <RotateCcw className="h-3.5 w-3.5" />
       сбросить прогресс

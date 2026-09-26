@@ -20,7 +20,7 @@ export const Chip = ({
     type="button"
     aria-pressed={selected}
     className={cn(
-      'h-8 shrink-0 rounded-full border px-3 text-[13px] font-medium transition-colors',
+      'h-8 shrink-0 rounded-full border px-3 text-label font-medium transition-colors',
       'disabled:pointer-events-none disabled:opacity-40',
       selected
         ? 'border-foreground bg-foreground text-background'

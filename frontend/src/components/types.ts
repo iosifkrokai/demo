@@ -9,6 +9,20 @@ export interface ActiveWaypoint {
   addressindex: number;
 }
 
+/**
+ * Result type sent as `result_mode` to POST /routes/generate (spec 002):
+ * `route` is a ready itinerary, `catalogue` a grouped list the tourist picks
+ * a route from.
+ */
+export type ResultMode = 'route' | 'catalogue';
+
+/**
+ * How strongly an amenity is wanted. `hard` amenities go out as
+ * `hard_services` (the route must serve them or report the requirement unmet);
+ * `soft` ones join `interests` and are offered only if they fit the route.
+ */
+export type AmenityStrength = 'hard' | 'soft';
+
 export type ActiveWaypoints = ActiveWaypoint[];
 
 export type Settings = Record<
@@ -98,6 +112,18 @@ export interface ParsedDirectionsGeometry {
   id: string;
   decodedGeometry: number[][];
   alternates?: ValhallaRouteResponse[];
+  /**
+   * Which line is on screen (spec 002 — one route source). `agent` means the
+   * geometry came from the verified backend plan; `client` means this app asked
+   * Valhalla itself, which only happens for a hand-built route. Set by
+   * `use-directions-queries`, read by the map's provenance chip.
+   */
+  source?: 'agent' | 'client';
+  /**
+   * False when an agent plan exists but carries no usable geometry: the map
+   * must say so instead of substituting a client-side line.
+   */
+  hasVerifiedLine?: boolean;
 }
 
 export interface Trip {

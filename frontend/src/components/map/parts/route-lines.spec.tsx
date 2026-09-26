@@ -147,4 +147,109 @@ describe('RouteLines', () => {
     expect(coords[0]).toEqual([10, 50]);
     expect(coords[1]).toEqual([11, 51]);
   });
+
+  describe('route provenance (spec 002 §7 — one route, one source)', () => {
+    const agentRoute = {
+      decodedGeometry: [
+        [53.9, 23.8],
+        [53.91, 23.81],
+      ],
+      trip: {
+        legs: [],
+        summary: { length: 7.5, time: 1800 },
+      },
+      source: 'agent' as const,
+      hasVerifiedLine: true,
+    };
+
+    it('draws the agent line and states it as the source', () => {
+      mockUseDirectionsStore.mockImplementation((selector) =>
+        selector(createMockState({ results: { data: agentRoute, show: {} } }))
+      );
+
+      render(<RouteLines />);
+
+      const feature = mockSource.mock.calls[0]?.[0]?.data.features[0];
+      expect(feature.properties.provenance).toBe('agent');
+      expect(feature.geometry.coordinates[0]).toEqual([23.8, 53.9]);
+    });
+
+    it('draws a hand-built route as a client line', () => {
+      mockUseDirectionsStore.mockImplementation((selector) =>
+        selector(
+          createMockState({
+            results: {
+              data: {
+                decodedGeometry: [
+                  [50, 10],
+                  [51, 11],
+                ],
+                trip: { summary: { length: 100, time: 3600 } },
+                source: 'client' as const,
+                hasVerifiedLine: true,
+              },
+              show: {},
+            },
+          })
+        )
+      );
+
+      render(<RouteLines />);
+
+      expect(
+        mockSource.mock.calls[0]?.[0]?.data.features[0].properties.provenance
+      ).toBe('client');
+    });
+
+    it('treats a result without provenance as a client route', () => {
+      mockUseDirectionsStore.mockImplementation((selector) => {
+        const state = createMockState();
+        return selector(state);
+      });
+
+      render(<RouteLines />);
+
+      expect(
+        mockSource.mock.calls[0]?.[0]?.data.features[0].properties.provenance
+      ).toBe('client');
+    });
+
+    it('draws nothing when an agent route carries no usable geometry', () => {
+      mockUseDirectionsStore.mockImplementation((selector) =>
+        selector(
+          createMockState({
+            results: {
+              data: {
+                decodedGeometry: [],
+                trip: { legs: [], summary: { length: 0, time: 0 } },
+                source: 'agent' as const,
+                hasVerifiedLine: false,
+              },
+              show: { '0': true },
+            },
+          })
+        )
+      );
+
+      const { container } = render(<RouteLines />);
+
+      // No substituted client line: the stops stay on the map, the line does not.
+      expect(container.firstChild).toBeNull();
+      expect(mockSource).not.toHaveBeenCalled();
+    });
+
+    it('reports the summary of the line it actually draws', () => {
+      mockUseDirectionsStore.mockImplementation((selector) =>
+        selector(createMockState({ results: { data: agentRoute, show: {} } }))
+      );
+
+      render(<RouteLines />);
+
+      // The hover popup and the route strip read this: the verified line's own
+      // numbers, not the ones a client-side request would have produced.
+      expect(
+        mockSource.mock.calls[0]?.[0]?.data.features[0].properties.summary
+      ).toEqual({ length: 7.5, time: 1800 });
+    });
+  });
 });

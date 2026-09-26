@@ -89,14 +89,14 @@ export function TilesProperty({
         ) : (
           <XIcon className="size-3.5" />
         )}
-        <span className="text-xs">{value ? 'Yes' : 'No'}</span>
+        <span className="text-meta">{value ? 'Yes' : 'No'}</span>
       </span>
     );
   }
 
   if (propertyKey === 'length') {
     return (
-      <span className="font-mono text-xs">
+      <span className="font-mono text-meta">
         {String(value)}
         <span className="text-muted-foreground ml-0.5">m</span>
       </span>
@@ -108,7 +108,7 @@ export function TilesProperty({
     !(propertyKey.includes('congestion') || propertyKey.includes('breakpoint'))
   ) {
     return (
-      <span className="font-mono text-xs">
+      <span className="font-mono text-meta">
         {String(value)}
         <span className="text-muted-foreground ml-0.5">km/h</span>
       </span>
@@ -117,7 +117,7 @@ export function TilesProperty({
 
   if (propertyKey.includes('slope')) {
     return (
-      <span className="font-mono text-xs">
+      <span className="font-mono text-meta">
         {String(value)}
         <span className="text-muted-foreground">°</span>
       </span>
@@ -126,11 +126,11 @@ export function TilesProperty({
 
   if (typeof value === 'object') {
     return (
-      <code className="text-[10px] font-mono text-muted-foreground">
+      <code className="text-badge font-mono text-muted-foreground">
         {JSON.stringify(value)}
       </code>
     );
   }
 
-  return <span className="font-mono text-xs">{String(value)}</span>;
+  return <span className="font-mono text-meta">{String(value)}</span>;
 }

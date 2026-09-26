@@ -12,14 +12,14 @@ interface PlaceMarkerLabelProps {
 export function PlaceMarkerLabel({ details }: PlaceMarkerLabelProps) {
   return (
     <div
-      className="pointer-events-none absolute bottom-[calc(100%+6px)] left-1/2 w-max max-w-[210px] -translate-x-1/2 rounded-md border border-border/60 bg-background/90 px-2 py-1 text-center shadow-sm backdrop-blur-sm"
+      className="pointer-events-none absolute bottom-[calc(100%+6px)] left-1/2 w-max max-w-[210px] -translate-x-1/2 rounded-lg border border-border/60 bg-background/90 px-2 py-1 text-center shadow-sm backdrop-blur-sm"
       data-testid="place-marker-label"
     >
-      <div className="truncate text-[11px] leading-tight font-semibold">
+      <div className="truncate text-badge leading-tight font-semibold">
         {details.name}
       </div>
       {details.blurb && (
-        <div className="truncate text-[10px] leading-tight text-muted-foreground">
+        <div className="truncate text-badge leading-tight text-muted-foreground">
           {details.blurb}
         </div>
       )}
