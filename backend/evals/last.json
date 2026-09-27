@@ -1,0 +1,496 @@
+[
+ {
+  "stage": "verdicts",
+  "checks": [
+   {
+    "case": "must_visit_present",
+    "check": "verdict",
+    "ok": true,
+    "known_gap": false,
+    "detail": "получено [('satisfied', 'must_visit_on_route')], ожидалось [('satisfied', 'must_visit_on_route')]",
+    "why": "Обязательное место на маршруте и линия есть — значит выполнено, и место-доказательство названо."
+   },
+   {
+    "case": "must_visit_absent",
+    "check": "verdict",
+    "ok": true,
+    "known_gap": false,
+    "detail": "получено [('unmet', 'must_visit_absent')], ожидалось [('unmet', 'must_visit_absent')]",
+    "why": "Место не попало в маршрут — честно «не выполнено», а не «наверное получилось»."
+   },
+   {
+    "case": "hard_service_as_stop",
+    "check": "verdict",
+    "ok": true,
+    "known_gap": false,
+    "detail": "получено [('satisfied', 'service_on_route')], ожидалось [('satisfied', 'service_on_route')]",
+    "why": "Услуга оказалась остановкой — это старый путь; требование закрыто, доказательство — сама остановка."
+   },
+   {
+    "case": "service_along_the_line",
+    "check": "verdict",
+    "ok": true,
+    "known_gap": false,
+    "detail": "получено [('satisfied', 'service_along_route')], ожидалось [('satisfied', 'service_along_route')]",
+    "why": "Кафе не остановка, но лежит у линии: «кофе по пути» закрыто измерением, а не выдумкой. Именно это ломалось до правки."
+   },
+   {
+    "case": "service_measured_none_found",
+    "check": "verdict",
+    "ok": true,
+    "known_gap": false,
+    "detail": "получено [('unmet', 'hard_service_absent')], ожидалось [('unmet', 'hard_service_absent')]",
+    "why": "Измерили и не нашли — это «нет», и оно должно остаться «нет»."
+   },
+   {
+    "case": "service_measurement_failed",
+    "check": "verdict",
+    "ok": true,
+    "known_gap": false,
+    "detail": "получено [('uncertain', 'service_not_measured')], ожидалось [('uncertain', 'service_not_measured')]",
+    "why": "Измерить не смогли (сломалась линия, база недоступна) — «мы не знаем», а не «нет»: иначе мы утверждаем то, чего не проверяли."
+   },
+   {
+    "case": "service_evidence_for_other_code",
+    "check": "verdict",
+    "ok": true,
+    "known_gap": false,
+    "detail": "получено [('unmet', 'hard_service_absent')], ожидалось [('unmet', 'hard_service_absent')]",
+    "why": "Нашли кафе, а спрашивали туалет: совпадение по категории обязательно."
+   },
+   {
+    "case": "service_found_but_no_line",
+    "check": "verdict",
+    "ok": true,
+    "known_gap": false,
+    "detail": "получено [('uncertain', 'geometry_missing')], ожидалось [('uncertain', 'geometry_missing')]",
+    "why": "Услуга найдена, но линии нет — доказать, что её можно достичь, нечем: «неизвестно», а не «выполнено»."
+   },
+   {
+    "case": "unknown_code_is_uncertain",
+    "check": "verdict",
+    "ok": true,
+    "known_gap": false,
+    "detail": "получено [('uncertain', 'category_code_unknown')], ожидалось [('uncertain', 'category_code_unknown')]",
+    "why": "Кода нет в таксономии: проверить нечего, и это «неизвестно», а не «не выполнено»."
+   },
+   {
+    "case": "avoid_honoured",
+    "check": "verdict",
+    "ok": true,
+    "known_gap": false,
+    "detail": "получено [('satisfied', 'avoid_honoured')], ожидалось [('satisfied', 'avoid_honoured')]",
+    "why": "Запрет соблюдён: ничего запрещённого в маршруте нет."
+   },
+   {
+    "case": "avoid_violated",
+    "check": "verdict",
+    "ok": true,
+    "known_gap": false,
+    "detail": "получено [('unmet', 'avoid_violated')], ожидалось [('unmet', 'avoid_violated')]",
+    "why": "Запрещённая категория всё-таки в маршруте — это нарушение, и оно должно быть названо."
+   },
+   {
+    "case": "unroutable_must_visit",
+    "check": "verdict",
+    "ok": true,
+    "known_gap": false,
+    "detail": "получено [('unmet', 'must_visit_unroutable')], ожидалось [('unmet', 'must_visit_unroutable')]",
+    "why": "Место есть, но к нему нет дороги: это невозможно, а не «не выполнено»."
+   },
+   {
+    "case": "no_route_at_all",
+    "check": "verdict",
+    "ok": true,
+    "known_gap": false,
+    "detail": "получено [('uncertain', 'route_missing')], ожидалось [('uncertain', 'route_missing')]",
+    "why": "Маршрута нет вовсе — требование не выполнено и не проверено, статус обязан отличаться от «нет данных о дороге»."
+   },
+   {
+    "case": "interest_on_route",
+    "check": "verdict",
+    "ok": true,
+    "known_gap": false,
+    "detail": "получено [('satisfied', 'interest_on_route')], ожидалось [('satisfied', 'interest_on_route')]",
+    "why": "Интерес попал в маршрут — выполнено без натяжек."
+   },
+   {
+    "case": "interest_absent",
+    "check": "verdict",
+    "ok": true,
+    "known_gap": false,
+    "detail": "получено [('unmet', 'interest_absent')], ожидалось [('unmet', 'interest_absent')]",
+    "why": "Интереса в маршруте нет: пожелание остаётся невыполненным, но маршрут из-за него не блокируется."
+   },
+   {
+    "case": "avoid_parent_does_not_group",
+    "check": "verdict",
+    "ok": false,
+    "known_gap": true,
+    "detail": "получено [('satisfied', 'avoid_honoured')], ожидалось [('unmet', 'avoid_violated')]",
+    "why": "Известный пробел: «без храмов» запрещает только код «храм», а костёлы, церкви и монастыри в него не входят — в данных нет иерархии категорий. Пробел оставлен видимым."
+   }
+  ],
+  "skipped": null
+ },
+ {
+  "stage": "services",
+  "checks": [
+   {
+    "case": "centre_sovetskaya_walk",
+    "check": "role_only",
+    "ok": true,
+    "detail": "не-услуги в ответе: []",
+    "why": "Главный случай: идём по Советской, рядом должны найтись кафе и туалет — и только они, а не костёлы."
+   },
+   {
+    "case": "centre_sovetskaya_walk",
+    "check": "ordered_along",
+    "ok": true,
+    "detail": "along_m = [409, 417, 433, 440, 476, 490, 538, 546, 547, 582, 609, 612, 628, 691, 774, 780, 795, 812, 816, 817, 822, 828, 831, 833, 834, 842, 844, 845, 846, 850, 853, 857, 866, 874, 874, 875, 883, 884, 894, 897, 905, 911, 921, 930, 960, 989, 993, 997, 1014, 1016, 1030, 1030, 1030]",
+    "why": "Главный случай: идём по Советской, рядом должны найтись кафе и туалет — и только они, а не костёлы."
+   },
+   {
+    "case": "centre_sovetskaya_walk",
+    "check": "within_gate",
+    "ok": true,
+    "detail": "за порогом 150.0 м: []",
+    "why": "Главный случай: идём по Советской, рядом должны найтись кафе и туалет — и только они, а не костёлы."
+   },
+   {
+    "case": "centre_sovetskaya_walk",
+    "check": "cap_matches_limit",
+    "ok": true,
+    "detail": "в ответе 53 точек при пределе 400",
+    "why": "Главный случай: идём по Советской, рядом должны найтись кафе и туалет — и только они, а не костёлы."
+   },
+   {
+    "case": "centre_sovetskaya_walk",
+    "check": "membership_agrees",
+    "ok": true,
+    "detail": "нет в ответе [], лишние [] (у порога не считаем: 1)",
+    "why": "Главный случай: идём по Советской, рядом должны найтись кафе и туалет — и только они, а не костёлы."
+   },
+   {
+    "case": "centre_sovetskaya_walk",
+    "check": "distance_agrees",
+    "ok": true,
+    "detail": "максимальное расхождение 1.06 м (допуск 2.73 м)",
+    "why": "Главный случай: идём по Советской, рядом должны найтись кафе и туалет — и только они, а не костёлы."
+   },
+   {
+    "case": "centre_sovetskaya_walk",
+    "check": "honest_flags",
+    "ok": true,
+    "detail": "detour_confirmed=False, measured=distance_to_line, not_measured=detour_walking_time",
+    "why": "Главный случай: идём по Советской, рядом должны найтись кафе и туалет — и только они, а не костёлы."
+   },
+   {
+    "case": "centre_sovetskaya_walk",
+    "check": "wider_gate_finds_more",
+    "ok": true,
+    "detail": "53 при 150 м → 124 при 450 м",
+    "why": "Главный случай: идём по Советской, рядом должны найтись кафе и туалет — и только они, а не костёлы."
+   },
+   {
+    "case": "castle_quarter_short",
+    "check": "role_only",
+    "ok": true,
+    "detail": "не-услуги в ответе: []",
+    "why": "Короткий отрезок у замков: пустой ответ обязан значить «измерили, рядом нет», а не «сломалось»."
+   },
+   {
+    "case": "castle_quarter_short",
+    "check": "ordered_along",
+    "ok": true,
+    "detail": "along_m = [39, 42, 51, 60, 147, 157, 180, 185, 200, 217, 217, 217, 217, 217, 217]",
+    "why": "Короткий отрезок у замков: пустой ответ обязан значить «измерили, рядом нет», а не «сломалось»."
+   },
+   {
+    "case": "castle_quarter_short",
+    "check": "within_gate",
+    "ok": true,
+    "detail": "за порогом 150.0 м: []",
+    "why": "Короткий отрезок у замков: пустой ответ обязан значить «измерили, рядом нет», а не «сломалось»."
+   },
+   {
+    "case": "castle_quarter_short",
+    "check": "cap_matches_limit",
+    "ok": true,
+    "detail": "в ответе 15 точек при пределе 400",
+    "why": "Короткий отрезок у замков: пустой ответ обязан значить «измерили, рядом нет», а не «сломалось»."
+   },
+   {
+    "case": "castle_quarter_short",
+    "check": "membership_agrees",
+    "ok": true,
+    "detail": "нет в ответе [], лишние [] (у порога не считаем: 2)",
+    "why": "Короткий отрезок у замков: пустой ответ обязан значить «измерили, рядом нет», а не «сломалось»."
+   },
+   {
+    "case": "castle_quarter_short",
+    "check": "distance_agrees",
+    "ok": true,
+    "detail": "максимальное расхождение 0.90 м (допуск 2.75 м)",
+    "why": "Короткий отрезок у замков: пустой ответ обязан значить «измерили, рядом нет», а не «сломалось»."
+   },
+   {
+    "case": "castle_quarter_short",
+    "check": "honest_flags",
+    "ok": true,
+    "detail": "detour_confirmed=False, measured=distance_to_line, not_measured=detour_walking_time",
+    "why": "Короткий отрезок у замков: пустой ответ обязан значить «измерили, рядом нет», а не «сломалось»."
+   },
+   {
+    "case": "centre_by_car",
+    "check": "role_only",
+    "ok": true,
+    "detail": "не-услуги в ответе: []",
+    "why": "На машине порог шире: точек не может стать меньше, чем у пешехода на той же линии."
+   },
+   {
+    "case": "centre_by_car",
+    "check": "ordered_along",
+    "ok": true,
+    "detail": "along_m = [69, 409, 417, 431, 433, 440, 445, 476, 490, 538, 546, 547, 582, 586, 592, 607, 609, 612, 613, 621, 623, 627, 628, 637, 640, 654, 660, 671, 690, 691, 693, 696, 706, 711, 732, 733, 734, 746, 755, 774, 780, 782, 783, 795, 795, 805, 812, 816, 817, 822, 828, 831, 833, 834, 842, 844, 845, 846, 850, 853, 857, 866, 872, 874, 874, 874, 875, 883, 884, 894, 897, 905, 911, 921, 930, 932, 933, 940, 943, 951, 958, 960, 964, 981, 986, 989, 993, 994, 996, 997, 1010, 1012, 1014, 1016, 1020, 1021, 1023, 1023, 1025, 1030, 1030, 1030, 1030, 1030, 1030, 1030, 1030, 1030, 1030, 1030, 1030, 1030, 1030, 1030, 1030, 1030, 1030, 1030, 1030, 1030, 1030, 1030]",
+    "why": "На машине порог шире: точек не может стать меньше, чем у пешехода на той же линии."
+   },
+   {
+    "case": "centre_by_car",
+    "check": "within_gate",
+    "ok": true,
+    "detail": "за порогом 400.0 м: []",
+    "why": "На машине порог шире: точек не может стать меньше, чем у пешехода на той же линии."
+   },
+   {
+    "case": "centre_by_car",
+    "check": "cap_matches_limit",
+    "ok": true,
+    "detail": "в ответе 122 точек при пределе 400",
+    "why": "На машине порог шире: точек не может стать меньше, чем у пешехода на той же линии."
+   },
+   {
+    "case": "centre_by_car",
+    "check": "membership_agrees",
+    "ok": true,
+    "detail": "нет в ответе [], лишние [] (у порога не считаем: 1)",
+    "why": "На машине порог шире: точек не может стать меньше, чем у пешехода на той же линии."
+   },
+   {
+    "case": "centre_by_car",
+    "check": "distance_agrees",
+    "ok": true,
+    "detail": "максимальное расхождение 2.46 м (допуск 3.90 м)",
+    "why": "На машине порог шире: точек не может стать меньше, чем у пешехода на той же линии."
+   },
+   {
+    "case": "centre_by_car",
+    "check": "honest_flags",
+    "ok": true,
+    "detail": "detour_confirmed=False, measured=distance_to_line, not_measured=detour_walking_time",
+    "why": "На машине порог шире: точек не может стать меньше, чем у пешехода на той же линии."
+   },
+   {
+    "case": "centre_by_car",
+    "check": "wider_gate_finds_more",
+    "ok": true,
+    "detail": "122 при 400 м → 213 при 1200 м",
+    "why": "На машине порог шире: точек не может стать меньше, чем у пешехода на той же линии."
+   },
+   {
+    "case": "cap_is_visible",
+    "check": "role_only",
+    "ok": true,
+    "detail": "не-услуги в ответе: []",
+    "why": "Предел в 3 точки: ответ обязан быть обрезан и вслух сказать об этом, а не сделать вид, что рядом только три заведения."
+   },
+   {
+    "case": "cap_is_visible",
+    "check": "ordered_along",
+    "ok": true,
+    "detail": "along_m = [409, 417, 433]",
+    "why": "Предел в 3 точки: ответ обязан быть обрезан и вслух сказать об этом, а не сделать вид, что рядом только три заведения."
+   },
+   {
+    "case": "cap_is_visible",
+    "check": "within_gate",
+    "ok": true,
+    "detail": "за порогом 150.0 м: []",
+    "why": "Предел в 3 точки: ответ обязан быть обрезан и вслух сказать об этом, а не сделать вид, что рядом только три заведения."
+   },
+   {
+    "case": "cap_is_visible",
+    "check": "cap_matches_limit",
+    "ok": true,
+    "detail": "в ответе 3 точек при пределе 3",
+    "why": "Предел в 3 точки: ответ обязан быть обрезан и вслух сказать об этом, а не сделать вид, что рядом только три заведения."
+   },
+   {
+    "case": "cap_is_visible",
+    "check": "membership_agrees",
+    "ok": true,
+    "detail": "нет в ответе [], лишние [] (у порога не считаем: 0)",
+    "why": "Предел в 3 точки: ответ обязан быть обрезан и вслух сказать об этом, а не сделать вид, что рядом только три заведения."
+   },
+   {
+    "case": "cap_is_visible",
+    "check": "distance_agrees",
+    "ok": true,
+    "detail": "максимальное расхождение 0.17 м (допуск 2.04 м)",
+    "why": "Предел в 3 точки: ответ обязан быть обрезан и вслух сказать об этом, а не сделать вид, что рядом только три заведения."
+   },
+   {
+    "case": "cap_is_visible",
+    "check": "honest_flags",
+    "ok": true,
+    "detail": "detour_confirmed=False, measured=distance_to_line, not_measured=detour_walking_time",
+    "why": "Предел в 3 точки: ответ обязан быть обрезан и вслух сказать об этом, а не сделать вид, что рядом только три заведения."
+   },
+   {
+    "case": "cap_is_visible",
+    "check": "cap_is_declared",
+    "ok": true,
+    "detail": "capped=True при 3 точках",
+    "why": "Предел в 3 точки: ответ обязан быть обрезан и вслух сказать об этом, а не сделать вид, что рядом только три заведения."
+   }
+  ],
+  "skipped": null,
+  "near_gate_points": 4
+ },
+ {
+  "stage": "interpretation",
+  "checks": [
+   {
+    "case": "coffee_along_the_way",
+    "check": "reads_request",
+    "ok": true,
+    "detail": "источник=llm, прочитано [('service', 'кафе', 'soft')]",
+    "why": "«Кофе по пути» — пожелание, а не обязательство: если прочитать его как «обязательно», маршрут станет невозможно построить."
+   },
+   {
+    "case": "coffee_along_the_way",
+    "check": "no_invented_codes",
+    "ok": true,
+    "detail": "выдуманные коды: []",
+    "why": "«Кофе по пути» — пожелание, а не обязательство: если прочитать его как «обязательно», маршрут станет невозможно построить."
+   },
+   {
+    "case": "coffee_along_the_way",
+    "check": "must_visit_is_placeable",
+    "ok": true,
+    "detail": "обязательные места без имени и id: []",
+    "why": "«Кофе по пути» — пожелание, а не обязательство: если прочитать его как «обязательно», маршрут станет невозможно построить."
+   },
+   {
+    "case": "mandatory_toilet",
+    "check": "reads_request",
+    "ok": true,
+    "detail": "источник=llm, прочитано [('must_visit', 'Гродно', 'soft'), ('service', 'туалет', 'hard')]",
+    "why": "«Туалет обязательно» — жёсткое требование, и именно оно проверяется верификатором до конца."
+   },
+   {
+    "case": "mandatory_toilet",
+    "check": "no_invented_codes",
+    "ok": true,
+    "detail": "выдуманные коды: []",
+    "why": "«Туалет обязательно» — жёсткое требование, и именно оно проверяется верификатором до конца."
+   },
+   {
+    "case": "mandatory_toilet",
+    "check": "must_visit_is_placeable",
+    "ok": true,
+    "detail": "обязательные места без имени и id: []",
+    "why": "«Туалет обязательно» — жёсткое требование, и именно оно проверяется верификатором до конца."
+   },
+   {
+    "case": "avoid_churches",
+    "check": "reads_request",
+    "ok": true,
+    "detail": "источник=llm, прочитано [('avoid', 'костёл', 'hard'), ('must_visit', 'Гродно', 'soft')]",
+    "why": "Запрет должен стать avoid, иначе запрещённое спокойно попадёт в маршрут."
+   },
+   {
+    "case": "avoid_churches",
+    "check": "no_invented_codes",
+    "ok": true,
+    "detail": "выдуманные коды: []",
+    "why": "Запрет должен стать avoid, иначе запрещённое спокойно попадёт в маршрут."
+   },
+   {
+    "case": "avoid_churches",
+    "check": "must_visit_is_placeable",
+    "ok": true,
+    "detail": "обязательные места без имени и id: []",
+    "why": "Запрет должен стать avoid, иначе запрещённое спокойно попадёт в маршрут."
+   },
+   {
+    "case": "ui_filter_beats_text",
+    "check": "reads_request",
+    "ok": true,
+    "detail": "источник=mixed, прочитано [('service', 'туалет', 'hard')]",
+    "why": "Что турист выставил галочкой, то и главнее текста: молча переопределять выбор нельзя."
+   },
+   {
+    "case": "ui_filter_beats_text",
+    "check": "no_invented_codes",
+    "ok": true,
+    "detail": "выдуманные коды: []",
+    "why": "Что турист выставил галочкой, то и главнее текста: молча переопределять выбор нельзя."
+   },
+   {
+    "case": "ui_filter_beats_text",
+    "check": "must_visit_is_placeable",
+    "ok": true,
+    "detail": "обязательные места без имени и id: []",
+    "why": "Что турист выставил галочкой, то и главнее текста: молча переопределять выбор нельзя."
+   },
+   {
+    "case": "museums_rainy_day",
+    "check": "reads_request",
+    "ok": true,
+    "detail": "источник=llm, прочитано [('interest', 'музей', 'soft'), ('must_visit', 'Гродно', 'soft')]",
+    "why": "Дождливый день и музеи: допустимы оба честных прочтения — пожелание или обязательное место."
+   },
+   {
+    "case": "museums_rainy_day",
+    "check": "no_invented_codes",
+    "ok": true,
+    "detail": "выдуманные коды: []",
+    "why": "Дождливый день и музеи: допустимы оба честных прочтения — пожелание или обязательное место."
+   },
+   {
+    "case": "museums_rainy_day",
+    "check": "must_visit_is_placeable",
+    "ok": true,
+    "detail": "обязательные места без имени и id: []",
+    "why": "Дождливый день и музеи: допустимы оба честных прочтения — пожелание или обязательное место."
+   },
+   {
+    "case": "mobility_not_a_category",
+    "check": "reads_request",
+    "ok": true,
+    "detail": "источник=llm, прочитано [('interest', 'замок', 'soft'), ('must_visit', 'Гродно', 'soft')]",
+    "why": "«На самокате» — про способ движения, а не категория места: выдумывать код нельзя."
+   },
+   {
+    "case": "mobility_not_a_category",
+    "check": "no_invented_codes",
+    "ok": true,
+    "detail": "выдуманные коды: []",
+    "why": "«На самокате» — про способ движения, а не категория места: выдумывать код нельзя."
+   },
+   {
+    "case": "mobility_not_a_category",
+    "check": "must_visit_is_placeable",
+    "ok": true,
+    "detail": "обязательные места без имени и id: []",
+    "why": "«На самокате» — про способ движения, а не категория места: выдумывать код нельзя."
+   }
+  ],
+  "skipped": null,
+  "sources": {
+   "llm": 5,
+   "mixed": 1
+  }
+ }
+]

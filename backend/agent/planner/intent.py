@@ -708,6 +708,41 @@ def _agent_contract(
         return None
 
 
+def _territory_slug(name: str) -> str | None:
+    """The area slug a named token refers to — when the token is a territory.
+
+    Both readings used to turn *every* proper noun in the query into a
+    must-visit, so «нужен маршрут по Гродно с туалетом» produced a mandatory stop
+    named «Гродно». Nothing in the dataset carries that name, so the deterministic
+    verifier could only report it `unmet` — in almost every answer, which made
+    honest reporting look like noise. A territory names where to look, not what to
+    visit, so it becomes no requirement at all: it is not put into ``areas``
+    either, because those are the *sub-areas* the contract knows ("старый город"
+    → `grodno-old-town`), and «замки Гродно» is expected to name no area.
+    """
+    from .. import areas as areas_mod
+
+    return areas_mod.resolve_area((name or "").strip())
+
+
+def _is_fragment_of(name: str, known: list[str]) -> bool:
+    """Is a named token a piece of a longer place name we already have?
+
+    «Старый и Новый замки» yields the tokens «Старый» and «Новый», and each used
+    to become its own mandatory stop — a place that does not exist, so the
+    verifier could only report it unmet. A token that is a whole word inside a
+    longer name already claimed is a fragment of that name, not a place.
+    """
+    norm = name.strip().lower()
+    if not norm:
+        return False
+    return any(
+        norm != other.strip().lower() and norm in other.strip().lower().split()
+        for other in known
+        if other
+    )
+
+
 def _finalize_agent_contract(
     contract: TripRequirements, query: str, req: GenerateReq
 ) -> TripRequirements:
@@ -777,6 +812,13 @@ def _finalize_agent_contract(
         contract.budget_minutes = req.time_budget_minutes or None
 
     for name in _named_tokens(query):
+        if _territory_slug(name):
+            continue  # a territory is a search scope, not a stop
+        if _is_fragment_of(
+            name,
+            [r.name for r in contract.requirements if r.kind == "must_visit" and r.name],
+        ):
+            continue
         key = ("must_visit", name)
         if key in claimed:
             continue
@@ -894,7 +936,15 @@ def _deterministic_requirements(query: str, req: GenerateReq) -> TripRequirement
     requirements, claimed = _merge_requirements(ui_reqs, reading.requirements)
 
     # Named places the user asked for: names now, grounded to IDs in resolve().
+    # A territory is not one of them — see `_territory_slug`.
     for name in _named_tokens(query):
+        if _territory_slug(name):
+            continue  # a territory is a search scope, not a stop
+        if _is_fragment_of(
+            name,
+            [r.name for r in requirements if r.kind == "must_visit" and r.name],
+        ):
+            continue
         key = ("must_visit", name)
         if key in claimed:
             continue

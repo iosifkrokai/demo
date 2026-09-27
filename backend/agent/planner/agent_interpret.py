@@ -395,8 +395,20 @@ def _ui_used(req: GenerateReq) -> bool:
 
 def _reading_requirements(
     reading: AgentReading, query: str, observed: set[int]
-) -> tuple[list[Requirement], list[str]]:
-    """Agent requirements → contract requirements, plus the asks we had to drop."""
+) -> tuple[list[Requirement], list[str], list[str]]:
+    """Agent requirements → contract requirements, plus the asks we had to drop.
+
+    A **territory is not a stop**. Asked «Гродно за два часа», the model reads
+    «visit Grodno» and offers a must-visit named «Гродно» — a place that does not
+    exist in the data, so the verifier could only ever report it unmet. That one
+    phantom requirement appeared in almost every answer and made honest reporting
+    look broken. A territory is simply not made into a requirement; it is not
+    recorded as an area either, because ``areas`` holds only the *sub-areas* the
+    contract knows (see `intent._areas_from_text`), and the city scope already
+    follows from the query text and the region geo-fence.
+    """
+    from .. import areas as areas_mod
+
     out: list[Requirement] = []
     unsupported: list[str] = []
     for item in reading.requirements:
@@ -411,6 +423,15 @@ def _reading_requirements(
                 continue
         elif not (item.name or "").strip():
             unsupported.append(item.kind)
+            continue
+        elif (
+            isinstance(item.place_id, int) and item.place_id in observed
+        ) is False and areas_mod.resolve_area((item.name or "").strip()):
+            # A city or an oblast names where to look, not what to visit.
+            log.info(
+                "interpretation: must_visit %r — территория (%s), не остановка",
+                item.name, areas_mod.resolve_area((item.name or "").strip()),
+            )
             continue
 
         place_id = None

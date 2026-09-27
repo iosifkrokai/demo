@@ -38,6 +38,9 @@ from agent.planner.explain import explain
 from agent.planner.validate import validate
 from agent.planner.verify import (
     REASON_AVOID_OK,
+    REASON_SERVICE_ALONG_ROUTE,
+    REASON_SERVICE_NOT_MEASURED,
+    ServiceAlongEvidence,
     REASON_AVOID_VIOLATED,
     REASON_CODE_UNKNOWN,
     REASON_GEOMETRY_MISSING,
@@ -98,6 +101,67 @@ def test_must_visit_matched_by_name_when_id_is_unknown():
 
     assert result[0].status == "satisfied"
     assert result[0].place_ids == [7]
+
+
+def test_a_service_beside_the_line_satisfies_the_requirement():
+    """«Кофе по пути» — the case that used to be permanently unmet.
+
+    The café is not a stop and must never become one; the requirement is closed
+    by the measurement the caller made along the line, and the proving ids are
+    the cafés themselves.
+    """
+    route = [_cand(1, "Старый замок", "замок")]
+    reqs = _reqs(Requirement(kind="service", strength="soft", code="кафе"))
+    measured = ServiceAlongEvidence(True, {"кафе": [{"id": 42, "name": "Ссобойка", "off_line_m": 1}]})
+
+    result = verify(reqs, route, _geom(), measured)
+
+    assert result[0].status == "satisfied"
+    assert result[0].place_ids == [42]
+    assert result[0].reason == REASON_SERVICE_ALONG_ROUTE
+
+
+def test_a_failed_measurement_is_uncertain_not_unmet():
+    # The caller could not measure (bad shape, database down). Saying «нет»
+    # would be a claim we have no evidence for.
+    route = [_cand(1, "Старый замок", "замок")]
+    reqs = _reqs(Requirement(kind="service", strength="hard", code="туалет"))
+
+    result = verify(reqs, route, _geom(), ServiceAlongEvidence(False, {}))
+
+    assert result[0].status == "uncertain"
+    assert result[0].reason == REASON_SERVICE_NOT_MEASURED
+
+
+def test_measured_and_nothing_beside_the_line_is_still_unmet():
+    route = [_cand(1, "Старый замок", "замок")]
+    reqs = _reqs(Requirement(kind="service", strength="hard", code="туалет"))
+
+    result = verify(reqs, route, _geom(), ServiceAlongEvidence(True, {}))
+
+    assert result[0].status == "unmet"
+    assert result[0].reason == REASON_HARD_SERVICE_ABSENT
+
+
+def test_measured_but_no_line_is_uncertain_not_satisfied():
+    route = [_cand(1, "Старый замок", "замок")]
+    reqs = _reqs(Requirement(kind="service", strength="soft", code="кафе"))
+    measured = ServiceAlongEvidence(True, {"кафе": [{"id": 42, "name": "Ссобойка", "off_line_m": 1}]})
+
+    result = verify(reqs, route, None, measured)
+
+    assert result[0].status == "uncertain"
+    assert result[0].reason == REASON_GEOMETRY_MISSING
+
+
+def test_evidence_for_another_category_does_not_satisfy():
+    route = [_cand(1, "Старый замок", "замок")]
+    reqs = _reqs(Requirement(kind="service", strength="hard", code="туалет"))
+    measured = ServiceAlongEvidence(True, {"кафе": [{"id": 42, "name": "Ссобойка", "off_line_m": 1}]})
+
+    result = verify(reqs, route, _geom(), measured)
+
+    assert result[0].status == "unmet"
 
 
 def test_hard_service_found_by_category_is_satisfied():

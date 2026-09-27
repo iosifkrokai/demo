@@ -574,6 +574,48 @@ def _render_tour(
         return {}, {}
 
 
+
+def _services_along_evidence(
+    db: Any, requirements: Any, shape: Any
+) -> Any:
+    """Measure the services beside the line for the codes the requirements name.
+
+    The verifier decides what a requirement means; it owns no database, so this
+    is where the geometry is actually measured (``agent.services``). Returns
+
+    * ``None`` — nothing to measure (no service/interest codes, or no usable
+      line): the older semantics stay, so an absent café is still honestly
+      ``unmet``;
+    * ``ServiceAlongEvidence(measured=True, by_code=...)`` — measured. A code
+      missing from the mapping means «рядом нет», which is evidence;
+    * ``ServiceAlongEvidence(measured=False, ...)`` — the measurement itself
+      failed. A broken query is not evidence that the café is absent, so the
+      verifier reports ``uncertain`` rather than ``unmet``.
+    """
+    codes = sorted(
+        {
+            r.code
+            for r in getattr(requirements, "requirements", [])
+            if r.kind in ("service", "interest") and r.code
+        }
+    )
+    if not codes or not shape:
+        return None
+    from .. import services as services_mod
+    from .verify import ServiceAlongEvidence
+
+    try:
+        answer = services_mod.services_along(db, shape, categories=codes, limit=services_mod.MAX_SERVICES * 2)
+    except Exception:  # measurement is best-effort; its failure is reported, not hidden
+        log.warning("services_along: measurement failed", exc_info=True)
+        return ServiceAlongEvidence(measured=False, by_code={})
+    out: dict[str, list[dict]] = {}
+    for item in answer.get("items", []):
+        out.setdefault(str(item.get("category")), []).append(item)
+    return ServiceAlongEvidence(measured=True, by_code=out)
+
+
+
 class Pipeline:
     """Stateless planner. One instance, reused across requests."""
 
@@ -831,7 +873,12 @@ class Pipeline:
         # the Valhalla geometry (spec §4.4).  The interpretation model proposed
         # the meaning of the request; it gets no vote here, and an unmet hard
         # requirement is reported as such, never explained away.
-        verify(requirements, plan, shape)
+        verify(
+            requirements,
+            plan,
+            shape,
+            _services_along_evidence(self.db, requirements, shape),
+        )
         status = overall_status(requirements)
 
         ms = int((_time.perf_counter() - t0) * 1000)
@@ -1142,7 +1189,12 @@ class Pipeline:
         shape, summary = _render_tour(route, costing=costing, origin=req.origin)
         # The deterministic verifier decides the fate of the (delta) requirements
         # against the refined route — the model never does.
-        verify(requirements, plan, shape)
+        verify(
+            requirements,
+            plan,
+            shape,
+            _services_along_evidence(self.db, requirements, shape),
+        )
         status = overall_status(requirements)
 
         walk_s = float(summary.get("time", 0.0)) if summary else 0.0
