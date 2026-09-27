@@ -42,6 +42,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
 import sys
 from pathlib import Path
 from typing import Any, Callable
@@ -56,9 +57,10 @@ CASES = Path(__file__).resolve().parent / "cases"
 #: a verdict that claims «выполнено» without evidence and a fabricated service
 #: are the two ways this guide could lie to someone standing in the street.
 WEIGHTS: dict[str, float] = {
-    "verdicts": 0.30,
-    "services": 0.30,
-    "interpretation": 0.40,
+    "verdicts": 0.25,
+    "services": 0.20,
+    "interpretation": 0.30,
+    "plan": 0.25,
 }
 
 
@@ -366,6 +368,115 @@ def _role_of(taxonomy: Any, code: str) -> str:
         return "unknown"
 
 
+# ── stage: plan ─────────────────────────────────────────────────────────────
+
+#: Where the served app answers. The plan stage asks the app itself.
+BASE_URL = os.environ.get("EVALS_BASE_URL", "http://localhost:8080")
+
+
+def run_plan() -> dict[str, Any]:
+    """What the walk is actually made of, over HTTP.
+
+    This stage exists because the two defects it pins were invisible one level
+    down: a stop pool that keeps a service, and a prohibition the plan violates,
+    are properties of the *composed* route — the optimizer, the negative filter
+    and the must-visit bypass agreeing with each other. It asks the served app,
+    so a stale server answering with old code shows up as a failure of the
+    request rather than a green run (that happened: an orphaned process held the
+    port and the numbers looked fine).
+    """
+    from agent import taxonomy
+
+    cases = _load("plan")
+    checks: list[dict[str, Any]] = []
+
+    def check(name: str, ok: bool, detail: str) -> None:
+        checks.append(
+            {"case": case.id, "check": name, "ok": ok, "detail": detail,
+             "why": case.why, "known_gap": False}
+        )
+
+    import urllib.error
+    import urllib.request
+
+    for case in cases:
+        raw = case.raw
+        body = json.dumps(
+            {
+                "query": raw["query"],
+                "time_budget_minutes": raw.get("budget_minutes", 120),
+                "profile": raw.get("profile", "pedestrian"),
+                # A tourist standing somewhere: without a position the pipeline
+                # has nothing to anchor the walk to and refuses the request, and
+                # the case would test the refusal instead of the plan.
+                "origin": raw.get("origin") or {"lat": 53.6789, "lon": 23.8295},
+            }
+        ).encode("utf-8")
+        request = urllib.request.Request(
+            f"{BASE_URL}/routes/generate",
+            data=body,
+            headers={"content-type": "application/json"},
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=240) as response:
+                payload = json.loads(response.read())
+        except urllib.error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", "replace")[:160]
+            check("request_is_answered", False, f"HTTP {exc.code}: {detail}")
+            continue
+        except Exception as exc:
+            return {
+                "stage": "plan",
+                "checks": [],
+                "skipped": f"приложение не отвечает на {BASE_URL} ({exc})",
+            }
+
+        stops = payload.get("points") or []
+        requirements = (payload.get("interpretation") or {}).get("requirements") or []
+
+        if raw.get("expect", {}).get("stops_are_not_services", True):
+            offenders = [
+                f"{s.get('name')} [{s.get('category')}]"
+                for s in stops
+                if _role_of(taxonomy, s.get("category") or "") == "service"
+            ]
+            check(
+                "stops_are_not_services", not offenders,
+                f"услуги среди остановок: {offenders}" if offenders
+                else f"{len(stops)} остановок, услуги среди них нет",
+            )
+
+        if raw.get("expect", {}).get("avoid_is_honoured"):
+            forbidden = {
+                r.get("code") for r in requirements
+                if r.get("kind") == "avoid" and r.get("code")
+            }
+            verdicts = [
+                (r.get("code"), r.get("status"), r.get("reason"))
+                for r in requirements if r.get("kind") == "avoid"
+            ]
+            in_plan = [
+                f"{s.get('name')} [{s.get('category')}]"
+                for s in stops if (s.get("category") or "") in forbidden
+            ]
+            violated = [
+                code for code, status, _reason in verdicts if status != "satisfied"
+            ]
+            ok = not in_plan and not violated
+            detail = (
+                f"запрет в плане: {in_plan}, вердикты: {verdicts}" if not ok
+                else f"вердикты: {verdicts}, запрещённого в плане нет"
+            )
+            check("avoid_is_honoured", ok, detail)
+
+        check(
+            "request_is_answered", True,
+            f"статус {payload.get('status')}, остановок {len(stops)}",
+        )
+
+    return {"stage": "plan", "checks": checks, "base_url": BASE_URL}
+
+
 # ── stage: interpretation ────────────────────────────────────────────────────
 
 def run_interpretation() -> dict[str, Any]:
@@ -475,6 +586,7 @@ STAGES: dict[str, Callable[[], dict[str, Any]]] = {
     "verdicts": run_verdicts,
     "services": run_services,
     "interpretation": run_interpretation,
+    "plan": run_plan,
 }
 
 
@@ -566,7 +678,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--json", type=Path, default=None, help="write the raw report")
     args = parser.parse_args(argv)
 
-    wanted = args.stage or ["verdicts", "services"]
+    wanted = args.stage or ["verdicts", "services", "plan"]
     if args.with_interpretation and "interpretation" not in wanted:
         wanted.append("interpretation")
 

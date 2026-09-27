@@ -17,11 +17,15 @@ Outputs ResolvedConstraints consumed by retrieve/optimize/etc.
 
 from __future__ import annotations
 
+import logging
+
 import psycopg
 
 from .. import constants
 from ..models import IntentResult, ResolvedConstraints
 from ..search import _keyword_search, _name_match_search
+
+log = logging.getLogger(__name__)
 
 # Russian synonym expansion for retrieval — category → search keywords.
 #
@@ -224,6 +228,15 @@ def resolve(
     #   area_anchor     : first town/district-only match (for geo focus), or None
     must_visit_ids, area_anchor = _resolve_named_places(d.named_places, db)
 
+    # The request's own prohibition outranks a place inferred from its words.
+    # «вечерняя прогулка по Советской, без музеев» gives the fragment «Советской»,
+    # which name-matches «Аптека-музей на Советской» → must-visit, and a must-visit
+    # *bypasses* the negative filter (see retrieve.apply_negative_filter) — so the
+    # user's «без музеев» was violated by a place our own reader had invented. Such
+    # an id is kept out here; the must-visit name stays in the contract and the
+    # verifier reports it honestly as absent.
+    must_visit_ids = _without_forbidden(must_visit_ids, d.categories_neg, db)
+
     # ── Build must_visit_keywords (used by retrieval as a strong positive signal) ──
     must_visit_keywords = _expand_categories_to_keywords(d.categories_pos)
     must_visit_keywords.extend(d.keywords_pos)
@@ -264,6 +277,30 @@ def _is_location_suffix(name: str, query: str) -> bool:
         if name.lower().endswith(suffix):
             return True
     return False
+
+
+def _without_forbidden(
+    ids: list[int], forbidden: list[str], db: psycopg.Connection
+) -> list[int]:
+    """Drop must-visit ids whose own category the request forbids."""
+    if not ids or not forbidden:
+        return ids
+
+    rows = db.execute(
+        "SELECT id, category FROM places WHERE id = ANY(%s)", (list(ids),)
+    ).fetchall()
+    category_of = {r[0]: r[1] for r in rows}
+
+    out: list[int] = []
+    for pid in ids:
+        if category_of.get(pid) in forbidden:
+            log.warning(
+                "resolve: must_visit id=%s (%s) contradicts the request's own "
+                "«без %s» — kept out", pid, category_of.get(pid), category_of.get(pid),
+            )
+            continue
+        out.append(pid)
+    return out
 
 
 def _resolve_named_places(

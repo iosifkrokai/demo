@@ -89,7 +89,7 @@ from .refine import (
 )
 from .render import render
 from .resolve import resolve
-from .retrieve import retrieve, _row_to_candidate
+from .retrieve import apply_negative_filter, retrieve, _row_to_candidate
 from .validate import validate
 from .verify import overall_status, verify
 
@@ -797,6 +797,58 @@ class Pipeline:
             candidates = candidates[: constants.POOL_TRIM_SIZE]
             deadline_trim = constants.POOL_TRIM_SIZE
 
+        # A service is *on* the walk, never what the walk is built around: the
+        # stop pool is the sights, and cafés/toilets/hotels stay on the line
+        # (the along-the-route hints).  This was previously applied only in the
+        # retry below, i.e. only once the order had already collapsed to one
+        # stop — so a two-stop pool kept a café as stop #1 and the walk was built
+        # around a place the user never asked to visit.
+        all_candidates = list(candidates)
+        sights = [c for c in candidates if _is_sight_stop(c)]
+
+        # Too few sights to walk between is usually the *query's own words*
+        # being narrow, not the town being empty: «вечерняя прогулка по
+        # Советской» retrieves mostly what is *named* Sovetskaya — the street,
+        # the museum on it, a café, a theatre.  Dropping the services then leaves
+        # too little, and the optimizer either promotes a café back to a stop or
+        # refuses the request with a 422 about stops.  Ask again without the
+        # words: the position, the prohibitions, the interests and the region
+        # stay, which is what «a walk along this street» actually needs.
+        if len(sights) < 3 and not region_scope:
+            relaxed = constraints.model_copy(
+                update={"query_keywords": [], "must_visit_keywords": []}
+            )
+            wider = retrieve(relaxed, qvec, self.db, query_text="", near=near)
+            if relaxed.forbidden_categories or relaxed.forbidden_keywords:
+                wider = apply_negative_filter(wider, relaxed)
+            wider = _geo_focus(
+                wider,
+                origin=req.origin,
+                anchor_id=constraints.area_anchor
+                or (constraints.must_visit_ids[0] if constraints.must_visit_ids else None),
+            )
+            have = {c.id for c in candidates}
+            added = [c for c in wider if c.id not in have]
+            if added:
+                log.info(
+                    "pool: %d sight(s) of %d — widening the search by the words "
+                    "dropped %d more", len(sights), len(candidates), len(added),
+                )
+                candidates = _drop_excluded(candidates + added, excluded)
+                sights = [c for c in candidates if _is_sight_stop(c)]
+
+        if 2 <= len(sights) < len(candidates):
+            log.info(
+                "pool: %d sight(s) of %d candidate(s) — services stay on the line",
+                len(sights), len(candidates),
+            )
+            candidates = sights
+        elif len(sights) < 2:
+            # Nowhere nearby to walk to even after widening: the café the user
+            # named *is* the destination («где поесть» in a thin area), so the
+            # pool keeps its services rather than refusing the request.
+            log.info("pool: %d sight(s) — the services are the destination here", len(sights))
+
         candidates, cost = _build_cost(candidates, constraints, costing)
 
         # 6. Optimize. With a known tourist position the route must START there:
@@ -825,6 +877,20 @@ class Pipeline:
                     candidates, cost, route, info = (
                         retry_candidates, retry_cost, retry_route, retry_info,
                     )
+        if len(route) < 2 and len(all_candidates) > len(candidates):
+            # The sights-only pool could not be walked: nothing connects within
+            # the walkable cap.  A thin answer beats a refusal (the request is
+            # valid, the area is just sparse) — put the services back and let the
+            # verifier report what the walk does and does not contain.
+            log.info("optimize: sights alone give %d stop(s) — retrying with services", len(route))
+            retry_candidates, retry_cost = _build_cost(all_candidates, constraints, costing)
+            retry_route, retry_info = optimize(
+                retry_candidates, retry_cost, constraints, costing=costing
+            )
+            if len(retry_route) >= 2:
+                candidates, cost, route, info = (
+                    retry_candidates, retry_cost, retry_route, retry_info,
+                )
         if len(route) < 2:
             raise NoRoutePossible("optimizer could not produce a route with ≥ 2 stops")
 
