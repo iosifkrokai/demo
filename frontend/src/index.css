@@ -67,7 +67,9 @@
   --card-foreground: #222222;
   --popover: #ffffff;
   --popover-foreground: #222222;
-  --primary: #ff385c;
+  /* DESIGN.md: the accent, darkened so white text on it passes WCAG AA.
+     #ff385c gave 3.52:1; #d92d4f gives 4.73:1 and keeps the same hue. */
+  --primary: #d92d4f;
   --primary-foreground: #ffffff;
   --secondary: #f7f7f7;
   --secondary-foreground: #222222;
@@ -106,7 +108,8 @@
   --card-foreground: #ffffff;
   --popover: #333333;
   --popover-foreground: #ffffff;
-  --primary: #ff385c;
+  /* Same darkened accent: white on --primary is the pair that must pass AA. */
+  --primary: #d92d4f;
   --primary-foreground: #ffffff;
   --secondary: #3a3a3a;
   --secondary-foreground: #ffffff;
@@ -161,10 +164,58 @@ body {
   [role='button']:not(:disabled) {
     cursor: pointer;
   }
+  /*
+   * DESIGN.md focus rule: one visible ring on the accent token, on top of
+   * whatever the element already is. The browser default `outline: auto` was
+   * the only indicator before this; a keyboard user could not tell which
+   * control they were on because the default outline is nearly invisible on
+   * the white panel and missing entirely on the accent CTA.
+   */
+  :where(
+      a,
+      button,
+      input,
+      select,
+      summary,
+      textarea,
+      [tabindex]:not([tabindex='-1']),
+      [role='button'],
+      [role='radio']
+    ):focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
   input[type='number']::-webkit-inner-spin-button,
   input[type='number']::-webkit-outer-spin-button {
     -webkit-appearance: none;
     margin: 0;
+  }
+}
+
+/*
+ * Touch / phone viewports: every map control meets the 44px minimum tap target
+ * (DESIGN.md "Touch"). maplibre ships 29x29 buttons; on a phone that is a third
+ * of the recommended target and the zoom controls sit right under the thumb.
+ * The attribution strip is included: its links were 14px tall.
+ */
+@media (pointer: coarse), (max-width: 767px) {
+  .maplibregl-ctrl-group button,
+  .maplibregl-terradraw-add-control {
+    width: 44px;
+    height: 44px;
+  }
+  .maplibregl-ctrl-group button .maplibregl-ctrl-icon {
+    /* keep the glyph readable at the larger button size */
+    background-size: 60%;
+  }
+  .maplibregl-ctrl-attrib-button {
+    width: 44px;
+    height: 44px;
+  }
+  .maplibregl-ctrl-attrib a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
   }
 }
 

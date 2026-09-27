@@ -8,7 +8,9 @@ import {
   minutesLabel,
   decimalRu,
   formatDistanceRu,
+  placeCountRu,
   POINT_FORMS,
+  CHILD_FORMS,
 } from './plural';
 
 describe('pluralRu', () => {
@@ -66,6 +68,20 @@ describe('pluralCountRu and the counted labels', () => {
     expect(minutesLabel(1)).toBe('минута');
     expect(minutesLabel(3)).toBe('минуты');
     expect(minutesLabel(40)).toBe('минут');
+  });
+
+  it('inflects места for a saved route («3 места», never «3 мест»)', () => {
+    expect(placeCountRu(1)).toBe('1 место');
+    expect(placeCountRu(3)).toBe('3 места');
+    expect(placeCountRu(4)).toBe('4 места');
+    expect(placeCountRu(5)).toBe('5 мест');
+    expect(placeCountRu(11)).toBe('11 мест');
+  });
+
+  it('inflects ребёнок for a party with children', () => {
+    expect(pluralCountRu(1, CHILD_FORMS)).toBe('1 ребёнок');
+    expect(pluralCountRu(2, CHILD_FORMS)).toBe('2 ребёнка');
+    expect(pluralCountRu(5, CHILD_FORMS)).toBe('5 детей');
   });
 });
 

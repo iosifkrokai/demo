@@ -20,7 +20,10 @@ export const Chip = ({
     type="button"
     aria-pressed={selected}
     className={cn(
+      // `max-md` / `pointer-coarse` raise the 32px chip to the 44px minimum tap
+      // target on a phone (DESIGN.md "Touch"); the desktop look is unchanged.
       'h-8 shrink-0 rounded-full border px-3 text-label font-medium transition-colors',
+      'max-md:h-11 max-md:px-4 pointer-coarse:h-11',
       'disabled:pointer-events-none disabled:opacity-40',
       selected
         ? 'border-foreground bg-foreground text-background'

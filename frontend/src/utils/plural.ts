@@ -36,11 +36,18 @@ export const pluralCountRu = (count: number, forms: PluralForms): string =>
 export const POINT_FORMS: PluralForms = ['точка', 'точки', 'точек'];
 export const STOP_FORMS: PluralForms = ['остановка', 'остановки', 'остановок'];
 export const MINUTE_FORMS: PluralForms = ['минута', 'минуты', 'минут'];
+/** Places in a saved route («3 места», not «3 мест»). */
+export const PLACE_FORMS: PluralForms = ['место', 'места', 'мест'];
+/** Children in the party («1 ребёнок», «2 ребёнка», «5 детей»). */
+export const CHILD_FORMS: PluralForms = ['ребёнок', 'ребёнка', 'детей'];
 
 /** The noun alone: the label under a stat-tile number («3» / «точки»). */
 export const pointsLabel = (count: number) => pluralRu(count, POINT_FORMS);
 export const stopsLabel = (count: number) => pluralRu(count, STOP_FORMS);
 export const minutesLabel = (count: number) => pluralRu(count, MINUTE_FORMS);
+
+/** «3 места», «1 место», «5 мест» — places a saved route lists. */
+export const placeCountRu = (count: number) => pluralCountRu(count, PLACE_FORMS);
 
 /**
  * Russian decimal separator is a comma: `decimalRu(1.3)` → `«1,3»`.

@@ -395,7 +395,9 @@ describe('MapComponent', () => {
   it('should render no map controls beyond the Directions panel shortcut', () => {
     render(<MapComponent />);
 
-    const shortcuts = screen.getByLabelText('Panel shortcuts');
+    // The group label is Russian like the rest of the tourist-facing UI; the
+    // single shortcut inside it is the only panel entry point the map keeps.
+    const shortcuts = screen.getByLabelText('быстрый доступ к панели маршрута');
     expect(within(shortcuts).getAllByRole('button')).toHaveLength(1);
 
     expect(screen.queryByTestId('heightgraph-toggle')).not.toBeInTheDocument();

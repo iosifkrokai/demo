@@ -44,10 +44,17 @@ import {
 import { useDirectionsQuery } from '@/hooks/use-directions-queries';
 import { GuidePanel, guideRouteKey, type GuideStop } from './guide-panel';
 import { guideModeFor } from './parts/guide-mode';
-import { decimalRu } from '@/utils/plural';
+import { CHILD_FORMS, decimalRu, placeCountRu, pluralCountRu } from '@/utils/plural';
 import { WaypointList } from './waypoint-list';
 import { Chip } from './parts/chip';
 import { agentErrorMessage } from './parts/guide-format';
+import {
+  LONG_WAIT_SECONDS,
+  routeElapsedText,
+  routeLongWaitText,
+  routeStageText,
+  type RouteStage,
+} from './parts/route-progress';
 import { Segmented, type SegmentedItem } from './parts/segmented';
 import { StatTile, StatTiles } from './parts/stat-tiles';
 import { StopsSkeleton, SummarySkeleton } from './parts/skeletons';
@@ -226,6 +233,16 @@ const queryAsksForToilet = (q: string): boolean =>
 const TOILET_MISSING_WARNING =
   'В базе не нашлось туалетов — маршрут построен без них.';
 
+/** «запрос отменён» — an abort is the tourist's own action, not a failure. */
+const REQUEST_CANCELLED = 'Запрос отменён — маршрут остался прежним.';
+
+/** A fetch aborted through AbortController (or a cancelled XHR). */
+const isAbortError = (err: unknown): boolean =>
+  err instanceof Error &&
+  (err.name === 'AbortError' ||
+    /aborted|abort/i.test(err.message) ||
+    err.name === 'CanceledError');
+
 const fmtMin = (m: number) => {
   const mins = Math.max(0, Math.round(m));
   return mins >= 60
@@ -323,6 +340,30 @@ export const Sidebar = () => {
   >('idle');
   const [geoReason, setGeoReason] = useState('');
   const [busy, setBusy] = useState(false);
+  // ── Honest waiting ──────────────────────────────────────────────────────
+  // `stage` is one of the stages the client can actually observe, `elapsed` is
+  // the seconds that have passed, `abortRef` is what makes «отменить» real.
+  const [stage, setStage] = useState<RouteStage>('requesting');
+  const [elapsed, setElapsed] = useState(0);
+  const abortRef = useRef<AbortController | null>(null);
+
+  // Tick while a request is in flight. The interval is torn down with `busy`,
+  // so a finished or cancelled request stops counting immediately.
+  useEffect(() => {
+    if (!busy) return;
+    const startedAt = Date.now();
+    setElapsed(0);
+    const id = setInterval(
+      () => setElapsed((Date.now() - startedAt) / 1000),
+      250
+    );
+    return () => clearInterval(id);
+  }, [busy]);
+
+  /** Abort the in-flight /routes/generate request; the route is left as it was. */
+  const cancelRouteRequest = useCallback(() => {
+    abortRef.current?.abort();
+  }, []);
   const [status, setStatus] = useState<{
     kind: 'ok' | 'err' | 'warn';
     text: string;
@@ -507,7 +548,7 @@ export const Sidebar = () => {
     const out: string[] = [];
     if (partyAdults != null) out.push(`${partyAdults} взр.`);
     if (partyChildren != null)
-      out.push(partyChildren === 1 ? '1 ребёнок' : `${partyChildren} детей`);
+      out.push(pluralCountRu(partyChildren, CHILD_FORMS));
     if (childrenAges.length > 0) out.push(`возраст ${childrenAges.join(', ')}`);
     for (const code of hardServices)
       out.push(`обязательно: ${filterLabel(code)}`);
@@ -551,7 +592,10 @@ export const Sidebar = () => {
   const submitPrompt = async (text?: string) => {
     const q = (text ?? query).trim();
     if (!q || busy) return;
+    const controller = new AbortController();
+    abortRef.current = controller;
     setBusy(true);
+    setStage('requesting');
     setStatus(null);
     setSummary(null);
 
@@ -656,6 +700,8 @@ export const Sidebar = () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
+        // Cancel is real: the request is aborted, not just visually dismissed.
+        signal: controller.signal,
       });
       if (!r.ok) {
         // A 404 here means the app is talking to the wrong server, not that
@@ -722,7 +768,12 @@ export const Sidebar = () => {
           ])
         )
       );
-      refetchDirections();
+      // The plan has arrived and the line is still being drawn: both facts are
+      // observable client-side, so both may be stated. The promise is awaited
+      // at the end of this block so «рисую маршрут» stays on screen exactly as
+      // long as the line is missing.
+      setStage('drawing');
+      const drawing = refetchDirections();
 
       const visitMins =
         data.budget?.visit_minutes ??
@@ -798,9 +849,17 @@ export const Sidebar = () => {
       }
 
       setQuery('');
+      // Hold the panel's «рисую маршрут» status until the line is on the map.
+      await drawing;
     } catch (e) {
-      setStatus({ kind: 'err', text: routeSubmitErrorText(e) });
+      // The tourist's own cancel is not a failure and leaves the route alone.
+      if (isAbortError(e)) {
+        setStatus({ kind: 'ok', text: REQUEST_CANCELLED });
+      } else {
+        setStatus({ kind: 'err', text: routeSubmitErrorText(e) });
+      }
     } finally {
+      abortRef.current = null;
       setBusy(false);
     }
   };
@@ -918,9 +977,64 @@ export const Sidebar = () => {
         className={cn(PANEL_SHEET_CLASS, SHEET_SNAP_CLASS[snap])}
       >
         <div className="flex h-full min-h-0 flex-col">
+          {/* === Ask ===
+              First in the DOM, so the query field is the panel's first tab
+              stop — the tourist lands on the thing the panel is for, not on the
+              close button. `order-2` keeps it visually under the header. */}
+          {mode === 'plan' && (
+            <section className="order-2 shrink-0 border-b border-border px-4 pb-3 pt-3">
+              <div className="rounded-2xl border border-border bg-card px-3 py-2.5 shadow-card transition-colors focus-within:border-ring">
+                <div className="flex items-center gap-2.5">
+                  <Search
+                    className="h-[18px] w-[18px] shrink-0 text-muted-foreground"
+                    aria-hidden="true"
+                  />
+                  <Textarea
+                    ref={taRef}
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        submitPrompt();
+                      }
+                    }}
+                    placeholder={
+                      hasRoute
+                        ? 'Что уточнить? «добавь кофейню»'
+                        : QUERY_PLACEHOLDER
+                    }
+                    aria-label="что хотите посмотреть"
+                    className="min-h-0 flex-1 resize-none border-0 bg-transparent p-0 text-body leading-6 shadow-none focus-visible:ring-0 max-md:min-h-11"
+                    rows={1}
+                    disabled={busy}
+                  />
+                </div>
+              </div>
+              <div
+                role="group"
+                aria-label="подсказки"
+                className="mt-2 flex flex-wrap gap-1.5"
+              >
+                {HINT_CHIPS.map((hint) => (
+                  <Chip
+                    key={hint}
+                    onClick={() => {
+                      setQuery(hint);
+                      taRef.current?.focus();
+                    }}
+                    data-testid={`hint-${hint}`}
+                  >
+                    {hint}
+                  </Chip>
+                ))}
+              </div>
+            </section>
+          )}
+
           {/* ── Header: mode switch, title, quiet close row. All three sit in
               normal flow, so nothing can ever slide under the close button. ── */}
-          <header className="shrink-0 border-b border-border px-4 pb-2.5">
+          <header className="order-1 shrink-0 border-b border-border px-4 pb-2.5">
             <SheetDragHandle snap={snap} handleProps={handleProps} />
             <div className="flex items-center gap-2">
               <Segmented
@@ -936,7 +1050,7 @@ export const Sidebar = () => {
                 onClick={toggle}
                 aria-label="закрыть панель"
                 title="закрыть панель"
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground max-md:h-11 max-md:w-11 pointer-coarse:h-11 pointer-coarse:w-11"
               >
                 <X className="h-4 w-4" aria-hidden="true" />
               </button>
@@ -967,7 +1081,7 @@ export const Sidebar = () => {
           </header>
 
           {/* ── Body: the only part that scrolls. ── */}
-          <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 pb-6 pt-3">
+          <div className="order-3 flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 pb-6 pt-3">
             {mode === 'guide' ? (
               // key: a rebuilt route remounts the guide, so the walk restarts
               // instead of carrying progress from the route that no longer exists
@@ -978,56 +1092,6 @@ export const Sidebar = () => {
               />
             ) : (
               <>
-                {/* === Ask === */}
-                <section className="flex flex-col gap-2">
-                  <div className="rounded-2xl border border-border bg-card px-3 py-2.5 shadow-card transition-colors focus-within:border-ring">
-                    <div className="flex items-center gap-2.5">
-                      <Search
-                        className="h-[18px] w-[18px] shrink-0 text-muted-foreground"
-                        aria-hidden="true"
-                      />
-                      <Textarea
-                        ref={taRef}
-                        value={query}
-                        onChange={(e) => setQuery(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' && !e.shiftKey) {
-                            e.preventDefault();
-                            submitPrompt();
-                          }
-                        }}
-                        placeholder={
-                          hasRoute
-                            ? 'Что уточнить? «добавь кофейню»'
-                            : QUERY_PLACEHOLDER
-                        }
-                        aria-label="что хотите посмотреть"
-                        className="min-h-0 flex-1 resize-none border-0 bg-transparent p-0 text-body leading-6 shadow-none focus-visible:ring-0"
-                        rows={1}
-                        disabled={busy}
-                      />
-                    </div>
-                  </div>
-                  <div
-                    role="group"
-                    aria-label="подсказки"
-                    className="flex flex-wrap gap-1.5"
-                  >
-                    {HINT_CHIPS.map((hint) => (
-                      <Chip
-                        key={hint}
-                        onClick={() => {
-                          setQuery(hint);
-                          taRef.current?.focus();
-                        }}
-                        data-testid={`hint-${hint}`}
-                      >
-                        {hint}
-                      </Chip>
-                    ))}
-                  </div>
-                </section>
-
                 {/* === Constraints: time + transport. Both are the user's call —
                     nothing is invented for them. === */}
                 <section className="flex flex-col gap-2.5">
@@ -1075,7 +1139,7 @@ export const Sidebar = () => {
                     type="button"
                     onClick={() => void locateMe()}
                     disabled={geoState === 'locating'}
-                    className="flex w-full items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-meta transition-colors hover:bg-muted disabled:opacity-60"
+                    className="flex w-full items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-meta transition-colors hover:bg-muted disabled:opacity-60 max-md:min-h-11 pointer-coarse:min-h-11"
                     title="переопределить, откуда начинается маршрут"
                   >
                     <LocateFixed
@@ -1101,7 +1165,7 @@ export const Sidebar = () => {
                     aria-expanded={advancedOpen}
                     aria-controls="advanced-filters"
                     onClick={() => setAdvancedOpen((v) => !v)}
-                    className="flex w-full items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-meta transition-colors hover:bg-muted"
+                    className="flex w-full items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-meta transition-colors hover:bg-muted max-md:min-h-11 pointer-coarse:min-h-11"
                   >
                     <SlidersHorizontal
                       className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
@@ -1321,7 +1385,7 @@ export const Sidebar = () => {
                       <button
                         type="button"
                         onClick={reset}
-                        className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-meta text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                        className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-meta text-muted-foreground transition-colors hover:bg-muted hover:text-foreground max-md:min-h-11 pointer-coarse:min-h-11"
                         title="очистить маршрут"
                       >
                         <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
@@ -1486,7 +1550,7 @@ export const Sidebar = () => {
                             refetchDirections();
                           }}
                           disabled={routeSnapshots.length === 0}
-                          className="h-9 rounded-full px-3 text-label disabled:opacity-40"
+                          className="h-9 rounded-full px-3 text-label disabled:opacity-40 max-md:h-11 pointer-coarse:h-11"
                         >
                           <Undo2 className="h-3.5 w-3.5" aria-hidden="true" />
                           отменить уточнение
@@ -1498,7 +1562,7 @@ export const Sidebar = () => {
                             resetRoute();
                             reset();
                           }}
-                          className="h-9 rounded-full px-3 text-label font-normal text-muted-foreground hover:text-foreground"
+                          className="h-9 rounded-full px-3 text-label font-normal text-muted-foreground hover:text-foreground max-md:h-11 pointer-coarse:h-11"
                         >
                           <RotateCcw
                             className="h-3.5 w-3.5"
@@ -1526,7 +1590,7 @@ export const Sidebar = () => {
                       }}
                       placeholder="Каложская церковь, Гродно"
                       aria-label="добавить точку в маршрут"
-                      className="h-10 flex-1 text-body"
+                      className="h-10 flex-1 text-body max-md:h-11"
                       disabled={manualBusy}
                     />
                     <Button
@@ -1534,7 +1598,7 @@ export const Sidebar = () => {
                       onClick={manualAdd}
                       disabled={manualBusy || !manualQuery.trim()}
                       size="icon"
-                      className="h-10 w-10 shrink-0 rounded-full"
+                      className="h-10 w-10 shrink-0 rounded-full max-md:h-11 max-md:w-11"
                       aria-label="найти и добавить точку"
                     >
                       {manualBusy ? (
@@ -1550,7 +1614,7 @@ export const Sidebar = () => {
                   <button
                     type="button"
                     onClick={addEmptyWaypointToEnd}
-                    className="inline-flex items-center gap-1 self-start rounded-full px-2 py-1 text-meta text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                    className="inline-flex items-center gap-1 self-start rounded-full px-2 py-1 text-meta text-muted-foreground transition-colors hover:bg-muted hover:text-foreground max-md:min-h-11 pointer-coarse:min-h-11"
                   >
                     <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />{' '}
                     пустая точка (выбрать кликом по карте)
@@ -1576,7 +1640,7 @@ export const Sidebar = () => {
                       <button
                         type="button"
                         onClick={clearHistory}
-                        className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-meta text-muted-foreground transition-colors hover:bg-muted hover:text-destructive"
+                        className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-meta text-muted-foreground transition-colors hover:bg-muted hover:text-destructive max-md:min-h-11 pointer-coarse:min-h-11"
                         title="очистить историю"
                       >
                         <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
@@ -1661,11 +1725,44 @@ export const Sidebar = () => {
           {/* ── Sticky footer: the one action the panel exists for. Outside the
               scroll area, so it is reachable at either snap point. ── */}
           {mode === 'plan' && (
-            <footer className="shrink-0 border-t border-border bg-background px-4 py-3">
-              {/* Polite live region: button text alone is not reliably announced. */}
-              <span className="sr-only" aria-live="polite" aria-atomic="true">
-                {busy ? 'Строю маршрут…' : ''}
-              </span>
+            <footer className="order-4 shrink-0 border-t border-border bg-background px-4 py-3">
+              {/* Honest waiting: only what the client can observe — the request
+                  is in flight, or the plan has arrived and the line is being
+                  drawn — plus the seconds that have passed and a real cancel.
+                  No invented stages, and no bare spinner for 23 seconds. */}
+              {busy && (
+                <div
+                  role="status"
+                  aria-live="polite"
+                  data-testid="route-progress"
+                  data-stage={stage}
+                  className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl bg-muted px-3 py-2 text-meta"
+                >
+                  <Loader2
+                    className="h-3.5 w-3.5 shrink-0 animate-spin text-muted-foreground"
+                    aria-hidden="true"
+                  />
+                  <span className="text-foreground">
+                    {routeStageText(stage)}
+                  </span>
+                  <span className="tabular-nums text-muted-foreground">
+                    {routeElapsedText(elapsed)}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={cancelRouteRequest}
+                    data-testid="route-cancel"
+                    className="ml-auto inline-flex h-8 shrink-0 items-center rounded-full border border-border bg-card px-3 text-label font-medium text-foreground transition-colors hover:bg-muted max-md:h-11 pointer-coarse:h-11"
+                  >
+                    отменить
+                  </button>
+                  {elapsed >= LONG_WAIT_SECONDS && (
+                    <span className="basis-full text-muted-foreground">
+                      {routeLongWaitText}
+                    </span>
+                  )}
+                </div>
+              )}
               <Button
                 type="button"
                 onClick={() => submitPrompt()}
@@ -1723,7 +1820,7 @@ const Stepper = ({
         onClick={() =>
           onChange(value == null || value <= min ? null : value - 1)
         }
-        className="flex h-7 w-7 items-center justify-center rounded-full border border-border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-40"
+        className="flex h-7 w-7 items-center justify-center rounded-full border border-border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-40 max-md:h-11 max-md:w-11 pointer-coarse:h-11 pointer-coarse:w-11"
       >
         <Minus className="h-3.5 w-3.5" aria-hidden="true" />
       </button>
@@ -1738,7 +1835,7 @@ const Stepper = ({
         aria-label={`прибавить: ${label}`}
         data-testid={`${testId}-inc`}
         onClick={() => onChange(value == null ? min : Math.min(value + 1, max))}
-        className="flex h-7 w-7 items-center justify-center rounded-full border border-border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        className="flex h-7 w-7 items-center justify-center rounded-full border border-border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground max-md:h-11 max-md:w-11 pointer-coarse:h-11 pointer-coarse:w-11"
       >
         <Plus className="h-3.5 w-3.5" aria-hidden="true" />
       </button>
@@ -1780,7 +1877,7 @@ const HistoryItem = ({ entry, onLoad, onRemove }: HistoryItemProps) => {
               e.stopPropagation();
               onRemove();
             }}
-            className="flex h-6 w-6 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-destructive"
+            className="flex h-6 w-6 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-destructive max-md:h-11 max-md:w-11 pointer-coarse:h-11 pointer-coarse:w-11"
             title="удалить"
             aria-label="удалить из истории"
           >
@@ -1791,10 +1888,10 @@ const HistoryItem = ({ entry, onLoad, onRemove }: HistoryItemProps) => {
       <button
         type="button"
         onClick={() => setExpanded(!expanded)}
-        className="mt-1 inline-flex items-center gap-1 text-meta text-muted-foreground transition-colors hover:text-foreground"
+        className="mt-1 inline-flex items-center gap-1 text-meta text-muted-foreground transition-colors hover:text-foreground max-md:min-h-11 pointer-coarse:min-h-11"
       >
         <MapPin className="h-3.5 w-3.5" aria-hidden="true" />
-        {entry.places.length} мест
+        {placeCountRu(entry.places.length)}
         <ChevronDown
           className={`h-3.5 w-3.5 transition-transform ${
             expanded ? 'rotate-180' : ''
@@ -1812,7 +1909,7 @@ const HistoryItem = ({ entry, onLoad, onRemove }: HistoryItemProps) => {
               <span className="h-4 w-4 rounded-full bg-muted text-center text-badge font-semibold leading-4 text-foreground">
                 {i + 1}
               </span>
-              <span className="truncate">{p.name}</span>
+              <span className="min-w-0 break-words">{p.name}</span>
             </li>
           ))}
         </ol>

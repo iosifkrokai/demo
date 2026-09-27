@@ -21,8 +21,7 @@ import {
 } from '@/utils/valhalla';
 import { DrawControl } from './draw-control';
 import type { Summary } from '@/components/types';
-import RoutingIcon from '@/images/routing_icon_minimal_bw.svg?url';
-import { ToolButton } from './parts/tool-button';
+import { PlannerEntry } from './parts/planner-entry';
 
 import { MapStyleControl } from './map-style-control';
 import { getInitialMapStyle, getCustomStyle, getMapStyleUrl } from './utils';
@@ -886,15 +885,11 @@ export const MapComponent = () => {
 
       <div
         className="absolute top-4 left-4 z-10 flex flex-col gap-2"
-        aria-label="Panel shortcuts"
+        aria-label="быстрый доступ к панели маршрута"
       >
-        <ToolButton
-          title="Directions"
-          icon={
-            <img src={RoutingIcon} width={42} height={42} alt="Directions" />
-          }
+        <PlannerEntry
           onClick={() => handleNavigateToTab('directions')}
-          data-testid="tab-directions-button"
+          open={directionsPanelOpen}
         />
       </div>
 

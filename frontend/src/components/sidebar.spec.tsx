@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor, cleanup } from '@testing-library/react';
+import { render, screen, waitFor, cleanup, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 const mockStoreState = vi.hoisted(() => ({
@@ -552,11 +552,16 @@ describe('Sidebar', () => {
     await user.type(askField(), 'замки Гродно');
     await user.click(buildButton());
 
-    // Busy label is mirrored into a polite live region for screen readers
-    const announcement = await screen.findByText('Строю маршрут…', {
-      selector: '[aria-live="polite"]',
-    });
+    // The polite announcement is the real, observable stage now — not a bare
+    // «Строю маршрут…» that leaves the tourist with no idea what is happening.
+    const announcement = await screen.findByTestId('route-progress');
     expect(announcement).toHaveAttribute('aria-live', 'polite');
+    expect(announcement).toHaveTextContent('отправил запрос — жду план от агента');
+    expect(announcement).toHaveTextContent(/\d+ с/);
+    // …and a real cancel, so a 23-second wait is not a trap.
+    expect(within(announcement).getByTestId('route-cancel')).toBeInTheDocument();
+    // No invented stage: the client cannot see inside the request.
+    expect(announcement.textContent).not.toMatch(/проверя|анализ|требован/i);
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
     fail(new Error('агент недоступен'));
@@ -990,5 +995,133 @@ describe('Sidebar', () => {
     ).toHaveTextContent(
       'В базе не нашлось туалетов — маршрут построен без них.'
     );
+  });
+});
+
+// ── Felt-quality pass: reachability, touch, focus order, honest counts ──────
+
+/** Focusable elements in DOM order — that is exactly the tab order. */
+const tabOrder = (root: HTMLElement): HTMLElement[] =>
+  Array.from(
+    root.querySelectorAll<HTMLElement>(
+      'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    )
+  );
+
+describe('Sidebar — felt quality', () => {
+  beforeEach(() => {
+    mockGetCurrentPosition.mockImplementation((ok: (p: unknown) => void) => {
+      ok({ coords: { latitude: 53.7, longitude: 23.8 } });
+    });
+    mockStoreState.routeHistory = [];
+    mockStoreState.setWaypoint.mockImplementation(
+      (next: Record<string, unknown>[]) => {
+        mockStoreState.waypoints = next;
+      }
+    );
+    mockGetState.mockReturnValue(mockStoreState);
+  });
+
+  it('makes the query field the panel’s first tab stop, not the close button', () => {
+    render(<Sidebar />);
+
+    const order = tabOrder(screen.getByRole('dialog'));
+    expect(order[0]).toBe(askField());
+    // the close button is still reachable — it is just no longer first
+    expect(
+      order.findIndex(
+        (el) => el.getAttribute('aria-label') === 'закрыть панель'
+      )
+    ).toBeGreaterThan(0);
+  });
+
+  it('raises the tabs, chips, close button and query field to 44px on a phone', () => {
+    render(<Sidebar />);
+
+    expect(screen.getByTestId('mode-plan').className).toMatch(/max-md:h-11/);
+    expect(screen.getByTestId('mode-guide').className).toMatch(/max-md:h-11/);
+    for (const hint of ['замки', 'костёлы', 'монастыри', 'где поесть']) {
+      expect(screen.getByTestId(`hint-${hint}`).className).toMatch(
+        /max-md:h-11/
+      );
+    }
+    expect(
+      screen.getByRole('button', { name: 'закрыть панель' }).className
+    ).toMatch(/max-md:h-11 max-md:w-11/);
+    expect(askField().className).toMatch(/max-md:min-h-11/);
+    // …and coarse pointers (tablets, touch laptops) get the same target
+    expect(screen.getByTestId('mode-plan').className).toMatch(
+      /pointer-coarse:h-11/
+    );
+    expect(screen.getByTestId('hint-замки').className).toMatch(
+      /pointer-coarse:h-11/
+    );
+  });
+
+  it('shows elapsed time and a real cancel, and cancelling is not an error', async () => {
+    let aborted = false;
+    const fetchMock = vi.fn(
+      (_url: string, init: RequestInit) =>
+        new Promise((_resolve, reject) => {
+          init.signal?.addEventListener('abort', () => {
+            aborted = true;
+            const err = new Error('The user aborted a request.');
+            err.name = 'AbortError';
+            reject(err);
+          });
+        })
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const user = userEvent.setup({ delay: null });
+    render(<Sidebar />);
+
+    await user.type(askField(), 'замки Гродно');
+    await user.click(buildButton());
+
+    const progress = await screen.findByTestId('route-progress');
+    expect(progress).toHaveAttribute('data-stage', 'requesting');
+    expect(progress).toHaveTextContent(/\d+ с/);
+
+    await user.click(within(progress).getByTestId('route-cancel'));
+
+    await waitFor(() => expect(aborted).toBe(true));
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      'Запрос отменён'
+    );
+    expect(screen.queryByTestId('route-progress')).toBeNull();
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('inflects the history row («3 места», not «3 мест»)', () => {
+    mockStoreState.routeHistory = [
+      {
+        id: 'h1',
+        query: 'три остановки',
+        timeBudget: 120,
+        places: [1, 2, 3].map((id) => ({
+          id,
+          name: `Место ${id}`,
+          category: 'замок',
+          lat: 53.68,
+          lon: 23.83,
+          blurb: null,
+          funFact: null,
+          funFacts: [],
+          links: [],
+          visitMinutes: 30,
+          openingHours: null,
+          ticketPrice: null,
+          town: null,
+          district: null,
+        })),
+      },
+    ];
+    mockGetState.mockReturnValue(mockStoreState);
+
+    render(<Sidebar />);
+
+    expect(screen.getByText('3 места')).toBeInTheDocument();
+    expect(screen.queryByText('3 мест')).toBeNull();
   });
 });

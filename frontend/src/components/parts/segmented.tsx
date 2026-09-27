@@ -108,9 +108,10 @@ export function Segmented<T extends string>({
             title={item.label}
             className={cn(
               'flex min-w-0 flex-1 items-center justify-center rounded-full transition-colors',
+              // 44px tap target on phones; the desktop pill keeps its 32px.
               stacked
-                ? 'flex-col gap-0.5 px-1 py-1.5 text-badge'
-                : 'h-8 gap-1 px-2 text-label',
+                ? 'min-h-11 flex-col gap-0.5 px-1 py-1.5 text-badge'
+                : 'h-8 gap-1 px-2 text-label max-md:h-11 pointer-coarse:h-11',
               'disabled:pointer-events-none disabled:opacity-50',
               active
                 ? 'bg-card font-semibold text-foreground shadow-sm'

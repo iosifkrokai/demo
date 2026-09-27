@@ -161,7 +161,7 @@ export const WaypointList = ({ onChanged }: Props) => {
           >
             <button
               type="button"
-              className="shrink-0 cursor-grab text-muted-foreground active:cursor-grabbing"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full cursor-grab text-muted-foreground transition-colors hover:bg-muted active:cursor-grabbing max-md:h-11 max-md:w-11 pointer-coarse:h-11 pointer-coarse:w-11"
               aria-label={`переместить: ${name}`}
               title="перетащить · стрелки вверх/вниз"
               onKeyDown={(e) => {
@@ -203,7 +203,7 @@ export const WaypointList = ({ onChanged }: Props) => {
 
             <PlaceIcon category={details?.category} />
 
-            <span className="min-w-0 flex-1 truncate text-body" title={name}>
+            <span className="min-w-0 flex-1 break-words text-body" title={name}>
               {name}
             </span>
 
@@ -229,7 +229,7 @@ export const WaypointList = ({ onChanged }: Props) => {
                     : 'закрепить: уточнение не уберёт эту точку'
                 }
                 className={cn(
-                  'flex h-7 w-7 items-center justify-center rounded-full transition-colors hover:bg-muted',
+                  'flex h-7 w-7 items-center justify-center rounded-full transition-colors hover:bg-muted max-md:h-11 max-md:w-11 pointer-coarse:h-11 pointer-coarse:w-11',
                   wp.pinned
                     ? 'text-primary'
                     : 'text-muted-foreground hover:text-foreground'
@@ -245,7 +245,7 @@ export const WaypointList = ({ onChanged }: Props) => {
                 onClick={() => remove(i)}
                 aria-label="удалить"
                 title="удалить"
-                className="flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-destructive"
+                className="flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-destructive max-md:h-11 max-md:w-11 pointer-coarse:h-11 pointer-coarse:w-11"
               >
                 <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
               </button>
