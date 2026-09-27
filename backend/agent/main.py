@@ -27,7 +27,12 @@ import uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from . import clients_api, constants, itineraries as itineraries_mod
+from . import (
+    clients_api,
+    constants,
+    itineraries as itineraries_mod,
+    services as services_mod,
+)
 from .config import openrouter_api_key, settings
 from .errors import AgentError
 from .models import (
@@ -36,6 +41,7 @@ from .models import (
     HealthResponse,
     RerouteReq,
     RouteResponse,
+    ServicesAlongReq,
 )
 from .planner.agent_interpret import DEFAULT_MODEL
 from .planner.pipeline import Pipeline
@@ -133,6 +139,32 @@ def itineraries() -> dict:
             status_code=503, detail={"reason": "itineraries_unavailable"}
         ) from exc
     return {"items": items, "missing": missing}
+
+
+@app.post("/routes/services")
+def services_along_route(req: ServicesAlongReq) -> dict:
+    """Secondary points beside the line: cafés, toilets, hotels — never stops.
+
+    Measured, not guessed: the distance from the line is PostGIS geometry, and
+    the position along the route comes from the same measurement. The walking
+    detour to reach a point is a real Valhalla route and is NOT computed here,
+    so every item carries `detour_confirmed: false` — nobody may print «+2 мин»
+    from this answer.
+
+    A shape that cannot be measured is a 422 with a reason code: an empty list
+    must always mean «измерили, рядом ничего нет».
+    """
+    try:
+        return services_mod.services_along(
+            app.state.planner.db,
+            req.shape,
+            categories=req.categories,
+            profile=req.profile or services_mod.DEFAULT_PROFILE,
+            max_off_line_m=req.max_off_line_m,
+            limit=req.limit or services_mod.MAX_SERVICES,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail={"reason": str(exc)}) from exc
 
 
 @app.get("/health", response_model=HealthResponse)

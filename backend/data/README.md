@@ -75,6 +75,33 @@ new and does not grow duplicates.
 `--dry-run` builds the report entirely from the CSVs — it opens no connection and
 makes no HTTP call. The `db` section of the report is simply absent in that mode.
 
+## Services along a route: measured, never promised
+
+Cafés, restaurants, toilets and hotels are **secondary points**: they may sit on
+a walk, they are never what the walk is built around. `data/taxonomy.csv` owns
+that split (`role = sight` vs `role = service`), the planner already refuses to
+make a service a stop, and `agent/services.py` keeps the same split when it looks
+_beside_ a route line.
+
+```bash
+POST /routes/services   {"shape": <GeoJSON LineString>, "profile": "pedestrian"}
+```
+
+What the answer contains, and what it deliberately does not:
+
+* `off_line_m` — exact: PostGIS distance from the point to the route line;
+* `along_m` — exact: how far along the route that point sits;
+* `opening_hours` + `hours_known` — the dataset's own string, quoted as unknown
+  for the ~55% of service points that have none. Nothing claims «открыто»;
+* `detour_confirmed: false` and `not_measured: detour_walking_time` — the walk to
+  reach a point is a real Valhalla route, which is not built here. No client may
+  print «+2 мин» from this answer.
+
+A shape that cannot be measured (a single point, a broken coordinate, a line of
+2000+ points) answers 422 with a reason code, so an empty list always means
+«измерили, рядом ничего нет» rather than «вход был сломан». Asking for a sight
+code as a service returns `reason: no_service_categories` instead of a mixture.
+
 ## Photos: derived, licensed, and never invented
 
 Two scripts, run in this order, each writing one file here:

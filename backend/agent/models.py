@@ -165,6 +165,27 @@ class ExplainReq(BaseModel):
     point_ids: list[int] = Field(min_length=2, max_length=10)
 
 
+class ServicesAlongReq(BaseModel):
+    """POST /routes/services body: the line the tourist is walking.
+
+    `shape` is the GeoJSON LineString the client already has (the same one
+    Valhalla returns for the route it drew), so nothing has to be recomputed to
+    ask «что есть по пути».
+    """
+
+    shape: dict = Field(description="GeoJSON LineString, WGS84")
+    # Valhalla's own costing names, as everywhere else in this API.
+    profile: Literal[
+        "pedestrian", "bicycle", "auto", "car", "truck", "bus",
+        "motor_scooter", "motorcycle", "any",
+    ] | None = None
+    # Category codes from data/taxonomy.csv; only the service ones are honoured.
+    categories: list[str] | None = Field(default=None, max_length=8)
+    # An explicit gate in metres; None means «по профилю» (150 m walking).
+    max_off_line_m: float | None = Field(default=None, ge=10, le=1500)
+    limit: int | None = Field(default=None, ge=1, le=20)
+
+
 # ============================================================================
 # HTTP — Responses
 # ============================================================================
