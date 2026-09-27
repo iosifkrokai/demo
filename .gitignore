@@ -40,3 +40,6 @@ cache/*.log
 cache/*.json
 cache/research/pages/
 cache/research/raw/
+
+# Скриншоты живой проверки UI — артефакты отчётов, не код продукта
+ui/
