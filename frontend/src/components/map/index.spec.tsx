@@ -6,6 +6,7 @@ import {
   fireEvent,
   act,
   within,
+  cleanup,
 } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MapComponent } from './index';
@@ -13,6 +14,11 @@ import type { ParsedDirectionsGeometry } from '@/components/types';
 
 const mockToast = vi.hoisted(() => ({
   error: vi.fn(),
+}));
+
+/** Panel state the mocked common store reports; individual tests flip it. */
+const mockCommonState = vi.hoisted(() => ({
+  directionsPanelOpen: true,
 }));
 
 const mockQueryRenderedFeatures = vi.hoisted(() =>
@@ -139,7 +145,9 @@ vi.mock('@/stores/common-store', () => ({
   useCommonStore: vi.fn((selector) => {
     const state = {
       coordinates: [],
-      directionsPanelOpen: true,
+      get directionsPanelOpen() {
+        return mockCommonState.directionsPanelOpen;
+      },
       settingsPanelOpen: false,
       updateSettings: vi.fn(),
     };
@@ -399,7 +407,6 @@ describe('MapComponent', () => {
     // single shortcut inside it is the only panel entry point the map keeps.
     const shortcuts = screen.getByLabelText('быстрый доступ к панели маршрута');
     expect(within(shortcuts).getAllByRole('button')).toHaveLength(1);
-
     expect(screen.queryByTestId('heightgraph-toggle')).not.toBeInTheDocument();
     expect(
       screen.queryByTestId('heightgraph-hover-marker')
@@ -407,6 +414,41 @@ describe('MapComponent', () => {
     expect(
       screen.queryByRole('button', { name: 'Open on osm.org' })
     ).not.toBeInTheDocument();
+  });
+
+  it('hides the planner entry while the docked panel is open on a wide viewport', () => {
+    // The pill sits at the top-left, which is where the docked panel lives on a
+    // wide screen: painting both put the pill on top of the panel's own title
+    // and tabs. jsdom answers every media query with `matches: false`, so the
+    // wide case has to be stated explicitly here.
+    const original = window.matchMedia;
+    window.matchMedia = ((query: string) => ({
+      matches: true,
+      media: query,
+      onchange: null,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+      dispatchEvent: () => false,
+    })) as unknown as typeof window.matchMedia;
+
+    const group = () => screen.getByLabelText('быстрый доступ к панели маршрута');
+
+    try {
+      mockCommonState.directionsPanelOpen = true;
+      render(<MapComponent />);
+      expect(group()).toHaveAttribute('hidden');
+
+      cleanup();
+
+      mockCommonState.directionsPanelOpen = false;
+      render(<MapComponent />);
+      expect(group()).not.toHaveAttribute('hidden');
+    } finally {
+      mockCommonState.directionsPanelOpen = true;
+      window.matchMedia = original;
+    }
   });
 
   it('should call navigate when Directions shortcut button is clicked', async () => {

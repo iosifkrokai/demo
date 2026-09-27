@@ -22,6 +22,7 @@ import {
 import { DrawControl } from './draw-control';
 import type { Summary } from '@/components/types';
 import { PlannerEntry } from './parts/planner-entry';
+import { useMediaQuery } from '@/hooks/use-media-query';
 
 import { MapStyleControl } from './map-style-control';
 import { getInitialMapStyle, getCustomStyle, getMapStyleUrl } from './utils';
@@ -91,6 +92,13 @@ export const MapComponent = () => {
     (state) => state.directionsPanelOpen
   );
   const toggleDirections = useCommonStore((state) => state.toggleDirections);
+  // On a wide screen the panel is docked at the top-left — exactly where the
+  // planner entry pill sits — so rendering both paints the pill over the
+  // panel's own title and tabs. The pill is the front door only while the
+  // panel is out of the way; on a phone the panel is a bottom sheet, so the
+  // pill must stay regardless.
+  const isWideViewport = useMediaQuery('(min-width: 768px)');
+  const showPlannerEntry = !directionsPanelOpen || !isWideViewport;
   const updateSettings = useCommonStore((state) => state.updateSettings);
   const setMapReady = useCommonStore((state) => state.setMapReady);
   const { style } = useSearch({ from: '/$activeTab' });
@@ -886,6 +894,7 @@ export const MapComponent = () => {
       <div
         className="absolute top-4 left-4 z-10 flex flex-col gap-2"
         aria-label="быстрый доступ к панели маршрута"
+        hidden={!showPlannerEntry}
       >
         <PlannerEntry
           onClick={() => handleNavigateToTab('directions')}
