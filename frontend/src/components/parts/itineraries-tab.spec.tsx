@@ -21,6 +21,9 @@ const stop = (over: Partial<Itinerary['stops'][number]>) => ({
   fun_facts: [],
   links: [],
   ticket_price: null,
+  // The API always sends this field; most points have no photo, so the default
+  // is the common case and a test that wants one says so explicitly.
+  photo: null,
   ...over,
 });
 
@@ -122,5 +125,36 @@ describe('ItinerariesTab', () => {
     render(<ItinerariesTab itineraries={[]} isLoading onOpen={vi.fn()} />);
     expect(screen.getByTestId('itineraries-loading')).toBeInTheDocument();
     expect(screen.queryByTestId('itineraries-empty')).toBeNull();
+  });
+
+  it('shows a stop photo with its credit, and no image for stops without one', async () => {
+    const user = userEvent.setup({ delay: null });
+    const withPhoto: Itinerary = {
+      ...ITINERARY,
+      stops: [
+        stop({
+          name: 'Старый замок (Гродно)',
+          photo: {
+            url: 'https://upload.wikimedia.org/wikipedia/commons/6/6a/castle.jpg',
+            author: 'Александр Липилин',
+            license: 'CC BY-SA 3.0',
+            source: 'https://commons.wikimedia.org/wiki/File:castle.jpg',
+          },
+        }),
+        stop({ place_id: 3, source_url: 'city:kolozha', name: 'Коложская церковь' }),
+      ],
+    };
+
+    render(<ItinerariesTab itineraries={[withPhoto]} onOpen={vi.fn()} />);
+    await user.click(screen.getByTestId('itinerary-stops-old-town-castles'));
+
+    // Печать на строке — тоже печать: подпись обязана быть рядом с картинкой.
+    expect(screen.getByAltText('Старый замок (Гродно)')).toHaveAttribute(
+      'src',
+      'https://upload.wikimedia.org/wikipedia/commons/6/6a/castle.jpg'
+    );
+    expect(screen.getByText(/Александр Липилин/)).toBeInTheDocument();
+    // У второй остановки фото нет — значит и картинки быть не должно.
+    expect(screen.queryByAltText('Коложская церковь')).toBeNull();
   });
 });

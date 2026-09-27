@@ -906,7 +906,7 @@ class Pipeline:
                     lat=p.lat, lon=p.lon, blurb=p.blurb, fun_fact=p.fun_fact,
                     fun_facts=p.fun_facts, links=p.links,
                     opening_hours=p.opening_hours, ticket_price=p.ticket_price,
-                    town=p.town, district=p.district,
+                    town=p.town, district=p.district, photo=p.photo,
                     visit_minutes=p.visit_minutes_db or visit_time_minutes(p.category),
                 )
                 for p in plan.route
@@ -1236,6 +1236,7 @@ class Pipeline:
                     ticket_price=p.ticket_price,
                     town=p.town,
                     district=p.district,
+                    photo=p.photo,
                     visit_minutes=p.visit_minutes_db or visit_time_minutes(p.category),
                 )
                 for p in plan.route

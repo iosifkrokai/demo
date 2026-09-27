@@ -31,7 +31,8 @@ def db_categories(categories: list[str]) -> list[str]:
 
 
 CATEGORY_COLS = "id, name, category, lat, lon, blurb, fun_fact, fun_facts, links, " \
-               "opening_hours, ticket_price, town, district, visit_minutes"
+               "opening_hours, ticket_price, town, district, visit_minutes, " \
+               "photo_url, photo_author, photo_license, photo_source"
 
 
 def _keyword_search(

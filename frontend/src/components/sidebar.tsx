@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import { useNavigate } from '@tanstack/react-router';
 import { cn } from '@/lib/utils';
+import type { Photo } from '@/api/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -96,6 +97,7 @@ interface AgentPoint {
   blurb?: string | null;
   fun_fact?: string | null;
   fun_facts?: string[];
+  photo?: Photo | null;
   links?: Array<{ title: string; url: string }>;
   visit_minutes?: number | null;
   opening_hours?: string | null;
@@ -742,6 +744,8 @@ export const Sidebar = () => {
             blurb: p.blurb ?? null,
             funFact: p.funFact ?? null,
             funFacts: p.funFacts ?? [],
+            // A restored route shows the same picture it showed when it was built.
+            photo: p.photo ?? null,
             links: p.links ?? [],
             visitMinutes: p.visitMinutes ?? null,
             openingHours: p.openingHours ?? null,
@@ -814,6 +818,7 @@ export const Sidebar = () => {
             blurb: stop.blurb ?? null,
             funFact: stop.fun_fact ?? null,
             funFacts: stop.fun_facts ?? [],
+            photo: stop.photo ?? null,
             links: stop.links ?? [],
             visitMinutes: stop.visit_minutes ?? null,
             openingHours: stop.opening_hours ?? null,
@@ -1001,6 +1006,7 @@ export const Sidebar = () => {
               blurb: p.blurb ?? null,
               funFact: p.fun_fact ?? null,
               funFacts: p.fun_facts ?? [],
+              photo: p.photo ?? null,
               links: p.links ?? [],
               visitMinutes: p.visit_minutes ?? null,
               openingHours: p.opening_hours ?? null,
@@ -1049,6 +1055,7 @@ export const Sidebar = () => {
           blurb: p.blurb ?? null,
           funFact: p.fun_fact ?? null,
           funFacts: p.fun_facts ?? [],
+          photo: p.photo ?? null,
           links: p.links ?? [],
           visitMinutes: p.visit_minutes ?? null,
           openingHours: p.opening_hours ?? null,

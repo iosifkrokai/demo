@@ -31,7 +31,13 @@ CREATE TABLE IF NOT EXISTS places (
   -- Default: OpenRouter text-embedding-3-small (1536-d).
   embedding     VECTOR(1536),
   source_url    TEXT UNIQUE NOT NULL,
+  -- A photo is only ever stored with its attribution: Wikimedia files are
+  -- licensed, and "photo_url set, author NULL" would be a licence violation
+  -- waiting to happen. All four come from one resolution pass, never guessed.
   photo_url     TEXT,
+  photo_author  TEXT,
+  photo_license TEXT,
+  photo_source  TEXT,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 

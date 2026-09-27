@@ -10,6 +10,7 @@ import { Popup } from 'react-map-gl/maplibre';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import type { PlaceDetails } from '@/stores/directions-store';
+import { PlacePhoto } from '@/components/parts/place-photo';
 import { fmtMin } from '@/components/parts/guide-format';
 
 interface PlaceCardPopupProps {
@@ -78,6 +79,9 @@ export function PlaceCardPopup({
             </Badge>
           )}
         </div>
+
+        {/* The picture, when the dataset has one. Most points do not. */}
+        <PlacePhoto photo={details.photo} name={details.name} className="mt-0.5" />
 
         {/* Visitor info: opening hours, ticket price, location */}
         {(details.openingHours ||

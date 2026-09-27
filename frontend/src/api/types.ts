@@ -144,6 +144,23 @@ export interface ItineraryStop {
   /** Real source links (Wikipedia and friends) where the dataset has them. */
   links: { title: string; url: string }[];
   ticket_price: string | null;
+  /** The point's picture, or null when there is none (the usual case). */
+  photo: Photo | null;
+}
+
+/**
+ * A picture of a point, always with the credit the licence requires.
+ *
+ * An incomplete record never reaches the client: the backend drops a photo
+ * whose author or licence is missing (see `parse_photo` there), so `author` and
+ * `license` are always printable when this object is present.
+ */
+export interface Photo {
+  url: string;
+  author: string;
+  license: string;
+  /** The file page the credit was read from, for anyone re-checking it. */
+  source: string | null;
 }
 
 /** A curated itinerary: an ordered set of real places, no model involved. */

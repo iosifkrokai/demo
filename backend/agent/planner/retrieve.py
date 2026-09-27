@@ -324,6 +324,29 @@ def parse_links(raw: str | None) -> list[dict]:
     return links[:4]
 
 
+def parse_photo(row: dict) -> dict | None:
+    """The point's picture with its credit — or nothing at all.
+
+    All four fields are written by one resolution pass (`scripts/seed_photos.py`).
+    A URL without its author and licence is deliberately not shown: Wikimedia
+    files are licensed, and a credit-less image is a licence violation rather
+    than a nice-to-have.
+    """
+    url = (row.get("photo_url") or "").strip()
+    if not url:
+        return None
+    author = (row.get("photo_author") or "").strip()
+    license_name = (row.get("photo_license") or "").strip()
+    if not author or not license_name:
+        return None
+    return {
+        "url": url,
+        "author": author,
+        "license": license_name,
+        "source": (row.get("photo_source") or "").strip() or None,
+    }
+
+
 def _row_to_candidate(row: dict, rrf_score: float) -> Candidate:
     return Candidate(
         id=row["id"],
@@ -339,6 +362,7 @@ def _row_to_candidate(row: dict, rrf_score: float) -> Candidate:
         ticket_price=row.get("ticket_price"),
         town=row.get("town"),
         district=row.get("district"),
+        photo=parse_photo(row),
         visit_minutes_db=row.get("visit_minutes"),
         relevance=rrf_score,  # no re-scoring stage: relevance = RRF fusion
         rrf_score=rrf_score,

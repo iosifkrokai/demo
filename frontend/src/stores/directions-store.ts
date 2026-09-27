@@ -2,6 +2,7 @@ import type {
   ActiveWaypoint,
   ParsedDirectionsGeometry,
 } from '@/components/types';
+import type { Photo } from '@/api/types';
 import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
 import { immer } from 'zustand/middleware/immer';
@@ -103,6 +104,8 @@ export interface RouteHistoryPlace {
   ticketPrice?: string | null;
   town?: string | null;
   district?: string | null;
+  /** The point's picture with its credit — absent when the point has none. */
+  photo?: Photo | null;
 }
 
 // What the agent knows about a place, keyed by the DB `places.id`. Populated
@@ -119,6 +122,8 @@ export interface PlaceDetails {
   ticketPrice?: string | null;
   town?: string | null;
   district?: string | null;
+  /** The point's picture with its credit — absent when the point has none. */
+  photo?: Photo | null;
 }
 
 /** One turn of the refinement log: what the user asked and what it changed. */

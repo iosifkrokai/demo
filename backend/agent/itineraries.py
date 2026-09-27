@@ -31,7 +31,7 @@ ITINERARIES_PATH = Path(__file__).resolve().parent.parent / "data" / "itinerarie
 _STOP_SQL = """
     SELECT id, source_url, name, category, town, district, lat, lon,
            visit_minutes, opening_hours, blurb, fun_fact, fun_facts, links,
-           ticket_price
+           ticket_price, photo_url, photo_author, photo_license, photo_source
     FROM places
     WHERE source_url = ANY(%s)
 """
@@ -79,7 +79,7 @@ def _stop_payload(row: dict) -> dict:
     planner's own parsers so a card and a planned route cannot disagree about the
     same place.
     """
-    from .planner.retrieve import parse_fun_facts, parse_links
+    from .planner.retrieve import parse_fun_facts, parse_links, parse_photo
 
     return {
         "place_id": row["id"],
@@ -96,6 +96,7 @@ def _stop_payload(row: dict) -> dict:
         "fun_fact": row["fun_fact"],
         "fun_facts": parse_fun_facts(row.get("fun_facts")),
         "links": parse_links(row.get("links")),
+        "photo": parse_photo(row),
         "ticket_price": row.get("ticket_price"),
     }
 

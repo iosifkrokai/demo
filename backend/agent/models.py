@@ -169,6 +169,21 @@ class ExplainReq(BaseModel):
 # HTTP — Responses
 # ============================================================================
 
+class Photo(BaseModel):
+    """A picture of a point, always with the credit the licence demands.
+
+    The four fields travel together on purpose: a client that renders the URL
+    has everything it needs to show "author · licence" next to the image, and
+    an incomplete record is never emitted (see `parse_photo`).
+    """
+
+    url: str
+    author: str
+    license: str
+    #: The file page the credit was read from, for anyone re-checking it.
+    source: str | None = None
+
+
 class Place(BaseModel):
     id: int
     name: str
@@ -179,6 +194,7 @@ class Place(BaseModel):
     fun_fact: str | None = None
     fun_facts: list[str] = []
     links: list[dict] = []
+    photo: Photo | None = None
     visit_minutes: int | None = None
     opening_hours: str | None = None
     ticket_price: str | None = None
@@ -384,6 +400,7 @@ class Candidate(BaseModel):
     fun_fact: str | None = None
     fun_facts: list[str] = []
     links: list[dict] = []
+    photo: Photo | None = None
     opening_hours: str | None = None
     ticket_price: str | None = None
     town: str | None = None

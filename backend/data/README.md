@@ -19,6 +19,8 @@ contract and the coverage numbers actually measured on the current CSVs. It does
 | `taxonomy.csv` | — | Canonical category codes (W1) | — |
 | `grodno_border.json` | — | Grodno ADM1 polygon (geoBoundaries `BY-HR`) used by the geofence | — |
 | `belarus_border.json`, `belarus_border_keep.json` | — | Country polygon + documented POI exceptions | — |
+| `osm_photo_hints.json` | 453 | Photo hints OSM states for the objects our points *are* (`<type>/<id>` → `wikidata`/`wikipedia`/`image`/`wikimedia_commons`) | OSM `type/id` |
+| `place_photos.json` | 334 | Resolved pictures **with their attribution** (`url`, `author`, `license`, `source`, `via`) | `places.source_url` |
 | `data_quality.md` | — | Why curation beats the (old, small) local classifier | — |
 
 Every dataset row is pipe-delimited with 14 columns:
@@ -72,6 +74,47 @@ new and does not grow duplicates.
 
 `--dry-run` builds the report entirely from the CSVs — it opens no connection and
 makes no HTTP call. The `db` section of the report is simply absent in that mode.
+
+## Photos: derived, licensed, and never invented
+
+Two scripts, run in this order, each writing one file here:
+
+```bash
+cd backend
+./.venv/bin/python scripts/extract_osm_photo_hints.py     # PBF + places → osm_photo_hints.json
+./.venv/bin/python scripts/seed_photos.py                 # hints → Wikimedia → place_photos.json
+./.venv/bin/python scripts/seed_photos.py --apply         # …and into the DB
+```
+
+`extract_osm_photo_hints.py` scans the Belarus extract and keeps only the objects
+our own points claim to be — `places.source_url` is `osm:node/306067583`, so the
+join is exact (3 646 of 3 712 points carry such a key) and no name/coordinate
+fuzzy-matching is involved. 453 of them have a photo hint in OSM.
+
+`seed_photos.py` turns a hint into one picture, strongest first: `wikimedia_commons`
+→ Wikidata `P18` → the `wikipedia` article's lead image. Everything is resolved
+through Commons `imageinfo`, which is what supplies `author`, `license` and the
+file page; the image itself is stored as the 800 px rendition, not the original.
+
+Deliberate refusals, each of which costs coverage:
+
+* **No attribution, no photo.** A record missing `author` or `license` is dropped
+  by `parse_photo`, so the API never emits a picture nobody is credited for.
+* **Commons only.** The OSM `image` tag also holds share links
+  (`https://photos.app.goo.gl/…`); 89 points have one and none are used, because
+  there is nothing to credit.
+* **A category is not a photo** (`Category:…`, or a path like `Belarus/Grodno/Farny`).
+* **A URL is verified, not assumed** — the content type has to come back `image/*`.
+
+Operational notes learned the hard way: Wikimedia answers **429** when asked too
+fast, so calls retry with backoff honouring `Retry-After`, and **414** when a
+batch of Cyrillic titles is put in the query string, so queries are POSTed with
+the body as the cache key. Every answer is cached on disk
+(`$PHOTO_CACHE`, default a scratch dir) — a second run is nearly free and mostly
+re-verifies.
+
+Attribution is a licence obligation, not decoration: the panel prints
+`фото: {author} · {license}` and links to the file page.
 
 ## Curated categories cannot be overwritten by automatic classification
 

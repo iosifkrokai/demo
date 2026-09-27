@@ -192,6 +192,15 @@ function StopRow({ stop, index }: { stop: ItineraryStop; index: number }) {
       <span className="mt-0.5 h-4 w-4 shrink-0 rounded-full bg-muted text-center text-badge font-semibold leading-4 text-foreground">
         {index + 1}
       </span>
+      {stop.photo && (
+        <img
+          src={stop.photo.url}
+          alt={stop.name}
+          loading="lazy"
+          decoding="async"
+          className="h-14 w-14 shrink-0 rounded-md border border-border object-cover"
+        />
+      )}
       <span className="min-w-0">
         <span className="block break-words font-medium text-foreground">
           {stop.name}
@@ -199,6 +208,16 @@ function StopRow({ stop, index }: { stop: ItineraryStop; index: number }) {
         {facts.length > 0 && (
           <span className="block break-words text-muted-foreground">
             {facts.join(' · ')}
+          </span>
+        )}
+        {/* The credit stays on the row: it is a licence obligation, and a
+            thumbnail without it would be an unlicensed picture in a small size. */}
+        {stop.photo && (
+          <span className="block break-words text-muted-foreground">
+            {t('photo.credit', {
+              author: stop.photo.author,
+              license: stop.photo.license,
+            })}
           </span>
         )}
       </span>
