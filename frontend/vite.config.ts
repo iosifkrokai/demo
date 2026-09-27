@@ -53,6 +53,14 @@ export default defineConfig({
         target: process.env.VITE_DEV_AGENT_TARGET || 'http://localhost:8080',
         changeOrigin: true,
       },
+      // Anonymous client entity (spec 003): saved routes, preferences and
+      // «удалить мои данные». Same proxy miss class as the Valhalla pattern
+      // below — without this entry Vite answers 200 with index.html and the
+      // client layer honestly reports a bad response instead of saving.
+      '/clients': {
+        target: process.env.VITE_DEV_AGENT_TARGET || 'http://localhost:8080',
+        changeOrigin: true,
+      },
       // Valhalla endpoints the map talks to directly (route, status, ...).
       // The trailing (?|\$) matters: these URLs carry a ?json=... query, and a
       // \$-anchored pattern silently misses them — Vite then answers with
