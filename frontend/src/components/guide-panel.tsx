@@ -20,6 +20,8 @@ import {
   useDirectionsStore,
   type Waypoint,
 } from '@/stores/directions-store';
+import { useTranslation } from 'react-i18next';
+import { isSimulating } from '@/lib/geo-sim';
 import { getManeuverIcon } from '@/utils/get-maneuver-icon';
 import {
   loadVisitOverrides,
@@ -328,6 +330,25 @@ const meWaypoint = (lat: number, lon: number): Waypoint => {
  *    every stop (mandatory points are never dropped by the re-plan);
  *  - suggestions are proposals that never change the route by themselves.
  */
+/**
+ * The guide's own honesty about where the position came from: with `?sim=walk`
+ * the fix is replayed, and every screen that shows a distance must say so. One
+ * component, used by all three states of the panel — a replayed position that
+ * looks like a phone's is the one thing the simulation must not do.
+ */
+const SimulatedBadge = ({ active }: { active: boolean }) => {
+  const { t } = useTranslation();
+  if (!active) return null;
+  return (
+    <p
+      data-testid="guide-simulated"
+      className="flex items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 text-meta font-medium text-amber-900"
+    >
+      {t('sidebar.status.simulatedFix')}
+    </p>
+  );
+};
+
 export const GuidePanel = ({
   stops,
   onReroute,
@@ -336,6 +357,7 @@ export const GuidePanel = ({
   transport = null,
   onWalked,
 }: GuidePanelProps) => {
+  const { t } = useTranslation();
   const key = useMemo(() => guideRouteKey(stops), [stops]);
   /** How the guide speaks about movement: on foot, on a bike, or driving. */
   const travel = useMemo(() => guideModeFor(transport), [transport]);
@@ -449,6 +471,9 @@ export const GuidePanel = ({
   }, [key]);
 
   const stopCount = stops.length;
+  // Read once per mount: the flag cannot change while the app runs (it comes
+  // from the URL), and a stale `true` would put a lie on screen.
+  const simulated = isSimulating();
   const setGuideFix = useCommonStore((s) => s.setGuideFix);
   const focusOn = useCommonStore((s) => s.focusOn);
 
@@ -732,6 +757,7 @@ export const GuidePanel = ({
     return (
       <section data-testid="guide-panel" className="flex flex-col gap-3">
         <GuideHeader onReset={reset} />
+        <SimulatedBadge active={simulated} />
         <GuideEmpty />
       </section>
     );
@@ -747,6 +773,7 @@ export const GuidePanel = ({
         data-mode="moving"
         className="flex min-h-full flex-col gap-3"
       >
+        <SimulatedBadge active={simulated} />
         {/* The turn the tourist is walking into — the one big thing on screen. */}
         <ManeuverBanner
           instruction={
@@ -866,6 +893,7 @@ export const GuidePanel = ({
       className="flex flex-col gap-3"
     >
       <GuideHeader onReset={reset} />
+      <SimulatedBadge active={simulated} />
 
       {/* The next stop, or a quiet «all done» card once there is none. */}
       {nextStop ? (

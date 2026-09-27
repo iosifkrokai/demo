@@ -443,6 +443,69 @@ def test_the_scorer_rejects_a_missing_mandatory_category():
     assert verdict.failed_checks == [b.CHECK_MISSING_MANDATORY_CATEGORY]
 
 
+def test_a_mandatory_service_beside_the_line_counts_as_served():
+    """«Туалет обязателен» is proven by the verifier, not by the stop list.
+
+    A toilet is never a stop (the taxonomy says so, and the planner keeps it off
+    the route), so a harness that looked only at stops reported "туалет не
+    найден" for routes that do serve one. The evidence is the verdict the
+    verifier already produced — reason `service_along_route` — and it is about
+    the route, not a promise made by the plan.
+    """
+    case = make_case(
+        filters={"hard_services": ["туалет"]},
+        expectations={"must_contain_categories": ["туалет"], "expected_status": ["ready"]},
+    )
+    verdict = verdict_of(
+        case,
+        plan(
+            [point("Фарный костёл", category="костёл")],
+            status="ready",
+            requirements=[
+                {
+                    "kind": "service",
+                    "strength": "hard",
+                    "code": "туалет",
+                    "status": "satisfied",
+                    "detail": "service_along_route",
+                    "place_ids": [17],
+                }
+            ],
+        ),
+    )
+
+    assert verdict.passed is True, verdict.detail
+    assert verdict.reason == "ok"
+
+
+def test_a_mandatory_service_the_verifier_could_not_prove_still_fails():
+    """The same door must stay shut for an unmet service: satisfied or nothing."""
+    case = make_case(
+        filters={"hard_services": ["туалет"]},
+        expectations={"must_contain_categories": ["туалет"], "expected_status": ["ready"]},
+    )
+    verdict = verdict_of(
+        case,
+        plan(
+            [point("Фарный костёл", category="костёл")],
+            status="ready",
+            requirements=[
+                {
+                    "kind": "service",
+                    "strength": "hard",
+                    "code": "туалет",
+                    "status": "unmet",
+                    "detail": "hard_service_absent",
+                    "place_ids": [],
+                }
+            ],
+        ),
+    )
+
+    assert verdict.passed is False
+    assert verdict.reason == b.CHECK_MISSING_MANDATORY_CATEGORY
+
+
 def test_the_scorer_rejects_a_forbidden_category_present():
     case = make_case(
         filters={"avoid": ["кафе"]},

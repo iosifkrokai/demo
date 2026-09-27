@@ -1,3 +1,5 @@
+import type { Photo } from '@/api/types';
+
 export interface ActiveWaypoint {
   title: string;
   description?: string;
@@ -263,6 +265,95 @@ export interface FetchGeocodeObject {
 }
 
 export type PossibleTabValues = 'directions' | 'isochrones';
+
+/** One stop of an agent-planned route, as POST /routes/generate returns it. */
+export interface AgentPoint {
+  id: number;
+  name: string;
+  category?: string | null;
+  lat: number;
+  lon: number;
+  blurb?: string | null;
+  fun_fact?: string | null;
+  fun_facts?: string[];
+  photo?: Photo | null;
+  links?: Array<{ title: string; url: string }>;
+  visit_minutes?: number | null;
+  opening_hours?: string | null;
+  ticket_price?: string | null;
+  town?: string | null;
+  district?: string | null;
+}
+
+export interface AgentBudget {
+  budget_minutes: number | null;
+  total_minutes: number;
+  walk_minutes: number;
+  visit_minutes: number;
+  fits: boolean;
+}
+
+/** What the planner managed with the request — or that it is still working. */
+export type RoutePlanStatus = 'ready' | 'degraded' | 'infeasible' | 'pending';
+
+/**
+ * Why a requirement went unmet. The codes are the backend's own; each has a
+ * label under `sidebar.status.reason.*` so the panel can say the reason in the
+ * interface language instead of printing a code.
+ */
+export type PlanRequirementReason =
+  | 'must_visit_on_route'
+  | 'must_visit_absent'
+  | 'must_visit_unroutable'
+  | 'must_visit_outside_coverage'
+  | 'service_on_route'
+  | 'service_along_route'
+  | 'hard_service_absent'
+  | 'soft_service_absent'
+  | 'service_not_measured'
+  | 'interest_absent'
+  | 'avoid_honoured'
+  | 'avoid_violated'
+  | 'route_missing'
+  | 'geometry_missing';
+
+/** One requirement from the agent's interpretation of the request. */
+export interface PlanRequirement {
+  kind: string;
+  strength: string;
+  code: string | null;
+  name: string;
+  origin: string;
+  status: string;
+  reason: PlanRequirementReason | null;
+  place_ids: number[];
+}
+
+/**
+ * The agent's own account of the plan: which requirements it honoured, which
+ * it could not, and what it did not understand. The panel shows this verbatim
+ * (names included) — guessing would be a second, worse answer.
+ */
+export interface PlanInterpretation {
+  status: RoutePlanStatus;
+  requirements: PlanRequirement[];
+  unmet: PlanRequirement[];
+  unknowns: string[];
+}
+
+/**
+ * POST /routes/generate — either a ready plan or the honest reason there is
+ * none. `status`/`interpretation` travel with every answer; the client reads
+ * them so the panel can say what went wrong instead of showing an empty route.
+ */
+export interface AgentRouteResponse {
+  points?: AgentPoint[];
+  budget?: AgentBudget;
+  costing?: string | null;
+  summary?: { length_km?: number | null; time_seconds?: number | null };
+  status?: RoutePlanStatus;
+  interpretation?: PlanInterpretation;
+}
 
 export interface OptimizedLocation {
   type: string;

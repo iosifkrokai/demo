@@ -18,6 +18,7 @@ Outputs ResolvedConstraints consumed by retrieve/optimize/etc.
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
 
 import psycopg
 
@@ -199,6 +200,7 @@ def resolve(
     *,
     explicit_time_budget: int | None = None,
     explicit_bbox: list[float] | None = None,
+    outside: Sequence[str] = (),
     db: psycopg.Connection,
 ) -> ResolvedConstraints:
     d = intent.decision
@@ -226,7 +228,9 @@ def resolve(
     # ── Named places → must_visit_ids + area_anchor ──
     #   must_visit_ids  : real POI name matches (definite places the user named)
     #   area_anchor     : first town/district-only match (for geo focus), or None
-    must_visit_ids, area_anchor = _resolve_named_places(d.named_places, db)
+    must_visit_ids, area_anchor, resolved_names = _resolve_named_places(
+        d.named_places, db, outside
+    )
 
     # The request's own prohibition outranks a place inferred from its words.
     # «вечерняя прогулка по Советской, без музеев» gives the fragment «Советской»,
@@ -246,6 +250,7 @@ def resolve(
 
     return ResolvedConstraints(
         must_visit_ids=must_visit_ids,
+        resolved_names=resolved_names,
         area_anchor=area_anchor,
         optional_categories=list(d.categories_pos),
         forbidden_categories=list(d.categories_neg),
@@ -304,8 +309,8 @@ def _without_forbidden(
 
 
 def _resolve_named_places(
-    names: list[str], db: psycopg.Connection
-) -> tuple[list[int], int | None]:
+    names: list[str], db: psycopg.Connection, outside: Sequence[str] = ()
+) -> tuple[list[int], int | None, list[str]]:
     """Match named place strings to place IDs, distinguishing POI names from areas.
 
     Returns (must_visit_ids, area_anchor):
@@ -319,10 +324,21 @@ def _resolve_named_places(
     must_out: list[int] = []
     seen: set[int] = set()
     area_anchor: int | None = None
+    resolved: list[str] = []
+    reported_outside = {n.strip().lower() for n in outside if n and n.strip()}
 
     for name in names:
         if not name or not name.strip():
             continue
+
+        # A name the reader placed outside the region is matched STRICTLY: it may
+        # only resolve to a place whose name really is that name (allowing for a
+        # town suffix). Similarity alone used to hand a Vilnius cathedral the
+        # Lida one (id 554) — a plausible-looking substitution for a place that
+        # does not exist in this region, which then anchored a route in the wrong
+        # town and answered `ready`. A name that does not resolve this way stays
+        # unresolved, and the planner refuses the request instead.
+        strict = name.strip().lower() in reported_outside
 
         # Step 1: name-only search — strict, high-quality matches only.
         name_rows = _name_match_search(db, name, limit=3)
@@ -335,9 +351,13 @@ def _resolve_named_places(
             # These are area names, not specific POIs — fall through to area check.
             if _is_location_suffix(top_name, name):
                 pass  # don't add to must_visit; fall through to area check below
-            elif sim >= constants.NAME_MATCH_MIN_SIM and top["id"] not in seen:
+            elif (
+                (sim >= constants.NAME_MATCH_MIN_SIM if not strict else _same_name(top_name, name))
+                and top["id"] not in seen
+            ):
                 seen.add(top["id"])
                 must_out.append(top["id"])
+                resolved.append(name)
                 continue  # resolved as a real POI; don't also use as area anchor
 
         # Step 2: town/district search — area anchor only, NOT a must-visit.
@@ -358,7 +378,26 @@ def _resolve_named_places(
                         area_anchor = row["id"]
                     break
 
-    return must_out, area_anchor
+    return must_out, area_anchor, resolved
+
+
+def _same_name(row_name: str, wanted: str) -> bool:
+    """Is `row_name` the very name asked for — not merely a similar one?
+
+    Allows the town suffix the data carries («Старый замок» for «Старый замок
+    (Гродно)») and nothing more: a different cathedral in a different town is a
+    different place, however close its name looks. Used when the reader has
+    already said the asked-for name is not in this region.
+    """
+    a = " ".join((row_name or "").lower().split())
+    b = " ".join((wanted or "").lower().split())
+    if not a or not b:
+        return False
+    if a == b:
+        return True
+    # The data's own spelling may add a parenthesised location: «… (Гродно)».
+    head = a.split("(", 1)[0].strip()
+    return head == b or a.startswith(b + " ") or b.startswith(a + " ")
 
 
 def _word_boundary_match(text: str, query: str) -> bool:

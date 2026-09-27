@@ -30,7 +30,11 @@ import re
 from typing import Any, NamedTuple, Literal
 
 from .. import taxonomy
-from ..requirements import Requirement, TripRequirements
+from ..requirements import (
+    REASON_MUST_VISIT_OUTSIDE as REASON_MUST_VISIT_OUTSIDE_CODE,
+    Requirement,
+    TripRequirements,
+)
 
 __all__ = [
     "INFEASIBLE_REASONS",
@@ -48,6 +52,9 @@ REASON_MUST_VISIT_OK = "must_visit_on_route"
 REASON_MUST_VISIT_ABSENT = "must_visit_absent"
 REASON_MUST_VISIT_UNROUTABLE = "must_visit_unroutable"
 REASON_MUST_VISIT_UNSPECIFIED = "must_visit_unspecified"
+# Re-exported so callers here read like the rest of the vocabulary; the string
+# itself lives in requirements.py, next to the contract that sets it.
+REASON_MUST_VISIT_OUTSIDE = REASON_MUST_VISIT_OUTSIDE_CODE
 
 REASON_SERVICE_OK = "service_on_route"
 #: A service of the requested kind lies beside the line — measured, not assumed.
@@ -94,6 +101,7 @@ class ServiceAlongEvidence(NamedTuple):
 REASON_CODES: frozenset[str] = frozenset(
     {
         REASON_MUST_VISIT_OK,
+        REASON_MUST_VISIT_OUTSIDE,
         REASON_MUST_VISIT_ABSENT,
         REASON_MUST_VISIT_UNROUTABLE,
         REASON_MUST_VISIT_UNSPECIFIED,
@@ -119,6 +127,7 @@ INFEASIBLE_REASONS: frozenset[str] = frozenset(
     {
         REASON_MUST_VISIT_UNROUTABLE,
         REASON_MUST_VISIT_ABSENT,
+        REASON_MUST_VISIT_OUTSIDE,
         REASON_HARD_SERVICE_ABSENT,
     }
 )
@@ -288,6 +297,14 @@ def _verify_must_visit(
     unroutable: set[int],
     geom_ok: bool,
 ) -> None:
+    # A place outside the region is not "missing from the plan" — it can never
+    # be in it, and the look-alike the name matcher liked (a Lida cathedral for
+    # a Vilnius one) must not be allowed to satisfy it either. The deterministic
+    # layer set this reason before planning; nothing in the plan overturns it.
+    if r.reason == REASON_MUST_VISIT_OUTSIDE:
+        _set(r, "unmet", [], REASON_MUST_VISIT_OUTSIDE)
+        return
+
     if r.place_id is None and not r.name:
         _set(r, "uncertain", [], REASON_MUST_VISIT_UNSPECIFIED)
         return

@@ -120,12 +120,17 @@ class TestResolveNamedPlacesLogic:
             with patch("agent.planner.resolve._keyword_search", return_value=[]):
                 from agent.planner.resolve import _resolve_named_places
 
-                must_ids, area_anchor = _resolve_named_places(["Мирскому"], MagicMock())
+                must_ids, area_anchor, resolved = _resolve_named_places(
+                    ["Мирскому"], MagicMock()
+                )
 
         assert must_ids == [38], \
             "Мирскому (sim=0.5 >= 0.3) -> must_visit_ids"
         assert area_anchor is None, \
             "Name match must NOT become area_anchor"
+        # The third value is how the planner tells a name that grounded here from
+        # one that did not: a resolved name can never trigger a coverage refusal.
+        assert resolved == ["Мирскому"]
 
     def test_name_below_threshold_town_match_goes_to_area_anchor(self):
         """When _name_match_search returns low similarity (sim < 0.3),
@@ -154,12 +159,16 @@ class TestResolveNamedPlacesLogic:
             with patch("agent.planner.resolve._keyword_search", return_value=[town_row]):
                 from agent.planner.resolve import _resolve_named_places
 
-                must_ids, area_anchor = _resolve_named_places(["Гродно"], MagicMock())
+                must_ids, area_anchor, resolved = _resolve_named_places(
+                    ["Гродно"], MagicMock()
+                )
 
         assert must_ids == [], \
             "Гродно (name_sim=0.2 < 0.3) -> must_visit_ids must be empty"
         assert area_anchor == 49, \
             "Гродно (town match) -> area_anchor"
+        assert resolved == [], \
+            "an area anchor is not a resolved must-visit name"
 
 
 # ─────────────────────────────────────────────────────────────────────────────

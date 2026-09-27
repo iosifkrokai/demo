@@ -77,7 +77,11 @@ from .cost import (
 )
 from .diversity import mmr_select
 from .explain import explain as explain_route
-from .intent import build_requirements, intent_from_requirements
+from .intent import (
+    build_requirements,
+    intent_from_requirements,
+    mark_out_of_coverage,
+)
 from .optimize import optimize
 from .preprocess import preprocess
 from .refine import (
@@ -562,6 +566,26 @@ def _interpretation(
     )
 
 
+def _outside_left_unresolved(
+    requirements: Any, constraints: ResolvedConstraints
+) -> list[str]:
+    """Names the reading placed outside the region that stayed unresolvable.
+
+    The cross-check that keeps a wrong reading harmless: if the name DID resolve
+    to a place inside the region — the model flagged «Старый замок» although it
+    is in Grodno — it is not a refusal, whatever the reading said. Only a name
+    that has no place here at all (Vilnius Cathedral) is left in the list.
+    """
+    flagged = getattr(requirements, "outside_coverage", None) or []
+    if not flagged:
+        return []
+    resolved = {
+        (n or "").strip().lower()
+        for n in (getattr(constraints, "resolved_names", None) or [])
+    }
+    return [n for n in flagged if (n or "").strip().lower() not in resolved]
+
+
 def _render_tour(
     route: list[Candidate], *, costing: str, origin: LatLon | None
 ) -> tuple[dict, dict]:
@@ -681,8 +705,22 @@ class Pipeline:
             intent,
             explicit_time_budget=req.time_budget_minutes,
             explicit_bbox=req.region_bbox,
+            outside=requirements.outside_coverage,
             db=self.db,
         )
+
+        # 2b. Coverage gate. The reading can say that a name in the request lies
+        # outside the region this system serves; what follows from that is
+        # decided here, before anything is retrieved. Without this gate a request
+        # about Vilnius Cathedral was answered `ready` with four stops in Лида:
+        # the name matcher had accepted a different cathedral in a different town
+        # as the named place, and the route was planned around it. A refusal is
+        # the honest answer; a route to somewhere else is not.
+        outside_left = _outside_left_unresolved(requirements, constraints)
+        if outside_left:
+            return self._refuse_out_of_coverage(
+                req, requirements, intent, constraints, outside_left, t0
+            )
 
         # Embed query (OpenRouter). Without an API key — or when the call
         # fails — the pipeline degrades gracefully: retrieval falls back to
@@ -1009,6 +1047,51 @@ class Pipeline:
                 "pool_trimmed_to": deadline_trim,
                 "valhalla_order_skipped": deadline_order_skipped,
                 "geometry_skipped": deadline_geometry_skipped,
+            },
+        )
+
+    def _refuse_out_of_coverage(
+        self,
+        req: GenerateReq,
+        requirements: Any,
+        intent: Any,
+        constraints: ResolvedConstraints,
+        names: list[str],
+        t0: float,
+    ) -> RouteResponse:
+        """Answer "not here" instead of planning a route somewhere else.
+
+        No stop is returned, and the reason is not prose invented for the client:
+        the contract carries a hard requirement that nothing in this region can
+        satisfy, so the verifier's own rule makes the status `infeasible` and the
+        client localises the reason code. Building a plan out of look-alikes would
+        look more complete and be worse — it would walk a tourist to another
+        town's landmarks under the name they asked for.
+        """
+        mark_out_of_coverage(requirements, names)
+        plan = validate([], None, constraints, {}, requirements=requirements)
+        return self._build_response(
+            intent=intent,
+            changes=None,
+            constraints=constraints,
+            plan=plan,
+            shape={},
+            walk_s=0.0,
+            length_km=0.0,
+            explanation=(
+                "Маршрут не построен: "
+                + ", ".join(names)
+                + " — вне зоны покрытия (Гродненская область)."
+            ),
+            costing=req.profile,
+            requirements=requirements,
+            status=overall_status(requirements),
+            deadline={
+                "budget_s": constants.REQUEST_DEADLINE_S,
+                "used_s": round(_time.perf_counter() - t0, 3),
+                "pool_trimmed_to": None,
+                "valhalla_order_skipped": False,
+                "geometry_skipped": False,
             },
         )
 

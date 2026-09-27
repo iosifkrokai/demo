@@ -397,6 +397,10 @@ class IntentResult(BaseModel):
 
 class ResolvedConstraints(BaseModel):
     must_visit_ids: list[int] = []
+    # Names that were grounded to a real place inside the region. The planner
+    # needs them to tell "this name has no place here" (an honest refusal) from
+    # "this name was resolved and the plan simply did not include it".
+    resolved_names: list[str] = []
     area_anchor: int | None = None  # town/district-only geo anchor, not a POI
     optional_categories: list[str] = []
     forbidden_categories: list[str] = []

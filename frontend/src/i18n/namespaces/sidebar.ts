@@ -39,7 +39,8 @@ type SidebarShape = {
     | 'fewPlaces'
     | 'nothingFound'
     | 'noChanges'
-    | 'restoredPrevious',
+    | 'restoredPrevious'
+    | 'simulatedFix',
     string
   >;
   /** The pipeline's own stages, keyed by the codes it sends (`agent/progress.py`). */
@@ -170,6 +171,7 @@ export const sidebarArea = {
       fewPlaces: 'нашёл меньше 2 мест — попробуйте уточнить запрос',
       nothingFound: 'ничего не нашлось',
       noChanges: 'без изменений',
+      simulatedFix: 'СИМУЛЯЦИЯ GPS: положение проигрывается, телефон ни при чём',
       restoredPrevious: 'вернул предыдущий маршрут',
     },
     geo: {
@@ -308,6 +310,7 @@ export const sidebarArea = {
       fewPlaces: 'fewer than 2 places found — try narrowing the request',
       nothingFound: 'nothing found',
       noChanges: 'no changes',
+      simulatedFix: 'GPS SIMULATION: the position is replayed, no phone involved',
       restoredPrevious: 'restored the previous route',
     },
     geo: {

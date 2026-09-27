@@ -480,6 +480,9 @@ class _Reading:
     time_budget: int | None = None
     areas: list[str] = field(default_factory=list)
     unknowns: list[str] = field(default_factory=list)
+    # Names the reading placed outside the region. Only the agent can read
+    # geography; this stays empty on the deterministic path.
+    outside_coverage: list[str] = field(default_factory=list)
 
 
 def _clause_containing(query: str, idx: int) -> str:
@@ -723,6 +726,42 @@ def _territory_slug(name: str) -> str | None:
     from .. import areas as areas_mod
 
     return areas_mod.resolve_area((name or "").strip())
+
+
+def mark_out_of_coverage(contract: TripRequirements, names: list[str]) -> None:
+    """Record named places that cannot be reached from this region at all.
+
+    The contract keeps what the tourist asked for and the verifier reports it; a
+    refusal is never invented here. Marking it `hard` is the one judgement this
+    function makes, and it is about the world, not about the request: no plan in
+    Гродненская область can ever contain Vilnius Cathedral, so the request cannot
+    be served — unlike a soft wish the plan may reasonably drop.
+
+    Satisfying it is impossible, which the verifier knows: the reason set here
+    survives planning, and a look-alike place inside the region cannot stand in
+    for it (see verify._verify_must_visit).
+    """
+    from ..requirements import REASON_MUST_VISIT_OUTSIDE
+
+    by_name = {
+        (r.name or "").strip().lower(): r
+        for r in contract.requirements
+        if r.kind == "must_visit"
+    }
+    for name in names:
+        key = name.strip().lower()
+        if not key:
+            continue
+        r = by_name.get(key)
+        if r is None:
+            r = Requirement(
+                kind="must_visit", name=name, label=name, text=name, source="text"
+            )
+            contract.requirements.append(r)
+            by_name[key] = r
+        r.strength = "hard"
+        r.reason = REASON_MUST_VISIT_OUTSIDE
+        r.place_id = None
 
 
 def _is_fragment_of(name: str, known: list[str]) -> bool:

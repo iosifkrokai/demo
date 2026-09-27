@@ -36,6 +36,13 @@ from pydantic import BaseModel, Field
 # avoid      — something to keep out of the route.
 RequirementKind = Literal["must_visit", "service", "interest", "avoid"]
 
+# A named place that lies outside the region this system serves. Not "absent
+# from the plan" — it can never be in it, and no look-alike inside the region
+# may stand in for it. Lives here (not in verify.py) because both the contract
+# and the verifier name it, and requirements.py is what verify.py already
+# imports; a second copy would be free to drift.
+REASON_MUST_VISIT_OUTSIDE = "must_visit_outside_coverage"
+
 Strength = Literal["hard", "soft"]
 
 # pending   — extracted, not yet checked against data
@@ -121,6 +128,11 @@ class TripRequirements(BaseModel):
 
     # Resolved area slugs the request is restricted to (e.g. "grodno-old-town").
     areas: list[str] = Field(default_factory=list)
+
+    # Names in the request that lie outside the region (the model reads the
+    # geography, it decides nothing here). A request about them is not served by
+    # a route somewhere else — see planner.outside_coverage.
+    outside_coverage: list[str] = Field(default_factory=list)
 
     result_mode: ResultMode = "route"
     round_trip: bool = False

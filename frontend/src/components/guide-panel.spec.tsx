@@ -13,6 +13,8 @@ import userEvent from '@testing-library/user-event';
 import type { ParsedDirectionsGeometry } from '@/components/types';
 import { useDirectionsStore } from '@/stores/directions-store';
 
+import { installGeoSim, resetSim } from '@/lib/geo-sim';
+
 import { GuidePanel, guideRouteKey, type GuideStop } from './guide-panel';
 
 const STOPS: GuideStop[] = [
@@ -199,6 +201,29 @@ describe('GuidePanel', () => {
     expect(
       screen.getByText(/соберите маршрут в режиме планирования/i)
     ).toBeInTheDocument();
+  });
+
+  it('не выдаёт симуляцию за настоящий GPS', () => {
+    // The badge is the whole point of the simulation being allowed in a build:
+    // a replayed position must never look like something the phone reported.
+    stubGeolocation(null);
+    render(<GuidePanel stops={STOPS} />);
+
+    expect(screen.queryByTestId('guide-simulated')).not.toBeInTheDocument();
+  });
+
+  it('говорит вслух, когда положение проигрывается', () => {
+    installGeoSim('?sim=walk&sim-speed=20');
+    try {
+      stubGeolocation(null);
+      render(<GuidePanel stops={STOPS} />);
+
+      expect(screen.getByTestId('guide-simulated')).toHaveTextContent(
+        /СИМУЛЯЦИЯ GPS/
+      );
+    } finally {
+      resetSim();
+    }
   });
 
   it('marks stops by hand and keeps the progress across a reload', async () => {

@@ -2892,6 +2892,18 @@ def evaluate_compliance(
     seen: set[str] = set()
     for stop in points:
         seen |= stop_category_codes(stop)
+    # A mandatory category can be served without being a stop: a toilet is never
+    # a stop, so counting stops alone had the harness report "туалет не найден"
+    # for routes that do serve one — the requirement is closed by the verifier's
+    # own verdict (reason `service_along_route`), which is evidence about the
+    # route, not a promise from the plan. `requirements` carries no names, only
+    # codes and fates, so nothing here has to read Russian prose.
+    for req in raw.get("requirements") or []:
+        if not isinstance(req, dict) or req.get("status") != "satisfied":
+            continue
+        code = req.get("code")
+        if isinstance(code, str) and code.strip():
+            seen.add(_norm_code(code))
     wanted = [_norm_code(c) for c in exp["must_contain_categories"]]
     missing = [c for c in wanted if c not in seen]
     # `missing`/`seen` are carried as data, not only as prose: the parity check

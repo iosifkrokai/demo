@@ -134,6 +134,13 @@ class AgentReading(BaseModel):
     areas: list[str] = Field(default_factory=list)
     # Asks this system cannot represent or prove ("без лестниц", "не устать").
     unknowns: list[str] = Field(default_factory=list)
+    # Names in the request that lie outside the region this system serves
+    # (Гродненская область, Belarus): a foreign city or landmark ("Вильнюс",
+    # "Кафедральный собор Святого Станислава в Вильнюсе"), or a Belarusian place
+    # beyond the oblast. Reading geography is the model's job; what follows from
+    # it — refusing to plan a route somewhere else — is decided deterministically
+    # in the planner (see `planner/outside_coverage.py`).
+    outside_coverage: list[str] = Field(default_factory=list)
 
 
 # ── Dependencies handed to the tools ────────────────────────────────────────
@@ -182,6 +189,13 @@ def _instructions(ui_note: str) -> str:
         "system cannot prove (step-free access, opening hours not in the data, "
         "a service you could not confirm) goes into `unknowns`, worded as the "
         "user's own ask.\n"
+        "- `outside_coverage` lists the names in the request that are NOT inside "
+        "the served region (Гродненская область, Belarus) — a foreign city or "
+        "landmark, or a Belarusian place beyond the oblast. Copy each name "
+        "verbatim. Leave it empty when everything named is inside the region. "
+        "This is a fact about geography, not a decision: never refuse a request "
+        "yourself, and never guess an object into the list because it looked "
+        "absent from the data you saw.\n"
         "- User language: label text in the request's own locale.\n"
         f"{ui_note}"
     )
@@ -526,12 +540,29 @@ def _merge(
         origin_lat=req.origin.lat if req.origin is not None else None,
         origin_lon=req.origin.lon if req.origin is not None else None,
         areas=areas,
+        outside_coverage=_outside_names(reading.outside_coverage),
         result_mode=req.result_mode,
         round_trip=req.round_trip,
         requirements=requirements,
         unknowns=_unknowns(reading, unsupported, party.mobility),
         source="mixed" if _ui_used(req) else "llm",
     )
+
+
+def _outside_names(raw: list[str]) -> list[str]:
+    """Names the model placed outside the region, de-duplicated and trimmed.
+
+    An empty string in the list would become a must-visit for nothing, and the
+    same name twice would produce two identical unmet verdicts in the answer.
+    """
+    out: list[str] = []
+    for name in raw:
+        if not isinstance(name, str):
+            continue
+        cleaned = name.strip()
+        if cleaned and cleaned not in out:
+            out.append(cleaned)
+    return out
 
 
 # ── Public entry point ──────────────────────────────────────────────────────
