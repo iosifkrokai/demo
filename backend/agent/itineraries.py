@@ -101,6 +101,25 @@ def _stop_payload(row: dict) -> dict:
     }
 
 
+def _split_by_role(payloads: list[dict[str, Any]]) -> tuple[list[dict], list[dict]]:
+    """Partition resolved places into (stops, services) using the taxonomy.
+
+    An unknown code counts as a stop: the taxonomy only ever gains codes, and a
+    place we know nothing about is more honest as a destination than as a café.
+    """
+    from . import taxonomy
+
+    stops: list[dict[str, Any]] = []
+    services: list[dict[str, Any]] = []
+    for payload in payloads:
+        try:
+            is_service = taxonomy.role(payload["category"]) == "service"
+        except Exception:  # unknown/unmapped code → a destination, as elsewhere
+            is_service = False
+        (services if is_service else stops).append(payload)
+    return stops, services
+
+
 def resolve_itineraries(
     conn: Any, items: list[dict[str, Any]] | None = None
 ) -> tuple[list[dict[str, Any]], list[str]]:
@@ -109,6 +128,14 @@ def resolve_itineraries(
     Returns the payloads and the list of keys that did not resolve. Two
     itineraries may share a stop (the аптека-музей is in two of them), which is
     why every row is fetched once for the whole file.
+
+    **A service is served beside the route, never as a stop.** The curated file
+    is hand-written, and one of its routes («С детьми: замки и парк») lists a
+    toilet among its stops; returning that as a numbered stop would put a toilet
+    where the guide promised a sight. The taxonomy decides (the same
+    ``role == "service"`` split the planner uses), so the toilet comes back in
+    ``services`` — findable by the tourist, not counted as a destination — and
+    the authored file keeps its own keys.
     """
     authored = items if items is not None else load_itineraries()
     wanted = [key for item in authored for key in item.get("stops", [])]
@@ -118,7 +145,8 @@ def resolve_itineraries(
 
     out: list[dict[str, Any]] = []
     for item in authored:
-        stops = [_stop_payload(rows[key]) for key in item.get("stops", []) if key in rows]
+        payloads = [_stop_payload(rows[key]) for key in item.get("stops", []) if key in rows]
+        stops, services = _split_by_role(payloads)
         visit_minutes = sum(s["visit_minutes"] or 0 for s in stops)
         out.append(
             {
@@ -131,6 +159,9 @@ def resolve_itineraries(
                 # driving time is added by the router when the route is drawn.
                 "visit_minutes": visit_minutes,
                 "stops": stops,
+                # Secondary points the author put on the way: cafés, toilets.
+                # They are not numbered and do not count towards the visit time.
+                "services": services,
             }
         )
     return out, missing

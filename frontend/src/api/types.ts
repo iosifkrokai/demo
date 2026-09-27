@@ -173,6 +173,14 @@ export interface Itinerary {
   /** Curated visit time of the stops; travel time is added when it is drawn. */
   visit_minutes: number;
   stops: ItineraryStop[];
+  /**
+   * Secondary points the author put on the way (a toilet, a café).
+   *
+   * They are NOT stops: not numbered, not counted in `stop_count`, not part of
+   * `visit_minutes`. The server splits them by the taxonomy's role, so a toilet
+   * can never stand where the guide promised a sight.
+   */
+  services?: ItineraryStop[];
 }
 
 export interface ItineraryList {
@@ -182,4 +190,57 @@ export interface ItineraryList {
    * than authored; this is how the client can tell that it happened.
    */
   missing: string[];
+}
+
+/**
+ * A route line as Valhalla and the agent both speak it (WGS84, GeoJSON).
+ *
+ * The app already holds this for the line it draws, so asking «что есть по
+ * пути» needs no recomputation.
+ */
+export interface RouteLine {
+  type: 'LineString';
+  coordinates: [number, number][];
+}
+
+/**
+ * One secondary point beside the route: a café, a toilet, a hotel.
+ *
+ * `off_line_m` and `along_m` are measured (PostGIS). `detour_confirmed` is
+ * always false here: the walk needed to reach the point is a real Valhalla
+ * route, which this answer does not build — so no screen may print «+2 мин»
+ * from it. `hours_known` is false for the ~55% of service points whose hours
+ * the dataset does not have; unknown hours are never shown as «открыто».
+ */
+export interface ServiceAlong {
+  id: number;
+  source_url: string;
+  name: string;
+  category: string;
+  town: string | null;
+  lat: number;
+  lon: number;
+  opening_hours: string | null;
+  hours_known: boolean;
+  off_line_m: number;
+  along_m: number;
+  along_fraction: number;
+  detour_confirmed: false;
+}
+
+export interface ServicesAlongAnswer {
+  items: ServiceAlong[];
+  /** What was measured, named for what it is. */
+  measured: string;
+  /** What was deliberately not measured, and why nothing here is a detour. */
+  not_measured: string;
+  detour_confirmed: boolean;
+  profile: string;
+  categories: string[];
+  max_off_line_m: number;
+  line_m: number;
+  result_cap: number;
+  capped: boolean;
+  /** Set when the answer is empty on purpose (e.g. no service categories). */
+  reason?: string;
 }

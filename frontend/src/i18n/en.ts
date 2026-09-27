@@ -88,6 +88,7 @@ export const en: Dictionary = {
     open: 'show on the map',
     stops: 'stops',
     visit: 'visit',
+    alongTheWay: 'along the way',
     onFoot: 'on foot',
     byCar: 'by car',
   },

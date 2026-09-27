@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+from pathlib import Path
 import urllib.error
 import urllib.request
 
@@ -23,6 +24,7 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from agent import constants  # noqa: E402
 from agent.itineraries import (  # noqa: E402
     ItinerariesUnavailable,
     load_itineraries,
@@ -193,6 +195,39 @@ def test_stop_payload_carries_the_facts_a_card_prints():
     assert stop["opening_hours"] == "вт–вс 10:00–18:00"
 
 
+def test_a_service_in_the_authored_file_is_not_a_stop():
+    # Regression: «С детьми: замки и парк» lists a toilet among its stops, and
+    # the resolver used to hand it back as a numbered stop — a toilet where the
+    # guide promised a sight. The taxonomy decides, so it comes back as a
+    # service beside the route: not numbered, not counted, not timed.
+    conn = _FakeConn(
+        [
+            _row("city:one", category="замок", visit_minutes=90),
+            _row("city:shared", name="Туалет", category="туалет", visit_minutes=10),
+        ]
+    )
+    items, _ = resolve_itineraries(conn, [ITEMS[0]])
+
+    stops = items[0]["stops"]
+    assert [s["category"] for s in stops] == ["замок"]
+    assert items[0]["stop_count"] == 1
+    # The toilet keeps its curated 10 minutes out of the route's visit time.
+    assert items[0]["visit_minutes"] == 90
+
+    services = items[0]["services"]
+    assert [s["name"] for s in services] == ["Туалет"]
+    assert services[0]["source_url"] == "city:shared"
+
+
+def test_an_unmapped_category_counts_as_a_stop_not_as_a_service():
+    # The taxonomy only ever gains codes; a code we do not know is more honest
+    # as a destination than as a café nobody can find.
+    conn = _FakeConn([_row("city:one", category="вертолётная площадка")])
+    items, _ = resolve_itineraries(conn, [ITEMS[0]])
+    assert items[0]["stop_count"] == 1
+    assert items[0]["services"] == []
+
+
 def test_visit_minutes_of_unknown_length_stays_zero_not_none():
     conn = _FakeConn([_row("city:one", visit_minutes=None)])
     items, _ = resolve_itineraries(conn, [ITEMS[0]])
@@ -229,7 +264,43 @@ def test_live_every_stop_key_in_the_shipped_file_resolves():
 
     for item in payload["items"]:
         want = len(authored[item["id"]]["stops"])
-        assert item["stop_count"] == want, f"{item['id']}: stops went missing"
+        # Every authored key comes back — as a stop or as a service beside the
+        # route. Nothing may go missing just because it changed role.
+        assert item["stop_count"] + len(item.get("services", [])) == want, (
+            f"{item['id']}: stops went missing"
+        )
         assert item["visit_minutes"] > 0
         for stop in item["stops"]:
             assert stop["name"] and stop["lat"] and stop["lon"]
+
+
+@pytest.mark.skipif(
+    not _live_available(), reason=f"backend not answering at {BASE_URL}"
+)
+def test_live_no_curated_stop_is_a_service():
+    """The dataset invariant behind the user's complaint: a toilet was a stop.
+
+    Checked against the API rather than the file, because the role comes from
+    the taxonomy in the database, not from the authored keys.
+    """
+    with urllib.request.urlopen(f"{BASE_URL}/routes/itineraries", timeout=10) as r:
+        payload = json.loads(r.read())
+
+    offenders = [
+        (item["id"], stop["name"])
+        for item in payload["items"]
+        for stop in item["stops"]
+        if stop["category"] in constants.CONVENIENCE_CATEGORIES
+    ]
+    assert offenders == [], f"услуги стоят остановками: {offenders}"
+
+    # The toilet the author put on the way of «С детьми: замки и парк» is still
+    # in the answer — as a service of that route, not thrown away.
+    with_kids = payload["items"]
+    services = [
+        service
+        for item in with_kids
+        for service in item.get("services", [])
+        if service["category"] == "туалет"
+    ]
+    assert services, "авторский туалет должен оставаться в маршруте как услуга"

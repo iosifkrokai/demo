@@ -52,15 +52,17 @@ import {
   VALHALLA_ACCESS_RESTRICTIONS_TIMED_LAYER_ID,
 } from '@/components/tiles/valhalla-layers';
 import { MarkerIcon, type MarkerColor } from './parts/marker-icon';
+import { ServicesLayer } from './parts/services-layer';
 import { PlaceCardPopup } from './parts/place-card-popup';
 import { PlaceMarkerLabel } from './parts/place-marker-label';
 import { maxBounds } from './constants';
 import { getInitialMapPosition, LAST_CENTER_KEY } from './utils';
 import { useCommonStore } from '@/stores/common-store';
 import { useTranslation } from 'react-i18next';
-import { LocateFixed } from 'lucide-react';
+import { Coffee, LocateFixed } from 'lucide-react';
 import { ME_WAYPOINT_ID, useDirectionsStore } from '@/stores/directions-store';
 import { meWaypoint } from '@/utils/me-waypoint';
+import { useServicesAlong } from '@/hooks/use-services-along';
 import { useIsochronesStore } from '@/stores/isochrones-store';
 import {
   useDirectionsQuery,
@@ -114,6 +116,10 @@ export const MapComponent = () => {
   const waypoints = useDirectionsStore((state) => state.waypoints);
   const placeDetails = useDirectionsStore((state) => state.placeDetails);
   const routeResult = useDirectionsStore((state) => state.results.data);
+  // Off by default and asked for by hand: a guide that pushes cafés uninvited
+  // stops being a guide. The same answer feeds the map marks and the panel rows.
+  const [showServices, setShowServices] = useState(false);
+  const services = useServicesAlong(routeResult, { enabled: showServices });
   const setActiveRouteIndex = useDirectionsStore(
     (state) => state.setActiveRouteIndex
   );
@@ -967,7 +973,20 @@ export const MapComponent = () => {
           </Popup>
         )}
 
+        {showServices && <ServicesLayer items={services.items} />}
       </Map>
+
+      {routeResult && (
+        <div className="absolute bottom-40 right-3 z-10 md:right-4">
+          <ToolButton
+            data-testid="services-toggle"
+            title={t('map.servicesToggle')}
+            active={showServices}
+            icon={<Coffee className="h-4 w-4" />}
+            onClick={() => setShowServices((on) => !on)}
+          />
+        </div>
+      )}
 
       {guiding && (
         <div className="absolute bottom-24 right-3 z-10 md:right-4">

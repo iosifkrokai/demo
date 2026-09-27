@@ -45,9 +45,34 @@ const ITINERARY: Itinerary = {
       opening_hours: null,
     }),
   ],
+  services: [
+    stop({
+      place_id: 9,
+      source_url: 'osm:node/999',
+      name: 'Туалет',
+      category: 'туалет',
+      visit_minutes: null,
+      opening_hours: '24/7',
+    }),
+  ],
 };
 
 describe('ItinerariesTab', () => {
+  it('говорит про услугу тихо и без номера: туалет — не остановка маршрута', async () => {
+    const user = userEvent.setup();
+    render(<ItinerariesTab itineraries={[ITINERARY]} onOpen={vi.fn()} />);
+    await user.click(screen.getByTestId('itinerary-stops-old-town-castles'));
+
+    // The numbered list holds stops only — a toilet was never a destination.
+    const stops = screen.getByTestId('itinerary-stops-list-old-town-castles');
+    expect(stops).not.toHaveTextContent('Туалет');
+    expect(stops.querySelectorAll('li')).toHaveLength(2);
+
+    // And the hint says it exists, without inflating the route.
+    const hint = screen.getByTestId('itinerary-services-old-town-castles');
+    expect(hint).toHaveTextContent('по пути: Туалет');
+  });
+
   it('prints what the dataset holds: the authored stops and their real facts', () => {
     render(<ItinerariesTab itineraries={[ITINERARY]} onOpen={vi.fn()} />);
 

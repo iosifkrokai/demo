@@ -88,6 +88,7 @@ export const ru = {
     open: 'показать на карте',
     stops: 'остановки',
     visit: 'осмотр',
+    alongTheWay: 'по пути',
     onFoot: 'пешком',
     byCar: 'на машине',
   },

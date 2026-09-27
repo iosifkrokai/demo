@@ -171,6 +171,17 @@ export function ItinerariesTab({
                     ))}
                   </ol>
                 )}
+
+                {/* Said quietly and without a number: this is a hint, not a stop. */}
+                {expanded && (itinerary.services?.length ?? 0) > 0 && (
+                  <p
+                    className="mt-1.5 text-meta text-muted-foreground"
+                    data-testid={`itinerary-services-${itinerary.id}`}
+                  >
+                    {t('itineraries.alongTheWay')}:{' '}
+                    {itinerary.services?.map((service) => service.name).join(', ')}
+                  </p>
+                )}
               </div>
             </li>
           );
