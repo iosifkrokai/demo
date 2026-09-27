@@ -45,7 +45,6 @@ import {
 } from '@/stores/directions-store';
 import { useDirectionsQuery } from '@/hooks/use-directions-queries';
 import { GuidePanel, guideRouteKey, type GuideStop } from './guide-panel';
-import { currentFix, isSimulating, setSimPath } from '../lib/geo-sim';
 import { HistoryTab } from './parts/history-tab';
 import { PlanVerdict } from './parts/plan-verdict';
 import { ItinerariesTab } from './parts/itineraries-tab';
@@ -1236,19 +1235,6 @@ export const Sidebar = () => {
         .filter((stop): stop is GuideStop => stop !== null),
     [waypoints, placeDetails]
   );
-
-  // `?sim=walk` walks the very stops the guide is about to announce — the same
-  // coordinates, so an arrival in the simulation is an arrival in the panel.
-  // Inactive without the parameter, and the panel says so while it is active.
-  useEffect(() => {
-    if (isSimulating() && guideStops.length > 0) {
-      // From where the tourist stands (the request's origin) to the stops, in
-      // the order the guide will announce them.
-      const from = currentFix();
-      const stops: [number, number][] = guideStops.map((stop) => [stop.lat, stop.lon]);
-      setSimPath(from ? [[from.lat, from.lon], ...stops] : stops);
-    }
-  }, [guideStops]);
 
   // Guide mode is worth offering only when there is something to walk: two
   // stops is the minimum that makes a route. The guide itself explains the

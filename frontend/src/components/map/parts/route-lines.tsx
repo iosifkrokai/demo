@@ -3,6 +3,10 @@ import { Source, Layer } from 'react-map-gl/maplibre';
 import { useDirectionsStore } from '@/stores/directions-store';
 import { routeObjects } from '../constants';
 import type { Feature, FeatureCollection, LineString } from 'geojson';
+
+import { useCommonStore } from '@/stores/common-store';
+
+import { splitAtPosition, type LineCoords } from './route-walk';
 import type { ParsedDirectionsGeometry } from '@/components/types';
 
 /**
@@ -67,6 +71,10 @@ export function RouteLines() {
   const activeRouteIndex = useDirectionsStore(
     (state) => state.activeRouteIndex
   );
+  // While the guide runs, the line behind the tourist is spent: a navigator keeps
+  // the way ahead in focus and fades what has been walked.
+  const guiding = useCommonStore((state) => state.guiding);
+  const guideFix = useCommonStore((state) => state.guideFix);
 
   const data = useMemo(() => {
     if (!directionResults.data || !directionsSuccessful) return null;
@@ -114,20 +122,52 @@ export function RouteLines() {
       const summary = response.trip.summary;
       const isActive = activeRouteIndex === 0;
 
-      features.push({
-        type: 'Feature',
-        geometry: {
-          type: 'LineString',
-          coordinates: coords.map((c) => [c[1] ?? 0, c[0] ?? 0]),
-        },
-        properties: {
-          color: isActive ? routeObjects.color : routeObjects.inactiveColor,
-          type: 'main',
-          routeIndex: 0,
-          summary,
-          provenance,
-        },
-      });
+      const line: LineCoords = coords.map((c) => [c[1] ?? 0, c[0] ?? 0]);
+      const color = isActive ? routeObjects.color : routeObjects.inactiveColor;
+      const split =
+        guiding && guideFix && isActive
+          ? splitAtPosition(line, { lat: guideFix.lat, lon: guideFix.lng })
+          : null;
+
+      if (split) {
+        features.push({
+          type: 'Feature',
+          geometry: { type: 'LineString', coordinates: split.walked },
+          properties: {
+            color,
+            type: 'main',
+            routeIndex: 0,
+            summary,
+            provenance,
+            walked: true,
+          },
+        });
+        features.push({
+          type: 'Feature',
+          geometry: { type: 'LineString', coordinates: split.remaining },
+          properties: {
+            color,
+            type: 'main',
+            routeIndex: 0,
+            summary,
+            provenance,
+            walked: false,
+          },
+        });
+      } else {
+        features.push({
+          type: 'Feature',
+          geometry: { type: 'LineString', coordinates: line },
+          properties: {
+            color,
+            type: 'main',
+            routeIndex: 0,
+            summary,
+            provenance,
+            walked: false,
+          },
+        });
+      }
     }
 
     // Sort so active route renders last (on top)
@@ -141,7 +181,7 @@ export function RouteLines() {
       type: 'FeatureCollection',
       features,
     } as FeatureCollection;
-  }, [directionResults, directionsSuccessful, activeRouteIndex]);
+  }, [directionResults, directionsSuccessful, activeRouteIndex, guiding, guideFix]);
 
   if (!data) return null;
 
@@ -160,7 +200,14 @@ export function RouteLines() {
         id="routes-line"
         type="line"
         paint={{
-          'line-color': ['get', 'color'],
+          // The walked half greys out rather than disappearing: the tourist
+          // still sees where they came from, without it competing with the way on.
+          'line-color': [
+            'case',
+            ['==', ['get', 'walked'], true],
+            '#9CA3AF',
+            ['get', 'color'],
+          ],
           'line-width': 5,
           'line-opacity': [
             'case',

@@ -16,6 +16,13 @@ vi.mock('react-map-gl/maplibre', () => ({
   },
 }));
 
+const mockUseCommonStore = vi.fn();
+
+vi.mock('@/stores/common-store', () => ({
+  useCommonStore: (selector: (state: unknown) => unknown) =>
+    mockUseCommonStore(selector),
+}));
+
 const mockUseDirectionsStore = vi.fn();
 
 vi.mock('@/stores/directions-store', () => ({
@@ -43,6 +50,9 @@ const createMockState = (overrides = {}) => ({
 describe('RouteLines', () => {
   beforeEach(() => {
     mockSource.mockClear();
+    // По умолчанию проводник не ведёт: линия рисуется целиком.
+    mockUseCommonStore.mockReset();
+    mockUseCommonStore.mockImplementation((selector) => selector({}));
     mockLayer.mockClear();
     mockUseDirectionsStore.mockClear();
   });
@@ -126,12 +136,42 @@ describe('RouteLines', () => {
         id: 'routes-line',
         type: 'line',
         paint: {
-          'line-color': ['get', 'color'],
+          // Пройденная половина линии гаснет: цвет выбирается по флагу walked.
+          'line-color': [
+            'case',
+            ['==', ['get', 'walked'], true],
+            '#9CA3AF',
+            ['get', 'color'],
+          ],
           'line-width': 5,
           'line-opacity': ['case', ['==', ['get', 'routeIndex'], -1], 1, 0.5],
         },
       })
     );
+  });
+
+  it('гасит пройденную половину линии, пока ведёт проводник', () => {
+    // Навигатор не рисует весь маршрут за спиной: пройденное тускнеет, впереди
+    // остаётся акцентный цвет.
+    // Основной маршрут активен (индекс 0), а положение — его начало.
+    mockUseDirectionsStore.mockImplementation((selector) => {
+      const state = createMockState({ activeRouteIndex: 0, show: { 0: true } });
+      return selector(state);
+    });
+    mockUseCommonStore.mockImplementation((selector) =>
+      selector({ guiding: true, guideFix: { lat: 50, lng: 10 } })
+    );
+
+    render(<RouteLines />);
+
+    const data = mockSource.mock.calls.at(-1)?.[0]?.data as {
+      features: { properties: { walked?: boolean } }[];
+    };
+    const walkedParts = data.features.filter((f) => f.properties.walked === true);
+    const aheadParts = data.features.filter((f) => f.properties.walked === false);
+
+    expect(walkedParts.length).toBeGreaterThan(0);
+    expect(aheadParts.length).toBeGreaterThan(0);
   });
 
   it('should convert lat/lng to lng/lat format', () => {

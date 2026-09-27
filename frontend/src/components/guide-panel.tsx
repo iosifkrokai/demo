@@ -21,7 +21,6 @@ import {
   type Waypoint,
 } from '@/stores/directions-store';
 import { useTranslation } from 'react-i18next';
-import { isSimulating } from '@/lib/geo-sim';
 import { getManeuverIcon } from '@/utils/get-maneuver-icon';
 import {
   loadVisitOverrides,
@@ -31,6 +30,7 @@ import {
 } from '@/utils/visit-time';
 
 import { useCommonStore } from '@/stores/common-store';
+import { isSimulating, setSimPath } from '@/lib/geo-sim';
 import { GuideEmpty } from './parts/guide-empty';
 import { fmtDist, metresBetween } from './parts/guide-format';
 import { guideModeFor } from './parts/guide-mode';
@@ -577,6 +577,18 @@ export const GuidePanel = ({
     );
     if (withinReach) setVisited(withinReach.id, true);
   }, [precise, fix, stops, progress.visited, setVisited]);
+
+  // The replayed walk follows the route's own geometry, not straight lines
+  // between stops: a position that cuts across blocks is not a walk, and the map
+  // drew the dot off the line because that is exactly where the simulation put
+  // it. The stops remain the fallback for a route without usable geometry.
+  useEffect(() => {
+    if (!isSimulating()) return;
+    const path: [number, number][] = line
+      ? line.points.map((point) => [point.lat, point.lon])
+      : stops.map((stop) => [stop.lat, stop.lon]);
+    if (path.length > 1) setSimPath(path);
+  }, [line, stops]);
 
   const nextStop = useMemo(
     () => stops.find((s) => !effectiveVisited.includes(s.id)) ?? null,
