@@ -13,8 +13,9 @@ UI filters into `agent.requirements.TripRequirements`:
     satisfied requirement;
   * the no-key fallback produces the same shape as the LLM path.
 
-The file is deterministic and offline: no DB, no network. The LLM cases stub
-`jev.ask`, exactly as `test_degraded_intent.py` does.
+The file is deterministic and offline: no DB, no network. When the model path is
+exercised, the interpretation agent's contract is stubbed by monkeypatching
+`intent_mod._agent_contract`, so no key and no network are needed.
 """
 
 from __future__ import annotations
@@ -27,12 +28,12 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agent import constants, jev
-from agent.config import settings
+from agent import constants
+from agent.config import openrouter_api_key, settings
 from agent.models import GenerateReq
 from agent.planner import intent as intent_mod
 from agent.planner.intent import build_requirements
-from agent.requirements import TripRequirements
+from agent.requirements import PartyComposition, Requirement, TripRequirements
 
 RU = "ru"
 EN = "en"
@@ -57,32 +58,32 @@ def no_key(monkeypatch):
     so a developer's shell key cannot leak in and exercise the wrong branch."""
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     monkeypatch.setattr(settings, "OPENROUTER_API_KEY", None, raising=False)
-    assert jev.available() is False
+    assert openrouter_api_key() is None
 
 
 @pytest.fixture
 def with_key(monkeypatch):
     monkeypatch.setenv("OPENROUTER_API_KEY", "«redacted:sk-…»")
     monkeypatch.setattr(settings, "OPENROUTER_API_KEY", "«redacted:sk-…»", raising=False)
-    assert jev.available() is True
+    assert openrouter_api_key() is not None
 
 
 def _req(query: str, locale: Literal["ru", "en"] = RU, **kw) -> GenerateReq:
     return GenerateReq(query=query, locale=locale, **kw)
 
 
-def _mock_jev_ask(_query: str, _questions: dict) -> dict:
-    """The typed-answer shape /systemone returns, with no category scored."""
-    return {
-        **{f"cat_{cat}": {"noul": 0.0, "confidence": 0.9} for cat in constants.CATEGORIES},
-        **{f"neg_{cat}": {"noul": 0.0, "confidence": 0.9} for cat in constants.CATEGORIES},
-        "intent_type": {"choice": "themed", "confidence": 0.9},
-        "party_type": {"choice": "family", "confidence": 0.9},
-        "era_hint": {"choice": "any", "confidence": 0.9},
-        "search_scope": {"choice": "town", "confidence": 0.9},
-        "mentions_named_place": {"noul": 1.0, "confidence": 0.9},
-        "time_hours": {"score": 0, "confidence": 0.9},
-    }
+def _agent_contract(*, source: str = "llm", codes: tuple[str, ...] = ()) -> TripRequirements:
+    """A contract shaped exactly as the interpretation agent returns one."""
+    return TripRequirements(
+        locale="ru",
+        raw_query="stub",
+        party=PartyComposition(),
+        requirements=[
+            Requirement(kind="interest", strength="soft", code=code, label=code)
+            for code in codes
+        ],
+        source=source,  # type: ignore[arg-type]
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -430,42 +431,56 @@ class TestExplicitUiWins:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# The LLM path produces the same shape, and degrades cleanly
+# The agent path produces the contract, and degrades cleanly
 # ─────────────────────────────────────────────────────────────────────────────
 
-class TestLlmPath:
+class TestAgentPath:
 
-    def test_llm_adds_the_category_the_word_map_missed(self, with_key, monkeypatch):
-        def scored(_query, _questions):
-            answers = _mock_jev_ask(_query, _questions)
-            answers["cat_замок"] = {"noul": 0.98, "confidence": 0.9}
-            return answers
-        monkeypatch.setattr(jev, "ask", scored)
+    def test_agent_adds_the_category_the_word_map_missed(self, with_key, monkeypatch):
+        """A bare discovery query has no category word; the agent's reading is
+        what puts «замок» into the contract."""
+        monkeypatch.setattr(
+            intent_mod, "_agent_contract",
+            lambda *a, **k: _agent_contract(codes=("замок",)),
+        )
         tr = build_requirements("что посмотреть в Гродно", _req("что посмотреть в Гродно"))
         assert "замок" in tr.interest_codes()
         assert tr.source == "llm"
 
-    def test_llm_and_ui_together_are_mixed(self, with_key, monkeypatch):
-        monkeypatch.setattr(jev, "ask", _mock_jev_ask)
+    def test_agent_and_ui_together_are_mixed(self, with_key, monkeypatch):
+        """The agent layer already merges the UI filters and reports "mixed";
+        build_requirements must not overwrite that provenance."""
+        monkeypatch.setattr(
+            intent_mod, "_agent_contract",
+            lambda *a, **k: _agent_contract(source="mixed"),
+        )
         tr = build_requirements(RU_BUG, _req(RU_BUG, hard_services=["туалет"]))
         assert tr.source == "mixed"
 
-    def test_jev_outage_degrades_to_fallback(self, with_key, monkeypatch):
-        def boom(_query, _questions):
-            raise jev.JevUpstreamError("simulated upstream failure")
-        monkeypatch.setattr(jev, "ask", boom)
+    def test_agent_outage_degrades_to_fallback(self, with_key, monkeypatch):
+        """No agent reading (None) → the deterministic reading, with the UI
+        filters and everything the text states intact."""
+        monkeypatch.setattr(intent_mod, "_agent_contract", lambda *a, **k: None)
         tr = build_requirements(RU_BUG, _req(RU_BUG))
         assert tr.source == "fallback"
         assert tr.party.children == 2
         assert tr.budget_minutes == 120
 
-    def test_same_shape_online(self, with_key, monkeypatch):
-        """The LLM path fills the same fields as the offline reading."""
-        monkeypatch.setattr(jev, "ask", _mock_jev_ask)
+    def test_agent_exception_degrades_to_fallback(self, with_key, monkeypatch):
+        """An unexpected error in the agent layer must never fail the request."""
+        def boom(*_a, **_kw):
+            raise RuntimeError("simulated agent failure")
+        monkeypatch.setattr(intent_mod, "_agent_contract", boom)
+        tr = build_requirements(RU_BUG, _req(RU_BUG))
+        assert tr.source == "fallback"
+
+    def test_same_shape_as_offline(self, with_key, monkeypatch):
+        """The agent path fills the same fields as the offline reading."""
+        monkeypatch.setattr(
+            intent_mod, "_agent_contract",
+            lambda *a, **k: _agent_contract(codes=("замок",)),
+        )
         online = build_requirements(RU_BUG, _req(RU_BUG))
-        assert online.party.children == 2
-        assert online.budget_minutes == 120
-        assert online.areas == ["grodno-old-town"]
         assert online.model_dump().keys() == TripRequirements(
             raw_query=RU_BUG
         ).model_dump().keys()

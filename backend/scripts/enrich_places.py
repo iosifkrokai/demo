@@ -1,4 +1,4 @@
-"""One-shot enrichment: assigns category (Jev typed decisions) + embedding (OpenRouter).
+"""One-shot enrichment: assigns category (deterministic taxonomy) + embedding (OpenRouter).
 
 # Curated data wins. The curated ground truth lives in data/places_curated.csv
 # (76 rows manually labelled) and is written by scripts/apply_curated.py, while
@@ -13,10 +13,12 @@
 OpenRouter:
   - Embedding: openai/text-embedding-3-small (1536-d, multilingual) — the same
     POST /embeddings call as scripts/seed_region.py and scripts/ingest_poi.py.
-  - Categories: TypeSafe Jev (typesafe/jev-1.13) typed `choice` questions via
-    agent/jev.py. This used to be agent/llm.py + a Gemini chat completion; that
-    module was removed and Jev is the project's decision model now
-    (agent/constants.py::JEV_MODEL, same pattern as agent/planner/intent.py).
+  - Categories: the deterministic taxonomy resolver (agent/taxonomy.py
+    `resolve_code`) over the row's name. Jev (typesafe/jev-1.13) is gone from
+    the backend, so classification no longer calls a model: a row whose name the
+    taxonomy cannot map is stored as «другое» rather than guessed. This keeps
+    the pass honest and key-free; a future model classifier belongs to the
+    interpretation agent, not to this one-shot script.
 
 Usage:
     python scripts/enrich_places.py
@@ -29,15 +31,16 @@ import httpx
 import psycopg
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from agent import jev
+from agent.taxonomy import all_codes, resolve_code
 
 DSN = os.environ.get("DATABASE_URL", "postgresql://grodno:grodno@localhost:5432/grodno")
 OPENROUTER_URL = "https://openrouter.ai/api/v1"
 OPENROUTER_EMBED_MODEL = os.environ.get("OPENROUTER_EMBED_MODEL", "openai/text-embedding-3-small")
 
-# Category → English gloss. The Cyrillic key is what lands in places.category;
-# the gloss is the description Jev gets for that choice criterion (its training
-# language is English — same reasoning as agent/planner/intent.py).
+# Category → English gloss. The Cyrillic key is what lands in places.category.
+# Kept as the documented label set for reviewers; classification itself is done
+# by the deterministic taxonomy resolver, so no model sees these glosses any
+# more (they were the criteria Jev used to receive).
 TAXONOMY: dict[str, str] = {
     "замок": "castle, fortress or other defensive structure",
     "костёл": "Catholic church",
@@ -54,8 +57,7 @@ TAXONOMY: dict[str, str] = {
     "кладбище": "cemetery or necropolis",
     "другое": "none of the above",
 }
-# Items per /systemone call. Their "parallel questions" pattern: one choice
-# question per item inside a single request, not one call per item.
+# Kept for signature compatibility; there is no chunked model call any more.
 CLASSIFY_CHUNK = 6
 EMBED_BATCH = 20  # OpenRouter batch limit
 
@@ -65,41 +67,23 @@ def classify_items(
     taxonomy: dict[str, str] = TAXONOMY,
     chunk_size: int = CLASSIFY_CHUNK,
 ) -> list[str | None]:
-    """Category per item, from typed Jev `choice` questions.
+    """Category per item, from the deterministic taxonomy resolver.
 
     items are the "name. description" strings built in main(); the returned list
-    is positional. Each chunk of `chunk_size` items becomes ONE /systemone call
-    carrying one choice question per item.
+    is positional. The NAME (the part before the first period) is resolved
+    through agent/taxonomy.py — the single source of category codes — and the
+    full string is tried as a fallback. A row the taxonomy cannot map is None
+    and the caller stores «другое»; nothing is invented and no model is called.
 
-    A missing answer is None and the caller stores «другое». A value outside the
-    taxonomy raises — same "fail loud on drift" rule as agent/planner/intent.py,
-    because a stray label here would overwrite a hand-curated category.
+    `taxonomy` and `chunk_size` are accepted for signature compatibility with
+    the removed Jev implementation and are otherwise unused.
     """
+    known = set(all_codes())
     out: list[str | None] = []
-    for start in range(0, len(items), chunk_size):
-        chunk = items[start: start + chunk_size]
-        questions = {
-            f"item_{i}": {
-                "type": "choice",
-                "instructions": (
-                    "Which category does this tourist place belong to? The state "
-                    "is a list of places, each with an `id`, a name and a short "
-                    "description in `text`."
-                ),
-                "criteria": dict(taxonomy),
-            }
-            for i in range(len(chunk))
-        }
-        answers = jev.ask([{"id": i, "text": t} for i, t in enumerate(chunk)], questions)
-        for i in range(len(chunk)):
-            answer = answers.get(f"item_{i}")
-            if not answer:
-                out.append(None)
-                continue
-            cat = jev.choice(answer)
-            if cat not in taxonomy:
-                raise ValueError(f"jev: unknown category {cat!r} — add it to TAXONOMY")
-            out.append(cat)
+    for item in items:
+        name = item.split(".", 1)[0].strip()
+        code = resolve_code(name) or resolve_code(item)
+        out.append(code if (code and code in known) else None)
     return out
 
 
@@ -139,23 +123,27 @@ def main() -> None:
             "WHERE COALESCE(category_source, 'auto') = 'auto' ORDER BY id",
         )
         if rows:
-            print(f"  classifying {len(rows)} rows with Jev...", flush=True)
+            print(f"  classifying {len(rows)} rows with the taxonomy resolver...", flush=True)
             items = [
                 f"{(r['name'] or '').strip()}. {(r['description'] or '').strip()}".strip(" .")
                 for r in rows
             ]
             classes = classify_items(items, TAXONOMY, chunk_size=6)
-            n_llm = 0
+            n_mapped = 0
             for row, cat in zip(rows, classes, strict=True):
                 if cat:
-                    n_llm += 1
+                    n_mapped += 1
                 cur.execute(
                     "UPDATE places SET category = %s "
                     "WHERE id = %s AND COALESCE(category_source, 'auto') = 'auto'",
                     (cat or "другое", row["id"]),
                 )
             conn.commit()
-            print(f"  categories: {n_llm}/{len(rows)} by Jev, rest set to «другое»", flush=True)
+            print(
+                f"  categories: {n_mapped}/{len(rows)} resolved by taxonomy, "
+                "rest set to «другое»",
+                flush=True,
+            )
 
         # === Pass 2: embeddings (only rows where embedding IS NULL) ===
         while True:

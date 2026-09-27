@@ -137,7 +137,7 @@ def plan(
 ) -> dict:
     """A /routes/generate response in the shape the API actually returns."""
     body = {
-        "parsed": {"source": "jev"},
+        "parsed": {"source": "regex"},
         "points": points,
         "shape": shape if shape is not None else {"type": "LineString", "coordinates": []},
         "summary": {"length_km": 3.0, "time_seconds": walk_s},
@@ -150,7 +150,7 @@ def plan(
             "stops_dropped": 0,
         },
         "costing": "pedestrian",
-        "debug": {"intent_source": "jev", "trace": {"algorithm": "2opt"}},
+        "debug": {"intent_source": "regex", "trace": {"algorithm": "2opt"}},
     }
     body.update(extra)
     return body

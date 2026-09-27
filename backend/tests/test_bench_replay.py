@@ -99,7 +99,7 @@ def api_response(
     stops_dropped: int = 0,
     shape: dict | None = "auto",
     trace: dict | None = None,
-    intent_source: str = "jev",
+    intent_source: str = "regex",
 ) -> dict:
     """A /routes/generate response in the shape the API actually returns."""
     if shape == "auto":

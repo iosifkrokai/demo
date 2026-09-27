@@ -43,7 +43,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-from .. import constants, jev, tools
+from .. import constants, tools
+from ..config import openrouter_api_key
 from ..models import GenerateReq
 from ..requirements import PartyComposition, Requirement, TripRequirements
 from ..taxonomy import all_categories, resolve_code
@@ -77,15 +78,18 @@ log = logging.getLogger(__name__)
 # Hard budgets for one interpretation. They are the whole reason this layer is
 # allowed to exist inside a request: bounded cost, bounded latency, bounded
 # blast radius. Exceeding any of them returns None.
-MAX_TOOL_CALLS = 6  # tool_calls_limit
-MAX_REQUESTS = 4  # model turns (request_limit) — no unbounded loop
+MAX_TOOL_CALLS = 10  # tool_calls_limit
+MAX_REQUESTS = 5  # model turns (request_limit) — no unbounded loop
 MAX_OUTPUT_TOKENS = 1500  # model_settings.max_tokens
 WALL_CLOCK_TIMEOUT_S = 25.0
 MODEL_TIMEOUT_S = 20.0  # per-request HTTP timeout, below the wall clock
 
 # Model is a deployment fact, not a tuning knob (spec §4.2: the measurement
-# picks the model, the framework stays). Overridable for the stage-1 benchmark.
-DEFAULT_MODEL = "openai/gpt-4o-mini"
+# picks the model, the framework stays). Chosen by the product owner from the
+# live OpenRouter list (both tools and structured outputs supported) and set to
+# the cheapest capable candidate so the interpretation layer is affordable per
+# request. Overridable per-process with AGENT_INTERPRET_MODEL for a benchmark.
+DEFAULT_MODEL = "deepseek/deepseek-v4.1-flash"
 
 
 def _model_name() -> str:
@@ -159,6 +163,10 @@ def _instructions(ui_note: str) -> str:
         "Use the tools to ground every factual claim: call search_places before "
         "naming or id-ing a place, find_areas before restricting to a territory, "
         "get_place_facts for opening hours or ticket price.\n"
+        f"Tool budget: at most {MAX_TOOL_CALLS} tool calls in total. One call per "
+        "distinct need, never the same query twice — then answer. If you are near "
+        "the budget, answer with what you already know and put the rest in "
+        "`unknowns`.\n"
         "Canonical category codes (use ONLY these, never invent one): "
         f"{catalogue}.\n"
         "Rules:\n"
@@ -210,7 +218,7 @@ def _ui_note(req: GenerateReq) -> str:
 
 def _make_model() -> Any:
     """Build the OpenRouter model. Tests replace this with a fake model."""
-    key = jev.api_key()
+    key = openrouter_api_key()
     if not key:
         raise RuntimeError("no OPENROUTER_API_KEY")  # pragma: no cover — checked earlier
     return OpenRouterModel(_model_name(), provider=OpenRouterProvider(api_key=key))
@@ -297,7 +305,7 @@ def _run_with_timeout(fn: Any, timeout_s: float) -> tuple[Any, str | None]:
 
 
 def _run_agent(
-    query: str, req: GenerateReq, deps: InterpretDeps
+    query: str, req: GenerateReq, deps: InterpretDeps, wall_clock_s: float | None = None
 ) -> tuple[AgentReading | None, str | None]:
     """Run one bounded interpretation. Returns (reading, failure_reason)."""
     if pydantic_ai is None:  # guarded import failed at module load
@@ -328,7 +336,10 @@ def _run_agent(
             prompt, deps=deps, usage_limits=usage_limits, model_settings=model_settings
         )
 
-    result, failure = _run_with_timeout(call, WALL_CLOCK_TIMEOUT_S)
+    bound = WALL_CLOCK_TIMEOUT_S
+    if wall_clock_s is not None and wall_clock_s > 0:
+        bound = min(bound, float(wall_clock_s))
+    result, failure = _run_with_timeout(call, bound)
     if failure is not None:
         return None, failure
     if result is None or not isinstance(getattr(result, "output", None), AgentReading):
@@ -514,7 +525,7 @@ def available() -> bool:
     """
     if pydantic_ai is None:
         return False
-    if not jev.api_key():
+    if not openrouter_api_key():
         return False
     return bool(_model_name())
 
@@ -524,6 +535,7 @@ def interpret_with_agent(
     req: GenerateReq,
     *,
     db: Any | None = None,
+    wall_clock_s: float | None = None,
 ) -> TripRequirements | None:
     """Interpret one request with the tool-using agent.
 
@@ -533,7 +545,8 @@ def interpret_with_agent(
     caller falls back to the deterministic path, which keeps the UI filters.
 
     ``db`` is an optional caller-owned connection; without one each tool opens
-    its own short-lived connection.
+    its own short-lived connection.  ``wall_clock_s`` narrows the agent's own
+    bound when the caller has less of its request deadline left.
     """
     if not isinstance(query, str) or not query.strip():
         return None
@@ -543,7 +556,7 @@ def interpret_with_agent(
 
     deps = InterpretDeps(db=db)
     try:
-        reading, failure = _run_agent(query.strip(), req, deps)
+        reading, failure = _run_agent(query.strip(), req, deps, wall_clock_s=wall_clock_s)
     except Exception as exc:
         log.warning("agent_interpret: unexpected failure: %s: %s", type(exc).__name__, exc)
         return None

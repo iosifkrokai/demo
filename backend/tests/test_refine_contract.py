@@ -29,7 +29,8 @@ from fastapi.testclient import TestClient
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agent import jev, main as agent_main
+from agent import main as agent_main
+from agent.config import settings
 from agent.errors import UpstreamUnavailable
 from agent.models import Candidate, GenerateReq, LatLon
 from agent.planner import pipeline as pipeline_mod
@@ -55,7 +56,7 @@ from agent.planner.refine import (
 @pytest.fixture
 def no_key(monkeypatch):
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
-    monkeypatch.setattr(jev, "api_key", lambda: None)
+    monkeypatch.setattr(settings, "OPENROUTER_API_KEY", None)
 
 
 def _cand(

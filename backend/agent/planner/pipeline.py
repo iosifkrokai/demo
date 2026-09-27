@@ -5,27 +5,33 @@ explicit dependencies (db) for testability.
 
 Steps in order:
   0  preprocess         query → PreprocessedQuery
-  1  extract_intent     query → IntentResult
+  1  interpret          query + explicit UI filters → TripRequirements
+                        (PydanticAI agent over OpenRouter; deterministic
+                         fallback when no key/model), then →
+                        IntentResult for resolve()
   2  resolve            IntentResult + client params → ResolvedConstraints
   -- embed query         text → vec (OpenRouter; skipped when unavailable)
   3  retrieve           vec + constraints → list[Candidate] (RRF-fused)
-  3.5 rerank            candidates → top-K (Jev; skipped when unavailable)
   4  diversity          candidates → top-N (MMR)
   5  cost               candidates + constraints → CostMatrix
   6  optimize           candidates + cost → ordered list (3 modes)
   7  validate           ordered + cost → ValidatedPlan
   8  render             ValidatedPlan → shape + summary (Valhalla /route)
   9  explain            ValidatedPlan + summary → human-readable string
+  9b verify             TripRequirements + final route/geometry → per-requirement
+                        satisfaction (planner/verify.py — the deterministic
+                        verifier, NOT the model)
 
-Degraded mode (no OPENROUTER_API_KEY, or OpenRouter unreachable)
-    The three OpenRouter steps each degrade on their own and log ONE warning
-    naming the reason: intent falls back to a deterministic parse
-    (planner/intent.py `fallback_intent`), the vector signal is dropped so
-    retrieval runs on keywords + categories alone, and rerank keeps the
-    retrieval order.  A route request still returns points; /health keeps
-    reporting `llm`/`embedder` as false because no key is held.
+Degraded mode (no OPENROUTER_API_KEY, or the agent/OpenRouter unreachable)
+    The interpretation step degrades to the deterministic parse in
+    planner/intent.py (`build_requirements` → `_deterministic_requirements`)
+    while keeping every explicit UI filter; the vector signal is dropped so
+    retrieval runs on keywords + categories alone.  A route request still
+    returns points; /health keeps reporting `llm`/`embedder` as false because
+    no key is held.
 
-Returns: RouteResponse (Pydantic) — what main.py serves over HTTP.
+Returns: RouteResponse (Pydantic) — what main.py serves over HTTP.  Its
+`status`/`requirements` fields are the verifier's verdict, not the model's.
 """
 
 from __future__ import annotations
@@ -37,7 +43,8 @@ import time as _time
 import httpx
 import psycopg
 
-from .. import constants, jev
+from .. import constants, taxonomy
+from ..config import openrouter_api_key
 from ..errors import (
     NoCandidatesFound,
     NoRoutePossible,
@@ -48,9 +55,11 @@ from ..models import (
     Candidate,
     CostMatrix,
     GenerateReq,
+    Interpretation,
     LatLon,
     ParsedQuery,
     Place,
+    RequirementSignal,
     ResolvedConstraints,
     RouteChange,
     RouteChanges,
@@ -68,7 +77,7 @@ from .cost import (
 )
 from .diversity import mmr_select
 from .explain import explain as explain_route
-from .intent import extract_intent
+from .intent import build_requirements, intent_from_requirements
 from .optimize import optimize
 from .preprocess import preprocess
 from .refine import (
@@ -79,10 +88,10 @@ from .refine import (
     visit_minutes_of,
 )
 from .render import render
-from .rerank import rerank as rerank_pool
 from .resolve import resolve
 from .retrieve import retrieve, _row_to_candidate
 from .validate import validate
+from .verify import overall_status, verify
 
 log = logging.getLogger(__name__)
 
@@ -95,7 +104,7 @@ def _openrouter_embed(texts: list[str]) -> list[list[float]]:
     WARNING per call, naming the reason, so a log reader can tell "no key"
     apart from "key but upstream down".
     """
-    api_key = jev.api_key()
+    api_key = openrouter_api_key()
     if not api_key:
         log.warning("embed: no OPENROUTER_API_KEY — keyword-only retrieval")
         return []
@@ -483,6 +492,68 @@ def _prune_unroutable(
     return route
 
 
+def _is_sight_stop(candidate: Any) -> bool:
+    """True when a candidate is a destination, not a service the user asked for.
+
+    A service POI (toilet/café/hotel) can be *on* the walk; it must never be the
+    thing the walk is built around.  Unknown category codes count as sights —
+    the taxonomy is the only authority, and it only ever gains codes.
+    """
+    try:
+        return taxonomy.role(candidate.category) != "service"
+    except Exception:  # unknown/unmapped code → treat it as a destination
+        return True
+
+
+def _interpretation(
+    requirements: Any | None, status: str | None
+) -> Interpretation | None:
+    """What the system understood, in one compact block for the client.
+
+    Codes and numbers only — the client localises ``code``/``reason`` itself.
+    ``unmet`` lists EVERY requirement that the verifier did not prove satisfied
+    (unmet, uncertain or still pending), so a request whose mandatory stop could
+    not be placed is reported explicitly instead of quietly returning a plan
+    that ignores it.
+    """
+    if requirements is None:
+        return None
+    # Per-requirement provenance defaults to wherever the reading came from;
+    # a requirement the user set with a visible control keeps "ui".
+    origin = "agent" if requirements.source in ("llm", "mixed") else "fallback"
+
+    def signal(r: Any) -> RequirementSignal:
+        return RequirementSignal(
+            kind=r.kind,
+            strength=r.strength,
+            code=r.code,
+            name=r.name,
+            origin="ui" if r.source == "ui" else origin,
+            status=r.status,
+            reason=r.reason,
+            place_ids=list(r.place_ids),
+        )
+
+    signals = [signal(r) for r in requirements.requirements]
+    return Interpretation(
+        source=requirements.source,
+        locale=requirements.locale,
+        status=status or "pending",
+        adults=requirements.party.adults,
+        children=requirements.party.children,
+        children_ages=list(requirements.party.children_ages),
+        mobility=list(requirements.party.mobility),
+        budget_minutes=requirements.budget_minutes,
+        areas=list(requirements.areas),
+        transport=requirements.costing,
+        result_mode=requirements.result_mode,
+        round_trip=requirements.round_trip,
+        requirements=signals,
+        unmet=[s for s in signals if s.status != "satisfied"],
+        unknowns=list(requirements.unknowns),
+    )
+
+
 def _render_tour(
     route: list[Candidate], *, costing: str, origin: LatLon | None
 ) -> tuple[dict, dict]:
@@ -509,12 +580,20 @@ class Pipeline:
     def __init__(self, db: psycopg.Connection):
         self.db = db
 
+    @staticmethod
+    def _left(t0: float) -> float:
+        """Seconds left of this request's end-to-end deadline (may be < 0)."""
+        return constants.REQUEST_DEADLINE_S - (_time.perf_counter() - t0)
+
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
 
     def generate(self, req: GenerateReq) -> RouteResponse:
         t0 = _time.perf_counter()
+        deadline_trim: int | None = None
+        deadline_order_skipped = False
+        deadline_geometry_skipped = False
 
         # A refinement turn is not a new plan: the route the user already has is
         # the input.  Handled before retrieval so a delta instruction can never
@@ -528,8 +607,16 @@ class Pipeline:
         # 0. Preprocess
         pre = preprocess(req.query)
 
-        # 1. Intent
-        intent = extract_intent(req.query)
+        # 1. Interpretation — the plan is built from `TripRequirements`.  The
+        # tool-using agent (planner/agent_interpret.py) fills the contract when
+        # it can; the deterministic parse answers otherwise (no key, no SDK, a
+        # model/tool failure).  `intent` is derived FROM that contract, so
+        # resolve() grounds the reading that actually produced the plan and not
+        # a second, keyword-only guess.
+        requirements = build_requirements(
+            req.query, req, db=self.db, wall_clock_s=self._left(t0)
+        )
+        intent = intent_from_requirements(requirements, req.query)
 
         # The scope comes from the intent model (typed), not from keyword
         # matching: a region-wide request ("все костёлы Гродненской области") is a
@@ -577,9 +664,10 @@ class Pipeline:
                 "no candidates matched the query — попробуйте другую формулировку"
             )
 
-        # 3.5 Rerank (Jev) — skipped in keyword mode; rerank() decides and
-        # returns the pool in retrieval order when OpenRouter cannot answer.
-        candidates = rerank_pool(req.query, candidates, top_k=constants.RERANK_POOL_SIZE)
+        # 3.5 Rerank: retired with Jev.  `retrieve()` already fuses the vector
+        # and keyword signals (RRF) into a relevance order, and the ordered
+        # pool is what the pipeline uses; the Jev scoring call is gone with the
+        # rest of Jev (spec §4.2 keeps Jev only if it measurably pays off).
 
         # 3.55 Physical duplicates: the same POI exists twice when the curated
         # row and the OSM row disagree on the name ("Новый замок (дворец
@@ -652,17 +740,64 @@ class Pipeline:
         costing = req.profile or ("auto" if region_scope else "pedestrian")
 
         # 5. Cost matrix + drop candidates Valhalla cannot connect to anything.
+        # A wide query (whole oblast, no time budget) puts up to 50 stops into a
+        # 50×50 Valhalla matrix — a fixed ~20 s.  When the request deadline is
+        # already close, plan a smaller tour instead of running out of time: the
+        # trim is reported in `debug.deadline` and the verifier still judges the
+        # result honestly.
+        left = self._left(t0)
+        if left < constants.COST_MATRIX_MIN_LEFT_S and len(candidates) > constants.POOL_TRIM_SIZE:
+            log.info(
+                "deadline: %.1fs left — trimming %d candidates to %d before the cost matrix",
+                left, len(candidates), constants.POOL_TRIM_SIZE,
+            )
+            candidates = sorted(candidates, key=lambda c: c.relevance, reverse=True)
+            candidates = candidates[: constants.POOL_TRIM_SIZE]
+            deadline_trim = constants.POOL_TRIM_SIZE
+
         candidates, cost = _build_cost(candidates, constraints, costing)
 
         # 6. Optimize. With a known tourist position the route must START there:
         # the optimizer scores orders over the candidate matrix; we prepend the
         # origin afterwards as a fixed first leg (render walks origin → first stop).
         route, info = optimize(candidates, cost, constraints, costing=costing)
+        if len(route) < 2 and len(candidates) > 1:
+            # The most relevant stop of a service-only query («туалет по пути»)
+            # is the service itself.  If that POI sits far from everything else,
+            # the walkability cap rejects every insertion, the order collapses to
+            # one stop and the request dies as a 422 — which hides a plan that
+            # was otherwise fine.  Retry anchored on the SIGHT stops: the walk
+            # gets a destination, and the service the user asked for is then
+            # reported unmet by the verifier instead of failing the request.
+            sights = [c for c in candidates if _is_sight_stop(c)]
+            if 2 <= len(sights) < len(candidates):
+                log.info(
+                    "optimize collapsed to %d stop(s) — retrying on %d sight stop(s)",
+                    len(route), len(sights),
+                )
+                retry_candidates, retry_cost = _build_cost(sights, constraints, costing)
+                retry_route, retry_info = optimize(
+                    retry_candidates, retry_cost, constraints, costing=costing
+                )
+                if len(retry_route) >= 2:
+                    candidates, cost, route, info = (
+                        retry_candidates, retry_cost, retry_route, retry_info,
+                    )
         if len(route) < 2:
             raise NoRoutePossible("optimizer could not produce a route with ≥ 2 stops")
 
-        # 6b. Valhalla orders the walk when nothing pins the sequence.
-        route, info = _valhalla_order(route, info, costing=costing)
+        # 6b. Valhalla orders the walk when nothing pins the sequence.  Its
+        # `optimized_route` over a region-wide tour is unbounded (60 s+ measured
+        # on «замки Гродненской области»): under deadline pressure the matrix
+        # order stands, and the response says so.
+        if self._left(t0) >= constants.VALHALLA_ORDER_MIN_LEFT_S:
+            route, info = _valhalla_order(route, info, costing=costing)
+        else:
+            log.info(
+                "deadline: %.1fs left — skipping Valhalla re-ordering",
+                self._left(t0),
+            )
+            deadline_order_skipped = True
 
         # 6c. Drop stops the matrix cannot connect to their predecessor in this
         # order (Valhalla's own verdict — see _prune_unroutable).
@@ -671,8 +806,16 @@ class Pipeline:
         # 7. Validate
         plan = validate(route, cost, constraints, info)
 
-        # 8. Render (Valhalla /route) — origin is the tourist's GPS start
-        shape, summary = _render_tour(plan.route, costing=costing, origin=req.origin)
+        # 8. Render (Valhalla /route) — origin is the tourist's GPS start.
+        # Skipped when the deadline is spent: the response then carries no
+        # geometry, which the verifier reports as `geometry_missing`/`degraded`
+        # rather than the client waiting for a hang.
+        if self._left(t0) >= constants.RENDER_MIN_LEFT_S:
+            shape, summary = _render_tour(plan.route, costing=costing, origin=req.origin)
+        else:
+            log.info("deadline: %.1fs left — skipping geometry", self._left(t0))
+            shape, summary = {}, {}
+            deadline_geometry_skipped = True
 
         walk_s = float(summary.get("time", 0.0)) if summary else 0.0
         length_km = summary.get("length") if summary else None
@@ -683,11 +826,20 @@ class Pipeline:
         # 9. Explain
         explanation = explain_route(plan.route, plan.trace, walk_s, costing)
 
+        # 9b. Verify — the DETERMINISTIC verifier decides, per requirement,
+        # whether the request was actually honoured against the final route and
+        # the Valhalla geometry (spec §4.4).  The interpretation model proposed
+        # the meaning of the request; it gets no vote here, and an unmet hard
+        # requirement is reported as such, never explained away.
+        verify(requirements, plan, shape)
+        status = overall_status(requirements)
+
         ms = int((_time.perf_counter() - t0) * 1000)
         log.info(
-            "pipeline.ok query_len=%d ms=%d n_stops=%d walk_s=%.0f budget_min=%s source=%s",
+            "pipeline.ok query_len=%d ms=%d n_stops=%d walk_s=%.0f budget_min=%s "
+            "source=%s status=%s",
             len(req.query), ms, len(plan.route), walk_s,
-            constraints.time_budget_minutes, intent.source,
+            constraints.time_budget_minutes, intent.source, status,
         )
 
         changes = (
@@ -704,6 +856,15 @@ class Pipeline:
             length_km=length_km,
             explanation=explanation,
             costing=costing,
+            requirements=requirements,
+            status=status,
+            deadline={
+                "budget_s": constants.REQUEST_DEADLINE_S,
+                "used_s": round(_time.perf_counter() - t0, 3),
+                "pool_trimmed_to": deadline_trim,
+                "valhalla_order_skipped": deadline_order_skipped,
+                "geometry_skipped": deadline_geometry_skipped,
+            },
         )
 
     def reroute(self, point_ids: list[int], profile: str | None = None) -> RouteResponse:
@@ -785,7 +946,7 @@ class Pipeline:
         except Exception:
             valhalla_ok = False
 
-        openrouter_ok = bool(jev.api_key())
+        openrouter_ok = bool(openrouter_api_key())
 
         return {
             "status": "ok" if (db_ok and valhalla_ok and openrouter_ok) else "degraded",
@@ -964,7 +1125,8 @@ class Pipeline:
             "refinement_operation": directive.operation,
         }
 
-        intent = extract_intent(instruction or req.query)
+        requirements = build_requirements(instruction or req.query, req, db=self.db)
+        intent = intent_from_requirements(requirements, instruction or req.query)
         constraints = resolve(
             intent,
             explicit_time_budget=req.time_budget_minutes,
@@ -978,6 +1140,10 @@ class Pipeline:
 
         plan = validate(route, cost, constraints, info)
         shape, summary = _render_tour(route, costing=costing, origin=req.origin)
+        # The deterministic verifier decides the fate of the (delta) requirements
+        # against the refined route — the model never does.
+        verify(requirements, plan, shape)
+        status = overall_status(requirements)
 
         walk_s = float(summary.get("time", 0.0)) if summary else 0.0
         if walk_s == 0.0 and plan.walk_seconds > 0:
@@ -1008,6 +1174,8 @@ class Pipeline:
             length_km=length_km,
             explanation=explanation,
             costing=costing,
+            requirements=requirements,
+            status=status,
         )
         # Machine-readable refinement outcome; the human text is a fallback for
         # the UI, the reason code is the contract.
@@ -1041,6 +1209,9 @@ class Pipeline:
         length_km: float | None,
         explanation: str,
         costing: str = "pedestrian",
+        requirements=None,
+        status: str | None = None,
+        deadline: dict | None = None,
     ) -> RouteResponse:
         d = intent.decision
         return RouteResponse(
@@ -1082,9 +1253,18 @@ class Pipeline:
                 stops_dropped=plan.stops_dropped,
             ),
             explanation=explanation,
+            status=status,
+            requirements=(
+                requirements.public_requirements() if requirements is not None else None
+            ),
+            interpretation=_interpretation(requirements, status),
             debug={
                 "intent_source": intent.source,
                 "intent_latency_ms": intent.latency_ms,
+                "deadline": deadline,
+                "requirements_source": (
+                    getattr(requirements, "source", None) if requirements is not None else None
+                ),
                 "constraints": {
                     "must_visit_ids": constraints.must_visit_ids,
                     "area_anchor": constraints.area_anchor,

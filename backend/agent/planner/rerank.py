@@ -1,87 +1,40 @@
-"""Step 3.5 — Candidate re-scoring via TypeSafe Jev (Score questions).
+"""Step 3.5 — candidate re-scoring. RETIRED with Jev.
 
-One batched /systemone call: a Score question per (query, place) pair.
-Score levels: 0 = irrelevant … 4 = exactly what the user asked for.
-The weighted score is normalised to [0, 1] and overwrites relevance.
+The candidate pool used to be re-scored by TypeSafe Jev (`typesafe/jev-1.13`)
+via the System One decisions endpoint.  Spec 002 §4.2 keeps Jev only "if it
+measurably improves quality" — the golden-set measurement showed Jev does not
+pay for itself (compliance was *lower* with Jev on than off), and Jev has been
+removed from the backend entirely, so this step no longer calls a model.
 
-The TypeSafe re-ranking cookbook validates this pattern: one question per
-query-candidate pair, batched in a single request — cheaper and faster
-than per-pair calls.
-
-Degraded mode: with no OPENROUTER_API_KEY, or an upstream that times out
-or 5xx, the step is SKIPPED and the candidates come back in retrieval
-order. Re-ranking is a refinement of an order that is already usable, so
-losing it costs quality, not the request — one WARNING per call, never
-one per candidate.
+What remains is the honest fallback that was always its degraded path:
+`rerank()` returns the pool exactly as `retrieve()` produced it (RRF-fused
+relevance order) and does NOT truncate to `top_k`.  The pipeline no longer calls
+this module at all; it is kept as a documented no-op so nothing that still
+imports it breaks, and so the removal is visible rather than silent.
 """
 
 from __future__ import annotations
 
 import logging as _logging
 
-from .. import constants, jev
 from ..models import Candidate
 
 log = _logging.getLogger(__name__)
 
-# Score criteria — 5 ordered levels.
-_LEVELS = [
-    "irrelevant — the place does not match the query at all",
-    "weak — tangentially related",
-    "moderate — related but not a highlight for this query",
-    "good — clearly matches what the user asked for",
-    "perfect — exactly the kind of place the user asked for",
-]
-_MAX_LEVEL = len(_LEVELS) - 1
-
 
 def rerank(query: str, candidates: list[Candidate], top_k: int) -> list[Candidate]:
-    """Score candidates against the query via one batched Jev call.
+    """Return the candidates in retrieval order — no model, no truncation.
 
-    Returns the pool untouched (retrieval order, no top_k truncation) when
-    Jev cannot answer — see the module docstring.  Otherwise the scores
-    overwrite relevance and the pool is cut to top_k, exactly as before.
+    `top_k` is accepted for signature compatibility and deliberately ignored:
+    dropping the tail here would silently trim the pool, which is the one thing
+    the no-model path promises not to do.
     """
     if not candidates:
         return []
-
-    if not jev.available():
-        log.warning("rerank: no OPENROUTER_API_KEY — skipped, retrieval order kept")
-        return candidates
-
-    places = [
-        {"id": str(i), "name": c.name, "description": (c.blurb or "")[:200]}
-        for i, c in enumerate(candidates)
-    ]
-    state = [{"query": query}, {"places": places}]
-    questions = {
-        f"rel_{i}": {
-            "type": "score",
-            "instructions": {
-                "question": "How well does place `place` match the user's `query`?",
-                "place": p,
-            },
-            "criteria": _LEVELS,
-        }
-        for i, p in enumerate(places)
-    }
-
-    try:
-        answers = jev.ask(state, questions, model=constants.JEV_MODEL)
-    except jev.JevError as exc:
-        log.warning("rerank: Jev unavailable (%s) — skipped, retrieval order kept", exc)
-        return candidates
-
-    for i, c in enumerate(candidates):
-        raw = jev.score(answers[f"rel_{i}"])
-        norm = raw / _MAX_LEVEL if _MAX_LEVEL else 0.0
-        c.relevance = norm
-        c.rerank_score = norm
-
-    candidates.sort(key=lambda c: c.relevance, reverse=True)
-    return candidates[:top_k]
+    log.info("rerank: disabled (Jev removed) — retrieval order kept, no top_k trim")
+    return candidates
 
 
 def warmup() -> bool:
-    """No-op: Jev needs no preloading."""
+    """No-op: there is no model to preload."""
     return True

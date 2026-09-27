@@ -12,11 +12,26 @@ from __future__ import annotations
 
 from . import taxonomy
 
+# ── Per-request deadlines ───────────────────────────────────────────────────
+# One route request has a hard end-to-end budget.  Exceeding it is never a
+# hang: the planner drops the optional work (Valhalla re-ordering, geometry)
+# and returns a smaller plan with an honest status instead.
+REQUEST_DEADLINE_S = 40.0
+# Less than this left → trim the candidate pool before the (50×50) cost matrix.
+COST_MATRIX_MIN_LEFT_S = 26.0
+POOL_TRIM_SIZE = 12
+# Less than this left → do not ask Valhalla to re-order a wide tour; its
+# `optimized_route` call is unbounded over a region and was the 60 s+ tail.
+VALHALLA_ORDER_MIN_LEFT_S = 18.0
+# Less than this left → skip the geometry call: the plan is returned with
+# `geometry_missing`, which the verifier reports as `degraded`.
+RENDER_MIN_LEFT_S = 6.0
+
 # ── ML models (OpenRouter) ──────────────────────────────────────────────────
-# Jev: TypeSafe System One decision model — typed answers (noul/choice/score),
-# no text generation. Used for intent classification and rerank scoring.
-JEV_MODEL = "typesafe/jev-1.13"
-JEV_TIMEOUT_S = 5.0
+# The interpretation model is a deployment fact chosen by measurement, not a
+# tuning knob: it lives in planner/agent_interpret.py (DEFAULT_MODEL) next to
+# the agent that uses it, and is overridable per-process with
+# AGENT_INTERPRET_MODEL so a benchmark can pick one.
 
 # Text-embedding model for the vector retrieval signal.
 EMBED_MODEL = "openai/text-embedding-3-small"
@@ -56,7 +71,6 @@ VALHALLA_MAX_LOCATIONS = 20
 
 NEGATIVE_FILTER_ENABLED = True  # drop candidates matching forbidden categories
 RETRIEVAL_POOL_SIZE = 50   # candidates after RRF fusion
-RERANK_POOL_SIZE = 30      # candidates sent to Jev scoring
 MMR_POOL_SIZE = 12         # final candidate pool for the optimizer
 
 # A place whose visit time exceeds this share of the total budget is dropped

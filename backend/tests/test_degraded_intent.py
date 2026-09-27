@@ -1,35 +1,31 @@
-"""The no-LLM intent fallback: deterministic, map-driven, never a failure.
+"""The interpretation layer's contracts: deterministic intent, agent hand-off.
 
-This file pins the degraded contract for step 1 (intent) — the layer that
-used to answer «Хочу погулять по замкам Гродно» with a canteen and a toilet
-because the fallback extracted NO category at all.
+This file pins step 1 (intent / requirements) with NO network and NO model:
 
-What is pinned here:
-  * categories_pos is filled from the SAME deterministic keyword→category map
-    retrieval uses (resolve.CATEGORY_SYNONYMS, inverted) — «замкам» → замок,
-    «костёлам» → костёл — across singular/plural and case forms;
-  * the no-LLM path never raises and answers a themed query with a non-empty
-    category set; a category-less query gets an honest empty set;
-  * time_budget_minutes survives only when the query states a duration
-    («за 3 часа», «2 часа») — the existing deterministic helper;
-  * named-place extraction is unchanged (DB-driven, no LLM);
-  * with a stubbed LLM present the fallback is NOT used: the Jev path
-    answers, byte for byte, as before.
+  * `extract_intent` is the deterministic, map-driven reader — categories_pos is
+    filled from the SAME keyword→category map retrieval uses
+    (resolve.CATEGORY_SYNONYMS, inverted), «замкам» → замок, «костёлам» →
+    костёл, across singular/plural/case forms.  It never calls a model.
+  * `build_requirements` asks the tool-using agent first; when the agent answers
+    the contract comes from it, and when it does not (no key / failure) the
+    deterministic reading answers — with every explicit UI filter kept.
+  * `intent_from_requirements` turns a contract into the IntentResult resolve()
+    consumes, so the plan is driven by the reading that produced it.
+  * time_budget_minutes survives only when the query states a duration;
+    named-place extraction is unchanged (DB-driven, no LLM).
 """
 
 from __future__ import annotations
 
 import os
 import sys
-from collections.abc import Iterator
-from contextlib import contextmanager
 
 import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agent import constants, jev
-from agent.config import settings
+from agent import constants
+from agent.config import openrouter_api_key, settings
 from agent.models import GenerateReq
 from agent.planner import intent as intent_mod
 from agent.planner.intent import (
@@ -38,8 +34,10 @@ from agent.planner.intent import (
     build_requirements,
     extract_intent,
     fallback_intent,
+    intent_from_requirements,
 )
 from agent.planner.resolve import CATEGORY_SYNONYMS
+from agent.requirements import PartyComposition, Requirement, TripRequirements
 
 QUERY = "Хочу погулять по замкам Гродно"
 
@@ -53,44 +51,31 @@ def no_key(monkeypatch):
     shell leaks in and the test would exercise the wrong branch."""
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     monkeypatch.setattr(settings, "OPENROUTER_API_KEY", None, raising=False)
-    assert jev.available() is False
+    assert openrouter_api_key() is None
 
 
 @pytest.fixture
 def with_key(monkeypatch):
     monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test-key")
     monkeypatch.setattr(settings, "OPENROUTER_API_KEY", "sk-or-test-key", raising=False)
-    assert jev.available() is True
-
-
-@contextmanager
-def offline() -> Iterator[None]:
-    """Belt and braces: nothing in this block may reach OpenRouter."""
-    old = jev.api_key
-    jev.api_key = lambda: None  # type: ignore[assignment]
-    try:
-        yield
-    finally:
-        jev.api_key = old  # type: ignore[assignment]
+    assert openrouter_api_key() is not None
 
 
 def _explode(*_a, **_kw):
-    raise AssertionError("the fallback must not be used when a stubbed LLM answers")
+    raise AssertionError("no model may be consulted on this path")
 
 
-def _mock_jev_ask(_query: str, _questions: dict) -> dict:
-    """The typed-answer shape a real /systemone call returns, with one category
-    scored high — the fallback must ignore this map and use these answers."""
-    return {
-        **{f"cat_{cat}": {"noul": 0.0, "confidence": 0.9} for cat in constants.CATEGORIES},
-        **{f"neg_{cat}": {"noul": 0.0, "confidence": 0.9} for cat in constants.CATEGORIES},
-        "intent_type": {"choice": "themed", "confidence": 0.9},
-        "party_type": {"choice": "solo", "confidence": 0.9},
-        "era_hint": {"choice": "any", "confidence": 0.9},
-        "search_scope": {"choice": "town", "confidence": 0.9},
-        "mentions_named_place": {"noul": 1.0, "confidence": 0.9},
-        "time_hours": {"score": 0, "confidence": 0.9},
-    }
+def _agent_contract(*, source: str = "llm") -> TripRequirements:
+    """A hand-built contract, as the interpretation agent would return it."""
+    return TripRequirements(
+        raw_query="что посмотреть в Гродно",
+        party=PartyComposition(adults=2),
+        budget_minutes=None,
+        requirements=[
+            Requirement(kind="interest", strength="soft", code="замок", label="замок"),
+        ],
+        source=source,  # type: ignore[arg-type]
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -99,10 +84,9 @@ def _mock_jev_ask(_query: str, _questions: dict) -> dict:
 
 class TestFallbackCategories:
 
-    def test_the_live_query_extracts_its_category(self, no_key, monkeypatch):
+    def test_the_live_query_extracts_its_category(self, no_key):
         """The exact degraded request that answered with a canteen and a toilet:
         «замкам» → замок, so retrieval steers at castles."""
-        monkeypatch.setattr(jev, "ask", _explode)
         d = extract_intent(QUERY).decision
         assert d.categories_pos == ["замок"]
 
@@ -155,21 +139,19 @@ class TestFallbackCategories:
             ("обед из трёх блюд", "ресторан"),
         ],
     )
-    def test_categories_from_query_forms(self, no_key, monkeypatch, query, expected):
+    def test_categories_from_query_forms(self, no_key, query, expected):
         """Singular/plural/case forms and synonyms all resolve through the map."""
-        monkeypatch.setattr(jev, "ask", _explode)
         d = extract_intent(query).decision
         assert expected in d.categories_pos, query
 
-    def test_multiple_categories_in_one_query(self, no_key, monkeypatch):
-        monkeypatch.setattr(jev, "ask", _explode)
+    def test_multiple_categories_in_one_query(self, no_key):
         d = extract_intent("костёлы и замки Новогрудка").decision
         assert {"костёл", "замок"} <= set(d.categories_pos)
 
-    def test_no_llm_path_never_raises_on_a_themed_query(self, no_key, monkeypatch):
-        """Whatever the themed query says, the fallback answers — and with a
-        category, not with whatever bare keyword ILIKE happens to hit."""
-        monkeypatch.setattr(jev, "ask", _explode)
+    def test_no_llm_path_never_raises_on_a_themed_query(self, no_key):
+        """Whatever the themed query says, the deterministic reader answers —
+        and with a category, not with whatever bare keyword ILIKE happens to
+        hit."""
         for query in (
             QUERY,
             "костёлы и замки Новогрудка",
@@ -180,10 +162,9 @@ class TestFallbackCategories:
             assert res.source == "regex"
             assert res.decision.categories_pos, query
 
-    def test_query_without_a_category_word_gets_an_honest_empty_set(self, no_key, monkeypatch):
+    def test_query_without_a_category_word_gets_an_honest_empty_set(self, no_key):
         """Nothing stated → nothing invented: a category-less query keeps
         categories_pos empty instead of a keyword guess."""
-        monkeypatch.setattr(jev, "ask", _explode)
         for query in ("куда сходить вечером", "что посмотреть в Гродно", "просто погулять"):
             assert extract_intent(query).decision.categories_pos == [], query
 
@@ -222,10 +203,9 @@ class TestFallbackCategories:
                 assert form not in seen, f"{form!r} under both {seen.get(form)} and {cat}"
                 seen[form] = cat
 
-    def test_grodno_family_toilet_query_extracts_toilet_category(self, no_key, monkeypatch):
+    def test_grodno_family_toilet_query_extracts_toilet_category(self, no_key):
         """Grodno family query with toilet phrase extracts туалет as optional
         category and does not make sightseeing categories exclusive."""
-        monkeypatch.setattr(jev, "ask", _explode)
         query = "Гродно семья чтобы туалеты по пути были"
         d = extract_intent(query).decision
         assert "туалет" in d.categories_pos, "туалет category should be extracted"
@@ -355,46 +335,53 @@ class TestDegradedRequirements:
         assert "step_free" in tr.unknowns
         assert all(r.status != "satisfied" for r in tr.requirements)
 
-    def test_fallback_is_not_used_when_a_stubbed_llm_answers(self, with_key, monkeypatch):
-        monkeypatch.setattr(jev, "ask", _mock_jev_ask)
-        tr = build_requirements("что посмотреть в Гродно", GenerateReq(query="что посмотреть в Гродно"))
+    def test_no_key_means_the_deterministic_contract(self, no_key, monkeypatch):
+        """With no key the agent cannot run, so build_requirements must produce
+        the deterministic contract — and must not run a model."""
+        from agent.planner import agent_interpret as ai
+        monkeypatch.setattr(
+            ai, "_run_agent",
+            lambda *a, **k: pytest.fail("no model may be run without a key"),
+        )
+        tr = build_requirements(
+            "что посмотреть в Гродно", GenerateReq(query="что посмотреть в Гродно")
+        )
+        assert tr.source == "fallback"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# With the agent answering: its contract drives, the map does not
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestAgentContractPath:
+
+    def test_agent_contract_is_used_when_the_agent_answers(self, with_key, monkeypatch):
+        """When the agent returns a contract, build_requirements uses it —
+        source is "llm" and the contract's own categories drive the result."""
+        monkeypatch.setattr(intent_mod, "_agent_contract", lambda *a, **k: _agent_contract())
+        tr = build_requirements(
+            "что посмотреть в Гродно", GenerateReq(query="что посмотреть в Гродно")
+        )
         assert tr.source == "llm"
+        assert tr.interest_codes() == ["замок"]
 
+    def test_intent_from_requirements_follows_the_contract(self):
+        """The IntentResult derived from a contract carries the contract's
+        categories and named places — the plan is built from the reading."""
+        contract = _agent_contract()
+        contract.requirements.append(
+            Requirement(kind="must_visit", name="Мир", label="Мир")
+        )
+        intent = intent_from_requirements(contract, "что посмотреть в Гродно")
+        assert intent.source == "agent"
+        assert intent.decision.categories_pos == ["замок"]
+        assert "Мир" in intent.decision.named_places
 
-# ─────────────────────────────────────────────────────────────────────────────
-# With a stubbed LLM: the Jev path answers, the fallback is NOT used
-# ─────────────────────────────────────────────────────────────────────────────
-
-class TestStubbedLlmPathUnchanged:
-
-    def test_fallback_is_not_used_when_a_stubbed_llm_answers(self, with_key, monkeypatch):
-        monkeypatch.setattr(jev, "ask", _mock_jev_ask)
-        monkeypatch.setattr(intent_mod, "fallback_intent", _explode)
-        res = extract_intent(QUERY)
-        assert res.source == "jev"
-        assert res.raw_response is not None
-
-    def test_categories_come_from_the_model_not_the_map(self, with_key, monkeypatch):
-        """A stubbed LLM that scores замок high drives categories_pos — the
-        deterministic map must not fire on the Jev path."""
-        def scored(_query, _questions):
-            answers = _mock_jev_ask(_query, _questions)
-            answers["cat_замок"] = {"noul": 0.98, "confidence": 0.9}
-            return answers
-        monkeypatch.setattr(jev, "ask", scored)
-        d = extract_intent("что посмотреть в Гродно").decision   # no category word
-        assert d.categories_pos == ["замок"]                      # from the model
-
-    def test_model_answers_drive_the_rest_of_the_decision(self, with_key, monkeypatch):
-        monkeypatch.setattr(jev, "ask", _mock_jev_ask)
-        d = extract_intent(QUERY).decision
-        assert d.intent_type == "themed"
-        assert d.search_scope == "town"
-        assert d.era_hint == "any"
-        assert d.party_type == "solo"
-        assert d.named_places == ["Хочу", "Гродно"]
-        # The mock scored 0 hours — no budget, exactly as before.
-        assert d.time_budget_minutes is None
+    def test_extract_intent_is_always_deterministic(self, with_key):
+        """`extract_intent` never calls a model — source is always "regex",
+        whether or not a key is present.  Free-text meaning is the agent's job,
+        reached only through build_requirements."""
+        assert extract_intent(QUERY).source == "regex"
 
 
 if __name__ == "__main__":

@@ -190,7 +190,12 @@ class ParsedQuery(BaseModel):
     keywords: list[str] = []
     categories: list[str] = []
     time_budget_minutes: int | None = None
-    source: Literal["llm", "fallback", "explicit", "gemini", "regex", "jev"] = "llm"
+    # Where the requirement reading came from: "agent" (the PydanticAI
+    # interpretation layer), "llm" (a model reading merged with UI filters),
+    # "fallback" (the deterministic parser), "explicit" (UI filters only),
+    # "regex" (the deterministic intent parse). The retired "gemini"/"jev"
+    # values are gone with their producers.
+    source: Literal["agent", "llm", "fallback", "explicit", "regex"] = "fallback"
 
 
 class BudgetInfo(BaseModel):
@@ -208,6 +213,68 @@ class RouteSummary(BaseModel):
     time_seconds: float | None = None
 
 
+class RequirementSignal(BaseModel):
+    """One requirement as the client renders it — codes only, never prose.
+
+    The client localises `code` (and `reason`) itself; nothing here is a
+    sentence in any language.  `origin` is the honest provenance of that single
+    line: a visible UI control, the interpretation model, or the deterministic
+    parser.
+    """
+
+    kind: Literal["must_visit", "service", "interest", "avoid"]
+    strength: Literal["hard", "soft"] = "soft"
+    # Canonical taxonomy code for service/interest/avoid; None for must_visit.
+    code: str | None = None
+    # The proper noun for a must_visit requirement ("Фарный костёл").
+    name: str | None = None
+    # "ui" = a visible control, "agent" = the interpretation model, "fallback"
+    # = the deterministic parser (no key / the model could not answer).
+    origin: Literal["ui", "agent", "fallback"] = "fallback"
+    status: Literal["satisfied", "unmet", "uncertain", "pending"] = "pending"
+    # verify.py's machine-readable reason code ("hard_service_absent", ...).
+    reason: str | None = None
+    # The stops that satisfied it.
+    place_ids: list[int] = Field(default_factory=list)
+
+
+class Interpretation(BaseModel):
+    """What the system understood — one place, before the plan is judged.
+
+    The client renders `requirements` as chips (with `unmet` called out) and
+    shows `source` so the user knows whether a model or the deterministic
+    parser read their text.  Every field is a code or a number; the Russian/
+    English wording is the client's.
+    """
+
+    # "agent"/"mixed" = the interpretation model read the text, "fallback" =
+    # the deterministic parser answered, "explicit" = only UI filters.
+    source: Literal["llm", "mixed", "explicit", "fallback"] = "fallback"
+    locale: Literal["ru", "en"] = "ru"
+    # Overall fate, from verify.py::overall_status — not from the model.
+    status: Literal["ready", "infeasible", "degraded", "pending"] = "pending"
+
+    adults: int | None = None
+    children: int | None = None
+    children_ages: list[int] = Field(default_factory=list)
+    mobility: list[str] = Field(default_factory=list)
+    budget_minutes: int | None = None
+    # Resolved area slugs, e.g. ["grodno-old-town"].
+    areas: list[str] = Field(default_factory=list)
+    # Valhalla costing / transport of the plan ("pedestrian", "bicycle").
+    transport: str | None = None
+    result_mode: Literal["route", "catalogue"] = "route"
+    round_trip: bool = False
+
+    requirements: list[RequirementSignal] = Field(default_factory=list)
+    # Every requirement that is NOT proven satisfied, with its reason code.
+    # Non-empty here is the explicit signal that something the user asked for
+    # is missing from the plan — never a silent success.
+    unmet: list[RequirementSignal] = Field(default_factory=list)
+    # Asks this system cannot represent or prove ("step_free").
+    unknowns: list[str] = Field(default_factory=list)
+
+
 class RouteResponse(BaseModel):
     parsed: ParsedQuery
     points: list[Place]
@@ -215,6 +282,17 @@ class RouteResponse(BaseModel):
     summary: RouteSummary
     budget: BudgetInfo | None = None
     explanation: str | None = None
+    # Overall fate of the request, decided by the deterministic verifier
+    # (planner/verify.py) against the final route + geometry — never by the
+    # interpretation model: "ready" | "infeasible" | "degraded" | "pending".
+    status: str | None = None
+    # Per-requirement verdicts (kind/strength/code/status/place_ids). The
+    # verification of a mandatory requirement is visible here, and the status
+    # above is derived from these.
+    requirements: list[dict] | None = None
+    # What the system understood, in one place, for the client to render before
+    # and alongside the plan (chips + the explicit unmet list).
+    interpretation: Interpretation | None = None
     # Valhalla costing the plan and geometry were built with ("pedestrian",
     # "auto", ...). The webapp mirrors it into its own profile so the line it
     # draws itself uses the same transport as the plan.
@@ -266,7 +344,7 @@ class IntentDecision(BaseModel):
 
 class IntentResult(BaseModel):
     decision: IntentDecision
-    source: Literal["gemini", "regex", "jev"] = "jev"
+    source: Literal["agent", "regex", "fallback"] = "regex"
     confidence: float = 1.0
     latency_ms: int = 0
     raw_response: dict | None = None

@@ -8,12 +8,11 @@ agent.planner.pipeline.Pipeline (one orchestrator class). Endpoints:
     POST /routes/reroute      body: RerouteReq   -> RouteResponse
     POST /routes/explain      body: ExplainReq   -> {explanation: str}
 
-Embeddings, intent and rerank come from OpenRouter through a single
+Embeddings and the interpretation agent come from OpenRouter through a single
 OPENROUTER_API_KEY.  With no key — or an upstream that times out — the
-planner degrades to keyword-only retrieval instead of failing; see
-agent/planner/pipeline.py.  `_call` is the last-resort net: an upstream
-error that somehow escaped the degradation paths is reported as a 503
-with a readable detail, never as a bare 500.
+planner degrades to keyword-only retrieval and the deterministic interpretation
+instead of failing; see agent/planner/pipeline.py.  `_call` maps the planner's
+own AgentError onto HTTP and never turns a degraded upstream into a bare 500.
 """
 
 from __future__ import annotations
@@ -28,10 +27,9 @@ import uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from . import constants, jev
-from .config import settings
+from . import clients_api, constants
+from .config import openrouter_api_key, settings
 from .errors import AgentError
-from .jev import JevError
 from .models import (
     ExplainReq,
     GenerateReq,
@@ -39,6 +37,7 @@ from .models import (
     RerouteReq,
     RouteResponse,
 )
+from .planner.agent_interpret import DEFAULT_MODEL
 from .planner.pipeline import Pipeline
 
 logging.basicConfig(
@@ -56,19 +55,21 @@ async def lifespan(_: FastAPI):
         # (agent/search.py); mirrors db/migrations/0003_trgm_search.sql
         cur.execute("SET pg_trgm.word_similarity_threshold = 0.45")
     app.state.planner = Pipeline(db=db)
-    log.info("agent ready (OpenRouter: embed=%s, jev=%s, key=%s)",
-             constants.EMBED_MODEL, constants.JEV_MODEL,
-             "set" if jev.available() else "MISSING")
-    if not jev.available():
+    log.info("agent ready (OpenRouter: embed=%s, interpret=%s, key=%s)",
+             constants.EMBED_MODEL, DEFAULT_MODEL,
+             "set" if openrouter_api_key() else "MISSING")
+    if not openrouter_api_key():
         log.warning(
             "no OPENROUTER_API_KEY — degraded keyword-only mode: no embeddings, "
-            + "deterministic intent, no Jev rerank (routes are still built)"
+            + "deterministic interpretation (routes are still built)"
         )
     yield
     db.close()
 
 
 app = FastAPI(title="grodno-poc-agent", lifespan=lifespan)
+
+app.include_router(clients_api.router)
 
 app.add_middleware(
     CORSMiddleware,
@@ -81,7 +82,7 @@ app.add_middleware(
         "http://host.docker.internal",
     ],
     allow_credentials=False,
-    allow_methods=["POST", "GET"],
+    allow_methods=["POST", "GET", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type"],
 )
 
@@ -89,20 +90,15 @@ app.add_middleware(
 def _call(fn: Callable[[], Any], **kwargs: Any) -> Any:
     """Run a planner call and map its failures onto HTTP.
 
-    AgentError carries the status the planner chose (404 / 422 / 503).  A
-    JevError that got here means the degraded paths did not cover it: report
-    it as 503 with the reason, so an OpenRouter outage can never reach the
-    client as an opaque 500.  Anything else is a real bug and stays a 500.
+    AgentError carries the status the planner chose (404 / 422 / 503).  Any
+    other failure is a real bug and stays a 500 — the interpretation agent and
+    its OpenRouter calls degrade internally (planner/agent_interpret.py returns
+    None), so an upstream outage must never reach the client as a 5xx from here.
     """
     try:
         return fn(**kwargs)
     except AgentError as e:
         raise HTTPException(status_code=e.http_status, detail=str(e)) from e
-    except JevError as e:
-        log.warning("openrouter error escaped the planner: %s", e)
-        raise HTTPException(
-            status_code=503, detail=f"OpenRouter unavailable: {e}",
-        ) from e
 
 
 @app.post("/routes/generate", response_model=RouteResponse)

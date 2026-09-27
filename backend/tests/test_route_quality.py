@@ -411,7 +411,7 @@ class TestResolveIntegration:
                 keywords_pos=[],
                 keywords_neg=[],
             ),
-            source="jev",
+            source="regex",
         )
 
         # Simulate: name_sim=0.2 (below threshold) so it's treated as a town match
@@ -460,7 +460,7 @@ class TestBudgetRule:
                 keywords_neg=[],
                 time_budget_minutes=llm_budget,
             ),
-            source="jev",
+            source="regex",
         )
         with patch("agent.planner.resolve._name_match_search", return_value=[]):
             with patch("agent.planner.resolve._keyword_search", return_value=[]):

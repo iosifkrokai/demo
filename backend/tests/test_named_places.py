@@ -30,24 +30,6 @@ def _extract_named_place_tokens(query: str) -> list[str]:
     return [t for t in tokens if t.lower() not in _PLACE_STOP_LIST]
 
 
-# ── Shared mock for jev.ask ─────────────────────────────────────────────────
-# jev.noul reads answer["noul"]; jev.choice reads answer["choice"];
-# jev.score reads answer["score"].  All answers include "confidence".
-
-def _mock_jev_ask(query: str, questions: dict) -> dict:
-    all_cats = list(constants.CATEGORIES)
-    return {
-        **{f"cat_{cat}": {"noul": 0.0, "confidence": 0.9} for cat in all_cats},
-        **{f"neg_{cat}": {"noul": 0.0, "confidence": 0.9} for cat in all_cats},
-        "intent_type": {"choice": "specific", "confidence": 0.9},
-        "party_type": {"choice": "solo", "confidence": 0.9},
-        "era_hint": {"choice": "any", "confidence": 0.9},
-        "search_scope": {"choice": "town", "confidence": 0.9},
-        "mentions_named_place": {"noul": 1.0, "confidence": 0.9},
-        "time_hours": {"score": 2, "confidence": 0.9},
-    }
-
-
 # ── Fake Candidate builder ──────────────────────────────────────────────────
 
 def _c(id: int, name: str, lat: float, lon: float, rrf_score: float = 0.0) -> Candidate:
@@ -197,25 +179,22 @@ class TestGeoFocus:
 # ── extract_intent integration (mock LLM) ────────────────────────────────────
 
 class TestExtractIntentNamedPlaces:
-    """Verify that extract_intent populates named_places correctly when the
-    LLM part is mocked.  This exercises the full pipeline from query to
-    IntentDecision.named_places without any OpenRouter call."""
+    """Verify that extract_intent populates named_places correctly.  The reader
+    is deterministic (no model, no network), so this exercises the full path
+    from query to IntentDecision.named_places offline."""
 
     def test_named_places_single(self):
-        # Patch jev.ask at the module where intent.py imports it from.
-        with patch("agent.jev.ask", side_effect=_mock_jev_ask):
-            from agent.planner.intent import extract_intent
-            result = extract_intent("Хочу к Мирскому замку")
+        from agent.planner.intent import extract_intent
+        result = extract_intent("Хочу к Мирскому замку")
         named = result.decision.named_places
         assert "Мирскому" in named
         # "Хочу" is captured (sentence-initial verb) — harmless; resolves to 0 rows.
 
     def test_named_places_region_name_filtered(self):
-        with patch("agent.jev.ask", side_effect=_mock_jev_ask):
-            from agent.planner import intent as intent_mod
-            result = intent_mod.extract_intent(
-                "достопримечательности Гродненской области"
-            )
+        from agent.planner import intent as intent_mod
+        result = intent_mod.extract_intent(
+            "достопримечательности Гродненской области"
+        )
         named = result.decision.named_places
         # The region name should be filtered out (defect-1 fix)
         lowered = {t.lower() for t in named}
@@ -223,9 +202,8 @@ class TestExtractIntentNamedPlaces:
         assert "области" not in lowered
 
     def test_named_places_mixed_verb_and_real_place(self):
-        with patch("agent.jev.ask", side_effect=_mock_jev_ask):
-            from agent.planner import intent as intent_mod
-            result = intent_mod.extract_intent("Хочу погулять по замкам Гродно")
+        from agent.planner import intent as intent_mod
+        result = intent_mod.extract_intent("Хочу погулять по замкам Гродно")
         named = result.decision.named_places
         assert "Гродно" in named
         assert "Хочу" in named   # sentence-initial verb — harmless downstream

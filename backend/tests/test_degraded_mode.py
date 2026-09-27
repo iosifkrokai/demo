@@ -1,29 +1,22 @@
-"""Degraded mode: no OPENROUTER_API_KEY (or an OpenRouter that is down) must
-never turn a route request into a 500.
+"""Degraded mode: no OPENROUTER_API_KEY (or a model/upstream that is down)
+must never turn a route request into a 500.
 
-The bug this file pins down, reproduced on a machine with no key:
-
-    File "agent/planner/intent.py", line 144, in extract_intent
-      answers = jev.ask(query, _QUESTIONS)
-    File "agent/jev.py", line 49, in ask
-      raise RuntimeError("OPENROUTER_API_KEY not set — Jev unavailable")
-    → HTTP 500 on every POST /routes/generate, while the README promised
-      "OPENROUTER_API_KEY is optional — without it the pipeline degrades to
-      keyword-only retrieval".
+The bug this file used to pin down, reproduced on a machine with no key: the
+old model-backed intent step raised on every request and the planner answered
+HTTP 500 for every POST /routes/generate.
 
 What must hold, per step:
-  * intent  — falls back to a deterministic parse of the query text: categories
-    from the shared keyword→category map, an explicit duration kept, named
-    places still extracted.
-  * rerank  — skipped, retrieval order kept, ONE warning (not one per
-    candidate).
+  * intent — the deterministic reader answers: categories from the shared
+    keyword→category map, an explicit duration kept, named places still
+    extracted.  It is a first-class mode, not an anomaly: no warning storm.
+  * the interpretation agent — when it fails (or has no key) `build_requirements`
+    silently takes the deterministic contract; when it answers, its contract
+    drives the reading the planner uses.
+  * rerank  — retired with Jev: the retrieval order stands, nothing is trimmed.
   * embed   — no vector, retrieval runs keyword/category-only.
   * health  — still reports llm/embedder false, so the flags stay honest.
   * HTTP    — an upstream error that escapes the planner is a 503 with a
     detail, never an opaque 500.
-
-And what must NOT change: with a key and a working upstream, intent and
-rerank produce exactly what Jev answered.
 
 No network except the last class, which uses the live DB + Valhalla and
 skips when they are not reachable.
@@ -43,15 +36,16 @@ from fastapi.testclient import TestClient
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agent import constants, jev, main as agent_main
-from agent.config import settings
-from agent.errors import NoCandidatesFound
-from agent.jev import JevUnavailableError, JevUpstreamError
+from agent import constants, main as agent_main
+from agent.config import openrouter_api_key, settings
+from agent.errors import NoCandidatesFound, UpstreamUnavailable
 from agent.models import Candidate, GenerateReq, ResolvedConstraints
+from agent.planner import agent_interpret as ai
 from agent.planner import intent as intent_mod, pipeline as pipeline_mod, retrieve as retrieve_mod
-from agent.planner.intent import extract_intent, fallback_intent
+from agent.planner.intent import build_requirements, extract_intent, fallback_intent
 from agent.planner.pipeline import Pipeline, _openrouter_embed
 from agent.planner.rerank import rerank
+from agent.requirements import PartyComposition, Requirement, TripRequirements
 from agent.valhalla_client import ping as valhalla_ping
 
 QUERY = "Хочу погулять по замкам Гродно"
@@ -67,26 +61,29 @@ def no_key(monkeypatch):
     shell leaks in and the test would exercise the wrong branch."""
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     monkeypatch.setattr(settings, "OPENROUTER_API_KEY", None, raising=False)
-    assert jev.available() is False
+    assert openrouter_api_key() is None
 
 
 @pytest.fixture
 def with_key(monkeypatch):
     monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test-key")
     monkeypatch.setattr(settings, "OPENROUTER_API_KEY", "sk-or-test-key", raising=False)
-    assert jev.available() is True
+    assert openrouter_api_key() is not None
 
 
 @contextmanager
 def offline() -> Iterator[None]:
     """Belt and braces: nothing in this block may reach OpenRouter, whatever
     the environment says."""
-    old = jev.api_key
-    jev.api_key = lambda: None  # type: ignore[assignment]
+    old_env = os.environ.pop("OPENROUTER_API_KEY", None)
+    old_setting = settings.OPENROUTER_API_KEY
+    settings.OPENROUTER_API_KEY = None
     try:
         yield
     finally:
-        jev.api_key = old  # type: ignore[assignment]
+        if old_env is not None:
+            os.environ["OPENROUTER_API_KEY"] = old_env
+        settings.OPENROUTER_API_KEY = old_setting
 
 
 def _c(id: int, relevance: float = 0.5, name: str = "place") -> Candidate:
@@ -94,18 +91,17 @@ def _c(id: int, relevance: float = 0.5, name: str = "place") -> Candidate:
                      relevance=relevance, rrf_score=relevance)
 
 
-def _mock_jev_ask(_query: str, _questions: dict) -> dict:
-    """The typed-answer shape a real /systemone call returns."""
-    return {
-        **{f"cat_{cat}": {"noul": 0.0, "confidence": 0.9} for cat in constants.CATEGORIES},
-        **{f"neg_{cat}": {"noul": 0.0, "confidence": 0.9} for cat in constants.CATEGORIES},
-        "intent_type": {"choice": "themed", "confidence": 0.9},
-        "party_type": {"choice": "solo", "confidence": 0.9},
-        "era_hint": {"choice": "any", "confidence": 0.9},
-        "search_scope": {"choice": "town", "confidence": 0.9},
-        "mentions_named_place": {"noul": 1.0, "confidence": 0.9},
-        "time_hours": {"score": 2, "confidence": 0.9},
-    }
+def _agent_contract(*, source: str = "llm", codes: tuple[str, ...] = ()) -> TripRequirements:
+    """A contract shaped exactly as the interpretation agent returns one."""
+    return TripRequirements(
+        locale="ru",
+        raw_query=QUERY,
+        party=PartyComposition(adults=1),
+        requirements=[
+            Requirement(kind="interest", strength="soft", code=c, label=c) for c in codes
+        ],
+        source=source,  # type: ignore[arg-type]
+    )
 
 
 def _explode(*_a, **_kw):
@@ -172,49 +168,20 @@ def _boom_client(exc: BaseException):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# jev client — the key lookup, and the two degradable failure classes
+# The interpretation agent — no key means no model, and that is not an error
 # ─────────────────────────────────────────────────────────────────────────────
 
-class TestJevClient:
+class TestAgentAvailability:
 
-    def test_no_key_raises_unavailable(self, no_key):
-        with pytest.raises(JevUnavailableError):
-            jev.ask("костёлы", {"q": {"type": "noul"}})
-        # Still a RuntimeError, so callers written against the old client
-        # (scripts/enrich_places.py) keep catching it.
-        assert issubclass(JevUnavailableError, RuntimeError)
+    def test_no_key_means_unavailable(self, no_key):
+        assert ai.available() is False
 
-    def test_both_causes_are_one_catchable_type(self):
-        # Callers degrade on the base class, so "no key" and "upstream down"
-        # must not be two different except clauses.
-        assert issubclass(JevUnavailableError, jev.JevError)
-        assert issubclass(JevUpstreamError, jev.JevError)
+    def test_key_present_means_available(self, with_key):
+        assert ai.available() is True
 
-    def test_key_present_and_callable_means_available(self, with_key):
-        assert jev.available() is True
-
-    def test_timeout_becomes_upstream_error(self, with_key, monkeypatch):
-        monkeypatch.setattr(httpx, "Client", _boom_client(httpx.ReadTimeout("timed out")))
-        with pytest.raises(JevUpstreamError) as exc:
-            jev.ask("костёлы", {"q": {"type": "noul"}})
-        assert "timed out" in str(exc.value)
-
-    def test_5xx_becomes_upstream_error(self, with_key, monkeypatch):
-        monkeypatch.setattr(httpx, "Client", _fake_post_client(_Resp(status=502)))
-        with pytest.raises(JevUpstreamError):
-            jev.ask("костёлы", {"q": {"type": "noul"}})
-
-    def test_malformed_body_still_raises_loudly(self, with_key, monkeypatch):
-        """A 200 whose body is not an answers map is a contract break, not an
-        outage: it keeps propagating as ValueError (behaviour unchanged)."""
-        monkeypatch.setattr(httpx, "Client", _fake_post_client(_Resp(body={"nope": 1})))
-        with pytest.raises(ValueError, match="malformed response"):
-            jev.ask("костёлы", {"q": {"type": "noul"}})
-
-    def test_a_good_answer_is_returned_untouched(self, with_key, monkeypatch):
-        answers = {"cat_замок": {"noul": 0.98}}
-        monkeypatch.setattr(httpx, "Client", _fake_post_client(_Resp(body={"answers": answers})))
-        assert jev.ask("костёлы", {"cat_замок": {"type": "noul"}}) == answers
+    def test_no_key_returns_no_contract(self, no_key, monkeypatch):
+        monkeypatch.setattr(ai, "_run_agent", _explode)
+        assert ai.interpret_with_agent(QUERY, GenerateReq(query=QUERY)) is None
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -222,22 +189,22 @@ class TestJevClient:
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestIntentFallback:
+    """Step 1 with no model: the deterministic reader, and the agent hand-off."""
 
     def test_no_key_never_calls_openrouter(self, no_key, monkeypatch):
-        monkeypatch.setattr(jev, "ask", _explode)
+        monkeypatch.setattr(ai, "_run_agent", _explode)
         res = extract_intent(QUERY)          # used to raise → HTTP 500
         assert res.source == "regex"
         assert res.raw_response is None
         assert res.confidence == 0.0
         assert res.decision.intent_type in constants.INTENT_TYPES
 
-    def test_no_key_categories_come_from_the_shared_map(self, no_key, monkeypatch):
-        """The fallback fills categories from the deterministic keyword→category
+    def test_no_key_categories_come_from_the_shared_map(self, no_key):
+        """The reader fills categories from the deterministic keyword→category
         map (resolve.CATEGORY_SYNONYMS) — the same taxonomy retrieval uses —
         not from a model guess.  «замкам» → замок, so "замки Гродно" still
         retrieves castles in degraded mode.  Exclusion ("без замков") and
         keywords stay a no-invent zone: the maps do not carry them."""
-        monkeypatch.setattr(jev, "ask", _explode)
         d = extract_intent(QUERY).decision
         assert "замок" in d.categories_pos
         assert d.categories_neg == []
@@ -247,7 +214,7 @@ class TestIntentFallback:
     def test_no_key_keeps_the_named_places(self, no_key):
         d = fallback_intent(QUERY).decision
         assert "Гродно" in d.named_places      # resolves through the DB path
-        # Region names are still filtered out (same regex as the Jev path).
+        # Region names are still filtered out (same stop-list as the agent path).
         region = fallback_intent("достопримечательности Гродненской области").decision
         assert region.named_places == []
 
@@ -279,57 +246,39 @@ class TestIntentFallback:
     def test_scope_read_off_the_text(self, no_key, query, scope):
         assert fallback_intent(query).decision.search_scope == scope
 
-    def test_logs_one_warning_per_call(self, no_key, monkeypatch, caplog):
-        monkeypatch.setattr(jev, "ask", _explode)
+    def test_no_key_is_quiet_on_the_intent_path(self, no_key, caplog):
+        """The deterministic reader is a first-class mode, not an anomaly: it
+        must not emit a warning for every call (the old degraded path did)."""
         with caplog.at_level("WARNING", logger="agent.planner.intent"):
-            extract_intent(QUERY)
-        warnings = _warnings(caplog, "agent.planner.intent")
-        assert len(warnings) == 1, "one warning per call, not per candidate"
-        assert "fallback" in warnings[0]
+            build_requirements(QUERY, GenerateReq(query=QUERY))
+        assert _warnings(caplog, "agent.planner.intent") == []
 
-    def test_upstream_failure_also_degrades(self, with_key, monkeypatch, caplog):
+    def test_agent_failure_degrades_to_the_deterministic_contract(
+        self, with_key, monkeypatch, caplog
+    ):
         def boom(*_a, **_kw):
-            raise JevUpstreamError("jev: /systemone failed: 502")
-        monkeypatch.setattr(jev, "ask", boom)
+            raise RuntimeError("agent: upstream failed: 502")
+        monkeypatch.setattr(intent_mod, "_agent_contract", boom)
         with caplog.at_level("WARNING", logger="agent.planner.intent"):
-            res = extract_intent(QUERY)          # must not propagate
-        assert res.source == "regex"
-        assert "Гродно" in res.decision.named_places
+            tr = build_requirements(QUERY, GenerateReq(query=QUERY))  # must not propagate
+        assert tr.source == "fallback"
+        assert "Гродно" in tr.must_visit_names()
         assert len(_warnings(caplog, "agent.planner.intent")) == 1
 
-    def test_with_a_key_the_jev_path_is_unchanged(self, with_key, monkeypatch):
-        monkeypatch.setattr(jev, "ask", _mock_jev_ask)
-        res = extract_intent(QUERY)
-        assert res.source == "jev"
-        d = res.decision
-        assert d.intent_type == "themed"        # straight from the mock
-        assert d.categories_pos == []
-        assert d.search_scope == "town"
-        assert d.era_hint == "any"
-        assert d.party_type == "solo"
-        assert d.named_places == ["Хочу", "Гродно"]
-        assert res.confidence == 0.9
-        # The mock scored 2 hours, but the query states no time — the model
-        # guess is dropped, exactly as before this change.
-        assert d.time_budget_minutes is None
-
-    def test_both_paths_agree_on_a_stated_duration(self, with_key, monkeypatch):
-        monkeypatch.setattr(jev, "ask", _mock_jev_ask)
-        with_jev = extract_intent("погулять по костёлам 2 часа").decision.time_budget_minutes
-        monkeypatch.setattr(jev, "ask", _explode)
-        monkeypatch.setattr(jev, "available", lambda: False)
-        without_jev = extract_intent("погулять по костёлам 2 часа").decision.time_budget_minutes
-        assert with_jev == without_jev == 120
-
-    def test_with_a_key_a_broken_answer_still_raises(self, with_key, monkeypatch):
-        """Behaviour with a key must not change: taxonomy drift fails loud."""
-        def drifted(*_a, **_kw):
-            answers = _mock_jev_ask("", {})
-            answers["intent_type"] = {"choice": "not-a-type"}
-            return answers
-        monkeypatch.setattr(jev, "ask", drifted)
-        with pytest.raises(ValueError, match="unknown intent_type"):
-            extract_intent(QUERY)
+    def test_agent_contract_drives_the_reading(self, with_key, monkeypatch):
+        """With the agent answering, the IntentResult the planner consumes comes
+        from the contract — and the facts the text states are still there (the
+        model may add meaning, never lose a fact the parser found)."""
+        monkeypatch.setattr(
+            intent_mod, "_agent_contract",
+            lambda *a, **k: _agent_contract(codes=("костёл",)),
+        )
+        tr = build_requirements(QUERY, GenerateReq(query=QUERY))
+        assert tr.source == "llm"
+        intent = intent_mod.intent_from_requirements(tr, QUERY)
+        assert intent.source == "agent"
+        assert "костёл" in intent.decision.categories_pos   # the model's reading
+        assert "замок" in intent.decision.categories_pos    # the text's own fact
 
     def test_source_stays_inside_the_model_literal(self):
         assert fallback_intent(QUERY).source == "regex"
@@ -337,47 +286,28 @@ class TestIntentFallback:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Step 3.5 — rerank is skipped, the retrieval order stands
+# Step 3.5 — retired with Jev: the retrieval order stands, always
 # ─────────────────────────────────────────────────────────────────────────────
 
-class TestRerankDegraded:
+class TestRerankRetired:
+    """The step no longer calls a model at all (spec §4.2: Jev did not pay off).
+    The pipeline does not call it either; the module stays a documented no-op."""
 
-    def test_no_key_keeps_the_retrieval_order(self, no_key, monkeypatch):
-        monkeypatch.setattr(jev, "ask", _explode)
+    def test_the_retrieval_order_is_kept(self, no_key):
         pool = [_c(1, 0.9), _c(2, 0.8), _c(3, 0.7), _c(4, 0.1)]
         out = rerank(QUERY, pool, top_k=2)
         assert [c.id for c in out] == [1, 2, 3, 4]   # NOT truncated to top_k
         assert [c.relevance for c in out] == [0.9, 0.8, 0.7, 0.1]  # untouched
         assert all(c.rerank_score is None for c in out)
 
-    def test_no_key_logs_one_warning_for_the_whole_pool(self, no_key, monkeypatch, caplog):
-        monkeypatch.setattr(jev, "ask", _explode)
-        pool = [_c(i) for i in range(constants.RERANK_POOL_SIZE)]
-        with caplog.at_level("WARNING", logger="agent.planner.rerank"):
-            rerank(QUERY, pool, top_k=constants.RERANK_POOL_SIZE)
-        assert len(_warnings(caplog, "agent.planner.rerank")) == 1
+    def test_empty_pool_short_circuits(self, no_key):
+        assert rerank(QUERY, [], top_k=5) == []
 
-    def test_upstream_failure_keeps_the_retrieval_order(self, with_key, monkeypatch):
-        def boom(*_a, **_kw):
-            raise JevUpstreamError("jev: /systemone failed: timeout")
-        monkeypatch.setattr(jev, "ask", boom)
+    def test_a_key_changes_nothing(self, with_key):
+        """There is no model left to change the order — with or without a key."""
         out = rerank(QUERY, [_c(7, 0.4), _c(8, 0.2)], top_k=1)
         assert [c.id for c in out] == [7, 8]
         assert all(c.rerank_score is None for c in out)
-
-    def test_empty_pool_short_circuits(self, no_key, monkeypatch):
-        monkeypatch.setattr(jev, "ask", _explode)
-        assert rerank(QUERY, [], top_k=5) == []
-
-    def test_with_a_key_the_scores_still_win(self, with_key, monkeypatch):
-        """Unchanged behaviour: relevance is overwritten, pool cut to top_k."""
-        def scored(_state, _questions, **_kw):
-            # rel_1 is the best candidate, rel_0 the worst → the order flips.
-            return {"rel_0": {"score": 0.0}, "rel_1": {"score": 4.0}, "rel_2": {"score": 2.0}}
-        monkeypatch.setattr(jev, "ask", scored)
-        out = rerank(QUERY, [_c(1), _c(2), _c(3)], top_k=2)
-        assert [c.id for c in out] == [2, 3]
-        assert [c.relevance for c in out] == [1.0, 0.5]
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -476,13 +406,15 @@ def _restore_planner():
 class TestHttpDegraded:
 
     def test_escaped_upstream_error_is_503_not_500(self, _restore_planner):
-        client = _client_with_planner(_StubPlanner(JevUpstreamError("jev: failed: 502")))
+        client = _client_with_planner(
+            _StubPlanner(UpstreamUnavailable("valhalla: /route failed: 502"))
+        )
         r = client.post("/routes/generate", json={"query": QUERY})
         assert r.status_code == 503
-        assert "OpenRouter unavailable" in r.json()["detail"]
+        assert "502" in r.json()["detail"]
 
-    def test_missing_key_error_is_503_too(self, _restore_planner):
-        client = _client_with_planner(_StubPlanner(JevUnavailableError("no key")))
+    def test_a_degraded_upstream_is_never_a_bare_500(self, _restore_planner):
+        client = _client_with_planner(_StubPlanner(UpstreamUnavailable("db: gone")))
         assert client.post("/routes/generate", json={"query": QUERY}).status_code == 503
 
     def test_planner_errors_keep_their_own_status(self, _restore_planner):
@@ -554,10 +486,14 @@ class TestLiveDegradedRoute:
             resp = Pipeline(db=live_db).generate(
                 GenerateReq(query=QUERY, time_budget_minutes=120)
             )
-        assert resp.debug["intent_source"] == "regex"
+        assert resp.debug["intent_source"] == "fallback"
         assert len(resp.points) >= 2, "a route needs at least two stops"
         assert all(p.lat and p.lon for p in resp.points)
         assert resp.explanation
+        # The verifier's verdict travels with the response, and the
+        # requirements the (deterministic) reading produced are visible.
+        assert resp.status in ("ready", "degraded", "needs_clarification")
+        assert resp.requirements
 
     def test_a_stated_duration_reaches_the_constraints(self, no_key, live_db):
         with offline():

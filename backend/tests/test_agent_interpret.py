@@ -28,7 +28,7 @@ from pydantic_ai.models.function import AgentInfo, FunctionModel
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agent import areas as areas_mod, jev, tools
+from agent import areas as areas_mod, tools
 from agent.config import settings
 from agent.models import GenerateReq
 from agent.planner import agent_interpret as ai
@@ -112,7 +112,7 @@ def _fake_model(payload: dict | None, tool_calls: list[tuple[str, dict]] | None 
 
 
 def test_no_key_returns_none_and_ui_filters_survive(no_key):
-    assert jev.available() is False
+    assert ai.available() is False
 
     req = GenerateReq(query=QUERY, hard_services=["туалет"], party_children=2)
     assert ai.interpret_with_agent(QUERY, req) is None

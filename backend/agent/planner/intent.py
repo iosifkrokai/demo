@@ -1,28 +1,34 @@
-"""Step 1 — Intent extraction via TypeSafe Jev (System One).
+"""Step 1 — Intent, and the TripRequirements interpretation entry point.
 
-One /systemone call with typed questions against the raw query:
-    * categories_pos  — noul per category (13 questions, batched)
-    * categories_neg  — noul per category against "does the user NOT want X"
-    * intent_type     — choice (discovery/specific/themed/vague)
-    * party_type      — choice (solo/family/couple/group)
-    * era_hint        — choice (any/pre1900/soviet/modern)
-    * time_hours      — score 0..8 (0 = not mentioned) → minutes in code
+There is no closed-question model call here any more.  Free-text understanding
+belongs to the tool-using interpretation agent (``planner/agent_interpret.py``,
+PydanticAI over OpenRouter), which fills the frozen ``TripRequirements``
+contract; this module keeps the *deterministic* reading that the agent degrades
+to when it cannot be trusted to answer.
 
-Jev's primary training language is English (docs), so questions and
-criteria are written in English while the state (the user query) stays
-Russian — live-tested: "замки и костёлы Новогрудка" → castles 0.98,
-churches 0.94.
+Two readings, one shape:
 
-Degraded mode (no OpenRouter key, or an upstream that times out / 5xx)
-    The step falls back to `fallback_intent`: a deterministic, dependency-free
-    parse of the same query text.  It fills in only what the text itself says
-    — categories via the SAME shared keyword→category map retrieval uses
-    (planner/resolve.py `CATEGORY_SYNONYMS`, inverted — the taxonomy lives
-    in one place, never duplicated here), an explicit time budget
-    ("за 3 часа"), the named-place tokens that resolve through the DB, a
-    region-wide scope.  A degraded route is worse than a good model answer,
-    but it is never a failed request: with no key the agent still answers
-    every /routes/generate.
+  * ``build_requirements(query, req)`` — the single interpretation entry point.
+    It asks ``agent_interpret.interpret_with_agent`` first; when that returns a
+    complete contract (a key, an importable SDK and a model answer inside the
+    tool/request/token/timeout budgets) the contract is used, with the explicit
+    UI filters already merged in by the agent layer.  Otherwise — no key, no
+    SDK, an upstream failure, a budget overrun — it falls back to the
+    deterministic parse below, which still keeps every explicit UI filter.
+  * ``fallback_intent`` / ``_fallback_reading`` — a dependency-free parse of the
+    query text: categories via the SAME shared keyword→category map retrieval
+    uses (planner/resolve.py ``CATEGORY_SYNONYMS``, inverted), an explicit time
+    budget, the named-place tokens that resolve through the DB, a region-wide
+    scope.  Nothing stated → nothing invented.
+
+``extract_intent`` is the deterministic intent decision (``IntentResult``) that
+``resolve()`` consumes; ``intent_from_requirements`` derives the same shape from
+a ``TripRequirements`` contract so the plan is driven by the model reading.
+
+Degraded mode (no key, or an upstream that fails)
+    Every path here answers: a degraded route is worse than a good model
+    answer, but it is never a failed request — with no key the agent still
+    answers every /routes/generate.
 """
 
 from __future__ import annotations
@@ -32,112 +38,13 @@ import re as _re
 import time
 from dataclasses import dataclass, field
 
-from .. import constants, jev
+from .. import constants
 from ..models import GenerateReq, IntentDecision, IntentResult
 from ..requirements import PartyComposition, Requirement, TripRequirements
 from .preprocess import WORD_RE
 from .resolve import CATEGORY_SYNONYMS, CATEGORY_SYNONYMS_EN
 
 log = _logging.getLogger(__name__)
-
-# Probability threshold: a category counts as requested above this.
-_CAT_YES = 0.5
-# Score levels for the time budget: hours 0..8 (0 means "not mentioned").
-_TIME_LEVELS = ["not mentioned", "1h", "2h", "3h", "4h", "5h", "6h", "7h", "8h+"]
-
-# The time budget exists only when the USER stated it. Jev scores generously —
-# "хочу посмотреть все костёлы области" came back as 2 hours — and an invented
-# budget trims a perfectly good route down to two stops, so a budget is kept
-# only when the query itself carries a time expression. No expression → no
-# limit at all, and the whole route is built.
-_TIME_PHRASE_RE = _re.compile(
-    r"\d+\s*(?:час|мин)|"
-    r"пол\s*дня|полдня|"
-    r"(?:весь|целый|полный)\s+день|"
-    r"\b(?:час|часа|часов|минут|минуты)\b|"
-    r"\bдень\b|\bутр[оа]\b|\bвечер\w*|\bноч\w*|"
-    r"\bнедел\w*|"
-    r"быстр\w*|коротк\w*|недолг\w*|"
-    r"на\s+выходн\w*",
-    _re.I,
-)
-
-_QUESTIONS: dict[str, dict] = {
-    **{
-        f"cat_{cat}": {
-            "type": "noul",
-            "instructions": "Does this tourist query ask to visit places of this type?",
-            "criteria": {
-                "true": f"`{cat}` — yes, the user wants to see this kind of place",
-                "false": "no mention of this kind of place",
-            },
-        }
-        for cat in constants.CATEGORIES
-    },
-    **{
-        f"neg_{cat}": {
-            "type": "noul",
-            "instructions": "Does this tourist query explicitly EXCLUDE this kind of place (phrases like 'без X', 'кроме X', 'не хочу X')?",
-            "criteria": {
-                "true": f"`{cat}` — explicitly excluded",
-                "false": "not excluded",
-            },
-        }
-        for cat in constants.CATEGORIES
-    },
-    "intent_type": {
-        "type": "choice",
-        "instructions": "What kind of tourist query is this?",
-        "criteria": {
-            "specific": "asks about one concrete named place",
-            "themed": "explicit theme or contrast (e.g. old vs soviet, by the river)",
-            "discovery": "general exploration / a walk without a strong theme",
-            "vague": "no clear ask at all",
-        },
-    },
-    "party_type": {
-        "type": "choice",
-        "instructions": "Who is travelling according to the query?",
-        "criteria": {
-            "family": "with children / family",
-            "couple": "two people, romantic wording",
-            "group": "friends or a group",
-            "solo": "one person or unspecified",
-        },
-    },
-    "era_hint": {
-        "type": "choice",
-        "instructions": "Which historical era does the query emphasise?",
-        "criteria": {
-            "pre1900": "old / medieval / pre-revolutionary explicitly requested",
-            "soviet": "soviet era explicitly requested",
-            "modern": "modern / contemporary explicitly requested",
-            "any": "no era preference",
-        },
-    },
-    "mentions_named_place": {
-        "type": "noul",
-        "instructions": "Does the query explicitly name one specific place or town (proper noun, e.g. 'Мирский замок', 'Новогрудок', 'Коложская церковь')?",
-        "criteria": {
-            "true": "a proper name of a specific place/town is present",
-            "false": "no specific place named",
-        },
-    },
-    "search_scope": {
-        "type": "choice",
-        "instructions": "How wide is the area the user wants to cover?",
-        "criteria": {
-            "town": "one town / a spot inside a town ('замки Гродно', 'костёлы Новогрудка')",
-            "district": "a town with its rural surroundings, or one named district",
-            "region": "an entire administrative region / voblast, no single town ('все костёлы Гродненской области', 'что посмотреть по всей области')",
-        },
-    },
-    "time_hours": {
-        "type": "score",
-        "instructions": "How many hours of sightseeing does the query budget (phrases like '3 часа', 'полдня', 'весь день')? Use 0 only if not mentioned.",
-        "criteria": _TIME_LEVELS,
-    },
-}
 
 # Stop-list of capitalised words that look like region/administrative names
 # but are not place names tourists would visit.  Kept in lower-case so the
@@ -339,91 +246,73 @@ def fallback_intent(query: str) -> IntentResult:
 
 
 def extract_intent(query: str) -> IntentResult:
-    """Typed intent decision in one Jev call.
+    """Deterministic intent decision in one call (source="regex").
 
-    Degrades to `fallback_intent` (source="regex") when OpenRouter cannot
-    answer: no key, or an upstream failure.  With a key and a healthy
-    upstream the result is exactly what Jev returned.
+    Free-text understanding is the interpretation agent's job
+    (``build_requirements``); this function is the dependency-free reader that
+    ``resolve()`` consumes directly and that the agent path degrades to.  It
+    reads only what the query states: categories off the shared map, a stated
+    time budget, the proper-noun tokens that resolve through the DB, and the
+    area width (town / district / region).  It never calls a model, so it
+    always answers.
     """
-    t0 = time.perf_counter()
+    return fallback_intent(query)
 
-    if not jev.available():
-        log.warning(
-            "intent: no OPENROUTER_API_KEY — deterministic fallback, map-based categories"
-        )
-        return fallback_intent(query)
-    try:
-        answers = jev.ask(query, _QUESTIONS)
-    except jev.JevError as exc:
-        log.warning("intent: Jev unavailable (%s) — deterministic fallback", exc)
-        return fallback_intent(query)
 
-    # A taxonomy entry the model did not answer about is simply "not mentioned"
-    # (the category list can grow between prompts; never crash on a missing key).
-    cat_pos = [
-        cat for cat in constants.CATEGORIES
-        if jev.noul(answers.get(f"cat_{cat}") or {"noul": 0.0}) >= _CAT_YES
+def intent_from_requirements(
+    requirements: TripRequirements, query: str
+) -> IntentResult:
+    """Derive the ``IntentResult`` that ``resolve()`` consumes from a contract.
+
+    This is what makes the PLAN follow the model reading: when the interpretation
+    agent produced the requirements, its interest/service/avoid codes and named
+    places drive the constraints instead of a second, keyword-only parse.  The
+    search *scope* stays a deterministic text reading — a region word
+    ("область") is a fact in the query, not a model guess.
+
+    ``source`` is "agent" when the contract came from the model path
+    ("llm"/"mixed"), "fallback" otherwise — always honest about where the
+    meaning came from.
+    """
+    cats_pos: list[str] = []
+    for code in (
+        requirements.interest_codes()
+        + requirements.soft_service_codes()
+        + requirements.hard_service_codes()
+    ):
+        if code and code in constants.CATEGORIES and code not in cats_pos:
+            cats_pos.append(code)
+    cats_neg = [
+        c for c in requirements.avoid_codes()
+        if c in constants.CATEGORIES and c not in cats_pos
     ]
-    cat_neg = [
-        cat for cat in constants.CATEGORIES
-        if jev.noul(answers.get(f"neg_{cat}") or {"noul": 0.0}) >= 0.7
-    ]
 
-    hours = jev.score(answers["time_hours"])
-    time_budget = int(round(hours * 60)) if hours >= 0.5 else None
-    if time_budget is not None and not _TIME_PHRASE_RE.search(query):
-        # The model guessed a duration the user never gave. Treat as unlimited:
-        # no budget means the whole route is built, not trimmed to fit a number
-        # nobody asked for.
-        log.info("intent: dropping inferred time budget (%s min) — no time in query", time_budget)
-        time_budget = None
-
-    # Jev returns free-form strings; validate against the taxonomy and fail
-    # loud on drift (stray values mean the model or taxonomy changed).
-    itype = jev.choice(answers["intent_type"])
-    if itype not in constants.INTENT_TYPES:
-        raise ValueError(f"jev: unknown intent_type {itype!r}")
-    era = jev.choice(answers["era_hint"])
-    if era not in constants.ERA_HINTS:
-        raise ValueError(f"jev: unknown era_hint {era!r}")
-    party = jev.choice(answers["party_type"])
-    if party not in constants.PARTY_TYPES:
-        raise ValueError(f"jev: unknown party_type {party!r}")
-    scope = jev.choice(answers["search_scope"])
-    if scope not in constants.SEARCH_SCOPES:
-        raise ValueError(f"jev: unknown search_scope {scope!r}")
-    known = set(constants.CATEGORIES)
-    pos = [c for c in cat_pos if c in known]
-    neg = [c for c in cat_neg if c in known]
-
-    # Proper-noun candidates for must-visit resolution — same extraction the
-    # degraded path uses (see _named_place_tokens for the verb caveat).
-    named = _named_place_tokens(query)
+    named = [r.name for r in requirements.of_kind("must_visit") if r.name]
+    if not named:
+        # A contract with no named place still needs the DB-resolved tokens the
+        # deterministic reader found, so a query that relies on them keeps
+        # working (must_visit_ids / area_anchor).
+        named = _named_tokens(query)
 
     decision = IntentDecision(
-        intent_type=itype,  # type: ignore[arg-type]
-        categories_pos=pos,  # type: ignore[arg-type]
-        categories_neg=neg,  # type: ignore[arg-type]
-        keywords_pos=[],   # keyword signal comes from retrieval, not the LLM
+        intent_type="vague" if not WORD_RE.search(query) else "discovery",
+        categories_pos=cats_pos,  # type: ignore[arg-type]
+        categories_neg=cats_neg,  # type: ignore[arg-type]
+        keywords_pos=[],
         keywords_neg=[],
         named_places=named,
         narrative=[],
-        time_budget_minutes=time_budget,
-        era_hint=era,  # type: ignore[arg-type]
-        party_type=party,  # type: ignore[arg-type]
-        search_scope=scope,  # type: ignore[arg-type]
+        time_budget_minutes=requirements.budget_minutes,
+        era_hint="any",
+        party_type="solo",
+        search_scope=_fallback_search_scope(query),  # type: ignore[arg-type]
     )
-
     return IntentResult(
         decision=decision,
-        source="jev",
-        confidence=max(
-            (a.get("confidence", 0.0) for a in answers.values()
-             if isinstance(a, dict)),
-            default=0.0,
-        ),
-        latency_ms=int((time.perf_counter() - t0) * 1000),
-        raw_response=answers,
+        source="agent" if requirements.source in ("llm", "mixed") else "fallback",
+        confidence=0.0,
+        latency_ms=0,
+        raw_response=None,
     )
 
 
@@ -789,97 +678,126 @@ def _fallback_reading(query: str, _locale: str) -> _Reading:
     )
 
 
-def _clause_for_category(query: str, cat: str) -> str:
-    for found, start, _end in _iter_terms(query):
-        if found == cat:
-            return _clause_containing(query, start)
-    return ""
-
-
-def _llm_reading(query: str, locale: str) -> _Reading:
-    """The deterministic reading plus the categories Jev typed on top.
-
-    The typed model decides *which* categories a query is about (including
-    phrasings the word map misses); the deterministic pass keeps provenance and
-    the party/budget/area facts that a typed choice cannot express.  A Jev
-    outage degrades to the plain fallback — never to an exception.
-    """
-    base = _fallback_reading(query, locale)
-    try:
-        intent = extract_intent(query)
-    except jev.JevError:
-        log.warning("requirements: Jev unavailable — deterministic reading")
-        return base
-    if intent.source != "jev":
-        # extract_intent degrades internally on an upstream outage; that is the
-        # same situation as no key — the requirements come from the text alone.
-        log.info("requirements: intent source=%s — deterministic reading", intent.source)
-        return base
-
-    d = intent.decision
-    conf = max(0.0, min(1.0, round(intent.confidence, 3)))
-    reqs = list(base.requirements)
-    seen = {(r.kind, r.code) for r in reqs}
-
-    for cat in d.categories_pos:
-        kind = "service" if cat in _SERVICE_CODES else "interest"
-        clause = _clause_for_category(query, cat)
-        if kind == "service":
-            strength = "hard" if _OBLIGATION_RE.search(clause.lower()) else "soft"
-        else:
-            strength = "soft"
-        if (kind, cat) in seen:
-            continue
-        seen.add((kind, cat))
-        reqs.append(
-            Requirement(
-                kind=kind,  # type: ignore[arg-type]
-                strength=strength,  # type: ignore[arg-type]
-                code=cat,
-                label=cat,
-                text=clause or None,
-                source="text",
-                confidence=conf,
-            )
-        )
-
-    for cat in d.categories_neg:
-        if ("avoid", cat) in seen:
-            continue
-        seen.add(("avoid", cat))
-        clause = _clause_for_category(query, cat)
-        reqs.append(
-            Requirement(
-                kind="avoid",
-                strength="hard",
-                code=cat,
-                label=cat,
-                text=clause or None,
-                source="text",
-                confidence=conf,
-            )
-        )
-
-    budget = base.time_budget if base.time_budget is not None else d.time_budget_minutes
-    return _Reading(
-        source="llm",
-        requirements=reqs,
-        adults=base.adults,
-        children=base.children,
-        children_ages=base.children_ages,
-        mobility=base.mobility,
-        time_budget=budget,
-        areas=base.areas,
-        unknowns=base.unknowns,
-    )
-
-
 def _read_text(query: str, locale: str) -> _Reading:
-    """LLM reading when OpenRouter can answer, deterministic reading otherwise."""
-    if jev.available():
-        return _llm_reading(query, locale)
-    log.info("requirements: no OPENROUTER_API_KEY — deterministic reading")
+    """The deterministic reading of the query text.
+
+    This is the no-model path and, equally, the reading the agent path degrades
+    to: it keeps every fact the text itself states and invents nothing.
+    """
     return _fallback_reading(query, locale)
+
+
+def _agent_contract(
+    query: str, req: GenerateReq, db, wall_clock_s: float | None = None
+) -> TripRequirements | None:
+    """The interpretation agent's contract, or None when it cannot be trusted.
+
+    ``interpret_with_agent`` already returns None (never a half-filled contract)
+    for no key, no SDK, a budget overrun or any model/tool failure; this wrapper
+    only adds the last-resort guard so an unexpected error can never turn a
+    route request into a 500.  A local import keeps PydanticAI off the planner's
+    import path until a reading is actually attempted.
+    """
+    from . import agent_interpret  # noqa: PLC0415 — loaded only when needed
+    try:
+        return agent_interpret.interpret_with_agent(
+            query, req, db=db, wall_clock_s=wall_clock_s
+        )
+    except Exception as exc:  # pragma: no cover — defensive; the layer is guarded
+        log.warning("requirements: agent layer failed (%s) — deterministic reading", exc)
+        return None
+
+
+def _finalize_agent_contract(
+    contract: TripRequirements, query: str, req: GenerateReq
+) -> TripRequirements:
+    """Top up an agent contract with the deterministic facts it must not omit.
+
+    The agent owns the MEANING of the free text, but three things are not its
+    to decide:
+
+      * explicit UI filters — they are visible to the tourist and WIN.  The
+        agent layer already merges them, but they are re-asserted here so a
+        contract that contradicts a visible filter can never override it;
+      * named places the query states as proper nouns (the pipeline grounds them
+        to ids / an area anchor in resolve()) — added only when the agent did
+        not already produce a must_visit for the same name;
+      * the text markers of asks the system cannot prove ("без лестниц"), which
+        belong in ``unknowns`` and are never satisfied.
+    """
+    contract.requirements, claimed = _merge_requirements(
+        _ui_requirements(req), contract.requirements
+    )
+    # A visible positive filter wins over a model's reading of the same code as
+    # something to avoid — the tourist turned that category ON, not off.
+    ui_positive = {
+        r.code for r in _ui_requirements(req) if r.code and r.kind in ("interest", "service")
+    }
+    contract.requirements = [
+        r for r in contract.requirements
+        if not (r.kind == "avoid" and r.code in ui_positive)
+    ]
+
+    # Facts the text states with a keyword are not the model's to drop: a
+    # service/interest/exclusion the deterministic reading found but the agent
+    # did not mention is added, so an EN phrasing the model under-reads still
+    # reaches the planner (the model may only ever ADD meaning, not lose facts).
+    for r in _read_text(query, req.locale).requirements:
+        if r.kind not in ("service", "interest", "avoid"):
+            continue
+        key = (r.kind, r.code or r.name)
+        if key in claimed:
+            continue
+        claimed.add(key)
+        contract.requirements.append(r)
+
+    # A mandatory ask the text states must not be softened by the model: "hard"
+    # wins when either reader says the user made it obligatory (the model may
+    # paraphrase, the deterministic span marks «обязательно»/«must»).
+    text_mandatory = {
+        (r.kind, r.code or r.name)
+        for r in _read_text(query, req.locale).requirements
+        if r.strength == "hard"
+    }
+    for r in contract.requirements:
+        if r.strength == "soft" and (r.kind, r.code or r.name) in text_mandatory:
+            r.strength = "hard"
+
+    # UI scalars win over the agent's reading of the same field.
+    if req.party_children is not None:
+        contract.party.children = req.party_children
+    if req.party_adults is not None:
+        contract.party.adults = req.party_adults
+    if req.party_children_ages:
+        contract.party.children_ages = list(req.party_children_ages)
+    for code in req.mobility:
+        if code and code not in contract.party.mobility:
+            contract.party.mobility.append(code)
+    if req.time_budget_minutes is not None:
+        contract.budget_minutes = req.time_budget_minutes or None
+
+    for name in _named_tokens(query):
+        key = ("must_visit", name)
+        if key in claimed:
+            continue
+        claimed.add(key)
+        contract.requirements.append(
+            Requirement(
+                kind="must_visit", name=name, label=name, text=name, source="text",
+            )
+        )
+    for code in _unknowns_from_text(query):
+        if code not in contract.unknowns:
+            contract.unknowns.append(code)
+    if "wheelchair" in contract.party.mobility and "wheelchair_accessible" not in contract.unknowns:
+        contract.unknowns.append("wheelchair_accessible")
+    if contract.budget_minutes is not None:
+        contract.budget_minutes = max(
+            constants.MIN_BUDGET_MIN, min(contract.budget_minutes, constants.MAX_BUDGET_MIN)
+        )
+    if contract.source == "llm" and _ui_used(req, [r for r in contract.requirements if r.source == "ui"]):
+        contract.source = "mixed"
+    return contract
 
 
 def _ui_requirements(req: GenerateReq) -> list[Requirement]:
@@ -930,13 +848,43 @@ def _merge_requirements(
     return merged, claimed
 
 
-def build_requirements(query: str, req: GenerateReq) -> TripRequirements:
+def build_requirements(
+    query: str, req: GenerateReq, *, db: object | None = None,
+    wall_clock_s: float | None = None,
+) -> TripRequirements:
     """Interpret one request into the frozen `TripRequirements` contract.
 
-    Single entry point for "what did the tourist ask for".  Works RU and EN,
-    with the LLM present and in the degraded no-key path; explicit UI filters
-    always win over a text reading, and nothing the data cannot prove is
-    presented as satisfied (it goes to `unknowns` instead).
+    The single entry point for "what did the tourist ask for".  It asks the
+    tool-using interpretation agent first (spec §4.2); the agent returns a
+    complete contract with the explicit UI filters merged in (they win), or
+    ``None`` — no key, no SDK, a model/tool failure, a budget overrun — and then
+    the deterministic reading below answers instead, keeping every UI filter.
+
+    ``db`` is an optional caller-owned psycopg connection the agent's bounded
+    tools reuse; without one each tool opens its own short-lived connection.
+    """
+    try:
+        contract = _agent_contract(query, req, db, wall_clock_s)
+    except Exception as exc:  # the agent must never fail a request
+        log.warning("requirements: agent raised (%s) — deterministic parse", exc)
+        contract = None
+    if contract is not None:
+        log.info(
+            "requirements: agent reading (source=%s, %d requirement(s))",
+            contract.source, len(contract.requirements),
+        )
+        return _finalize_agent_contract(contract, query, req)
+    log.info("requirements: no agent reading — deterministic parse")
+    return _deterministic_requirements(query, req)
+
+
+def _deterministic_requirements(query: str, req: GenerateReq) -> TripRequirements:
+    """The no-model reading of one request, as the frozen contract.
+
+    Works RU and EN.  Explicit UI filters always win over a text reading, and
+    nothing the data cannot prove is presented as satisfied (it goes to
+    `unknowns` instead).  This is the whole interpretation when no model
+    answers, and the shape the agent path must match when one does.
     """
     locale = req.locale
     reading = _read_text(query, locale)
