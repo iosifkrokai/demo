@@ -74,6 +74,15 @@ export const en: Dictionary = {
     remove: 'Remove from history',
   },
   itineraries: {
+    loading: 'Loading ready-made routes…',
+    loadFailed:
+      'Could not load the ready-made routes. The routes themselves are fine — the agent did not answer.',
+    retry: 'retry',
+    emptyList: 'No ready-made routes yet.',
+    intro:
+      'Put together by hand from real data points: they open right away with no model request — the route can be edited as usual afterwards.',
+    incompleteCount:
+      'Some points are missing from the data ({{count}}) — those routes are shown incomplete.',
     empty: 'Ready-made routes did not load',
     incomplete: 'One stop of this route is missing from the data',
     open: 'show on the map',

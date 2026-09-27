@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ChevronDown, Clock, Loader2, MapPin, Route as RouteIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Itinerary, ItineraryStop } from '@/api/types';
@@ -41,6 +42,7 @@ export function ItinerariesTab({
   onReload,
   disabled = false,
 }: ItinerariesTabProps) {
+  const { t } = useTranslation();
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   if (isLoading) {
@@ -51,7 +53,7 @@ export function ItinerariesTab({
         role="status"
       >
         <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-        Загружаю готовые маршруты…
+        {t('itineraries.loading')}
       </p>
     );
   }
@@ -69,7 +71,7 @@ export function ItinerariesTab({
             onClick={() => onReload()}
             className="self-start rounded-full border border-border px-3 py-1.5 text-meta transition-colors hover:bg-muted max-md:min-h-11 pointer-coarse:min-h-11"
           >
-            повторить
+            {t('itineraries.retry')}
           </button>
         )}
       </div>
@@ -125,7 +127,7 @@ export function ItinerariesTab({
                   {itinerary.visit_minutes > 0 && (
                     <span className="inline-flex items-center gap-1">
                       <Clock className="h-3.5 w-3.5" aria-hidden="true" />
-                      осмотр ~{fmtMin(itinerary.visit_minutes)}
+                      {t('itineraries.visit')} ~{fmtMin(itinerary.visit_minutes)}
                     </span>
                   )}
                 </p>
@@ -139,7 +141,7 @@ export function ItinerariesTab({
                     className="inline-flex items-center gap-1.5 rounded-full bg-primary px-3 py-1.5 text-meta font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50 max-md:min-h-11 pointer-coarse:min-h-11"
                   >
                     <MapPin className="h-3.5 w-3.5" aria-hidden="true" />
-                    показать на карте
+                    {t('itineraries.open')}
                   </button>
                   <button
                     type="button"
@@ -150,7 +152,7 @@ export function ItinerariesTab({
                     }
                     className="inline-flex items-center gap-1 rounded-full px-2.5 py-1.5 text-meta text-muted-foreground transition-colors hover:bg-muted hover:text-foreground max-md:min-h-11 pointer-coarse:min-h-11"
                   >
-                    точки маршрута
+                    {t('itineraries.stops')}
                     <ChevronDown
                       className={cn(
                         'h-3.5 w-3.5 transition-transform',
@@ -179,6 +181,7 @@ export function ItinerariesTab({
 
 /** One stop: its number, its name, and the facts that are actually known. */
 function StopRow({ stop, index }: { stop: ItineraryStop; index: number }) {
+  const { t } = useTranslation();
   const facts = [
     stop.visit_minutes ? fmtMin(stop.visit_minutes) : null,
     stop.opening_hours,

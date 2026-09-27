@@ -116,12 +116,12 @@ interface AgentBudget {
  * Time presets. 0 = «без ограничения»: no `time_budget_minutes` is sent at all
  * and the agent builds the full route. Anything >= 15 min is a real constraint.
  */
-const TIME_BUDGET_OPTIONS = [
-  { value: 30, label: '30 мин' },
-  { value: 60, label: '1 ч' },
-  { value: 120, label: '2 ч' },
-  { value: 240, label: 'полдня' },
-  { value: 0, label: 'без ограничения' },
+const buildTimeBudgetOptions = (t: TFunction) => [
+  { value: 30, label: t('sidebar.budgets.b30') },
+  { value: 60, label: t('sidebar.budgets.b60') },
+  { value: 120, label: t('sidebar.budgets.b120') },
+  { value: 240, label: t('sidebar.budgets.b240') },
+  { value: 0, label: t('sidebar.budgets.none') },
 ];
 
 /**
@@ -129,18 +129,23 @@ const TIME_BUDGET_OPTIONS = [
  * agent picks the costing that fits the query (a walk inside a town, a drive
  * across the область). Picking one sends it — transport is a real constraint.
  */
-const TRANSPORT_OPTIONS: Array<
-  SegmentedItem<'' | Profile> & { costing?: string }
-> = [
+const buildTransportOptions = (
+  t: TFunction
+): Array<SegmentedItem<'' | Profile> & { costing?: string }> => [
   {
     value: 'pedestrian',
-    label: 'пешком',
+    label: t('sidebar.transport.pedestrian'),
     icon: Footprints,
     costing: 'pedestrian',
   },
-  { value: 'bicycle', label: 'велосипед', icon: Bike, costing: 'bicycle' },
-  { value: 'car', label: 'машина', icon: Car, costing: 'auto' },
-  { value: '', label: 'как удобно', icon: Sparkles },
+  {
+    value: 'bicycle',
+    label: t('sidebar.transport.bicycle'),
+    icon: Bike,
+    costing: 'bicycle',
+  },
+  { value: 'car', label: t('sidebar.transport.car'), icon: Car, costing: 'auto' },
+  { value: '', label: t('sidebar.transport.any'), icon: Sparkles },
 ];
 
 /**
@@ -209,47 +214,48 @@ interface FilterOption {
 }
 
 /** Result type: a ready itinerary, or a grouped catalogue to choose from. */
-const RESULT_MODE_OPTIONS: SegmentedItem<ResultMode>[] = [
-  { value: 'route', label: 'маршрут' },
-  { value: 'catalogue', label: 'каталог' },
+const buildResultModeOptions = (t: TFunction): SegmentedItem<ResultMode>[] => [
+  { value: 'route', label: t('sidebar.resultModes.route') },
+  { value: 'catalogue', label: t('sidebar.resultModes.catalogue') },
 ];
 
 /** Themes: what the tourist wants more of (soft — they never force a detour). */
-const INTEREST_OPTIONS: readonly FilterOption[] = [
-  { code: 'замок', label: 'замки' },
-  { code: 'костёл', label: 'костёлы' },
-  { code: 'церковь', label: 'церкви' },
-  { code: 'монастырь', label: 'монастыри' },
-  { code: 'музей', label: 'музеи' },
-  { code: 'усадьба', label: 'усадьбы' },
-  { code: 'парк', label: 'парки' },
-  { code: 'памятник', label: 'памятники' },
+const buildInterestOptions = (t: TFunction): FilterOption[] => [
+  { code: 'замок', label: t('sidebar.interests.castles') },
+  { code: 'костёл', label: t('sidebar.interests.catholic') },
+  { code: 'церковь', label: t('sidebar.interests.orthodox') },
+  { code: 'монастырь', label: t('sidebar.interests.monasteries') },
+  { code: 'музей', label: t('sidebar.interests.museums') },
+  { code: 'усадьба', label: t('sidebar.interests.estates') },
+  { code: 'парк', label: t('sidebar.interests.parks') },
+  { code: 'памятник', label: t('sidebar.interests.monuments') },
 ];
 
 /**
  * Amenities a walk may need, each with a strength: «обязательно» goes out as a
  * hard service the route must serve, «желательно» as a soft interest.
  */
-const AMENITY_OPTIONS: readonly FilterOption[] = [
-  { code: 'туалет', label: 'туалет' },
-  { code: 'кафе', label: 'кафе / перерыв' },
+const buildAmenityOptions = (t: TFunction): FilterOption[] => [
+  { code: 'туалет', label: t('sidebar.amenities.toilet') },
+  { code: 'кафе', label: t('sidebar.amenities.cafe') },
 ];
 
 /** Categories to keep out of the route. */
-const AVOID_OPTIONS: readonly FilterOption[] = [
-  { code: 'кладбище', label: 'кладбища' },
-  { code: 'инфраструктура', label: 'инфраструктура' },
-  { code: 'гостиница', label: 'гостиницы' },
+const buildAvoidOptions = (t: TFunction): FilterOption[] => [
+  { code: 'кладбище', label: t('sidebar.avoid.cemeteries') },
+  { code: 'инфраструктура', label: t('sidebar.avoid.infrastructure') },
+  { code: 'гостиница', label: t('sidebar.avoid.hotels') },
 ];
 
-const ALL_FILTER_OPTIONS: readonly FilterOption[] = [
-  ...INTEREST_OPTIONS,
-  ...AMENITY_OPTIONS,
-  ...AVOID_OPTIONS,
+const buildAllFilterOptions = (t: TFunction): FilterOption[] => [
+  ...buildInterestOptions(t),
+  ...buildAmenityOptions(t),
+  ...buildAvoidOptions(t),
 ];
 
-const filterLabel = (code: string): string =>
-  ALL_FILTER_OPTIONS.find((o) => o.code === code)?.label ?? code;
+/** The visible name of a filter code; the code itself is never translated. */
+const filterLabel = (code: string, t: TFunction): string =>
+  buildAllFilterOptions(t).find((o) => o.code === code)?.label ?? code;
 
 /**
  * Ages the tourist actually typed ("4, 7" → [4, 7]). Free text is parsed for
@@ -267,7 +273,7 @@ const parseChildAges = (raw: string): number[] =>
  * Client-thrown Russian messages (validation) pass through unchanged; browser
  * English like "Failed to fetch" and raw backend JSON bodies do not.
  */
-const routeSubmitErrorText = (err: unknown): string => {
+const routeSubmitErrorText = (err: unknown, t: TFunction): string => {
   if (!(err instanceof Error)) return String(err);
   const msg = err.message;
   // fetch() network failures: Chromium "Failed to fetch", Firefox NetworkError,
@@ -278,7 +284,7 @@ const routeSubmitErrorText = (err: unknown): string => {
     msg === 'NetworkError when attempting to fetch resource.' ||
     err.name === 'TypeError'
   ) {
-    return 'нет связи с агентом — проверьте сеть и попробуйте ещё раз';
+    return t('sidebar.status.offline');
   }
   return msg;
 };
@@ -287,11 +293,10 @@ const routeSubmitErrorText = (err: unknown): string => {
 const queryAsksForToilet = (q: string): boolean =>
   /туалет|санузел|toilet/i.test(q);
 
-const TOILET_MISSING_WARNING =
-  'В базе не нашлось туалетов — маршрут построен без них.';
+const toiletMissingWarning = (t: TFunction) => t('sidebar.status.noToilets');
 
 /** «запрос отменён» — an abort is the tourist's own action, not a failure. */
-const REQUEST_CANCELLED = 'Запрос отменён — маршрут остался прежним.';
+const requestCancelled = (t: TFunction) => t('sidebar.status.cancelled');
 
 /** A fetch aborted through AbortController (or a cancelled XHR). */
 const isAbortError = (err: unknown): boolean =>
@@ -300,27 +305,33 @@ const isAbortError = (err: unknown): boolean =>
     /aborted|abort/i.test(err.message) ||
     err.name === 'CanceledError');
 
-const fmtMin = (m: number) => {
+const fmtMin = (m: number, t: TFunction) => {
   const mins = Math.max(0, Math.round(m));
-  return mins >= 60
-    ? `${Math.floor(mins / 60)} ч ${mins % 60 ? `${mins % 60} мин` : ''}`.trim()
-    : `${mins} мин`;
+  if (mins < 60) return t('sidebar.units.minutes', { count: mins });
+  const hours = Math.floor(mins / 60);
+  const rest = mins % 60;
+  // «1 ч 20 мин» / «1 hr 20 min»: the unit words come from the dictionary, the
+  // numbers do not.
+  const hourPart = t('sidebar.units.hours', { count: hours });
+  return rest ? `${hourPart} ${t('sidebar.units.minutes', { count: rest })}` : hourPart;
 };
 
 /** «1,3 км» — Russian uses a comma as the decimal separator, never a dot. */
-const fmtKm = (km: number) =>
-  km >= 10 ? `${Math.round(km)} км` : `${decimalRu(km)} км`;
+const fmtKm = (km: number, t: TFunction) => {
+  const value = km >= 10 ? String(Math.round(km)) : decimalRu(km);
+  return t('sidebar.units.km', { value });
+};
 
 /** A waypoint that simply says "I am here". */
-const meWaypoint = (lat: number, lon: number): Waypoint => {
+const meWaypoint = (lat: number, lon: number, t: TFunction): Waypoint => {
   const lngLat: [number, number] = [lon, lat];
   return {
     id: ME_WAYPOINT_ID,
-    userInput: 'Моё местоположение',
+    userInput: t('sidebar.ui.myLocation'),
     geocodeResults: [
       {
-        title: 'Моё местоположение',
-        description: 'старт маршрута',
+        title: t('sidebar.ui.myLocation'),
+        description: t('sidebar.ui.start'),
         selected: true,
         displaylnglat: lngLat,
         sourcelnglat: lngLat,
@@ -367,6 +378,10 @@ const walkKey = (waypoints: readonly Waypoint[]) =>
         };
       })
   );
+
+/** Why the panel could not say where you are — a code, not a finished sentence,
+ * so the line follows the interface language instead of freezing in one. */
+type GeoReason = 'unsupported' | 'failedShort' | 'denied';
 
 export const Sidebar = () => {
   const panelOpen = useCommonStore((s) => s.directionsPanelOpen);
@@ -424,7 +439,7 @@ export const Sidebar = () => {
   const [geoState, setGeoState] = useState<
     'idle' | 'locating' | 'ok' | 'denied'
   >('idle');
-  const [geoReason, setGeoReason] = useState('');
+  const [geoReason, setGeoReason] = useState<GeoReason | null>(null);
   const [busy, setBusy] = useState(false);
   // ── Honest waiting ──────────────────────────────────────────────────────
   // `stage` is one of the stages the client can actually observe, `elapsed` is
@@ -482,6 +497,9 @@ export const Sidebar = () => {
   // The docked width, dragged by the tourist and remembered across visits.
   const panel = usePanelWidth();
   const tabs = useMemo(() => buildViews(t), [t]);
+  // Filters and presets are built from the dictionary where they are rendered:
+  // their visible labels follow the language, while their `code`s never do —
+  // those are the backend's own categories.
   const subtitles = useMemo(() => buildViewSubtitles(t), [t]);
   const hints = useMemo(() => buildHintChips(t), [t]);
 
@@ -551,7 +569,7 @@ export const Sidebar = () => {
     async (silent = false): Promise<{ lat: number; lon: number } | null> => {
       if (!navigator.geolocation) {
         setGeoState('denied');
-        setGeoReason('браузер не умеет геолокацию');
+        setGeoReason('unsupported');
         return null;
       }
       setGeoState('locating');
@@ -578,7 +596,7 @@ export const Sidebar = () => {
         });
         if (!pos) {
           setGeoState('denied');
-          setGeoReason('не удалось определить');
+          setGeoReason('failedShort');
           return null;
         }
         const coords = {
@@ -587,12 +605,12 @@ export const Sidebar = () => {
         };
         setMe(coords);
         setGeoState('ok');
-        setGeoReason('');
+        setGeoReason(null);
         // Keep my position as waypoint 0 so the map shows it and the line the
         // webapp draws starts there too.
         const current = useDirectionsStore.getState().waypoints;
         setWaypoint([
-          meWaypoint(coords.lat, coords.lon),
+          meWaypoint(coords.lat, coords.lon, t),
           ...current.filter((w) => w.id !== ME_WAYPOINT_ID),
         ]);
         if (!silent) refetchDirections();
@@ -601,13 +619,12 @@ export const Sidebar = () => {
         // 1 === PERMISSION_DENIED in the Geolocation API
         const code = (err as GeolocationPositionError | undefined)?.code;
         setGeoState('denied');
-        setGeoReason(
-          code === 1 ? 'браузер запретил доступ' : 'не удалось определить'
-        );
+        // 1 === PERMISSION_DENIED; anything else is «could not determine».
+        setGeoReason(code === 1 ? 'denied' : 'failedShort');
         return null;
       }
     },
-    [refetchDirections, setWaypoint]
+    [refetchDirections, setWaypoint, t]
   );
 
   // Ask once on open: the tourist expects to see themselves on the map.
@@ -624,17 +641,17 @@ export const Sidebar = () => {
   );
   const hardServices = useMemo(
     () =>
-      AMENITY_OPTIONS.filter((o) => amenities[o.code] === 'hard').map(
+      buildAmenityOptions(t).filter((o) => amenities[o.code] === 'hard').map(
         (o) => o.code
       ),
-    [amenities]
+    [amenities, t]
   );
   const softAmenities = useMemo(
     () =>
-      AMENITY_OPTIONS.filter((o) => amenities[o.code] === 'soft').map(
+      buildAmenityOptions(t).filter((o) => amenities[o.code] === 'soft').map(
         (o) => o.code
       ),
-    [amenities]
+    [amenities, t]
   );
   // Soft amenities are interests like any theme: one list goes to the agent.
   const interestCodes = useMemo(
@@ -654,13 +671,13 @@ export const Sidebar = () => {
       out.push(pluralCountRu(partyChildren, CHILD_FORMS));
     if (childrenAges.length > 0) out.push(`возраст ${childrenAges.join(', ')}`);
     for (const code of hardServices)
-      out.push(`обязательно: ${filterLabel(code)}`);
+      out.push(`обязательно: ${filterLabel(code, t)}`);
     for (const code of softAmenities)
-      out.push(`желательно: ${filterLabel(code)}`);
-    for (const code of interests) out.push(`интерес: ${filterLabel(code)}`);
-    for (const code of avoid) out.push(`без ${filterLabel(code)}`);
-    if (resultMode === 'catalogue') out.push('каталог мест');
-    if (roundTrip) out.push('круговой маршрут');
+      out.push(`желательно: ${filterLabel(code, t)}`);
+    for (const code of interests) out.push(`интерес: ${filterLabel(code, t)}`);
+    for (const code of avoid) out.push(`без ${filterLabel(code, t)}`);
+    if (resultMode === 'catalogue') out.push(t('sidebar.ui.catalogue'));
+    if (roundTrip) out.push(t('sidebar.ui.roundTrip'));
     return out;
   }, [
     partyAdults,
@@ -714,7 +731,7 @@ export const Sidebar = () => {
         },
       ],
     }));
-    setWaypoint(me ? [meWaypoint(me.lat, me.lon), ...restored] : restored);
+    setWaypoint(me ? [meWaypoint(me.lat, me.lon, t), ...restored] : restored);
     setPlaceDetails(
       Object.fromEntries(
         entry.places.map((p) => [
@@ -768,7 +785,7 @@ export const Sidebar = () => {
     }));
     // replan=false: the router is called once below, with the new stops.
     setTransportEverywhere(itinerary.transport, false);
-    const next = me ? [meWaypoint(me.lat, me.lon), ...restored] : restored;
+    const next = me ? [meWaypoint(me.lat, me.lon, t), ...restored] : restored;
     setWaypoint(next);
     // A ready-made route is still a route someone may walk, and a walk needs a
     // history entry to attach to — without this, «пройдено» would be missing for
@@ -861,7 +878,7 @@ export const Sidebar = () => {
         };
       } = { query: q };
       if (timeBudget >= 15) body.time_budget_minutes = timeBudget;
-      const chosen = TRANSPORT_OPTIONS.find(
+      const chosen = buildTransportOptions(t).find(
         (o) => o.value === transportRef.current
       );
       if (chosen?.costing) body.profile = chosen.costing;
@@ -940,18 +957,20 @@ export const Sidebar = () => {
       };
       const pts = data.points ?? [];
       if (pts.length < 2) {
-        throw new Error('нашёл меньше 2 мест — попробуйте уточнить запрос');
+        throw new Error(t('sidebar.status.fewPlaces'));
       }
 
       // The agent tells us which transport it planned for; adopt it (unless the
       // tourist picked one) so the map's own line uses the same costing.
       if (!transportRef.current && data.costing) {
-        const match = TRANSPORT_OPTIONS.find((o) => o.costing === data.costing);
+        const match = buildTransportOptions(t).find(
+          (o) => o.costing === data.costing
+        );
         if (match) setTransportEverywhere(match.value, false);
       }
 
       const start: Waypoint[] = origin
-        ? [meWaypoint(origin.lat, origin.lon)]
+        ? [meWaypoint(origin.lat, origin.lon, t)]
         : [];
       const placeWaypoints: Waypoint[] = pts.map((p, i) => ({
         id: i.toString(),
@@ -1072,7 +1091,7 @@ export const Sidebar = () => {
         (queryAsksForToilet(q) || hardServices.includes('туалет')) &&
         !pts.some((p) => p.category === 'туалет')
       ) {
-        setStatus({ kind: 'warn', text: TOILET_MISSING_WARNING });
+        setStatus({ kind: 'warn', text: toiletMissingWarning(t) });
       }
 
       setQuery('');
@@ -1081,9 +1100,9 @@ export const Sidebar = () => {
     } catch (e) {
       // The tourist's own cancel is not a failure and leaves the route alone.
       if (isAbortError(e)) {
-        setStatus({ kind: 'ok', text: REQUEST_CANCELLED });
+        setStatus({ kind: 'ok', text: requestCancelled(t) });
       } else {
-        setStatus({ kind: 'err', text: routeSubmitErrorText(e) });
+        setStatus({ kind: 'err', text: routeSubmitErrorText(e, t) });
       }
     } finally {
       abortRef.current = null;
@@ -1103,7 +1122,7 @@ export const Sidebar = () => {
       { id: '0', userInput: '', geocodeResults: [] },
       { id: '1', userInput: '', geocodeResults: [] },
     ];
-    setWaypoint(me ? [meWaypoint(me.lat, me.lon), ...empties] : empties);
+    setWaypoint(me ? [meWaypoint(me.lat, me.lon, t), ...empties] : empties);
     setStatus(null);
     setSummary(null);
     refetchDirections();
@@ -1118,7 +1137,7 @@ export const Sidebar = () => {
       const { data } = await forward_geocode(q);
       const top = data?.[0];
       if (!top) {
-        setManualErr('ничего не нашлось');
+        setManualErr(t('sidebar.status.nothingFound'));
         return;
       }
       const lat = parseFloat(top.lat);
@@ -1213,15 +1232,20 @@ export const Sidebar = () => {
   const geoBadge = useMemo(() => {
     switch (geoState) {
       case 'ok':
-        return { text: 'старт — моё местоположение', tone: 'text-emerald-600' };
+        return { text: t('sidebar.geo.startIsMe'), tone: 'text-emerald-600' };
       case 'locating':
-        return { text: 'ищу вас…', tone: 'text-muted-foreground' };
+        return { text: t('sidebar.geo.searching'), tone: 'text-muted-foreground' };
       case 'denied':
-        return { text: `геолокация: ${geoReason}`, tone: 'text-amber-600' };
+        return {
+          text: geoReason
+            ? `${t('sidebar.geo.label')}: ${t(`sidebar.geo.${geoReason}`)}`
+            : t('sidebar.geo.label'),
+          tone: 'text-amber-600',
+        };
       default:
-        return { text: 'старт не задан', tone: 'text-muted-foreground' };
+        return { text: t('sidebar.geo.startUnset'), tone: 'text-muted-foreground' };
     }
-  }, [geoState, geoReason]);
+  }, [geoState, geoReason, t]);
 
   return (
     <Sheet open={panelOpen} modal={false}>
@@ -1295,7 +1319,7 @@ export const Sidebar = () => {
               <div className="mt-1.5 flex items-center gap-2">
                 <div className="flex min-w-0 flex-1 items-center gap-2 rounded-2xl bg-primary px-3 py-2 text-primary-foreground">
                   {/* Radix still needs a title for the dialog. */}
-                  <SheetTitle className="sr-only">Проводник</SheetTitle>
+                  <SheetTitle className="sr-only">{t('sidebar.ui.guide')}</SheetTitle>
                   <Compass className="h-4 w-4 shrink-0" aria-hidden="true" />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-label font-semibold">
@@ -1409,14 +1433,14 @@ export const Sidebar = () => {
                       id="time-budget-label"
                       className="text-meta text-muted-foreground"
                     >
-                      сколько есть времени
+                      {t('sidebar.ui.timeLabel')}
                     </span>
                     <div
                       role="group"
                       aria-labelledby="time-budget-label"
                       className="flex flex-wrap gap-1.5"
                     >
-                      {TIME_BUDGET_OPTIONS.map((option) => (
+                      {buildTimeBudgetOptions(t).map((option) => (
                         <Chip
                           key={option.value}
                           selected={timeBudget === option.value}
@@ -1431,13 +1455,13 @@ export const Sidebar = () => {
 
                   <div className="flex flex-col gap-1.5">
                     <span className="text-meta text-muted-foreground">
-                      на чём
+                      {t('sidebar.ui.transportLabel')}
                     </span>
                     <Segmented
-                      items={TRANSPORT_OPTIONS}
+                      items={buildTransportOptions(t)}
                       value={transport}
                       onChange={setTransportEverywhere}
-                      label="на чём"
+                      label={t('sidebar.ui.transportLabel')}
                       stacked
                       disabled={busy}
                       testId={(value) => `transport-${value || 'any'}`}
@@ -1462,7 +1486,7 @@ export const Sidebar = () => {
                       {geoBadge.text}
                     </span>
                     <span className="ml-auto shrink-0 text-muted-foreground">
-                      {geoState === 'locating' ? '…' : 'обновить'}
+                      {geoState === 'locating' ? '…' : t('sidebar.ui.refresh')}
                     </span>
                   </button>
 
@@ -1480,7 +1504,7 @@ export const Sidebar = () => {
                       className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
                       aria-hidden="true"
                     />
-                    <span>ещё фильтры</span>
+                    <span>{t('sidebar.ui.moreFilters')}</span>
                     {filterSummary.length > 0 && (
                       <span
                         data-testid="filters-count"
@@ -1506,7 +1530,7 @@ export const Sidebar = () => {
                       role="status"
                       className="flex flex-wrap items-center gap-1 rounded-xl bg-muted px-3 py-2 text-meta text-muted-foreground"
                     >
-                      <span>учитываю:</span>
+                      <span>{t('sidebar.ui.considering')}</span>
                       {filterSummary.map((item) => (
                         <span
                           key={item}
@@ -1580,7 +1604,7 @@ export const Sidebar = () => {
                         <span className="text-meta text-muted-foreground">
                           удобства в пути
                         </span>
-                        {AMENITY_OPTIONS.map((option) => (
+                        {buildAmenityOptions(t).map((option) => (
                           <div
                             key={option.code}
                             className="flex items-center gap-2"
@@ -1622,7 +1646,7 @@ export const Sidebar = () => {
                           aria-label="интересы"
                           className="flex flex-wrap gap-1.5"
                         >
-                          {INTEREST_OPTIONS.map((option) => (
+                          {buildInterestOptions(t).map((option) => (
                             <Chip
                               key={option.code}
                               selected={interests.includes(option.code)}
@@ -1647,7 +1671,7 @@ export const Sidebar = () => {
                           aria-label="избегать"
                           className="flex flex-wrap gap-1.5"
                         >
-                          {AVOID_OPTIONS.map((option) => (
+                          {buildAvoidOptions(t).map((option) => (
                             <Chip
                               key={option.code}
                               selected={avoid.includes(option.code)}
@@ -1666,7 +1690,7 @@ export const Sidebar = () => {
                           что показать
                         </span>
                         <Segmented
-                          items={RESULT_MODE_OPTIONS}
+                          items={buildResultModeOptions(t)}
                           value={resultMode}
                           onChange={setResultMode}
                           label="тип результата"
@@ -1714,7 +1738,7 @@ export const Sidebar = () => {
                           unit="points"
                         />
                         <StatTile
-                          value={summary.km != null ? fmtKm(summary.km) : '—'}
+                          value={summary.km != null ? fmtKm(summary.km, t) : '—'}
                           label="длина"
                         />
                         <StatTile
@@ -1725,13 +1749,13 @@ export const Sidebar = () => {
                       <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-meta text-muted-foreground">
                         <span className="inline-flex items-center gap-1">
                           <Clock className="h-3.5 w-3.5" aria-hidden="true" />
-                          {`в пути ~${fmtMin(summary.walkMinutes)}`}
+                          {`в пути ~${fmtMin(summary.walkMinutes, t)}`}
                         </span>
-                        <span>{`осмотр ~${fmtMin(summary.visitMinutes)}`}</span>
+                        <span>{`осмотр ~${fmtMin(summary.visitMinutes, t)}`}</span>
                         <span>
                           {summary.budgetMinutes
-                            ? `лимит ${fmtMin(summary.budgetMinutes)}`
-                            : 'без лимита'}
+                            ? `лимит ${fmtMin(summary.budgetMinutes, t)}`
+                            : t('sidebar.ui.noLimit')}
                         </span>
                         {!summary.fits && (
                           <span className="rounded-full bg-amber-500/15 px-2 py-0.5 font-medium text-amber-700">
@@ -1760,8 +1784,7 @@ export const Sidebar = () => {
                         aria-hidden="true"
                       />
                       <p className="text-label text-muted-foreground">
-                        Здесь появятся остановки маршрута — или соберите его из
-                        точек вручную
+                        {t('sidebar.ui.emptyStops')}
                       </p>
                     </div>
                   )}
@@ -1812,7 +1835,7 @@ export const Sidebar = () => {
                                       : '',
                                   ]
                                     .filter(Boolean)
-                                    .join(' · ') || 'без изменений'
+                                    .join(' · ') || t('sidebar.status.noChanges')
                                 }
                                 className="rounded-full border border-border bg-muted px-2.5 py-0.5 text-meta text-muted-foreground"
                               >
@@ -1854,7 +1877,7 @@ export const Sidebar = () => {
                             undoRefinement();
                             setStatus({
                               kind: 'ok',
-                              text: 'вернул предыдущий маршрут',
+                              text: t('sidebar.status.restoredPrevious'),
                             });
                             refetchDirections();
                           }}
@@ -1886,7 +1909,7 @@ export const Sidebar = () => {
 
                 {/* === Manual add === */}
                 <section className="flex flex-col gap-2 rounded-2xl border border-border bg-card p-3 shadow-card">
-                  <h2 className="text-label font-semibold">Добавить точку</h2>
+                  <h2 className="text-label font-semibold">{t('sidebar.ui.addPoint')}</h2>
                   <div className="flex gap-2">
                     <Input
                       value={manualQuery}
@@ -1926,7 +1949,7 @@ export const Sidebar = () => {
                     className="inline-flex items-center gap-1 self-start rounded-full px-2 py-1 text-meta text-muted-foreground transition-colors hover:bg-muted hover:text-foreground max-md:min-h-11 pointer-coarse:min-h-11"
                   >
                     <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />{' '}
-                    пустая точка (выбрать кликом по карте)
+                    {t('sidebar.ui.emptyPoint')}
                   </button>
                 </section>
 
@@ -2009,7 +2032,7 @@ export const Sidebar = () => {
                     aria-hidden="true"
                   />
                 )}
-                {busy ? 'Строю маршрут…' : 'Построить маршрут'}
+                {busy ? t('sidebar.ui.plan') : t('sidebar.ui.build')}
               </Button>
             </footer>
           )}
