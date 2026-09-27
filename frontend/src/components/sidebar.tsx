@@ -22,7 +22,6 @@ import {
   SlidersHorizontal,
   Sparkles,
   Undo2,
-  X,
 } from 'lucide-react';
 import { useNavigate } from '@tanstack/react-router';
 import { cn } from '@/lib/utils';
@@ -59,13 +58,16 @@ import {
   placeCountRu,
   pluralCountRu,
 } from '@/utils/plural';
+import { newProgressId } from '@/api/progress';
 import { WaypointList } from './waypoint-list';
 import { Chip } from './parts/chip';
 import { agentErrorMessage } from './parts/guide-format';
+import { useRouteProgress } from '@/hooks/use-route-progress';
 import {
   LONG_WAIT_SECONDS,
-  routeElapsedText,
+  routeElapsedSeconds,
   routeLongWaitText,
+  routeServerStageKey,
   routeStageText,
   type RouteStage,
 } from './parts/route-progress';
@@ -121,9 +123,12 @@ interface AgentBudget {
  */
 const buildTimeBudgetOptions = (t: TFunction) => [
   { value: 30, label: t('sidebar.budgets.b30') },
+  { value: 45, label: t('sidebar.budgets.b45') },
   { value: 60, label: t('sidebar.budgets.b60') },
   { value: 120, label: t('sidebar.budgets.b120') },
+  { value: 180, label: t('sidebar.budgets.b180') },
   { value: 240, label: t('sidebar.budgets.b240') },
+  { value: 480, label: t('sidebar.budgets.b480') },
   { value: 0, label: t('sidebar.budgets.none') },
 ];
 
@@ -198,11 +203,18 @@ const buildViewSubtitles = (t: TFunction): Record<PanelView, string> => ({
  * word goes to the agent, which reads either language. Showing English but
  * sending Russian would be a lie about what was asked.
  */
-const buildHintChips = (t: TFunction): string[] => [
-  t('ask.chips.castles'),
-  t('ask.chips.churches'),
-  t('ask.chips.monasteries'),
-  t('ask.chips.food'),
+interface HintChip {
+  /** Stable id: the chip's text is a whole sentence, and it may be reworded. */
+  id: string;
+  text: string;
+}
+
+const buildHintChips = (t: TFunction): HintChip[] => [
+  { id: 'old-town', text: t('ask.chips.oldTown') },
+  { id: 'castles-churches', text: t('ask.chips.castlesChurches') },
+  { id: 'food', text: t('ask.chips.food') },
+  { id: 'evening', text: t('ask.chips.evening') },
+  { id: 'with-children', text: t('ask.chips.withChildren') },
 ];
 
 /**
@@ -212,9 +224,34 @@ const buildHintChips = (t: TFunction): string[] => [
  * later; the sidebar keeps no translation dictionary of its own.
  */
 interface FilterOption {
+  /**
+   * What the chip is called and remembered by. For a group («всё религиозное»)
+   * this is an id of its own, not a category: the codes that actually go to the
+   * agent are in `codes`.
+   */
   code: string;
+  /** Codes the option stands for; absent means just `code`. */
+  codes?: string[];
   label: string;
 }
+
+/** Codes an option sends: a single category, or every code a group covers. */
+const optionCodes = (option: FilterOption): string[] => option.codes ?? [option.code];
+
+/** A group counts as chosen only when all of its codes are. */
+const optionSelected = (option: FilterOption, selected: string[]): boolean =>
+  optionCodes(option).every((code) => selected.includes(code));
+
+/** Choosing adds or clears the whole group — half of «всё религиозное» is a bug. */
+const toggleOption = (
+  set: Dispatch<SetStateAction<string[]>>,
+  option: FilterOption
+): void =>
+  set((prev) =>
+    optionSelected(option, prev)
+      ? prev.filter((code) => !optionCodes(option).includes(code))
+      : [...new Set([...prev, ...optionCodes(option)])]
+  );
 
 /** Result type: a ready itinerary, or a grouped catalogue to choose from. */
 const buildResultModeOptions = (t: TFunction): SegmentedItem<ResultMode>[] => [
@@ -225,13 +262,22 @@ const buildResultModeOptions = (t: TFunction): SegmentedItem<ResultMode>[] => [
 /** Themes: what the tourist wants more of (soft — they never force a detour). */
 const buildInterestOptions = (t: TFunction): FilterOption[] => [
   { code: 'замок', label: t('sidebar.interests.castles') },
+  { code: 'дворец', label: t('sidebar.interests.palaces') },
+  { code: 'усадьба', label: t('sidebar.interests.estates') },
   { code: 'костёл', label: t('sidebar.interests.catholic') },
   { code: 'церковь', label: t('sidebar.interests.orthodox') },
   { code: 'монастырь', label: t('sidebar.interests.monasteries') },
   { code: 'музей', label: t('sidebar.interests.museums') },
-  { code: 'усадьба', label: t('sidebar.interests.estates') },
-  { code: 'парк', label: t('sidebar.interests.parks') },
   { code: 'памятник', label: t('sidebar.interests.monuments') },
+  { code: 'архитектура', label: t('sidebar.interests.architecture') },
+  { code: 'парк', label: t('sidebar.interests.parks') },
+  // A shortcut for one traveller's whole taste: it sends four real codes rather
+  // than inventing a parent category the data does not have.
+  {
+    code: 'религиозное',
+    codes: ['костёл', 'церковь', 'храм', 'монастырь'],
+    label: t('sidebar.interests.religious'),
+  },
 ];
 
 /**
@@ -241,13 +287,21 @@ const buildInterestOptions = (t: TFunction): FilterOption[] => [
 const buildAmenityOptions = (t: TFunction): FilterOption[] => [
   { code: 'туалет', label: t('sidebar.amenities.toilet') },
   { code: 'кафе', label: t('sidebar.amenities.cafe') },
+  { code: 'ресторан', label: t('sidebar.amenities.restaurant') },
+  { code: 'гостиница', label: t('sidebar.amenities.hotel') },
 ];
 
 /** Categories to keep out of the route. */
 const buildAvoidOptions = (t: TFunction): FilterOption[] => [
+  { code: 'музей', label: t('sidebar.avoid.museums') },
   { code: 'кладбище', label: t('sidebar.avoid.cemeteries') },
   { code: 'инфраструктура', label: t('sidebar.avoid.infrastructure') },
   { code: 'гостиница', label: t('sidebar.avoid.hotels') },
+  {
+    code: 'религиозное',
+    codes: ['костёл', 'церковь', 'храм', 'монастырь'],
+    label: t('sidebar.avoid.religious'),
+  },
 ];
 
 const buildAllFilterOptions = (t: TFunction): FilterOption[] => [
@@ -258,7 +312,9 @@ const buildAllFilterOptions = (t: TFunction): FilterOption[] => [
 
 /** The visible name of a filter code; the code itself is never translated. */
 const filterLabel = (code: string, t: TFunction): string =>
-  buildAllFilterOptions(t).find((o) => o.code === code)?.label ?? code;
+  buildAllFilterOptions(t).find(
+    (o) => o.code === code || optionCodes(o).includes(code)
+  )?.label ?? code;
 
 /**
  * Ages the tourist actually typed ("4, 7" → [4, 7]). Free text is parsed for
@@ -368,7 +424,6 @@ type GeoReason = 'unsupported' | 'failedShort' | 'denied';
 
 export const Sidebar = () => {
   const panelOpen = useCommonStore((s) => s.directionsPanelOpen);
-  const toggle = useCommonStore((s) => s.toggleDirections);
   const setWaypoint = useDirectionsStore((s) => s.setWaypoint);
   const addEmptyWaypointToEnd = useDirectionsStore(
     (s) => s.addEmptyWaypointToEnd
@@ -430,6 +485,11 @@ export const Sidebar = () => {
   // the seconds that have passed, `abortRef` is what makes «отменить» real.
   const [stage, setStage] = useState<RouteStage>('requesting');
   const [elapsed, setElapsed] = useState(0);
+  // The pipeline reports its own stages under this id, so the panel can name
+  // them instead of guessing. `null` (no id, unknown id) keeps the client's own,
+  // observable sentence on screen.
+  const [progressId, setProgressId] = useState<string | null>(null);
+  const serverStage = useRouteProgress(progressId, { enabled: busy });
   const abortRef = useRef<AbortController | null>(null);
 
   // Tick while a request is in flight. The interval is torn down with `busy`,
@@ -818,6 +878,10 @@ export const Sidebar = () => {
     abortRef.current = controller;
     setBusy(true);
     setStage('requesting');
+    // A fresh id per attempt: the pipeline reports under it, and a stale id from
+    // a previous request must never colour this one's progress.
+    const requestProgressId = newProgressId();
+    setProgressId(requestProgressId);
     setStatus(null);
     setSummary(null);
 
@@ -859,7 +923,8 @@ export const Sidebar = () => {
             source: 'agent' | 'user' | 'mine';
           }[];
         };
-      } = { query: q };
+        progress_id?: string;
+      } = { query: q, progress_id: requestProgressId };
       if (timeBudget >= 15) body.time_budget_minutes = timeBudget;
       const chosen = buildTransportOptions(t).find(
         (o) => o.value === transportRef.current
@@ -1302,14 +1367,14 @@ export const Sidebar = () => {
               >
                 {hints.map((hint) => (
                   <Chip
-                    key={hint}
+                    key={hint.id}
                     onClick={() => {
-                      setQuery(hint);
+                      setQuery(hint.text);
                       taRef.current?.focus();
                     }}
-                    data-testid={`hint-${hint}`}
+                    data-testid={`hint-${hint.id}`}
                   >
-                    {hint}
+                    {hint.text}
                   </Chip>
                 ))}
               </div>
@@ -1347,15 +1412,6 @@ export const Sidebar = () => {
                     выйти
                   </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={toggle}
-                  aria-label="закрыть панель"
-                  title="закрыть панель"
-                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground max-md:h-11 max-md:w-11 pointer-coarse:h-11 pointer-coarse:w-11"
-                >
-                  <X className="h-4 w-4" aria-hidden="true" />
-                </button>
               </div>
             ) : (
               <>
@@ -1368,16 +1424,10 @@ export const Sidebar = () => {
                     className="min-w-0 flex-1"
                     testId={(value) => `mode-${value}`}
                   />
+                  {/* No ✕ here: the panel is opened and closed by its own handle
+                      on the map's left edge — one control for one thing, and it
+                      cannot fall out of step with the panel's state. */}
                   <LanguageSwitcher className="shrink-0" />
-                  <button
-                    type="button"
-                    onClick={toggle}
-                    aria-label={t('actions.closePanel')}
-                    title={t('actions.closePanel')}
-                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground max-md:h-11 max-md:w-11 pointer-coarse:h-11 pointer-coarse:w-11"
-                  >
-                    <X className="h-4 w-4" aria-hidden="true" />
-                  </button>
                 </div>
                 <div className="mt-2.5 flex min-w-0 items-center gap-2">
                   <RouteIcon
@@ -1657,10 +1707,8 @@ export const Sidebar = () => {
                           {buildInterestOptions(t).map((option) => (
                             <Chip
                               key={option.code}
-                              selected={interests.includes(option.code)}
-                              onClick={() =>
-                                toggleCode(setInterests, option.code)
-                              }
+                              selected={optionSelected(option, interests)}
+                              onClick={() => toggleOption(setInterests, option)}
                               data-testid={`interest-${option.code}`}
                             >
                               {option.label}
@@ -1682,8 +1730,8 @@ export const Sidebar = () => {
                           {buildAvoidOptions(t).map((option) => (
                             <Chip
                               key={option.code}
-                              selected={avoid.includes(option.code)}
-                              onClick={() => toggleCode(setAvoid, option.code)}
+                              selected={optionSelected(option, avoid)}
+                              onClick={() => toggleOption(setAvoid, option)}
                               data-testid={`avoid-${option.code}`}
                             >
                               {option.label}
@@ -1987,10 +2035,14 @@ export const Sidebar = () => {
                     aria-hidden="true"
                   />
                   <span className="text-foreground">
-                    {routeStageText(stage)}
+                    {serverStage
+                      ? t(routeServerStageKey(serverStage)!)
+                      : t(stage === 'requesting'
+                          ? 'sidebar.progress.waitingRequest'
+                          : 'sidebar.progress.waitingLine')}
                   </span>
                   <span className="tabular-nums text-muted-foreground">
-                    {routeElapsedText(elapsed)}
+                    {t('sidebar.progress.elapsed', { count: routeElapsedSeconds(elapsed) })}
                   </span>
                   <button
                     type="button"
@@ -1998,11 +2050,11 @@ export const Sidebar = () => {
                     data-testid="route-cancel"
                     className="ml-auto inline-flex h-8 shrink-0 items-center rounded-full border border-border bg-card px-3 text-label font-medium text-foreground transition-colors hover:bg-muted max-md:h-11 pointer-coarse:h-11"
                   >
-                    отменить
+                    {t('sidebar.progress.cancel')}
                   </button>
                   {elapsed >= LONG_WAIT_SECONDS && (
                     <span className="basis-full text-muted-foreground">
-                      {routeLongWaitText}
+                      {t('sidebar.progress.longWait')}
                     </span>
                   )}
                 </div>

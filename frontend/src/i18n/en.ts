@@ -32,10 +32,12 @@ export const en: Dictionary = {
     placeholder: 'What would you like to see?',
     label: 'What would you like to see',
     chips: {
-      castles: 'castles',
-      churches: 'churches',
-      monasteries: 'monasteries',
-      food: 'where to eat',
+      // A chip *is* the query — it goes to the agent as written.
+      oldTown: 'Old town in two hours on foot',
+      castlesChurches: 'Castles and churches of Grodno',
+      food: 'Where to eat in the centre, on a budget',
+      evening: 'An evening walk along Sovetskaya',
+      withChildren: 'With children: parks and castles',
     },
   },
   transport: {

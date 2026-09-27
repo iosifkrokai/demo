@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 
 import {
   LONG_WAIT_SECONDS,
-  routeElapsedText,
+  routeElapsedSeconds,
   routeLongWaitText,
   routeStageText,
 } from './route-progress';
@@ -31,14 +31,14 @@ describe('routeStageText', () => {
   });
 });
 
-describe('routeElapsedText', () => {
+describe('routeElapsedSeconds', () => {
   it('reads as seconds in Russian', () => {
-    expect(routeElapsedText(0)).toBe('0 с');
-    expect(routeElapsedText(12.4)).toBe('12 с');
+    expect(routeElapsedSeconds(0)).toBe(0);
+    expect(routeElapsedSeconds(12.4)).toBe(12);
   });
 
   it('never shows a negative counter', () => {
-    expect(routeElapsedText(-3)).toBe('0 с');
+    expect(routeElapsedSeconds(-3)).toBe(0);
   });
 });
 

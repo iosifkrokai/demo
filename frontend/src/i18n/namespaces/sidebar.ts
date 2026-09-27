@@ -10,22 +10,28 @@ import type { LocaleArea } from './guide';
  */
 /** The shape both locales must satisfy — kept explicit so a missing key fails. */
 type SidebarShape = {
-  budgets: Record<'b30' | 'b60' | 'b120' | 'b240' | 'none', string>;
+  budgets: Record<
+    'b30' | 'b45' | 'b60' | 'b120' | 'b180' | 'b240' | 'b480' | 'none',
+    string
+  >;
   transport: Record<'pedestrian' | 'bicycle' | 'car' | 'any', string>;
   resultModes: Record<'route' | 'catalogue', string>;
   interests: Record<
     | 'castles'
+    | 'palaces'
+    | 'estates'
     | 'catholic'
     | 'orthodox'
     | 'monasteries'
     | 'museums'
-    | 'estates'
+    | 'monuments'
+    | 'architecture'
     | 'parks'
-    | 'monuments',
+    | 'religious',
     string
   >;
-  amenities: Record<'toilet' | 'cafe', string>;
-  avoid: Record<'cemeteries' | 'infrastructure' | 'hotels', string>;
+  amenities: Record<'toilet' | 'cafe' | 'restaurant' | 'hotel', string>;
+  avoid: Record<'museums' | 'cemeteries' | 'infrastructure' | 'hotels' | 'religious', string>;
   status: Record<
     | 'offline'
     | 'noToilets'
@@ -34,6 +40,26 @@ type SidebarShape = {
     | 'nothingFound'
     | 'noChanges'
     | 'restoredPrevious',
+    string
+  >;
+  /** The pipeline's own stages, keyed by the codes it sends (`agent/progress.py`). */
+  progress: Record<
+    | 'cancel'
+    | 'waitingRequest'
+    | 'waitingLine'
+    | 'longWait'
+    | 'elapsed_one'
+    | 'elapsed_few'
+    | 'elapsed_many'
+    | 'elapsed_other'
+    | 'interpreting_request'
+    | 'searching_places'
+    | 'selecting_candidates'
+    | 'measuring_legs'
+    | 'ordering_stops'
+    | 'drawing_line'
+    | 'checking_requirements'
+    | 'done',
     string
   >;
   geo: Record<
@@ -93,9 +119,12 @@ export const sidebarArea = {
     sidebar: {
     budgets: {
       b30: '30 мин',
+      b45: '45 мин',
       b60: '1 ч',
       b120: '2 ч',
+      b180: '3 ч',
       b240: 'полдня',
+      b480: 'весь день',
       none: 'без ограничения',
     },
     transport: {
@@ -110,22 +139,29 @@ export const sidebarArea = {
     },
     interests: {
       castles: 'замки',
+      palaces: 'дворцы',
       catholic: 'костёлы',
       orthodox: 'церкви',
       monasteries: 'монастыри',
       museums: 'музеи',
       estates: 'усадьбы',
       parks: 'парки',
+      religious: 'всё религиозное',
       monuments: 'памятники',
+      architecture: 'архитектура',
     },
     amenities: {
       toilet: 'туалет',
       cafe: 'кафе / перерыв',
+      restaurant: 'ресторан',
+      hotel: 'гостиница',
     },
     avoid: {
+      museums: 'музеи',
       cemeteries: 'кладбища',
       infrastructure: 'инфраструктура',
       hotels: 'гостиницы',
+      religious: 'религиозные места',
     },
     status: {
       offline: 'нет связи с агентом — проверьте сеть и попробуйте ещё раз',
@@ -171,6 +207,29 @@ export const sidebarArea = {
       hours_few: '{{count}} ч',
       hours_many: '{{count}} ч',
     },
+    // What the pipeline itself reports while a route is being built. Codes come
+    // from the backend (`agent/progress.py`); the wording is ours, in both
+    // languages, because the server does not speak one.
+    progress: {
+      cancel: 'отменить',
+      elapsed_one: '{{count}} с',
+      elapsed_few: '{{count}} с',
+      elapsed_many: '{{count}} с',
+      elapsed_other: '{{count}} с',
+      waitingRequest: 'отправил запрос — жду план от агента',
+      waitingLine: 'план пришёл — рисую маршрут по дорогам',
+      longWait: 'агент всё ещё строит — иногда это занимает до минуты',
+      interpreting_request: 'определяю, что вы просите',
+      searching_places: 'ищу точки рядом',
+      selecting_candidates: 'отбираю, что взять',
+      measuring_legs: 'считаю дорогу между точками',
+      ordering_stops: 'собираю порядок остановок',
+      drawing_line: 'рисую линию по дорогам',
+      checking_requirements: 'проверяю, что всё выполнено',
+      done: 'готово',
+    },
+
+
     ui: {
       timeLabel: 'сколько есть времени',
       transportLabel: 'на чём',
@@ -198,9 +257,12 @@ export const sidebarArea = {
     sidebar: {
     budgets: {
       b30: '30 min',
+      b45: '45 min',
       b60: '1 hr',
       b120: '2 hrs',
+      b180: '3 hrs',
       b240: 'half a day',
+      b480: 'a whole day',
       none: 'no limit',
     },
     transport: {
@@ -215,22 +277,29 @@ export const sidebarArea = {
     },
     interests: {
       castles: 'castles',
+      palaces: 'palaces',
       catholic: 'Catholic churches',
       orthodox: 'Orthodox churches',
       monasteries: 'monasteries',
       museums: 'museums',
       estates: 'manor houses',
       parks: 'parks',
+      religious: 'all religious sites',
       monuments: 'monuments',
+      architecture: 'architecture',
     },
     amenities: {
       toilet: 'toilet',
       cafe: 'cafe / a break',
+      restaurant: 'restaurant',
+      hotel: 'hotel',
     },
     avoid: {
+      museums: 'museums',
       cemeteries: 'cemeteries',
       infrastructure: 'infrastructure',
       hotels: 'hotels',
+      religious: 'religious sites',
     },
     status: {
       offline: 'the agent is unreachable — check the network and try again',
@@ -274,6 +343,28 @@ export const sidebarArea = {
       hours_one: '{{count}} hr',
       hours_other: '{{count}} hrs',
     },
+    progress: {
+      cancel: 'cancel',
+      // English plural rules only ever pick _one/_other, but the dictionary
+      // shape is shared with Russian, so the categories both languages need are
+      // declared here rather than left for one of them to be missing a key.
+      elapsed_one: '{{count}} s',
+      elapsed_other: '{{count}} s',
+      elapsed_few: '{{count}} s',
+      elapsed_many: '{{count}} s',
+      waitingRequest: 'request sent — waiting for the plan',
+      waitingLine: 'the plan is here — drawing the route along the roads',
+      longWait: 'the agent is still working — this sometimes takes a minute',
+      interpreting_request: 'working out what you asked for',
+      searching_places: 'looking for places nearby',
+      selecting_candidates: 'choosing what to include',
+      measuring_legs: 'measuring the way between stops',
+      ordering_stops: 'putting the stops in order',
+      drawing_line: 'drawing the line along the roads',
+      checking_requirements: 'checking that everything is honoured',
+      done: 'done',
+    },
+
     ui: {
       timeLabel: 'how much time you have',
       transportLabel: 'how you travel',

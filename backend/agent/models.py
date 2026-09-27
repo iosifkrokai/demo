@@ -93,6 +93,10 @@ class RouteChanges(BaseModel):
 class GenerateReq(BaseModel):
     """POST /routes/generate body."""
     query: str = Field(min_length=3, max_length=500)
+    # Optional id the client offers so it can ask GET /routes/progress/{id} what
+    # the pipeline is doing. Absent → nothing is tracked and nothing changes
+    # (the benchmarks and the golden harness send no id).
+    progress_id: str | None = Field(default=None, max_length=64)
     # The only limit on a route is the time the tourist names. 0 (and a missing
     # field) both mean "без ограничения" — the UI selector's default — so they map
     # to no budget at all instead of a zero-minute one.

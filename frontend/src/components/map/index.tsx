@@ -6,9 +6,6 @@ import {
   Marker,
   Popup,
   type MapRef,
-  NavigationControl,
-  GeolocateControl,
-  type GeolocateErrorEvent,
 } from 'react-map-gl/maplibre';
 import type { MaplibreTerradrawControl } from '@watergis/maplibre-gl-terradraw';
 import type maplibregl from 'maplibre-gl';
@@ -19,19 +16,13 @@ import {
   buildHeightRequest,
   VALHALLA_CLIENT_HEADERS,
 } from '@/utils/valhalla';
-import { DrawControl } from './draw-control';
 import type { Summary } from '@/components/types';
-import { PlannerEntry } from './parts/planner-entry';
+import { PanelToggle } from './parts/panel-toggle';
 import { useMediaQuery } from '@/hooks/use-media-query';
 
-import { MapStyleControl } from './map-style-control';
 import { ToolButton } from './parts/tool-button';
 import { getInitialMapStyle, getCustomStyle, getMapStyleUrl } from './utils';
-import {
-  CLICK_DELAY_MS,
-  DEFAULT_MAP_STYLE_ID,
-  DOUBLE_TAP_THRESHOLD_MS,
-} from './constants';
+import { CLICK_DELAY_MS, DOUBLE_TAP_THRESHOLD_MS } from './constants';
 import type { MapStyleType } from './types';
 import {
   isMissingVerifiedLine,
@@ -53,6 +44,7 @@ import {
 } from '@/components/tiles/valhalla-layers';
 import { MarkerIcon, type MarkerColor } from './parts/marker-icon';
 import { ServicesLayer } from './parts/services-layer';
+import { ServicesSummary } from './parts/services-summary';
 import { PlaceCardPopup } from './parts/place-card-popup';
 import { PlaceMarkerLabel } from './parts/place-marker-label';
 import { maxBounds } from './constants';
@@ -72,7 +64,6 @@ import {
   useIsochronesQuery,
   useReverseGeocodeIsochrones,
 } from '@/hooks/use-isochrones-queries';
-import { toast } from 'sonner';
 
 const { center, zoom: zoom_initial } = getInitialMapPosition();
 
@@ -104,7 +95,6 @@ export const MapComponent = () => {
   // panel is out of the way; on a phone the panel is a bottom sheet, so the
   // pill must stay regardless.
   const isWideViewport = useMediaQuery('(min-width: 768px)');
-  const showPlannerEntry = !directionsPanelOpen || !isWideViewport;
   const updateSettings = useCommonStore((state) => state.updateSettings);
   const setMapReady = useCommonStore((state) => state.setMapReady);
   const { style } = useSearch({ from: '/$activeTab' });
@@ -116,10 +106,12 @@ export const MapComponent = () => {
   const waypoints = useDirectionsStore((state) => state.waypoints);
   const placeDetails = useDirectionsStore((state) => state.placeDetails);
   const routeResult = useDirectionsStore((state) => state.results.data);
-  // Off by default and asked for by hand: a guide that pushes cafés uninvited
-  // stops being a guide. The same answer feeds the map marks and the panel rows.
+  // Off by default and asked for by hand: a guide that *marks* cafés uninvited
+  // stops being a guide. The measurement itself runs whenever there is a route,
+  // because the count is what the guide owes the tourist («по пути: 12 мест») —
+  // it is the marks appearing unasked that would be pushy, not the number.
   const [showServices, setShowServices] = useState(false);
-  const services = useServicesAlong(routeResult, { enabled: showServices });
+  const services = useServicesAlong(routeResult, { enabled: Boolean(routeResult) });
   const setActiveRouteIndex = useDirectionsStore(
     (state) => state.setActiveRouteIndex
   );
@@ -163,8 +155,12 @@ export const MapComponent = () => {
   const [currentMapStyle, setCurrentMapStyle] = useState<MapStyleType>(
     getInitialMapStyle(style)
   );
-  const [customStyleData, setCustomStyleData] =
-    useState<maplibregl.StyleSpecification | null>(() => getCustomStyle());
+  // Selectable from the URL only: the map's own style switcher was one of the
+  // controls in the top-right cluster the owner asked to remove, and a style is
+  // chosen once, not while walking.
+  const [customStyleData] = useState<maplibregl.StyleSpecification | null>(() =>
+    getCustomStyle()
+  );
 
   const resolvedMapStyle = useMemo(() => {
     if (currentMapStyle === 'custom') {
@@ -207,60 +203,6 @@ export const MapComponent = () => {
     }
   }, []);
 
-  const handleStyleChange = useCallback((style: MapStyleType) => {
-    setCurrentMapStyle(style);
-
-    const url = new URL(window.location.href);
-    if (style !== DEFAULT_MAP_STYLE_ID) {
-      url.searchParams.set('style', style);
-    } else {
-      url.searchParams.delete('style');
-    }
-    window.history.replaceState({}, '', url.toString());
-  }, []);
-
-  const handleCustomStyleLoaded = useCallback(
-    (styleData: maplibregl.StyleSpecification) => {
-      setCustomStyleData(styleData);
-      setCurrentMapStyle('custom');
-
-      const url = new URL(window.location.href);
-      url.searchParams.set('style', 'custom');
-      window.history.replaceState({}, '', url.toString());
-    },
-    []
-  );
-
-  const updateExcludePolygons = useCallback(() => {
-    if (!drawRef.current) return;
-    const terraDrawInstance = drawRef.current.getTerraDrawInstance();
-    if (!terraDrawInstance) return;
-
-    const snapshot = terraDrawInstance.getSnapshot();
-    const excludePolygons: number[][][] = [];
-
-    snapshot.forEach((feature) => {
-      if (feature.geometry.type === 'Polygon') {
-        const coords = feature.geometry.coordinates[0];
-        if (coords) {
-          const lngLatArray = coords.map((coord) => [
-            coord[0] ?? 0,
-            coord[1] ?? 0,
-          ]);
-          excludePolygons.push(lngLatArray);
-        }
-      }
-    });
-
-    updateSettings('exclude_polygons', excludePolygons as unknown as string);
-
-    if (activeTab === 'directions') {
-      refetchDirections();
-    } else {
-      refetchIsochrones();
-    }
-  }, [activeTab, refetchDirections, updateSettings, refetchIsochrones]);
-
   const updateWaypointPosition = useCallback(
     (object: { latLng: { lat: number; lng: number }; index: number }) => {
       setWaypointFromCoords(
@@ -282,6 +224,14 @@ export const MapComponent = () => {
     },
     [reverseGeocodeIsochrones, refetchIsochrones]
   );
+
+  /** The panel's handle does both: it closes what is open, opens what is not. */
+  const handlePanelToggle = useCallback(() => {
+    toggleDirections();
+    if (!directionsPanelOpen) {
+      navigate({ params: { activeTab: 'directions' } });
+    }
+  }, [directionsPanelOpen, toggleDirections, navigate]);
 
   const handleNavigateToTab = useCallback(
     (tab: string) => {
@@ -824,16 +774,6 @@ export const MapComponent = () => {
     [setWaypoint, t]
   );
 
-  const handleGeolocateError = useCallback((error: GeolocateErrorEvent) => {
-    const defaultMessage = t('sidebar.geo.failedShort');
-    if (error.PERMISSION_DENIED) {
-      toast.error(`${t('sidebar.geo.label')}: ${t('sidebar.geo.denied')}`);
-      return;
-    }
-
-    toast.error(defaultMessage);
-  }, []);
-
   return (
     <>
       <Map
@@ -868,17 +808,6 @@ export const MapComponent = () => {
         data-testid="map"
         id="mainMap"
       >
-        <NavigationControl />
-        <GeolocateControl
-          onGeolocate={handleGeolocate}
-          onError={handleGeolocateError}
-        />
-        <DrawControl onUpdate={updateExcludePolygons} controlRef={drawRef} />
-        <MapStyleControl
-          customStyleData={customStyleData}
-          onStyleChange={handleStyleChange}
-          onCustomStyleLoaded={handleCustomStyleLoaded}
-        />
         <RouteLines />
         <HighlightSegment />
         <IsochronePolygons />
@@ -978,12 +907,21 @@ export const MapComponent = () => {
 
       {routeResult && (
         <div className="absolute bottom-40 right-3 z-10 md:right-4">
-          <ToolButton
-            data-testid="services-toggle"
-            title={t('map.servicesToggle')}
+          <ServicesSummary
+            items={services.items}
+            state={services.state}
+            maxOffLineM={services.maxOffLineM}
+            capped={services.capped}
             active={showServices}
-            icon={<Coffee className="h-4 w-4" />}
-            onClick={() => setShowServices((on) => !on)}
+            toggle={
+              <ToolButton
+                data-testid="services-toggle"
+                title={t('map.servicesToggle')}
+                active={showServices}
+                icon={<Coffee className="h-4 w-4" />}
+                onClick={() => setShowServices((on) => !on)}
+              />
+            }
           />
         </div>
       )}
@@ -1011,18 +949,23 @@ export const MapComponent = () => {
         </div>
       )}
 
-      <div
-        className="absolute top-4 left-4 z-10 flex flex-col gap-2 md:left-[calc(var(--panel-width,0px)+1rem)]"
-        aria-label="быстрый доступ к панели маршрута"
-        hidden={!showPlannerEntry}
-      >
-        <PlannerEntry
-          onClick={() => handleNavigateToTab('directions')}
-          open={directionsPanelOpen}
-        />
-      </div>
+      {/* The panel's own handle, on the panel's own edge — the same line the
+          resize grip sits on, so opening, closing and resizing read as one
+          control instead of three buttons fighting for the map's corners. The
+          label is the only thing said out loud, for a screen reader. */}
+      <PanelToggle
+        open={directionsPanelOpen}
+        onToggle={handlePanelToggle}
+        label={t('map.panelToggle')}
+        className="left-[min(var(--panel-width,0px),calc(100vw-1.75rem))]"
+      />
 
-      {provenance && (
+      {/* Only the two cases that carry information are shown. A line this app
+          drew itself is the ordinary case; a badge saying so is noise a tourist
+          has to read past (the owner read it as such). What must never be
+          silent is an agent plan whose line is missing, and where a verified
+          line came from. */}
+      {provenance === 'agent' && (
         <div
           role="status"
           data-testid="route-provenance"
@@ -1030,11 +973,7 @@ export const MapComponent = () => {
           data-verified-line={missingVerifiedLine ? 'false' : 'true'}
           className="absolute left-4 top-20 z-10 max-w-[calc(100vw-2rem)] rounded-full border border-border bg-card px-3 py-1.5 text-meta text-muted-foreground shadow-card md:left-[calc(var(--panel-width,0px)+1rem)]"
         >
-          {missingVerifiedLine
-            ? t('map.lineMissing')
-            : provenance === 'agent'
-              ? t('map.lineFromAgent')
-              : t('map.lineFromApp')}
+          {missingVerifiedLine ? t('map.lineMissing') : t('map.lineFromAgent')}
         </div>
       )}
     </>

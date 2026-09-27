@@ -21,6 +21,9 @@ const mockCommonState = vi.hoisted(() => ({
   directionsPanelOpen: true,
 }));
 
+/** The panel's handle toggles the store, so the toggle is a spy here. */
+const mockToggleDirections = vi.hoisted(() => vi.fn());
+
 const mockQueryRenderedFeatures = vi.hoisted(() =>
   vi.fn(() => [] as unknown[])
 );
@@ -149,6 +152,7 @@ vi.mock('@/stores/common-store', () => ({
         return mockCommonState.directionsPanelOpen;
       },
       settingsPanelOpen: false,
+      toggleDirections: mockToggleDirections,
       updateSettings: vi.fn(),
       focus: null,
       guideFix: null,
@@ -352,24 +356,24 @@ describe('MapComponent', () => {
     expect(screen.getByTestId('map')).toBeInTheDocument();
   });
 
-  it('should render navigation control', () => {
+  // The four controls that used to sit in the map's top-right corner are gone.
+  // They were chrome borrowed from a route planner — zoom, geolocate, a polygon
+  // excluder, a style switcher — and the owner read them as a second, native row
+  // of buttons competing with the panel's own controls in the same corner. The
+  // map keeps gestures (pinch, scroll, drag) and the panel keeps its own «use my
+  // location», so nothing became unreachable. This test keeps the corner empty:
+  // one of them quietly coming back is the regression to catch.
+  it('держит верхний правый угол карты без кнопок', () => {
     render(<MapComponent />);
-    expect(screen.getByTestId('navigation-control')).toBeInTheDocument();
-  });
 
-  it('should render geolocate control', () => {
-    render(<MapComponent />);
-    expect(screen.getByTestId('geolocate-control')).toBeInTheDocument();
-  });
-
-  it('should render draw control', () => {
-    render(<MapComponent />);
-    expect(screen.getByTestId('draw-control')).toBeInTheDocument();
-  });
-
-  it('should render map style control', () => {
-    render(<MapComponent />);
-    expect(screen.getByTestId('map-style-control')).toBeInTheDocument();
+    for (const id of [
+      'navigation-control',
+      'geolocate-control',
+      'draw-control',
+      'map-style-control',
+    ]) {
+      expect(screen.queryByTestId(id)).not.toBeInTheDocument();
+    }
   });
 
   it('should render route lines component', () => {
@@ -392,9 +396,19 @@ describe('MapComponent', () => {
     expect(screen.getByTestId('isochrone-locations')).toBeInTheDocument();
   });
 
-  it('should render left-side Directions shortcut button', () => {
+  // The panel's handle lives on the panel's own edge — the line the resize grip
+  // sits on — not in a corner of the map. It says what it does out loud only to
+  // a screen reader; visually it is a chevron pointing the way the panel moves.
+  it('держит ручку панели на её собственном крае', () => {
     render(<MapComponent />);
-    expect(screen.getByTestId('tab-directions-button')).toBeInTheDocument();
+
+    const handle = screen.getByTestId('panel-toggle');
+    expect(handle).toHaveAttribute(
+      'aria-label',
+      'открыть или закрыть панель маршрута'
+    );
+    expect(handle.className).toContain('top-1/2');
+    expect(handle.className).toContain('--panel-width');
   });
 
   // The upstream map put four more controls on the canvas: an elevation
@@ -409,10 +423,8 @@ describe('MapComponent', () => {
   it('should render no map controls beyond the Directions panel shortcut', () => {
     render(<MapComponent />);
 
-    // The group label is Russian like the rest of the tourist-facing UI; the
-    // single shortcut inside it is the only panel entry point the map keeps.
-    const shortcuts = screen.getByLabelText('быстрый доступ к панели маршрута');
-    expect(within(shortcuts).getAllByRole('button')).toHaveLength(1);
+    // The panel's handle is the only entry point the map keeps, and it is not
+    // in this corner: it is on the panel's edge (see the test above).
     expect(screen.queryByTestId('heightgraph-toggle')).not.toBeInTheDocument();
     expect(
       screen.queryByTestId('heightgraph-hover-marker')
@@ -422,11 +434,12 @@ describe('MapComponent', () => {
     ).not.toBeInTheDocument();
   });
 
-  it('hides the planner entry while the docked panel is open on a wide viewport', () => {
-    // The pill sits at the top-left, which is where the docked panel lives on a
-    // wide screen: painting both put the pill on top of the panel's own title
-    // and tabs. jsdom answers every media query with `matches: false`, so the
-    // wide case has to be stated explicitly here.
+  it('держит ручку панели на месте в обоих состояниях', () => {
+    // The pill it replaced disappeared once the panel was open, which is why the
+    // header needed a second control to close it. A toggle stays put and means
+    // the same thing either way — that is the point of tying it to the panel's
+    // edge rather than to the map's corner. jsdom answers every media query with
+    // `matches: false`, so the wide case is stated explicitly.
     const original = window.matchMedia;
     window.matchMedia = ((query: string) => ({
       matches: true,
@@ -439,37 +452,57 @@ describe('MapComponent', () => {
       dispatchEvent: () => false,
     })) as unknown as typeof window.matchMedia;
 
-    const group = () => screen.getByLabelText('быстрый доступ к панели маршрута');
-
     try {
       mockCommonState.directionsPanelOpen = true;
       render(<MapComponent />);
-      expect(group()).toHaveAttribute('hidden');
+      expect(screen.getByTestId('panel-toggle')).toHaveAttribute(
+        'aria-expanded',
+        'true'
+      );
 
       cleanup();
 
       mockCommonState.directionsPanelOpen = false;
       render(<MapComponent />);
-      expect(group()).not.toHaveAttribute('hidden');
+      expect(screen.getByTestId('panel-toggle')).toHaveAttribute(
+        'aria-expanded',
+        'false'
+      );
     } finally {
       mockCommonState.directionsPanelOpen = true;
       window.matchMedia = original;
     }
   });
 
-  it('should call navigate when Directions shortcut button is clicked', async () => {
+  it('ручка открывает панель, когда её нет, и закрывает, когда она есть', async () => {
     const mockNavigate = vi.fn();
     const router = await import('@tanstack/react-router');
     vi.mocked(router.useNavigate).mockReturnValue(mockNavigate);
-
     const user = userEvent.setup();
+
+    // Open: the handle closes it and does not lead anywhere — closing is the
+    // whole action, and wandering to the directions tab would be a side effect.
+    mockCommonState.directionsPanelOpen = true;
     render(<MapComponent />);
+    await user.click(screen.getByTestId('panel-toggle'));
+    expect(mockToggleDirections).toHaveBeenCalled();
+    expect(mockNavigate).not.toHaveBeenCalled();
 
-    await user.click(screen.getByTestId('tab-directions-button'));
+    cleanup();
 
-    expect(mockNavigate).toHaveBeenCalledWith({
-      params: { activeTab: 'directions' },
-    });
+    // Closed: the handle opens it and brings the panel's own tab into view.
+    mockToggleDirections.mockClear();
+    mockCommonState.directionsPanelOpen = false;
+    try {
+      render(<MapComponent />);
+      await user.click(screen.getByTestId('panel-toggle'));
+      expect(mockToggleDirections).toHaveBeenCalled();
+      expect(mockNavigate).toHaveBeenCalledWith({
+        params: { activeTab: 'directions' },
+      });
+    } finally {
+      mockCommonState.directionsPanelOpen = true;
+    }
   });
 
   it('should NOT open the Valhalla coordinate popup on a plain map click', async () => {
@@ -549,30 +582,11 @@ describe('MapComponent', () => {
     vi.useRealTimers();
   });
 
-  describe('GeolocateControl error handling', () => {
-    it('should show default error toast when geolocate fails', async () => {
-      const user = userEvent.setup();
-      render(<MapComponent />);
-
-      await user.click(screen.getByTestId('trigger-geolocate-error'));
-
-      // The text now comes from the dictionary (RU/EN), not from a literal.
-      expect(mockToast.error).toHaveBeenCalledWith('не удалось определить');
-    });
-
-    it('should show permission denied error toast when location permission is denied', async () => {
-      const user = userEvent.setup();
-      render(<MapComponent />);
-
-      await user.click(
-        screen.getByTestId('trigger-geolocate-permission-denied')
-      );
-
-      expect(mockToast.error).toHaveBeenCalledWith(
-        'геолокация: браузер запретил доступ'
-      );
-    });
-  });
+  // The map's own GeolocateControl is gone with the rest of the corner. The
+  // tourist still has geolocation — the panel's «use my location» races the
+  // browser's answer against its own timer and reports failure inside the panel
+  // (see the sidebar specs) — so no user-facing feedback was lost with the
+  // control, and the toasts it used to raise are gone with it.
 
   describe('double-click and double-tap behavior', () => {
     it('should not show popup on double-click (zoom only)', async () => {
@@ -770,7 +784,7 @@ describe('MapComponent', () => {
       expect(chip).toHaveTextContent('проверенного плана агента');
     });
 
-    it('states that a hand-built route is drawn by the app itself', () => {
+    it('молчит про линию, которую приложение нарисовало само', () => {
       mockDirectionsState.current = {
         ...mockDirectionsState.current,
         results: {
@@ -790,9 +804,11 @@ describe('MapComponent', () => {
 
       render(<MapComponent />);
 
-      const chip = screen.getByTestId('route-provenance');
-      expect(chip).toHaveAttribute('data-provenance', 'client');
-      expect(chip).toHaveTextContent('построена в приложении');
+      // A line this app drew itself is the ordinary case, and the owner read the
+      // badge saying so as noise to scroll past. Only the two cases that carry
+      // information speak: where a verified line came from, and an agent plan
+      // whose line is missing.
+      expect(screen.queryByTestId('route-provenance')).not.toBeInTheDocument();
     });
 
     it('says "no verified line" instead of showing a different one', () => {

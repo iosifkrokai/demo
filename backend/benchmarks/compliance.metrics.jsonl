@@ -1,0 +1,14 @@
+{"case": "all_churches_catalogue", "passed": false, "reason": "wrong_status", "status": "degraded"}
+{"case": "avoid_cafe_want_parks", "passed": true, "reason": "ok", "status": "ready"}
+{"case": "avoid_temples", "passed": true, "reason": "ok", "status": "ready"}
+{"case": "castles_half_day", "passed": true, "reason": "ok", "status": "ready"}
+{"case": "family_walk_en", "passed": false, "reason": "missing_mandatory_category", "status": "ready"}
+{"case": "family_walk_ru", "passed": false, "reason": "missing_mandatory_category", "status": "ready"}
+{"case": "hard_toilet_soft_cafe_en", "passed": false, "reason": "missing_mandatory_category", "status": "ready"}
+{"case": "museums_budget_en", "passed": true, "reason": "ok", "status": "ready"}
+{"case": "museums_budget_ru", "passed": true, "reason": "ok", "status": "ready"}
+{"case": "named_farnyi", "passed": true, "reason": "ok", "status": "ready"}
+{"case": "named_mir_castle", "passed": true, "reason": "ok", "status": "ready"}
+{"case": "out_of_region_vilnius", "passed": false, "reason": "wrong_status", "status": "ready"}
+{"case": "vague_no_anchor", "passed": true, "reason": "ok", "status": "ready"}
+{"case": "__overall__", "compliance_rate": 0.666667, "failures_by_reason": {"missing_mandatory_category": 3, "wrong_status": 2}, "n_units": 15, "n_units_passed": 10}

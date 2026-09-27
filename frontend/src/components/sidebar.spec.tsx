@@ -162,8 +162,28 @@ const agentFetch = () => {
     sentBodies.push(JSON.parse(String(init.body)));
     return { ok: true, json: async () => AGENT_ANSWER };
   });
-  vi.stubGlobal('fetch', fetchMock);
+  stubAgentFetch(fetchMock);
   return { fetchMock, sentBodies, body: (i: number) => sentBodies[i] ?? {} };
+};
+
+/**
+ * The panel also asks `GET /routes/progress/{id}` while a request is in flight.
+ * These specs are about the plan request, so the poll is answered right here —
+ * «the server does not know this id», which is exactly what a spec without a
+ * pipeline should say — and never reaches the mock under test. Call counts and
+ * recorded bodies therefore stay about plans, as every assertion here expects.
+ */
+const stubAgentFetch = (mock: (url: string, init: RequestInit) => Promise<unknown>) => {
+  vi.stubGlobal('fetch', (url: string, init?: RequestInit) => {
+    if (String(url).includes('/routes/progress/')) {
+      return Promise.resolve({
+        ok: false,
+        status: 404,
+        json: async () => ({ detail: { reason: 'unknown_progress_id' } }),
+      } as unknown as Response);
+    }
+    return mock(url, init as RequestInit);
+  });
 };
 
 describe('Sidebar', () => {
@@ -231,7 +251,7 @@ describe('Sidebar', () => {
       ok: true,
       json: async () => AGENT_ANSWER,
     }));
-    vi.stubGlobal('fetch', fetchMock);
+    stubAgentFetch(fetchMock);
 
     const user = userEvent.setup({ delay: null });
     render(<Sidebar />);
@@ -253,7 +273,7 @@ describe('Sidebar', () => {
       ok: true,
       json: async () => AGENT_ANSWER,
     }));
-    vi.stubGlobal('fetch', fetchMock);
+    stubAgentFetch(fetchMock);
 
     const user = userEvent.setup({ delay: null });
     render(<Sidebar />);
@@ -273,7 +293,7 @@ describe('Sidebar', () => {
       ok: true,
       json: async () => AGENT_ANSWER,
     }));
-    vi.stubGlobal('fetch', fetchMock);
+    stubAgentFetch(fetchMock);
 
     const user = userEvent.setup({ delay: null });
     render(<Sidebar />);
@@ -297,7 +317,7 @@ describe('Sidebar', () => {
       ok: true,
       json: async () => AGENT_ANSWER,
     }));
-    vi.stubGlobal('fetch', fetchMock);
+    stubAgentFetch(fetchMock);
 
     const user = userEvent.setup({ delay: null });
     render(<Sidebar />);
@@ -319,7 +339,7 @@ describe('Sidebar', () => {
       ok: true,
       json: async () => ({ ...AGENT_ANSWER, costing: 'pedestrian' }),
     }));
-    vi.stubGlobal('fetch', fetchMock);
+    stubAgentFetch(fetchMock);
 
     const user = userEvent.setup({ delay: null });
     render(<Sidebar />);
@@ -344,7 +364,7 @@ describe('Sidebar', () => {
       ok: true,
       json: async () => AGENT_ANSWER,
     }));
-    vi.stubGlobal('fetch', fetchMock);
+    stubAgentFetch(fetchMock);
 
     const user = userEvent.setup({ delay: null });
     render(<Sidebar />);
@@ -368,7 +388,7 @@ describe('Sidebar', () => {
       sentBodies.push(String(init.body));
       return { ok: true, json: async () => AGENT_ANSWER };
     });
-    vi.stubGlobal('fetch', fetchMock);
+    stubAgentFetch(fetchMock);
 
     const user = userEvent.setup({ delay: null });
     render(<Sidebar />);
@@ -502,13 +522,15 @@ describe('Sidebar', () => {
 
   // ── The redesign (DESIGN.md phases 1–2) ────────────────────────────────────
 
-  it('keeps the close button out of the title’s way', () => {
+  it('держит шапку без крестика: панель закрывает её же ручка', () => {
     render(<Sidebar />);
 
-    // It sits in the header's flex row, never absolutely placed over the text.
+    // The panel is opened *and closed* by one handle on the map's left edge
+    // (panel-toggle), so a second, ✕-shaped control in the header would be a
+    // second way to say the same thing — and could fall out of step with it.
     expect(
-      screen.getByRole('button', { name: 'закрыть панель' }).className
-    ).not.toMatch(/absolute/);
+      screen.queryByRole('button', { name: 'закрыть панель' })
+    ).not.toBeInTheDocument();
     expect(screen.getByText('AI-гид по Гродно')).toBeInTheDocument();
   });
 
@@ -523,8 +545,16 @@ describe('Sidebar', () => {
     expect(
       screen.getByPlaceholderText('Что хотите посмотреть?')
     ).toBeInTheDocument();
-    for (const hint of ['замки', 'костёлы', 'монастыри', 'где поесть']) {
-      expect(screen.getByRole('button', { name: hint })).toBeInTheDocument();
+    // The chips are whole questions, not filter names: what is on them is what
+    // the agent receives, so each one has to read as something a tourist says.
+    for (const [id, said] of [
+      ['old-town', 'Старый город за два часа пешком'],
+      ['castles-churches', 'Замки и костёлы Гродно'],
+      ['food', 'Где поесть в центре, недорого'],
+      ['evening', 'Вечерняя прогулка по Советской'],
+      ['with-children', 'С детьми: парки и замки'],
+    ] as const) {
+      expect(screen.getByTestId(`hint-${id}`)).toHaveTextContent(said);
     }
     // nothing typed yet → nothing to build
     expect(buildButton()).toBeDisabled();
@@ -536,14 +566,15 @@ describe('Sidebar', () => {
     const user = userEvent.setup({ delay: null });
     render(<Sidebar />);
 
-    await user.click(screen.getByTestId('hint-замки'));
+    await user.click(screen.getByTestId('hint-old-town'));
     // the chip only fills the field — the tourist still decides when to go
-    expect(askField()).toHaveValue('замки');
+    expect(askField()).toHaveValue('Старый город за два часа пешком');
     expect(fetchMock).not.toHaveBeenCalled();
 
     await user.type(askField(), '{Enter}');
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
-    expect(body(0).query).toBe('замки');
+    // And what the agent gets is the sentence on the chip, word for word.
+    expect(body(0).query).toBe('Старый город за два часа пешком');
   });
 
   it('sends the time budget the tourist picked', async () => {
@@ -619,7 +650,7 @@ describe('Sidebar', () => {
           answer = resolve;
         }),
     }));
-    vi.stubGlobal('fetch', fetchMock);
+    stubAgentFetch(fetchMock);
 
     const user = userEvent.setup({ delay: null });
     render(<Sidebar />);
@@ -649,7 +680,7 @@ describe('Sidebar', () => {
           fail = reject;
         })
     );
-    vi.stubGlobal('fetch', fetchMock);
+    stubAgentFetch(fetchMock);
 
     const user = userEvent.setup({ delay: null });
     render(<Sidebar />);
@@ -675,11 +706,48 @@ describe('Sidebar', () => {
     );
   });
 
+  it('говорит стадию словами конвейера, когда он её называет', async () => {
+    // The pipeline reports its own stages; the panel must prefer them over its
+    // own (honest but vaguer) «отправил запрос», and it must never blend the two.
+    const fetchMock = vi.fn(async (url: string) => {
+      if (String(url).includes('/routes/progress/')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            stage: 'ordering_stops',
+            done: false,
+            failed: false,
+            elapsed_ms: 4200,
+          }),
+        };
+      }
+      // The plan request itself never answers: the stage is what is under test.
+      return new Promise(() => undefined);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const user = userEvent.setup({ delay: null });
+    render(<Sidebar />);
+
+    await user.type(askField(), 'замки Гродно');
+    await user.click(buildButton());
+
+    const announcement = await screen.findByTestId('route-progress');
+    await waitFor(() =>
+      expect(announcement).toHaveTextContent('собираю порядок остановок')
+    );
+    expect(announcement).not.toHaveTextContent('отправил запрос');
+    expect(fetchMock.mock.calls.some((c) => String(c[0]).includes('/routes/progress/'))).toBe(
+      true
+    );
+  });
+
   it('shows a Russian network hint instead of browser “Failed to fetch”', async () => {
     const fetchMock = vi.fn(async () => {
       throw new TypeError('Failed to fetch');
     });
-    vi.stubGlobal('fetch', fetchMock);
+    stubAgentFetch(fetchMock);
 
     const user = userEvent.setup({ delay: null });
     render(<Sidebar />);
@@ -700,7 +768,7 @@ describe('Sidebar', () => {
       text: async () =>
         JSON.stringify({ detail: 'upstream Valhalla timed out' }),
     }));
-    vi.stubGlobal('fetch', fetchMock);
+    stubAgentFetch(fetchMock);
 
     const user = userEvent.setup({ delay: null });
     render(<Sidebar />);
@@ -812,7 +880,7 @@ describe('Sidebar', () => {
       ok: true,
       json: async () => withToilet,
     }));
-    vi.stubGlobal('fetch', fetchMock);
+    stubAgentFetch(fetchMock);
 
     const user = userEvent.setup({ delay: null });
     render(<Sidebar />);
@@ -856,7 +924,7 @@ describe('Sidebar', () => {
       text: async () =>
         JSON.stringify({ detail: 'upstream Valhalla timed out' }),
     }));
-    vi.stubGlobal('fetch', fetchMock);
+    stubAgentFetch(fetchMock);
 
     const user = userEvent.setup({ delay: null });
     render(<Sidebar />);
@@ -971,6 +1039,47 @@ describe('Sidebar', () => {
     expect(body(0).query).toBe('старый Гродно');
   });
 
+  it('группа фильтров уходит всеми своими кодами и снимается целиком', async () => {
+    const { fetchMock, body } = agentFetch();
+
+    const user = userEvent.setup({ delay: null });
+    render(<Sidebar />);
+
+    await openAdvanced(user);
+
+    // «всё религиозное» is a label for four real categories — the agent gets the
+    // codes themselves, because the data has no parent category to send. The
+    // chip is chosen only when every code it stands for is.
+    const group = () => screen.getByTestId('interest-религиозное');
+    expect(group()).toHaveAttribute('aria-pressed', 'false');
+
+    await user.click(group());
+    expect(group()).toHaveAttribute('aria-pressed', 'true');
+    // …and the single chips it covers read as chosen too: one state, two views.
+    expect(screen.getByTestId('interest-костёл')).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+
+    await user.type(askField(), 'старый город');
+    await user.click(buildButton());
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(body(0).interests).toEqual([
+      'костёл',
+      'церковь',
+      'храм',
+      'монастырь',
+    ]);
+
+    // Clicking the group again clears the whole thing, never half of it.
+    await user.click(group());
+    expect(group()).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByTestId('interest-костёл')).toHaveAttribute(
+      'aria-pressed',
+      'false'
+    );
+  });
+
   it('steps the party back to unset instead of inventing a group', async () => {
     const { fetchMock, body } = agentFetch();
 
@@ -1021,7 +1130,7 @@ describe('Sidebar', () => {
       sentBodies.push(String(init.body));
       return { ok: true, json: async () => AGENT_ANSWER };
     });
-    vi.stubGlobal('fetch', fetchMock);
+    stubAgentFetch(fetchMock);
 
     const user = userEvent.setup({ delay: null });
     render(<Sidebar />);
@@ -1145,40 +1254,29 @@ describe('Sidebar — felt quality', () => {
     expect(panelAt()?.getAttribute('style')).toContain('--panel-width: 480px');
   });
 
-  it('makes the query field the panel’s first tab stop, not the close button', () => {
+  it('делает поле запроса первым таб-стопом панели', () => {
     render(<Sidebar />);
 
-    const order = tabOrder(screen.getByRole('dialog'));
-    expect(order[0]).toBe(askField());
-    // the close button is still reachable — it is just no longer first
-    expect(
-      order.findIndex(
-        (el) => el.getAttribute('aria-label') === 'закрыть панель'
-      )
-    ).toBeGreaterThan(0);
+    // Nothing precedes the question: no close button, no title control.
+    expect(tabOrder(screen.getByRole('dialog'))[0]).toBe(askField());
   });
 
-  it('raises the tabs, chips, close button and query field to 44px on a phone', () => {
+  it('поднимает вкладки, чипы и поле запроса до 44px на телефоне', () => {
     render(<Sidebar />);
 
     expect(screen.getByTestId('mode-plan').className).toMatch(/max-md:h-11/);
     expect(screen.getByTestId('mode-itineraries').className).toMatch(
       /max-md:h-11/
     );
-    for (const hint of ['замки', 'костёлы', 'монастыри', 'где поесть']) {
-      expect(screen.getByTestId(`hint-${hint}`).className).toMatch(
-        /max-md:h-11/
-      );
+    for (const id of ['old-town', 'castles-churches', 'food', 'evening', 'with-children']) {
+      expect(screen.getByTestId(`hint-${id}`).className).toMatch(/max-md:h-11/);
     }
-    expect(
-      screen.getByRole('button', { name: 'закрыть панель' }).className
-    ).toMatch(/max-md:h-11 max-md:w-11/);
     expect(askField().className).toMatch(/max-md:min-h-11/);
     // …and coarse pointers (tablets, touch laptops) get the same target
     expect(screen.getByTestId('mode-plan').className).toMatch(
       /pointer-coarse:h-11/
     );
-    expect(screen.getByTestId('hint-замки').className).toMatch(
+    expect(screen.getByTestId('hint-old-town').className).toMatch(
       /pointer-coarse:h-11/
     );
   });
@@ -1196,7 +1294,7 @@ describe('Sidebar — felt quality', () => {
           });
         })
     );
-    vi.stubGlobal('fetch', fetchMock);
+    stubAgentFetch(fetchMock);
 
     const user = userEvent.setup({ delay: null });
     render(<Sidebar />);
@@ -1330,7 +1428,7 @@ describe('Sidebar — felt quality', () => {
 
     // Any request at all in this test is a request the tab should not make.
     const fetchMock = vi.fn();
-    vi.stubGlobal('fetch', fetchMock);
+    stubAgentFetch(fetchMock);
 
     try {
       render(<Sidebar />);

@@ -32,10 +32,13 @@ export const ru = {
     placeholder: 'Что хотите посмотреть?',
     label: 'что хотите посмотреть',
     chips: {
-      castles: 'замки',
-      churches: 'костёлы',
-      monasteries: 'монастыри',
-      food: 'где поесть',
+      // A chip *is* the query: it goes to the agent exactly as written, so it
+      // reads like something a tourist would say, not like a filter name.
+      oldTown: 'Старый город за два часа пешком',
+      castlesChurches: 'Замки и костёлы Гродно',
+      food: 'Где поесть в центре, недорого',
+      evening: 'Вечерняя прогулка по Советской',
+      withChildren: 'С детьми: парки и замки',
     },
   },
   transport: {

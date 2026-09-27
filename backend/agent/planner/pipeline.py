@@ -43,7 +43,7 @@ import time as _time
 import httpx
 import psycopg
 
-from .. import constants, taxonomy
+from .. import constants, progress, taxonomy
 from ..config import openrouter_api_key
 from ..errors import (
     NoCandidatesFound,
@@ -492,6 +492,14 @@ def _prune_unroutable(
     return route
 
 
+def _is_service_code(code: str) -> bool:
+    """True when a taxonomy code is a service (a café, a toilet, a hotel)."""
+    try:
+        return taxonomy.role(code) == "service"
+    except Exception:  # unknown/unmapped code → treat it as a destination
+        return False
+
+
 def _is_sight_stop(candidate: Any) -> bool:
     """True when a candidate is a destination, not a service the user asked for.
 
@@ -655,6 +663,9 @@ class Pipeline:
         # model/tool failure).  `intent` is derived FROM that contract, so
         # resolve() grounds the reading that actually produced the plan and not
         # a second, keyword-only guess.
+        # The client cannot see inside this request, so the pipeline says where
+        # it got to. Codes only; the client localises them.
+        progress.note(progress.STAGE_INTERPRETING)
         requirements = build_requirements(
             req.query, req, db=self.db, wall_clock_s=self._left(t0)
         )
@@ -694,6 +705,7 @@ class Pipeline:
                 near = (float(anchor_rows[0]["lat"]), float(anchor_rows[0]["lon"]))
 
         # 3. Retrieve
+        progress.note(progress.STAGE_SEARCHING)
         candidates = retrieve(
             constraints,
             qvec,
@@ -803,6 +815,7 @@ class Pipeline:
         # retry below, i.e. only once the order had already collapsed to one
         # stop — so a two-stop pool kept a café as stop #1 and the walk was built
         # around a place the user never asked to visit.
+        progress.note(progress.STAGE_SELECTING)
         all_candidates = list(candidates)
         sights = [c for c in candidates if _is_sight_stop(c)]
 
@@ -815,8 +828,22 @@ class Pipeline:
         # words: the position, the prohibitions, the interests and the region
         # stay, which is what «a walk along this street» actually needs.
         if len(sights) < 3 and not region_scope:
+            # The categories are relaxed too, and the *service* ones dropped:
+            # «старый Гродно, туалет обязателен, кафе если по пути» steers
+            # retrieval with two service signals, and the whole pool came back
+            # cafés and toilets — zero sights — so the walk had nothing to be
+            # built from.  A service is never a stop (see the pool rule below),
+            # and the services layer finds them along the line anyway; what the
+            # second pass needs is the ordinary places of the area.
+            sight_categories = [
+                c for c in constraints.optional_categories if not _is_service_code(c)
+            ]
             relaxed = constraints.model_copy(
-                update={"query_keywords": [], "must_visit_keywords": []}
+                update={
+                    "query_keywords": [],
+                    "must_visit_keywords": [],
+                    "optional_categories": sight_categories,
+                }
             )
             wider = retrieve(relaxed, qvec, self.db, query_text="", near=near)
             if relaxed.forbidden_categories or relaxed.forbidden_keywords:
@@ -849,11 +876,13 @@ class Pipeline:
             # pool keeps its services rather than refusing the request.
             log.info("pool: %d sight(s) — the services are the destination here", len(sights))
 
+        progress.note(progress.STAGE_MEASURING_LEGS)
         candidates, cost = _build_cost(candidates, constraints, costing)
 
         # 6. Optimize. With a known tourist position the route must START there:
         # the optimizer scores orders over the candidate matrix; we prepend the
         # origin afterwards as a fixed first leg (render walks origin → first stop).
+        progress.note(progress.STAGE_ORDERING)
         route, info = optimize(candidates, cost, constraints, costing=costing)
         if len(route) < 2 and len(candidates) > 1:
             # The most relevant stop of a service-only query («туалет по пути»)
@@ -918,6 +947,7 @@ class Pipeline:
         # Skipped when the deadline is spent: the response then carries no
         # geometry, which the verifier reports as `geometry_missing`/`degraded`
         # rather than the client waiting for a hang.
+        progress.note(progress.STAGE_DRAWING)
         if self._left(t0) >= constants.RENDER_MIN_LEFT_S:
             shape, summary = _render_tour(plan.route, costing=costing, origin=req.origin)
         else:
@@ -939,6 +969,7 @@ class Pipeline:
         # the Valhalla geometry (spec §4.4).  The interpretation model proposed
         # the meaning of the request; it gets no vote here, and an unmet hard
         # requirement is reported as such, never explained away.
+        progress.note(progress.STAGE_CHECKING)
         verify(
             requirements,
             plan,
@@ -946,6 +977,7 @@ class Pipeline:
             _services_along_evidence(self.db, requirements, shape),
         )
         status = overall_status(requirements)
+        progress.note(progress.STAGE_DONE)
 
         ms = int((_time.perf_counter() - t0) * 1000)
         log.info(

@@ -31,6 +31,7 @@ from . import (
     clients_api,
     constants,
     itineraries as itineraries_mod,
+    progress,
     services as services_mod,
 )
 from .config import openrouter_api_key, settings
@@ -109,7 +110,32 @@ def _call(fn: Callable[[], Any], **kwargs: Any) -> Any:
 
 @app.post("/routes/generate", response_model=RouteResponse)
 def generate(req: GenerateReq) -> RouteResponse:
-    return _call(app.state.planner.generate, req=req)
+    """Build a route. With a `progress_id`, the work is reported as it happens."""
+    progress.begin(req.progress_id)
+    try:
+        return _call(app.state.planner.generate, req=req)
+    finally:
+        # The tracker stops being interesting the moment the answer exists — and
+        # on failure too, so a client polling a rejected request is told so
+        # instead of watching a stage freeze.
+        progress.finish()
+
+
+@app.get("/routes/progress/{progress_id}")
+def route_progress(progress_id: str) -> dict:
+    """Where the pipeline got to, in stage codes the client localises.
+
+    An unknown id is a 404 with a reason code, not an empty stage: «не знаю, где
+    мы» and «мы на этапе поиска» are different things, and the client falls back
+    to what it can observe itself rather than showing an invented caption.
+    """
+    snapshot = progress.snapshot(progress_id)
+    if snapshot is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"reason": "unknown_progress_id"},
+        )
+    return snapshot
 
 
 @app.post("/routes/reroute", response_model=RouteResponse)
