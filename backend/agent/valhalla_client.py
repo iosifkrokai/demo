@@ -471,12 +471,6 @@ def time_matrix(
     return result
 
 
-def _is_snap_failure(exc: Exception) -> bool:
-    """True when Valhalla failed because it could not snap a location to the graph."""
-    text = str(exc).lower()
-    return any(marker in text for marker in SNAP_ERROR_MARKERS)
-
-
 def _is_route_failure(exc: Exception) -> bool:
     """True when the tour itself is the problem, not the Valhalla connection.
 

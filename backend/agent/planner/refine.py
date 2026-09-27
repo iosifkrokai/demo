@@ -192,9 +192,6 @@ class RefinementPlan:
         """Every category code named by the instruction (add + exclude)."""
         return self.add_categories + self.exclude_categories
 
-    def is_noop(self) -> bool:
-        return self.operation == "none"
-
 
 def _detected_categories(text: str) -> tuple[str, ...]:
     """Canonical category codes named in the instruction, in taxonomy order.

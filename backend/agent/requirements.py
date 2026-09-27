@@ -96,9 +96,6 @@ class PartyComposition(BaseModel):
     # sends and the text extractor fills; never inferred from party size.
     mobility: list[str] = Field(default_factory=list)
 
-    def is_empty(self) -> bool:
-        return not (self.adults or self.children or self.children_ages or self.mobility)
-
 
 class TripRequirements(BaseModel):
     """Everything the route must respect, in one place.
