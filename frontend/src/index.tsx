@@ -1,6 +1,8 @@
 import { StrictMode } from 'react';
 import ReactDOM from 'react-dom/client';
 import './index.css'; // postCSS import of CSS module
+// Must run before the first render: the panel's own strings come from here.
+import './i18n';
 import { RouterProvider } from '@tanstack/react-router';
 import * as TanStackQueryProvider from './lib/tanstack-query/root-provider';
 import { router } from './routes';

@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { TFunction } from 'i18next';
+import { useTranslation } from 'react-i18next';
 import type { Dispatch, SetStateAction } from 'react';
 import {
   Bike,
@@ -65,6 +67,7 @@ import {
   type RouteStage,
 } from './parts/route-progress';
 import { Segmented, type SegmentedItem } from './parts/segmented';
+import { LanguageSwitcher } from './parts/language-switcher';
 import { StatTile, StatTiles } from './parts/stat-tiles';
 import { StopsSkeleton, SummarySkeleton } from './parts/skeletons';
 import type { AmenityStrength, ResultMode } from './types';
@@ -149,24 +152,48 @@ const TRANSPORT_OPTIONS: Array<
  */
 export type PanelView = 'plan' | 'history' | 'itineraries';
 
-const VIEWS: SegmentedItem<PanelView>[] = [
-  { value: 'plan', label: 'Планирование', short: 'План', icon: RouteIcon },
-  { value: 'history', label: 'История', icon: History },
-  { value: 'itineraries', label: 'Готовые маршруты', short: 'Готовые', icon: Sparkles },
+/**
+ * The strip's tabs, in the order the tourist actually works: plan a route, take
+ * a ready-made one, look back at history. Built from the dictionary rather than
+ * kept as a constant, so switching the interface language moves the labels with
+ * it — the order itself is the point and must not drift.
+ */
+const buildViews = (t: TFunction): SegmentedItem<PanelView>[] => [
+  {
+    value: 'plan',
+    label: t('tabs.plan'),
+    short: t('tabs.planShort'),
+    icon: RouteIcon,
+  },
+  {
+    value: 'itineraries',
+    label: t('tabs.itineraries'),
+    short: t('tabs.itinerariesShort'),
+    icon: Sparkles,
+  },
+  { value: 'history', label: t('tabs.history'), icon: History },
 ];
 
 /** One line under the panel title, per view. */
-const VIEW_SUBTITLES: Record<PanelView, string> = {
-  plan: 'Опишите запрос — соберу маршрут по дорогам',
-  history: 'Маршруты, которые вы уже построили',
-  itineraries: 'Готовые маршруты — начать с одного из них',
-};
+const buildViewSubtitles = (t: TFunction): Record<PanelView, string> => ({
+  plan: t('tabSubtitles.plan'),
+  itineraries: t('tabSubtitles.itineraries'),
+  history: t('tabSubtitles.history'),
+});
 
-/** Placeholder of the ask field. Also what the empty state tells the user. */
-const QUERY_PLACEHOLDER = 'Что хотите посмотреть?';
-
-/** One-tap starters: they fill the ask field, the tourist decides when to go. */
-const HINT_CHIPS = ['замки', 'костёлы', 'монастыри', 'где поесть'];
+/**
+ * One-tap starters.
+ *
+ * The label *is* what gets sent: the tourist sees «замки» or «castles» and that
+ * word goes to the agent, which reads either language. Showing English but
+ * sending Russian would be a lie about what was asked.
+ */
+const buildHintChips = (t: TFunction): string[] => [
+  t('ask.chips.castles'),
+  t('ask.chips.churches'),
+  t('ask.chips.monasteries'),
+  t('ask.chips.food'),
+];
 
 /**
  * Options of the advanced filters. `code` is the canonical backend category
@@ -448,6 +475,11 @@ export const Sidebar = () => {
   const [manualQuery, setManualQuery] = useState('');
   const [manualBusy, setManualBusy] = useState(false);
   const [manualErr, setManualErr] = useState<string | null>(null);
+
+  const { t } = useTranslation();
+  const tabs = useMemo(() => buildViews(t), [t]);
+  const subtitles = useMemo(() => buildViewSubtitles(t), [t]);
+  const hints = useMemo(() => buildHintChips(t), [t]);
 
   const routeHistory = useDirectionsStore((s) => s.routeHistory);
   const addToHistory = useDirectionsStore((s) => s.addToHistory);
@@ -1217,11 +1249,9 @@ export const Sidebar = () => {
                       }
                     }}
                     placeholder={
-                      hasRoute
-                        ? 'Что уточнить? «добавь кофейню»'
-                        : QUERY_PLACEHOLDER
+                      hasRoute ? t('ask.placeholderRefine') : t('ask.placeholder')
                     }
-                    aria-label="что хотите посмотреть"
+                    aria-label={t('ask.label')}
                     className="min-h-0 flex-1 resize-none border-0 bg-transparent p-0 text-body leading-6 shadow-none focus-visible:ring-0 max-md:min-h-11"
                     rows={1}
                     disabled={busy}
@@ -1233,7 +1263,7 @@ export const Sidebar = () => {
                 aria-label="подсказки"
                 className="mt-2 flex flex-wrap gap-1.5"
               >
-                {HINT_CHIPS.map((hint) => (
+                {hints.map((hint) => (
                   <Chip
                     key={hint}
                     onClick={() => {
@@ -1294,18 +1324,19 @@ export const Sidebar = () => {
               <>
                 <div className="flex items-center gap-2">
                   <Segmented
-                    items={VIEWS}
+                    items={tabs}
                     value={mode}
                     onChange={setMode}
                     label="раздел панели"
                     className="min-w-0 flex-1"
                     testId={(value) => `mode-${value}`}
                   />
+                  <LanguageSwitcher className="shrink-0" />
                   <button
                     type="button"
                     onClick={toggle}
-                    aria-label="закрыть панель"
-                    title="закрыть панель"
+                    aria-label={t('actions.closePanel')}
+                    title={t('actions.closePanel')}
                     className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground max-md:h-11 max-md:w-11 pointer-coarse:h-11 pointer-coarse:w-11"
                   >
                     <X className="h-4 w-4" aria-hidden="true" />
@@ -1318,16 +1349,16 @@ export const Sidebar = () => {
                   />
                   <div className="min-w-0">
                     <SheetTitle className="truncate text-body">
-                      AI-гид по Гродно
+                      {t('app.title')}
                     </SheetTitle>
                     {/* Radix wants a description for the dialog; the visible
                         line below is the same sentence, so keep it out of the
                         a11y tree. */}
                     <SheetDescription className="sr-only">
-                      Планировщик маршрутов по Гродно и области
+                      {t('app.description')}
                     </SheetDescription>
                     <p className="truncate text-meta text-muted-foreground">
-                      {VIEW_SUBTITLES[mode]}
+                      {subtitles[mode]}
                     </p>
                   </div>
                 </div>
