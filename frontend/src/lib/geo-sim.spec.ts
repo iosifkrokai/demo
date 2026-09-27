@@ -96,15 +96,35 @@ describe('the walk', () => {
     expect(seen[seen.length - 1]!.lat).toBeCloseTo(end.lat, 6);
   });
 
-  it('не двигает никого, пока маршрута нет', () => {
+  it('стоит в центре Гродно, пока маршрута ещё нет', () => {
+    // Панель спрашивает позицию до того, как появится маршрут, и берёт из неё
+    // точку старта запроса. Молчание тут однажды стоило целого прогона:
+    // бэкенд отвечал «нет маршрута с ≥ 2 остановками», и проводник был
+    // недостижим.
+    installGeoSim('?sim=walk');
+
+    const fix = currentFix();
+
+    expect(fix).not.toBeNull();
+    expect(fix!.lat).toBeCloseTo(53.678, 2);
+    expect(fix!.lon).toBeCloseTo(23.83, 2);
+  });
+
+  it('стоит на месте, пока маршрута нет', () => {
+    // Положение уже отдаётся (панель берёт из него точку старта запроса), но
+    // турист по нему не идёт: пока нет маршрута, двигаться некуда.
     installGeoSim('?sim=walk');
     const onFix = vi.fn();
     window.navigator.geolocation.watchPosition(onFix);
 
     tick();
+    const first = currentFix();
+    tick();
+    const second = currentFix();
 
-    expect(onFix).not.toHaveBeenCalled();
-    expect(currentFix()).toBeNull();
+    expect(onFix).toHaveBeenCalled();
+    expect(first).not.toBeNull();
+    expect(second).toEqual(first);
   });
 
   it('отдаёт текущее положение по запросу, а не только потоком', () => {

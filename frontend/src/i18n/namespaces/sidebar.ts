@@ -40,8 +40,19 @@ type SidebarShape = {
     | 'nothingFound'
     | 'noChanges'
     | 'restoredPrevious'
-    | 'simulatedFix',
-    string
+    | 'simulatedFix'
+    | 'outsideCoverageTitle'
+    | 'outsideCoverageHint'
+    | 'impossibleTitle'
+    | 'degradedTitle'
+    | 'reasonFallback'
+    // The reason codes live in a nested object on purpose: the parity test walks
+    // the dictionaries by splitting paths on dots, so a flat key containing a
+    // dot would read as a path that does not exist. The i18n key stays
+    // `sidebar.status.reason.<code>` either way.
+    | 'reason'
+    | string,
+    string | Record<string, string>
   >;
   /** The pipeline's own stages, keyed by the codes it sends (`agent/progress.py`). */
   progress: Record<
@@ -173,6 +184,34 @@ export const sidebarArea = {
       noChanges: 'без изменений',
       simulatedFix: 'СИМУЛЯЦИЯ GPS: положение проигрывается, телефон ни при чём',
       restoredPrevious: 'вернул предыдущий маршрут',
+      // Почему плана нет или он неполный — собственный ответ агента, словами,
+      // на которые турист может реагировать. Имена мест не переводятся: они
+      // приходят из данных и остаются как есть.
+      outsideCoverageTitle:
+        'Сюда маршрут не построить: {{names}} — вне зоны покрытия (Гродненская область)',
+      outsideCoverageHint: 'Попробуйте точку внутри области',
+      impossibleTitle:
+        'Маршрут не построен: не удалось выполнить обязательное требование',
+      degradedTitle: 'Часть запроса выполнить не удалось',
+      reasonFallback: 'требование не выполнено',
+      // Причины — по кодам бэкенда; ключ — это путь i18n, поэтому коды лежат
+      // вложенным объектом, а не плоскими ключами с точкой.
+      reason: {
+        must_visit_on_route: 'обязательная точка не попала на маршрут',
+        must_visit_absent: 'обязательная точка не найдена в данных',
+        must_visit_unroutable: 'до обязательной точки нет дороги',
+        must_visit_outside_coverage: 'обязательная точка вне зоны покрытия',
+        service_on_route: 'удобство не попало на маршрут',
+        service_along_route: 'удобство не рядом с маршрутом',
+        hard_service_absent: 'обязательное удобство не найдено в данных',
+        soft_service_absent: 'удобство не найдено в данных',
+        service_not_measured: 'удобство не измерено',
+        interest_absent: 'интерес не найден в данных',
+        avoid_honoured: 'ограничение соблюдено',
+        avoid_violated: 'ограничение нарушено',
+        route_missing: 'маршрут не построен',
+        geometry_missing: 'нет геометрии маршрута',
+      },
     },
     geo: {
       unsupported: 'браузер не умеет геолокацию',
@@ -312,6 +351,35 @@ export const sidebarArea = {
       noChanges: 'no changes',
       simulatedFix: 'GPS SIMULATION: the position is replayed, no phone involved',
       restoredPrevious: 'restored the previous route',
+      // Why there is no plan, or why it is incomplete — the agent's own account,
+      // in words the tourist can act on. Place names are never translated: they
+      // come from the data and stay as they are.
+      outsideCoverageTitle:
+        'No route here: {{names}} — outside the coverage area (Hrodna region)',
+      outsideCoverageHint: 'Try a point inside the region',
+      impossibleTitle:
+        'Route not built: a mandatory requirement could not be met',
+      degradedTitle: 'Part of the request could not be fulfilled',
+      reasonFallback: 'requirement not met',
+      // Reasons, keyed by the backend's codes; the key is the i18n path, so the
+      // codes live in a nested object rather than flat dotted keys.
+      reason: {
+        must_visit_on_route: 'a mandatory stop is not on the route',
+        must_visit_absent: 'a mandatory stop is not in the data',
+        must_visit_unroutable: 'no road leads to a mandatory stop',
+        must_visit_outside_coverage:
+          'a mandatory stop is outside the coverage area',
+        service_on_route: 'the amenity is not on the route',
+        service_along_route: 'the amenity is not along the route',
+        hard_service_absent: 'a required amenity is not in the data',
+        soft_service_absent: 'the amenity is not in the data',
+        service_not_measured: 'the amenity was not measured',
+        interest_absent: 'the interest is not in the data',
+        avoid_honoured: 'the restriction was honoured',
+        avoid_violated: 'the restriction was violated',
+        route_missing: 'no route was built',
+        geometry_missing: 'no route geometry',
+      },
     },
     geo: {
       unsupported: 'this browser has no geolocation',

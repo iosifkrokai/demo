@@ -42,6 +42,7 @@ from .. import constants
 from ..models import GenerateReq, IntentDecision, IntentResult
 from ..requirements import PartyComposition, Requirement, TripRequirements
 from .preprocess import WORD_RE
+from . import interpret_cache
 from .resolve import CATEGORY_SYNONYMS, CATEGORY_SYNONYMS_EN
 
 log = _logging.getLogger(__name__)
@@ -690,6 +691,31 @@ def _read_text(query: str, locale: str) -> _Reading:
     return _fallback_reading(query, locale)
 
 
+def _interpret_cache_key(
+    query: str, req: GenerateReq
+) -> tuple[str | None, str]:
+    """A key for this reading, or None when there is nothing worth caching.
+
+    None when the agent cannot run at all (no key, no SDK): the deterministic
+    parse is a few milliseconds of regex, and caching it would only add a way
+    for it to go stale. The prompt is hashed into the key, so editing the
+    instructions invalidates every entry by itself.
+    """
+    try:
+        from . import agent_interpret, interpret_cache
+
+        if not agent_interpret.available():
+            return None, ""
+        instructions = agent_interpret._instructions(agent_interpret._ui_note(req))
+        return (
+            interpret_cache.interpret_key(query, req, instructions),
+            interpret_cache.prompt_hash(instructions),
+        )
+    except Exception as exc:  # never let bookkeeping fail a request
+        log.warning("requirements: cache key unavailable (%s)", exc)
+        return None, ""
+
+
 def _agent_contract(
     query: str, req: GenerateReq, db, wall_clock_s: float | None = None
 ) -> TripRequirements | None:
@@ -944,6 +970,16 @@ def build_requirements(
     ``db`` is an optional caller-owned psycopg connection the agent's bounded
     tools reuse; without one each tool opens its own short-lived connection.
     """
+    cache_key, prompt_hash = _interpret_cache_key(query, req)
+    if cache_key is not None:
+        cached = interpret_cache.INTERPRET_CACHE.get(cache_key)
+        if cached is not None:
+            log.info("requirements: cached reading (no model call)")
+            # The contract is MUTATED downstream — resolve() attaches place ids,
+            # the verifier writes statuses — so the stored copy is never handed
+            # out: the next request would otherwise inherit this one's verdicts.
+            return cached.model_copy(deep=True)
+
     try:
         contract = _agent_contract(query, req, db, wall_clock_s)
     except Exception as exc:  # the agent must never fail a request
@@ -954,7 +990,12 @@ def build_requirements(
             "requirements: agent reading (source=%s, %d requirement(s))",
             contract.source, len(contract.requirements),
         )
-        return _finalize_agent_contract(contract, query, req)
+        final = _finalize_agent_contract(contract, query, req)
+        if cache_key is not None:
+            interpret_cache.INTERPRET_CACHE.put(
+                cache_key, final.model_copy(deep=True), prompt_hash
+            )
+        return final
     log.info("requirements: no agent reading — deterministic parse")
     return _deterministic_requirements(query, req)
 

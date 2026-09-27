@@ -25,7 +25,6 @@ import {
 } from 'lucide-react';
 import { useNavigate } from '@tanstack/react-router';
 import { cn } from '@/lib/utils';
-import type { Photo } from '@/api/types';
 import { meWaypoint, storedMeCoords } from '@/utils/me-waypoint';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -46,8 +45,9 @@ import {
 } from '@/stores/directions-store';
 import { useDirectionsQuery } from '@/hooks/use-directions-queries';
 import { GuidePanel, guideRouteKey, type GuideStop } from './guide-panel';
-import { isSimulating, setSimPath } from '../lib/geo-sim';
+import { currentFix, isSimulating, setSimPath } from '../lib/geo-sim';
 import { HistoryTab } from './parts/history-tab';
+import { PlanVerdict } from './parts/plan-verdict';
 import { ItinerariesTab } from './parts/itineraries-tab';
 import { useItineraries } from '@/hooks/use-itineraries';
 import type { Itinerary } from '@/api/types';
@@ -77,7 +77,7 @@ import { PanelResizeHandle, usePanelWidth } from './parts/panel-resize';
 import { LanguageSwitcher } from './parts/language-switcher';
 import { StatTile, StatTiles } from './parts/stat-tiles';
 import { StopsSkeleton, SummarySkeleton } from './parts/skeletons';
-import type { AmenityStrength, ResultMode } from './types';
+import type { AgentRouteResponse, AmenityStrength, ResultMode } from './types';
 import {
   PANEL_SHEET_CLASS,
   SHEET_SNAP_CLASS,
@@ -91,32 +91,6 @@ import { forward_geocode } from '@/utils/nominatim';
 // a port-forwarded URL (Codespaces, tunnels) where "localhost" would resolve to
 // the visitor's own machine. Set VITE_AGENT_URL only to point at a remote agent.
 const AGENT_URL = (import.meta.env.VITE_AGENT_URL as string | undefined) ?? '';
-
-interface AgentPoint {
-  id: number;
-  name: string;
-  category?: string | null;
-  lat: number;
-  lon: number;
-  blurb?: string | null;
-  fun_fact?: string | null;
-  fun_facts?: string[];
-  photo?: Photo | null;
-  links?: Array<{ title: string; url: string }>;
-  visit_minutes?: number | null;
-  opening_hours?: string | null;
-  ticket_price?: string | null;
-  town?: string | null;
-  district?: string | null;
-}
-
-interface AgentBudget {
-  budget_minutes: number | null;
-  total_minutes: number;
-  walk_minutes: number;
-  visit_minutes: number;
-  fits: boolean;
-}
 
 /**
  * Time presets. 0 = «без ограничения»: no `time_budget_minutes` is sent at all
@@ -525,6 +499,10 @@ export const Sidebar = () => {
     budgetMinutes: number | null;
     fits: boolean;
   } | null>(null);
+  // The agent's own verdict on the last answer (why no route / what went
+  // unmet). Kept beside the summary: both describe the same plan, and both
+  // are cleared when the route is reset or replaced.
+  const [verdict, setVerdict] = useState<AgentRouteResponse | null>(null);
 
   // The query of the last successful build: switching transport re-plans it, so
   // the stops, the drawn line and the "в пути" time all follow the new costing.
@@ -794,6 +772,7 @@ export const Sidebar = () => {
       )
     );
     setSummary(null);
+    setVerdict(null);
     refetchDirections();
   };
 
@@ -867,6 +846,7 @@ export const Sidebar = () => {
       )
     );
     setSummary(null);
+    setVerdict(null);
     refetchDirections();
     setMode('plan');
   };
@@ -885,6 +865,7 @@ export const Sidebar = () => {
     setProgressId(requestProgressId);
     setStatus(null);
     setSummary(null);
+    setVerdict(null);
 
     // A fresh position wins over the cached one; the position already stored as
     // waypoint 0 is usable even when a previous attempt failed, because the map
@@ -998,12 +979,17 @@ export const Sidebar = () => {
         // nothing was found — say that instead of blaming the query.
         throw new Error(agentErrorMessage(r.status));
       }
-      const data = (await r.json()) as {
-        points?: AgentPoint[];
-        budget?: AgentBudget;
-        costing?: string | null;
-        summary?: { length_km?: number | null; time_seconds?: number | null };
-      };
+      const data = (await r.json()) as AgentRouteResponse;
+      // An infeasible plan carries no points at all, so the honest answer is
+      // the verdict — which requirements failed and why — not the generic
+      // "fewer than 2 places found": the tourist needs the reason, not a count.
+      // The query stays in the field so it can be adjusted and sent again.
+      if (data.status === 'infeasible') {
+        setVerdict(data);
+        return;
+      }
+      // A degraded plan still has a route; the verdict rides along with it.
+      if (data.status === 'degraded') setVerdict(data);
       const pts = data.points ?? [];
       if (pts.length < 2) {
         throw new Error(t('sidebar.status.fewPlaces'));
@@ -1176,6 +1162,7 @@ export const Sidebar = () => {
     setWaypoint(me ? [meWaypoint(me.lat, me.lon, t('sidebar.ui.myLocation')), ...empties] : empties);
     setStatus(null);
     setSummary(null);
+    setVerdict(null);
     refetchDirections();
   };
 
@@ -1255,7 +1242,11 @@ export const Sidebar = () => {
   // Inactive without the parameter, and the panel says so while it is active.
   useEffect(() => {
     if (isSimulating() && guideStops.length > 0) {
-      setSimPath(guideStops.map((stop) => [stop.lat, stop.lon] as const));
+      // From where the tourist stands (the request's origin) to the stops, in
+      // the order the guide will announce them.
+      const from = currentFix();
+      const stops: [number, number][] = guideStops.map((stop) => [stop.lat, stop.lon]);
+      setSimPath(from ? [[from.lat, from.lon], ...stops] : stops);
     }
   }, [guideStops]);
 
@@ -1778,6 +1769,11 @@ export const Sidebar = () => {
 
                 {/* === Route === */}
                 <section className="flex flex-col gap-2.5">
+                  {/* The plan's own verdict, above the stops: for a degraded plan
+                      it heads the summary it qualifies, and for an infeasible
+                      one it shows at all precisely because there is no route —
+                      that is when the tourist most needs to hear why. */}
+                  <PlanVerdict response={verdict} />
                   {hasRoute && (
                     <div className="flex items-center justify-between gap-2">
                       <h2 className="text-label font-semibold">Маршрут</h2>
@@ -2085,6 +2081,7 @@ export const Sidebar = () => {
               )}
               <Button
                 type="button"
+                data-testid="build-route"
                 onClick={() => submitPrompt()}
                 disabled={busy || !query.trim()}
                 className={cn(

@@ -77,6 +77,7 @@ from .cost import (
 )
 from .diversity import mmr_select
 from .explain import explain as explain_route
+from . import interpret_cache
 from .intent import (
     build_requirements,
     intent_from_requirements,
@@ -113,6 +114,14 @@ def _openrouter_embed(texts: list[str]) -> list[list[float]]:
         log.warning("embed: no OPENROUTER_API_KEY — keyword-only retrieval")
         return []
 
+    # An embedding is a pure function of the text and the model, so it is the
+    # safest thing here to remember: no verdict, no measurement, nothing that
+    # can go stale about the world.
+    cache_key = interpret_cache.embed_key(texts, constants.EMBED_MODEL)
+    cached = interpret_cache.EMBED_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
+
     try:
         with httpx.Client(timeout=30.0) as client:
             r = client.post(
@@ -128,7 +137,9 @@ def _openrouter_embed(texts: list[str]) -> list[list[float]]:
             )
             r.raise_for_status()
             body = r.json()
-            return [item["embedding"] for item in body["data"]]
+            vectors = [item["embedding"] for item in body["data"]]
+            interpret_cache.EMBED_CACHE.put(cache_key, vectors)
+            return vectors
     except httpx.HTTPError as exc:
         # Timeout, connect error, 4xx/5xx — OpenRouter is not answering.
         log.warning("embed: OpenRouter unreachable (%s) — keyword-only retrieval", exc)
@@ -1496,6 +1507,9 @@ class Pipeline:
                 "intent_source": intent.source,
                 "intent_latency_ms": intent.latency_ms,
                 "deadline": deadline,
+                # Whether this answer came from the cache, and how the cache has
+                # been doing — a claim about speed that the response can be held to.
+                "cache": interpret_cache.stats(),
                 "requirements_source": (
                     getattr(requirements, "source", None) if requirements is not None else None
                 ),

@@ -84,9 +84,23 @@ export const isSimulating = (): boolean => state.active;
 
 export const simSpeed = (): number => state.speed;
 
-/** Where the simulated tourist stands right now; null before a route exists. */
-export const currentFix = (): SimFix | null =>
-  state.path.length > 0 ? state.fix : null;
+/**
+ * Where the tourist stands before there is a route to walk: the centre of
+ * Grodno, the point the map opens on.
+ *
+ * This is not a nicety. The panel asks for a position *before* a route exists —
+ * that answer is the request's origin — and a simulation that stays silent
+ * until it has a path to walk leaves the build without a starting point: the
+ * backend answers "no route with ≥ 2 stops" and the guide is never reached.
+ * Stand somewhere sensible from the very first call, then walk the route.
+ */
+const START_POINT: SimFix = { lat: 53.6778, lon: 23.8295, heading: null };
+
+/** Where the simulated tourist stands right now. */
+export const currentFix = (): SimFix | null => {
+  if (!state.active) return null;
+  return state.path.length > 0 ? state.fix : START_POINT;
+};
 
 const accumulate = (path: SimPoint[]): number[] => {
   const marks = [0];
@@ -131,7 +145,13 @@ const emit = (): void => {
 
 /** One tick of the walk: the tourist moves `speed × 1.4 m` further along. */
 export const tick = (seconds = 1): void => {
-  if (!state.active || state.path.length === 0) return;
+  if (!state.active) return;
+  if (state.path.length === 0) {
+    // Standing still, but still a position the panel can use as its origin.
+    state.fix = START_POINT;
+    emit();
+    return;
+  }
   state.travelled += WALKING_SPEED_MPS * state.speed * seconds;
   const { fix, atEnd } = pointAt(state.travelled);
   state.fix = fix;
@@ -145,6 +165,11 @@ export const tick = (seconds = 1): void => {
 
 /** Give the simulation something to walk: the stops of the current route. */
 export const setSimPath = (path: readonly SimPoint[]): void => {
+  // The walk starts where the tourist actually is, not on the first stop: a
+  // path that begins *at* stop 1 means nobody ever arrives there, and the guide
+  // honestly reports "0 of 2 walked" while standing on the place. Passing the
+  // origin first is also what a real walk looks like — you leave home, then
+  // reach the first stop.
   state.path = path.map(([lat, lon]) => [lat, lon] as SimPoint);
   state.marks = accumulate(state.path);
   state.travelled = 0;
@@ -189,6 +214,17 @@ export const installGeoSim = (search = window.location.search): boolean => {
   if (state.active) return true;
   state.active = true;
   state.speed = speed;
+
+  // A handle for QA scripts driving a recorded walk: reading «it walks» off a
+  // video is guesswork, and this reports what the simulation actually has.
+  // It exists only behind `?sim=walk`, which is never a shipped default.
+  (window as unknown as Record<string, unknown>).__geoSim = {
+    fix: () => currentFix(),
+    travelled: () => state.travelled,
+    pathLength: () => state.path.length,
+    subscribers: () => state.subscribers.size,
+    tick: (seconds = 1) => tick(seconds),
+  };
 
   const fake: Geolocation = {
     watchPosition(success, error) {
