@@ -370,7 +370,7 @@ class ResolvedConstraints(BaseModel):
 
 
 # ============================================================================
-# Internal planner — Steps 3-4 (retrieval / reranking / MMR)
+# Internal planner — Steps 3-4 (retrieval / MMR)
 # ============================================================================
 
 class Candidate(BaseModel):
@@ -391,7 +391,6 @@ class Candidate(BaseModel):
     visit_minutes_db: int | None = None  # curated visit time from the region dataset
     relevance: float = 0.0          # higher is better
     rrf_score: float = 0.0          # RRF signal strength
-    rerank_score: float | None = None  # cross-encoder score
 
 
 # ============================================================================

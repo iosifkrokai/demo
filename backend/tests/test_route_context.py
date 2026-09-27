@@ -130,8 +130,6 @@ def test_valhalla_pool_keeps_base_stops_and_stays_under_20():
     merged museum+café pool."""
     base = [_cand(i, f"монастырь {i}") for i in range(1, 13)]
     extras = [_cand(100 + i, f"кафе {i}") for i in range(30)]
-    for e in extras:
-        e.rerank_score = 0.5
 
     capped = _cap_for_valhalla(base + extras, base)
 

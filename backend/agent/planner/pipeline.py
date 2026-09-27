@@ -296,7 +296,7 @@ def _cap_for_valhalla(
     base_ids = {c.id for c in base}
     ordered = [c for c in candidates if c.id in base_ids]
     rest = [c for c in candidates if c.id not in base_ids]
-    rest.sort(key=lambda c: (c.rerank_score or 0.0, c.relevance), reverse=True)
+    rest.sort(key=lambda c: c.relevance, reverse=True)
     return (ordered + rest)[:limit]
 
 

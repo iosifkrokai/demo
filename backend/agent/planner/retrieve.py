@@ -17,9 +17,10 @@ signals are enough to build a route: explicit category words in the query
 still drive category-first retrieval, and named places still resolve
 through must_visit_ids / the geo anchor.
 
-Output: list of Candidate with `rrf_score` populated. The relevance field
-is left as the rrf_score (downstream rerank overwrites it, or leaves the
-retrieval order alone when Jev is unavailable).
+Output: list of Candidate with `rrf_score` populated. `relevance` is set to the
+same RRF value: there is no re-scoring stage any more (the Jev reranker was
+removed — it did not pay for itself on the golden set), so the fused retrieval
+order *is* the relevance order.
 """
 
 from __future__ import annotations
@@ -339,7 +340,7 @@ def _row_to_candidate(row: dict, rrf_score: float) -> Candidate:
         town=row.get("town"),
         district=row.get("district"),
         visit_minutes_db=row.get("visit_minutes"),
-        relevance=rrf_score,  # before rerank, relevance = rrf score
+        relevance=rrf_score,  # no re-scoring stage: relevance = RRF fusion
         rrf_score=rrf_score,
     )
 

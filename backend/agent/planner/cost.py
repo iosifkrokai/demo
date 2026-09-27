@@ -53,7 +53,6 @@ class PrunedStop:
         return self.candidate.name
 
 
-MAX_VISIT_BUDGET_SHARE = 0.4
 # A single stop may claim at most this share of the time budget; see the cap in
 # compute_cost_matrix().
 VISIT_CAP_BUDGET_SHARE = 0.4

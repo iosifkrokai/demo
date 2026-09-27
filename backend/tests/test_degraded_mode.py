@@ -12,7 +12,6 @@ What must hold, per step:
   * the interpretation agent — when it fails (or has no key) `build_requirements`
     silently takes the deterministic contract; when it answers, its contract
     drives the reading the planner uses.
-  * rerank  — retired with Jev: the retrieval order stands, nothing is trimmed.
   * embed   — no vector, retrieval runs keyword/category-only.
   * health  — still reports llm/embedder false, so the flags stay honest.
   * HTTP    — an upstream error that escapes the planner is a 503 with a
@@ -44,7 +43,6 @@ from agent.planner import agent_interpret as ai
 from agent.planner import intent as intent_mod, pipeline as pipeline_mod, retrieve as retrieve_mod
 from agent.planner.intent import build_requirements, extract_intent, fallback_intent
 from agent.planner.pipeline import Pipeline, _openrouter_embed
-from agent.planner.rerank import rerank
 from agent.requirements import PartyComposition, Requirement, TripRequirements
 from agent.valhalla_client import ping as valhalla_ping
 
@@ -286,30 +284,6 @@ class TestIntentFallback:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Step 3.5 — retired with Jev: the retrieval order stands, always
-# ─────────────────────────────────────────────────────────────────────────────
-
-class TestRerankRetired:
-    """The step no longer calls a model at all (spec §4.2: Jev did not pay off).
-    The pipeline does not call it either; the module stays a documented no-op."""
-
-    def test_the_retrieval_order_is_kept(self, no_key):
-        pool = [_c(1, 0.9), _c(2, 0.8), _c(3, 0.7), _c(4, 0.1)]
-        out = rerank(QUERY, pool, top_k=2)
-        assert [c.id for c in out] == [1, 2, 3, 4]   # NOT truncated to top_k
-        assert [c.relevance for c in out] == [0.9, 0.8, 0.7, 0.1]  # untouched
-        assert all(c.rerank_score is None for c in out)
-
-    def test_empty_pool_short_circuits(self, no_key):
-        assert rerank(QUERY, [], top_k=5) == []
-
-    def test_a_key_changes_nothing(self, with_key):
-        """There is no model left to change the order — with or without a key."""
-        out = rerank(QUERY, [_c(7, 0.4), _c(8, 0.2)], top_k=1)
-        assert [c.id for c in out] == [7, 8]
-        assert all(c.rerank_score is None for c in out)
-
-
 # ─────────────────────────────────────────────────────────────────────────────
 # Embeddings — keyword-only retrieval, never an exception
 # ─────────────────────────────────────────────────────────────────────────────

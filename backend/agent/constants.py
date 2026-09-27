@@ -35,14 +35,9 @@ RENDER_MIN_LEFT_S = 6.0
 
 # Text-embedding model for the vector retrieval signal.
 EMBED_MODEL = "openai/text-embedding-3-small"
-EMBED_DIM = 1536
 
 # ── Intent taxonomy ─────────────────────────────────────────────────────────
 INTENT_TYPES = ("discovery", "specific", "themed", "vague")
-ERA_HINTS = ("any", "pre1900", "soviet", "modern")
-PARTY_TYPES = ("solo", "family", "couple", "group")
-# Area width of a request, decided by the intent model (not by keyword matching).
-SEARCH_SCOPES = ("town", "district", "region")
 
 # Category taxonomy — the canonical codes live in data/taxonomy.csv and are
 # read through agent/taxonomy.py. Nothing here is a second list: import a code
@@ -73,18 +68,19 @@ NEGATIVE_FILTER_ENABLED = True  # drop candidates matching forbidden categories
 RETRIEVAL_POOL_SIZE = 50   # candidates after RRF fusion
 MMR_POOL_SIZE = 12         # final candidate pool for the optimizer
 
-# A place whose visit time exceeds this share of the total budget is dropped
-# before matrix computation (can't fit alongside anything else).
-MAX_VISIT_BUDGET_SHARE = 0.4
+# A place whose visit time exceeds a share of the total budget is dropped before
+# matrix computation (it cannot fit alongside anything else). That share lives
+# in exactly one place — `planner/cost.VISIT_CAP_BUDGET_SHARE` — because it is
+# applied where the cost matrix is built; a second copy here was dead and could
+# only drift.
 
 # Keep the route walkable: max distance between the anchor and candidates.
 # Keyword retrieval can fuse places across the whole voblast otherwise.
 GEO_FOCUS_KM = 12.0
-GEO_FOCUS_MAX_KM = 200.0   # cap: Valhalla's matrix limit
 # Discovery query with no anchor/named place at all: the route still has to be
-# walkable, so the pool stays local. Expanding to GEO_FOCUS_MAX_KM used to mix
-# stops hundreds of kilometres apart and the optimizer then answered 422
-# "optimizer could not produce a route with ≥ 2 stops".
+# walkable, so the pool stays local. Expanding the focus to Valhalla's matrix
+# cap (200 km) used to mix stops hundreds of kilometres apart and the optimizer
+# then answered 422 "optimizer could not produce a route with ≥ 2 stops".
 GEO_FOCUS_DISCOVERY_MAX_KM = 36.0
 
 # ── Unreachable pairs ───────────────────────────────────────────────────────
@@ -102,7 +98,6 @@ UNREACHABLE_S = 10**9
 # ── Time budget bounds (minutes) ────────────────────────────────────────────
 MIN_BUDGET_MIN = 15
 MAX_BUDGET_MIN = 480
-DEFAULT_BUDGET_MIN = 120
 
 # ── Valhalla ────────────────────────────────────────────────────────────────
 VALHALLA_TIMEOUT_S = 20.0
@@ -113,12 +108,11 @@ GRODNO_BBOX = {"south": 52.75, "west": 23.35, "north": 54.80, "east": 27.00}
 
 # ── Visit-time defaults by category (minutes) ───────────────────────────────
 # Derived from the taxonomy so a category's visit time is defined in exactly
-# one place (data/taxonomy.csv). VISIT_TIME_DEFAULT still covers rows whose
-# category is unknown/legacy free text.
+# one place (data/taxonomy.csv); taxonomy.visit_minutes() answers for unknown or
+# legacy free-text categories, so there is no second default to drift.
 VISIT_TIME_BY_CATEGORY: dict[str, int] = {
     cat.code: cat.visit_minutes for cat in taxonomy.all_categories()
 }
-VISIT_TIME_DEFAULT = 15
 
 # ── Walkability ──────────────────────────────────────────────────────────────
 # A pedestrian route is only useful if every leg is walkable.
