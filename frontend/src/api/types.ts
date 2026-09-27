@@ -117,3 +117,52 @@ export const SAVING_UNAVAILABLE_CODES: readonly ClientApiErrorCode[] = [
   'storage_unavailable',
   'network_unavailable',
 ];
+
+/**
+ * One stop of a ready-made route (`GET /routes/itineraries`).
+ *
+ * The agent reads these fields from the same places table the planner uses, so
+ * a card can only print facts the dataset actually holds — `opening_hours` and
+ * `visit_minutes` are `null` where nothing is known, never a default.
+ */
+export interface ItineraryStop {
+  place_id: number;
+  /** Provenance key the curated file is authored against (`city:old-castle`). */
+  source_url: string;
+  name: string;
+  category: string | null;
+  town: string | null;
+  district: string | null;
+  lat: number;
+  lon: number;
+  visit_minutes: number | null;
+  opening_hours: string | null;
+  blurb: string | null;
+  fun_fact: string | null;
+  /** Extra facts for the marker card; the agent parses them like the planner. */
+  fun_facts: string[];
+  /** Real source links (Wikipedia and friends) where the dataset has them. */
+  links: { title: string; url: string }[];
+  ticket_price: string | null;
+}
+
+/** A curated itinerary: an ordered set of real places, no model involved. */
+export interface Itinerary {
+  id: string;
+  title: string;
+  blurb: string;
+  transport: Transport;
+  stop_count: number;
+  /** Curated visit time of the stops; travel time is added when it is drawn. */
+  visit_minutes: number;
+  stops: ItineraryStop[];
+}
+
+export interface ItineraryList {
+  items: Itinerary[];
+  /**
+   * Stop keys the dataset no longer holds. An itinerary can be served shorter
+   * than authored; this is how the client can tell that it happened.
+   */
+  missing: string[];
+}

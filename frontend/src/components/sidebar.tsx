@@ -18,7 +18,6 @@ import {
   Search,
   SlidersHorizontal,
   Sparkles,
-  Trash2,
   Undo2,
   X,
 } from 'lucide-react';
@@ -43,8 +42,18 @@ import {
 } from '@/stores/directions-store';
 import { useDirectionsQuery } from '@/hooks/use-directions-queries';
 import { GuidePanel, guideRouteKey, type GuideStop } from './guide-panel';
+import { HistoryTab } from './parts/history-tab';
+import { ItinerariesTab } from './parts/itineraries-tab';
+import { useItineraries } from '@/hooks/use-itineraries';
+import type { Itinerary } from '@/api/types';
 import { guideModeFor } from './parts/guide-mode';
-import { CHILD_FORMS, decimalRu, placeCountRu, pluralCountRu } from '@/utils/plural';
+import {
+  CHILD_FORMS,
+  STOP_FORMS,
+  decimalRu,
+  placeCountRu,
+  pluralCountRu,
+} from '@/utils/plural';
 import { WaypointList } from './waypoint-list';
 import { Chip } from './parts/chip';
 import { agentErrorMessage } from './parts/guide-format';
@@ -129,10 +138,29 @@ const TRANSPORT_OPTIONS: Array<
   { value: '', label: 'как удобно', icon: Sparkles },
 ];
 
-const MODES: SegmentedItem<'plan' | 'guide'>[] = [
-  { value: 'plan', label: 'Планирование' },
-  { value: 'guide', label: 'Проводник' },
+/**
+ * Panel views — the content a tourist browses.
+ *
+ * The guide is deliberately *not* one of them. As a fourth tab it read as «ещё
+ * один раздел панели», while walking a route is a different activity with its
+ * own screen: in a navigator you enter it with one explicit action and the
+ * navigation UI takes over, tabs and all. So `guiding` is a separate state (see
+ * the panel header and the footer), not a view.
+ */
+export type PanelView = 'plan' | 'history' | 'itineraries';
+
+const VIEWS: SegmentedItem<PanelView>[] = [
+  { value: 'plan', label: 'Планирование', short: 'План', icon: RouteIcon },
+  { value: 'history', label: 'История', icon: History },
+  { value: 'itineraries', label: 'Готовые маршруты', short: 'Готовые', icon: Sparkles },
 ];
+
+/** One line under the panel title, per view. */
+const VIEW_SUBTITLES: Record<PanelView, string> = {
+  plan: 'Опишите запрос — соберу маршрут по дорогам',
+  history: 'Маршруты, которые вы уже построили',
+  itineraries: 'Готовые маршруты — начать с одного из них',
+};
 
 /** Placeholder of the ask field. Also what the empty state tells the user. */
 const QUERY_PLACEHOLDER = 'Что хотите посмотреть?';
@@ -307,8 +335,12 @@ export const Sidebar = () => {
   const navigate = useNavigate({ from: '/$activeTab' });
 
   const [query, setQuery] = useState('');
-  // Mode 1 — planning (build/refine the route), mode 2 — the guide that walks it.
-  const [mode, setMode] = useState<'plan' | 'guide'>('plan');
+  // Which panel view is open: building/refining the route, the past routes, or
+  // the ready-made starting points. The guide is not a view — see `guiding`.
+  const [mode, setMode] = useState<PanelView>('plan');
+  // Guide mode: the panel becomes the navigator's screen. Entered by an explicit
+  // action on a ready route, left by «выйти» in its own header.
+  const [guiding, setGuiding] = useState(false);
   const placeDetails = useDirectionsStore((s) => s.placeDetails);
   const [timeBudget, setTimeBudget] = useState(0); // 0 = без ограничения
   // '' = «как удобно»: no transport constraint, the agent picks the costing
@@ -396,6 +428,15 @@ export const Sidebar = () => {
   const addToHistory = useDirectionsStore((s) => s.addToHistory);
   const removeFromHistory = useDirectionsStore((s) => s.removeFromHistory);
   const clearHistory = useDirectionsStore((s) => s.clearHistory);
+
+  // Ready-made routes: fetched only when the tab that shows them is opened.
+  const {
+    itineraries,
+    missing: itinerariesMissing,
+    isLoading: itinerariesLoading,
+    error: itinerariesError,
+    reload: reloadItineraries,
+  } = useItineraries({ enabled: mode === 'itineraries' });
 
   const { snap, handleProps } = useSheetSnap();
   const taRef = useRef<HTMLTextAreaElement>(null);
@@ -589,6 +630,109 @@ export const Sidebar = () => {
       return copy;
     });
 
+  /**
+   * Open a past route again: the same stops, on the map, with their facts — what
+   * the history row promised. Nothing is re-requested from the planner; the
+   * route that gets drawn is the one that was stored.
+   */
+  const restoreFromHistory = (entry: RouteHistoryEntry) => {
+    const restored: Waypoint[] = entry.places.map((p, i) => ({
+      id: i.toString(),
+      userInput: p.name,
+      placeId: p.id,
+      geocodeResults: [
+        {
+          title: p.name,
+          description: p.category ?? undefined,
+          selected: true,
+          displaylnglat: [p.lon, p.lat] as [number, number],
+          sourcelnglat: [p.lon, p.lat] as [number, number],
+          key: i,
+          addressindex: 0,
+        },
+      ],
+    }));
+    setWaypoint(me ? [meWaypoint(me.lat, me.lon), ...restored] : restored);
+    setPlaceDetails(
+      Object.fromEntries(
+        entry.places.map((p) => [
+          p.id,
+          {
+            name: p.name,
+            category: p.category,
+            blurb: p.blurb ?? null,
+            funFact: p.funFact ?? null,
+            funFacts: p.funFacts ?? [],
+            links: p.links ?? [],
+            visitMinutes: p.visitMinutes ?? null,
+            openingHours: p.openingHours ?? null,
+            ticketPrice: p.ticketPrice ?? null,
+            town: p.town ?? null,
+            district: p.district ?? null,
+          } satisfies PlaceDetails,
+        ])
+      )
+    );
+    setSummary(null);
+    refetchDirections();
+  };
+
+  /**
+   * Show a ready-made route on the map.
+   *
+   * The stops are real places from the dataset, so this is a plain hand-over:
+   * waypoints and their facts go into the store and the router draws the line.
+   * No request to the model — that is the point of the tab. The transport comes
+   * from the itinerary, the time budget is left exactly as the tourist set it
+   * (a curated «осмотр» figure is not a budget they chose).
+   */
+  const openItinerary = (itinerary: Itinerary) => {
+    const stops = itinerary.stops;
+    const restored: Waypoint[] = stops.map((stop, i) => ({
+      id: i.toString(),
+      userInput: stop.name,
+      placeId: stop.place_id,
+      geocodeResults: [
+        {
+          title: stop.name,
+          description: stop.category ?? undefined,
+          selected: true,
+          displaylnglat: [stop.lon, stop.lat] as [number, number],
+          sourcelnglat: [stop.lon, stop.lat] as [number, number],
+          key: i,
+          addressindex: 0,
+        },
+      ],
+    }));
+    // replan=false: the router is called once below, with the new stops.
+    setTransportEverywhere(itinerary.transport, false);
+    setWaypoint(me ? [meWaypoint(me.lat, me.lon), ...restored] : restored);
+    setPlaceDetails(
+      Object.fromEntries(
+        stops.map((stop) => [
+          stop.place_id,
+          {
+            name: stop.name,
+            category: stop.category,
+            blurb: stop.blurb ?? null,
+            funFact: stop.fun_fact ?? null,
+            funFacts: stop.fun_facts ?? [],
+            links: stop.links ?? [],
+            visitMinutes: stop.visit_minutes ?? null,
+            openingHours: stop.opening_hours ?? null,
+            ticketPrice: stop.ticket_price ?? null,
+            town: stop.town ?? null,
+            district: stop.district ?? null,
+          } satisfies PlaceDetails,
+        ])
+      )
+    );
+    setSummary(null);
+    refetchDirections();
+    setMode('plan');
+  };
+
+  /** Build (or refine) a route. */
   const submitPrompt = async (text?: string) => {
     const q = (text ?? query).trim();
     if (!q || busy) return;
@@ -953,6 +1097,11 @@ export const Sidebar = () => {
     [waypoints, placeDetails]
   );
 
+  // Guide mode is worth offering only when there is something to walk: two
+  // stops is the minimum that makes a route. The guide itself explains the
+  // empty case, but the panel should not dangle the action before then.
+  const canGuide = guideStops.length >= 2;
+
   const stopCount = waypoints.filter(
     (w) => w.id !== ME_WAYPOINT_ID && w.geocodeResults.length > 0
   ).length;
@@ -981,7 +1130,7 @@ export const Sidebar = () => {
               First in the DOM, so the query field is the panel's first tab
               stop — the tourist lands on the thing the panel is for, not on the
               close button. `order-2` keeps it visually under the header. */}
-          {mode === 'plan' && (
+          {!guiding && mode === 'plan' && (
             <section className="order-2 shrink-0 border-b border-border px-4 pb-3 pt-3">
               <div className="rounded-2xl border border-border bg-card px-3 py-2.5 shadow-card transition-colors focus-within:border-ring">
                 <div className="flex items-center gap-2.5">
@@ -1032,63 +1181,118 @@ export const Sidebar = () => {
             </section>
           )}
 
-          {/* ── Header: mode switch, title, quiet close row. All three sit in
-              normal flow, so nothing can ever slide under the close button. ── */}
+          {/* ── Header. Planning and browsing keep the tab strip, the title and
+              the quiet close row; guide mode gets its own bar instead — the
+              navigator's «маршрут идёт» state, with one obvious way out and no
+              tabs to read past. All of it sits in normal flow, so nothing can
+              slide under the close button. ── */}
           <header className="order-1 shrink-0 border-b border-border px-4 pb-2.5">
             <SheetDragHandle snap={snap} handleProps={handleProps} />
-            <div className="flex items-center gap-2">
-              <Segmented
-                items={MODES}
-                value={mode}
-                onChange={setMode}
-                label="режим"
-                className="min-w-0 flex-1"
-                testId={(value) => `mode-${value}`}
-              />
-              <button
-                type="button"
-                onClick={toggle}
-                aria-label="закрыть панель"
-                title="закрыть панель"
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground max-md:h-11 max-md:w-11 pointer-coarse:h-11 pointer-coarse:w-11"
-              >
-                <X className="h-4 w-4" aria-hidden="true" />
-              </button>
-            </div>
-            <div className="mt-2.5 flex min-w-0 items-center gap-2">
-              <RouteIcon
-                className="h-4 w-4 shrink-0 text-primary"
-                aria-hidden="true"
-              />
-              <div className="min-w-0">
-                <SheetTitle className="truncate text-body">
-                  AI-гид по Гродно
-                </SheetTitle>
-                {/* Radix wants a description for the dialog; the visible line
-                    below is the same sentence, so keep it out of the a11y tree. */}
-                <SheetDescription className="sr-only">
-                  Планировщик маршрутов по Гродно и области
-                </SheetDescription>
-                <p className="truncate text-meta text-muted-foreground">
-                  {mode === 'plan'
-                    ? 'Опишите запрос — соберу маршрут по дорогам'
-                    : guideModeFor(transport).id === 'foot'
-                      ? 'Отмечайте пройденные остановки'
-                      : 'Отмечайте посещённые остановки'}
-                </p>
+            {guiding ? (
+              <div className="mt-1.5 flex items-center gap-2">
+                <div className="flex min-w-0 flex-1 items-center gap-2 rounded-2xl bg-primary px-3 py-2 text-primary-foreground">
+                  {/* Radix still needs a title for the dialog. */}
+                  <SheetTitle className="sr-only">Проводник</SheetTitle>
+                  <Compass className="h-4 w-4 shrink-0" aria-hidden="true" />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-label font-semibold">
+                      Проводник
+                    </p>
+                    <p className="truncate text-badge opacity-90">
+                      {pluralCountRu(guideStops.length, STOP_FORMS)} ·{' '}
+                      {guideModeFor(transport).label}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    data-testid="guide-exit"
+                    onClick={() => setGuiding(false)}
+                    className="shrink-0 rounded-full bg-primary-foreground/15 px-2.5 py-1 text-badge font-semibold transition-colors hover:bg-primary-foreground/25 max-md:min-h-11 pointer-coarse:min-h-11"
+                  >
+                    выйти
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  onClick={toggle}
+                  aria-label="закрыть панель"
+                  title="закрыть панель"
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground max-md:h-11 max-md:w-11 pointer-coarse:h-11 pointer-coarse:w-11"
+                >
+                  <X className="h-4 w-4" aria-hidden="true" />
+                </button>
               </div>
-            </div>
+            ) : (
+              <>
+                <div className="flex items-center gap-2">
+                  <Segmented
+                    items={VIEWS}
+                    value={mode}
+                    onChange={setMode}
+                    label="раздел панели"
+                    className="min-w-0 flex-1"
+                    testId={(value) => `mode-${value}`}
+                  />
+                  <button
+                    type="button"
+                    onClick={toggle}
+                    aria-label="закрыть панель"
+                    title="закрыть панель"
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground max-md:h-11 max-md:w-11 pointer-coarse:h-11 pointer-coarse:w-11"
+                  >
+                    <X className="h-4 w-4" aria-hidden="true" />
+                  </button>
+                </div>
+                <div className="mt-2.5 flex min-w-0 items-center gap-2">
+                  <RouteIcon
+                    className="h-4 w-4 shrink-0 text-primary"
+                    aria-hidden="true"
+                  />
+                  <div className="min-w-0">
+                    <SheetTitle className="truncate text-body">
+                      AI-гид по Гродно
+                    </SheetTitle>
+                    {/* Radix wants a description for the dialog; the visible
+                        line below is the same sentence, so keep it out of the
+                        a11y tree. */}
+                    <SheetDescription className="sr-only">
+                      Планировщик маршрутов по Гродно и области
+                    </SheetDescription>
+                    <p className="truncate text-meta text-muted-foreground">
+                      {VIEW_SUBTITLES[mode]}
+                    </p>
+                  </div>
+                </div>
+              </>
+            )}
           </header>
 
           {/* ── Body: the only part that scrolls. ── */}
-          <div className="order-3 flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 pb-6 pt-3">
-            {mode === 'guide' ? (
+          <div className="slim-scroll order-3 flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 pb-6 pt-3">
+            {guiding ? (
               // key: a rebuilt route remounts the guide, so the walk restarts
               // instead of carrying progress from the route that no longer exists
               <GuidePanel
                 key={guideRouteKey(guideStops)}
                 stops={guideStops}
                 transport={transport}
+              />
+            ) : mode === 'history' ? (
+              <HistoryTab
+                entries={routeHistory}
+                onRestore={restoreFromHistory}
+                onRemove={removeFromHistory}
+                onClear={clearHistory}
+              />
+            ) : mode === 'itineraries' ? (
+              <ItinerariesTab
+                itineraries={itineraries}
+                missing={itinerariesMissing}
+                isLoading={itinerariesLoading}
+                error={itinerariesError}
+                onReload={reloadItineraries}
+                onOpen={openItinerary}
+                disabled={busy}
               />
             ) : (
               <>
@@ -1621,110 +1825,14 @@ export const Sidebar = () => {
                   </button>
                 </section>
 
-                {/* === Route History === */}
-                <section className="flex flex-col gap-2 rounded-2xl border border-border bg-card p-3 shadow-card">
-                  <div className="flex items-center justify-between gap-2">
-                    <h2 className="flex items-center gap-1.5 text-label font-semibold">
-                      <History
-                        className="h-3.5 w-3.5 text-muted-foreground"
-                        aria-hidden="true"
-                      />
-                      История
-                      {routeHistory.length > 0 && (
-                        <span className="rounded-full bg-muted px-1.5 py-0.5 text-badge font-normal text-muted-foreground">
-                          {routeHistory.length}
-                        </span>
-                      )}
-                    </h2>
-                    {routeHistory.length > 0 && (
-                      <button
-                        type="button"
-                        onClick={clearHistory}
-                        className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-meta text-muted-foreground transition-colors hover:bg-muted hover:text-destructive max-md:min-h-11 pointer-coarse:min-h-11"
-                        title="очистить историю"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
-                        очистить
-                      </button>
-                    )}
-                  </div>
-
-                  {routeHistory.length === 0 ? (
-                    <p className="text-meta text-muted-foreground">
-                      Построенные маршруты появятся здесь
-                    </p>
-                  ) : (
-                    <div className="flex flex-col gap-1.5">
-                      {routeHistory.map((entry) => (
-                        <HistoryItem
-                          key={entry.id}
-                          entry={entry}
-                          onLoad={() => {
-                            const restored: Waypoint[] = entry.places.map(
-                              (p, i) => ({
-                                id: i.toString(),
-                                userInput: p.name,
-                                placeId: p.id,
-                                geocodeResults: [
-                                  {
-                                    title: p.name,
-                                    description: p.category ?? undefined,
-                                    selected: true,
-                                    displaylnglat: [p.lon, p.lat] as [
-                                      number,
-                                      number,
-                                    ],
-                                    sourcelnglat: [p.lon, p.lat] as [
-                                      number,
-                                      number,
-                                    ],
-                                    key: i,
-                                    addressindex: 0,
-                                  },
-                                ],
-                              })
-                            );
-                            setWaypoint(
-                              me
-                                ? [meWaypoint(me.lat, me.lon), ...restored]
-                                : restored
-                            );
-                            setPlaceDetails(
-                              Object.fromEntries(
-                                entry.places.map((p) => [
-                                  p.id,
-                                  {
-                                    name: p.name,
-                                    category: p.category,
-                                    blurb: p.blurb ?? null,
-                                    funFact: p.funFact ?? null,
-                                    funFacts: p.funFacts ?? [],
-                                    links: p.links ?? [],
-                                    visitMinutes: p.visitMinutes ?? null,
-                                    openingHours: p.openingHours ?? null,
-                                    ticketPrice: p.ticketPrice ?? null,
-                                    town: p.town ?? null,
-                                    district: p.district ?? null,
-                                  } satisfies PlaceDetails,
-                                ])
-                              )
-                            );
-                            setSummary(null);
-                            refetchDirections();
-                          }}
-                          onRemove={() => removeFromHistory(entry.id)}
-                        />
-                      ))}
-                    </div>
-                  )}
-                </section>
               </>
             )}
           </div>
 
           {/* ── Sticky footer: the one action the panel exists for. Outside the
-              scroll area, so it is reachable at either snap point. ── */}
-          {mode === 'plan' && (
+              scroll area, so it is reachable at either snap point. The guide
+              brings its own actions, so the footer steps out of its way. ── */}
+          {!guiding && mode === 'plan' && (
             <footer className="order-4 shrink-0 border-t border-border bg-background px-4 py-3">
               {/* Honest waiting: only what the client can observe — the request
                   is in flight, or the plan has arrived and the line is being
@@ -1763,11 +1871,32 @@ export const Sidebar = () => {
                   )}
                 </div>
               )}
+              {/* Entering the guide is its own, louder action: walking a route
+                  is a different activity from planning one, and in a navigator
+                  it is a button you press once, not a tab you visit. */}
+              {canGuide && (
+                <Button
+                  type="button"
+                  data-testid="guide-enter"
+                  onClick={() => setGuiding(true)}
+                  className="mb-2 h-12 w-full rounded-xl bg-primary text-body font-semibold text-primary-foreground motion-safe:transition hover:brightness-[0.97] active:scale-[0.99] motion-reduce:active:scale-100"
+                >
+                  <Compass className="h-4 w-4" aria-hidden="true" />
+                  Пойти по маршруту
+                </Button>
+              )}
               <Button
                 type="button"
                 onClick={() => submitPrompt()}
                 disabled={busy || !query.trim()}
-                className="h-12 w-full rounded-xl bg-primary text-body font-semibold text-primary-foreground transition hover:bg-primary hover:brightness-[0.97] active:scale-[0.99] motion-reduce:active:scale-100 disabled:opacity-40"
+                className={cn(
+                  'h-12 w-full rounded-xl text-body font-semibold transition hover:brightness-[0.97] active:scale-[0.99] motion-reduce:active:scale-100 disabled:opacity-40',
+                  // With a route in hand, starting it is the hero action — the
+                  // build button steps back to the quieter style.
+                  canGuide
+                    ? 'bg-secondary text-secondary-foreground'
+                    : 'bg-primary text-primary-foreground'
+                )}
               >
                 {busy && (
                   <Loader2
@@ -1842,78 +1971,3 @@ const Stepper = ({
     </div>
   </div>
 );
-
-// History item component
-interface HistoryItemProps {
-  entry: RouteHistoryEntry;
-  onLoad: () => void;
-  onRemove: () => void;
-}
-
-const HistoryItem = ({ entry, onLoad, onRemove }: HistoryItemProps) => {
-  const [expanded, setExpanded] = useState(false);
-
-  return (
-    <div className="rounded-xl border border-border p-2.5 text-label">
-      <div className="flex items-center justify-between gap-2">
-        <button
-          type="button"
-          onClick={onLoad}
-          className="min-w-0 flex-1 truncate text-left font-medium transition-colors hover:text-primary"
-          title={entry.query}
-        >
-          {entry.query.length > 35
-            ? entry.query.slice(0, 35) + '…'
-            : entry.query}
-        </button>
-        <div className="flex shrink-0 items-center gap-1">
-          <span className="flex items-center gap-0.5 text-meta text-muted-foreground">
-            <Clock className="h-3.5 w-3.5" aria-hidden="true" />
-            {entry.timeBudget <= 0 ? 'без лимита' : fmtMin(entry.timeBudget)}
-          </span>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onRemove();
-            }}
-            className="flex h-6 w-6 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-destructive max-md:h-11 max-md:w-11 pointer-coarse:h-11 pointer-coarse:w-11"
-            title="удалить"
-            aria-label="удалить из истории"
-          >
-            <X className="h-3.5 w-3.5" aria-hidden="true" />
-          </button>
-        </div>
-      </div>
-      <button
-        type="button"
-        onClick={() => setExpanded(!expanded)}
-        className="mt-1 inline-flex items-center gap-1 text-meta text-muted-foreground transition-colors hover:text-foreground max-md:min-h-11 pointer-coarse:min-h-11"
-      >
-        <MapPin className="h-3.5 w-3.5" aria-hidden="true" />
-        {placeCountRu(entry.places.length)}
-        <ChevronDown
-          className={`h-3.5 w-3.5 transition-transform ${
-            expanded ? 'rotate-180' : ''
-          }`}
-          aria-hidden="true"
-        />
-      </button>
-      {expanded && (
-        <ol className="mt-1.5 flex flex-col gap-0.5 pl-4">
-          {entry.places.map((p, i) => (
-            <li
-              key={p.id}
-              className="flex items-center gap-1.5 text-meta text-muted-foreground"
-            >
-              <span className="h-4 w-4 rounded-full bg-muted text-center text-badge font-semibold leading-4 text-foreground">
-                {i + 1}
-              </span>
-              <span className="min-w-0 break-words">{p.name}</span>
-            </li>
-          ))}
-        </ol>
-      )}
-    </div>
-  );
-};

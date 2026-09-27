@@ -332,3 +332,63 @@ i.help.grey.icon {
 .ui.menu:not(.vertical) .item {
   justify-content: center;
 }
+
+/* ── Scrollbars ──────────────────────────────────────────────────────────────
+   Nothing here was styled, so every scroll area fell back to the platform
+   scrollbar: a full-width grey track with square ends, painted on top of the
+   panel's 24px-rounded cards, reading like a piece of another product.
+
+   One rule set for the whole app instead:
+     * thin and inset — the thumb is narrower than the gutter and pulled in
+       from the edge, so it never touches a rounded corner;
+     * no track fill — the area behind it stays the panel's own background;
+     * quiet until touched — the thumb is 18% of the foreground colour (so it
+       follows light/dark for free) and darkens under the pointer, which keeps
+       it a hint rather than a permanent widget;
+     * `scrollbar-width`/`scrollbar-color` carry the same two colours to
+       Firefox, which ignores the WebKit pseudo-elements. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--foreground) 18%, transparent)
+    transparent;
+}
+
+*:hover,
+*:focus-within {
+  scrollbar-color: color-mix(in srgb, var(--foreground) 30%, transparent)
+    transparent;
+}
+
+::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  /* border + background-clip keeps the 6px thumb centred in a 12px gutter. */
+  border: 3px solid transparent;
+  border-radius: 9999px;
+  background-clip: content-box;
+  background-color: color-mix(in srgb, var(--foreground) 18%, transparent);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: color-mix(in srgb, var(--foreground) 30%, transparent);
+}
+
+::-webkit-scrollbar-thumb:active {
+  background-color: color-mix(in srgb, var(--foreground) 42%, transparent);
+}
+
+/* The panel's own scroll area: reserve the gutter, so content does not shift
+   sideways when a late-arriving list (ready-made routes, history) makes the
+   area scrollable for the first time. */
+.slim-scroll {
+  scrollbar-gutter: stable;
+  overscroll-behavior: contain;
+}

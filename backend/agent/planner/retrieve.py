@@ -283,7 +283,7 @@ def _hydrate(
     return [_row_to_candidate(r, scores.get(r["id"], 0.0)) for r in rows]
 
 
-def _parse_fun_facts(raw: str | None) -> list[str]:
+def parse_fun_facts(raw: str | None) -> list[str]:
     """Accept both '["a","b"]' JSON (region dataset) and 'a|b' pipe format (curated)."""
     raw = (raw or "").strip()
     if not raw:
@@ -297,7 +297,7 @@ def _parse_fun_facts(raw: str | None) -> list[str]:
     return [f.strip() for f in raw.split("|") if f.strip()][:3]
 
 
-def _parse_links(raw: str | None) -> list[dict]:
+def parse_links(raw: str | None) -> list[dict]:
     """Accept both '[{"title":...}]' JSON and 'title | url' pipe items."""
     raw = (raw or "").strip()
     if not raw:
@@ -333,8 +333,8 @@ def _row_to_candidate(row: dict, rrf_score: float) -> Candidate:
         lon=row["lon"],
         blurb=row.get("blurb"),
         fun_fact=row.get("fun_fact"),
-        fun_facts=_parse_fun_facts(row.get("fun_facts")),
-        links=_parse_links(row.get("links")),
+        fun_facts=parse_fun_facts(row.get("fun_facts")),
+        links=parse_links(row.get("links")),
         opening_hours=row.get("opening_hours"),
         ticket_price=row.get("ticket_price"),
         town=row.get("town"),

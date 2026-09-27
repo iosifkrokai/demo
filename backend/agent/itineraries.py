@@ -1,0 +1,135 @@
+"""Ready-made routes: a curated itinerary a tourist can open without asking.
+
+Design rules, in order of importance:
+
+1. **Stops are keys, not copies.** An itinerary lists `places.source_url` values
+   — the same provenance key the ingestion scripts write — so a re-seed cannot
+   silently repoint a stop at a different place, and nothing about a place
+   (name, category, coordinates, opening hours, curated visit time) is duplicated
+   into this file. Everything a card shows is read from the database.
+2. **A missing key is reported, not hidden.** If a stop no longer resolves the
+   itinerary is still served without it, and the key is listed in `missing`;
+   silently dropping it would make the route look complete when it is not.
+3. **The file is data, not code.** Hand-authored titles and blurbs live in
+   `data/itineraries.json`; this module only reads, resolves and totals.
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+from pathlib import Path
+from typing import Any
+
+log = logging.getLogger(__name__)
+
+#: Curated itineraries live next to the other hand-written dataset files.
+ITINERARIES_PATH = Path(__file__).resolve().parent.parent / "data" / "itineraries.json"
+
+#: Columns a stop carries into the API. A card prints them, so they are chosen
+#: explicitly instead of `SELECT *`.
+_STOP_SQL = """
+    SELECT id, source_url, name, category, town, district, lat, lon,
+           visit_minutes, opening_hours, blurb, fun_fact, fun_facts, links,
+           ticket_price
+    FROM places
+    WHERE source_url = ANY(%s)
+"""
+
+
+class ItinerariesUnavailable(RuntimeError):
+    """The curated file is unreadable — a deployment bug, not a request error."""
+
+
+def load_itineraries(path: Path | None = None) -> list[dict[str, Any]]:
+    """Read the curated file.
+
+    A broken file is a bug in the deployment; it is raised loudly at the call
+    site (the endpoint answers 503 with a reason code) rather than swallowed
+    into an empty list, which would look like «у нас нет готовых маршрутов».
+    """
+    target = path or ITINERARIES_PATH
+    try:
+        raw = json.loads(target.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ItinerariesUnavailable(f"{target}: {exc}") from exc
+    items = raw.get("itineraries")
+    if not isinstance(items, list) or not items:
+        raise ItinerariesUnavailable(f"{target}: no itineraries")
+    return items
+
+
+def _resolve_stops(conn: Any, keys: list[str]) -> tuple[dict[str, dict], list[str]]:
+    """Fetch every stop in one query. Returns (rows by source_url, missing keys)."""
+    if not keys:
+        return {}, []
+    from psycopg.rows import dict_row  # local: keeps the import surface small
+
+    with conn.cursor(row_factory=dict_row) as cur:
+        cur.execute(_STOP_SQL, (keys,))
+        rows = {row["source_url"]: dict(row) for row in cur.fetchall()}
+    missing = [key for key in keys if key not in rows]
+    return rows, missing
+
+
+def _stop_payload(row: dict) -> dict:
+    """One stop, in the shape the panel prints. Numbers stay numbers.
+
+    `fun_facts` and `links` are text columns holding JSON; they are read with the
+    planner's own parsers so a card and a planned route cannot disagree about the
+    same place.
+    """
+    from .planner.retrieve import parse_fun_facts, parse_links
+
+    return {
+        "place_id": row["id"],
+        "source_url": row["source_url"],
+        "name": row["name"],
+        "category": row["category"],
+        "town": row["town"],
+        "district": row["district"],
+        "lat": row["lat"],
+        "lon": row["lon"],
+        "visit_minutes": row["visit_minutes"],
+        "opening_hours": row["opening_hours"],
+        "blurb": row["blurb"],
+        "fun_fact": row["fun_fact"],
+        "fun_facts": parse_fun_facts(row.get("fun_facts")),
+        "links": parse_links(row.get("links")),
+        "ticket_price": row.get("ticket_price"),
+    }
+
+
+def resolve_itineraries(
+    conn: Any, items: list[dict[str, Any]] | None = None
+) -> tuple[list[dict[str, Any]], list[str]]:
+    """Attach dataset facts to every stop, in the authored order.
+
+    Returns the payloads and the list of keys that did not resolve. Two
+    itineraries may share a stop (the аптека-музей is in two of them), which is
+    why every row is fetched once for the whole file.
+    """
+    authored = items if items is not None else load_itineraries()
+    wanted = [key for item in authored for key in item.get("stops", [])]
+    rows, missing = _resolve_stops(conn, wanted)
+    if missing:
+        log.warning("itineraries: %d stop(s) no longer resolve: %s", len(missing), missing)
+
+    out: list[dict[str, Any]] = []
+    for item in authored:
+        stops = [_stop_payload(rows[key]) for key in item.get("stops", []) if key in rows]
+        visit_minutes = sum(s["visit_minutes"] or 0 for s in stops)
+        out.append(
+            {
+                "id": item["id"],
+                "title": item["title"],
+                "blurb": item["blurb"],
+                "transport": item.get("transport") or "pedestrian",
+                "stop_count": len(stops),
+                # Curated visit time of the stops themselves; the walking or
+                # driving time is added by the router when the route is drawn.
+                "visit_minutes": visit_minutes,
+                "stops": stops,
+            }
+        )
+    return out, missing

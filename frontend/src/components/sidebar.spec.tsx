@@ -38,6 +38,27 @@ vi.mock('@/hooks/use-directions-queries', () => ({
   useDirectionsQuery: () => ({ refetch: mockRefetch }),
 }));
 
+// The panel fetches the authored itineraries through react-query. This spec is
+// about the panel, so the hook is mocked like the directions one — which also
+// lets a test assert that opening a ready-made route makes no request at all.
+const mockItineraries = vi.hoisted(() => ({
+  items: [] as unknown[],
+  missing: [] as string[],
+  isLoading: false,
+  error: null as unknown,
+}));
+const mockReloadItineraries = vi.hoisted(() => vi.fn());
+
+vi.mock('@/hooks/use-itineraries', () => ({
+  useItineraries: () => ({
+    itineraries: mockItineraries.items,
+    missing: mockItineraries.missing,
+    isLoading: mockItineraries.isLoading,
+    error: mockItineraries.error,
+    reload: mockReloadItineraries,
+  }),
+}));
+
 vi.mock('@/stores/common-store', () => ({
   useCommonStore: (selector: (s: Record<string, unknown>) => unknown) =>
     selector({
@@ -377,22 +398,77 @@ describe('Sidebar', () => {
     expect(body.context.base_points[1].pinned).toBe(false);
   });
 
-  it('switches to the guide mode and back', async () => {
+  it('has no guide tab: the guide opens from one explicit action on a route', async () => {
     const user = userEvent.setup({ delay: null });
     render(<Sidebar />);
 
+    // Walking is not a section of the panel any more, so it is not in the strip.
+    expect(screen.queryByTestId('mode-guide')).toBeNull();
+    expect(screen.queryByTestId('mode-plan')).toBeInTheDocument();
+    expect(screen.queryByTestId('mode-history')).toBeInTheDocument();
+    expect(screen.queryByTestId('mode-itineraries')).toBeInTheDocument();
+    // Nothing to walk yet: the action is not offered before there is a route.
+    expect(screen.queryByTestId('guide-enter')).toBeNull();
     expect(screen.queryByTestId('guide-panel')).toBeNull();
 
-    await user.click(screen.getByTestId('mode-guide'));
-    // No route built yet: the guide explains what it needs instead of pretending
-    expect(screen.getByTestId('guide-panel')).toBeInTheDocument();
-    expect(
-      screen.getByText(/соберите маршрут в режиме планирования/i)
-    ).toBeInTheDocument();
+    // Two stops — a route worth walking.
+    mockStoreState.waypoints = [
+      {
+        id: 'me',
+        userInput: 'моё местоположение',
+        geocodeResults: [
+          { title: 'me', sourcelnglat: [23.8, 53.7], displaylnglat: [23.8, 53.7] },
+        ],
+      },
+      {
+        id: '0',
+        userInput: 'Старый замок',
+        placeId: 11,
+        geocodeResults: [
+          {
+            title: 'Старый замок',
+            selected: true,
+            sourcelnglat: [23.8222, 53.6772],
+            displaylnglat: [23.8222, 53.6772],
+          },
+        ],
+      },
+      {
+        id: '1',
+        userInput: 'Новый замок',
+        placeId: 12,
+        geocodeResults: [
+          {
+            title: 'Новый замок',
+            selected: true,
+            sourcelnglat: [23.8223, 53.6799],
+            displaylnglat: [23.8223, 53.6799],
+          },
+        ],
+      },
+    ];
 
-    await user.click(screen.getByTestId('mode-plan'));
-    expect(screen.queryByTestId('guide-panel')).toBeNull();
-    expect(buildButton()).toBeInTheDocument();
+    try {
+      cleanup();
+      render(<Sidebar />);
+
+      await user.click(screen.getByTestId('guide-enter'));
+
+      expect(screen.getByTestId('guide-panel')).toBeInTheDocument();
+      // Guide mode takes the panel over: read nothing past the tabs, walk.
+      expect(screen.queryByTestId('mode-plan')).toBeNull();
+      expect(screen.queryByTestId('mode-history')).toBeNull();
+      expect(screen.queryByTestId('guide-enter')).toBeNull();
+
+      await user.click(screen.getByTestId('guide-exit'));
+      expect(screen.queryByTestId('guide-panel')).toBeNull();
+      // …and back to where the tourist was, with the route still in hand.
+      expect(screen.getByTestId('mode-plan')).toBeInTheDocument();
+      expect(buildButton()).toBeInTheDocument();
+      expect(screen.getByTestId('guide-enter')).toBeInTheDocument();
+    } finally {
+      mockStoreState.waypoints = [];
+    }
   });
 
   // ── The redesign (DESIGN.md phases 1–2) ────────────────────────────────────
@@ -1039,7 +1115,9 @@ describe('Sidebar — felt quality', () => {
     render(<Sidebar />);
 
     expect(screen.getByTestId('mode-plan').className).toMatch(/max-md:h-11/);
-    expect(screen.getByTestId('mode-guide').className).toMatch(/max-md:h-11/);
+    expect(screen.getByTestId('mode-itineraries').className).toMatch(
+      /max-md:h-11/
+    );
     for (const hint of ['замки', 'костёлы', 'монастыри', 'где поесть']) {
       expect(screen.getByTestId(`hint-${hint}`).className).toMatch(
         /max-md:h-11/
@@ -1093,7 +1171,7 @@ describe('Sidebar — felt quality', () => {
     expect(screen.queryByRole('alert')).toBeNull();
   });
 
-  it('inflects the history row («3 места», not «3 мест»)', () => {
+  it('inflects the history row («3 места», not «3 мест»)', async () => {
     mockStoreState.routeHistory = [
       {
         id: 'h1',
@@ -1121,7 +1199,118 @@ describe('Sidebar — felt quality', () => {
 
     render(<Sidebar />);
 
+    // History has its own tab now, so the row is not on screen until it is
+    // opened — that is the point of the tab, not a regression.
+    await userEvent.setup({ delay: null }).click(screen.getByTestId('mode-history'));
+
     expect(screen.getByText('3 места')).toBeInTheDocument();
     expect(screen.queryByText('3 мест')).toBeNull();
+  });
+
+  it('switches views: planner, history, ready-made routes', async () => {
+    render(<Sidebar />);
+    const user = userEvent.setup({ delay: null });
+
+    // Planner: the ask field is the view's own content.
+    expect(askField()).toBeInTheDocument();
+
+    await user.click(screen.getByTestId('mode-history'));
+    expect(screen.getByTestId('history-tab')).toBeInTheDocument();
+    // The planner's own controls are gone, not merely scrolled away.
+    expect(
+      screen.queryByRole('textbox', { name: 'что хотите посмотреть' })
+    ).toBeNull();
+    // Nothing to build from this view, so the build action is not offered.
+    expect(
+      screen.queryByRole('button', { name: /построить маршрут/i })
+    ).toBeNull();
+
+    await user.click(screen.getByTestId('mode-itineraries'));
+    // An empty authored list is stated as empty, not dressed up as a route.
+    expect(screen.getByTestId('itineraries-empty')).toBeInTheDocument();
+
+    await user.click(screen.getByTestId('mode-plan'));
+    expect(askField()).toBeInTheDocument();
+  });
+
+  it('opens a ready-made route on the map without asking the model for it', async () => {
+    mockItineraries.items = [
+      {
+        id: 'old-town-castles',
+        title: 'Два замка и Советская',
+        blurb: 'Сердце старого города',
+        transport: 'pedestrian',
+        stop_count: 2,
+        visit_minutes: 150,
+        stops: [
+          {
+            place_id: 1,
+            source_url: 'city:old-castle',
+            name: 'Старый замок (Гродно)',
+            category: 'замок',
+            town: 'Гродно',
+            district: null,
+            lat: 53.6791,
+            lon: 23.8216,
+            visit_minutes: 90,
+            opening_hours: 'вт–вс 10:00–18:00',
+            blurb: 'Королевский замок Витовта',
+            fun_fact: 'Факт',
+            fun_facts: [],
+            links: [],
+            ticket_price: null,
+          },
+          {
+            place_id: 2,
+            source_url: 'city:new-castle',
+            name: 'Новый замок',
+            category: 'дворец',
+            town: 'Гродно',
+            district: null,
+            lat: 53.6799,
+            lon: 23.8223,
+            visit_minutes: 60,
+            opening_hours: null,
+            blurb: null,
+            fun_fact: null,
+            fun_facts: [],
+            links: [],
+            ticket_price: null,
+          },
+        ],
+      },
+    ];
+
+    // Any request at all in this test is a request the tab should not make.
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    try {
+      render(<Sidebar />);
+      const user = userEvent.setup({ delay: null });
+
+      await user.click(screen.getByTestId('mode-itineraries'));
+      await user.click(screen.getByTestId('itinerary-open-old-town-castles'));
+
+      // The stops are handed to the map as waypoints…
+      await waitFor(() => expect(mockSetWaypoint).toHaveBeenCalled());
+      const waypoints = mockSetWaypoint.mock.calls.at(-1)![0] as Array<{
+        userInput: string;
+        placeId: number;
+      }>;
+      expect(waypoints.map((w) => w.userInput)).toEqual([
+        'Старый замок (Гродно)',
+        'Новый замок',
+      ]);
+      expect(waypoints.map((w) => w.placeId)).toEqual([1, 2]);
+      // …the router is asked to draw them…
+      expect(mockRefetch).toHaveBeenCalled();
+      // …and the model is never asked: this tab exists to avoid that request.
+      expect(fetchMock).not.toHaveBeenCalled();
+      // Back on the planner, where the route can be refined as usual.
+      expect(askField()).toBeInTheDocument();
+    } finally {
+      mockItineraries.items = [];
+    }
   });
 });

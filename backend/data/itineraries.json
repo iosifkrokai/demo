@@ -1,0 +1,83 @@
+{
+  "_comment": [
+    "Ready-made routes, authored by hand and frozen in this file.",
+    "Stops are keyed on places.source_url — the provenance key the ingestion",
+    "scripts write — never on database ids, which are reassigned on a re-seed.",
+    "Nothing about a place is repeated here: name, category, coordinates, opening",
+    "hours and the curated visit time are read from the database at request time,",
+    "so a card can never show a fact the dataset does not hold.",
+    "`transport` is a Valhalla costing word, exactly as the planner sends it.",
+    "A tip is allowed only when it restates what the data already says."
+  ],
+  "itineraries": [
+    {
+      "id": "old-town-castles",
+      "title": "Два замка и Советская",
+      "blurb": "Сердце старого города: оба замка, Фарный костёл и пешеходная Советская с аптекой-музеем.",
+      "transport": "pedestrian",
+      "stops": [
+        "city:old-castle",
+        "city:new-castle",
+        "city:farny",
+        "city:pharmacy-museum"
+      ]
+    },
+    {
+      "id": "churches-of-the-north",
+      "title": "Коложа и монастыри",
+      "blurb": "Северо-восточная линия: бригитки, кафедральный собор, бернардинцы и древнейшая церковь Беларуси.",
+      "transport": "pedestrian",
+      "stops": [
+        "city:brigittine",
+        "city:pokrov-cathedral",
+        "city:bernardine",
+        "city:kolozha"
+      ]
+    },
+    {
+      "id": "museums-rainy-day",
+      "title": "Дождь: три музея",
+      "blurb": "Что смотреть в Гродно под крышей — история города, старинная аптека и дом Элизы Ожешко.",
+      "transport": "pedestrian",
+      "stops": [
+        "city:city-history-museum",
+        "city:pharmacy-museum",
+        "city:orzeshko-museum"
+      ]
+    },
+    {
+      "id": "family-with-kids",
+      "title": "С детьми: замки и парк",
+      "blurb": "Короткие переходы, оба замка и Каложский парк; между замками и парком — туалет по пути.",
+      "transport": "pedestrian",
+      "stops": [
+        "city:old-castle",
+        "city:new-castle",
+        "osm_poi:node/5659105662",
+        "city:kolozha"
+      ]
+    },
+    {
+      "id": "castles-lida-krevo-golshany",
+      "title": "Замки северо-востока: Лида — Крево — Гольшаны",
+      "blurb": "Кольцо по области на машине: живой Лидский замок, руины Крево и Гольшан.",
+      "transport": "auto",
+      "stops": [
+        "region:lida-castle",
+        "region:krevo-castle",
+        "region:golshany-castle"
+      ]
+    },
+    {
+      "id": "mir-novogrudok-dyatlovo",
+      "title": "Мир, Новогрудок и Дятлово",
+      "blurb": "Полный день на машине: Мирский замок, руины Новогрудка и дворец Радзивиллов в Дятлово.",
+      "transport": "auto",
+      "stops": [
+        "region:mir-castle",
+        "region:novogrudok-castle",
+        "region:dyatlovo-palace"
+      ]
+    }
+  ]
+}

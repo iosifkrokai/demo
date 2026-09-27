@@ -6,6 +6,13 @@ import { cn } from '@/lib/utils';
 export interface SegmentedItem<T extends string> {
   value: T;
   label: string;
+  /**
+   * Shorter text for the pill when four items share a 380px column
+   * («Планирование» → «План»). `label` stays the full meaning: it is the title
+   * tooltip and the accessible name, so the shortened pill is never the only
+   * place the full wording lives.
+   */
+  short?: string;
   icon?: LucideIcon;
 }
 
@@ -103,6 +110,8 @@ export function Segmented<T extends string>({
             tabIndex={active ? 0 : -1}
             disabled={disabled}
             data-testid={testId?.(item.value)}
+            // The pill may be shortened; the full wording stays the name.
+            aria-label={item.short ? item.label : undefined}
             onClick={() => onChange(item.value)}
             onKeyDown={(event) => onKeyDown(event, index)}
             title={item.label}
@@ -119,7 +128,7 @@ export function Segmented<T extends string>({
             )}
           >
             {Icon && <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />}
-            <span className="truncate">{item.label}</span>
+            <span className="truncate">{item.short ?? item.label}</span>
           </button>
         );
       })}

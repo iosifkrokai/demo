@@ -27,7 +27,7 @@ import uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from . import clients_api, constants
+from . import clients_api, constants, itineraries as itineraries_mod
 from .config import openrouter_api_key, settings
 from .errors import AgentError
 from .models import (
@@ -114,6 +114,25 @@ def reroute(req: RerouteReq) -> RouteResponse:
 @app.post("/routes/explain")
 def explain(req: ExplainReq) -> dict:
     return {"explanation": _call(app.state.planner.explain_route, point_ids=req.point_ids)}
+
+
+@app.get("/routes/itineraries")
+def itineraries() -> dict:
+    """Ready-made routes — curated, and resolved against the live dataset.
+
+    No model is involved: the list is authored, and every stop is read from the
+    same places table the planner uses. `missing` names any stop key that no
+    longer resolves, so a shortened route is visible as such instead of passing
+    for a complete one.
+    """
+    try:
+        items, missing = itineraries_mod.resolve_itineraries(app.state.planner.db)
+    except itineraries_mod.ItinerariesUnavailable as exc:
+        log.error("itineraries unavailable: %s", exc)
+        raise HTTPException(
+            status_code=503, detail={"reason": "itineraries_unavailable"}
+        ) from exc
+    return {"items": items, "missing": missing}
 
 
 @app.get("/health", response_model=HealthResponse)
