@@ -2,6 +2,9 @@ import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
 
 import { en } from './en';
+import { guideArea } from './namespaces/guide';
+import { historyArea } from './namespaces/history';
+import { mapArea } from './namespaces/map';
 import { ru } from './ru';
 
 /**
@@ -39,8 +42,29 @@ export const initialLanguage = (): Language => {
     : 'ru';
 };
 
+/**
+ * The flat dictionaries the app actually uses: the core area (`ru`/`en`) plus
+ * every namespace area, merged by key. Exported so the parity test checks what
+ * ships rather than a copy of it.
+ */
+export const flatRu = {
+  ...ru,
+  ...guideArea.ru,
+  ...mapArea.ru,
+  ...historyArea.ru,
+};
+export const flatEn = {
+  ...en,
+  ...guideArea.en,
+  ...mapArea.en,
+  ...historyArea.en,
+};
+
 void i18n.use(initReactI18next).init({
-  resources: { ru: { translation: ru }, en: { translation: en } },
+  resources: {
+    ru: { translation: flatRu },
+    en: { translation: flatEn },
+  },
   lng: initialLanguage(),
   fallbackLng: 'ru',
   supportedLngs: [...LANGUAGES],

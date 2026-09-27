@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { CSSProperties } from 'react';
 import type { TFunction } from 'i18next';
 import { useTranslation } from 'react-i18next';
 import type { Dispatch, SetStateAction } from 'react';
@@ -67,6 +68,7 @@ import {
   type RouteStage,
 } from './parts/route-progress';
 import { Segmented, type SegmentedItem } from './parts/segmented';
+import { PanelResizeHandle, usePanelWidth } from './parts/panel-resize';
 import { LanguageSwitcher } from './parts/language-switcher';
 import { StatTile, StatTiles } from './parts/stat-tiles';
 import { StopsSkeleton, SummarySkeleton } from './parts/skeletons';
@@ -477,6 +479,8 @@ export const Sidebar = () => {
   const [manualErr, setManualErr] = useState<string | null>(null);
 
   const { t } = useTranslation();
+  // The docked width, dragged by the tourist and remembered across visits.
+  const panel = usePanelWidth();
   const tabs = useMemo(() => buildViews(t), [t]);
   const subtitles = useMemo(() => buildViewSubtitles(t), [t]);
   const hints = useMemo(() => buildHintChips(t), [t]);
@@ -1224,6 +1228,7 @@ export const Sidebar = () => {
       <SheetContent
         side="left"
         className={cn(PANEL_SHEET_CLASS, SHEET_SNAP_CLASS[snap])}
+        style={{ '--panel-width': `${panel.width}px` } as CSSProperties}
       >
         <div className="flex h-full min-h-0 flex-col">
           {/* === Ask ===
@@ -2009,6 +2014,15 @@ export const Sidebar = () => {
             </footer>
           )}
         </div>
+        {/* Last in the DOM on purpose: it is positioned absolutely on the right
+            edge, and the panel's first tab stop must stay the query field —
+            not a resize handle. */}
+        <PanelResizeHandle
+          width={panel.width}
+          resizing={panel.resizing}
+          props={panel.handleProps}
+          label={t('panel.resize')}
+        />
       </SheetContent>
     </Sheet>
   );

@@ -1,5 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor, cleanup, within } from '@testing-library/react';
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  cleanup,
+  within,
+} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 const mockStoreState = vi.hoisted(() => ({
@@ -1097,6 +1104,24 @@ describe('Sidebar — felt quality', () => {
       }
     );
     mockGetState.mockReturnValue(mockStoreState);
+  });
+
+  it('даёт туристу задать ширину панели и помнит её', async () => {
+    render(<Sidebar />);
+
+    const handle = screen.getByTestId('panel-resize-handle');
+    // Ширина живёт в CSS-переменной, а её читает класс панели только с md —
+    // мобильная шторка остаётся во всю ширину экрана.
+    const panelAt = () => document.querySelector('[style*="--panel-width"]');
+    expect(handle).toHaveAttribute('aria-valuenow', '420');
+    expect(panelAt()?.getAttribute('style')).toContain('--panel-width: 420px');
+
+    fireEvent.pointerDown(handle, { clientX: 400, pointerId: 1 });
+    fireEvent.pointerMove(handle, { clientX: 460, pointerId: 1 });
+    fireEvent.pointerUp(handle, { clientX: 460, pointerId: 1 });
+
+    expect(handle).toHaveAttribute('aria-valuenow', '480');
+    expect(panelAt()?.getAttribute('style')).toContain('--panel-width: 480px');
   });
 
   it('makes the query field the panel’s first tab stop, not the close button', () => {

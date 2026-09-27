@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { en } from './en';
-import { ru } from './ru';
+import { flatEn as en, flatRu as ru } from './index';
 
 /** Every leaf path of a dictionary, e.g. `tabs.planShort`. */
 const paths = (node: Record<string, unknown>, prefix = ''): string[] =>

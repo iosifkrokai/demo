@@ -8,6 +8,9 @@ import type { Dictionary } from './ru';
  * to Russian mid-screen.
  */
 export const en: Dictionary = {
+  panel: {
+    resize: 'resize the panel',
+  },
   app: {
     title: 'Grodno AI guide',
     description: 'Route planner for Grodno and the region',

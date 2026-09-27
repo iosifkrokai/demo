@@ -14,7 +14,7 @@ export const SHEET_SNAP_CLASS: Record<SheetSnap, string> = {
 
 /**
  * The panel itself: a bottom sheet under 768px (the map stays visible above it)
- * and a 380px column from 768px up. Built on the shared `Sheet` primitive, so
+ * and a resizable column (420px by default) from 768px up. Built on the shared `Sheet` primitive, so
  * these classes only re-shape it — `cn()` (tailwind-merge) lets them win over
  * the primitive's own `inset-y-0 h-full w-3/4` defaults.
  */
@@ -26,8 +26,10 @@ export const PANEL_SHEET_CLASS = [
   'shadow-sheet',
   'transition-[height] duration-200 ease-out motion-reduce:transition-none',
   'data-[state=open]:slide-in-from-bottom data-[state=closed]:slide-out-to-bottom',
-  // desktop: 360–400px column
-  'md:inset-0 md:w-[380px] md:max-w-[400px]',
+  // desktop: a column whose width the tourist sets (`--panel-width`, see
+  // panel-resize.tsx). The variable only applies from md up, so the mobile
+  // sheet keeps the full viewport width.
+  'md:inset-0 md:w-[var(--panel-width,420px)] md:max-w-[var(--panel-width,420px)]',
   'md:rounded-none md:border-t-0 md:border-r md:shadow-none',
   'md:transition-none',
   'md:data-[state=open]:slide-in-from-left md:data-[state=closed]:slide-out-to-left',

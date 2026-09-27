@@ -8,6 +8,9 @@
  * from data and are switched by the request's `language`, not by the UI.
  */
 export const ru = {
+  panel: {
+    resize: 'изменять ширину панели',
+  },
   app: {
     title: 'AI-гид по Гродно',
     description: 'Планировщик маршрутов по Гродно и области',
