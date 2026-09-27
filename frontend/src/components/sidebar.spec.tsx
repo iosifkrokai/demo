@@ -20,6 +20,7 @@ const mockStoreState = vi.hoisted(() => ({
   addToHistory: vi.fn(),
   removeFromHistory: vi.fn(),
   clearHistory: vi.fn(),
+  markWalked: vi.fn(),
   snapshotRoute: vi.fn(),
   undoRefinement: vi.fn(),
   resetRoute: vi.fn(),
@@ -1307,6 +1308,16 @@ describe('Sidebar — felt quality', () => {
       expect(mockRefetch).toHaveBeenCalled();
       // …and the model is never asked: this tab exists to avoid that request.
       expect(fetchMock).not.toHaveBeenCalled();
+      // A ready-made route is still a route someone may walk, so it lands in the
+      // history with its own stop key — that is what a finished walk marks.
+      const entry = mockStoreState.addToHistory.mock.calls.at(-1)![0] as {
+        query: string;
+        routeKey: string;
+        places: unknown[];
+      };
+      expect(entry.query).toBe('Два замка и Советская');
+      expect(entry.routeKey).toContain('@');
+      expect(entry.places).toHaveLength(2);
       // Back on the planner, where the route can be refined as usual.
       expect(askField()).toBeInTheDocument();
     } finally {

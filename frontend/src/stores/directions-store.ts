@@ -57,6 +57,30 @@ export interface RouteHistoryEntry {
   timeBudget: number;
   places: RouteHistoryPlace[];
   createdAt: number; // timestamp
+  /**
+   * Fingerprint of the route's stops (see `guideRouteKey`). Stored so the guide
+   * can find this entry when the walk moves: without it the history has no way
+   * to tell which of two similar routes was actually walked.
+   */
+  routeKey?: string;
+  /** How far the walk got, once it was started at all. */
+  walk?: RouteHistoryWalk;
+}
+
+/**
+ * How far the tourist got through a route's walk.
+ *
+ * Kept with the history entry rather than in the guide, because a route you
+ * actually walked is a different thing from one you only planned — that
+ * difference has to survive closing the guide, reloading, and tomorrow.
+ */
+export interface RouteHistoryWalk {
+  visited: number;
+  total: number;
+  /** When the walk last moved (ms epoch, the same clock as `createdAt`). */
+  at: number;
+  /** Every stop of the route was marked visited. */
+  completed: boolean;
 }
 
 export interface PlaceLink {
@@ -219,6 +243,15 @@ interface DirectionsActions {
   setActiveRouteIndex: (index: number) => void;
   // Route history actions
   addToHistory: (entry: Omit<RouteHistoryEntry, 'id' | 'createdAt'>) => void;
+  /**
+   * Record how far the walk of a route has got. Matched on the route's stop
+   * fingerprint; a route with no history entry is left alone (nothing to mark).
+   */
+  markWalked: (walk: {
+    routeKey: string;
+    visited: number;
+    total: number;
+  }) => void;
   removeFromHistory: (id: string) => void;
   clearHistory: () => void;
   loadHistory: () => void;
@@ -499,11 +532,20 @@ export const useDirectionsStore = create<DirectionsStore>()(
       addToHistory: (entry) =>
         set(
           (state) => {
+            const previous = state.routeHistory.find(
+              (e) => e.query === entry.query
+            );
             const newEntry: RouteHistoryEntry = {
               ...entry,
               id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
               createdAt: Date.now(),
             };
+            // Rebuilding the *same* route under the same request is a re-do, not
+            // a new route: keep the walk that was already recorded for it. A
+            // different route (different stops) starts with no walk.
+            if (previous?.routeKey && previous.routeKey === entry.routeKey) {
+              newEntry.walk = previous.walk;
+            }
             // Remove duplicate queries
             state.routeHistory = [
               newEntry,
@@ -513,6 +555,28 @@ export const useDirectionsStore = create<DirectionsStore>()(
           },
           undefined,
           'addToHistory'
+        ),
+
+      markWalked: ({ routeKey, visited, total }) =>
+        set(
+          (state) => {
+            const entry = state.routeHistory.find(
+              (e) => e.routeKey === routeKey
+            );
+            // No entry for this route (a hand-made one, say): nothing to mark,
+            // and nothing to invent either.
+            if (!entry) return;
+            entry.walk = {
+              visited,
+              total,
+              at: Date.now(),
+              completed: total > 0 && visited >= total,
+            };
+            state.routeHistory = [...state.routeHistory];
+            saveHistoryToStorage(state.routeHistory);
+          },
+          undefined,
+          'markWalked'
         ),
 
       removeFromHistory: (id) =>

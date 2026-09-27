@@ -314,6 +314,31 @@ const meWaypoint = (lat: number, lon: number): Waypoint => {
  * Layout follows DESIGN.md: a 380px column on desktop, a bottom sheet with two
  * snap points under 768px, header and main action outside the scroll area.
  */
+/**
+ * Fingerprint of the route as the guide will walk it.
+ *
+ * Taken from the waypoints — place id plus the *source* coordinates the guide
+ * itself reads — and never from the API response. A key that differs by a metre
+ * from the one the guide computes leaves a walked route with no history entry
+ * to mark, which is exactly the bug this closes.
+ */
+const walkKey = (waypoints: readonly Waypoint[]) =>
+  guideRouteKey(
+    waypoints
+      .filter((w) => w.id !== ME_WAYPOINT_ID)
+      .map((w) => {
+        const geo =
+          w.geocodeResults.find((g) => g.selected) ?? w.geocodeResults[0];
+        const [lon = 0, lat = 0] = geo?.sourcelnglat ?? geo?.displaylnglat ?? [];
+        return {
+          placeId: w.placeId,
+          name: w.userInput || geo?.title || '?',
+          lat,
+          lon,
+        };
+      })
+  );
+
 export const Sidebar = () => {
   const panelOpen = useCommonStore((s) => s.directionsPanelOpen);
   const toggle = useCommonStore((s) => s.toggleDirections);
@@ -428,6 +453,7 @@ export const Sidebar = () => {
   const addToHistory = useDirectionsStore((s) => s.addToHistory);
   const removeFromHistory = useDirectionsStore((s) => s.removeFromHistory);
   const clearHistory = useDirectionsStore((s) => s.clearHistory);
+  const markWalked = useDirectionsStore((s) => s.markWalked);
 
   // Ready-made routes: fetched only when the tab that shows them is opened.
   const {
@@ -706,7 +732,25 @@ export const Sidebar = () => {
     }));
     // replan=false: the router is called once below, with the new stops.
     setTransportEverywhere(itinerary.transport, false);
-    setWaypoint(me ? [meWaypoint(me.lat, me.lon), ...restored] : restored);
+    const next = me ? [meWaypoint(me.lat, me.lon), ...restored] : restored;
+    setWaypoint(next);
+    // A ready-made route is still a route someone may walk, and a walk needs a
+    // history entry to attach to — without this, «пройдено» would be missing for
+    // exactly the routes most people take.
+    addToHistory({
+      query: itinerary.title,
+      timeBudget: itinerary.visit_minutes,
+      routeKey: walkKey(next),
+      places: stops.map((stop) => ({
+        id: stop.place_id,
+        name: stop.name,
+        category: stop.category,
+        lat: stop.lat,
+        lon: stop.lon,
+        blurb: stop.blurb ?? null,
+        funFact: stop.fun_fact ?? null,
+      })),
+    });
     setPlaceDetails(
       Object.fromEntries(
         stops.map((stop) => [
@@ -938,6 +982,9 @@ export const Sidebar = () => {
       addToHistory({
         query: q,
         timeBudget: data.budget?.budget_minutes ?? timeBudget,
+        // The route's fingerprint, so the guide (which walks these very stops)
+        // can find this entry later and record what was actually walked.
+        routeKey: walkKey([...start, ...placeWaypoints]),
         places: pts.map((p) => ({
           id: p.id,
           name: p.name,
@@ -1101,6 +1148,27 @@ export const Sidebar = () => {
   // stops is the minimum that makes a route. The guide itself explains the
   // empty case, but the panel should not dangle the action before then.
   const canGuide = guideStops.length >= 2;
+
+  /**
+   * Keep the route's history entry in step with the walk.
+   *
+   * The guide reports progress; this is what turns it into «пройдено 3 из 5» in
+   * the history, where it is still true after the guide is closed. Identical
+   * progress is not written twice (the guide re-reports on every render of its
+   * progress), and a route with fewer than two stops has no entry to mark.
+   */
+  const lastWalkedRef = useRef('');
+  const handleWalked = useCallback(
+    ({ visited, total }: { visited: number; total: number }) => {
+      const routeKey = guideRouteKey(guideStops);
+      if (!routeKey || total < 2) return;
+      const stamp = `${routeKey}#${visited}/${total}`;
+      if (lastWalkedRef.current === stamp) return;
+      lastWalkedRef.current = stamp;
+      markWalked({ routeKey, visited, total });
+    },
+    [guideStops, markWalked]
+  );
 
   const stopCount = waypoints.filter(
     (w) => w.id !== ME_WAYPOINT_ID && w.geocodeResults.length > 0
@@ -1276,6 +1344,7 @@ export const Sidebar = () => {
                 key={guideRouteKey(guideStops)}
                 stops={guideStops}
                 transport={transport}
+                onWalked={handleWalked}
               />
             ) : mode === 'history' ? (
               <HistoryTab

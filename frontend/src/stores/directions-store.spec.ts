@@ -154,3 +154,100 @@ describe('directions-store — refinement context', () => {
     expect(state.successful).toBe(false);
   });
 });
+
+describe('история: что было пройдено', () => {
+  const planned = (routeKey: string, query = 'два замка пешком') => ({
+    query,
+    timeBudget: 120,
+    routeKey,
+    places: [
+      {
+        id: 1,
+        name: 'Старый замок',
+        category: 'замок',
+        lat: 53.677,
+        lon: 23.83,
+      },
+    ],
+  });
+
+  const history = () => useDirectionsStore.getState().routeHistory;
+
+  beforeEach(() => {
+    useDirectionsStore.getState().clearHistory();
+  });
+
+  it('отмечает пройденным тот маршрут, который шли, и только его', () => {
+    const store = useDirectionsStore.getState();
+    store.addToHistory(planned('a@1,2'));
+    store.addToHistory(planned('b@3,4', 'коложский парк'));
+
+    const walkedKey = history()[1]!.routeKey!;
+    useDirectionsStore.getState().markWalked({
+      routeKey: walkedKey,
+      visited: 1,
+      total: 2,
+    });
+
+    const [other, walked] = history();
+    expect(walked!.walk).toMatchObject({
+      visited: 1,
+      total: 2,
+      completed: false,
+    });
+    expect(other!.walk).toBeUndefined();
+  });
+
+  it('считает маршрут пройденным только когда посещены все точки', () => {
+    const store = useDirectionsStore.getState();
+    store.addToHistory(planned('a@1,2'));
+    const routeKey = history()[0]!.routeKey!;
+
+    useDirectionsStore.getState().markWalked({ routeKey, visited: 1, total: 2 });
+    expect(history()[0]!.walk?.completed).toBe(false);
+
+    useDirectionsStore.getState().markWalked({ routeKey, visited: 2, total: 2 });
+    expect(history()[0]!.walk).toMatchObject({ visited: 2, completed: true });
+  });
+
+  it('ничего не выдумывает для маршрута, которого нет в истории', () => {
+    const store = useDirectionsStore.getState();
+    store.addToHistory(planned('a@1,2'));
+
+    useDirectionsStore.getState().markWalked({
+      routeKey: 'чужая@9,9',
+      visited: 2,
+      total: 2,
+    });
+
+    expect(history()).toHaveLength(1);
+    expect(history()[0]!.walk).toBeUndefined();
+  });
+
+  it('сохраняет пройденное, когда тот же маршрут строят заново', () => {
+    const store = useDirectionsStore.getState();
+    store.addToHistory(planned('a@1,2'));
+    const routeKey = history()[0]!.routeKey!;
+    useDirectionsStore.getState().markWalked({ routeKey, visited: 2, total: 2 });
+
+    useDirectionsStore.getState().addToHistory(planned('a@1,2'));
+
+    expect(history()).toHaveLength(1);
+    expect(history()[0]!.walk).toMatchObject({ visited: 2, completed: true });
+  });
+
+  it('начинает прогулку с нуля, если новый маршрут другой', () => {
+    const store = useDirectionsStore.getState();
+    store.addToHistory(planned('a@1,2'));
+    useDirectionsStore.getState().markWalked({
+      routeKey: 'a@1,2',
+      visited: 2,
+      total: 2,
+    });
+
+    useDirectionsStore.getState().addToHistory(planned('b@3,4'));
+
+    expect(history()).toHaveLength(1);
+    expect(history()[0]!.walk).toBeUndefined();
+  });
+});

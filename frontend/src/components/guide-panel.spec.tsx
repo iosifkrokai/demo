@@ -501,6 +501,34 @@ describe('GuidePanel · режим движения', () => {
     expect(screen.getByText(/маршрут пройден/i)).toBeInTheDocument();
   });
 
+  it('сообщает, насколько пройден маршрут, — это забирает история', async () => {
+    const onWalked = vi.fn();
+    const geo = stubWatchingGeolocation();
+    const user = userEvent.setup();
+    render(<GuidePanel stops={STOPS} onWalked={onWalked} />);
+
+    // До начала прогулки прогресса нет, но он уже честно равен нулю.
+    await waitFor(() =>
+      expect(onWalked).toHaveBeenLastCalledWith({ visited: 0, total: 2 })
+    );
+
+    geo.fail();
+    await user.click(screen.getByTestId('guide-start'));
+    await waitFor(() =>
+      expect(screen.getByTestId('guide-advance')).toBeInTheDocument()
+    );
+
+    await user.click(screen.getByTestId('guide-advance'));
+    await waitFor(() =>
+      expect(onWalked).toHaveBeenLastCalledWith({ visited: 1, total: 2 })
+    );
+
+    await user.click(screen.getByTestId('guide-advance'));
+    await waitFor(() =>
+      expect(onWalked).toHaveBeenLastCalledWith({ visited: 2, total: 2 })
+    );
+  });
+
   it('offers a re-plan once the tourist is clearly off route', async () => {
     const geo = stubWatchingGeolocation();
     const onReroute = vi.fn();

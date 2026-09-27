@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { ChevronDown, Clock, MapPin, Trash2, X } from 'lucide-react';
-import { type RouteHistoryEntry } from '@/stores/directions-store';
+import { ChevronDown, CircleCheck, Clock, Footprints, MapPin, Trash2, X } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { type RouteHistoryEntry, type RouteHistoryWalk } from '@/stores/directions-store';
 import { placeCountRu } from '@/utils/plural';
 import { fmtMin } from './guide-format';
 
@@ -73,6 +74,41 @@ export function HistoryTab({
   );
 }
 
+/**
+ * The day a walk last moved: «27 сентября».
+ *
+ * Only the day, formatted here rather than in a date library: the history shows
+ * it next to a state («пройден»), and the exact time of day was never asked for.
+ */
+const walkDay = (at: number) =>
+  new Date(at).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
+
+/** «пройден» when every stop was visited, otherwise how far it got. */
+const WalkBadge = ({ id, walk }: { id: string; walk: RouteHistoryWalk }) => (
+  <p
+    data-testid={`history-walk-${id}`}
+    className={cn(
+      'mt-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-badge',
+      walk.completed
+        ? 'bg-primary/10 font-semibold text-primary'
+        : 'bg-muted text-muted-foreground'
+    )}
+  >
+    {walk.completed ? (
+      <>
+        <CircleCheck className="h-3 w-3" aria-hidden="true" />
+        пройден
+      </>
+    ) : (
+      <>
+        <Footprints className="h-3 w-3" aria-hidden="true" />
+        пройдено {walk.visited} из {walk.total}
+      </>
+    )}
+    <span className="font-normal opacity-80">· {walkDay(walk.at)}</span>
+  </p>
+);
+
 interface HistoryItemProps {
   entry: RouteHistoryEntry;
   onLoad: () => void;
@@ -114,6 +150,9 @@ const HistoryItem = ({ entry, onLoad, onRemove }: HistoryItemProps) => {
           </button>
         </div>
       </div>
+      {/* A route you actually walked is a different thing from one you only
+          planned, so the state is visible without expanding the row. */}
+      {entry.walk && <WalkBadge id={entry.id} walk={entry.walk} />}
       <button
         type="button"
         onClick={() => setExpanded(!expanded)}

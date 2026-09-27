@@ -76,6 +76,15 @@ interface GuidePanelProps {
    * language; this makes the guide's own voice match them.
    */
   transport?: string | null;
+  /**
+   * How far the walk has got, reported whenever it changes.
+   *
+   * The panel owns the progress, but the *history* of the route is the caller's
+   * business — this is how «пройдено 3 из 5» can still be shown after the guide
+   * is closed. Derived from `effectiveVisited`, so a weak GPS fix never ticks a
+   * stop off behind the tourist's back.
+   */
+  onWalked?: (progress: { visited: number; total: number }) => void;
 }
 
 const STORAGE_KEY = 'grodno-guide-progress';
@@ -96,11 +105,22 @@ const mapsUrl = (lat: number, lon: number) =>
   `https://www.google.com/maps/search/?api=1&query=${lat},${lon}`;
 
 /**
- * Fingerprint of the route the progress belongs to. The parent uses it as the
- * React key: a rebuilt route remounts the guide, which is what starts a fresh
- * walk (see sidebar.tsx).
+ * Fingerprint of the route the walk belongs to.
+ *
+ * The parent uses it as the React key: a rebuilt route remounts the guide, which
+ * is what starts a fresh walk (see sidebar.tsx). Structural, not nominal: the
+ * planner knows the stops it just built (place id, name, coordinates) before
+ * they become `GuideStop`s, and it computes the *same* key — that is how a
+ * route's history entry finds the walk that belongs to it.
  */
-export const guideRouteKey = (stops: GuideStop[]) =>
+export const guideRouteKey = (
+  stops: ReadonlyArray<{
+    placeId?: number | null;
+    name: string;
+    lat: number;
+    lon: number;
+  }>
+) =>
   stops
     .map(
       (s) => `${s.placeId ?? s.name}@${s.lat.toFixed(4)},${s.lon.toFixed(4)}`
@@ -313,6 +333,7 @@ export const GuidePanel = ({
   suggestions = [],
   onAddSuggestion,
   transport = null,
+  onWalked,
 }: GuidePanelProps) => {
   const key = useMemo(() => guideRouteKey(stops), [stops]);
   /** How the guide speaks about movement: on foot, on a bike, or driving. */
@@ -492,6 +513,13 @@ export const GuidePanel = ({
     () => stops.find((s) => !effectiveVisited.includes(s.id)) ?? null,
     [stops, effectiveVisited]
   );
+
+  // Report the walk's progress upward: the history entry of this route is the
+  // caller's to keep, and this is the only place that knows how far it got.
+  const walked = effectiveVisited.length;
+  useEffect(() => {
+    onWalked?.({ visited: walked, total: stops.length });
+  }, [onWalked, walked, stops.length]);
   const nextIndex = useMemo(
     () => (nextStop ? stops.findIndex((s) => s.id === nextStop.id) : -1),
     [stops, nextStop]
