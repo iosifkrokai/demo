@@ -290,7 +290,9 @@ describe('GuidePanel', () => {
 
     const card = screen.getByTestId('guide-next-stop');
     fireEvent.click(within(card).getByTestId('visit-time-chip'));
-    fireEvent.click(within(card).getByTestId('visit-time-plus'));
+    // The controls live in a popover, which renders in a portal outside the
+    // card — deliberately, so a scrolling panel cannot clip them.
+    fireEvent.click(screen.getByTestId('visit-time-plus'));
 
     // Their number replaces the estimate and drops the «≈».
     expect(within(card).getByTestId('visit-time-chip')).toHaveTextContent(

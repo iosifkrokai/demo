@@ -150,6 +150,12 @@ vi.mock('@/stores/common-store', () => ({
       },
       settingsPanelOpen: false,
       updateSettings: vi.fn(),
+      focus: null,
+      guideFix: null,
+      guiding: false,
+      focusOn: vi.fn(),
+      setGuideFix: vi.fn(),
+      setGuiding: vi.fn(),
     };
     return selector(state);
   }),
@@ -550,9 +556,8 @@ describe('MapComponent', () => {
 
       await user.click(screen.getByTestId('trigger-geolocate-error'));
 
-      expect(mockToast.error).toHaveBeenCalledWith(
-        'Не удалось определить ваше местоположение. Попробуйте ещё раз.'
-      );
+      // The text now comes from the dictionary (RU/EN), not from a literal.
+      expect(mockToast.error).toHaveBeenCalledWith('не удалось определить');
     });
 
     it('should show permission denied error toast when location permission is denied', async () => {
@@ -564,7 +569,7 @@ describe('MapComponent', () => {
       );
 
       expect(mockToast.error).toHaveBeenCalledWith(
-        'Не удалось определить ваше местоположение. Проверьте настройки браузера и разрешите доступ к геолокации.'
+        'геолокация: браузер запретил доступ'
       );
     });
   });

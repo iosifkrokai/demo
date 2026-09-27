@@ -27,6 +27,7 @@ import {
 import { useNavigate } from '@tanstack/react-router';
 import { cn } from '@/lib/utils';
 import type { Photo } from '@/api/types';
+import { meWaypoint, storedMeCoords } from '@/utils/me-waypoint';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -324,26 +325,6 @@ const fmtKm = (km: number, t: TFunction) => {
   return t('sidebar.units.km', { value });
 };
 
-/** A waypoint that simply says "I am here". */
-const meWaypoint = (lat: number, lon: number, t: TFunction): Waypoint => {
-  const lngLat: [number, number] = [lon, lat];
-  return {
-    id: ME_WAYPOINT_ID,
-    userInput: t('sidebar.ui.myLocation'),
-    geocodeResults: [
-      {
-        title: t('sidebar.ui.myLocation'),
-        description: t('sidebar.ui.start'),
-        selected: true,
-        displaylnglat: lngLat,
-        sourcelnglat: lngLat,
-        key: 0,
-        addressindex: 0,
-      },
-    ],
-  };
-};
-
 /**
  * The planning panel that replaces the upstream RoutePlanner:
  *   1. ask — the query field, time budget, transport; on submit it hits
@@ -412,6 +393,7 @@ export const Sidebar = () => {
   // Guide mode: the panel becomes the navigator's screen. Entered by an explicit
   // action on a ready route, left by «выйти» in its own header.
   const [guiding, setGuiding] = useState(false);
+  const setGuidingStore = useCommonStore((s) => s.setGuiding);
   const placeDetails = useDirectionsStore((s) => s.placeDetails);
   const [timeBudget, setTimeBudget] = useState(0); // 0 = без ограничения
   // '' = «как удобно»: no transport constraint, the agent picks the costing
@@ -612,7 +594,7 @@ export const Sidebar = () => {
         // webapp draws starts there too.
         const current = useDirectionsStore.getState().waypoints;
         setWaypoint([
-          meWaypoint(coords.lat, coords.lon, t),
+          meWaypoint(coords.lat, coords.lon, t('sidebar.ui.myLocation')),
           ...current.filter((w) => w.id !== ME_WAYPOINT_ID),
         ]);
         if (!silent) refetchDirections();
@@ -628,12 +610,6 @@ export const Sidebar = () => {
     },
     [refetchDirections, setWaypoint, t]
   );
-
-  // Ask once on open: the tourist expects to see themselves on the map.
-  useEffect(() => {
-    if (geoState === 'idle') void locateMe(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   // Ages the tourist named, in order, deduplicated. Empty = unknown, and then
   // `party_children_ages` is not sent at all.
@@ -733,7 +709,7 @@ export const Sidebar = () => {
         },
       ],
     }));
-    setWaypoint(me ? [meWaypoint(me.lat, me.lon, t), ...restored] : restored);
+    setWaypoint(me ? [meWaypoint(me.lat, me.lon, t('sidebar.ui.myLocation')), ...restored] : restored);
     setPlaceDetails(
       Object.fromEntries(
         entry.places.map((p) => [
@@ -789,7 +765,7 @@ export const Sidebar = () => {
     }));
     // replan=false: the router is called once below, with the new stops.
     setTransportEverywhere(itinerary.transport, false);
-    const next = me ? [meWaypoint(me.lat, me.lon, t), ...restored] : restored;
+    const next = me ? [meWaypoint(me.lat, me.lon, t('sidebar.ui.myLocation')), ...restored] : restored;
     setWaypoint(next);
     // A ready-made route is still a route someone may walk, and a walk needs a
     // history entry to attach to — without this, «пройдено» would be missing for
@@ -845,11 +821,13 @@ export const Sidebar = () => {
     setStatus(null);
     setSummary(null);
 
-    // A fresh position wins over the cached one; without it the route simply
-    // starts at the first place.
-    let origin = me;
-    if (geoState !== 'denied') {
-      origin = (await locateMe(true)) ?? me;
+    // A fresh position wins over the cached one; the position already stored as
+    // waypoint 0 is usable even when a previous attempt failed, because the map
+    // button may have found it in the meantime. Only then, and only if the
+    // browser has not refused us, do we ask again.
+    let origin = me ?? storedMeCoords(useDirectionsStore.getState().waypoints);
+    if (!origin && geoState !== 'denied') {
+      origin = await locateMe(true);
     }
 
     try {
@@ -975,7 +953,7 @@ export const Sidebar = () => {
       }
 
       const start: Waypoint[] = origin
-        ? [meWaypoint(origin.lat, origin.lon, t)]
+        ? [meWaypoint(origin.lat, origin.lon, t('sidebar.ui.myLocation'))]
         : [];
       const placeWaypoints: Waypoint[] = pts.map((p, i) => ({
         id: i.toString(),
@@ -1129,7 +1107,7 @@ export const Sidebar = () => {
       { id: '0', userInput: '', geocodeResults: [] },
       { id: '1', userInput: '', geocodeResults: [] },
     ];
-    setWaypoint(me ? [meWaypoint(me.lat, me.lon, t), ...empties] : empties);
+    setWaypoint(me ? [meWaypoint(me.lat, me.lon, t('sidebar.ui.myLocation')), ...empties] : empties);
     setStatus(null);
     setSummary(null);
     refetchDirections();
@@ -1253,6 +1231,29 @@ export const Sidebar = () => {
         return { text: t('sidebar.geo.startUnset'), tone: 'text-muted-foreground' };
     }
   }, [geoState, geoReason, t]);
+
+  // The guide is a mode of the whole app, not just of the panel: while it runs
+  // the map follows the walk (see the map's navigator effect). That only works
+  // if the map can see the mode.
+  useEffect(() => {
+    setGuidingStore(guiding);
+  }, [guiding, setGuidingStore]);
+
+  // The map's own overlays (the route-line pill, the planner entry) are siblings
+  // of the panel, not children, so the `--panel-width` set on the panel below
+  // never reached them: they stayed at left-4 and were drawn on top of the
+  // panel. Publish the width where both sides can read it, and 0 while the
+  // panel is closed so the map keeps its full width.
+  useEffect(() => {
+    const root = document.documentElement;
+    root.style.setProperty(
+      '--panel-width',
+      panelOpen ? `${panel.width}px` : '0px'
+    );
+    return () => {
+      root.style.setProperty('--panel-width', '0px');
+    };
+  }, [panelOpen, panel.width]);
 
   return (
     <Sheet open={panelOpen} modal={false}>
@@ -1490,7 +1491,7 @@ export const Sidebar = () => {
                       }
                     />
                     <span className={`truncate ${geoBadge.tone}`}>
-                      {geoBadge.text}
+                      {geoState === 'idle' ? t('sidebar.geo.detect') : geoBadge.text}
                     </span>
                     <span className="ml-auto shrink-0 text-muted-foreground">
                       {geoState === 'locating' ? '…' : t('sidebar.ui.refresh')}

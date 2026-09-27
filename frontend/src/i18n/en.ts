@@ -53,7 +53,7 @@ export const en: Dictionary = {
   },
   actions: {
     closePanel: 'close the panel',
-    build: 'Build the route',
+    build: 'Plan my route',
     cancel: 'Cancel',
   },
   guide: {

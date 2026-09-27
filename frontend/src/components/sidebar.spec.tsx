@@ -73,6 +73,12 @@ vi.mock('@/stores/common-store', () => ({
       directionsPanelOpen: true,
       toggleDirections: vi.fn(),
       resetSettings: mockResetSettings,
+      focus: null,
+      guideFix: null,
+      guiding: false,
+      focusOn: vi.fn(),
+      setGuideFix: vi.fn(),
+      setGuiding: vi.fn(),
     }),
 }));
 
@@ -147,7 +153,7 @@ const askField = () =>
 
 /** The sticky footer's main action. */
 const buildButton = () =>
-  screen.getByRole('button', { name: /построить маршрут/i });
+  screen.getByRole('button', { name: /подобрать маршрут/i });
 
 /** A fetch that answers with `AGENT_ANSWER` and records every body sent. */
 const agentFetch = () => {
@@ -166,6 +172,9 @@ describe('Sidebar', () => {
       ...navigator,
       geolocation: { getCurrentPosition: mockGetCurrentPosition },
     });
+    // Call history outlives a test (restoreAllMocks does not clear it), and a
+    // «did not ask for the position» assertion must start from zero.
+    mockGetCurrentPosition.mockClear();
     mockGetCurrentPosition.mockImplementation((ok: (p: unknown) => void) => {
       ok({ coords: { latitude: 53.7, longitude: 23.8 } });
     });
@@ -193,12 +202,24 @@ describe('Sidebar', () => {
     vi.restoreAllMocks();
   });
 
-  it('pins the tourist’s position as the route start', async () => {
+  it('pins the tourist’s position as the route start from one tap', async () => {
+    // The panel asks for nothing on open: an attempt fired without a gesture is
+    // not answered, and the panel used to declare «не удалось определить»
+    // before the tourist had asked for anything. One tap does the whole job.
     render(<Sidebar />);
 
     await waitFor(() => {
-      expect(mockSetWaypoint).toHaveBeenCalled();
+      expect(
+        screen.getByText(/определить моё местоположение/i)
+      ).toBeInTheDocument();
     });
+    expect(mockGetCurrentPosition).not.toHaveBeenCalled();
+
+    await userEvent
+      .setup({ delay: null })
+      .click(screen.getByText(/определить моё местоположение/i));
+
+    await waitFor(() => expect(mockSetWaypoint).toHaveBeenCalled());
     const waypoints = mockSetWaypoint.mock.calls.at(-1)?.[0];
     expect(waypoints[0].id).toBe('me');
     expect(waypoints[0].geocodeResults[0].displaylnglat).toEqual([23.8, 53.7]);
@@ -1248,7 +1269,7 @@ describe('Sidebar — felt quality', () => {
     ).toBeNull();
     // Nothing to build from this view, so the build action is not offered.
     expect(
-      screen.queryByRole('button', { name: /построить маршрут/i })
+      screen.queryByRole('button', { name: /подобрать маршрут/i })
     ).toBeNull();
 
     await user.click(screen.getByTestId('mode-itineraries'));

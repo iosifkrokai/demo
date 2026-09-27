@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ChevronDown, Clock, Loader2, MapPin, Route as RouteIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useCommonStore } from '@/stores/common-store';
 import type { Itinerary, ItineraryStop } from '@/api/types';
 import { fmtMin } from './guide-format';
 import { guideModeFor } from './guide-mode';
@@ -182,6 +183,7 @@ export function ItinerariesTab({
 /** One stop: its number, its name, and the facts that are actually known. */
 function StopRow({ stop, index }: { stop: ItineraryStop; index: number }) {
   const { t } = useTranslation();
+  const focusOn = useCommonStore((s) => s.focusOn);
   const facts = [
     stop.visit_minutes ? fmtMin(stop.visit_minutes) : null,
     stop.opening_hours,
@@ -202,9 +204,16 @@ function StopRow({ stop, index }: { stop: ItineraryStop; index: number }) {
         />
       )}
       <span className="min-w-0">
-        <span className="block break-words font-medium text-foreground">
+        {/* A curated stop is a place like any other: tapping its name shows it
+            on the map instead of leaving the tourist to search for it. */}
+        <button
+          type="button"
+          onClick={() => focusOn(stop.lon, stop.lat)}
+          className="block break-words text-left font-medium text-foreground transition-colors hover:text-primary"
+          data-testid={`focus-stop-${stop.source_url}`}
+        >
           {stop.name}
-        </span>
+        </button>
         {facts.length > 0 && (
           <span className="block break-words text-muted-foreground">
             {facts.join(' · ')}

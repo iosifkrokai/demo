@@ -25,6 +25,7 @@ import { PlannerEntry } from './parts/planner-entry';
 import { useMediaQuery } from '@/hooks/use-media-query';
 
 import { MapStyleControl } from './map-style-control';
+import { ToolButton } from './parts/tool-button';
 import { getInitialMapStyle, getCustomStyle, getMapStyleUrl } from './utils';
 import {
   CLICK_DELAY_MS,
@@ -56,7 +57,10 @@ import { PlaceMarkerLabel } from './parts/place-marker-label';
 import { maxBounds } from './constants';
 import { getInitialMapPosition, LAST_CENTER_KEY } from './utils';
 import { useCommonStore } from '@/stores/common-store';
+import { useTranslation } from 'react-i18next';
+import { LocateFixed } from 'lucide-react';
 import { ME_WAYPOINT_ID, useDirectionsStore } from '@/stores/directions-store';
+import { meWaypoint } from '@/utils/me-waypoint';
 import { useIsochronesStore } from '@/stores/isochrones-store';
 import {
   useDirectionsQuery,
@@ -117,12 +121,14 @@ export const MapComponent = () => {
   // Which line is on screen, stated on the map: the plan the backend verified,
   // or the one this app routed for a hand-built route. An agent route without a
   // verified line says so instead of showing a substitute.
+  const { t } = useTranslation();
   const provenance = routeProvenance(routeResult);
   const missingVerifiedLine = isMissingVerifiedLine(routeResult);
 
   const { refetch: refetchDirections } = useDirectionsQuery();
   const { refetch: refetchIsochrones } = useIsochronesQuery();
   const { setWaypointFromCoords } = useSetWaypointFromCoords();
+  const setWaypoint = useDirectionsStore((s) => s.setWaypoint);
   const { reverseGeocode: reverseGeocodeIsochrones } =
     useReverseGeocodeIsochrones();
   const [routeHoverPopup, setRouteHoverPopup] = useState<{
@@ -165,6 +171,11 @@ export const MapComponent = () => {
   ]) as unknown as maplibregl.StyleSpecification;
 
   const mapRef = useRef<MapRef>(null);
+  const focusRequest = useCommonStore((s) => s.focus);
+  const guideFix = useCommonStore((s) => s.guideFix);
+  const guiding = useCommonStore((s) => s.guiding);
+  /** Navigator mode: the map keeps the tourist in view until a hand moves it. */
+  const [follow, setFollow] = useState(true);
   const drawRef = useRef<MaplibreTerradrawControl | null>(null);
   const touchStartTimeRef = useRef<number | null>(null);
   const touchLocationRef = useRef<{ x: number; y: number } | null>(null);
@@ -315,7 +326,7 @@ export const MapComponent = () => {
             lat: address.displaylnglat[1],
             type: 'waypoint',
             index: 0,
-            title: 'Моё местоположение',
+            title: t('sidebar.ui.myLocation'),
             color: 'blue',
           });
         });
@@ -447,6 +458,56 @@ export const MapComponent = () => {
     //only rerun when coordinates change
     //panel change no longer rerun this
   }, [coordinates]);
+
+  // ── Panel → map: «покажи мне это место» ──────────────────────────────────
+  // Tapping a place in the panel used to do nothing here: the tourist picked a
+  // row and then had to find it on the map by hand. The row asks, the map looks.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !focusRequest) return;
+    map.flyTo({
+      center: [focusRequest.lng, focusRequest.lat],
+      // Keep the tourist's own zoom when it is already closer than a street.
+      zoom: Math.max(map.getZoom(), 15.5),
+      duration: 900,
+      essential: true,
+    });
+  }, [focusRequest]);
+
+  // ── Guide → map: the navigator behaviour ─────────────────────────────────
+  // While the guide runs the map follows the walk: centred on the tourist,
+  // tilted, and turned to the heading when the device reports one. Without this
+  // the tourist had to hunt for their own position on a still map.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !guiding || !follow || !guideFix) return;
+    map.easeTo({
+      center: [guideFix.lng, guideFix.lat],
+      ...(guideFix.heading != null ? { bearing: guideFix.heading } : {}),
+      pitch: 45,
+      zoom: Math.max(map.getZoom(), 16.5),
+      duration: 800,
+      essential: true,
+    });
+  }, [guiding, follow, guideFix]);
+
+  // Following starts again every time the guide is entered.
+  useEffect(() => {
+    if (guiding) setFollow(true);
+  }, [guiding]);
+
+  // A hand on the map wins over the follow: dragging releases it.
+  useEffect(() => {
+    const map = mapRef.current?.getMap?.();
+    if (!map || !guiding) return;
+    const release = () => setFollow(false);
+    map.on('dragstart', release);
+    map.on('rotatestart', release);
+    return () => {
+      map.off('dragstart', release);
+      map.off('rotatestart', release);
+    };
+  }, [guiding]);
 
   const handleMapTilesClick = useCallback(
     (event: maplibregl.MapLayerMouseEvent) => {
@@ -742,12 +803,26 @@ export const MapComponent = () => {
     setRouteHoverPopup(null);
   }, []);
 
+  // The map's own locate control used to move the camera only: the panel kept
+  // saying «старт не задан» until a separate call succeeded. Now it writes the
+  // same waypoint 0 the panel writes, so either button is enough on its own.
+  const handleGeolocate = useCallback(
+    (position: { coords: { latitude: number; longitude: number } }) => {
+      const label = t('sidebar.ui.myLocation');
+      const current = useDirectionsStore.getState().waypoints;
+      setWaypoint([
+        meWaypoint(position.coords.latitude, position.coords.longitude, label),
+        ...current.filter((w) => w.id !== ME_WAYPOINT_ID),
+      ]);
+    },
+    [setWaypoint, t]
+  );
+
   const handleGeolocateError = useCallback((error: GeolocateErrorEvent) => {
-    let defaultMessage =
-      'Не удалось определить ваше местоположение. Попробуйте ещё раз.';
+    const defaultMessage = t('sidebar.geo.failedShort');
     if (error.PERMISSION_DENIED) {
-      defaultMessage =
-        'Не удалось определить ваше местоположение. Проверьте настройки браузера и разрешите доступ к геолокации.';
+      toast.error(`${t('sidebar.geo.label')}: ${t('sidebar.geo.denied')}`);
+      return;
     }
 
     toast.error(defaultMessage);
@@ -788,7 +863,10 @@ export const MapComponent = () => {
         id="mainMap"
       >
         <NavigationControl />
-        <GeolocateControl onError={handleGeolocateError} />
+        <GeolocateControl
+          onGeolocate={handleGeolocate}
+          onError={handleGeolocateError}
+        />
         <DrawControl onUpdate={updateExcludePolygons} controlRef={drawRef} />
         <MapStyleControl
           customStyleData={customStyleData}
@@ -891,8 +969,31 @@ export const MapComponent = () => {
 
       </Map>
 
+      {guiding && (
+        <div className="absolute bottom-24 right-3 z-10 md:right-4">
+          <ToolButton
+            data-testid="guide-follow"
+            title={follow ? t('map.following') : t('map.followMe')}
+            active={follow}
+            icon={<LocateFixed className="h-4 w-4" />}
+            onClick={() => {
+              setFollow(true);
+              const map = mapRef.current;
+              if (map && guideFix) {
+                map.easeTo({
+                  center: [guideFix.lng, guideFix.lat],
+                  pitch: 45,
+                  zoom: Math.max(map.getZoom(), 16.5),
+                  duration: 600,
+                });
+              }
+            }}
+          />
+        </div>
+      )}
+
       <div
-        className="absolute top-4 left-4 z-10 flex flex-col gap-2"
+        className="absolute top-4 left-4 z-10 flex flex-col gap-2 md:left-[calc(var(--panel-width,0px)+1rem)]"
         aria-label="быстрый доступ к панели маршрута"
         hidden={!showPlannerEntry}
       >
@@ -908,13 +1009,13 @@ export const MapComponent = () => {
           data-testid="route-provenance"
           data-provenance={provenance}
           data-verified-line={missingVerifiedLine ? 'false' : 'true'}
-          className="absolute top-20 left-4 z-10 max-w-[calc(100vw-2rem)] rounded-full border border-border bg-card px-3 py-1.5 text-meta text-muted-foreground shadow-card"
+          className="absolute left-4 top-20 z-10 max-w-[calc(100vw-2rem)] rounded-full border border-border bg-card px-3 py-1.5 text-meta text-muted-foreground shadow-card md:left-[calc(var(--panel-width,0px)+1rem)]"
         >
           {missingVerifiedLine
-            ? 'Агент вернул остановки без проверенной линии — линия не показана'
+            ? t('map.lineMissing')
             : provenance === 'agent'
-              ? 'Линия маршрута — из проверенного плана агента'
-              : 'Линия маршрута — построена в приложении'}
+              ? t('map.lineFromAgent')
+              : t('map.lineFromApp')}
         </div>
       )}
     </>

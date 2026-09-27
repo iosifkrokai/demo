@@ -37,7 +37,31 @@ type SidebarShape = {
     string
   >;
   geo: Record<
-    'label' | 'unsupported' | 'failedShort' | 'denied' | 'searching' | 'startUnset' | 'startIsMe',
+    | 'label'
+    | 'unsupported'
+    | 'failedShort'
+    | 'denied'
+    | 'searching'
+    | 'detect'
+    | 'allow'
+    | 'startUnset'
+    | 'startIsMe',
+    string
+  >;
+  visit: Record<
+    | 'label'
+    | 'estimate'
+    | 'mine'
+    | 'unit'
+    | 'open'
+    | 'openEstimate'
+    | 'minus'
+    | 'plus'
+    | 'reset'
+    | 'resetHint'
+    | 'chipEstimate'
+    | 'chipMine'
+    | 'estimatedHint',
     string
   >;
   ui: Record<
@@ -118,8 +142,25 @@ export const sidebarArea = {
       denied: 'браузер запретил доступ',
       label: 'геолокация',
       searching: 'ищу вас…',
+      detect: 'определить моё местоположение',
+      allow: 'разрешить',
       startUnset: 'старт не задан',
       startIsMe: 'старт — моё местоположение',
+    },
+    visit: {
+      label: 'время осмотра',
+      estimate: 'оценка из данных',
+      mine: 'ваше время',
+      unit: 'мин',
+      open: 'время осмотра: {{minutes}} минут, изменить',
+      openEstimate: 'время осмотра: примерно {{minutes}} минут, изменить',
+      minus: 'убавить время осмотра на {{minutes}} минут',
+      plus: 'прибавить время осмотра на {{minutes}} минут',
+      reset: 'вернуть оценку',
+      resetHint: 'вернуть примерно {{minutes}} мин',
+      chipEstimate: '≈ {{minutes}} мин',
+      chipMine: '{{minutes}} мин',
+      estimatedHint: 'обычно здесь оставляют ≈ {{minutes}} мин',
     },
     units: {
       km: '{{value}} км',
@@ -147,7 +188,7 @@ export const sidebarArea = {
       roundTrip: 'круговой маршрут',
       point: 'точка',
       plan: 'Строю маршрут…',
-      build: 'Построить маршрут',
+      build: 'Подобрать маршрут',
       start: 'старт маршрута',
       myLocation: 'Моё местоположение',
     },
@@ -206,8 +247,25 @@ export const sidebarArea = {
       denied: 'the browser blocked access',
       label: 'geolocation',
       searching: 'finding you…',
+      detect: 'use my location',
+      allow: 'allow',
       startUnset: 'no start set',
       startIsMe: 'start — my location',
+    },
+    visit: {
+      label: 'visit time',
+      estimate: 'an estimate from the dataset',
+      mine: 'your own time',
+      unit: 'min',
+      open: 'visit time: {{minutes}} minutes, change',
+      openEstimate: 'visit time: about {{minutes}} minutes, change',
+      minus: 'less visit time, by {{minutes}} minutes',
+      plus: 'more visit time, by {{minutes}} minutes',
+      reset: 'use the estimate',
+      resetHint: 'back to about {{minutes}} min',
+      chipEstimate: '≈ {{minutes}} min',
+      chipMine: '{{minutes}} min',
+      estimatedHint: 'people usually spend about {{minutes}} min here',
     },
     units: {
       km: '{{value}} km',
@@ -232,7 +290,7 @@ export const sidebarArea = {
       roundTrip: 'round trip',
       point: 'stop',
       plan: 'Building the route…',
-      build: 'Build the route',
+      build: 'Plan my route',
       start: 'route start',
       myLocation: 'My location',
     },

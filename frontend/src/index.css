@@ -219,6 +219,19 @@ body {
   }
 }
 
+/*
+ * Popover surfaces were transparent across the whole app.
+ *
+ * `--color-popover` is mapped in `@theme inline`, but no `.bg-popover` rule ever
+ * reached the bundle, so the shared `PopoverContent` (time picker, map styles,
+ * settings) painted nothing and whatever lay behind it showed through — the
+ * time picker over the panel read as a broken, half-drawn box. One rule here
+ * fixes every popover; the theme variables stay the source of colour.
+ */
+.bg-popover {
+  background-color: var(--popover);
+}
+
 /* Map popups float above the map: DESIGN.md floating shadow + 24px corners.
    `!important` is required: maplibre-gl.css ships its own .maplibregl-popup-content
    later in the bundle and would otherwise win the cascade. */

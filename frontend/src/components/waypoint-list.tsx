@@ -9,6 +9,7 @@ import {
 import { useDirectionsQuery } from '@/hooks/use-directions-queries';
 import { useVisitOverrides } from '@/hooks/use-visit-overrides';
 import { PlaceIcon } from './parts/place-icon';
+import { useCommonStore } from '@/stores/common-store';
 import { VisitTimeEditor } from './parts/visit-time-editor';
 
 interface Props {
@@ -47,6 +48,7 @@ export const WaypointList = ({ onChanged }: Props) => {
   const doRemoveWaypoint = useDirectionsStore((s) => s.doRemoveWaypoint);
   const excludeStops = useDirectionsStore((s) => s.excludeStops);
   const placeDetails = useDirectionsStore((s) => s.placeDetails);
+  const focusOn = useCommonStore((s) => s.focusOn);
   const { refetch } = useDirectionsQuery();
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const routeKey = useMemo(() => plannerVisitKey(waypoints), [waypoints]);
@@ -203,9 +205,23 @@ export const WaypointList = ({ onChanged }: Props) => {
 
             <PlaceIcon category={details?.category} />
 
-            <span className="min-w-0 flex-1 break-words text-body" title={name}>
+            {/* Tapping the name looks at the place on the map: picking a stop
+                in the panel and then hunting for it on the map was the gap. */}
+            <button
+              type="button"
+              onClick={() => {
+                const selected =
+                  wp.geocodeResults.find((g) => g.selected) ??
+                  wp.geocodeResults[0];
+                const lngLat = selected?.sourcelnglat ?? selected?.displaylnglat;
+                if (lngLat) focusOn(lngLat[0], lngLat[1]);
+              }}
+              className="min-w-0 flex-1 break-words text-left text-body transition-colors hover:text-primary"
+              title={name}
+              data-testid={`focus-place-${wp.id}`}
+            >
               {name}
-            </span>
+            </button>
 
             {effective != null && (
               <VisitTimeEditor

@@ -53,7 +53,7 @@ export const ru = {
   },
   actions: {
     closePanel: 'закрыть панель',
-    build: 'Построить маршрут',
+    build: 'Подобрать маршрут',
     cancel: 'Отменить',
   },
   guide: {

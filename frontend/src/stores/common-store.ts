@@ -30,6 +30,23 @@ interface CommonState {
   settings: PossibleSettings;
   dateTime: { type: number; value: string };
   mapReady: boolean;
+  /**
+   * A one-shot «look here» request from a panel row to the map.
+   *
+   * `at` is a timestamp rather than a flag so tapping the same place twice
+   * still moves the map: the payload changes even when the coordinates do not.
+   */
+  focus: { lng: number; lat: number; at: number } | null;
+  /** The guide's latest fix, published so the map can follow it. */
+  guideFix: {
+    lng: number;
+    lat: number;
+    /** Compass heading in degrees, when the device reports one. */
+    heading: number | null;
+    at: number;
+  } | null;
+  /** True while the guide (Проводник) is running. */
+  guiding: boolean;
 }
 
 interface CommonActions {
@@ -44,6 +61,10 @@ interface CommonActions {
   resetSettings: (profile: Profile) => void;
   updateDateTime: (key: 'type' | 'value', value: string | number) => void;
   setMapReady: (ready: boolean) => void;
+  /** Ask the map to look at one spot. */
+  focusOn: (lng: number, lat: number) => void;
+  setGuideFix: (fix: CommonState['guideFix']) => void;
+  setGuiding: (guiding: boolean) => void;
 }
 
 type CommonStore = CommonState & CommonActions;
@@ -65,6 +86,14 @@ export const useCommonStore = create<CommonStore>()(
         value: new Date().toISOString().slice(0, 16),
       },
       mapReady: false,
+      focus: null,
+      guideFix: null,
+      guiding: false,
+
+      focusOn: (lng, lat) =>
+        set({ focus: { lng, lat, at: Date.now() } }, undefined, 'focusOn'),
+      setGuideFix: (fix) => set({ guideFix: fix }, undefined, 'setGuideFix'),
+      setGuiding: (guiding) => set({ guiding }, undefined, 'setGuiding'),
 
       showLoading: (loading) => set({ loading }),
       zoomTo: (coordinates) => set({ coordinates }),

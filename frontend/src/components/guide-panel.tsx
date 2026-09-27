@@ -28,6 +28,7 @@ import {
   type VisitOverrides,
 } from '@/utils/visit-time';
 
+import { useCommonStore } from '@/stores/common-store';
 import { GuideEmpty } from './parts/guide-empty';
 import { fmtDist, metresBetween } from './parts/guide-format';
 import { guideModeFor } from './parts/guide-mode';
@@ -448,6 +449,8 @@ export const GuidePanel = ({
   }, [key]);
 
   const stopCount = stops.length;
+  const setGuideFix = useCommonStore((s) => s.setGuideFix);
+  const focusOn = useCommonStore((s) => s.focusOn);
 
   // ── Geolocation: keep watching as long as we are moving ──────────────────
   useEffect(() => {
@@ -457,6 +460,8 @@ export const GuidePanel = ({
     const watch = geo.watchPosition(
       (pos) => {
         setGeoState('ok');
+        const at =
+          typeof pos.timestamp === 'number' ? pos.timestamp : Date.now();
         setFix({
           lat: pos.coords.latitude,
           lon: pos.coords.longitude,
@@ -464,14 +469,29 @@ export const GuidePanel = ({
             typeof pos.coords.accuracy === 'number'
               ? pos.coords.accuracy
               : null,
-          at: typeof pos.timestamp === 'number' ? pos.timestamp : Date.now(),
+          at,
+        });
+        // The map follows this: the guide is a navigator, not a list next to a
+        // still map the tourist has to find themselves on.
+        const heading = pos.coords.heading;
+        setGuideFix({
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+          heading:
+            typeof heading === 'number' && Number.isFinite(heading)
+              ? heading
+              : null,
+          at,
         });
       },
       () => setGeoState('denied'),
       { enableHighAccuracy: true, maximumAge: 5_000, timeout: 15_000 }
     );
-    return () => geo.clearWatch?.(watch);
-  }, [stopCount]);
+    return () => {
+      geo.clearWatch?.(watch);
+      setGuideFix(null);
+    };
+  }, [stopCount, setGuideFix]);
 
   // Staleness only matters while walking: a fix that stops updating must not
   // keep looking like a live position.
