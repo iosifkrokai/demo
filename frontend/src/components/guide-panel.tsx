@@ -539,20 +539,44 @@ export const GuidePanel = ({
 
   // ── Stops the tourist is standing at count as walked ─────────────────────
   //
-  // Derived, never stored: a fix worth trusting completes the upcoming stop,
-  // and stepping on to the next one completes that as well. A weak fix never
-  // reaches this branch, so a bad signal cannot silently tick stops off.
+  // Derived, never stored: a fix worth trusting completes the stop it is
+  // standing on. A weak fix never reaches this branch, so a bad signal cannot
+  // silently tick stops off.
+  //
+  // Every stop is considered, not only the upcoming one: the loop used to break
+  // out at the first stop farther than the arrival radius, which meant one stop
+  // the tourist never came within 40 m of — a cut corner, a route drawn on the
+  // other side of the street, a stop reached in a different order — silenced
+  // every stop after it. They would walk right through the rest of the route
+  // with the guide stuck on «пройдено 0 из N».
   const effectiveVisited = useMemo(() => {
     const seen = new Set(progress.visited);
     if (precise && fix) {
       for (const stop of stops) {
         if (seen.has(stop.id)) continue;
-        if (metresBetween(fix, stop) > ARRIVAL_RADIUS_M) break;
+        if (metresBetween(fix, stop) > ARRIVAL_RADIUS_M) continue;
         seen.add(stop.id);
       }
     }
     return stops.filter((s) => seen.has(s.id)).map((s) => s.id);
   }, [progress.visited, stops, fix, precise]);
+
+  // An arrival is remembered, not only shown while the tourist stands there.
+  // Without this the guide forgets each stop the moment they walk on, and
+  // someone who walked the whole route still reads «пройдено 0 из N» — which is
+  // exactly what a replayed walk showed. The gate is the same one the manual
+  // fallback relies on (a fix worth trusting, inside the arrival radius), so a
+  // weak signal still cannot tick stops off; and marking once is enough, since
+  // the stop then lives in the stored progress.
+  useEffect(() => {
+    if (!precise || !fix) return;
+    const withinReach = stops.find(
+      (stop) =>
+        !progress.visited.includes(stop.id) &&
+        metresBetween(fix, stop) <= ARRIVAL_RADIUS_M
+    );
+    if (withinReach) setVisited(withinReach.id, true);
+  }, [precise, fix, stops, progress.visited, setVisited]);
 
   const nextStop = useMemo(
     () => stops.find((s) => !effectiveVisited.includes(s.id)) ?? null,

@@ -194,6 +194,44 @@ describe('GuidePanel', () => {
     vi.restoreAllMocks();
   });
 
+  it('помнит пройденную остановку и после того, как турист пошёл дальше', () => {
+    // Навигатор обязан помнить «я здесь был»: иначе весь пройденный маршрут
+    // остаётся «пройдено 0 из N», что и было видно на записи прохода.
+    let push: ((p: unknown) => void) | null = null;
+    Object.defineProperty(navigator, 'geolocation', {
+      configurable: true,
+      value: {
+        watchPosition: (ok: (p: unknown) => void) => {
+          push = ok;
+          return 1;
+        },
+        clearWatch: () => {},
+        getCurrentPosition: () => {},
+      },
+    });
+
+    render(<GuidePanel stops={STOPS} />);
+    act(() => {
+      push?.({ coords: { latitude: STOPS[1]!.lat, longitude: STOPS[1]!.lon, accuracy: 8 } });
+    });
+    // Дальше турист уходит из радиуса остановки.
+    act(() => {
+      push?.({ coords: { latitude: 53.70, longitude: 23.90, accuracy: 8 } });
+    });
+
+    expect(screen.getByText(/пройдено 1 из 2/i)).toBeInTheDocument();
+  });
+
+  it('отмечает остановку, на которой стоит турист, даже если предыдущую он пропустил', () => {
+    // Срезанный угол не должен замолчать весь маршрут: раньше цикл выходил на
+    // первой же непройденной остановке дальше радиуса, и все следующие
+    // оставались неотмеченными, хотя турист шёл прямо по ним.
+    stubGeolocation({ latitude: STOPS[1]!.lat, longitude: STOPS[1]!.lon });
+    render(<GuidePanel stops={STOPS} />);
+
+    expect(screen.getByText(/пройдено 1 из 2/i)).toBeInTheDocument();
+  });
+
   it('explains itself when there is no route yet', () => {
     stubGeolocation(null);
     render(<GuidePanel stops={[]} />);
