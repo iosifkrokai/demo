@@ -437,9 +437,19 @@ export const MapComponent = () => {
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !guiding || !follow || !guideFix) return;
+    // The panel covers the left of the canvas, so centring on the canvas would
+    // park the tourist's dot behind it. The padding puts the dot in the middle
+    // of the map the tourist can actually see.
+    const panelWidth =
+      Number.parseFloat(
+        getComputedStyle(document.documentElement).getPropertyValue(
+          '--panel-width'
+        )
+      ) || 0;
     map.easeTo({
       center: [guideFix.lng, guideFix.lat],
       ...(guideFix.heading != null ? { bearing: guideFix.heading } : {}),
+      padding: { left: panelWidth, top: 0, right: 0, bottom: 0 },
       pitch: 45,
       zoom: Math.max(map.getZoom(), 16.5),
       duration: 800,
@@ -453,10 +463,18 @@ export const MapComponent = () => {
   }, [guiding]);
 
   // A hand on the map wins over the follow: dragging releases it.
+  //
+  // Only a real hand does. `easeTo` — the very call that makes the map follow —
+  // emits dragstart/rotatestart of its own while it turns the camera to the
+  // tourist's heading, so treating every such event as user input switched the
+  // follow off on its first move: the map centred once and then stood still for
+  // the rest of the walk. A user-driven event carries the DOM event with it.
   useEffect(() => {
     const map = mapRef.current?.getMap?.();
     if (!map || !guiding) return;
-    const release = () => setFollow(false);
+    const release = (event?: { originalEvent?: unknown }) => {
+      if (event?.originalEvent) setFollow(false);
+    };
     map.on('dragstart', release);
     map.on('rotatestart', release);
     return () => {
@@ -812,6 +830,25 @@ export const MapComponent = () => {
         <HighlightSegment />
         <IsochronePolygons />
         <IsochroneLocations />
+        {/* The tourist's own position. The blue origin marker stays where the
+            route began — it is a waypoint, not a person — so without this the
+            map never showed anyone actually moving along the line. */}
+        {guiding && guideFix && (
+          <Marker
+            anchor="center"
+            longitude={guideFix.lng}
+            latitude={guideFix.lat}
+          >
+            <div
+              data-testid="guide-position"
+              className="relative flex h-6 w-6 items-center justify-center"
+            >
+              <span className="absolute h-6 w-6 rounded-full bg-blue-500/25 motion-safe:animate-ping" />
+              <span className="h-3.5 w-3.5 rounded-full border-2 border-white bg-blue-600 shadow-md" />
+            </div>
+          </Marker>
+        )}
+
         {markers.map((marker) => {
           const details =
             marker.placeId != null ? placeDetails[marker.placeId] : undefined;

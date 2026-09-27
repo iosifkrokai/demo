@@ -12,8 +12,9 @@ const OUT = process.env.OUT_DIR || '/tmp/walk-video';
 // позволяет записать то же с дев-сервера, не трогая открытое у пользователя окно.
 const BASE = process.env.APP_URL || 'http://localhost';
 const QUERY = 'Все главные достопримечательности Гродно';
-const SPEED = 30;
-const WALK_MS = 130_000;
+// Десятикратная скорость: проход виден, но укладывается в полторы минуты.
+const SPEED = 10;
+const WALK_MS = 240_000;
 
 mkdirSync(OUT, { recursive: true });
 
@@ -82,9 +83,20 @@ const snapshot = async (label) => {
 
 const started = Date.now();
 let step = 0;
+let finishedAt = null;
 while (Date.now() - started < WALK_MS) {
   await page.waitForTimeout(10_000);
   step += 1;
+  const progress = await page.evaluate(() => {
+    const t = document.querySelector('[data-testid="guide-panel"]')?.innerText ?? '';
+    const m = t.match(/пройдено\s+(\d+)\s+из\s+(\d+)/i);
+    return m ? { walked: Number(m[1]), total: Number(m[2]) } : null;
+  });
+  if (progress && progress.total > 0 && progress.walked === progress.total) {
+    finishedAt = Math.round((Date.now() - started) / 1000);
+    await page.screenshot({ path: `${OUT}/step-${String(step).padStart(2, '0')}-finish.png` });
+    break;
+  }
   const sim = await page.evaluate(() => {
     const g = window.__geoSim;
     return g ? { путь: g.pathLength(), пройдено_м: Math.round(g.travelled()) } : null;
@@ -94,8 +106,7 @@ while (Date.now() - started < WALK_MS) {
   await page.screenshot({ path: `${OUT}/step-${String(step).padStart(2, '0')}.png` });
 }
 
-const visited = await page.locator('[data-testid="guide-panel"] [data-done="true"], [data-testid="guide-panel"] [aria-checked="true"]').count();
-note(`отмечено пройденных: ${visited}`);
+note(finishedAt === null ? 'проход не завершился за отведённое время' : `маршрут пройден за ${finishedAt} с`);
 
 const video = page.video();
 const videoPath = await finish(video);
