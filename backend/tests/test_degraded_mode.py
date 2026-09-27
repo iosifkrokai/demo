@@ -260,7 +260,15 @@ class TestIntentFallback:
         with caplog.at_level("WARNING", logger="agent.planner.intent"):
             tr = build_requirements(QUERY, GenerateReq(query=QUERY))  # must not propagate
         assert tr.source == "fallback"
-        assert "Гродно" in tr.must_visit_names()
+        # The degraded reader must still understand the ask itself…
+        assert "замок" in [r.code for r in tr.requirements if r.kind == "interest"]
+        # …but «Гродно» in the query is the city we are walking in, not a stop.
+        # This used to assert a mandatory place named «Гродно»: nothing in the
+        # data carries that name, so the deterministic verifier could only report
+        # it `unmet` — in nearly every answer. That phantom is what the stage
+        # evals caught (evals/cases/interpretation.jsonl), so the assertion now
+        # pins its absence rather than its presence.
+        assert tr.must_visit_names() == []
         assert len(_warnings(caplog, "agent.planner.intent")) == 1
 
     def test_agent_contract_drives_the_reading(self, with_key, monkeypatch):
