@@ -17,6 +17,11 @@ services:
       interval: 5s
       timeout: 5s
       retries: 20
+    # Without this the database was the one service that could stay dead: the
+    # Docker daemon here kills containers with exit 255 from time to time, and
+    # the other three came back while Postgres did not — taking the agent, which
+    # waits for 5432, into a restart loop with it.
+    restart: unless-stopped
 
   valhalla:
     image: ghcr.io/nilsnolde/docker-valhalla/valhalla:latest
