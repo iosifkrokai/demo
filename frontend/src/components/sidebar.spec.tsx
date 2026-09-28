@@ -188,6 +188,10 @@ const stubAgentFetch = (mock: (url: string, init: RequestInit) => Promise<unknow
 
 describe('Sidebar', () => {
   beforeEach(() => {
+    // The panel now reads `waypoints` to decide whether the field is planning or
+    // refining, so a route left behind by an earlier test would silently change
+    // which chips the next one sees. Start every test with no route.
+    mockStoreState.waypoints = [];
     vi.stubGlobal('navigator', {
       ...navigator,
       geolocation: { getCurrentPosition: mockGetCurrentPosition },
@@ -558,6 +562,57 @@ describe('Sidebar', () => {
     }
     // nothing typed yet → nothing to build
     expect(buildButton()).toBeDisabled();
+  });
+
+  it('once a route exists the chips edit it instead of starting a new one', () => {
+    // A route with one real stop: planning is over, so the same field now asks
+    // a different question and must not re-offer the starting questions.
+    mockStoreState.waypoints = [
+      {
+        id: 'me',
+        userInput: 'моё местоположение',
+        geocodeResults: [
+          {
+            title: 'me',
+            sourcelnglat: [23.8, 53.7],
+            displaylnglat: [23.8, 53.7],
+          },
+        ],
+      },
+      {
+        id: '0',
+        userInput: 'Старый замок',
+        placeId: 11,
+        geocodeResults: [
+          {
+            title: 'Старый замок',
+            selected: true,
+            sourcelnglat: [23.8222, 53.6772],
+            displaylnglat: [23.8222, 53.6772],
+          },
+        ],
+      },
+    ];
+
+    render(<Sidebar />);
+
+    for (const [id, said] of [
+      ['refine-add-cafe', 'добавь кафе по пути'],
+      ['refine-remove-museum', 'убери музей из маршрута'],
+      ['refine-shorter', 'сделай короче — часа на два'],
+      ['refine-only-churches', 'оставь только костёлы и замки'],
+      ['refine-with-children', 'добавь что-нибудь для детей'],
+    ] as const) {
+      expect(screen.getByTestId(`hint-${id}`)).toHaveTextContent(said);
+    }
+    // The starting questions are gone: next to a finished route they read as
+    // «начать заново», which is the opposite of what the field now does.
+    expect(screen.queryByTestId('hint-old-town')).not.toBeInTheDocument();
+    expect(
+      screen.getByPlaceholderText('Что уточнить? «добавь кофейню»')
+    ).toBeInTheDocument();
+
+    mockStoreState.waypoints = [];
   });
 
   it('fills the query from a hint chip and submits on Enter', async () => {
@@ -1228,6 +1283,9 @@ describe('Sidebar — felt quality', () => {
       ok({ coords: { latitude: 53.7, longitude: 23.8 } });
     });
     mockStoreState.routeHistory = [];
+    // Same reason as in the first block: a route from an earlier test would turn
+    // the field into refinement mode and swap the chips under this test.
+    mockStoreState.waypoints = [];
     mockStoreState.setWaypoint.mockImplementation(
       (next: Record<string, unknown>[]) => {
         mockStoreState.waypoints = next;

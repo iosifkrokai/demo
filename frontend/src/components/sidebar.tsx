@@ -183,12 +183,29 @@ interface HintChip {
   text: string;
 }
 
+/**
+ * The chips offered before anything is planned — how a tourist would start.
+ */
 const buildHintChips = (t: TFunction): HintChip[] => [
   { id: 'old-town', text: t('ask.chips.oldTown') },
   { id: 'castles-churches', text: t('ask.chips.castlesChurches') },
   { id: 'food', text: t('ask.chips.food') },
   { id: 'evening', text: t('ask.chips.evening') },
   { id: 'with-children', text: t('ask.chips.withChildren') },
+];
+
+/**
+ * The chips offered once a route exists. Planning is over: from here the
+ * tourist edits what they have, so a chip has to read like an instruction to
+ * change the current route («убери музей»), not like a fresh request. Showing
+ * the starting five again would invite them to start over by accident.
+ */
+const buildRefineHintChips = (t: TFunction): HintChip[] => [
+  { id: 'refine-add-cafe', text: t('ask.chipsRefine.addCafe') },
+  { id: 'refine-remove-museum', text: t('ask.chipsRefine.removeMuseum') },
+  { id: 'refine-shorter', text: t('ask.chipsRefine.shorter') },
+  { id: 'refine-only-churches', text: t('ask.chipsRefine.onlyChurches') },
+  { id: 'refine-with-children', text: t('ask.chipsRefine.withChildren') },
 ];
 
 /**
@@ -523,7 +540,15 @@ export const Sidebar = () => {
   // their visible labels follow the language, while their `code`s never do —
   // those are the backend's own categories.
   const subtitles = useMemo(() => buildViewSubtitles(t), [t]);
-  const hints = useMemo(() => buildHintChips(t), [t]);
+  // Once a route exists the same field asks a different question, so it offers
+  // different chips: instructions that edit what is already built.
+  const hints = useMemo(
+    () =>
+      waypoints.some((w) => w.id !== ME_WAYPOINT_ID && w.geocodeResults.length > 0)
+        ? buildRefineHintChips(t)
+        : buildHintChips(t),
+    [t, waypoints]
+  );
 
   const routeHistory = useDirectionsStore((s) => s.routeHistory);
   const addToHistory = useDirectionsStore((s) => s.addToHistory);

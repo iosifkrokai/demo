@@ -39,6 +39,15 @@ export const en: Dictionary = {
       evening: 'An evening walk along Sovetskaya',
       withChildren: 'With children: parks and castles',
     },
+    // Offered only once a route exists: instructions that change it, not fresh
+    // requests. The pair must stay in step with the Russian chips.
+    chipsRefine: {
+      addCafe: 'add a café on the way',
+      removeMuseum: 'take the museum out',
+      shorter: 'make it shorter — two hours',
+      onlyChurches: 'keep only churches and castles',
+      withChildren: 'add something for the children',
+    },
   },
   transport: {
     pedestrian: 'on foot',

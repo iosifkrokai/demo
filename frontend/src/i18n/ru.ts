@@ -40,6 +40,16 @@ export const ru = {
       evening: 'Вечерняя прогулка по Советской',
       withChildren: 'С детьми: парки и замки',
     },
+    // Offered only when a route already exists: these edit it instead of
+    // planning a new one. Each is an instruction the pipeline can honour —
+    // add a stop, exclude one, shorten the budget, narrow the interests.
+    chipsRefine: {
+      addCafe: 'добавь кафе по пути',
+      removeMuseum: 'убери музей из маршрута',
+      shorter: 'сделай короче — часа на два',
+      onlyChurches: 'оставь только костёлы и замки',
+      withChildren: 'добавь что-нибудь для детей',
+    },
   },
   transport: {
     pedestrian: 'пешком',
