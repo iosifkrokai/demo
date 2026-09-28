@@ -16,7 +16,13 @@ from . import taxonomy
 # One route request has a hard end-to-end budget.  Exceeding it is never a
 # hang: the planner drops the optional work (Valhalla re-ordering, geometry)
 # and returns a smaller plan with an honest status instead.
-REQUEST_DEADLINE_S = 40.0
+#
+# Kept at 75 s, not 40: with 40 the re-ordering was usually thrown away for want
+# of a second or two (interpretation + rerank + cost matrix took ~23 s, leaving
+# 17.2 s against a threshold of 18), and the plan came back with two stops that
+# followed the retrieval order rather than a walkable one. The ceiling exists to
+# bound the worst case, not to discard the step that makes the route good.
+REQUEST_DEADLINE_S = 75.0
 # Less than this left → trim the candidate pool before the (50×50) cost matrix.
 COST_MATRIX_MIN_LEFT_S = 26.0
 POOL_TRIM_SIZE = 12

@@ -89,7 +89,7 @@ MODEL_TIMEOUT_S = 20.0  # per-request HTTP timeout, below the wall clock
 # live OpenRouter list (both tools and structured outputs supported) and set to
 # the cheapest capable candidate so the interpretation layer is affordable per
 # request. Overridable per-process with AGENT_INTERPRET_MODEL for a benchmark.
-DEFAULT_MODEL = "deepseek/deepseek-v4.1-flash"
+DEFAULT_MODEL = "google/gemini-2.5-flash"
 
 
 def _model_name() -> str:
