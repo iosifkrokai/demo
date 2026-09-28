@@ -16,6 +16,9 @@ COPY pyproject.toml uv.lock* ./
 RUN uv lock && uv sync --no-install-project --no-dev
 
 COPY agent/ /app/agent/
+# Данные таксономии нужны уже при импорте `agent.constants`: без них контейнер
+# падает на старте с FileNotFoundError, и сервис агента в compose не поднимается.
+COPY data/ /app/data/
 RUN uv sync --no-dev
 
 ENV PYTHONUNBUFFERED=1 \

@@ -175,6 +175,8 @@ export const MapComponent = () => {
   const mapRef = useRef<MapRef>(null);
   const focusRequest = useCommonStore((s) => s.focus);
   const guideFix = useCommonStore((s) => s.guideFix);
+  /** The bearing in force, so small course wobbles do not turn the map. */
+  const bearingRef = useRef<number | null>(null);
   const guiding = useCommonStore((s) => s.guiding);
   /** Navigator mode: the map keeps the tourist in view until a hand moves it. */
   const [follow, setFollow] = useState(true);
@@ -437,6 +439,11 @@ export const MapComponent = () => {
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !guiding || !follow || !guideFix) return;
+    // A new animation on every fix is what made the camera stutter: each one
+    // started before the last had finished, so the view was pulled between two
+    // targets and snapped. While one is still running, the next fix is simply
+    // dropped — the camera is a second behind at worst, never fighting itself.
+    if (map.isEasing?.()) return;
     // The panel covers the left of the canvas, so centring on the canvas would
     // park the tourist's dot behind it. The padding puts the dot in the middle
     // of the map the tourist can actually see.
@@ -446,13 +453,32 @@ export const MapComponent = () => {
           '--panel-width'
         )
       ) || 0;
+    // The heading is read once it has moved far enough to matter. A GPS course
+    // wobbles by a few degrees every second and the simulated one jumps at every
+    // corner; rotating for those turned the map into a spinning top. Below the
+    // threshold the current bearing is kept, above it the map turns once, slowly.
+    const seen = bearingRef.current;
+    const bearing =
+      guideFix.heading != null &&
+      (seen === null || Math.abs(((guideFix.heading - seen + 540) % 360) - 180) > 15)
+        ? guideFix.heading
+        : undefined;
+    if (bearing !== undefined) bearingRef.current = bearing;
+
     map.easeTo({
       center: [guideFix.lng, guideFix.lat],
-      ...(guideFix.heading != null ? { bearing: guideFix.heading } : {}),
+      ...(bearing !== undefined ? { bearing } : {}),
       padding: { left: panelWidth, top: 0, right: 0, bottom: 0 },
       pitch: 45,
       zoom: Math.max(map.getZoom(), 16.5),
-      duration: 800,
+      // Linear, and as long as the gap between fixes: the camera then moves at
+      // one steady speed for the whole walk instead of easing in and out on
+      // every step, which is what read as jolting.
+      duration: 900,
+      // Identity easing: constant speed from the first millisecond to the last.
+      // The default curve accelerates and brakes inside every step, which is
+      // what read as the view lurching and snapping back.
+      easing: (progress: number) => progress,
       essential: true,
     });
   }, [guiding, follow, guideFix]);
