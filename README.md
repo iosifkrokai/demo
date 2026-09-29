@@ -19,8 +19,9 @@ curl -LsSf https://astral.sh/uv/install.sh | sh    # uv
 
 For network: outbound HTTPS to `download.geofabrik.de`, `nominatim.openstreetmap.org`,
 `tile.openstreetmap.org`, `overpass-api.de`, `openrouter.ai`. **OPENROUTER_API_KEY is
-optional** — without it the pipeline degrades to keyword-only retrieval (no embeddings,
-no Jev intent/rerank); routes are still built via a deterministic regex/keyword fallback.
+optional** — without it the pipeline degrades to keyword-only retrieval (no
+embeddings, and the request is read by the deterministic parser); routes are still
+built.
 
 ## 0a. One command (fresh machine)
 
@@ -37,15 +38,15 @@ retrieval until you re-run the seeds with the key).
 
 ## 1. Web-app subdir
 
-The webapp lives in `frontend/` (sidebar, waypoints, place cards, guide panel — built
-on top of the MapLibre/Valhalla web-app upstream). Copy the committed example to `.env`
-before building:
+The webapp lives in `frontend/`. It shares the **single root `.env`** (Vite reads it
+via `envDir: '..'`); there is no separate `frontend/.env`. Copy the committed example
+at the repository root before building:
 
 ```bash
-cp frontend/.env.example frontend/.env
+cp .env.example .env
 ```
 
-`.env` is gitignored, so a fresh clone has none; `frontend/.env.example` holds the
+`.env` is gitignored, so a fresh clone has none; the root `.env.example` holds the
 defaults — both URLs empty, which is what makes the app work behind a forwarded port
 (Codespaces, tunnels): the UI talks to its own origin and nginx proxies `/routes/*` →
 agent, `/route`, `/status`, `/isochrone`, … → Valhalla.
@@ -168,13 +169,15 @@ export OPENROUTER_API_KEY=sk-or-...    # optional; without it the agent is keywo
 .venv/bin/python -m uvicorn agent.main:app --host 0.0.0.0 --port 8080
 ```
 
-Without `OPENROUTER_API_KEY`: embeddings are skipped, intent falls back to a
-deterministic regex/keyword parse (same CATEGORY_SYNONYMS map as retrieval), and Jev
-rerank is skipped. Routes are still built; `/health` reports `"llm": false`.
+Without `OPENROUTER_API_KEY`: embeddings are skipped and the request is read by the
+deterministic parser (`planner/intent.py::build_requirements` → the regex/keyword
+reading, over the same CATEGORY_SYNONYMS map retrieval uses). Routes are still built;
+`/health` reports `"llm": false`.
 
 With key: embeddings via OpenRouter (`openai/text-embedding-3-small`, 1536 dims) and
-intent/rerank via the Jev typed-decision endpoint (`POST /api/v1/systemone`,
-`typesafe/jev-1.13`). No local models, no first-call download.
+the reading by the tool-using PydanticAI agent (`planner/agent_interpret.py`) over
+OpenRouter. There is no re-scoring stage — `retrieve()` already fuses the signals with
+RRF and that order *is* the relevance order. No local models, no first-call download.
 
 ## 6. Smoke tests
 
@@ -213,10 +216,27 @@ cd backend
 # prints a table and writes backend/benchmarks/report.json + report.md
 ```
 
+Two layers measure different things, and the runner can produce both:
+
+```bash
+# Golden set: did the request survive the pipeline (mandatory categories, prohibitions,
+# region, budget, RU/EN parity)? Writes benchmarks/compliance.json + compliance.md.
+.venv/bin/python scripts/bench_routes.py --golden --snapshot "" --report-dir benchmarks
+
+# One page that reads the three layers (geometry / golden / evals) and shows the
+# freshness of each; a layer nobody measured prints as «НЕ ИЗМЕРЯЛОСЬ», never green.
+.venv/bin/python reports/quality.py
+```
+
+`reports/quality.py` measures nothing itself: it reads what the layers wrote. It
+exits non-zero when **none** of the three has numbers, so an empty page cannot pass
+for a good one.
+
 ## 7. Dev workflow
 
 ```bash
 cd backend
+uv sync                       # create/refresh .venv from the locked deps
 
 # Lint (auto-fix safe issues)
 .venv/bin/ruff check --fix .
@@ -224,27 +244,46 @@ cd backend
 # Format
 .venv/bin/ruff format .
 
-# Type-check (strict-ish, ~5 sec)
+# Type-check (strict-ish, ~10-20 sec on a cold pyright cache)
 .venv/bin/pyright
 
 # Tests
 .venv/bin/python -m pytest -q
 ```
 
-CI equivalent (run before commit):
-```bash
-cd backend && .venv/bin/ruff check . && .venv/bin/pyright
-```
+These three checks are the gate, and they run in CI on every push and PR
+(`.github/workflows/ci.yml`: `uv sync --frozen` → `ruff check .` → `pyright` →
+`pytest -q`). Run them before committing; a red gate means the tree is not green, so
+nothing here is «green until someone looks».
+
+Notes that make the gate reproducible:
+- the dev dependency group carries `requests`/`beautifulsoup4` because the suite
+  imports the one-shot scripts (`tests/test_seed_geofence.py` → `scripts/parse_places.py`);
+  without them a plain `uv sync` cannot even collect the suite;
+- `pyright` is pointed at `.venv` (`venvPath`/`venv` in `pyproject.toml`) — without
+  that it cannot resolve `psycopg`/`pydantic` and reports them as missing imports;
+- `ruff` deliberately ignores the ambiguous-unicode rules (`RUF001`-`RUF003`): the
+  product's own language is Russian, so Cyrillic in strings is not a finding.
 
 ## 8. Configuration
 
-Environment carries secrets and addresses only (`agent/config.py`):
-`OPENROUTER_API_KEY`, `DATABASE_URL`, `VALHALLA_URL`, `AGENT_HOST`, `AGENT_PORT`.
+Environment carries secrets, deployment addresses and two deliberate escape hatches —
+nothing that belongs in review (`agent/config.py`, `agent/planner/interpret_cache.py`):
+
+| Variable | What it is |
+|---|---|
+| `OPENROUTER_API_KEY` | secret; embeddings + the interpretation agent (also read by the seed scripts) |
+| `DATABASE_URL` | Postgres DSN (agent and seed scripts; default is the local compose one) |
+| `VALHALLA_URL` | routing engine address |
+| `AGENT_HOST` / `AGENT_PORT` | bind address |
+| `AGENT_INTERPRET_MODEL` | optional override of the interpretation model, so a benchmark can pin one |
+| `CACHE_BUST=1` | turn the in-process reading/embedding cache off for this process (demos, measurement runs) |
+| `INTERPRET_CACHE_SIZE` / `INTERPRET_CACHE_TTL_S` | bounds of that cache (defaults 128 entries / 30 min) |
 
 Everything else is reviewable code in `agent/constants.py` — models, weights and limits:
-`EMBED_MODEL`, `JEV_MODEL`, `RRF_K`, `MMR_LAMBDA`, `RETRIEVAL_POOL_SIZE`,
-`RERANK_POOL_SIZE`, `MMR_POOL_SIZE`, `GEO_FOCUS_KM`, `GEO_FOCUS_MAX_KM`,
-`GEO_FOCUS_DISCOVERY_MAX_KM`, `MAX_WALK_LEG_KM` / `WALK_LEG_BUDGET_SHARE` (walkability),
+`EMBED_MODEL`, `RRF_K`, `MMR_LAMBDA`, `RETRIEVAL_POOL_SIZE`,
+`MMR_POOL_SIZE`, `GEO_FOCUS_KM`, `GEO_FOCUS_DISCOVERY_MAX_KM`,
+`MAX_WALK_LEG_KM` / `WALK_LEG_BUDGET_SHARE` (walkability),
 `NAME_MATCH_MIN_SIM` (named-place → must-visit threshold),
 `DUPLICATE_RADIUS_M` / `DUPLICATE_NAME_RADIUS_M` (same-POI deduplication),
 `CONVENIENCE_RADIUS_M` / `CONVENIENCE_MAX_ADDED`, `VALHALLA_MAX_LOCATIONS`,
@@ -267,10 +306,20 @@ for the geo focus instead, so «замки Гродно» is not pinned to one a
 Fixed by sending `radius: 100` per location (`LOCATION_SNAP_RADIUS_M` in
 `valhalla_client.py`); `search_radius` / `street_side_tolerance` do NOT help.
 
-**"relation 'places' does not exist".** `db/init.sql` only loads on FIRST start of the
-`db` container. A fresh `pgdata` volume gets the complete current schema straight from
-`init.sql`; the files under `db/migrations/` are historical (`IF NOT EXISTS`) and only
-matter for volumes created before `init.sql` caught up.
+**"relation 'places' does not exist", or the seed failing on a fresh volume.**
+`db/init.sql` loads only on the FIRST start of the `db` container, and it carries the
+COMPLETE current schema: `places`, `place_aliases`, `place_sources`, `areas`, `clients`,
+`client_preferences`, `saved_routes`, the `places.category_source` column and the
+curated-category guard trigger (the same DDL as `db/migrations/0004`/`0005`). Those
+migration files stay as the idempotent path for volumes created before `init.sql` caught
+up:
+
+```bash
+docker exec grodno-db psql -U grodno -d grodno -f db/migrations/0004_places_taxonomy.sql
+```
+
+If a fresh volume comes up *without* those tables, `init.sql` has drifted from the
+migrations again — fix that, not the seed.
 
 **Agent returns `503 UpstreamUnavailable` on every request.** Valhalla tile build didn't
 finish or the `pgdata` volume lost embeddings — re-run `scripts/seed_region.py --embed`.
@@ -294,13 +343,20 @@ Browser → nginx :80  (frontend container)
   │                           │
   │               agent.main → agent.planner.Pipeline
   │                           │
-  │  ┌─ preprocess ─ intent (Jev typed decisions; regex/keyword fallback) ─ resolve ─┐
+  │  ┌─ preprocess ─ interpret (PydanticAI over OpenRouter; deterministic fallback) ─┐
   │  │                                                                               │
-  │  ├─ retrieve (vector + keyword + must-visit, RRF fusion) ─ rerank (Jev scores) ──┤
+  │  ├─ resolve ─ retrieve (vector + keyword + must-visit, RRF fusion) ─────────────┤
   │  │                                                                               │
   │  ├─ geo-focus ─ diversity (MMR) ─ cost (Valhalla matrix) ─ optimize ────────────┤
   │  │                                                                               │
-  │  └─ validate ─ render (Valhalla /route) ─ explain ─────────────────────────────-┘
+  │  └─ validate ─ render (Valhalla /route) ─ explain ─ verify (deterministic) ──────┘
+  │
+  │  A refinement turn («добавь кофейню и туалет») enters with the route as it stands and
+  │  applies ONE typed operation to it (add / remove / reorder), or refuses with a machine
+  │  reason code — it never silently re-plans from scratch.
+  │
+  │  result_mode=catalogue leaves the same path before geo-focus and answers with the
+  │  matching places grouped by town: no geometry, no ordering, no budget trim.
   │
   └─ /route, /status, /isochrone, /locate, /height, /tile
           → proxy → valhalla :8002
@@ -308,10 +364,30 @@ Browser → nginx :80  (frontend container)
 
 nginx rule: `location /routes/` proxies the whole prefix to the agent; individual
 Valhalla paths are matched by the regex `^/(route|isochrone|optimized_route|status|locate|height|tile)$`
-(see `frontend/nginx.conf`).
+(see `frontend/nginx.conf`). `/clients/` is proxied to the agent too, and its preflight
+allows `X-Client-Id`.
 
-Planner files: `backend/agent/planner/{preprocess,intent,resolve,retrieve,rerank,diversity,cost,optimize,validate,render,explain,pipeline}.py`,
-clients in `backend/agent/{jev,valhalla_client,search}.py`, tunables in `backend/agent/constants.py`.
+Two request fields change the shape of the answer, and both are honoured by the pipeline
+rather than merely accepted:
+
+- `result_mode="catalogue"` — the answer is a **list** of the matching places grouped by
+  town, with no geometry, no ordering, no budget trim and no geo focus: confining a
+  catalogue to one walkable cluster is exactly what made «все костёлы области»
+  unanswerable. Verification is membership-only (`verify_catalogue`), so the requirement
+  chips carry `*_in_catalogue` reason codes — nothing may claim «на маршруте» when no
+  route exists.
+- `round_trip=true` — the tour closes back on its own start: `render()` asks Valhalla for
+  the return leg and `validate()` counts it against the budget, so a closed tour cannot
+  look cheaper than an open one.
+
+`verify` is the honest half of the response: it is deterministic, it re-reads the final
+route and the geometry, and it — not the interpretation model — decides `status`
+(`ready` / `infeasible` / `degraded` / `pending`) and each requirement's verdict. The
+same verdicts reach the client as `interpretation.requirements` plus the explicit
+`interpretation.unmet` list.
+
+Planner files: `backend/agent/planner/{preprocess,intent,resolve,retrieve,diversity,cost,optimize,validate,render,explain,refine,verify,interpret_cache,agent_interpret,pipeline}.py`,
+clients in `backend/agent/{valhalla_client,search}.py`, tunables in `backend/agent/constants.py`.
 
 ## 11. What is not verified / not promised
 
@@ -340,7 +416,7 @@ use.
 - No continuous ingest pipeline — `ingest_osm.py`, `load_osm.py` and `ingest_poi.py`
   are one-shot CLI scripts; `parse_places.py`, `enrich_places.py`, `apply_curated.py`
   predate the current structure and are not part of the active seed path.
-- No local ML models: embeddings, intent and rerank are OpenRouter calls.
+- No local ML models: embeddings and the query reading are OpenRouter calls.
 - `planner/verify.py` (independent post-route verifier against `TripRequirements`) is
-  planned in workstream W3 of `docs/specs/002-grodno-guide-rebuild/` but not yet
-  merged.
+  merged and runs on every request: it decides `status`/`requirements` from the final
+  route and the Valhalla geometry, never from the interpretation model.

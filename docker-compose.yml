@@ -88,7 +88,6 @@ services:
       # Container-internal hosts override the host-side values from .env.
       DATABASE_URL: "postgresql://${POSTGRES_USER:-grodno}:${POSTGRES_PASSWORD:-grodno}@db:5432/${POSTGRES_DB:-grodno}"
       VALHALLA_URL: "http://valhalla:8002"
-      RERANK_ENABLED: "${RERANK_ENABLED:-1}"
     ports:
       - "8080:8080"
     depends_on:
