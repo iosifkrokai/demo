@@ -18,7 +18,10 @@ describe('PanelToggle', () => {
       name: 'открыть или закрыть панель маршрута',
     });
     expect(handle).toHaveAttribute('aria-expanded', 'false');
-    expect(handle).toHaveAttribute('title', 'открыть или закрыть панель маршрута');
+    expect(handle).toHaveAttribute(
+      'title',
+      'открыть или закрыть панель маршрута'
+    );
   });
 
   it('показывает, куда двинется панель: закрыта — вправо, открыта — влево', () => {
@@ -28,12 +31,16 @@ describe('PanelToggle', () => {
     // The chevron points the way the panel moves, so the icon alone says what
     // the next click does. lucide marks the two glyphs by name.
     expect(document.querySelector('.lucide-chevron-right')).toBeInTheDocument();
-    expect(document.querySelector('.lucide-chevron-left')).not.toBeInTheDocument();
+    expect(
+      document.querySelector('.lucide-chevron-left')
+    ).not.toBeInTheDocument();
 
     rerender(<PanelToggle open onToggle={() => {}} label="панель" />);
 
     expect(document.querySelector('.lucide-chevron-left')).toBeInTheDocument();
-    expect(document.querySelector('.lucide-chevron-right')).not.toBeInTheDocument();
+    expect(
+      document.querySelector('.lucide-chevron-right')
+    ).not.toBeInTheDocument();
   });
 
   it('сообщает о нажатии одним колбэком — ручка не знает, что делает панель', async () => {

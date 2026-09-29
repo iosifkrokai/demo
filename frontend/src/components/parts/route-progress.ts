@@ -29,7 +29,7 @@ export const LONG_WAIT_SECONDS = 12;
  * code returns `null` and the panel falls back to what it can observe itself.
  */
 export const routeServerStageKey = (stage: string | null): string | null =>
-  stage ? `sidebar.progress.${stage}` : null
+  stage ? `sidebar.progress.${stage}` : null;
 
 /** Honest long-wait note: the request is still pending, nothing more. */
 export const routeLongWaitText =

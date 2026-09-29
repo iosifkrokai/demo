@@ -25,7 +25,9 @@ vi.mock('@/routes', () => ({
 // summary that goes with it) can be asserted directly.
 vi.mock('@/utils/valhalla', async () => {
   const actual =
-    await vi.importActual<typeof import('@/utils/valhalla')>('@/utils/valhalla');
+    await vi.importActual<typeof import('@/utils/valhalla')>(
+      '@/utils/valhalla'
+    );
   return {
     ...actual,
     parseDirectionsGeometry: (data: {
@@ -93,9 +95,7 @@ const zoomTo = vi.fn();
 
 const wrapper = ({ children }: { children: ReactNode }) => (
   <QueryClientProvider
-    client={
-      new QueryClient({ defaultOptions: { queries: { retry: false } } })
-    }
+    client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
   >
     {children}
   </QueryClientProvider>
@@ -108,7 +108,10 @@ const refetch = async () => {
     ({ data } = await result.current.refetch());
   });
   return data as
-    | (ParsedDirectionsGeometry & { source?: string; hasVerifiedLine?: boolean })
+    | (ParsedDirectionsGeometry & {
+        source?: string;
+        hasVerifiedLine?: boolean;
+      })
     | null
     | undefined;
 };
@@ -183,7 +186,7 @@ describe('useDirectionsQuery — one route, one source (spec 002 §7)', () => {
     );
   });
 
-  it('falls back to the app\'s own Valhalla call for a hand-built route', async () => {
+  it("falls back to the app's own Valhalla call for a hand-built route", async () => {
     const coordinates = [
       [53.9, 23.8],
       [53.91, 23.81],
@@ -207,12 +210,27 @@ describe('useDirectionsQuery — one route, one source (spec 002 §7)', () => {
     fetchMock
       .mockResolvedValueOnce({
         ok: true,
-        json: async () => valhallaResponse([[53.9, 23.8], [53.91, 23.81]], 5, 600),
+        json: async () =>
+          valhallaResponse(
+            [
+              [53.9, 23.8],
+              [53.91, 23.81],
+            ],
+            5,
+            600
+          ),
       })
       .mockResolvedValueOnce({
         ok: true,
         json: async () =>
-          valhallaResponse([[53.9 + 0.19, 23.8], [53.9 + 0.21, 23.8]], 7, 900),
+          valhallaResponse(
+            [
+              [53.9 + 0.19, 23.8],
+              [53.9 + 0.21, 23.8],
+            ],
+            7,
+            900
+          ),
       });
 
     const data = await refetch();

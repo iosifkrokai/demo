@@ -18,7 +18,11 @@ export const useMediaQuery = (query: string): boolean => {
   );
 
   useEffect(() => {
-    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
+    if (
+      typeof window === 'undefined' ||
+      typeof window.matchMedia !== 'function'
+    )
+      return;
     const list = window.matchMedia(query);
     const onChange = (event: MediaQueryListEvent) => setMatches(event.matches);
     setMatches(list.matches);

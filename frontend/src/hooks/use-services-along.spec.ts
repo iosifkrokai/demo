@@ -20,10 +20,18 @@ const geometry = (points: number[][]): ParsedDirectionsGeometry =>
 describe('lineFromGeometry', () => {
   it('отдаёт GeoJSON-порядок координат, а не порядок Valhalla', () => {
     // Grodno: 53.68 N, 23.83 E. In the answer the *first* number must be 23.83.
-    const line = lineFromGeometry(geometry([[53.68, 23.83], [53.67, 23.82]]));
+    const line = lineFromGeometry(
+      geometry([
+        [53.68, 23.83],
+        [53.67, 23.82],
+      ])
+    );
     expect(line).toEqual({
       type: 'LineString',
-      coordinates: [[23.83, 53.68], [23.82, 53.67]],
+      coordinates: [
+        [23.83, 53.68],
+        [23.82, 53.67],
+      ],
     });
   });
 
@@ -75,9 +83,15 @@ describe('useServicesAlong', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     const { result } = renderHook(() =>
-      useServicesAlong(geometry([[53.68, 23.83], [53.67, 23.82]]), {
-        enabled: false,
-      })
+      useServicesAlong(
+        geometry([
+          [53.68, 23.83],
+          [53.67, 23.82],
+        ]),
+        {
+          enabled: false,
+        }
+      )
     );
 
     expect(fetchMock).not.toHaveBeenCalled();
@@ -86,10 +100,19 @@ describe('useServicesAlong', () => {
   });
 
   it('отдаёт найденные точки и то, что именно было измерено', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => answer }));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({ ok: true, json: async () => answer })
+    );
 
     const { result } = renderHook(() =>
-      useServicesAlong(geometry([[53.68, 23.83], [53.67, 23.82]]), { enabled: true })
+      useServicesAlong(
+        geometry([
+          [53.68, 23.83],
+          [53.67, 23.82],
+        ]),
+        { enabled: true }
+      )
     );
 
     await waitFor(() => expect(result.current.state).toBe('ready'));
@@ -104,14 +127,22 @@ describe('useServicesAlong', () => {
     // Regression: the effect used to depend on the shape *object*, so a parent
     // building an equal geometry every render restarted the request forever and
     // the vitest worker died of heap exhaustion (2 GB, ~50 s).
-    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => answer });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue({ ok: true, json: async () => answer });
     vi.stubGlobal('fetch', fetchMock);
 
     const { result, rerender } = renderHook(
       ({ n }) =>
         useServicesAlong(
           // A fresh object every render, same coordinates — the trap.
-          { decodedGeometry: [[53.68, 23.83], [53.67, 23.82]], n } as unknown as ParsedDirectionsGeometry,
+          {
+            decodedGeometry: [
+              [53.68, 23.83],
+              [53.67, 23.82],
+            ],
+            n,
+          } as unknown as ParsedDirectionsGeometry,
           { enabled: true }
         ),
       { initialProps: { n: 1 } }
@@ -128,7 +159,13 @@ describe('useServicesAlong', () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('boom')));
 
     const { result } = renderHook(() =>
-      useServicesAlong(geometry([[53.68, 23.83], [53.67, 23.82]]), { enabled: true })
+      useServicesAlong(
+        geometry([
+          [53.68, 23.83],
+          [53.67, 23.82],
+        ]),
+        { enabled: true }
+      )
     );
 
     await waitFor(() => expect(result.current.state).toBe('unavailable'));
@@ -147,7 +184,13 @@ describe('useServicesAlong', () => {
     );
 
     const { result } = renderHook(() =>
-      useServicesAlong(geometry([[53.68, 23.83], [53.67, 23.82]]), { enabled: true })
+      useServicesAlong(
+        geometry([
+          [53.68, 23.83],
+          [53.67, 23.82],
+        ]),
+        { enabled: true }
+      )
     );
 
     await waitFor(() => expect(result.current.state).toBe('unavailable'));

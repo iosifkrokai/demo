@@ -1,7 +1,18 @@
 import { useState } from 'react';
-import { ChevronDown, CircleCheck, Clock, Footprints, MapPin, Trash2, X } from 'lucide-react';
+import {
+  ChevronDown,
+  CircleCheck,
+  Clock,
+  Footprints,
+  MapPin,
+  Trash2,
+  X,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { type RouteHistoryEntry, type RouteHistoryWalk } from '@/stores/directions-store';
+import {
+  type RouteHistoryEntry,
+  type RouteHistoryWalk,
+} from '@/stores/directions-store';
 import { placeCountRu } from '@/utils/plural';
 import { fmtMin } from './guide-format';
 
@@ -27,10 +38,7 @@ export function HistoryTab({
   onClear,
 }: HistoryTabProps) {
   return (
-    <div
-      className="flex flex-col gap-2"
-      data-testid="history-tab"
-    >
+    <div className="flex flex-col gap-2" data-testid="history-tab">
       <div className="flex items-center justify-between gap-2">
         <p className="flex items-center gap-1.5 text-meta text-muted-foreground">
           Построенные маршруты

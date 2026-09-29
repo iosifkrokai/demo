@@ -22,7 +22,11 @@ export class ServicesError extends Error {
   /** The agent's machine-readable reason, when it sent one. */
   readonly reason: string | null;
 
-  constructor(message: string, status: number | null = null, reason: string | null = null) {
+  constructor(
+    message: string,
+    status: number | null = null,
+    reason: string | null = null
+  ) {
     super(message);
     this.name = 'ServicesError';
     this.status = status;
@@ -67,7 +71,9 @@ export async function fetchServicesAlong(
     });
   } catch (error) {
     if ((error as Error)?.name === 'AbortError') throw error;
-    throw new ServicesError('агент недоступен — «что по пути» проверить нельзя');
+    throw new ServicesError(
+      'агент недоступен — «что по пути» проверить нельзя'
+    );
   }
 
   if (!response.ok) {

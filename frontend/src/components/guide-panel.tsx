@@ -357,7 +357,6 @@ export const GuidePanel = ({
   transport = null,
   onWalked,
 }: GuidePanelProps) => {
-  const { t } = useTranslation();
   const key = useMemo(() => guideRouteKey(stops), [stops]);
   /** How the guide speaks about movement: on foot, on a bike, or driving. */
   const travel = useMemo(() => guideModeFor(transport), [transport]);
@@ -475,7 +474,6 @@ export const GuidePanel = ({
   // from the URL), and a stale `true` would put a lie on screen.
   const simulated = isSimulating();
   const setGuideFix = useCommonStore((s) => s.setGuideFix);
-  const focusOn = useCommonStore((s) => s.focusOn);
 
   // ── Geolocation: keep watching as long as we are moving ──────────────────
   useEffect(() => {

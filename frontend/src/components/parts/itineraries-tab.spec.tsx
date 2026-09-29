@@ -142,7 +142,9 @@ describe('ItinerariesTab', () => {
         onOpen={vi.fn()}
       />
     );
-    expect(screen.getByRole('alert')).toHaveTextContent(/не удалось загрузить/i);
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      /не удалось загрузить/i
+    );
     expect(screen.queryByTestId('itineraries-empty')).toBeNull();
   });
 
@@ -166,7 +168,11 @@ describe('ItinerariesTab', () => {
             source: 'https://commons.wikimedia.org/wiki/File:castle.jpg',
           },
         }),
-        stop({ place_id: 3, source_url: 'city:kolozha', name: 'Коложская церковь' }),
+        stop({
+          place_id: 3,
+          source_url: 'city:kolozha',
+          name: 'Коложская церковь',
+        }),
       ],
     };
 

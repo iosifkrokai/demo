@@ -17,7 +17,9 @@ afterEach(async () => {
 
 describe('фото точки', () => {
   it('без фото не рисует ничего — ни картинки, ни заглушки', () => {
-    const { container } = render(<PlacePhoto photo={null} name="Старый замок" />);
+    const { container } = render(
+      <PlacePhoto photo={null} name="Старый замок" />
+    );
 
     // Заглушка читалась бы как «ещё грузится» на большинстве точек, у которых
     // фото просто нет.
@@ -46,7 +48,9 @@ describe('фото точки', () => {
   });
 
   it('без страницы файла подпись остаётся, ссылка не выдумывается', () => {
-    render(<PlacePhoto photo={{ ...PHOTO, source: null }} name="Старый замок" />);
+    render(
+      <PlacePhoto photo={{ ...PHOTO, source: null }} name="Старый замок" />
+    );
 
     expect(screen.getByText(/Александр Липилин/)).toBeInTheDocument();
     expect(screen.queryByRole('link')).not.toBeInTheDocument();

@@ -212,11 +212,17 @@ describe('GuidePanel', () => {
 
     render(<GuidePanel stops={STOPS} />);
     act(() => {
-      push?.({ coords: { latitude: STOPS[1]!.lat, longitude: STOPS[1]!.lon, accuracy: 8 } });
+      push?.({
+        coords: {
+          latitude: STOPS[1]!.lat,
+          longitude: STOPS[1]!.lon,
+          accuracy: 8,
+        },
+      });
     });
     // Дальше турист уходит из радиуса остановки.
     act(() => {
-      push?.({ coords: { latitude: 53.70, longitude: 23.90, accuracy: 8 } });
+      push?.({ coords: { latitude: 53.7, longitude: 23.9, accuracy: 8 } });
     });
 
     expect(screen.getByText(/пройдено 1 из 2/i)).toBeInTheDocument();

@@ -1,24 +1,13 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import type { MapGeoJSONFeature } from 'maplibre-gl';
 import { useParams, useSearch, useNavigate } from '@tanstack/react-router';
-import {
-  Map,
-  Marker,
-  Popup,
-  type MapRef,
-} from 'react-map-gl/maplibre';
+import { Map, Marker, Popup, type MapRef } from 'react-map-gl/maplibre';
 import type { MaplibreTerradrawControl } from '@watergis/maplibre-gl-terradraw';
 import type maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 
-import {
-  getValhallaUrl,
-  buildHeightRequest,
-  VALHALLA_CLIENT_HEADERS,
-} from '@/utils/valhalla';
 import type { Summary } from '@/components/types';
 import { PanelToggle } from './parts/panel-toggle';
-import { useMediaQuery } from '@/hooks/use-media-query';
 
 import { ToolButton } from './parts/tool-button';
 import { getInitialMapStyle, getCustomStyle, getMapStyleUrl } from './utils';
@@ -53,7 +42,6 @@ import { useCommonStore } from '@/stores/common-store';
 import { useTranslation } from 'react-i18next';
 import { Coffee, LocateFixed } from 'lucide-react';
 import { ME_WAYPOINT_ID, useDirectionsStore } from '@/stores/directions-store';
-import { meWaypoint } from '@/utils/me-waypoint';
 import { useServicesAlong } from '@/hooks/use-services-along';
 import { useIsochronesStore } from '@/stores/isochrones-store';
 import {
@@ -94,8 +82,6 @@ export const MapComponent = () => {
   // panel's own title and tabs. The pill is the front door only while the
   // panel is out of the way; on a phone the panel is a bottom sheet, so the
   // pill must stay regardless.
-  const isWideViewport = useMediaQuery('(min-width: 768px)');
-  const updateSettings = useCommonStore((state) => state.updateSettings);
   const setMapReady = useCommonStore((state) => state.setMapReady);
   const { style } = useSearch({ from: '/$activeTab' });
   const [showContextPopup, setShowContextPopup] = useState(false);
@@ -111,7 +97,9 @@ export const MapComponent = () => {
   // because the count is what the guide owes the tourist («по пути: 12 мест») —
   // it is the marks appearing unasked that would be pushy, not the number.
   const [showServices, setShowServices] = useState(false);
-  const services = useServicesAlong(routeResult, { enabled: Boolean(routeResult) });
+  const services = useServicesAlong(routeResult, {
+    enabled: Boolean(routeResult),
+  });
   const setActiveRouteIndex = useDirectionsStore(
     (state) => state.setActiveRouteIndex
   );
@@ -126,7 +114,6 @@ export const MapComponent = () => {
   const { refetch: refetchDirections } = useDirectionsQuery();
   const { refetch: refetchIsochrones } = useIsochronesQuery();
   const { setWaypointFromCoords } = useSetWaypointFromCoords();
-  const setWaypoint = useDirectionsStore((s) => s.setWaypoint);
   const { reverseGeocode: reverseGeocodeIsochrones } =
     useReverseGeocodeIsochrones();
   const [routeHoverPopup, setRouteHoverPopup] = useState<{
@@ -152,9 +139,7 @@ export const MapComponent = () => {
     latitude: center[1],
     zoom: zoom_initial,
   });
-  const [currentMapStyle, setCurrentMapStyle] = useState<MapStyleType>(
-    getInitialMapStyle(style)
-  );
+  const [currentMapStyle] = useState<MapStyleType>(getInitialMapStyle(style));
   // Selectable from the URL only: the map's own style switcher was one of the
   // controls in the top-right cluster the owner asked to remove, and a style is
   // chosen once, not while walking.
@@ -234,16 +219,6 @@ export const MapComponent = () => {
       navigate({ params: { activeTab: 'directions' } });
     }
   }, [directionsPanelOpen, toggleDirections, navigate]);
-
-  const handleNavigateToTab = useCallback(
-    (tab: string) => {
-      if (!directionsPanelOpen) {
-        toggleDirections();
-      }
-      navigate({ params: { activeTab: tab } });
-    },
-    [directionsPanelOpen, toggleDirections, navigate]
-  );
 
   const handleAddWaypoint = useCallback(
     (index: number) => {
@@ -460,7 +435,8 @@ export const MapComponent = () => {
     const seen = bearingRef.current;
     const bearing =
       guideFix.heading != null &&
-      (seen === null || Math.abs(((guideFix.heading - seen + 540) % 360) - 180) > 15)
+      (seen === null ||
+        Math.abs(((guideFix.heading - seen + 540) % 360) - 180) > 15)
         ? guideFix.heading
         : undefined;
     if (bearing !== undefined) bearingRef.current = bearing;
@@ -802,21 +778,6 @@ export const MapComponent = () => {
     map.getCanvas().style.cursor = '';
     setRouteHoverPopup(null);
   }, []);
-
-  // The map's own locate control used to move the camera only: the panel kept
-  // saying «старт не задан» until a separate call succeeded. Now it writes the
-  // same waypoint 0 the panel writes, so either button is enough on its own.
-  const handleGeolocate = useCallback(
-    (position: { coords: { latitude: number; longitude: number } }) => {
-      const label = t('sidebar.ui.myLocation');
-      const current = useDirectionsStore.getState().waypoints;
-      setWaypoint([
-        meWaypoint(position.coords.latitude, position.coords.longitude, label),
-        ...current.filter((w) => w.id !== ME_WAYPOINT_ID),
-      ]);
-    },
-    [setWaypoint, t]
-  );
 
   return (
     <>

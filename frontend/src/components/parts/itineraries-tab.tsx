@@ -1,6 +1,12 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ChevronDown, Clock, Loader2, MapPin, Route as RouteIcon } from 'lucide-react';
+import {
+  ChevronDown,
+  Clock,
+  Loader2,
+  MapPin,
+  Route as RouteIcon,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useCommonStore } from '@/stores/common-store';
 import type { Itinerary, ItineraryStop } from '@/api/types';
@@ -81,7 +87,10 @@ export function ItinerariesTab({
 
   if (itineraries.length === 0) {
     return (
-      <p className="text-meta text-muted-foreground" data-testid="itineraries-empty">
+      <p
+        className="text-meta text-muted-foreground"
+        data-testid="itineraries-empty"
+      >
         Готовых маршрутов пока нет.
       </p>
     );
@@ -128,7 +137,8 @@ export function ItinerariesTab({
                   {itinerary.visit_minutes > 0 && (
                     <span className="inline-flex items-center gap-1">
                       <Clock className="h-3.5 w-3.5" aria-hidden="true" />
-                      {t('itineraries.visit')} ~{fmtMin(itinerary.visit_minutes)}
+                      {t('itineraries.visit')} ~
+                      {fmtMin(itinerary.visit_minutes)}
                     </span>
                   )}
                 </p>
@@ -165,9 +175,16 @@ export function ItinerariesTab({
                 </div>
 
                 {expanded && (
-                  <ol className="mt-1 flex flex-col gap-1.5" data-testid={`itinerary-stops-list-${itinerary.id}`}>
+                  <ol
+                    className="mt-1 flex flex-col gap-1.5"
+                    data-testid={`itinerary-stops-list-${itinerary.id}`}
+                  >
                     {itinerary.stops.map((stop, index) => (
-                      <StopRow key={stop.source_url} stop={stop} index={index} />
+                      <StopRow
+                        key={stop.source_url}
+                        stop={stop}
+                        index={index}
+                      />
                     ))}
                   </ol>
                 )}
@@ -179,7 +196,9 @@ export function ItinerariesTab({
                     data-testid={`itinerary-services-${itinerary.id}`}
                   >
                     {t('itineraries.alongTheWay')}:{' '}
-                    {itinerary.services?.map((service) => service.name).join(', ')}
+                    {itinerary.services
+                      ?.map((service) => service.name)
+                      .join(', ')}
                   </p>
                 )}
               </div>

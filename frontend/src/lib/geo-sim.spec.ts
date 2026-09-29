@@ -89,7 +89,9 @@ describe('the walk', () => {
 
     const end = at();
     expect(metres(end.lat, end.lon, NEXT[0], NEXT[1])).toBeLessThan(5);
-    expect(metres(end.lat, end.lon, START[0], START[1])).toBeGreaterThan(before);
+    expect(metres(end.lat, end.lon, START[0], START[1])).toBeGreaterThan(
+      before
+    );
     // Every tick reached the subscriber: the panel would have seen a tourist
     // standing still otherwise.
     expect(seen.length).toBeGreaterThanOrEqual(58);

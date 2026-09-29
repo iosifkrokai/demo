@@ -333,7 +333,10 @@ export const TilesControl = () => {
             key={layer.id}
             className="flex items-center justify-between p-2 rounded-lg hover:bg-muted/30"
           >
-            <Label htmlFor={layer.id} className="text-body cursor-pointer flex-1">
+            <Label
+              htmlFor={layer.id}
+              className="text-body cursor-pointer flex-1"
+            >
               {layer.id}
               <span className="text-meta text-muted-foreground ml-2">
                 ({layer.type})

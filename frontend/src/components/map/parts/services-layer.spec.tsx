@@ -14,7 +14,11 @@ vi.mock('react-map-gl/maplibre', () => ({
     longitude: number;
     latitude: number;
   }) => (
-    <div data-testid="marker" data-longitude={longitude} data-latitude={latitude}>
+    <div
+      data-testid="marker"
+      data-longitude={longitude}
+      data-latitude={latitude}
+    >
       {children}
     </div>
   ),
@@ -60,7 +64,15 @@ describe('ServicesLayer', () => {
   it('рисует по метке на каждую точку и ни одной лишней', () => {
     render(
       <ServicesLayer
-        items={[service(), service({ id: 2, source_url: 'osm:node/2', name: 'Туалет', category: 'туалет' })]}
+        items={[
+          service(),
+          service({
+            id: 2,
+            source_url: 'osm:node/2',
+            name: 'Туалет',
+            category: 'туалет',
+          }),
+        ]}
       />
     );
     expect(screen.getAllByTestId('service-marker')).toHaveLength(2);
@@ -70,7 +82,9 @@ describe('ServicesLayer', () => {
     expect(serviceIcon('кафе')).not.toBe(serviceIcon('туалет'));
     expect(serviceIcon('ресторан')).not.toBe(serviceIcon('кафе'));
     // An unknown category gets the neutral dot rather than a café icon.
-    expect(serviceIcon('вертолётная площадка')).toBe(serviceIcon('что-то новое'));
+    expect(serviceIcon('вертолётная площадка')).toBe(
+      serviceIcon('что-то новое')
+    );
   });
 
   it('карточка показывает часы как есть и говорит, что время на заход не считали', () => {
@@ -89,10 +103,14 @@ describe('ServicesLayer', () => {
 
   it('без часов в данных пишет «часы неизвестны», а не молчит', () => {
     render(
-      <ServicesLayer items={[service({ opening_hours: null, hours_known: false })]} />
+      <ServicesLayer
+        items={[service({ opening_hours: null, hours_known: false })]}
+      />
     );
     fireEvent.click(screen.getByTestId('service-marker'));
-    expect(screen.getByTestId('service-card')).toHaveTextContent('часы неизвестны');
+    expect(screen.getByTestId('service-card')).toHaveTextContent(
+      'часы неизвестны'
+    );
   });
 
   it('на метке нет номера: услуга не становится остановкой маршрута', () => {

@@ -173,7 +173,9 @@ const agentFetch = () => {
  * pipeline should say — and never reaches the mock under test. Call counts and
  * recorded bodies therefore stay about plans, as every assertion here expects.
  */
-const stubAgentFetch = (mock: (url: string, init: RequestInit) => Promise<unknown>) => {
+const stubAgentFetch = (
+  mock: (url: string, init: RequestInit) => Promise<unknown>
+) => {
   vi.stubGlobal('fetch', (url: string, init?: RequestInit) => {
     if (String(url).includes('/routes/progress/')) {
       return Promise.resolve({
@@ -470,7 +472,11 @@ describe('Sidebar', () => {
         id: 'me',
         userInput: 'моё местоположение',
         geocodeResults: [
-          { title: 'me', sourcelnglat: [23.8, 53.7], displaylnglat: [23.8, 53.7] },
+          {
+            title: 'me',
+            sourcelnglat: [23.8, 53.7],
+            displaylnglat: [23.8, 53.7],
+          },
         ],
       },
       {
@@ -747,10 +753,14 @@ describe('Sidebar', () => {
     // «Строю маршрут…» that leaves the tourist with no idea what is happening.
     const announcement = await screen.findByTestId('route-progress');
     expect(announcement).toHaveAttribute('aria-live', 'polite');
-    expect(announcement).toHaveTextContent('отправил запрос — жду план от агента');
+    expect(announcement).toHaveTextContent(
+      'отправил запрос — жду план от агента'
+    );
     expect(announcement).toHaveTextContent(/\d+ с/);
     // …and a real cancel, so a 23-second wait is not a trap.
-    expect(within(announcement).getByTestId('route-cancel')).toBeInTheDocument();
+    expect(
+      within(announcement).getByTestId('route-cancel')
+    ).toBeInTheDocument();
     // No invented stage: the client cannot see inside the request.
     expect(announcement.textContent).not.toMatch(/проверя|анализ|требован/i);
 
@@ -793,9 +803,11 @@ describe('Sidebar', () => {
       expect(announcement).toHaveTextContent('собираю порядок остановок')
     );
     expect(announcement).not.toHaveTextContent('отправил запрос');
-    expect(fetchMock.mock.calls.some((c) => String(c[0]).includes('/routes/progress/'))).toBe(
-      true
-    );
+    expect(
+      fetchMock.mock.calls.some((c) =>
+        String(c[0]).includes('/routes/progress/')
+      )
+    ).toBe(true);
   });
 
   it('shows a Russian network hint instead of browser “Failed to fetch”', async () => {
@@ -1326,7 +1338,13 @@ describe('Sidebar — felt quality', () => {
     expect(screen.getByTestId('mode-itineraries').className).toMatch(
       /max-md:h-11/
     );
-    for (const id of ['old-town', 'castles-churches', 'food', 'evening', 'with-children']) {
+    for (const id of [
+      'old-town',
+      'castles-churches',
+      'food',
+      'evening',
+      'with-children',
+    ]) {
       expect(screen.getByTestId(`hint-${id}`).className).toMatch(/max-md:h-11/);
     }
     expect(askField().className).toMatch(/max-md:min-h-11/);
@@ -1404,7 +1422,9 @@ describe('Sidebar — felt quality', () => {
 
     // History has its own tab now, so the row is not on screen until it is
     // opened — that is the point of the tab, not a regression.
-    await userEvent.setup({ delay: null }).click(screen.getByTestId('mode-history'));
+    await userEvent
+      .setup({ delay: null })
+      .click(screen.getByTestId('mode-history'));
 
     expect(screen.getByText('3 места')).toBeInTheDocument();
     expect(screen.queryByText('3 мест')).toBeNull();

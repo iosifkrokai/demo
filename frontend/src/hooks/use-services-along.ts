@@ -40,7 +40,9 @@ export const lineFromGeometry = (
   if (!points || points.length < 2) return null;
   return {
     type: 'LineString',
-    coordinates: points.map(([lat, lon]) => [lon ?? 0, lat ?? 0] as [number, number]),
+    coordinates: points.map(
+      ([lat, lon]) => [lon ?? 0, lat ?? 0] as [number, number]
+    ),
   };
 };
 

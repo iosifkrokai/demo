@@ -61,12 +61,7 @@ describe('GuideNextStop', () => {
 
   it('speaks of driving and parking on a car route', () => {
     render(
-      <GuideNextStop
-        {...base}
-        mode={drive}
-        distance={2400}
-        travelMinutes={9}
-      />
+      <GuideNextStop {...base} mode={drive} distance={2400} travelMinutes={9} />
     );
 
     expect(screen.getByTestId('guide-next-travel')).toHaveTextContent(

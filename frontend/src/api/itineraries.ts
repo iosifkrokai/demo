@@ -42,12 +42,18 @@ export async function fetchItineraries(
   }
 
   if (!response.ok) {
-    throw new ItinerariesError(`agent answered ${response.status}`, response.status);
+    throw new ItinerariesError(
+      `agent answered ${response.status}`,
+      response.status
+    );
   }
 
   const body = (await response.json()) as Partial<ItineraryList>;
   if (!Array.isArray(body?.items)) {
-    throw new ItinerariesError('agent answer has no itineraries', response.status);
+    throw new ItinerariesError(
+      'agent answer has no itineraries',
+      response.status
+    );
   }
   return { items: body.items, missing: body.missing ?? [] };
 }

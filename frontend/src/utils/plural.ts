@@ -47,7 +47,8 @@ export const stopsLabel = (count: number) => pluralRu(count, STOP_FORMS);
 export const minutesLabel = (count: number) => pluralRu(count, MINUTE_FORMS);
 
 /** «3 места», «1 место», «5 мест» — places a saved route lists. */
-export const placeCountRu = (count: number) => pluralCountRu(count, PLACE_FORMS);
+export const placeCountRu = (count: number) =>
+  pluralCountRu(count, PLACE_FORMS);
 
 /**
  * Russian decimal separator is a comma: `decimalRu(1.3)` → `«1,3»`.

@@ -213,7 +213,8 @@ export const WaypointList = ({ onChanged }: Props) => {
                 const selected =
                   wp.geocodeResults.find((g) => g.selected) ??
                   wp.geocodeResults[0];
-                const lngLat = selected?.sourcelnglat ?? selected?.displaylnglat;
+                const lngLat =
+                  selected?.sourcelnglat ?? selected?.displaylnglat;
                 if (lngLat) focusOn(lngLat[0], lngLat[1]);
               }}
               className="min-w-0 flex-1 break-words text-left text-body transition-colors hover:text-primary"

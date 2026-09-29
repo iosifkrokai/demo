@@ -10,10 +10,7 @@ import path from 'node:path';
  * #ff385c and was the only failing pair in the audit.
  */
 const css = readFileSync(
-  path.resolve(
-    path.dirname(fileURLToPath(import.meta.url)),
-    'index.css'
-  ),
+  path.resolve(path.dirname(fileURLToPath(import.meta.url)), 'index.css'),
   'utf8'
 );
 
@@ -34,7 +31,9 @@ const channel = (c: number) => {
 
 const luminance = (hex: string) => {
   const h = hex.replace('#', '');
-  const [r, g, b] = [0, 2, 4].map((i) => channel(parseInt(h.slice(i, i + 2), 16)));
+  const [r, g, b] = [0, 2, 4].map((i) =>
+    channel(parseInt(h.slice(i, i + 2), 16))
+  );
   return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!;
 };
 
@@ -62,10 +61,7 @@ describe.each([':root', '.dark'] as const)('design tokens (%s)', (block) => {
     // muted-foreground is 12px helper copy; AA large (3:1) is the floor it must
     // never drop below, and today it comfortably beats 4.5:1.
     expect(
-      contrast(
-        token('--muted-foreground', block),
-        token('--background', block)
-      )
+      contrast(token('--muted-foreground', block), token('--background', block))
     ).toBeGreaterThanOrEqual(4.5);
   });
 });

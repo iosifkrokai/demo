@@ -33,7 +33,9 @@ const unique = (items: string[]) => [...new Set(items)].sort();
 
 describe('словари локализации', () => {
   it('английский не отстал от русского ни одним ключом', () => {
-    expect(unique(paths(en).map(baseKey))).toEqual(unique(paths(ru).map(baseKey)));
+    expect(unique(paths(en).map(baseKey))).toEqual(
+      unique(paths(ru).map(baseKey))
+    );
   });
 
   it('у множественных форм есть все нужные формы в обоих языках', () => {
@@ -78,7 +80,9 @@ describe('словари локализации', () => {
       .filter((path) => paths(en).includes(path))
       .filter(
         (path) =>
-          placeholders(valueAt(ru as unknown as Record<string, unknown>, path)) !==
+          placeholders(
+            valueAt(ru as unknown as Record<string, unknown>, path)
+          ) !==
           placeholders(valueAt(en as unknown as Record<string, unknown>, path))
       );
 

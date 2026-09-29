@@ -22,7 +22,11 @@ const answer = (stage: string, done = false) => ({
   json: async () => ({ stage, done, failed: false, elapsed_ms: 1234 }),
 });
 
-const notFound = { ok: false, status: 404, json: async () => ({ detail: { reason: 'unknown_progress_id' } }) };
+const notFound = {
+  ok: false,
+  status: 404,
+  json: async () => ({ detail: { reason: 'unknown_progress_id' } }),
+};
 
 afterEach(() => {
   cleanup();
@@ -32,9 +36,14 @@ afterEach(() => {
 
 describe('useRouteProgress', () => {
   it('показывает стадию, которую назвал конвейер', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => answer('searching_places')));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => answer('searching_places'))
+    );
 
-    const { result } = renderHook(() => useRouteProgress('id-1', { enabled: true }));
+    const { result } = renderHook(() =>
+      useRouteProgress('id-1', { enabled: true })
+    );
 
     await waitFor(() => expect(result.current).toBe('searching_places'));
   });
@@ -46,13 +55,19 @@ describe('useRouteProgress', () => {
     let call = 0;
     vi.stubGlobal(
       'fetch',
-      vi.fn(async () => answer(stages[Math.min(call++, stages.length - 1)] ?? 'done'))
+      vi.fn(async () =>
+        answer(stages[Math.min(call++, stages.length - 1)] ?? 'done')
+      )
     );
 
-    const { result } = renderHook(() => useRouteProgress('id-2', { enabled: true }));
+    const { result } = renderHook(() =>
+      useRouteProgress('id-2', { enabled: true })
+    );
 
     await waitFor(() => expect(result.current).toBe('interpreting_request'));
-    await waitFor(() => expect(result.current).toBe('measuring_legs'), { timeout: 5000 });
+    await waitFor(() => expect(result.current).toBe('measuring_legs'), {
+      timeout: 5000,
+    });
     await waitFor(() => expect(result.current).toBe('done'), { timeout: 5000 });
   });
 
@@ -71,29 +86,44 @@ describe('useRouteProgress', () => {
   });
 
   it('незнакомый id — это молчание, а не выдуманная стадия', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => notFound));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => notFound)
+    );
 
-    const { result } = renderHook(() => useRouteProgress('id-4', { enabled: true }));
+    const { result } = renderHook(() =>
+      useRouteProgress('id-4', { enabled: true })
+    );
 
     await waitFor(() => expect(fetch).toHaveBeenCalled());
     expect(result.current).toBeNull();
   });
 
   it('неизвестный код стадии не превращается в соседнюю стадию', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => answer('polishing_the_spires')));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => answer('polishing_the_spires'))
+    );
 
-    const { result } = renderHook(() => useRouteProgress('id-5', { enabled: true }));
+    const { result } = renderHook(() =>
+      useRouteProgress('id-5', { enabled: true })
+    );
 
     await waitFor(() => expect(fetch).toHaveBeenCalled());
     expect(result.current).toBeNull();
   });
 
   it('сбой опроса не притворяется пустой стадией', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => {
-      throw new Error('network');
-    }));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw new Error('network');
+      })
+    );
 
-    const { result } = renderHook(() => useRouteProgress('id-6', { enabled: true }));
+    const { result } = renderHook(() =>
+      useRouteProgress('id-6', { enabled: true })
+    );
 
     await waitFor(() => expect(fetch).toHaveBeenCalled());
     expect(result.current).toBeNull();
@@ -103,7 +133,9 @@ describe('useRouteProgress', () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
 
-    const { result } = renderHook(() => useRouteProgress(null, { enabled: false }));
+    const { result } = renderHook(() =>
+      useRouteProgress(null, { enabled: false })
+    );
 
     expect(result.current).toBeNull();
     expect(fetchMock).not.toHaveBeenCalled();

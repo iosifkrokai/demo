@@ -167,8 +167,12 @@ describe('RouteLines', () => {
     const data = mockSource.mock.calls.at(-1)?.[0]?.data as {
       features: { properties: { walked?: boolean } }[];
     };
-    const walkedParts = data.features.filter((f) => f.properties.walked === true);
-    const aheadParts = data.features.filter((f) => f.properties.walked === false);
+    const walkedParts = data.features.filter(
+      (f) => f.properties.walked === true
+    );
+    const aheadParts = data.features.filter(
+      (f) => f.properties.walked === false
+    );
 
     expect(walkedParts.length).toBeGreaterThan(0);
     expect(aheadParts.length).toBeGreaterThan(0);

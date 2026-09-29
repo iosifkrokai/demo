@@ -70,24 +70,35 @@ export function ServicesSummary({
         className="max-w-[15rem] rounded-lg border border-border bg-card/95 px-2.5 py-2 text-right shadow-card"
       >
         {state === 'loading' && (
-          <span className="text-meta text-muted-foreground">{t('map.servicesSearching')}</span>
+          <span className="text-meta text-muted-foreground">
+            {t('map.servicesSearching')}
+          </span>
         )}
 
         {state === 'unavailable' && (
-          <span data-testid="services-summary-unavailable" className="text-meta text-muted-foreground">
+          <span
+            data-testid="services-summary-unavailable"
+            className="text-meta text-muted-foreground"
+          >
             {t('map.servicesUnavailable')}
           </span>
         )}
 
         {state === 'ready' && !showCount && (
-          <span data-testid="services-summary-empty" className="text-meta text-muted-foreground">
+          <span
+            data-testid="services-summary-empty"
+            className="text-meta text-muted-foreground"
+          >
             {t('map.servicesEmpty')}
           </span>
         )}
 
         {showCount && (
           <>
-            <span data-testid="services-summary-count" className="block text-meta font-medium">
+            <span
+              data-testid="services-summary-count"
+              className="block text-meta font-medium"
+            >
               {t('map.servicesOnRoute', { count: counted })}
             </span>
             {/* How close they are, because «по пути» alone could mean anything. */}
@@ -110,7 +121,11 @@ export function ServicesSummary({
                     className="flex items-center gap-1 text-meta text-muted-foreground"
                   >
                     <Icon className="h-3 w-3" aria-hidden="true" />
-                    <span>{t(`map.serviceCat_${category}`, { defaultValue: category })}</span>
+                    <span>
+                      {t(`map.serviceCat_${category}`, {
+                        defaultValue: category,
+                      })}
+                    </span>
                     <span className="tabular-nums">{count}</span>
                   </li>
                 );
@@ -121,7 +136,10 @@ export function ServicesSummary({
             </span>
             {/* A trimmed list must not read as the whole truth. */}
             {capped && (
-              <span data-testid="services-summary-capped" className="mt-0.5 block text-meta text-muted-foreground">
+              <span
+                data-testid="services-summary-capped"
+                className="mt-0.5 block text-meta text-muted-foreground"
+              >
                 {t('map.servicesCapped')}
               </span>
             )}

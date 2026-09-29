@@ -203,10 +203,14 @@ describe('история: что было пройдено', () => {
     store.addToHistory(planned('a@1,2'));
     const routeKey = history()[0]!.routeKey!;
 
-    useDirectionsStore.getState().markWalked({ routeKey, visited: 1, total: 2 });
+    useDirectionsStore
+      .getState()
+      .markWalked({ routeKey, visited: 1, total: 2 });
     expect(history()[0]!.walk?.completed).toBe(false);
 
-    useDirectionsStore.getState().markWalked({ routeKey, visited: 2, total: 2 });
+    useDirectionsStore
+      .getState()
+      .markWalked({ routeKey, visited: 2, total: 2 });
     expect(history()[0]!.walk).toMatchObject({ visited: 2, completed: true });
   });
 
@@ -228,7 +232,9 @@ describe('история: что было пройдено', () => {
     const store = useDirectionsStore.getState();
     store.addToHistory(planned('a@1,2'));
     const routeKey = history()[0]!.routeKey!;
-    useDirectionsStore.getState().markWalked({ routeKey, visited: 2, total: 2 });
+    useDirectionsStore
+      .getState()
+      .markWalked({ routeKey, visited: 2, total: 2 });
 
     useDirectionsStore.getState().addToHistory(planned('a@1,2'));
 

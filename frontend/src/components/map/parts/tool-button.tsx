@@ -37,9 +37,7 @@ export function ToolButton({
         height: '44px',
         backgroundColor: active ? '#ffe4ea' : '#ffffff',
         borderRadius: '4px',
-        boxShadow: active
-          ? '0 0 0 2px #ff385c'
-          : '0 0 0 2px rgba(0,0,0,0.1)',
+        boxShadow: active ? '0 0 0 2px #ff385c' : '0 0 0 2px rgba(0,0,0,0.1)',
         border: 'none',
         cursor: disabled ? 'default' : 'pointer',
         display: 'flex',

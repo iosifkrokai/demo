@@ -121,7 +121,10 @@ describe('ширина панели', () => {
 
     expect(handle()).toHaveAttribute('role', 'separator');
     expect(handle()).toHaveAttribute('aria-orientation', 'vertical');
-    expect(handle()).toHaveAttribute('aria-valuenow', String(PANEL_WIDTH_DEFAULT));
+    expect(handle()).toHaveAttribute(
+      'aria-valuenow',
+      String(PANEL_WIDTH_DEFAULT)
+    );
     expect(handle()).toHaveAttribute('aria-valuemin', String(PANEL_WIDTH_MIN));
     expect(handle()).toHaveAttribute('aria-valuemax', String(PANEL_WIDTH_MAX));
 

@@ -34,7 +34,9 @@ vi.mock('@/components/ui/sonner', () => ({
 const renderApp = () =>
   render(
     <QueryClientProvider
-      client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+      client={
+        new QueryClient({ defaultOptions: { queries: { retry: false } } })
+      }
     >
       <App />
     </QueryClientProvider>

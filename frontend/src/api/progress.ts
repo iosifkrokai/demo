@@ -55,7 +55,9 @@ const STAGE_CODES: ReadonlySet<string> = new Set<RouteStageCode>([
 
 /** Unknown codes are dropped rather than shown: the client never invents a stage. */
 export const asStageCode = (value: unknown): RouteStageCode | null =>
-  typeof value === 'string' && STAGE_CODES.has(value) ? (value as RouteStageCode) : null;
+  typeof value === 'string' && STAGE_CODES.has(value)
+    ? (value as RouteStageCode)
+    : null;
 
 /**
  * The current stage, or `null` when the server cannot say (unknown id, or a

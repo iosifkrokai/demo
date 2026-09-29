@@ -31,7 +31,9 @@ const service = (overrides: Partial<ServiceAlong> = {}): ServiceAlong => ({
   ...overrides,
 });
 
-const renderSummary = (props: Partial<React.ComponentProps<typeof ServicesSummary>> = {}) =>
+const renderSummary = (
+  props: Partial<React.ComponentProps<typeof ServicesSummary>> = {}
+) =>
   render(
     <ServicesSummary
       items={[service()]}
@@ -54,7 +56,9 @@ describe('ServicesSummary', () => {
       maxOffLineM: 120,
     });
 
-    expect(screen.getByTestId('services-summary-count')).toHaveTextContent('по пути: 3 места');
+    expect(screen.getByTestId('services-summary-count')).toHaveTextContent(
+      'по пути: 3 места'
+    );
     // The distance is measured; a walking time would be invented.
     expect(screen.getByTestId('services-summary-within')).toHaveTextContent(
       'в пределах 120 м от маршрута'
@@ -75,16 +79,19 @@ describe('ServicesSummary', () => {
     expect(rows[0]).toHaveAttribute('data-category', 'кафе');
     expect(rows[0]).toHaveTextContent('2');
     expect(rows[1]).toHaveAttribute('data-category', 'туалет');
-    const counted = categoryCounts(items).reduce((sum, entry) => sum + entry.count, 0);
+    const counted = categoryCounts(items).reduce(
+      (sum, entry) => sum + entry.count,
+      0
+    );
     expect(counted).toBe(items.length);
   });
 
   it('неудачную проверку не выдаёт за «ничего нет»', () => {
     renderSummary({ items: [], state: 'unavailable', maxOffLineM: null });
 
-    expect(screen.getByTestId('services-summary-unavailable')).toHaveTextContent(
-      'не удалось проверить, что рядом'
-    );
+    expect(
+      screen.getByTestId('services-summary-unavailable')
+    ).toHaveTextContent('не удалось проверить, что рядом');
     // The empty-result sentence must NOT appear: we did not learn that.
     expect(screen.queryByTestId('services-summary-empty')).toBeNull();
     expect(screen.queryByTestId('services-summary-count')).toBeNull();
@@ -102,7 +109,9 @@ describe('ServicesSummary', () => {
   it('пока идёт измерение — так и говорит, а не молчит и не выдумывает ноль', () => {
     renderSummary({ items: [], state: 'loading', maxOffLineM: null });
 
-    expect(screen.getByTestId('services-summary')).toHaveTextContent('ищу, что рядом');
+    expect(screen.getByTestId('services-summary')).toHaveTextContent(
+      'ищу, что рядом'
+    );
     expect(screen.queryByTestId('services-summary-count')).toBeNull();
   });
 
@@ -128,7 +137,9 @@ describe('ServicesSummary', () => {
         toggle={<button data-testid="services-toggle">toggle</button>}
       />
     );
-    expect(screen.getByTestId('services-summary')).toHaveTextContent('показать на карте');
+    expect(screen.getByTestId('services-summary')).toHaveTextContent(
+      'показать на карте'
+    );
 
     rerender(
       <ServicesSummary
@@ -139,6 +150,8 @@ describe('ServicesSummary', () => {
         toggle={<button data-testid="services-toggle">toggle</button>}
       />
     );
-    expect(screen.getByTestId('services-summary')).toHaveTextContent('скрыть с карты');
+    expect(screen.getByTestId('services-summary')).toHaveTextContent(
+      'скрыть с карты'
+    );
   });
 });

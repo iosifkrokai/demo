@@ -44,11 +44,16 @@ describe('splitAtPosition', () => {
   });
 
   it('молчит на вырожденной линии', () => {
-    expect(splitAtPosition([[23.83, 53.67]], { lat: 53.67, lon: 23.83 })).toBeNull();
+    expect(
+      splitAtPosition([[23.83, 53.67]], { lat: 53.67, lon: 23.83 })
+    ).toBeNull();
   });
 
   it('считает метры, а не градусы', () => {
-    const oneDegree = metresBetween({ lat: 53.67, lon: 23.83 }, { lat: 53.68, lon: 23.83 });
+    const oneDegree = metresBetween(
+      { lat: 53.67, lon: 23.83 },
+      { lat: 53.68, lon: 23.83 }
+    );
     expect(oneDegree).toBeGreaterThan(1100);
     expect(oneDegree).toBeLessThan(1120);
   });

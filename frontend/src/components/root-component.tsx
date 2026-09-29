@@ -6,7 +6,8 @@ import { lazy, Suspense } from 'react';
  * every dev run, which reads as a broken overlay for anyone looking at the app.
  * Start the dev server with VITE_DEVTOOLS=1 when you actually want them.
  */
-const DEVTOOLS_ENABLED = import.meta.env.DEV && import.meta.env.VITE_DEVTOOLS === '1';
+const DEVTOOLS_ENABLED =
+  import.meta.env.DEV && import.meta.env.VITE_DEVTOOLS === '1';
 
 const TanStackDevtools = DEVTOOLS_ENABLED
   ? lazy(() =>

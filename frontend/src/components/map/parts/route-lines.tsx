@@ -181,7 +181,13 @@ export function RouteLines() {
       type: 'FeatureCollection',
       features,
     } as FeatureCollection;
-  }, [directionResults, directionsSuccessful, activeRouteIndex, guiding, guideFix]);
+  }, [
+    directionResults,
+    directionsSuccessful,
+    activeRouteIndex,
+    guiding,
+    guideFix,
+  ]);
 
   if (!data) return null;
 

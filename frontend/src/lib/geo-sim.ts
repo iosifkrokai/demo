@@ -55,7 +55,12 @@ const state: SimState = {
 
 /** Metres between two coordinates — the same equirectangular approximation the
  *  guide uses for its arrival radius, so the simulation cannot disagree with it. */
-export const metres = (aLat: number, aLon: number, bLat: number, bLon: number): number => {
+export const metres = (
+  aLat: number,
+  aLon: number,
+  bLat: number,
+  bLon: number
+): number => {
   const R = 6371000;
   const dLat = ((bLat - aLat) * Math.PI) / 180;
   const dLon = ((bLon - aLon) * Math.PI) / 180;
@@ -74,9 +79,13 @@ export const readSimOptions = (
     return { enabled: false, speed: DEFAULT_SPEED_MULTIPLIER };
   }
   const mode = params.get('sim');
-  if (mode !== 'walk') return { enabled: false, speed: DEFAULT_SPEED_MULTIPLIER };
+  if (mode !== 'walk')
+    return { enabled: false, speed: DEFAULT_SPEED_MULTIPLIER };
   const raw = Number.parseFloat(params.get('sim-speed') ?? '');
-  const speed = Number.isFinite(raw) && raw > 0 ? Math.min(raw, 200) : DEFAULT_SPEED_MULTIPLIER;
+  const speed =
+    Number.isFinite(raw) && raw > 0
+      ? Math.min(raw, 200)
+      : DEFAULT_SPEED_MULTIPLIER;
   return { enabled: true, speed };
 };
 

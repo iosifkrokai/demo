@@ -39,9 +39,10 @@ export const useRouteProgress = (
 
     const tick = async () => {
       if (!runningRef.current) return;
-      const progress = await fetchRouteProgress(progressId, controller.signal).catch(
-        () => null
-      );
+      const progress = await fetchRouteProgress(
+        progressId,
+        controller.signal
+      ).catch(() => null);
       if (!runningRef.current) return;
       // A null answer is «сервер не знает» — the panel keeps its own sentence.
       if (!progress) return;

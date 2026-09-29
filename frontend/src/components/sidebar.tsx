@@ -13,7 +13,6 @@ import {
   History,
   Loader2,
   LocateFixed,
-  MapPin,
   Minus,
   Plus,
   RotateCcw,
@@ -55,7 +54,6 @@ import {
   CHILD_FORMS,
   STOP_FORMS,
   decimalRu,
-  placeCountRu,
   pluralCountRu,
 } from '@/utils/plural';
 import { newProgressId } from '@/api/progress';
@@ -66,9 +64,7 @@ import { useRouteProgress } from '@/hooks/use-route-progress';
 import {
   LONG_WAIT_SECONDS,
   routeElapsedSeconds,
-  routeLongWaitText,
   routeServerStageKey,
-  routeStageText,
   type RouteStage,
 } from './parts/route-progress';
 import { Segmented, type SegmentedItem } from './parts/segmented';
@@ -126,7 +122,12 @@ const buildTransportOptions = (
     icon: Bike,
     costing: 'bicycle',
   },
-  { value: 'car', label: t('sidebar.transport.car'), icon: Car, costing: 'auto' },
+  {
+    value: 'car',
+    label: t('sidebar.transport.car'),
+    icon: Car,
+    costing: 'auto',
+  },
   { value: '', label: t('sidebar.transport.any'), icon: Sparkles },
 ];
 
@@ -227,7 +228,8 @@ interface FilterOption {
 }
 
 /** Codes an option sends: a single category, or every code a group covers. */
-const optionCodes = (option: FilterOption): string[] => option.codes ?? [option.code];
+const optionCodes = (option: FilterOption): string[] =>
+  option.codes ?? [option.code];
 
 /** A group counts as chosen only when all of its codes are. */
 const optionSelected = (option: FilterOption, selected: string[]): boolean =>
@@ -363,7 +365,9 @@ const fmtMin = (m: number, t: TFunction) => {
   // «1 ч 20 мин» / «1 hr 20 min»: the unit words come from the dictionary, the
   // numbers do not.
   const hourPart = t('sidebar.units.hours', { count: hours });
-  return rest ? `${hourPart} ${t('sidebar.units.minutes', { count: rest })}` : hourPart;
+  return rest
+    ? `${hourPart} ${t('sidebar.units.minutes', { count: rest })}`
+    : hourPart;
 };
 
 /** «1,3 км» — Russian uses a comma as the decimal separator, never a dot. */
@@ -399,7 +403,8 @@ const walkKey = (waypoints: readonly Waypoint[]) =>
       .map((w) => {
         const geo =
           w.geocodeResults.find((g) => g.selected) ?? w.geocodeResults[0];
-        const [lon = 0, lat = 0] = geo?.sourcelnglat ?? geo?.displaylnglat ?? [];
+        const [lon = 0, lat = 0] =
+          geo?.sourcelnglat ?? geo?.displaylnglat ?? [];
         return {
           placeId: w.placeId,
           name: w.userInput || geo?.title || '?',
@@ -544,7 +549,9 @@ export const Sidebar = () => {
   // different chips: instructions that edit what is already built.
   const hints = useMemo(
     () =>
-      waypoints.some((w) => w.id !== ME_WAYPOINT_ID && w.geocodeResults.length > 0)
+      waypoints.some(
+        (w) => w.id !== ME_WAYPOINT_ID && w.geocodeResults.length > 0
+      )
         ? buildRefineHintChips(t)
         : buildHintChips(t),
     [t, waypoints]
@@ -682,16 +689,16 @@ export const Sidebar = () => {
   );
   const hardServices = useMemo(
     () =>
-      buildAmenityOptions(t).filter((o) => amenities[o.code] === 'hard').map(
-        (o) => o.code
-      ),
+      buildAmenityOptions(t)
+        .filter((o) => amenities[o.code] === 'hard')
+        .map((o) => o.code),
     [amenities, t]
   );
   const softAmenities = useMemo(
     () =>
-      buildAmenityOptions(t).filter((o) => amenities[o.code] === 'soft').map(
-        (o) => o.code
-      ),
+      buildAmenityOptions(t)
+        .filter((o) => amenities[o.code] === 'soft')
+        .map((o) => o.code),
     [amenities, t]
   );
   // Soft amenities are interests like any theme: one list goes to the agent.
@@ -732,15 +739,6 @@ export const Sidebar = () => {
     roundTrip,
   ]);
 
-  /** Flip a code in a multi-select list. */
-  const toggleCode = (
-    setter: Dispatch<SetStateAction<string[]>>,
-    code: string
-  ) =>
-    setter((prev) =>
-      prev.includes(code) ? prev.filter((c) => c !== code) : [...prev, code]
-    );
-
   /** Click the strength a row already has to clear it — off is a valid state. */
   const toggleAmenity = (code: string, next: AmenityStrength) =>
     setAmenities((prev) => {
@@ -772,7 +770,11 @@ export const Sidebar = () => {
         },
       ],
     }));
-    setWaypoint(me ? [meWaypoint(me.lat, me.lon, t('sidebar.ui.myLocation')), ...restored] : restored);
+    setWaypoint(
+      me
+        ? [meWaypoint(me.lat, me.lon, t('sidebar.ui.myLocation')), ...restored]
+        : restored
+    );
     setPlaceDetails(
       Object.fromEntries(
         entry.places.map((p) => [
@@ -829,7 +831,9 @@ export const Sidebar = () => {
     }));
     // replan=false: the router is called once below, with the new stops.
     setTransportEverywhere(itinerary.transport, false);
-    const next = me ? [meWaypoint(me.lat, me.lon, t('sidebar.ui.myLocation')), ...restored] : restored;
+    const next = me
+      ? [meWaypoint(me.lat, me.lon, t('sidebar.ui.myLocation')), ...restored]
+      : restored;
     setWaypoint(next);
     // A ready-made route is still a route someone may walk, and a walk needs a
     // history entry to attach to — without this, «пройдено» would be missing for
@@ -1183,7 +1187,11 @@ export const Sidebar = () => {
       { id: '0', userInput: '', geocodeResults: [] },
       { id: '1', userInput: '', geocodeResults: [] },
     ];
-    setWaypoint(me ? [meWaypoint(me.lat, me.lon, t('sidebar.ui.myLocation')), ...empties] : empties);
+    setWaypoint(
+      me
+        ? [meWaypoint(me.lat, me.lon, t('sidebar.ui.myLocation')), ...empties]
+        : empties
+    );
     setStatus(null);
     setSummary(null);
     setVerdict(null);
@@ -1296,7 +1304,10 @@ export const Sidebar = () => {
       case 'ok':
         return { text: t('sidebar.geo.startIsMe'), tone: 'text-emerald-600' };
       case 'locating':
-        return { text: t('sidebar.geo.searching'), tone: 'text-muted-foreground' };
+        return {
+          text: t('sidebar.geo.searching'),
+          tone: 'text-muted-foreground',
+        };
       case 'denied':
         return {
           text: geoReason
@@ -1305,7 +1316,10 @@ export const Sidebar = () => {
           tone: 'text-amber-600',
         };
       default:
-        return { text: t('sidebar.geo.startUnset'), tone: 'text-muted-foreground' };
+        return {
+          text: t('sidebar.geo.startUnset'),
+          tone: 'text-muted-foreground',
+        };
     }
   }, [geoState, geoReason, t]);
 
@@ -1363,7 +1377,9 @@ export const Sidebar = () => {
                       }
                     }}
                     placeholder={
-                      hasRoute ? t('ask.placeholderRefine') : t('ask.placeholder')
+                      hasRoute
+                        ? t('ask.placeholderRefine')
+                        : t('ask.placeholder')
                     }
                     aria-label={t('ask.label')}
                     className="min-h-0 flex-1 resize-none border-0 bg-transparent p-0 text-body leading-6 shadow-none focus-visible:ring-0 max-md:min-h-11"
@@ -1404,7 +1420,9 @@ export const Sidebar = () => {
               <div className="mt-1.5 flex items-center gap-2">
                 <div className="flex min-w-0 flex-1 items-center gap-2 rounded-2xl bg-primary px-3 py-2 text-primary-foreground">
                   {/* Radix still needs a title for the dialog. */}
-                  <SheetTitle className="sr-only">{t('sidebar.ui.guide')}</SheetTitle>
+                  <SheetTitle className="sr-only">
+                    {t('sidebar.ui.guide')}
+                  </SheetTitle>
                   <Compass className="h-4 w-4 shrink-0" aria-hidden="true" />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-label font-semibold">
@@ -1553,7 +1571,9 @@ export const Sidebar = () => {
                       }
                     />
                     <span className={`truncate ${geoBadge.tone}`}>
-                      {geoState === 'idle' ? t('sidebar.geo.detect') : geoBadge.text}
+                      {geoState === 'idle'
+                        ? t('sidebar.geo.detect')
+                        : geoBadge.text}
                     </span>
                     <span className="ml-auto shrink-0 text-muted-foreground">
                       {geoState === 'locating' ? '…' : t('sidebar.ui.refresh')}
@@ -1811,7 +1831,9 @@ export const Sidebar = () => {
                           unit="points"
                         />
                         <StatTile
-                          value={summary.km != null ? fmtKm(summary.km, t) : '—'}
+                          value={
+                            summary.km != null ? fmtKm(summary.km, t) : '—'
+                          }
                           label="длина"
                         />
                         <StatTile
@@ -1908,7 +1930,8 @@ export const Sidebar = () => {
                                       : '',
                                   ]
                                     .filter(Boolean)
-                                    .join(' · ') || t('sidebar.status.noChanges')
+                                    .join(' · ') ||
+                                  t('sidebar.status.noChanges')
                                 }
                                 className="rounded-full border border-border bg-muted px-2.5 py-0.5 text-meta text-muted-foreground"
                               >
@@ -1982,7 +2005,9 @@ export const Sidebar = () => {
 
                 {/* === Manual add === */}
                 <section className="flex flex-col gap-2 rounded-2xl border border-border bg-card p-3 shadow-card">
-                  <h2 className="text-label font-semibold">{t('sidebar.ui.addPoint')}</h2>
+                  <h2 className="text-label font-semibold">
+                    {t('sidebar.ui.addPoint')}
+                  </h2>
                   <div className="flex gap-2">
                     <Input
                       value={manualQuery}
@@ -2025,7 +2050,6 @@ export const Sidebar = () => {
                     {t('sidebar.ui.emptyPoint')}
                   </button>
                 </section>
-
               </>
             )}
           </div>
@@ -2054,12 +2078,16 @@ export const Sidebar = () => {
                   <span className="text-foreground">
                     {serverStage
                       ? t(routeServerStageKey(serverStage)!)
-                      : t(stage === 'requesting'
-                          ? 'sidebar.progress.waitingRequest'
-                          : 'sidebar.progress.waitingLine')}
+                      : t(
+                          stage === 'requesting'
+                            ? 'sidebar.progress.waitingRequest'
+                            : 'sidebar.progress.waitingLine'
+                        )}
                   </span>
                   <span className="tabular-nums text-muted-foreground">
-                    {t('sidebar.progress.elapsed', { count: routeElapsedSeconds(elapsed) })}
+                    {t('sidebar.progress.elapsed', {
+                      count: routeElapsedSeconds(elapsed),
+                    })}
                   </span>
                   <button
                     type="button"

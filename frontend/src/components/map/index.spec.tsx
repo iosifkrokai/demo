@@ -5,7 +5,6 @@ import {
   waitFor,
   fireEvent,
   act,
-  within,
   cleanup,
 } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -173,7 +172,9 @@ const mockDirectionsState = vi.hoisted(() => ({
     // Typed through the contract so a case can install an agent or client route
     // with its provenance fields (spec 002).
     results: {
-      data: null as import('@/components/types').ParsedDirectionsGeometry | null,
+      data: null as
+        | import('@/components/types').ParsedDirectionsGeometry
+        | null,
       show: {} as Record<string, boolean>,
     },
     successful: false,
@@ -227,10 +228,9 @@ vi.mock('./draw-control', () => ({
 }));
 
 vi.mock('./parts/route-lines', async () => {
-  const actual =
-    await vi.importActual<typeof import('./parts/route-lines')>(
-      './parts/route-lines'
-    );
+  const actual = await vi.importActual<typeof import('./parts/route-lines')>(
+    './parts/route-lines'
+  );
   return {
     ...actual,
     RouteLines: vi.fn(() => <div data-testid="route-lines">Route Lines</div>),

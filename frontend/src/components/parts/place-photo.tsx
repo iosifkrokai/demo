@@ -26,7 +26,10 @@ export function PlacePhoto({ photo, name, className }: PlacePhotoProps) {
 
   if (!photo) return null;
 
-  const credit = t('photo.credit', { author: photo.author, license: photo.license });
+  const credit = t('photo.credit', {
+    author: photo.author,
+    license: photo.license,
+  });
 
   return (
     <figure className={className}>

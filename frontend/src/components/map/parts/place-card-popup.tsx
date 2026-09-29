@@ -81,7 +81,11 @@ export function PlaceCardPopup({
         </div>
 
         {/* The picture, when the dataset has one. Most points do not. */}
-        <PlacePhoto photo={details.photo} name={details.name} className="mt-0.5" />
+        <PlacePhoto
+          photo={details.photo}
+          name={details.name}
+          className="mt-0.5"
+        />
 
         {/* Visitor info: opening hours, ticket price, location */}
         {(details.openingHours ||

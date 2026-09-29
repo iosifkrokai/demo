@@ -27,7 +27,12 @@ export interface PanelToggleProps {
   className?: string;
 }
 
-export const PanelToggle = ({ open, onToggle, label, className }: PanelToggleProps) => {
+export const PanelToggle = ({
+  open,
+  onToggle,
+  label,
+  className,
+}: PanelToggleProps) => {
   const Icon = open ? ChevronLeft : ChevronRight;
   return (
     <button

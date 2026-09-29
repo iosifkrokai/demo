@@ -135,7 +135,9 @@ export const chunkWaypoints = (
   const chunks: ActiveWaypoint[][] = [];
   const step = max - 1; // the shared endpoint is the next chunk's start
   for (let start = 0; start < waypoints.length - 1; start += step) {
-    chunks.push(waypoints.slice(start, Math.min(start + max, waypoints.length)));
+    chunks.push(
+      waypoints.slice(start, Math.min(start + max, waypoints.length))
+    );
   }
   return chunks;
 };

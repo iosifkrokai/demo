@@ -172,16 +172,16 @@ body {
    * the white panel and missing entirely on the accent CTA.
    */
   :where(
-      a,
-      button,
-      input,
-      select,
-      summary,
-      textarea,
-      [tabindex]:not([tabindex='-1']),
-      [role='button'],
-      [role='radio']
-    ):focus-visible {
+    a,
+    button,
+    input,
+    select,
+    summary,
+    textarea,
+    [tabindex]:not([tabindex='-1']),
+    [role='button'],
+    [role='radio']
+  ):focus-visible {
     outline: 2px solid var(--ring);
     outline-offset: 2px;
   }

@@ -1,7 +1,13 @@
 import { useState } from 'react';
 import { Marker, Popup } from 'react-map-gl/maplibre';
 import { useTranslation } from 'react-i18next';
-import { BedDouble, Circle, Coffee, Toilet, UtensilsCrossed } from 'lucide-react';
+import {
+  BedDouble,
+  Circle,
+  Coffee,
+  Toilet,
+  UtensilsCrossed,
+} from 'lucide-react';
 
 import type { ServiceAlong } from '@/api/types';
 

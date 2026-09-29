@@ -13,7 +13,11 @@ interface LngLat {
  * button and the map's locate control — so both fill the same waypoint rather
  * than each keeping its own copy of "where I am".
  */
-export const meWaypoint = (lat: number, lon: number, label: string): Waypoint => {
+export const meWaypoint = (
+  lat: number,
+  lon: number,
+  label: string
+): Waypoint => {
   const lngLat: [number, number] = [lon, lat];
   return {
     id: ME_WAYPOINT_ID,
@@ -37,8 +41,9 @@ export const storedMeCoords = (
   waypoints: Waypoint[]
 ): { lat: number; lon: number } | null => {
   const me = waypoints.find((w) => w.id === ME_WAYPOINT_ID);
-  const lngLat = me?.geocodeResults.find((g: { selected?: boolean }) => g.selected)
-    ?.sourcelnglat as LngLat | undefined;
+  const lngLat = me?.geocodeResults.find(
+    (g: { selected?: boolean }) => g.selected
+  )?.sourcelnglat as LngLat | undefined;
   if (!lngLat) return null;
   return { lat: lngLat[1], lon: lngLat[0] };
 };

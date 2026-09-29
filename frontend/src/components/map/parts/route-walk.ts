@@ -28,9 +28,7 @@ export const metresBetween = (a: LonLat, b: LonLat): number => {
   const meanLat = ((a.lat + b.lat) / 2) * (Math.PI / 180);
   const dLat = (b.lat - a.lat) * (Math.PI / 180);
   const dLon = (b.lon - a.lon) * (Math.PI / 180);
-  return (
-    EARTH_RADIUS_M * Math.hypot(dLat, dLon * Math.cos(meanLat))
-  );
+  return EARTH_RADIUS_M * Math.hypot(dLat, dLon * Math.cos(meanLat));
 };
 
 export interface WalkSplit {
@@ -101,8 +99,10 @@ export const splitAtPosition = (
   // walker standing on a corner does not get that corner twice — which is what
   // drew a zero-length stub of line under the dot.
   const atVertex = (point: LineCoords[number], vertex: LineCoords[number]) =>
-    metresBetween({ lat: point[1], lon: point[0] }, { lat: vertex[1], lon: vertex[0] }) <
-    0.5;
+    metresBetween(
+      { lat: point[1], lon: point[0] },
+      { lat: vertex[1], lon: vertex[0] }
+    ) < 0.5;
 
   const walked: LineCoords = coords.slice(0, bestSegment + 1);
   if (!atVertex(bestPoint, coords[bestSegment]!)) walked.push(bestPoint);
