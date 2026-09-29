@@ -1180,3 +1180,70 @@ def test_the_route_scorer_still_scores_a_route(routes_dir):
         b.EvaluationResult.__dataclass_fields__
     )
     assert "verdict" not in b.EvaluationResult.__dataclass_fields__
+
+
+# --------------------------------------------------------------------------
+# the forbidden check must judge the PLAN, not the verdicts about it
+# --------------------------------------------------------------------------
+
+
+def test_honoured_avoid_is_not_reported_as_a_violation():
+    """A satisfied `avoid` is proof of ABSENCE, not evidence of presence.
+
+    The harness folds satisfied requirement codes into the set it uses for the
+    mandatory check, because a toilet is served along the route and never as a
+    stop. That same set used to feed the forbidden check — and an honoured
+    prohibition is satisfied *because* nothing of its category is in the plan, so
+    its code landing in that set made the harness print «forbidden category
+    present» exactly when the prohibition was kept. The check read as its own
+    opposite, and it failed two committed cases (avoid_cafe_want_parks,
+    avoid_temples) whose plans were clean.
+    """
+    case = make_case(expectations={"must_not_contain_categories": ["кафе", "ресторан"]})
+    raw = plan(
+        [point("Парк Жилибера", category="парк")],
+        requirements=[
+            {
+                "kind": "avoid",
+                "strength": "hard",
+                "code": code,
+                "status": "satisfied",
+                "detail": "avoid_honoured",
+                "place_ids": [],
+            }
+            for code in ("кафе", "ресторан")
+        ],
+    )
+    verdict = verdict_of(case, raw)
+    assert verdict.checks[b.CHECK_FORBIDDEN_CATEGORY_PRESENT]["ok"] is True
+    assert verdict.reason == "ok"
+
+
+def test_a_real_violation_is_still_caught():
+    """Narrowing the evidence must not blind the check."""
+    case = make_case(expectations={"must_not_contain_categories": ["кафе"]})
+    raw = plan([point("Кафе у ратуши", category="кафе")])
+    verdict = verdict_of(case, raw)
+    assert verdict.checks[b.CHECK_FORBIDDEN_CATEGORY_PRESENT]["ok"] is False
+    assert verdict.reason == b.CHECK_FORBIDDEN_CATEGORY_PRESENT
+
+
+def test_a_service_along_the_route_still_closes_a_mandatory_category():
+    """The augmentation that motivated the shared set keeps working."""
+    case = make_case(expectations={"must_contain_categories": ["туалет"]})
+    raw = plan(
+        [point("Парк", category="парк")],
+        requirements=[
+            {
+                "kind": "service",
+                "strength": "hard",
+                "code": "туалет",
+                "status": "satisfied",
+                "detail": "service_along_route",
+                "place_ids": [7],
+            }
+        ],
+    )
+    verdict = verdict_of(case, raw)
+    assert verdict.checks[b.CHECK_MISSING_MANDATORY_CATEGORY]["ok"] is True
+    assert verdict.reason == "ok"

@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# ruff: noqa: RUF001, RUF002, RUF003
 #
 # RUF001/RUF002/RUF003 want "ambiguous" Cyrillic letters (В~B, С~C, Р~P, О~O ...)
 # spelled in Latin, and the U+2212 minus next to the U+002D hyphen. This file's
@@ -2892,12 +2891,21 @@ def evaluate_compliance(
     seen: set[str] = set()
     for stop in points:
         seen |= stop_category_codes(stop)
+    # The plan's own categories, frozen BEFORE the requirement codes below are
+    # mixed in — the forbidden check must judge the plan, not the verdicts.
+    stop_codes = set(seen)
     # A mandatory category can be served without being a stop: a toilet is never
     # a stop, so counting stops alone had the harness report "туалет не найден"
     # for routes that do serve one — the requirement is closed by the verifier's
     # own verdict (reason `service_along_route`), which is evidence about the
     # route, not a promise from the plan. `requirements` carries no names, only
     # codes and fates, so nothing here has to read Russian prose.
+    #
+    # Only `seen` gets this augmentation. It must NOT reach the forbidden check:
+    # an `avoid` requirement is satisfied precisely BECAUSE nothing of that
+    # category is in the plan, so adding its code to the same set made the
+    # harness report "forbidden category present" exactly when the prohibition
+    # was honoured — the check read as its own opposite.
     for req in raw.get("requirements") or []:
         if not isinstance(req, dict) or req.get("status") != "satisfied":
             continue
@@ -2923,7 +2931,9 @@ def evaluate_compliance(
         )
     )
     forbidden = [_norm_code(c) for c in exp["must_not_contain_categories"]]
-    present = [c for c in forbidden if c in seen]
+    # stop_codes, not seen: a satisfied `avoid` code is proof the category is
+    # absent, not evidence that it is present.
+    present = [c for c in forbidden if c in stop_codes]
     checks[CHECK_FORBIDDEN_CATEGORY_PRESENT] = (
         _ok(f"no forbidden category present {_canon_codes(forbidden)}")
         if not present

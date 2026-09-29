@@ -1,41 +1,36 @@
 {
   "schema": "bench_routes/report/2",
   "mode": "golden-live",
-  "generated_at": "2026-09-27T14:01:21.875022+00:00",
+  "generated_at": "2026-09-29T06:12:50.277728+00:00",
   "base_url": "http://localhost:8080",
   "snapshot": {
-    "dir": "/workspaces/demo/backend/benchmarks/snapshots/2026-09-27"
+    "dir": null
   },
   "summary": {
     "n_cases": 13,
-    "n_cases_passed": 8,
-    "n_cases_failed": 5,
+    "n_cases_passed": 13,
+    "n_cases_failed": 0,
     "n_parity_groups": 2,
     "n_parity_passed": 2,
     "n_units": 15,
-    "n_units_passed": 10,
-    "compliance_rate": 0.6666666666666666,
-    "case_pass_rate": 0.6153846153846154,
-    "failures_by_reason": {
-      "missing_mandatory_category": 3,
-      "wrong_status": 2
-    },
-    "unverified_checks": [
-      "all_churches_catalogue:result_mode_mismatch"
-    ],
+    "n_units_passed": 15,
+    "compliance_rate": 1.0,
+    "case_pass_rate": 1.0,
+    "failures_by_reason": {},
+    "unverified_checks": [],
     "cases_not_run": [],
     "cases": [
       {
         "case_id": "all_churches_catalogue",
-        "passed": false,
-        "reason": "wrong_status",
-        "detail": "0/1 repeat(s) passed; repeat failed with wrong_status: status degraded (response.status) is not one of ['ready', 'catalogue']",
-        "status": "degraded",
+        "passed": true,
+        "reason": "ok",
+        "detail": "1/1 repeat(s) passed",
+        "status": "ready",
         "status_source": "response.status",
         "checks": {
           "wrong_status": {
-            "ok": false,
-            "detail": "status degraded (response.status) is not one of ['ready', 'catalogue']"
+            "ok": true,
+            "detail": "ready (response.status) is in ['ready', 'catalogue']"
           },
           "api_error": {
             "ok": true,
@@ -43,7 +38,7 @@
           },
           "too_few_places": {
             "ok": true,
-            "detail": "48 stop(s) returned (>= 10)"
+            "detail": "49 stop(s) returned (>= 10)"
           },
           "missing_mandatory_category": {
             "ok": true,
@@ -51,6 +46,7 @@
             "missing": [],
             "seen": [
               "архитектура",
+              "замок",
               "костёл",
               "монастырь",
               "памятник",
@@ -63,7 +59,7 @@
           },
           "out_of_region_point": {
             "ok": true,
-            "detail": "all 48 point(s) inside Grodno ADM1"
+            "detail": "all 49 point(s) inside Grodno ADM1"
           },
           "over_budget": {
             "ok": true,
@@ -71,8 +67,7 @@
           },
           "result_mode_mismatch": {
             "ok": true,
-            "unverified": true,
-            "detail": "expected result_mode catalogue, but the response carries no result_mode marker (the API does not expose one yet)"
+            "detail": "result_mode catalogue"
           }
         }
       },
@@ -101,8 +96,10 @@
             "detail": "every mandatory category is present ['парк']",
             "missing": [],
             "seen": [
-              "музей",
-              "парк"
+              "кафе",
+              "памятник",
+              "парк",
+              "ресторан"
             ]
           },
           "forbidden_category_present": {
@@ -115,7 +112,7 @@
           },
           "over_budget": {
             "ok": true,
-            "detail": "total 85.0 min <= 90 min cap"
+            "detail": "total 55.0 min <= 90 min cap"
           },
           "result_mode_mismatch": {
             "ok": true,
@@ -141,15 +138,18 @@
           },
           "too_few_places": {
             "ok": true,
-            "detail": "3 stop(s) returned (>= 1)"
+            "detail": "2 stop(s) returned (>= 1)"
           },
           "missing_mandatory_category": {
             "ok": true,
             "detail": "every mandatory category is present ['парк']",
             "missing": [],
             "seen": [
-              "музей",
-              "парк"
+              "костёл",
+              "монастырь",
+              "парк",
+              "храм",
+              "церковь"
             ]
           },
           "forbidden_category_present": {
@@ -158,11 +158,11 @@
           },
           "out_of_region_point": {
             "ok": true,
-            "detail": "all 3 point(s) inside Grodno ADM1"
+            "detail": "all 2 point(s) inside Grodno ADM1"
           },
           "over_budget": {
             "ok": true,
-            "detail": "total 134.0 min <= 180 min cap"
+            "detail": "total 131.0 min <= 180 min cap"
           },
           "result_mode_mismatch": {
             "ok": true,
@@ -188,7 +188,7 @@
           },
           "too_few_places": {
             "ok": true,
-            "detail": "3 stop(s) returned (>= 1)"
+            "detail": "2 stop(s) returned (>= 1)"
           },
           "missing_mandatory_category": {
             "ok": true,
@@ -204,11 +204,11 @@
           },
           "out_of_region_point": {
             "ok": true,
-            "detail": "all 3 point(s) inside Grodno ADM1"
+            "detail": "all 2 point(s) inside Grodno ADM1"
           },
           "over_budget": {
             "ok": true,
-            "detail": "total 188.0 min <= 240 min cap"
+            "detail": "total 223.0 min <= 240 min cap"
           },
           "result_mode_mismatch": {
             "ok": true,
@@ -218,9 +218,9 @@
       },
       {
         "case_id": "family_walk_en",
-        "passed": false,
-        "reason": "missing_mandatory_category",
-        "detail": "0/1 repeat(s) passed; repeat failed with missing_mandatory_category: missing mandatory category(ies) ['туалет']; the plan has ['костёл', 'музей', 'памятник']",
+        "passed": true,
+        "reason": "ok",
+        "detail": "1/1 repeat(s) passed",
         "status": "ready",
         "status_source": "response.status",
         "checks": {
@@ -234,18 +234,16 @@
           },
           "too_few_places": {
             "ok": true,
-            "detail": "5 stop(s) returned (>= 1)"
+            "detail": "3 stop(s) returned (>= 1)"
           },
           "missing_mandatory_category": {
-            "ok": false,
-            "detail": "missing mandatory category(ies) ['туалет']; the plan has ['костёл', 'музей', 'памятник']",
-            "missing": [
-              "туалет"
-            ],
+            "ok": true,
+            "detail": "every mandatory category is present ['туалет']",
+            "missing": [],
             "seen": [
-              "костёл",
-              "музей",
-              "памятник"
+              "гостиница",
+              "кафе",
+              "туалет"
             ]
           },
           "forbidden_category_present": {
@@ -254,11 +252,11 @@
           },
           "out_of_region_point": {
             "ok": true,
-            "detail": "all 5 point(s) inside Grodno ADM1"
+            "detail": "all 3 point(s) inside Grodno ADM1"
           },
           "over_budget": {
             "ok": true,
-            "detail": "total 110.0 min <= 120 min cap"
+            "detail": "total 100.0 min <= 120 min cap"
           },
           "result_mode_mismatch": {
             "ok": true,
@@ -268,9 +266,9 @@
       },
       {
         "case_id": "family_walk_ru",
-        "passed": false,
-        "reason": "missing_mandatory_category",
-        "detail": "0/1 repeat(s) passed; repeat failed with missing_mandatory_category: missing mandatory category(ies) ['туалет']; the plan has ['костёл', 'музей', 'памятник']",
+        "passed": true,
+        "reason": "ok",
+        "detail": "1/1 repeat(s) passed",
         "status": "ready",
         "status_source": "response.status",
         "checks": {
@@ -284,18 +282,17 @@
           },
           "too_few_places": {
             "ok": true,
-            "detail": "5 stop(s) returned (>= 1)"
+            "detail": "3 stop(s) returned (>= 1)"
           },
           "missing_mandatory_category": {
-            "ok": false,
-            "detail": "missing mandatory category(ies) ['туалет']; the plan has ['костёл', 'музей', 'памятник']",
-            "missing": [
-              "туалет"
-            ],
+            "ok": true,
+            "detail": "every mandatory category is present ['туалет']",
+            "missing": [],
             "seen": [
-              "костёл",
-              "музей",
-              "памятник"
+              "архитектура",
+              "кафе",
+              "памятник",
+              "туалет"
             ]
           },
           "forbidden_category_present": {
@@ -304,11 +301,11 @@
           },
           "out_of_region_point": {
             "ok": true,
-            "detail": "all 5 point(s) inside Grodno ADM1"
+            "detail": "all 3 point(s) inside Grodno ADM1"
           },
           "over_budget": {
             "ok": true,
-            "detail": "total 115.0 min <= 120 min cap"
+            "detail": "total 59.0 min <= 120 min cap"
           },
           "result_mode_mismatch": {
             "ok": true,
@@ -318,9 +315,9 @@
       },
       {
         "case_id": "hard_toilet_soft_cafe_en",
-        "passed": false,
-        "reason": "missing_mandatory_category",
-        "detail": "0/1 repeat(s) passed; repeat failed with missing_mandatory_category: missing mandatory category(ies) ['туалет']; the plan has ['костёл', 'музей', 'памятник']",
+        "passed": true,
+        "reason": "ok",
+        "detail": "1/1 repeat(s) passed",
         "status": "ready",
         "status_source": "response.status",
         "checks": {
@@ -334,18 +331,16 @@
           },
           "too_few_places": {
             "ok": true,
-            "detail": "5 stop(s) returned (>= 1)"
+            "detail": "2 stop(s) returned (>= 1)"
           },
           "missing_mandatory_category": {
-            "ok": false,
-            "detail": "missing mandatory category(ies) ['туалет']; the plan has ['костёл', 'музей', 'памятник']",
-            "missing": [
-              "туалет"
-            ],
+            "ok": true,
+            "detail": "every mandatory category is present ['туалет']",
+            "missing": [],
             "seen": [
-              "костёл",
-              "музей",
-              "памятник"
+              "гостиница",
+              "кафе",
+              "туалет"
             ]
           },
           "forbidden_category_present": {
@@ -354,11 +349,11 @@
           },
           "out_of_region_point": {
             "ok": true,
-            "detail": "all 5 point(s) inside Grodno ADM1"
+            "detail": "all 2 point(s) inside Grodno ADM1"
           },
           "over_budget": {
             "ok": true,
-            "detail": "total 110.0 min <= 120 min cap"
+            "detail": "total 52.0 min <= 120 min cap"
           },
           "result_mode_mismatch": {
             "ok": true,
@@ -450,7 +445,7 @@
           },
           "over_budget": {
             "ok": true,
-            "detail": "total 97.0 min <= 120 min cap"
+            "detail": "total 85.0 min <= 120 min cap"
           },
           "result_mode_mismatch": {
             "ok": true,
@@ -476,7 +471,7 @@
           },
           "too_few_places": {
             "ok": true,
-            "detail": "2 stop(s) returned (>= 1)"
+            "detail": "3 stop(s) returned (>= 1)"
           },
           "missing_mandatory_category": {
             "ok": true,
@@ -497,11 +492,11 @@
           },
           "out_of_region_point": {
             "ok": true,
-            "detail": "all 2 point(s) inside Grodno ADM1"
+            "detail": "all 3 point(s) inside Grodno ADM1"
           },
           "over_budget": {
             "ok": true,
-            "detail": "total 91.0 min <= 150 min cap"
+            "detail": "total 140.0 min <= 150 min cap"
           },
           "result_mode_mismatch": {
             "ok": true,
@@ -527,7 +522,7 @@
           },
           "too_few_places": {
             "ok": true,
-            "detail": "2 stop(s) returned (>= 1)"
+            "detail": "3 stop(s) returned (>= 1)"
           },
           "missing_mandatory_category": {
             "ok": true,
@@ -535,7 +530,7 @@
             "missing": [],
             "seen": [
               "замок",
-              "кафе"
+              "музей"
             ]
           },
           "forbidden_category_present": {
@@ -548,11 +543,11 @@
           },
           "out_of_region_point": {
             "ok": true,
-            "detail": "all 2 point(s) inside Grodno ADM1"
+            "detail": "all 3 point(s) inside Grodno ADM1"
           },
           "over_budget": {
             "ok": true,
-            "detail": "total 81.0 min <= 180 min cap"
+            "detail": "total 174.0 min <= 180 min cap"
           },
           "result_mode_mismatch": {
             "ok": true,
@@ -562,15 +557,15 @@
       },
       {
         "case_id": "out_of_region_vilnius",
-        "passed": false,
-        "reason": "wrong_status",
-        "detail": "0/1 repeat(s) passed; repeat failed with wrong_status: status ready (response.status) is not one of ['rejected', 'infeasible', 'needs_clarification']",
-        "status": "ready",
+        "passed": true,
+        "reason": "ok",
+        "detail": "1/1 repeat(s) passed",
+        "status": "infeasible",
         "status_source": "response.status",
         "checks": {
           "wrong_status": {
-            "ok": false,
-            "detail": "status ready (response.status) is not one of ['rejected', 'infeasible', 'needs_clarification']"
+            "ok": true,
+            "detail": "infeasible (response.status) is in ['rejected', 'infeasible', 'needs_clarification']"
           },
           "api_error": {
             "ok": true,
@@ -578,17 +573,13 @@
           },
           "too_few_places": {
             "ok": true,
-            "detail": "4 stop(s) returned (>= 0)"
+            "detail": "0 stop(s) returned (>= 0)"
           },
           "missing_mandatory_category": {
             "ok": true,
             "detail": "every mandatory category is present []",
             "missing": [],
-            "seen": [
-              "архитектура",
-              "памятник",
-              "церковь"
-            ]
+            "seen": []
           },
           "forbidden_category_present": {
             "ok": true,
@@ -596,11 +587,11 @@
           },
           "out_of_region_point": {
             "ok": true,
-            "detail": "all 4 point(s) inside Grodno ADM1"
+            "detail": "all 0 point(s) inside Grodno ADM1"
           },
           "over_budget": {
             "ok": true,
-            "detail": "total 77.0 min <= 120 min cap"
+            "detail": "total 0.0 min <= 120 min cap"
           },
           "result_mode_mismatch": {
             "ok": true,
@@ -626,7 +617,7 @@
           },
           "too_few_places": {
             "ok": true,
-            "detail": "3 stop(s) returned (>= 0)"
+            "detail": "6 stop(s) returned (>= 0)"
           },
           "missing_mandatory_category": {
             "ok": true,
@@ -643,7 +634,7 @@
           },
           "out_of_region_point": {
             "ok": true,
-            "detail": "all 3 point(s) inside Grodno ADM1"
+            "detail": "all 6 point(s) inside Grodno ADM1"
           },
           "over_budget": {
             "ok": true,
@@ -661,13 +652,13 @@
         "case_id": "parity:family_walk",
         "passed": true,
         "reason": "ok",
-        "detail": "en: status=ready, failed=missing_mandatory_category, mandatory=туалет=MISSING; ru: status=ready, failed=missing_mandatory_category, mandatory=туалет=MISSING",
+        "detail": "en: status=ready, failed=none, mandatory=туалет=present; ru: status=ready, failed=none, mandatory=туалет=present",
         "status": "ready",
         "status_source": "parity",
         "checks": {
           "ru_en_parity_mismatch": {
             "ok": true,
-            "detail": "en: status=ready, failed=missing_mandatory_category, mandatory=туалет=MISSING; ru: status=ready, failed=missing_mandatory_category, mandatory=туалет=MISSING"
+            "detail": "en: status=ready, failed=none, mandatory=туалет=present; ru: status=ready, failed=none, mandatory=туалет=present"
           }
         }
       },
@@ -726,20 +717,20 @@
           "repeat": 1,
           "http_status": 200,
           "api_error": null,
-          "latency_s": 29.877,
-          "total_minutes": 2284.0,
-          "n_stops": 48,
+          "latency_s": 2.604,
+          "total_minutes": null,
+          "n_stops": 49,
           "verdict": {
             "case_id": "all_churches_catalogue",
-            "passed": false,
-            "reason": "wrong_status",
-            "detail": "status degraded (response.status) is not one of ['ready', 'catalogue']",
-            "status": "degraded",
+            "passed": true,
+            "reason": "ok",
+            "detail": "",
+            "status": "ready",
             "status_source": "response.status",
             "checks": {
               "wrong_status": {
-                "ok": false,
-                "detail": "status degraded (response.status) is not one of ['ready', 'catalogue']"
+                "ok": true,
+                "detail": "ready (response.status) is in ['ready', 'catalogue']"
               },
               "api_error": {
                 "ok": true,
@@ -747,7 +738,7 @@
               },
               "too_few_places": {
                 "ok": true,
-                "detail": "48 stop(s) returned (>= 10)"
+                "detail": "49 stop(s) returned (>= 10)"
               },
               "missing_mandatory_category": {
                 "ok": true,
@@ -755,6 +746,7 @@
                 "missing": [],
                 "seen": [
                   "архитектура",
+                  "замок",
                   "костёл",
                   "монастырь",
                   "памятник",
@@ -767,7 +759,7 @@
               },
               "out_of_region_point": {
                 "ok": true,
-                "detail": "all 48 point(s) inside Grodno ADM1"
+                "detail": "all 49 point(s) inside Grodno ADM1"
               },
               "over_budget": {
                 "ok": true,
@@ -775,8 +767,7 @@
               },
               "result_mode_mismatch": {
                 "ok": true,
-                "unverified": true,
-                "detail": "expected result_mode catalogue, but the response carries no result_mode marker (the API does not expose one yet)"
+                "detail": "result_mode catalogue"
               }
             }
           }
@@ -826,8 +817,8 @@
           "repeat": 1,
           "http_status": 200,
           "api_error": null,
-          "latency_s": 12.534,
-          "total_minutes": 85.0,
+          "latency_s": 4.04,
+          "total_minutes": 55.0,
           "n_stops": 2,
           "verdict": {
             "case_id": "avoid_cafe_want_parks",
@@ -854,8 +845,10 @@
                 "detail": "every mandatory category is present ['парк']",
                 "missing": [],
                 "seen": [
-                  "музей",
-                  "парк"
+                  "кафе",
+                  "памятник",
+                  "парк",
+                  "ресторан"
                 ]
               },
               "forbidden_category_present": {
@@ -868,7 +861,7 @@
               },
               "over_budget": {
                 "ok": true,
-                "detail": "total 85.0 min <= 90 min cap"
+                "detail": "total 55.0 min <= 90 min cap"
               },
               "result_mode_mismatch": {
                 "ok": true,
@@ -925,9 +918,9 @@
           "repeat": 1,
           "http_status": 200,
           "api_error": null,
-          "latency_s": 18.056,
-          "total_minutes": 134.0,
-          "n_stops": 3,
+          "latency_s": 2.732,
+          "total_minutes": 131.0,
+          "n_stops": 2,
           "verdict": {
             "case_id": "avoid_temples",
             "passed": true,
@@ -946,15 +939,18 @@
               },
               "too_few_places": {
                 "ok": true,
-                "detail": "3 stop(s) returned (>= 1)"
+                "detail": "2 stop(s) returned (>= 1)"
               },
               "missing_mandatory_category": {
                 "ok": true,
                 "detail": "every mandatory category is present ['парк']",
                 "missing": [],
                 "seen": [
-                  "музей",
-                  "парк"
+                  "костёл",
+                  "монастырь",
+                  "парк",
+                  "храм",
+                  "церковь"
                 ]
               },
               "forbidden_category_present": {
@@ -963,11 +959,11 @@
               },
               "out_of_region_point": {
                 "ok": true,
-                "detail": "all 3 point(s) inside Grodno ADM1"
+                "detail": "all 2 point(s) inside Grodno ADM1"
               },
               "over_budget": {
                 "ok": true,
-                "detail": "total 134.0 min <= 180 min cap"
+                "detail": "total 131.0 min <= 180 min cap"
               },
               "result_mode_mismatch": {
                 "ok": true,
@@ -1015,9 +1011,9 @@
           "repeat": 1,
           "http_status": 200,
           "api_error": null,
-          "latency_s": 16.027,
-          "total_minutes": 188.0,
-          "n_stops": 3,
+          "latency_s": 19.805,
+          "total_minutes": 223.0,
+          "n_stops": 2,
           "verdict": {
             "case_id": "castles_half_day",
             "passed": true,
@@ -1036,7 +1032,7 @@
               },
               "too_few_places": {
                 "ok": true,
-                "detail": "3 stop(s) returned (>= 1)"
+                "detail": "2 stop(s) returned (>= 1)"
               },
               "missing_mandatory_category": {
                 "ok": true,
@@ -1052,11 +1048,11 @@
               },
               "out_of_region_point": {
                 "ok": true,
-                "detail": "all 3 point(s) inside Grodno ADM1"
+                "detail": "all 2 point(s) inside Grodno ADM1"
               },
               "over_budget": {
                 "ok": true,
-                "detail": "total 188.0 min <= 240 min cap"
+                "detail": "total 223.0 min <= 240 min cap"
               },
               "result_mode_mismatch": {
                 "ok": true,
@@ -1106,14 +1102,14 @@
           "repeat": 1,
           "http_status": 200,
           "api_error": null,
-          "latency_s": 28.593,
-          "total_minutes": 110.0,
-          "n_stops": 5,
+          "latency_s": 8.96,
+          "total_minutes": 100.0,
+          "n_stops": 3,
           "verdict": {
             "case_id": "family_walk_en",
-            "passed": false,
-            "reason": "missing_mandatory_category",
-            "detail": "missing mandatory category(ies) ['туалет']; the plan has ['костёл', 'музей', 'памятник']",
+            "passed": true,
+            "reason": "ok",
+            "detail": "",
             "status": "ready",
             "status_source": "response.status",
             "checks": {
@@ -1127,18 +1123,16 @@
               },
               "too_few_places": {
                 "ok": true,
-                "detail": "5 stop(s) returned (>= 1)"
+                "detail": "3 stop(s) returned (>= 1)"
               },
               "missing_mandatory_category": {
-                "ok": false,
-                "detail": "missing mandatory category(ies) ['туалет']; the plan has ['костёл', 'музей', 'памятник']",
-                "missing": [
-                  "туалет"
-                ],
+                "ok": true,
+                "detail": "every mandatory category is present ['туалет']",
+                "missing": [],
                 "seen": [
-                  "костёл",
-                  "музей",
-                  "памятник"
+                  "гостиница",
+                  "кафе",
+                  "туалет"
                 ]
               },
               "forbidden_category_present": {
@@ -1147,11 +1141,11 @@
               },
               "out_of_region_point": {
                 "ok": true,
-                "detail": "all 5 point(s) inside Grodno ADM1"
+                "detail": "all 3 point(s) inside Grodno ADM1"
               },
               "over_budget": {
                 "ok": true,
-                "detail": "total 110.0 min <= 120 min cap"
+                "detail": "total 100.0 min <= 120 min cap"
               },
               "result_mode_mismatch": {
                 "ok": true,
@@ -1201,14 +1195,14 @@
           "repeat": 1,
           "http_status": 200,
           "api_error": null,
-          "latency_s": 17.252,
-          "total_minutes": 115.0,
-          "n_stops": 5,
+          "latency_s": 4.907,
+          "total_minutes": 59.0,
+          "n_stops": 3,
           "verdict": {
             "case_id": "family_walk_ru",
-            "passed": false,
-            "reason": "missing_mandatory_category",
-            "detail": "missing mandatory category(ies) ['туалет']; the plan has ['костёл', 'музей', 'памятник']",
+            "passed": true,
+            "reason": "ok",
+            "detail": "",
             "status": "ready",
             "status_source": "response.status",
             "checks": {
@@ -1222,18 +1216,17 @@
               },
               "too_few_places": {
                 "ok": true,
-                "detail": "5 stop(s) returned (>= 1)"
+                "detail": "3 stop(s) returned (>= 1)"
               },
               "missing_mandatory_category": {
-                "ok": false,
-                "detail": "missing mandatory category(ies) ['туалет']; the plan has ['костёл', 'музей', 'памятник']",
-                "missing": [
-                  "туалет"
-                ],
+                "ok": true,
+                "detail": "every mandatory category is present ['туалет']",
+                "missing": [],
                 "seen": [
-                  "костёл",
-                  "музей",
-                  "памятник"
+                  "архитектура",
+                  "кафе",
+                  "памятник",
+                  "туалет"
                 ]
               },
               "forbidden_category_present": {
@@ -1242,11 +1235,11 @@
               },
               "out_of_region_point": {
                 "ok": true,
-                "detail": "all 5 point(s) inside Grodno ADM1"
+                "detail": "all 3 point(s) inside Grodno ADM1"
               },
               "over_budget": {
                 "ok": true,
-                "detail": "total 115.0 min <= 120 min cap"
+                "detail": "total 59.0 min <= 120 min cap"
               },
               "result_mode_mismatch": {
                 "ok": true,
@@ -1296,14 +1289,14 @@
           "repeat": 1,
           "http_status": 200,
           "api_error": null,
-          "latency_s": 11.754,
-          "total_minutes": 110.0,
-          "n_stops": 5,
+          "latency_s": 41.717,
+          "total_minutes": 52.0,
+          "n_stops": 2,
           "verdict": {
             "case_id": "hard_toilet_soft_cafe_en",
-            "passed": false,
-            "reason": "missing_mandatory_category",
-            "detail": "missing mandatory category(ies) ['туалет']; the plan has ['костёл', 'музей', 'памятник']",
+            "passed": true,
+            "reason": "ok",
+            "detail": "",
             "status": "ready",
             "status_source": "response.status",
             "checks": {
@@ -1317,18 +1310,16 @@
               },
               "too_few_places": {
                 "ok": true,
-                "detail": "5 stop(s) returned (>= 1)"
+                "detail": "2 stop(s) returned (>= 1)"
               },
               "missing_mandatory_category": {
-                "ok": false,
-                "detail": "missing mandatory category(ies) ['туалет']; the plan has ['костёл', 'музей', 'памятник']",
-                "missing": [
-                  "туалет"
-                ],
+                "ok": true,
+                "detail": "every mandatory category is present ['туалет']",
+                "missing": [],
                 "seen": [
-                  "костёл",
-                  "музей",
-                  "памятник"
+                  "гостиница",
+                  "кафе",
+                  "туалет"
                 ]
               },
               "forbidden_category_present": {
@@ -1337,11 +1328,11 @@
               },
               "out_of_region_point": {
                 "ok": true,
-                "detail": "all 5 point(s) inside Grodno ADM1"
+                "detail": "all 2 point(s) inside Grodno ADM1"
               },
               "over_budget": {
                 "ok": true,
-                "detail": "total 110.0 min <= 120 min cap"
+                "detail": "total 52.0 min <= 120 min cap"
               },
               "result_mode_mismatch": {
                 "ok": true,
@@ -1389,7 +1380,7 @@
           "repeat": 1,
           "http_status": 200,
           "api_error": null,
-          "latency_s": 7.816,
+          "latency_s": 8.852,
           "total_minutes": 97.0,
           "n_stops": 2,
           "verdict": {
@@ -1478,8 +1469,8 @@
           "repeat": 1,
           "http_status": 200,
           "api_error": null,
-          "latency_s": 10.465,
-          "total_minutes": 97.0,
+          "latency_s": 5.622,
+          "total_minutes": 85.0,
           "n_stops": 2,
           "verdict": {
             "case_id": "museums_budget_ru",
@@ -1519,7 +1510,7 @@
               },
               "over_budget": {
                 "ok": true,
-                "detail": "total 97.0 min <= 120 min cap"
+                "detail": "total 85.0 min <= 120 min cap"
               },
               "result_mode_mismatch": {
                 "ok": true,
@@ -1569,9 +1560,9 @@
           "repeat": 1,
           "http_status": 200,
           "api_error": null,
-          "latency_s": 8.981,
-          "total_minutes": 91.0,
-          "n_stops": 2,
+          "latency_s": 16.586,
+          "total_minutes": 140.0,
+          "n_stops": 3,
           "verdict": {
             "case_id": "named_farnyi",
             "passed": true,
@@ -1590,7 +1581,7 @@
               },
               "too_few_places": {
                 "ok": true,
-                "detail": "2 stop(s) returned (>= 1)"
+                "detail": "3 stop(s) returned (>= 1)"
               },
               "missing_mandatory_category": {
                 "ok": true,
@@ -1611,11 +1602,11 @@
               },
               "out_of_region_point": {
                 "ok": true,
-                "detail": "all 2 point(s) inside Grodno ADM1"
+                "detail": "all 3 point(s) inside Grodno ADM1"
               },
               "over_budget": {
                 "ok": true,
-                "detail": "total 91.0 min <= 150 min cap"
+                "detail": "total 140.0 min <= 150 min cap"
               },
               "result_mode_mismatch": {
                 "ok": true,
@@ -1664,9 +1655,9 @@
           "repeat": 1,
           "http_status": 200,
           "api_error": null,
-          "latency_s": 13.82,
-          "total_minutes": 81.0,
-          "n_stops": 2,
+          "latency_s": 9.758,
+          "total_minutes": 174.0,
+          "n_stops": 3,
           "verdict": {
             "case_id": "named_mir_castle",
             "passed": true,
@@ -1685,7 +1676,7 @@
               },
               "too_few_places": {
                 "ok": true,
-                "detail": "2 stop(s) returned (>= 1)"
+                "detail": "3 stop(s) returned (>= 1)"
               },
               "missing_mandatory_category": {
                 "ok": true,
@@ -1693,7 +1684,7 @@
                 "missing": [],
                 "seen": [
                   "замок",
-                  "кафе"
+                  "музей"
                 ]
               },
               "forbidden_category_present": {
@@ -1706,11 +1697,11 @@
               },
               "out_of_region_point": {
                 "ok": true,
-                "detail": "all 2 point(s) inside Grodno ADM1"
+                "detail": "all 3 point(s) inside Grodno ADM1"
               },
               "over_budget": {
                 "ok": true,
-                "detail": "total 81.0 min <= 180 min cap"
+                "detail": "total 174.0 min <= 180 min cap"
               },
               "result_mode_mismatch": {
                 "ok": true,
@@ -1753,20 +1744,20 @@
           "repeat": 1,
           "http_status": 200,
           "api_error": null,
-          "latency_s": 6.221,
-          "total_minutes": 77.0,
-          "n_stops": 4,
+          "latency_s": 2.421,
+          "total_minutes": 0.0,
+          "n_stops": 0,
           "verdict": {
             "case_id": "out_of_region_vilnius",
-            "passed": false,
-            "reason": "wrong_status",
-            "detail": "status ready (response.status) is not one of ['rejected', 'infeasible', 'needs_clarification']",
-            "status": "ready",
+            "passed": true,
+            "reason": "ok",
+            "detail": "",
+            "status": "infeasible",
             "status_source": "response.status",
             "checks": {
               "wrong_status": {
-                "ok": false,
-                "detail": "status ready (response.status) is not one of ['rejected', 'infeasible', 'needs_clarification']"
+                "ok": true,
+                "detail": "infeasible (response.status) is in ['rejected', 'infeasible', 'needs_clarification']"
               },
               "api_error": {
                 "ok": true,
@@ -1774,17 +1765,13 @@
               },
               "too_few_places": {
                 "ok": true,
-                "detail": "4 stop(s) returned (>= 0)"
+                "detail": "0 stop(s) returned (>= 0)"
               },
               "missing_mandatory_category": {
                 "ok": true,
                 "detail": "every mandatory category is present []",
                 "missing": [],
-                "seen": [
-                  "архитектура",
-                  "памятник",
-                  "церковь"
-                ]
+                "seen": []
               },
               "forbidden_category_present": {
                 "ok": true,
@@ -1792,11 +1779,11 @@
               },
               "out_of_region_point": {
                 "ok": true,
-                "detail": "all 4 point(s) inside Grodno ADM1"
+                "detail": "all 0 point(s) inside Grodno ADM1"
               },
               "over_budget": {
                 "ok": true,
-                "detail": "total 77.0 min <= 120 min cap"
+                "detail": "total 0.0 min <= 120 min cap"
               },
               "result_mode_mismatch": {
                 "ok": true,
@@ -1838,9 +1825,9 @@
           "repeat": 1,
           "http_status": 200,
           "api_error": null,
-          "latency_s": 3.889,
-          "total_minutes": 136.0,
-          "n_stops": 3,
+          "latency_s": 4.01,
+          "total_minutes": 237.0,
+          "n_stops": 6,
           "verdict": {
             "case_id": "vague_no_anchor",
             "passed": true,
@@ -1859,7 +1846,7 @@
               },
               "too_few_places": {
                 "ok": true,
-                "detail": "3 stop(s) returned (>= 0)"
+                "detail": "6 stop(s) returned (>= 0)"
               },
               "missing_mandatory_category": {
                 "ok": true,
@@ -1876,7 +1863,7 @@
               },
               "out_of_region_point": {
                 "ok": true,
-                "detail": "all 3 point(s) inside Grodno ADM1"
+                "detail": "all 6 point(s) inside Grodno ADM1"
               },
               "over_budget": {
                 "ok": true,
