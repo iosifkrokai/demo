@@ -91,7 +91,7 @@ def ask(base: str, case: Case, timeout: float = 300.0) -> None:
         case.detail = error.read().decode("utf-8")[:200]
         case.elapsed = time.monotonic() - started
         return
-    except Exception as error:  # noqa: BLE001 — на демо важно «что вообще случилось»
+    except Exception as error:
         case.detail = f"{type(error).__name__}: {error}"
         case.elapsed = time.monotonic() - started
         return
@@ -110,7 +110,6 @@ def ask(base: str, case: Case, timeout: float = 300.0) -> None:
     if unmet:
         case.detail = f"не выполнено: {len(unmet)}"
 
-    lowered = [name.lower() for name in case.stops]
     case.junk = [name for name in case.stops if any(word in name.lower() for word in JUNK)]
 
 

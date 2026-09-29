@@ -29,9 +29,9 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from agent.models import Candidate, ResolvedConstraints
+from agent.planner.intent import mark_out_of_coverage
 from agent.planner.pipeline import _outside_left_unresolved
 from agent.planner.resolve import _same_name
-from agent.planner.intent import mark_out_of_coverage
 from agent.planner.verify import (
     INFEASIBLE_REASONS,
     REASON_CODES,
@@ -39,8 +39,11 @@ from agent.planner.verify import (
     overall_status,
     verify,
 )
-from agent.requirements import REASON_MUST_VISIT_OUTSIDE as CONTRACT_REASON
-from agent.requirements import Requirement, TripRequirements
+from agent.requirements import (
+    REASON_MUST_VISIT_OUTSIDE as CONTRACT_REASON,
+    Requirement,
+    TripRequirements,
+)
 
 VILNIUS_CATHEDRAL = "Кафедральный собор Святого Станислава"
 LIDA_CATHEDRAL = "Кафедральный собор святого Архангела Михаила"

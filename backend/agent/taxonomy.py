@@ -21,10 +21,11 @@ The CSV is versioned data (constitution §3): edit the file, not this module.
 from __future__ import annotations
 
 import csv
+from collections.abc import Iterable
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
-from typing import Iterable, Literal
+from typing import Literal
 
 Role = Literal["sight", "service"]
 Locale = Literal["ru", "en"]

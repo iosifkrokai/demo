@@ -130,6 +130,10 @@ def validate(
     visits = cost.visit_minutes
 
     walk = _leg_sum(matrix, order)
+    if constraints.round_trip and len(order) >= 2:
+        # «круговой маршрут»: the walk home is real walking time and must count
+        # against the budget, or a closed tour would look cheaper than it is.
+        walk += _leg_s(matrix[order[-1]][order[0]])
     visits_s = sum(visits[i] for i in order) * 60
     total = int(walk) + int(visits_s)
 

@@ -23,9 +23,9 @@ from fastapi import HTTPException
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agent import progress  # noqa: E402
-from agent.main import route_progress  # noqa: E402
-from agent.models import GenerateReq  # noqa: E402
+from agent import progress
+from agent.main import route_progress
+from agent.models import GenerateReq
 
 
 @pytest.fixture(autouse=True)

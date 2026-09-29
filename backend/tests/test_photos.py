@@ -20,14 +20,15 @@ import sys
 import urllib.error
 import urllib.request
 import uuid
+
 import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agent.itineraries import _stop_payload  # noqa: E402
-from agent.models import Photo, Place  # noqa: E402
-from agent.planner.retrieve import parse_photo  # noqa: E402
-from scripts.seed_photos import (  # noqa: E402
+from agent.itineraries import _stop_payload
+from agent.models import Photo, Place
+from agent.planner.retrieve import parse_photo
+from scripts.seed_photos import (
     commons_file_title,
     parse_wikipedia,
 )
@@ -106,7 +107,7 @@ def test_a_redirect_still_answers_under_the_name_we_asked(monkeypatch):
     answer, and without the redirect the point silently loses its photo."""
     import scripts.seed_photos as seed
 
-    def fake_api(endpoint, params):  # noqa: ARG001
+    def fake_api(endpoint, params):
         return {
             "query": {
                 "redirects": [{"from": "Коложская церковь", "to": "Борисоглебская церковь"}],
@@ -130,7 +131,7 @@ def test_wikidata_gives_the_image_and_the_coordinate_together(monkeypatch):
     """One call per batch, and P625 is the half that answers for more points."""
     import scripts.seed_photos as seed
 
-    def fake_api(endpoint, params):  # noqa: ARG001
+    def fake_api(endpoint, params):
         return {
             "entities": {
                 "Q1": {

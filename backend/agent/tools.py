@@ -157,7 +157,7 @@ def _connect() -> Any:
     Imported lazily so importing this module never requires a driver or a
     reachable database; the caller decides what a failure means.
     """
-    import psycopg  # noqa: PLC0415 — a driver import at call time, not at module import
+    import psycopg
 
     return psycopg.connect(DSN, connect_timeout=int(DB_TIMEOUT_S))
 
@@ -175,7 +175,7 @@ def _db_search_rows(
     trigram/keyword search; both are the same signals the deterministic
     pipeline uses, so the agent cannot see more of the DB than the pipeline.
     """
-    from . import search as search_mod  # noqa: PLC0415 — no DB layer at module import
+    from . import search as search_mod
 
     if near is not None:
         lat, lon, radius_m = near
@@ -185,7 +185,7 @@ def _db_search_rows(
 
 def _db_place_row(db: Any, place_id: int) -> dict | None:
     """One place row by id, or None."""
-    from . import search as search_mod  # noqa: PLC0415 — no DB layer at module import
+    from . import search as search_mod
 
     rows = search_mod.fetch_points_by_ids(db, [place_id])
     return rows[0] if rows else None
@@ -194,7 +194,7 @@ def _db_place_row(db: Any, place_id: int) -> dict | None:
 def _norm_term(text: str) -> str:
     """Lowercase, ё-folded, whitespace-collapsed — for term matching only."""
     # RUF001: the Cyrillic characters below are the point (yo -> ye fold).
-    return " ".join(str(text).lower().replace("ё", "е").split())  # noqa: RUF001
+    return " ".join(str(text).lower().replace("ё", "е").split())
 
 
 def _areas_from_registry(term: str, locale: str, limit: int) -> list[dict]:
@@ -204,7 +204,7 @@ def _areas_from_registry(term: str, locale: str, limit: int) -> list[dict]:
     this is the primary path and the DB table is only a fallback. May raise —
     the caller decides what an unusable registry means.
     """
-    from .areas import load_areas, resolve_area  # noqa: PLC0415 — optional module by design
+    from .areas import load_areas, resolve_area
 
     registry = load_areas()
     found: list[str] = []
@@ -345,7 +345,7 @@ def find_areas_with_db(db: Any, term: str, locale: str = "ru") -> dict:
     return _envelope("find_areas", results, provenance, capped=len(found) >= MAX_AREAS_PER_CALL)
 
 
-def search_places(  # noqa: PLR0917 — the signature mirrors the model-facing tool
+def search_places(
     query: str,
     category_codes: list[str] | None = None,
     limit: int = DEFAULT_SEARCH_LIMIT,
@@ -363,7 +363,7 @@ def search_places(  # noqa: PLR0917 — the signature mirrors the model-facing t
     return search_places_with_db(None, query, category_codes, limit, near_lat, near_lon, radius_m)
 
 
-def search_places_with_db(  # noqa: PLR0917 — the signature mirrors the model-facing tool
+def search_places_with_db(
     db: Any,
     query: str,
     category_codes: list[str] | None = None,

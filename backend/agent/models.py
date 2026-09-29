@@ -117,15 +117,16 @@ class GenerateReq(BaseModel):
         description="[south, west, north, east]. Used as a PostGIS envelope filter.",
         min_length=4, max_length=4,
     )
-    allow_auto_relax: bool = Field(default=True)
-    conversation_id: str | None = Field(default=None)
+    # Removed: `allow_auto_relax`, `conversation_id`, `user_interests` and
+    # `preferences` were accepted here and read by nothing in the pipeline —
+    # accepting a field and ignoring it contradicts the project rule «не обещать
+    # невыполнимого». The client never sent them either (checked in frontend/src).
+    # Bring one back only together with the code that honours it.
     # Present on a refinement turn: the route as it stands (base_points), the
     # stops the user deleted (excluded_ids) and the delta instruction. Absent on
     # a first turn — and then the pipeline behaves exactly as before this field
     # existed.
     context: RouteContext | None = None
-    user_interests: list[str] | None = Field(default=None)
-    preferences: dict | None = Field(default=None)
 
     # ── Explicit filters (spec 002) ─────────────────────────────────────────
     # Anything the tourist set with a visible control. Explicit values win over
@@ -279,6 +280,11 @@ class RequirementSignal(BaseModel):
     place_ids: list[int] = Field(default_factory=list)
 
 
+#: Overall fate of a request, decided by the deterministic verifier
+#: (planner/verify.py) — never by the interpretation model.
+OverallStatus = Literal["ready", "infeasible", "degraded", "pending"]
+
+
 class Interpretation(BaseModel):
     """What the system understood — one place, before the plan is judged.
 
@@ -293,7 +299,7 @@ class Interpretation(BaseModel):
     source: Literal["llm", "mixed", "explicit", "fallback"] = "fallback"
     locale: Literal["ru", "en"] = "ru"
     # Overall fate, from verify.py::overall_status — not from the model.
-    status: Literal["ready", "infeasible", "degraded", "pending"] = "pending"
+    status: OverallStatus = "pending"
 
     adults: int | None = None
     children: int | None = None
@@ -321,6 +327,12 @@ class RouteResponse(BaseModel):
     points: list[Place]
     shape: dict
     summary: RouteSummary
+    # What kind of answer this is: "route" — stops in visiting order with geometry —
+    # or "catalogue" — the matching places, no order and no geometry. The client
+    # cannot infer it from the payload: an empty `shape` also happens for a route
+    # whose geometry Valhalla could not build. Stating the mode is the difference
+    # between «here is a list to choose from» and «here is your walk».
+    result_mode: Literal["route", "catalogue"] = "route"
     budget: BudgetInfo | None = None
     explanation: str | None = None
     # Overall fate of the request, decided by the deterministic verifier
@@ -412,6 +424,10 @@ class ResolvedConstraints(BaseModel):
     intent_type: str = "discovery"
     must_visit_keywords: list[str] = []
     query_keywords: list[str] = []
+    # Close the tour back to its start (the UI's «круговой маршрут»). The return
+    # leg is drawn by render() and counted against the budget by validate(), so a
+    # round trip never looks cheaper than it is.
+    round_trip: bool = False
 
 
 # ============================================================================

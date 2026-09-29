@@ -26,8 +26,7 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from agent.models import GenerateReq
-from agent.planner import interpret_cache as cache
-from agent.planner import intent
+from agent.planner import intent, interpret_cache as cache
 from agent.requirements import Requirement, TripRequirements
 
 

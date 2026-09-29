@@ -16,7 +16,6 @@ from __future__ import annotations
 import json
 import os
 import sys
-from pathlib import Path
 import urllib.error
 import urllib.request
 
@@ -24,8 +23,8 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agent import constants  # noqa: E402
-from agent.itineraries import (  # noqa: E402
+from agent import constants
+from agent.itineraries import (
     ItinerariesUnavailable,
     load_itineraries,
     resolve_itineraries,
@@ -99,7 +98,7 @@ class _FakeConn:
         self.rows = rows
         self.queries = 0
 
-    def cursor(self, row_factory=None) -> _FakeCursor:  # noqa: ARG002
+    def cursor(self, row_factory=None) -> _FakeCursor:
         self.queries += 1
         return _FakeCursor(self.rows)
 
@@ -148,7 +147,7 @@ def test_keeps_the_authored_order_and_totals_the_stops():
             _row("city:shared", id=11, name="Общая", visit_minutes=15),
         ]
     )
-    items, missing = resolve_itineraries(conn, ITEMS)
+    items, _missing = resolve_itineraries(conn, ITEMS)
 
     assert [i["id"] for i in items] == ["a", "b"]  # authored order survives
     assert [s["name"] for s in items[0]["stops"]] == ["Первая", "Общая"]

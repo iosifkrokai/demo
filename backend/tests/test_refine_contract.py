@@ -33,8 +33,7 @@ from agent import main as agent_main
 from agent.config import settings
 from agent.errors import UpstreamUnavailable
 from agent.models import Candidate, GenerateReq, LatLon
-from agent.planner import pipeline as pipeline_mod
-from agent.planner import resolve as resolve_mod
+from agent.planner import pipeline as pipeline_mod, resolve as resolve_mod
 from agent.planner.pipeline import (
     Pipeline,
     _refinement_cost,
@@ -49,7 +48,6 @@ from agent.planner.refine import (
     reorder_stops,
     visit_minutes_of,
 )
-
 
 # ── Fakes: no key, no DB, no Valhalla ───────────────────────────────────────
 

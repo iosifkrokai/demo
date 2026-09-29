@@ -200,6 +200,7 @@ def resolve(
     *,
     explicit_time_budget: int | None = None,
     explicit_bbox: list[float] | None = None,
+    explicit_round_trip: bool = False,
     outside: Sequence[str] = (),
     db: psycopg.Connection,
 ) -> ResolvedConstraints:
@@ -219,10 +220,10 @@ def resolve(
         budget = max(constants.MIN_BUDGET_MIN, min(budget, constants.MAX_BUDGET_MIN))
 
     # ── Bbox: explicit wins; else None. Format: (W, S, E, N) — matches ST_MakeEnvelope.
-    bbox = tuple(explicit_bbox) if explicit_bbox else None
-    if bbox is not None and len(bbox) == 4:
+    bbox: tuple[float, float, float, float] | None = None
+    if explicit_bbox is not None and len(explicit_bbox) == 4:
         # Reorder from [south, west, north, east] (HTTP) to (W, S, E, N).
-        s, w, n, e = bbox
+        s, w, n, e = (float(v) for v in explicit_bbox)
         bbox = (w, s, e, n)
 
     # ── Named places → must_visit_ids + area_anchor ──
@@ -262,6 +263,8 @@ def resolve(
         intent_type=d.intent_type,
         must_visit_keywords=must_visit_keywords,
         query_keywords=list(d.keywords_pos),
+        # A visible UI choice: the tourist asked for a closed tour.
+        round_trip=explicit_round_trip,
     )
 
 
@@ -285,7 +288,7 @@ def _is_location_suffix(name: str, query: str) -> bool:
 
 
 def _without_forbidden(
-    ids: list[int], forbidden: list[str], db: psycopg.Connection
+    ids: list[int], forbidden: Sequence[str], db: psycopg.Connection
 ) -> list[int]:
     """Drop must-visit ids whose own category the request forbids."""
     if not ids or not forbidden:
@@ -439,7 +442,7 @@ def _is_town_or_district_match(row: dict, query: str) -> bool:
     return False
 
 
-def _expand_categories_to_keywords(categories: list[str]) -> list[str]:
+def _expand_categories_to_keywords(categories: Sequence[str]) -> list[str]:
     """Convert LLM categories into additional Russian synonyms for retrieval."""
     out: list[str] = []
     for c in categories:

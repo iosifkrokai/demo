@@ -39,6 +39,7 @@ from __future__ import annotations
 import logging
 import re as _re
 import time as _time
+from typing import Any
 
 import httpx
 import psycopg
@@ -57,6 +58,7 @@ from ..models import (
     GenerateReq,
     Interpretation,
     LatLon,
+    OverallStatus,
     ParsedQuery,
     Place,
     RequirementSignal,
@@ -66,9 +68,9 @@ from ..models import (
     RouteResponse,
     RouteSummary,
 )
-from ..search import fetch_points_by_ids, nearby_places, _name_match_search
-from ..valhalla_client import optimized_route as valhalla_optimized_route
-from ..valhalla_client import ping as valhalla_ping
+from ..search import _name_match_search, fetch_points_by_ids, nearby_places
+from ..valhalla_client import optimized_route as valhalla_optimized_route, ping as valhalla_ping
+from . import interpret_cache
 from .cost import (
     compute_cost_matrix,
     drop_unreachable,
@@ -77,9 +79,9 @@ from .cost import (
 )
 from .diversity import mmr_select
 from .explain import explain as explain_route
-from . import interpret_cache
 from .intent import (
     build_requirements,
+    extract_intent,
     intent_from_requirements,
     mark_out_of_coverage,
 )
@@ -94,9 +96,9 @@ from .refine import (
 )
 from .render import render
 from .resolve import resolve
-from .retrieve import apply_negative_filter, retrieve, _row_to_candidate
+from .retrieve import _row_to_candidate, apply_negative_filter, retrieve
 from .validate import validate
-from .verify import overall_status, verify
+from .verify import overall_status, verify, verify_catalogue
 
 log = logging.getLogger(__name__)
 
@@ -483,16 +485,27 @@ def _valhalla_order(
 
 
 def _prune_unroutable(
-    route: list[Candidate], candidates: list[Candidate], cost: CostMatrix
-) -> list[Candidate]:
+    route: list[Candidate],
+    candidates: list[Candidate],
+    cost: CostMatrix,
+    must_visit_ids: list[int] | None = None,
+) -> tuple[list[Candidate], list[Any]]:
     """Drop stops the matrix cannot connect to their predecessor in this order.
 
     Valhalla's own verdict (UNREACHABLE_S = 400 "No path could be found for
     input"): a chapel on a road island, reachable from its neighbour but from
     nothing else, made /route fail for the WHOLE tour — the UI showed every
     point drawn with no line between them.
+
+    Returns ``(route, report)`` where ``report`` carries a machine reason per
+    flagged stop.  A MANDATORY stop is never removed: it stays on the route and
+    is reported as ``must_visit_unroutable``, which the caller records in the
+    plan trace so the verifier can return ``unmet``/``infeasible`` instead of a
+    route that quietly lost the place the tourist demanded.
     """
-    route, pruned = prune_unroutable_stops(route, candidates, cost)
+    route, pruned = prune_unroutable_stops(
+        route, candidates, cost, must_visit_ids=must_visit_ids
+    )
     if pruned:
         log.warning(
             "pruned %d stop(s) Valhalla cannot reach in this order: %s",
@@ -504,7 +517,7 @@ def _prune_unroutable(
             "Valhalla не нашла дороги между нашими точками — "
             "уточните город или район"
         )
-    return route
+    return route, pruned
 
 
 def _is_service_code(code: str) -> bool:
@@ -529,7 +542,7 @@ def _is_sight_stop(candidate: Any) -> bool:
 
 
 def _interpretation(
-    requirements: Any | None, status: str | None
+    requirements: Any | None, status: OverallStatus | None
 ) -> Interpretation | None:
     """What the system understood, in one compact block for the client.
 
@@ -598,7 +611,11 @@ def _outside_left_unresolved(
 
 
 def _render_tour(
-    route: list[Candidate], *, costing: str, origin: LatLon | None
+    route: list[Candidate],
+    *,
+    costing: str,
+    origin: LatLon | None,
+    round_trip: bool = False,
 ) -> tuple[dict, dict]:
     """Draw the tour, never failing the request over geometry.
 
@@ -607,7 +624,9 @@ def _render_tour(
     instead of a 500 for a tour that was planned fine.
     """
     try:
-        shape, summary, status = render(route, costing=costing, origin=origin)
+        shape, summary, status = render(
+            route, costing=costing, origin=origin, round_trip=round_trip
+        )
         # Log status for monitoring, but don't fail the request
         if status != "usable":
             log.info("render returned status: %s", status)
@@ -659,6 +678,30 @@ def _services_along_evidence(
 
 
 
+def _to_places(candidates: list[Candidate]) -> list[Place]:
+    """Candidates → the response points (one mapping, used by every branch)."""
+    return [
+        Place(
+            id=p.id,
+            name=p.name,
+            category=p.category,
+            lat=p.lat,
+            lon=p.lon,
+            blurb=p.blurb,
+            fun_fact=p.fun_fact,
+            fun_facts=p.fun_facts,
+            links=p.links,
+            opening_hours=p.opening_hours,
+            ticket_price=p.ticket_price,
+            town=p.town,
+            district=p.district,
+            photo=p.photo,
+            visit_minutes=p.visit_minutes_db or visit_time_minutes(p.category),
+        )
+        for p in candidates
+    ]
+
+
 class Pipeline:
     """Stateless planner. One instance, reused across requests."""
 
@@ -689,8 +732,16 @@ class Pipeline:
             if base:
                 return self._generate_refinement(req, base, t0)
 
-        # 0. Preprocess
+        # 0. Preprocess — the normalized text and its fingerprint. The planner
+        # keys its work off the raw query, so the reading is recorded for the
+        # log rather than silently computed and thrown away.
         pre = preprocess(req.query)
+        log.info(
+            "preprocess: language=%s fingerprint=%s significant_words=%d",
+            pre.language,
+            pre.fingerprint,
+            pre.n_significant_words,
+        )
 
         # 1. Interpretation — the plan is built from `TripRequirements`.  The
         # tool-using agent (planner/agent_interpret.py) fills the contract when
@@ -716,6 +767,7 @@ class Pipeline:
             intent,
             explicit_time_budget=req.time_budget_minutes,
             explicit_bbox=req.region_bbox,
+            explicit_round_trip=req.round_trip,
             outside=requirements.outside_coverage,
             db=self.db,
         )
@@ -788,6 +840,18 @@ class Pipeline:
             before = len(candidates)
             candidates = _drop_excluded(candidates, excluded)
             log.info("context: dropped %d excluded stop(s)", before - len(candidates))
+
+        # ── Catalogue: a list to choose from, not a walk to follow ──────────
+        # «что показать: каталог» — the tourist wants to browse the matching
+        # places (grouped by town) and pick some. There is no order to optimise
+        # and no line to draw, so the walk-specific steps below (geo focus,
+        # diversity trim, cost matrix, optimize, render) are skipped on purpose:
+        # confining a catalogue to one walkable cluster is exactly what makes
+        # «все костёлы области» unanswerable.
+        if requirements.result_mode == "catalogue":
+            return self._catalogue_response(
+                req, requirements, intent, constraints, candidates, t0
+            )
 
         # 3.6 Geographic focus: keep the route walkable — candidates beyond
         # GEO_FOCUS_KM from the tourist's position (or the top-scored hit when
@@ -986,11 +1050,15 @@ class Pipeline:
             deadline_order_skipped = True
 
         # 6c. Drop stops the matrix cannot connect to their predecessor in this
-        # order (Valhalla's own verdict — see _prune_unroutable).
-        route = _prune_unroutable(route, candidates, cost)
+        # order (Valhalla's own verdict — see _prune_unroutable). A mandatory
+        # stop is kept and reported, never dropped; the report travels into the
+        # plan trace so the verifier can mark it `must_visit_unroutable`.
+        route, prune_report = _prune_unroutable(
+            route, candidates, cost, constraints.must_visit_ids
+        )
 
         # 7. Validate
-        plan = validate(route, cost, constraints, info)
+        plan = validate(route, cost, constraints, info, prune_report=prune_report)
 
         # 8. Render (Valhalla /route) — origin is the tourist's GPS start.
         # Skipped when the deadline is spent: the response then carries no
@@ -998,7 +1066,12 @@ class Pipeline:
         # rather than the client waiting for a hang.
         progress.note(progress.STAGE_DRAWING)
         if self._left(t0) >= constants.RENDER_MIN_LEFT_S:
-            shape, summary = _render_tour(plan.route, costing=costing, origin=req.origin)
+            shape, summary = _render_tour(
+                plan.route,
+                costing=costing,
+                origin=req.origin,
+                round_trip=constraints.round_trip,
+            )
         else:
             log.info("deadline: %.1fs left — skipping geometry", self._left(t0))
             shape, summary = {}, {}
@@ -1080,7 +1153,16 @@ class Pipeline:
         town's landmarks under the name they asked for.
         """
         mark_out_of_coverage(requirements, names)
-        plan = validate([], None, constraints, {}, requirements=requirements)
+        # No stops at all: an empty matrix is what validate() expects here (it
+        # returns before touching it), and the costing is reported even though
+        # nothing was planned.
+        plan = validate(
+            [],
+            CostMatrix(),
+            constraints,
+            {},
+            requirements=requirements,
+        )
         return self._build_response(
             intent=intent,
             changes=None,
@@ -1094,7 +1176,7 @@ class Pipeline:
                 + ", ".join(names)
                 + " — вне зоны покрытия (Гродненская область)."
             ),
-            costing=req.profile,
+            costing=req.profile or "pedestrian",
             requirements=requirements,
             status=overall_status(requirements),
             deadline={
@@ -1103,6 +1185,75 @@ class Pipeline:
                 "pool_trimmed_to": None,
                 "valhalla_order_skipped": False,
                 "geometry_skipped": False,
+            },
+        )
+
+    def _catalogue_response(
+        self,
+        req: GenerateReq,
+        requirements: Any,
+        intent: Any,
+        constraints: ResolvedConstraints,
+        candidates: list[Candidate],
+        t0: float,
+    ) -> RouteResponse:
+        """Answer with the matching places, grouped by town, and no route.
+
+        The list *is* the answer: the tourist picks stops from it. Grouping is by
+        `town` (already on every point), ordered by town then by relevance so the
+        order is stable between runs. Verification uses ``verify_catalogue`` —
+        membership only — so nothing here claims a walkable route or a geometry
+        this response does not have.
+        """
+        ordered = sorted(candidates, key=lambda c: ((c.town or "").strip().lower(), -c.relevance))
+        verify_catalogue(requirements, ordered)
+        status = overall_status(requirements)
+        progress.note(progress.STAGE_DONE)
+
+        towns = sorted({(c.town or "").strip() for c in ordered if (c.town or "").strip()})
+        log.info(
+            "pipeline.catalogue query_len=%d n=%d towns=%d ms=%d status=%s",
+            len(req.query), len(ordered), len(towns),
+            int((_time.perf_counter() - t0) * 1000), status,
+        )
+
+        d = intent.decision
+        return RouteResponse(
+            parsed=ParsedQuery(
+                keywords=d.keywords_pos,
+                categories=d.categories_pos,
+                time_budget_minutes=d.time_budget_minutes,
+                source=intent.source,
+            ),
+            points=_to_places(ordered),
+            # A catalogue has no line to draw: an empty shape is the honest
+            # answer, and the client draws the places without connecting them.
+            shape={},
+            summary=RouteSummary(length_km=None, time_seconds=None),
+            result_mode="catalogue",
+            budget=None,
+            explanation=(
+                f"Каталог: {len(ordered)} мест"
+                + (f" в {len(towns)} городах" if len(towns) > 1 else "")
+                + " — выберите точки, и я построю по ним маршрут."
+            ),
+            status=status,
+            requirements=requirements.public_requirements(),
+            interpretation=_interpretation(requirements, status),
+            costing=req.profile,
+            changes=None,
+            debug={
+                "result_mode": "catalogue",
+                "n_places": len(ordered),
+                "towns": towns,
+                "requirements_source": getattr(requirements, "source", None),
+                "deadline": {
+                    "budget_s": constants.REQUEST_DEADLINE_S,
+                    "used_s": round(_time.perf_counter() - t0, 3),
+                    "pool_trimmed_to": None,
+                    "valhalla_order_skipped": True,
+                    "geometry_skipped": True,
+                },
             },
         )
 
@@ -1131,7 +1282,9 @@ class Pipeline:
         plan = validate(route, cost, constraints, info)
 
         try:
-            shape, summary = render(plan.route, costing=profile or "pedestrian")
+            # render() answers (shape, summary, status); the status is logged by
+            # _render_tour's caller path, not needed here.
+            shape, summary, _status = render(plan.route, costing=profile or "pedestrian")
         except UpstreamUnavailable:
             shape, summary = {}, {}
         walk_s = float((summary or {}).get("time", 0.0)) or plan.walk_seconds
@@ -1139,17 +1292,7 @@ class Pipeline:
 
         return RouteResponse(
             parsed=ParsedQuery(source="explicit"),
-            points=[
-                Place(
-                    id=p.id, name=p.name, category=p.category,
-                    lat=p.lat, lon=p.lon, blurb=p.blurb, fun_fact=p.fun_fact,
-                    fun_facts=p.fun_facts, links=p.links,
-                    opening_hours=p.opening_hours, ticket_price=p.ticket_price,
-                    town=p.town, district=p.district, photo=p.photo,
-                    visit_minutes=p.visit_minutes_db or visit_time_minutes(p.category),
-                )
-                for p in plan.route
-            ],
+            points=_to_places(plan.route),
             changes=None,
             shape=shape,
             summary=RouteSummary(length_km=length_km, time_seconds=walk_s),
@@ -1370,6 +1513,7 @@ class Pipeline:
             intent,
             explicit_time_budget=req.time_budget_minutes,
             explicit_bbox=req.region_bbox,
+            explicit_round_trip=req.round_trip,
             db=self.db,
         )
         costing = req.profile or "pedestrian"
@@ -1378,7 +1522,12 @@ class Pipeline:
         route, cost = _refinement_cost(route, constraints, costing)
 
         plan = validate(route, cost, constraints, info)
-        shape, summary = _render_tour(route, costing=costing, origin=req.origin)
+        shape, summary = _render_tour(
+            route,
+            costing=costing,
+            origin=req.origin,
+            round_trip=constraints.round_trip,
+        )
         # The deterministic verifier decides the fate of the (delta) requirements
         # against the refined route — the model never does.
         verify(
@@ -1454,7 +1603,7 @@ class Pipeline:
         explanation: str,
         costing: str = "pedestrian",
         requirements=None,
-        status: str | None = None,
+        status: OverallStatus | None = None,
         deadline: dict | None = None,
     ) -> RouteResponse:
         d = intent.decision
@@ -1465,26 +1614,7 @@ class Pipeline:
                 time_budget_minutes=d.time_budget_minutes,
                 source=intent.source,
             ),
-            points=[
-                Place(
-                    id=p.id,
-                    name=p.name,
-                    category=p.category,
-                    lat=p.lat,
-                    lon=p.lon,
-                    blurb=p.blurb,
-                    fun_fact=p.fun_fact,
-                    fun_facts=p.fun_facts,
-                    links=p.links,
-                    opening_hours=p.opening_hours,
-                    ticket_price=p.ticket_price,
-                    town=p.town,
-                    district=p.district,
-                    photo=p.photo,
-                    visit_minutes=p.visit_minutes_db or visit_time_minutes(p.category),
-                )
-                for p in plan.route
-            ],
+            points=_to_places(plan.route),
             shape=shape,
             summary=RouteSummary(length_km=length_km, time_seconds=walk_s),
             changes=changes,

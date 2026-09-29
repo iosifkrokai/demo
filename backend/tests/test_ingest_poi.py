@@ -37,7 +37,7 @@ def test_tag_to_category_mapping():
 
 
 def test_name_prefers_name_then_name_ru():
-    assert extract_name({"name": "Кафе А"}, "кафе") == "Кафе А"  # noqa: RUF001
+    assert extract_name({"name": "Кафе А"}, "кафе") == "Кафе А"
     assert extract_name({"name:ru": "Кафе Б"}, "кафе") == "Кафе Б"
 
 

@@ -95,12 +95,14 @@
     {
       "slug": "volkovysk-district",
       "kind": "district",
-      "name_ru": "Волковыскский район",
+      "name_ru": "Волковысский район",
       "name_en": "Volkovysk District",
       "aliases": {
         "ru": [
-          "Волковыскский район",
-          "Волковыскский"
+          "Волковысский район",
+          "Волковысский",
+          "Волковыссккий район",
+          "Волковыссккий"
         ],
         "en": [
           "Volkovysk District"

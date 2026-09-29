@@ -39,8 +39,12 @@ from agent import constants, main as agent_main
 from agent.config import openrouter_api_key, settings
 from agent.errors import NoCandidatesFound, UpstreamUnavailable
 from agent.models import Candidate, GenerateReq, ResolvedConstraints
-from agent.planner import agent_interpret as ai
-from agent.planner import intent as intent_mod, pipeline as pipeline_mod, retrieve as retrieve_mod
+from agent.planner import (
+    agent_interpret as ai,
+    intent as intent_mod,
+    pipeline as pipeline_mod,
+    retrieve as retrieve_mod,
+)
 from agent.planner.intent import build_requirements, extract_intent, fallback_intent
 from agent.planner.pipeline import Pipeline, _openrouter_embed
 from agent.requirements import PartyComposition, Requirement, TripRequirements

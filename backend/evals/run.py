@@ -44,8 +44,9 @@ import json
 import math
 import os
 import sys
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
@@ -102,10 +103,7 @@ def run_verdicts() -> dict[str, Any]:
     for case in _load("verdicts"):
         raw = case.raw
         reqs = TripRequirements(
-            requirements=[
-                Requirement(**{k: v for k, v in r.items()})
-                for r in raw["requirements"]
-            ]
+            requirements=[Requirement(**dict(r)) for r in raw["requirements"]]
         )
         evidence = None
         if raw.get("evidence") is not None:
@@ -193,10 +191,10 @@ def run_services() -> dict[str, Any]:
     as disagreement — a spheroid and a sphere legitimately differ there, and
     pretending otherwise would turn a real tolerance into fake precision.
     """
-    from agent import services as services_mod
-    from agent import taxonomy
-    from agent.clients_store import default_connect
     from psycopg.rows import dict_row
+
+    from agent import services as services_mod, taxonomy
+    from agent.clients_store import default_connect
 
     checks: list[dict[str, Any]] = []
     try:
@@ -265,7 +263,6 @@ def run_services() -> dict[str, Any]:
             })
 
             # 4. Membership agrees with the independent reference (gate ties set aside).
-            got_ids = {i["id"] for i in items}
             # The answer is capped by `limit` and ordered along the route, so the
             # reference must be capped the same way — otherwise a correct capped
             # answer looks like a pile of missing points.
@@ -488,9 +485,9 @@ def run_interpretation() -> dict[str, Any]:
     says nothing about the model, and counting it as a pass would hide exactly
     the thing we want to tune.
     """
+    from agent import taxonomy
     from agent.models import GenerateReq
     from agent.planner.intent import build_requirements
-    from agent import taxonomy
 
     checks: list[dict[str, Any]] = []
     sources: dict[str, int] = {}

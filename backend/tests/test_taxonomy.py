@@ -22,7 +22,6 @@ from agent.taxonomy import (
     visit_minutes,
 )
 
-
 # ─────────────────────────────────────────────────────────────────────────────
 # The data file itself
 # ─────────────────────────────────────────────────────────────────────────────
@@ -189,12 +188,12 @@ class TestAccessorsAndConstants:
             visit_minutes("no-such-code")
 
     def test_constants_categories_come_from_the_taxonomy(self):
-        assert constants.CATEGORIES == all_codes()
+        assert all_codes() == constants.CATEGORIES
 
     def test_constants_convenience_categories_are_the_service_role(self):
         service_codes = tuple(c.code for c in all_categories() if c.role == "service")
-        assert constants.CONVENIENCE_CATEGORIES == service_codes
+        assert service_codes == constants.CONVENIENCE_CATEGORIES
 
     def test_constants_visit_times_come_from_the_taxonomy(self):
         expected = {c.code: c.visit_minutes for c in all_categories()}
-        assert constants.VISIT_TIME_BY_CATEGORY == expected
+        assert expected == constants.VISIT_TIME_BY_CATEGORY

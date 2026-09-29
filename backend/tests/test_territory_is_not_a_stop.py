@@ -20,7 +20,7 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agent.planner.agent_interpret import (  # noqa: E402
+from agent.planner.agent_interpret import (
     AgentReading,
     AgentRequirement,
     _reading_requirements,

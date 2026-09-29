@@ -32,7 +32,7 @@ from collections.abc import Iterable
 import psycopg
 
 from .. import constants
-from ..models import Candidate, ResolvedConstraints
+from ..models import Candidate, Photo, ResolvedConstraints
 from ..search import (
     _keyword_search,
     candidates_by_embedding,
@@ -58,7 +58,7 @@ CATEGORY_KEYWORD_TO_LLM: dict[str, str] = {
     "парке": "парк", "парков": "парк",
     "монастырь": "монастырь", "монастыри": "монастырь",
     "монастыря": "монастырь",
-    "церковь": "церковь", "церкви": "церковь", "церкви": "церковь",
+    "церковь": "церковь", "церкви": "церковь",
     "храм": "храм", "храмы": "храм",
     "усадьба": "усадьба", "усадьбы": "усадьба",
     "архитектура": "архитектура", "архитектурный": "архитектура",
@@ -347,6 +347,17 @@ def parse_photo(row: dict) -> dict | None:
     }
 
 
+def _photo_model(row: dict) -> Photo | None:
+    """The point's picture as the response model, or nothing at all.
+
+    ``parse_photo`` answers a plain dict (or None, when the credit is
+    incomplete); the API model is ``Photo``, so it is built here and pydantic
+    checks the four fields travel together.
+    """
+    raw = parse_photo(row)
+    return Photo(**raw) if raw else None
+
+
 def _row_to_candidate(row: dict, rrf_score: float) -> Candidate:
     return Candidate(
         id=row["id"],
@@ -362,7 +373,7 @@ def _row_to_candidate(row: dict, rrf_score: float) -> Candidate:
         ticket_price=row.get("ticket_price"),
         town=row.get("town"),
         district=row.get("district"),
-        photo=parse_photo(row),
+        photo=_photo_model(row),
         visit_minutes_db=row.get("visit_minutes"),
         relevance=rrf_score,  # no re-scoring stage: relevance = RRF fusion
         rrf_score=rrf_score,

@@ -11,13 +11,11 @@ from __future__ import annotations
 import os
 import re as _re
 import sys
-from unittest.mock import patch
 
 import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agent import constants
 from agent.models import Candidate, LatLon
 from agent.planner.intent import _PLACE_STOP_LIST
 from agent.planner.pipeline import _geo_focus

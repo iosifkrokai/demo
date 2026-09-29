@@ -19,7 +19,7 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from evals import run as evals  # noqa: E402
+from evals import run as evals
 
 
 def test_a_broken_case_file_is_a_loud_error(tmp_path, monkeypatch):

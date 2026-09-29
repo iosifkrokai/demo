@@ -27,11 +27,11 @@ import os
 import sys
 import time
 from pathlib import Path
-from typing import Any
 
 import psycopg
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from agent import taxonomy
 from agent.geofence import inside_project_area
 
 # ---------------------------------------------------------------------------
@@ -45,12 +45,9 @@ DSN = os.environ.get("DATABASE_URL", "postgresql://grodno:grodno@localhost:5432/
 # Grodno voblast bbox — same as agent/constants.py GRODNO_BBOX
 BBOX = {"south": 52.75, "west": 23.35, "north": 54.80, "east": 27.00}
 
-# Category taxonomy — must match seed_region.py TAXONOMY
-TAXONOMY = {
-    "замок", "костёл", "церковь", "монастырь", "дворец", "усадьба",
-    "парк", "музей", "архитектура", "памятник", "инфраструктура",
-    "храм", "кладбище",
-}
+# Category taxonomy — the sight codes of the canonical taxonomy, derived so the
+# two seed readers cannot disagree about what a valid category is.
+TAXONOMY = frozenset(cat.code for cat in taxonomy.all_categories() if cat.role == "sight")
 
 COLUMNS = [
     "name", "category", "district", "town", "lat", "lon", "blurb",
@@ -183,7 +180,7 @@ def is_duplicate(incoming: dict, existing: list[dict], threshold_m: float = 50.0
 
 def embed_missing(conn, dry_run: bool = False) -> int:
     """Embed OSM rows lacking vectors via OpenRouter. Returns count embedded."""
-    import httpx  # noqa: PLC0415 — only needed here
+    import httpx
 
     api_key = os.environ.get("OPENROUTER_API_KEY")
     if not api_key:

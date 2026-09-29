@@ -225,9 +225,9 @@ def read_curated(path: Path) -> list[dict]:
 # Coverage report (pure, offline)
 # ─────────────────────────────────────────────────────────────────────────────
 
-_CYRILLIC_RE = re.compile(r"[А-Яа-яЁёІіЎў]")  # noqa: RUF001 — Cyrillic ranges are intended
+_CYRILLIC_RE = re.compile(r"[А-Яа-яЁёІіЎў]")
 _LATIN_RE = re.compile(r"[A-Za-z]")
-_NORM_RE = re.compile(r"[^0-9a-zа-яёіў]+")  # noqa: RUF001 — Cyrillic tail is intended
+_NORM_RE = re.compile(r"[^0-9a-zа-яёіў]+")
 
 
 def script_of(name: str | None) -> str:
@@ -465,7 +465,7 @@ def source_fields(source_url: str, license: str | None = None) -> dict:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _connect(dsn: str):
-    import psycopg  # noqa: PLC0415 — only needed when actually writing
+    import psycopg
 
     return psycopg.connect(dsn)
 

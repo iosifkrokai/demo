@@ -22,6 +22,7 @@ from pathlib import Path
 import psycopg
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from agent import taxonomy
 from agent.geofence import inside_project_area
 
 BACKEND = Path(__file__).resolve().parents[1]  # backend/scripts/*.py -> backend/
@@ -34,11 +35,13 @@ DSN = os.environ.get("DATABASE_URL", "postgresql://grodno:grodno@localhost:5432/
 # Fast bounding pre-check; the ADM1 polygon below makes the actual decision.
 BBOX = {"south": 52.75, "west": 23.35, "north": 54.80, "east": 27.00}
 
-TAXONOMY = {
-    "замок", "костёл", "церковь", "монастырь", "дворец", "усадьба",
-    "парк", "музей", "архитектура", "памятник", "инфраструктура",
-    "храм", "кладбище",
-}
+# The canonical taxonomy (data/taxonomy.csv, read through agent/taxonomy.py) is
+# the ONE source of category codes. This city/region dataset carries sights
+# only — everyday services come from the POI ingest — so the allow-list is the
+# taxonomy's sight role, never a second hand-written set that can drift from the
+# agent's (this one used to say "must match seed_region.py TAXONOMY" and was
+# simply a copy of it).
+TAXONOMY = frozenset(cat.code for cat in taxonomy.all_categories() if cat.role == "sight")
 
 COLUMNS = [
     "name", "category", "district", "town", "lat", "lon", "blurb",
@@ -129,7 +132,7 @@ def normalize(row: dict) -> dict:
 
 def embed_missing(cur) -> int:
     """Embed rows lacking vectors via OpenRouter (needs OPENROUTER_API_KEY)."""
-    import httpx  # noqa: PLC0415 — optional path
+    import httpx
 
     api_key = os.environ.get("OPENROUTER_API_KEY")
     if not api_key:

@@ -374,7 +374,11 @@ def _openrouter_embed(texts: list[str]) -> list[list[float]]:
         timeout=60.0,
     )
     resp.raise_for_status()
-    return [item["embedding"] for item in resp.json()["data"]]
+    # JSON numbers arrive as int when a dimension is exactly 0 or 1; a list mixing
+    # int and float is what psycopg refuses to adapt («cannot dump lists of mixed
+    # types»), and the failure is data-dependent (it only fires once such a vector
+    # shows up, mid-run). Coerce here, where the declared type says float anyway.
+    return [[float(x) for x in item["embedding"]] for item in resp.json()["data"]]
 
 
 def embed_new_rows(conn) -> int:

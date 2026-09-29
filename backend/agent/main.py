@@ -90,7 +90,10 @@ app.add_middleware(
     ],
     allow_credentials=False,
     allow_methods=["POST", "GET", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["Content-Type"],
+    # X-Client-Id carries the anonymous client id the /clients/* routes read; a
+    # preflight that does not allow it makes the client entity unreachable from a
+    # browser talking to the agent directly (nginx already allows it).
+    allow_headers=["Content-Type", "X-Client-Id"],
 )
 
 

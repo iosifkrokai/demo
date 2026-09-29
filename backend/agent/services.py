@@ -22,7 +22,8 @@ Three rules, in order of importance:
 from __future__ import annotations
 
 import logging
-from typing import Any, Iterable, Sequence
+from collections.abc import Iterable, Sequence
+from typing import Any
 
 log = logging.getLogger(__name__)
 

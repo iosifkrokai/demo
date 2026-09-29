@@ -28,12 +28,17 @@ from __future__ import annotations
 import argparse
 import json
 import subprocess
+import sys
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 BACKEND = Path(__file__).resolve().parent.parent
 SNAPSHOTS = BACKEND / "benchmarks" / "snapshots"
+#: The golden/compliance run writes here unless a snapshot directory was asked
+#: for (bench_routes.py --report-dir). The reader looked ONLY under snapshots/,
+#: so a perfectly good report at the benchmarks root showed as «не измерялось».
+COMPLIANCE = BACKEND / "benchmarks" / "compliance.json"
 EVALS_LAST = BACKEND / "evals" / "last.json"
 VENV = BACKEND / ".venv" / "bin" / "python"
 
@@ -64,6 +69,18 @@ def _latest_under(root: Path, name: str) -> Path | None:
     return max(found, key=lambda p: p.stat().st_mtime) if found else None
 
 
+def _relative_to_backend(path: Path) -> str:
+    """Путь как его видно из backend/, либо абсолютный — если он снаружи.
+
+    A report directory may be anywhere (a snapshot on another disk, a temp dir in
+    a test); reading it must not raise just because it is not under backend/.
+    """
+    try:
+        return str(path.relative_to(BACKEND))
+    except ValueError:
+        return str(path)
+
+
 # ── слой: геометрия маршрутов (benchmarks/routes) ────────────────────────────
 
 def read_routes(path: Path | None = None) -> dict[str, Any]:
@@ -84,7 +101,7 @@ def read_routes(path: Path | None = None) -> dict[str, Any]:
     return {
         "layer": "benchmarks/routes",
         "measured": True,
-        "source": str(path.relative_to(BACKEND)),
+        "source": _relative_to_backend(path),
         "taken": _mtime(path),
         "age_days": _age_days(path),
         "n_runs": report.get("n_runs"),
@@ -106,8 +123,17 @@ def read_routes(path: Path | None = None) -> dict[str, Any]:
 
 # ── слой: соответствие запросу (benchmarks/golden) ───────────────────────────
 
+def _compliance_report() -> Path | None:
+    """Свежий отчёт golden: прогон в benchmarks/ либо датированный снимок."""
+    candidates = [COMPLIANCE] if COMPLIANCE.exists() else []
+    snapshot = _latest_under(SNAPSHOTS, "compliance.json")
+    if snapshot is not None:
+        candidates.append(snapshot)
+    return max(candidates, key=lambda p: p.stat().st_mtime) if candidates else None
+
+
 def read_golden(path: Path | None = None) -> dict[str, Any]:
-    path = path or _latest_under(SNAPSHOTS, "compliance.json")
+    path = path or _compliance_report()
     if path is None or not path.exists():
         return {
             "layer": "benchmarks/golden",
@@ -116,36 +142,51 @@ def read_golden(path: Path | None = None) -> dict[str, Any]:
                    "(нужен живой стек: приложение + Valhalla + ключ модели)",
         }
     data = json.loads(path.read_text(encoding="utf-8"))
+    # The report's own shape: `summary` holds the counts, top-level `cases`
+    # holds each case's `runs[].verdict`. The reader used to expect
+    # summary["compliance"] / summary["passed"] and a per-case `checks` list, so
+    # even when it found the file it printed «None/13».
     summary = data.get("summary") or {}
     cases = data.get("cases") or []
+
     failed: list[dict[str, Any]] = []
     for case in cases:
-        checks = case.get("checks") or case.get("conditions") or []
-        bad = [
-            c for c in checks
-            if isinstance(c, dict) and not (c.get("ok") is True or c.get("passed") is True)
+        verdicts = [
+            run.get("verdict")
+            for run in (case.get("runs") or [])
+            if isinstance(run, dict) and isinstance(run.get("verdict"), dict)
         ]
-        if bad or case.get("ok") is False or case.get("passed") is False:
-            failed.append(
-                {
-                    "case": case.get("id") or case.get("case"),
-                    "why": case.get("query"),
-                    "detail": "; ".join(
-                        str(c.get("name") or c.get("check")) + ": " + str(c.get("detail"))
-                        for c in bad
-                    ) or "кейс не выдержал условий",
-                }
-            )
+        bad = [v for v in verdicts if v.get("passed") is False]
+        if not bad:
+            continue
+        first = bad[0]
+        checks = first.get("checks") or {}
+        bad_checks = [
+            name for name, c in checks.items()
+            if isinstance(c, dict) and c.get("ok") is False
+        ]
+        failed.append(
+            {
+                "case": case.get("id"),
+                "why": case.get("query"),
+                "detail": "; ".join(
+                    f"{name}: {checks[name].get('detail')}" for name in bad_checks
+                ) or str(first.get("detail") or first.get("reason") or "кейс не выдержал условий"),
+            }
+        )
+
     return {
         "layer": "benchmarks/golden",
         "measured": True,
-        "source": str(path.relative_to(BACKEND)),
+        "source": _relative_to_backend(path),
         "taken": _mtime(path),
         "age_days": _age_days(path),
-        "compliance": summary.get("compliance") or summary.get("rate"),
-        "passed": summary.get("passed"),
-        "total": summary.get("total") or summary.get("n_cases") or len(cases),
+        "compliance": summary.get("compliance_rate"),
+        "passed": summary.get("n_cases_passed"),
+        "total": summary.get("n_cases") or len(cases),
         "parity": summary.get("parity"),
+        "unverified": summary.get("unverified_checks") or [],
+        "failure_reasons": summary.get("failures_by_reason") or {},
         "failed_cases": failed,
         "mode": data.get("mode"),
     }
@@ -186,7 +227,7 @@ def read_evals(path: Path | None = None) -> dict[str, Any]:
     return {
         "layer": "evals",
         "measured": True,
-        "source": str(path.relative_to(BACKEND)),
+        "source": _relative_to_backend(path),
         "taken": _mtime(path),
         "age_days": _age_days(path),
         "stages": out,
@@ -479,6 +520,12 @@ def main(argv: list[str] | None = None) -> int:
     # Отчёт — чтение, а не гейт: он не падает от чужих провалов. Он падает от
     # собственной неспособности показать числа — иначе «пусто» выглядело бы как
     # «хорошо».
+    if not any(layer.get("measured") for layer in (routes, golden, evals)):
+        print(
+            "ни один слой не измерялся — отчёт не о чем; см. колонку «НЕ ИЗМЕРЯЛОСЬ»",
+            file=sys.stderr,
+        )
+        return 1
     return 0
 
 

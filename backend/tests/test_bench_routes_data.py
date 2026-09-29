@@ -90,9 +90,9 @@ def test_place_ids_exist_in_the_database_when_it_is_reachable():
         pytest.skip("no place_id recorded")
 
     try:
-        import psycopg  # noqa: PLC0415 - optional dependency of this check
+        import psycopg
 
-        from agent.config import settings  # noqa: PLC0415 - lazy: no DB import graph at collection
+        from agent.config import settings
 
         with psycopg.connect(settings.DSN, connect_timeout=3) as conn:
             found = {
@@ -112,9 +112,9 @@ def test_coordinates_agree_with_the_database_rows():
     """A stop with a place_id must sit on that row (within 250 m), unless the case says otherwise."""
     checked = skipped = 0
     try:
-        import psycopg  # noqa: PLC0415 - optional dependency of this check
+        import psycopg
 
-        from agent.config import settings  # noqa: PLC0415 - lazy: no DB import graph at collection
+        from agent.config import settings
 
         conn = psycopg.connect(settings.DSN, connect_timeout=3)
     except Exception as exc:

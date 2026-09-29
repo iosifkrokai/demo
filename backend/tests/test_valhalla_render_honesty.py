@@ -14,8 +14,6 @@ from __future__ import annotations
 import os
 import sys
 
-import pytest
-
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from agent import valhalla_client as vc
@@ -135,7 +133,7 @@ def test_locale_mismatch_returns_honest_status(monkeypatch):
 
     monkeypatch.setattr(render, "route_through", fake_route_through)
 
-    shape, summary, status = render.render(route, costing="pedestrian", locale="ru")
+    _shape, _summary, status = render.render(route, costing="pedestrian", locale="ru")
 
     assert status == "locale_mismatch"
 
@@ -157,7 +155,7 @@ def test_missing_required_maneuver_fields_reported(monkeypatch):
 
     monkeypatch.setattr(render, "route_through", fake_route_through)
 
-    shape, summary, status = render.render(route, costing="pedestrian", locale="ru")
+    _shape, _summary, status = render.render(route, costing="pedestrian", locale="ru")
 
     assert status == "missing_maneuver_data"
 

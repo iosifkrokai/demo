@@ -144,10 +144,7 @@ def area_contains(slug: str | None, lat: float | None, lon: float | None) -> boo
     geometry = area.get("geometry")
     if not isinstance(geometry, dict) or geometry.get("source") != GRODNO_BORDER_PATH.name:
         return None
-    for ring in _grodno_rings():
-        if point_in_ring(lat, lon, ring):
-            return True
-    return False
+    return any(point_in_ring(lat, lon, ring) for ring in _grodno_rings())
 
 
 def in_project_area(lat: float | None, lon: float | None) -> bool:
@@ -159,13 +156,12 @@ def in_project_area(lat: float | None, lon: float | None) -> bool:
     """
     if lat is None or lon is None:
         return False
-    for ring in _grodno_rings():
-        if point_in_ring(lat, lon, ring):
-            return True
-    for exc in _exceptions():
-        if _within_radius(lat, lon, exc["lat"], exc["lon"], exc["radius_m"]):
-            return True
-    return False
+    if any(point_in_ring(lat, lon, ring) for ring in _grodno_rings()):
+        return True
+    return any(
+        _within_radius(lat, lon, exc["lat"], exc["lon"], exc["radius_m"])
+        for exc in _exceptions()
+    )
 
 
 # ── geometry ──────────────────────────────────────────────────────────────

@@ -100,7 +100,7 @@ def test_the_mandatory_toilet_is_never_silently_dropped():
     """The owner's live bug, pinned: either the toilet is on the route, or the
     response says it could not be placed."""
     query, extra = QUERIES[0]
-    status, body, err, elapsed = _post({"query": query, **extra}, timeout=BUDGET_S)
+    status, body, err, _elapsed = _post({"query": query, **extra}, timeout=BUDGET_S)
     assert status == 200, f"HTTP {status}: {err}"
 
     interp = body["interpretation"]

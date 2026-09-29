@@ -38,9 +38,6 @@ from agent.planner.explain import explain
 from agent.planner.validate import validate
 from agent.planner.verify import (
     REASON_AVOID_OK,
-    REASON_SERVICE_ALONG_ROUTE,
-    REASON_SERVICE_NOT_MEASURED,
-    ServiceAlongEvidence,
     REASON_AVOID_VIOLATED,
     REASON_CODE_UNKNOWN,
     REASON_GEOMETRY_MISSING,
@@ -50,8 +47,11 @@ from agent.planner.verify import (
     REASON_MUST_VISIT_OK,
     REASON_MUST_VISIT_UNROUTABLE,
     REASON_ROUTE_MISSING,
+    REASON_SERVICE_ALONG_ROUTE,
+    REASON_SERVICE_NOT_MEASURED,
     REASON_SERVICE_OK,
     REASON_SOFT_SERVICE_ABSENT,
+    ServiceAlongEvidence,
     geometry_ok,
     overall_status,
     verify,

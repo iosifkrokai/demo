@@ -1,0 +1,40 @@
+# Backend gates: the three checks the README calls "CI equivalent", now actually
+# run on every push and PR. All three pass on a clean checkout; if one starts
+# failing, the tree is not green — that is the whole point of wiring them up.
+#
+# The frontend job is deliberately NOT here yet: its lint/typecheck gate is red
+# on the current tree (dead upstream panel tree + unfinished i18n), so it needs
+# that cleanup first — see the audit notes. Add it in the same PR that makes it
+# pass, never before.
+name: ci
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Sync dependencies (locked)
+        run: uv sync --frozen
+
+      - name: Lint (ruff)
+        run: .venv/bin/ruff check .
+
+      - name: Type-check (pyright)
+        run: .venv/bin/pyright
+
+      - name: Tests (pytest)
+        run: .venv/bin/python -m pytest -q

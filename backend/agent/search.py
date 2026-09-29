@@ -89,7 +89,10 @@ def _keyword_search(
     params.extend(w for w in words for _ in range(4))
     params.append(limit)
     with db.cursor() as cur:
-        cur.execute(sql, params)
+        # The SQL is assembled from module constants (column list + a fixed
+        # operator template), never from user input; psycopg's LiteralString
+        # typing cannot see that through the f-string.
+        cur.execute(sql, params)  # pyright: ignore[reportArgumentType]
         cols = [d.name for d in cur.description]
         return [dict(zip(cols, r)) for r in cur.fetchall()]
 
@@ -255,6 +258,7 @@ def _name_match_search(
     params.append(limit)
 
     with db.cursor() as cur:
-        cur.execute(sql, params)
+        # Constant SQL template, parameters bound — see _keyword_search.
+        cur.execute(sql, params)  # pyright: ignore[reportArgumentType]
         cols = [d.name for d in cur.description]
         return [dict(zip(cols, r)) for r in cur.fetchall()]

@@ -66,7 +66,16 @@ dev = [
     "httpx>=0.27",                  # TestClient
     "ruff>=0.6",
     "pyright>=1.1",
+    # The suite imports the one-shot scripts (e.g. tests/test_seed_geofence.py
+    # imports scripts/parse_places.py), and those need the `scripts` extra. A
+    # plain `uv sync` must be able to collect the whole suite, so the extra's
+    # runtime deps belong here too.
+    "requests>=2.31",
+    "beautifulsoup4>=4.12",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Ruff — linting + formatting
@@ -109,11 +118,43 @@ ignore = [
     "N806",   # mixedCase variable in function — fine for math
     "ARG002", # unused method argument — common in protocols
     "ARG004", # unused static method argument
+    # The product's own language is Russian: every Cyrillic «у»/«о»/«е»/«к»
+    # that resembles a Latin letter trips the ambiguous-unicode rules. A Russian
+    # string is *supposed* to contain Cyrillic, so these are noise, not findings
+    # (they were 324 of 574 "errors" on a clean tree).
+    "RUF001", "RUF002", "RUF003",
+    # Local imports are deliberate: the interpretation SDK (pydantic_ai) is
+    # imported only when a reading is actually attempted, and tests import the
+    # symbol under test next to its use.
+    "PLC0415",
+    # ── Deliberate style, not defects ──────────────────────────────────────
+    # Complexity thresholds: the planner's stages are dense by nature
+    # (pipeline / optimize / bench_routes) and splitting them for a line count
+    # would not make them easier to follow.
+    "PLR0911", "PLR0912", "PLR0915", "PLR0917",
+    # Domain exception names read better without an "Error" suffix
+    # (StorageUnavailable, TooManyRoutes).
+    "N818",
+    # Unused arguments in protocols, fakes and fixed-signature callbacks.
+    "ARG001",
+    # zip(strict=) / pairwise preferences: the lengths are equal by construction
+    # at these call sites, so the explicit flag is ceremony rather than a check.
+    "B905", "RUF007",
+    # Micro-style preferences this project does not enforce: list concatenation
+    # vs unpacking, int() on an already-int value, next() vs [0], reusing a loop
+    # variable name, merging/normalising small if/with/try blocks.
+    "RUF005", "RUF015", "RUF046", "PLW2901",
+    "SIM102", "SIM105", "SIM108", "SIM117", "PLR1714", "PLC0206",
+    # A lambda assigned to a local name is the clearest form for the tiny
+    # distance predicates in pipeline._geo_focus.
+    "E731",
 ]
 
 [tool.ruff.lint.per-file-ignores]
-# Tests can have long lines, magic numbers, unused fixtures.
-"tests/**/*.py" = ["E501", "PLR2004", "ARG"]
+# Tests can have long lines, magic numbers, unused fixtures, mutable test
+# doubles and dictionary walks written for readability.
+"tests/**/*.py" = ["E501", "PLR2004", "ARG", "RUF012"]
+"scripts/**/*.py" = ["E501"]
 # __init__.py often has unused re-exports.
 "**/__init__.py" = ["F401"]
 
@@ -143,6 +184,11 @@ pythonPlatform = "Linux"
 # Strict-but-not-paranoid. Catches real bugs without screaming about every
 # psycopg Connection or Pydantic v2 quirk.
 typeCheckingMode = "standard"
+# Point pyright at the project's own interpreter: without this it cannot resolve
+# psycopg / pydantic / fastapi and reports them as missing imports, which reads
+# as 30+ errors that are not about the code at all.
+venvPath = "."
+venv = ".venv"
 reportMissingTypeStubs = "warning"
 reportUnknownVariableType = "none"
 reportUnknownArgumentType = "none"

@@ -113,7 +113,7 @@ def http_json(url: str, post: bytes | None = None, cache_id: str | None = None) 
             wait = float(exc.headers.get("Retry-After") or 0) or BACKOFF[min(attempt, len(BACKOFF) - 1)]
             print(f"  {exc.code} от Wikimedia — жду {wait:.0f} с и повторяю")
             time.sleep(wait)
-        except Exception as exc:  # noqa: BLE001 — one bad call must not end the pass
+        except Exception as exc:
             last = exc
             time.sleep(BACKOFF[min(attempt, len(BACKOFF) - 1)])
     raise last if last else RuntimeError(url)
@@ -179,13 +179,6 @@ def page_meta(wiki: str, titles: list[str]) -> dict[str, dict]:
         for item in (query.get("normalized", []) or []) + (query.get("redirects", []) or []):
             alias[item["from"]] = item["to"]
 
-        def resolve(title: str) -> str:
-            seen: set[str] = set()
-            while title in alias and title not in seen:
-                seen.add(title)
-                title = alias[title]
-            return title
-
         resolved: dict[str, dict] = {}
         for page in (query.get("pages", {}) or {}).values():
             coords = (page.get("coordinates") or [{}])[0]
@@ -195,7 +188,12 @@ def page_meta(wiki: str, titles: list[str]) -> dict[str, dict]:
                 "qid": (page.get("pageprops", {}) or {}).get("wikibase_item"),
             }
         for title in chunk:
-            info = resolved.get(resolve(title))
+            wanted = title
+            seen: set[str] = set()
+            while wanted in alias and wanted not in seen:
+                seen.add(wanted)
+                wanted = alias[wanted]
+            info = resolved.get(wanted)
             if info:
                 out[title] = info
     return out
@@ -329,21 +327,37 @@ def commons_imageinfo(titles: list[str]) -> dict[str, dict]:
                 continue
             meta = info.get("extmetadata", {}) or {}
 
-            def field(name: str) -> str:
-                value = (meta.get(name, {}) or {}).get("value", "") or ""
-                return clean_author(value)
-
             out[page.get("title", "")] = {
                 "url": info.get("thumburl") or info.get("url"),
                 "original": info.get("url"),
-                "author": field("Artist") or field("Credit"),
-                "license": field("LicenseShortName"),
+                "author": _extmetadata_value(meta, "Artist")
+                or _extmetadata_value(meta, "Credit"),
+                "license": _extmetadata_value(meta, "LicenseShortName"),
                 "source": info.get("descriptionurl")
                 or (meta.get("DescriptionUrl", {}) or {}).get("value", ""),
                 "width": info.get("thumbwidth") or info.get("width"),
                 "height": info.get("thumbheight") or info.get("height"),
             }
     return out
+
+
+def _extmetadata_value(meta: dict, name: str) -> str:
+    """One field of a Commons extmetadata block, cleaned for display.
+
+    A module-level helper rather than a closure over the loop's `meta`: the
+    value is passed in, so nothing can bind to a variable that is about to be
+    rebound on the next page.
+    """
+    return clean_author((meta.get(name, {}) or {}).get("value", "") or "")
+
+
+def _first_claim(claims: dict, prop: str):
+    """The first non-empty value of a Wikidata claim property, or None."""
+    for claim in claims.get(prop, []) or []:
+        value = (claim.get("mainsnak", {}) or {}).get("datavalue", {}).get("value")
+        if value:
+            return value
+    return None
 
 
 def wikidata_claims(qids: list[str]) -> dict[str, dict]:
@@ -369,16 +383,9 @@ def wikidata_claims(qids: list[str]) -> dict[str, dict]:
         for qid, entity in (data.get("entities", {}) or {}).items():
             claims = (entity or {}).get("claims", {}) or {}
 
-            def first(prop: str):
-                for claim in claims.get(prop, []) or []:
-                    value = (claim.get("mainsnak", {}) or {}).get("datavalue", {}).get("value")
-                    if value:
-                        return value
-                return None
-
-            coords = first("P625")
+            coords = _first_claim(claims, "P625")
             out[qid] = {
-                "image": first("P18"),
+                "image": _first_claim(claims, "P18"),
                 "lat": (coords or {}).get("latitude") if isinstance(coords, dict) else None,
                 "lon": (coords or {}).get("longitude") if isinstance(coords, dict) else None,
             }
@@ -410,7 +417,7 @@ def wikipedia_pageimage(pairs: list[tuple[str, str]]) -> dict[tuple[str, str], s
                         "format": "json",
                     },
                 )
-            except Exception as exc:  # noqa: BLE001 — a bad hint is not fatal
+            except Exception as exc:
                 print(f"  вики {wiki}: {type(exc).__name__} — пропускаю")
                 continue
             for page in (data.get("query", {}).get("pages", {}) or {}).values():
@@ -592,7 +599,7 @@ def build(limit: int | None) -> dict[str, dict]:
             stats["авторская точка: у статьи нет картинки"] += 1
 
     info = commons_imageinfo(sorted({t for t, _ in wanted.values()})) if wanted else {}
-    print(f"Commons ответил по файлам: {len(info)} из {len(set(t for t, _ in wanted.values()))}")
+    print(f"Commons ответил по файлам: {len(info)} из {len({t for t, _ in wanted.values()})}")
 
     photos: dict[str, dict] = {}
     for source_url, (title, via) in sorted(wanted.items()):

@@ -27,7 +27,7 @@ Owned by workstream W3 — see docs/specs/002-grodno-guide-rebuild/tasks.md.
 from __future__ import annotations
 
 import re
-from typing import Any, NamedTuple, Literal
+from typing import Any, Literal, NamedTuple
 
 from .. import taxonomy
 from ..requirements import (
@@ -42,6 +42,7 @@ __all__ = [
     "geometry_ok",
     "overall_status",
     "verify",
+    "verify_catalogue",
     "verify_summary",
 ]
 
@@ -69,6 +70,14 @@ REASON_SOFT_SERVICE_ABSENT = "soft_service_absent"
 
 REASON_INTEREST_OK = "interest_on_route"
 REASON_INTEREST_ABSENT = "interest_absent"
+
+# ── Catalogue (a list to choose from, not a route to walk) ───────────────────
+# The requirement is honoured when the LIST contains a matching place. Nothing
+# here claims reachability — a catalogue has no route and no geometry, so a
+# reason that said «on the route» would be a claim nobody checked.
+REASON_MUST_VISIT_IN_CATALOGUE = "must_visit_in_catalogue"
+REASON_SERVICE_IN_CATALOGUE = "service_in_catalogue"
+REASON_INTEREST_IN_CATALOGUE = "interest_in_catalogue"
 
 REASON_AVOID_OK = "avoid_honoured"
 REASON_AVOID_VIOLATED = "avoid_violated"
@@ -112,6 +121,9 @@ REASON_CODES: frozenset[str] = frozenset(
         REASON_SOFT_SERVICE_ABSENT,
         REASON_INTEREST_OK,
         REASON_INTEREST_ABSENT,
+        REASON_MUST_VISIT_IN_CATALOGUE,
+        REASON_SERVICE_IN_CATALOGUE,
+        REASON_INTEREST_IN_CATALOGUE,
         REASON_AVOID_OK,
         REASON_AVOID_VIOLATED,
         REASON_CODE_UNSPECIFIED,
@@ -290,6 +302,25 @@ def _set(requirement: Requirement, status: Status, place_ids: list[int], reason:
     requirement.reason = reason
 
 
+def _match_named(r: Requirement, stops: list[Any]) -> Any | None:
+    """The stop proving a named/numbered must-visit, or None.
+
+    Identity first (a real place id), then the normalised name — the same rule
+    the route verifier and the catalogue verifier share, so "is it there?" has
+    one answer in both.
+    """
+    if r.place_id is not None:
+        for stop in stops:
+            if _field(stop, "id") == r.place_id:
+                return stop
+    if r.name:
+        wanted = _norm_name(r.name)
+        for stop in stops:
+            if wanted and _norm_name(_field(stop, "name")) == wanted:
+                return stop
+    return None
+
+
 def _verify_must_visit(
     r: Requirement,
     stops: list[Any],
@@ -309,18 +340,15 @@ def _verify_must_visit(
         _set(r, "uncertain", [], REASON_MUST_VISIT_UNSPECIFIED)
         return
 
-    match = None
-    if r.place_id is not None:
-        for stop in stops:
-            if _field(stop, "id") == r.place_id:
-                match = stop
-                break
-    if match is None and r.name:
-        wanted = _norm_name(r.name)
-        for stop in stops:
-            if wanted and _norm_name(_field(stop, "name")) == wanted:
-                match = stop
-                break
+    # The pruner's verdict outranks mere presence in the stop list. A mandatory
+    # stop the matrix cannot reach in this order is kept on the route as a
+    # marker (never silently removed) AND reported here as unroutable — so a
+    # kept-but-unreachable place is `unmet`, not a satisfied requirement.
+    if r.place_id is not None and r.place_id in unroutable:
+        _set(r, "unmet", [], REASON_MUST_VISIT_UNROUTABLE)
+        return
+
+    match = _match_named(r, stops)
 
     if match is not None:
         pid = _field(match, "id")
@@ -335,9 +363,6 @@ def _verify_must_visit(
 
     if not route_present:
         _set(r, "uncertain", [], REASON_ROUTE_MISSING)
-        return
-    if r.place_id is not None and r.place_id in unroutable:
-        _set(r, "unmet", [], REASON_MUST_VISIT_UNROUTABLE)
         return
     _set(r, "unmet", [], REASON_MUST_VISIT_ABSENT)
 
@@ -513,6 +538,87 @@ def verify(
             _verify_avoid(r, stops, route_present)
         else:  # pragma: no cover — RequirementKind is closed
             _set(r, "uncertain", [], REASON_CODE_UNSPECIFIED)
+
+    return requirements.requirements
+
+
+def verify_catalogue(
+    requirements: TripRequirements, places: list[Any]
+) -> list[Requirement]:
+    """Check a CATALOGUE (a list of places to choose from) against the request.
+
+    A catalogue is not a route: there is nothing to walk and no Valhalla geometry
+    to confirm reachability, so no verdict here claims «on the route» — the
+    satisfaction reasons are the `*_in_catalogue` codes. That keeps the panel
+    honest: a chip must not say «на маршруте», because no route exists yet.
+
+    Statuses, same vocabulary as the route verifier:
+      * ``satisfied`` — the list contains a matching place;
+      * ``unmet``     — the data has nothing to offer (the list is non-empty and
+                        the asked place/category is not in it);
+      * ``uncertain`` — nothing to decide on (an empty list, an unknown category
+                        code, a must_visit with neither a name nor an id).
+    """
+    empty = not places
+    for r in requirements.requirements:
+        code = _canonical_code(r.code) if r.code else None
+
+        if r.kind == "must_visit":
+            if r.place_id is None and not r.name:
+                _set(r, "uncertain", [], REASON_MUST_VISIT_UNSPECIFIED)
+                continue
+            match = _match_named(r, places)
+            if match is not None:
+                pid = _field(match, "id")
+                ids = [pid] if isinstance(pid, int) else []
+                _set(r, "satisfied", ids, REASON_MUST_VISIT_IN_CATALOGUE)
+            elif empty:
+                _set(r, "uncertain", [], REASON_ROUTE_MISSING)
+            else:
+                _set(r, "unmet", [], REASON_MUST_VISIT_ABSENT)
+            continue
+
+        if not r.code:
+            _set(r, "uncertain", [], REASON_CODE_UNSPECIFIED)
+            continue
+        if code is None:
+            _set(r, "uncertain", [], REASON_CODE_UNKNOWN)
+            continue
+
+        if r.kind in ("service", "interest"):
+            matched = [p for p in places if _stop_matches_code(p, code)]
+            if matched:
+                ids = [i for i in (_field(p, "id") for p in matched) if isinstance(i, int)]
+                reason = (
+                    REASON_SERVICE_IN_CATALOGUE
+                    if r.kind == "service"
+                    else REASON_INTEREST_IN_CATALOGUE
+                )
+                _set(r, "satisfied", ids, reason)
+            elif empty:
+                _set(r, "uncertain", [], REASON_ROUTE_MISSING)
+            elif r.kind == "service":
+                _set(
+                    r,
+                    "unmet",
+                    [],
+                    REASON_HARD_SERVICE_ABSENT
+                    if r.strength == "hard"
+                    else REASON_SOFT_SERVICE_ABSENT,
+                )
+            else:
+                _set(r, "unmet", [], REASON_INTEREST_ABSENT)
+            continue
+
+        # avoid: nothing forbidden may be in the list.
+        offenders = [p for p in places if _stop_matches_code(p, code)]
+        if offenders:
+            ids = [i for i in (_field(p, "id") for p in offenders) if isinstance(i, int)]
+            _set(r, "unmet", ids, REASON_AVOID_VIOLATED)
+        elif empty:
+            _set(r, "uncertain", [], REASON_ROUTE_MISSING)
+        else:
+            _set(r, "satisfied", [], REASON_AVOID_OK)
 
     return requirements.requirements
 

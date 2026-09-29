@@ -180,12 +180,12 @@ class TestFallbackCategories:
     def test_inverted_index_is_the_shared_map_turned_around(self):
         """The fallback's lookup must be exactly resolve.CATEGORY_SYNONYMS,
         inverted — no second taxonomy that can drift from the first."""
-        assert _KEYWORD_TO_CATEGORY == {
+        assert {
             form: cat
             for cat, forms in CATEGORY_SYNONYMS.items()
             for form in forms
             if " " not in form
-        }
+        } == _KEYWORD_TO_CATEGORY
 
     def test_every_taxonomy_category_is_reachable(self):
         """A category whose surface forms are all missing from the map would

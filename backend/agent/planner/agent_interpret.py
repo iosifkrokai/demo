@@ -60,9 +60,9 @@ from ..taxonomy import all_categories, resolve_code
 try:  # pragma: no cover — the branch taken depends on the deployment
     import pydantic_ai
     from pydantic_ai import RunContext, UsageLimits
-    from pydantic_ai.settings import ModelSettings
     from pydantic_ai.models.openrouter import OpenRouterModel
     from pydantic_ai.providers.openrouter import OpenRouterProvider
+    from pydantic_ai.settings import ModelSettings
 
     SDK_IMPORT_ERROR: str | None = None
 except ImportError as exc:  # pragma: no cover
@@ -261,7 +261,7 @@ def _build_agent(model: Any, req: GenerateReq) -> Any:
         return tools.find_areas_with_db(ctx.deps.db, term, locale)
 
     @agent.tool
-    def search_places(  # noqa: PLR0917 — the signature mirrors the bounded tool
+    def search_places(
         ctx: RunContext[InterpretDeps],
         query: str,
         category_codes: list[str] | None = None,
@@ -285,7 +285,7 @@ def _build_agent(model: Any, req: GenerateReq) -> Any:
 
     @agent.tool
     def services_near_route(
-        ctx: RunContext[InterpretDeps],  # noqa: ARG001 — PydanticAI injects it
+        ctx: RunContext[InterpretDeps],
         category_codes: list[str] | None = None,
         shape: list | None = None,
         max_detour_minutes: float | None = None,
@@ -409,7 +409,7 @@ def _ui_used(req: GenerateReq) -> bool:
 
 def _reading_requirements(
     reading: AgentReading, query: str, observed: set[int]
-) -> tuple[list[Requirement], list[str], list[str]]:
+) -> tuple[list[Requirement], list[str]]:
     """Agent requirements → contract requirements, plus the asks we had to drop.
 
     A **territory is not a stop**. Asked «Гродно за два часа», the model reads

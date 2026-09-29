@@ -35,7 +35,7 @@ def main() -> None:
     started = time.monotonic()
     try:
         result = interpret_with_agent(query, request)
-    except Exception as error:  # noqa: BLE001 — на стенде важно, чем именно упало
+    except Exception as error:
         print(json.dumps({"error": f"{type(error).__name__}: {error}"}, ensure_ascii=False))
         return
     elapsed = round(time.monotonic() - started, 1)

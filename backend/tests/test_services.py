@@ -20,8 +20,8 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agent import services  # noqa: E402
-from agent.taxonomy import all_categories  # noqa: E402
+from agent import services
+from agent.taxonomy import all_categories
 
 #: A line along Советская through the centre of Grodno, west → east, so the
 #: cafés really are spread *along* it and `along_m` has something to say.
@@ -161,7 +161,7 @@ def test_live_services_along_a_real_street_in_grodno():
         from agent.clients_store import default_connect
 
         conn = default_connect()
-    except Exception as exc:  # noqa: BLE001 — no database here is a skip, not a failure
+    except Exception as exc:
         pytest.skip(f"нет базы: {exc}")
 
     try:

@@ -20,7 +20,7 @@ import math
 from collections.abc import Collection
 from dataclasses import dataclass
 
-from .. import constants
+from .. import constants, taxonomy
 from ..errors import UpstreamUnavailable
 from ..models import Candidate, CostMatrix, ResolvedConstraints
 from ..valhalla_client import snap_locations, time_matrix
@@ -64,31 +64,34 @@ MIN_VISIT_MINUTES = 10
 # Visit-time estimation (moved from agent/routing.py)
 # ─────────────────────────────────────────────────────────────────────────────
 
+#: Visit time for a category the taxonomy does not know — a free-text or legacy
+#: DB value. Canonical codes all resolve through data/taxonomy.csv; this is the
+#: honest last resort for the rest.
+DEFAULT_VISIT_MINUTES = 15
+
+
 def visit_time_minutes(category: str | None) -> int:
     """Estimated minutes to look around a place of a given category.
 
-    Aligned with the curated taxonomy in data/places_curated.csv. Compound/
-    verbose category strings fall back to substring match.
+    The number comes from the canonical taxonomy (``data/taxonomy.csv``) through
+    ``taxonomy.visit_minutes`` — ONE source, no second table to drift. Compound
+    or free-text DB categories ("католический костёл", "кафе-кондитерская") are
+    resolved to their code first; anything the taxonomy cannot place gets
+    ``DEFAULT_VISIT_MINUTES``.
     """
-    table: dict[str, int] = {
-        "замок": 40, "музей": 40, "монастырь": 30,
-        "дворец": 30, "усадьба": 30, "парк": 30,
-        "костёл": 20, "церковь": 20, "храм": 20,
-        "архитектура": 20, "кладбище": 15,
-        "памятник": 10, "инфраструктура": 10,
-        # everyday stops: a coffee and a toilet break are not sightseeing
-        "кафе": 40, "ресторан": 60, "туалет": 10, "гостиница": 10,
-    }
-    default = 15
     if not category:
-        return default
-    c = category.lower().strip()
-    if c in table:
-        return table[c]
-    for k, v in table.items():
-        if k in c:
-            return v
-    return default
+        return DEFAULT_VISIT_MINUTES
+    try:
+        code = (
+            category
+            if category in taxonomy.all_codes()
+            else taxonomy.resolve_code(category)
+        )
+        if code is None:
+            return DEFAULT_VISIT_MINUTES
+        return taxonomy.visit_minutes(code)
+    except KeyError:  # pragma: no cover — resolve_code only returns known codes
+        return DEFAULT_VISIT_MINUTES
 
 
 # ─────────────────────────────────────────────────────────────────────────────

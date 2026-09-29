@@ -39,6 +39,7 @@ except ImportError:
     sys.exit(1)
 
 sys.path.insert(0, str(Path(__file__).parent.parent.resolve()))
+from agent import taxonomy
 from agent.geofence import inside_project_area
 
 # ---------------------------------------------------------------------------
@@ -85,22 +86,19 @@ OVERPASS_QUERY = """
 out center;
 """
 
-# Category → visit_minutes lookup
-VISIT_MINUTES = {
-    "замок": 40,
-    "музей": 40,
-    "монастырь": 30,
-    "дворец": 30,
-    "усадьба": 30,
-    "парк": 30,
-    "костёл": 20,
-    "церковь": 20,
-    "храм": 20,
-    "архитектура": 20,
-    "кладбище": 15,
-    "памятник": 10,
-    "инфраструктура": 10,
-}
+# Visit time per category comes from the canonical taxonomy (data/taxonomy.csv):
+# the mapping this file used to carry by hand was a second copy of the same
+# numbers. A category the taxonomy does not know (a free-text OSM value) keeps
+# the historic fallback, which the agent then re-derives the same way.
+DEFAULT_VISIT_MINUTES = 20
+
+
+def visit_minutes_for(category: str) -> int:
+    """Default visit time (minutes) for a taxonomy category, else the fallback."""
+    try:
+        return taxonomy.visit_minutes(category)
+    except KeyError:
+        return DEFAULT_VISIT_MINUTES
 
 # District centroids (raion centres) as fallback
 RAION_CENTRES = {
@@ -120,6 +118,10 @@ RAION_CENTRES = {
     "Дятловский": (53.4522, 25.4618),
     "Зельвенский": (53.1480, 24.8190),
     "Вороновский": (54.2560, 25.3032),
+    # Slonim was missing, so points around it were labelled with a neighbour's
+    # district — the column the region CSV must stay away from anyway (its OSM
+    # values were proven unreliable, see tasks.md W4).
+    "Слонимский": (53.0936, 25.3203),
 }
 
 # ---------------------------------------------------------------------------
@@ -296,7 +298,7 @@ def resolve_district(
     return f"{nearest} район"
 
 
-def tag_to_category(tags: dict) -> str | None:  # noqa: PLR0911, PLR0912 — flat tag dispatch
+def tag_to_category(tags: dict) -> str | None:
     """Map OSM tags → our category."""
     historic = tags.get("historic", "")
     tourism = tags.get("tourism", "")
@@ -424,7 +426,7 @@ def osm_element_to_row(element: dict) -> dict | None:
         "fun_facts": "[]",
         "opening_hours": tags.get("opening_hours", ""),
         "ticket_price": tags.get("charge") or tags.get("fee", ""),
-        "visit_minutes": str(VISIT_MINUTES.get(category, 20)),
+        "visit_minutes": str(visit_minutes_for(category)),
         "links": "[]",
         "source_url": source_url,
     }

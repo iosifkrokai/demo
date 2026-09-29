@@ -22,7 +22,7 @@ from __future__ import annotations
 import os
 import sys
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import psycopg
 import pytest
@@ -31,8 +31,7 @@ from psycopg.types.json import Jsonb
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agent import clients_api, main as agent_main
-from agent.clients_api import get_repository
+from agent import main as agent_main
 from agent.clients_models import route_metrics
 from agent.clients_store import (
     PREFERENCE_COLUMNS,
@@ -67,7 +66,7 @@ VISIT_OVERRIDES = {"1": 120}
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 # ============================================================================
@@ -99,7 +98,7 @@ class FakeRepo:
         self.ensure_client(client_id)
         state = self.db[client_id]["prefs"]
         if state is None:
-            state = {c: None for c in PREFERENCE_COLUMNS}
+            state = dict.fromkeys(PREFERENCE_COLUMNS)
         for key in fields:
             if key in PREFERENCE_COLUMNS:
                 state[key] = fields[key]
@@ -531,7 +530,7 @@ class TestStore:
         assert repo.get_preferences(uuid.UUID(CLIENT_A)) is None
 
     def test_existing_preferences_row_is_returned(self):
-        row = {c: None for c in PREFERENCE_COLUMNS}
+        row = dict.fromkeys(PREFERENCE_COLUMNS)
         row["transport"] = "auto"
         repo, _ = _repo(lambda _s, _p: {"one": row})
         assert repo.get_preferences(uuid.UUID(CLIENT_A))["transport"] == "auto"
@@ -639,7 +638,7 @@ class TestRouteMetrics:
 def _db_up() -> bool:
     try:
         psycopg.connect(settings.DSN, connect_timeout=3).close()
-    except Exception:  # noqa: BLE001 - any failure means "no live DB here"
+    except Exception:
         return False
     return True
 

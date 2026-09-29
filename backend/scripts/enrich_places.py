@@ -105,7 +105,7 @@ def _openrouter_embed(texts: list[str]) -> list[list[float]]:
             json={"model": OPENROUTER_EMBED_MODEL, "input": texts},
         )
         r.raise_for_status()
-        return [item["embedding"] for item in r.json()["data"]]
+        return [[float(x) for x in item["embedding"]] for item in r.json()["data"]]
 
 
 def fetch_pending(cur, sql: str) -> list[dict]:

@@ -179,7 +179,7 @@ class PostgresClientRepository:
         if conn is not None:
             try:
                 conn.close()
-            except Exception:  # noqa: BLE001 - closing a dead socket may raise
+            except Exception:
                 pass
 
     @contextmanager

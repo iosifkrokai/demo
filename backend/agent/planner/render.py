@@ -20,7 +20,7 @@ from itertools import pairwise
 
 from ..errors import UpstreamUnavailable
 from ..models import Candidate, LatLon
-from ..valhalla_client import route_through, RouteStatus
+from ..valhalla_client import RouteStatus, route_through
 
 log = logging.getLogger(__name__)
 
@@ -30,12 +30,15 @@ def render(
     costing: str = "pedestrian",
     origin: LatLon | None = None,
     locale: str = "ru",
+    round_trip: bool = False,
 ) -> tuple[dict, dict, str]:
     """Call Valhalla /route. Returns (shape_geojson, summary_dict, status_code).
 
     `origin` (tourist's GPS position) becomes the fixed start of the shape.
     `locale` is the requested language for instructions (e.g., "ru" or "en").
-    
+    `round_trip` closes the tour on its own start, so the drawn line and the
+    summary include the walk back.
+
     Returns honest status codes:
     - "usable": valid route with geometry
     - "no_route_exists": no route can be built between these points
@@ -50,6 +53,11 @@ def render(
     pts = [(p.lat, p.lon) for p in route]
     if origin is not None:
         pts = [(origin.lat, origin.lon), *pts]
+    if round_trip:
+        # «круговой маршрут»: the tour comes back to where it started. Valhalla
+        # draws the return leg like any other, so the summary (length/time) and
+        # the polyline both include the walk home.
+        pts = [*pts, pts[0]]
 
     locations = [
         {
@@ -71,14 +79,14 @@ def render(
         if result.language != locale:
             log.warning("route: locale mismatch (requested %s, got %s)", locale, result.language)
             return result.shape, result.summary or {}, "locale_mismatch"
-        
+
         # Verify maneuver data
         if result.maneuvers:
             missing = _verify_maneuver_fields(result.maneuvers)
             if missing:
                 log.warning("route: missing maneuver fields: %s", missing)
                 return result.shape, result.summary or {}, "missing_maneuver_data"
-        
+
         return result.shape, result.summary or {}, "usable"
 
     if result and result.status == RouteStatus.SERVICE_UNAVAILABLE:
@@ -95,25 +103,25 @@ def render(
     shape, summary, leg_status = _render_legs(pts, costing, locale)
     if leg_status == "usable" and shape.get("coordinates"):
         return shape, summary, "usable"
-    
+
     log.warning("route: no leg of the tour could be drawn — empty shape")
     return {}, {}, "empty_geometry"
 
 
 def _verify_maneuver_fields(maneuvers: list[dict]) -> list[str]:
     """Verify that required maneuver fields are present.
-    
+
     Returns list of missing field names for maneuvers that lack them.
     A maneuver without an instruction is a problem — the guide would show blank text.
     """
     missing_fields: list[str] = []
     required_fields = ["instruction", "length", "time", "type"]
-    
+
     for i, maneuver in enumerate(maneuvers):
         for field in required_fields:
             if field not in maneuver or maneuver[field] is None:
                 missing_fields.append(f"maneuver_{i}_{field}")
-    
+
     return missing_fields
 
 
@@ -122,7 +130,7 @@ def _render_legs(pts: list[tuple[float, float]], costing: str, locale: str) -> t
 
     A leg Valhalla refuses (an unreachable pair) is skipped, so one bad stop
     costs its two legs, not the whole line.
-    
+
     Returns (shape, summary, status_code).
     """
     coords: list[list[float]] = []
@@ -139,13 +147,13 @@ def _render_legs(pts: list[tuple[float, float]], costing: str, locale: str) -> t
             result = route_through(pair, costing=costing, language=locale)
         except UpstreamUnavailable:
             continue
-        
+
         if result.status != RouteStatus.USABLE:
             continue
-        
+
         if not result.shape.get("coordinates"):
             continue
-        
+
         coords.extend(result.shape["coordinates"])
         drawn += 1
         length_km += float((result.summary or {}).get("length") or 0.0)
@@ -153,7 +161,7 @@ def _render_legs(pts: list[tuple[float, float]], costing: str, locale: str) -> t
 
     if not drawn:
         return {}, {}, "no_route_exists"
-    
+
     log.info("route: drew %d of %d legs separately", drawn, len(pts) - 1)
     return {"type": "LineString", "coordinates": coords}, {
         "length": length_km,

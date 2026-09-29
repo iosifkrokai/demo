@@ -542,10 +542,10 @@ def _trip_to_shape(body: dict, language: str | None = None) -> RouteResult:
     for leg in trip.get("legs", []):
         coords.extend(_decode_polyline(leg.get("shape", "")))
         maneuvers.extend(leg.get("maneuvers", []))
-    
+
     shape = {"type": "LineString", "coordinates": coords}
     summary = trip.get("summary")
-    
+
     if not coords:
         return RouteResult(
             status=RouteStatus.EMPTY_GEOMETRY,
@@ -554,7 +554,7 @@ def _trip_to_shape(body: dict, language: str | None = None) -> RouteResult:
             maneuvers=maneuvers,
             language=language,
         )
-    
+
     return RouteResult(
         status=RouteStatus.USABLE,
         shape=shape,

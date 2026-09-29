@@ -41,8 +41,8 @@ from dataclasses import dataclass, field
 from .. import constants
 from ..models import GenerateReq, IntentDecision, IntentResult
 from ..requirements import PartyComposition, Requirement, TripRequirements
-from .preprocess import WORD_RE
 from . import interpret_cache
+from .preprocess import WORD_RE
 from .resolve import CATEGORY_SYNONYMS, CATEGORY_SYNONYMS_EN
 
 log = _logging.getLogger(__name__)
@@ -226,7 +226,7 @@ def fallback_intent(query: str) -> IntentResult:
         # "vague" only for a query with no significant word at all ("?", "ааа");
         # otherwise "discovery", the neutral default nothing branches on.
         intent_type="vague" if not WORD_RE.search(query) else "discovery",
-        categories_pos=_fallback_categories(query),
+        categories_pos=_fallback_categories(query),  # type: ignore[arg-type]
         categories_neg=[],
         keywords_pos=[],
         keywords_neg=[],
@@ -727,7 +727,7 @@ def _agent_contract(
     route request into a 500.  A local import keeps PydanticAI off the planner's
     import path until a reading is actually attempted.
     """
-    from . import agent_interpret  # noqa: PLC0415 — loaded only when needed
+    from . import agent_interpret
     try:
         return agent_interpret.interpret_with_agent(
             query, req, db=db, wall_clock_s=wall_clock_s
