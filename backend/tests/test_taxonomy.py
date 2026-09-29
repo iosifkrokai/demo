@@ -96,7 +96,17 @@ class TestServicesNoLongerEmpty:
         ]
 
     def test_convenience_categories_all_map(self):
-        assert constants.CONVENIENCE_CATEGORIES == ("кафе", "ресторан", "туалет", "гостиница")
+        # Derived from the taxonomy's service role, in file order — the constant's
+        # own docstring promises a new service code is added once, in taxonomy.csv,
+        # and appears here by itself. A transit stop joined the list: the tourist
+        # walking a route should see where a bus or trolleybus can cut it short.
+        assert constants.CONVENIENCE_CATEGORIES == (
+            "кафе",
+            "ресторан",
+            "туалет",
+            "гостиница",
+            "остановка",
+        )
         for code in constants.CONVENIENCE_CATEGORIES:
             assert db_categories([code]) == [code]
 

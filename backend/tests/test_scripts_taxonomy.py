@@ -30,9 +30,17 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
 import load_osm
 import seed_region
 from ingest_osm import RAION_CENTRES, visit_minutes_for
-from ingest_poi import AMENITY_CATEGORY, TOURISM_CATEGORY
+from ingest_poi import (
+    AMENITY_CATEGORY,
+    HIGHWAY_CATEGORY,
+    PUBLIC_TRANSPORT_CATEGORY,
+    RAILWAY_CATEGORY,
+    TOURISM_CATEGORY,
+    extract_name,
+    tag_to_category,
+)
 
-from agent import taxonomy
+from agent import services, taxonomy
 
 DATA = Path(__file__).resolve().parents[1] / "data"
 
@@ -85,6 +93,57 @@ def test_ingest_poi_tag_map_agrees_with_the_taxonomy_osm_tags():
             assert f"{osm_key}={tag_value}" in tags, (
                 f"{osm_key}={tag_value} → {code!r}, but {code!r} lists {tags}"
             )
+
+
+# ── public-transport stops are services, and the ingest knows all three spellings ──
+
+
+def test_transit_tag_maps_agree_with_the_taxonomy_osm_tags():
+    """Same rule as the amenity/tourism maps: a map may not claim an unlisted tag.
+
+    Three OSM spellings mean one thing to a tourist at the kerb — a stop you can
+    board — so all three must land on the same code, and that code must list each
+    of them.
+    """
+    for osm_key, mapping in (
+        ("highway", HIGHWAY_CATEGORY),
+        ("public_transport", PUBLIC_TRANSPORT_CATEGORY),
+        ("railway", RAILWAY_CATEGORY),
+    ):
+        for tag_value, code in mapping.items():
+            assert code == "остановка", f"{osm_key}={tag_value} → {code!r}"
+            assert f"{osm_key}={tag_value}" in taxonomy.get(code).osm_tags, (
+                f"{osm_key}={tag_value} → {code!r}, but {code!r} lists "
+                f"{taxonomy.get(code).osm_tags}"
+            )
+            assert tag_to_category({osm_key: tag_value}) == code
+
+
+def test_a_transit_stop_is_a_service_not_a_sight():
+    """It is never «visited» — it is where the walk can be cut short.
+
+    The visit time is the taxonomy's smallest positive default (the file's own
+    contract is `visit_minutes > 0`), not 0: a boarding point is not a place to
+    spend time, and if a request ever turns it into a stop it must not cost zero.
+    """
+    stop = taxonomy.get("остановка")
+    assert stop.role == "service"
+    assert taxonomy.visit_minutes("остановка") > 0
+    assert taxonomy.visit_minutes("остановка") <= 5
+    assert "остановка" in services.service_codes(), (
+        "the services-along-the-route lookup reads the taxonomy, so a service code "
+        "must be reachable from it or the boarding points never appear"
+    )
+
+
+def test_an_unnamed_transit_stop_survives_with_a_placeholder_name():
+    """Most OSM bus stops carry no name; dropping them would hide the boarding
+    point the tourist asked for."""
+    assert extract_name({"highway": "bus_stop", "addr:street": "ул. Советская"}, "остановка") == (
+        "Остановка (ул. Советская)"
+    )
+    assert extract_name({"highway": "bus_stop"}, "остановка") == "Остановка"
+    assert extract_name({"highway": "bus_stop", "name": "Вокзал"}, "остановка") == "Вокзал"
 
 
 # ── districts ───────────────────────────────────────────────────────────────

@@ -36,3 +36,4 @@ code,ru,en,role,osm_tags,visit_minutes,aliases_ru,aliases_en
 ресторан,ресторан,restaurant,service,amenity=restaurant,60,столовая|обед|поесть,dining|canteen
 туалет,туалет,toilet,service,amenity=toilets,10,уборная|санузел|ватерклозет,wc|restroom|toilets
 гостиница,гостиница,hotel,service,tourism=hotel|tourism=hostel|tourism=guest_house,10,отель|хостел|гостевой дом,hostel|guest house
+остановка,остановка,transit stop,service,highway=bus_stop|public_transport=platform|railway=tram_stop,5,автобус|троллейбус|маршрутка|остановка автобуса|остановка транспорта,bus stop|trolleybus stop|tram stop|transit stop

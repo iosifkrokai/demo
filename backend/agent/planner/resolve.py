@@ -134,6 +134,18 @@ CATEGORY_SYNONYMS: dict[str, list[str]] = {
         "хостел", "хостела", "хостелу", "хостелом", "хостеле",
         "гостевой дом",
     ],
+    # Boarding points. A tourist walking a route asks «где сесть на автобус», and
+    # the deterministic fallback has to read that without a model — so the three
+    # everyday words for a stop are registered here, not only in taxonomy.csv.
+    "остановка": [
+        "остановка", "остановки", "остановку", "остановке", "остановкой",
+        "остановкам", "остановками", "остановках", "остановок",
+        "автобус", "автобуса", "автобусу", "автобусом", "автобусе",
+        "автобусы", "автобусов", "автобусам", "автобусах",
+        "троллейбус", "троллейбуса", "троллейбусу", "троллейбусом", "троллейбусе",
+        "троллейбусы", "троллейбусов",
+        "маршрутка", "маршрутки", "маршрутку", "маршрутке", "маршруткой", "маршруток",
+    ],
 }
 
 # English surface forms, same shape and same keys as CATEGORY_SYNONYMS.
@@ -191,6 +203,10 @@ CATEGORY_SYNONYMS_EN: dict[str, list[str]] = {
     ],
     "гостиница": [
         "hotel", "hotels", "hostel", "hostels", "inn", "inns", "lodging",
+    ],
+    "остановка": [
+        "stop", "stops", "bus stop", "bus stops", "trolleybus stop", "tram stop",
+        "transit stop", "boarding point",
     ],
 }
 

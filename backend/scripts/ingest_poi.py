@@ -88,6 +88,11 @@ POI_QUERY = """
   nwr["amenity"="toilets"]({south},{west},{north},{east});
   // Accommodation
   nwr["tourism"~"hotel|hostel|guest_house"]({south},{west},{north},{east});
+  // Public-transport boarding points: the tourist walking a route should see
+  // where to get on a bus, trolleybus or tram instead of walking the whole way.
+  nwr["highway"="bus_stop"]({south},{west},{north},{east});
+  nwr["public_transport"="platform"]({south},{west},{north},{east});
+  nwr["railway"="tram_stop"]({south},{west},{north},{east});
 );
 out center;
 """
@@ -103,6 +108,18 @@ TOURISM_CATEGORY = {
     "hotel": "гостиница",
     "hostel": "гостиница",
     "guest_house": "гостиница",
+}
+# Public-transport boarding points. Three OSM spellings mean the same thing to a
+# tourist standing at the kerb: a stop you can board. They are services, not sights
+# — nothing here is «visited», it is where the walk can be cut short.
+HIGHWAY_CATEGORY = {
+    "bus_stop": "остановка",
+}
+PUBLIC_TRANSPORT_CATEGORY = {
+    "platform": "остановка",
+}
+RAILWAY_CATEGORY = {
+    "tram_stop": "остановка",
 }
 
 # Mock fixture for --dry-run (a handful of realistic Grodno-region POIs).
@@ -210,25 +227,39 @@ def fetch_overpass(bbox: tuple, limit: int | None = None, dry_run: bool = False)
 # ---------------------------------------------------------------------------
 
 def tag_to_category(tags: dict) -> str | None:
-    """Map OSM amenity/tourism tags → project category (or None)."""
+    """Map OSM amenity/tourism/transit tags → project category (or None)."""
     amenity = tags.get("amenity", "")
     if amenity in AMENITY_CATEGORY:
         return AMENITY_CATEGORY[amenity]
-    return TOURISM_CATEGORY.get(tags.get("tourism", ""))
+    tourism = tags.get("tourism", "")
+    if tourism in TOURISM_CATEGORY:
+        return TOURISM_CATEGORY[tourism]
+    highway = tags.get("highway", "")
+    if highway in HIGHWAY_CATEGORY:
+        return HIGHWAY_CATEGORY[highway]
+    if tags.get("public_transport", "") in PUBLIC_TRANSPORT_CATEGORY:
+        return PUBLIC_TRANSPORT_CATEGORY[tags["public_transport"]]
+    railway = tags.get("railway", "")
+    if railway in RAILWAY_CATEGORY:
+        return RAILWAY_CATEGORY[railway]
+    return None
 
 
 def extract_name(tags: dict, category: str) -> str | None:
     """Name: ``name`` else ``name:ru``.
 
-    Toilets are allowed to be anonymous — they fall back to «Туалет», with the
-    street appended when OSM knows it. Everything else without a name is dropped.
+    Toilets and transit stops are allowed to be anonymous — most OSM bus stops
+    carry no name, and dropping them would hide exactly the boarding point the
+    tourist needs. They fall back to «Туалет» / «Остановка», with the street
+    appended when OSM knows it. Everything else without a name is dropped.
     """
     name = tags.get("name") or tags.get("name:ru")
     if name:
         return name.strip()
-    if category == "туалет":
+    if category in ("туалет", "остановка"):
+        label = "Туалет" if category == "туалет" else "Остановка"
         street = (tags.get("addr:street") or "").strip()
-        return f"Туалет ({street})" if street else "Туалет"
+        return f"{label} ({street})" if street else label
     return None
 
 
