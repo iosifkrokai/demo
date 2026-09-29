@@ -14,12 +14,15 @@ QUERIES = [
     ("Старый город за два часа пешком", 120),
     ("Замки и костёлы Гродно", None),
     ("Хочу всё интересное, есть 3 часа, с детьми", 180),
+    ("Мир и Новогрудок пешком", None),
 ]
 
 MODELS = [
-    "google/gemini-2.5-flash",
-    "google/gemini-2.5-pro",
-    "anthropic/claude-sonnet-4.5",
+    "google/gemini-2.5-pro",          # текущий — точка отсчёта
+    "stealth/space-bunny-alpha",      # бесплатный
+    "openai/gpt-6-luna",              # $0.10/1M, 2026
+    "xiaomi/mimo-v2.6-flash",         # $0.14/1M, 2026
+    "anthropic/claude-sonnet-5.5",    # $2.00/1M, флагман, самый свежий
 ]
 
 for model in MODELS:
@@ -54,5 +57,7 @@ for model in MODELS:
             return f"{r.kind}:{r.code or r.name or '—'}({r.strength})"
         print(
             f"  [{query[:34]:34}] {elapsed:5.1f}с  всего: {len(reqs)}  "
+            f"районы: {json.dumps(result.areas, ensure_ascii=False)}  "
+            f"непонятое: {len(result.unknowns)}  "
             f"{json.dumps([one(r) for r in reqs], ensure_ascii=False)}"
         )

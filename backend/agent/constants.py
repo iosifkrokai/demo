@@ -25,6 +25,10 @@ from . import taxonomy
 # 20-23 s per call), so a 75 s end-to-end ceiling would have guaranteed that the
 # better reading it just paid for was discarded. The ceiling exists to bound the
 # worst case, not to discard the step that makes the route good.
+# INVARIANT: every timeout in front of this one must be larger, or the front door
+# becomes the limit and a slow-but-valid plan dies as a 504 the tourist reads as
+# «всё сломалось». Dependents: frontend/nginx.conf proxy_read/send_timeout (300 s)
+# and scripts/bench_routes.py REQUEST_TIMEOUT_S (300 s). Raise them together.
 REQUEST_DEADLINE_S = 240.0
 # Less than this left → trim the candidate pool before the (50×50) cost matrix.
 COST_MATRIX_MIN_LEFT_S = 26.0

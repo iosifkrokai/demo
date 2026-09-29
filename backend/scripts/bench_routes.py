@@ -265,7 +265,7 @@ BOOTSTRAP_SAMPLES = 10_000
 BOOTSTRAP_SEED = 20260926
 BOOTSTRAP_ALPHA = 0.05
 
-REQUEST_TIMEOUT_S = 120.0
+REQUEST_TIMEOUT_S = 300.0
 # The /health probe is a preflight, not a measurement: short, so a dead stack
 # fails in seconds instead of hanging the run.
 HEALTH_TIMEOUT_S = 5.0

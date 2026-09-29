@@ -141,6 +141,13 @@ class AgentReading(BaseModel):
     areas: list[str] = Field(default_factory=list)
     # Asks this system cannot represent or prove ("без лестниц", "не устать").
     unknowns: list[str] = Field(default_factory=list)
+    # "route" — a walk with an order and geometry; "catalogue" — the matching
+    # places as a list, no order and no line. Only the model can tell an
+    # exhaustive request («все костёлы Гродненской области») from a walk, and
+    # without this field the pipeline could only ever mirror the client's own
+    # `result_mode`, which is why the golden's catalogue check was unverifiable.
+    # None means "no opinion": the request's value stands.
+    result_mode: Literal["route", "catalogue"] | None = None
     # Names in the request that lie outside the region this system serves
     # (Гродненская область, Belarus): a foreign city or landmark ("Вильнюс",
     # "Кафедральный собор Святого Станислава в Вильнюсе"), or a Belarusian place
@@ -169,6 +176,26 @@ class InterpretDeps:
 # ── Agent construction ──────────────────────────────────────────────────────
 
 
+def _known_areas_note() -> str:
+    """The territories the system already knows, as data for the model.
+
+    Without this the model has no way to tell a district from an unservable ask:
+    asked «Старый город за два часа пешком» it offered the district as an
+    unknown category, which the client renders as something the system failed to
+    handle — for a request that is perfectly normal. The canonical slugs listed
+    here are what `find_areas` resolves to and what `areas` must carry.
+    """
+    from .. import areas as areas_mod
+
+    lines = []
+    for slug, entry in sorted(areas_mod.load_areas().items()):
+        kind = entry.get("kind") or "area"
+        name_ru = entry.get("name_ru") or slug
+        name_en = entry.get("name_en") or ""
+        lines.append(f"{slug} ({kind}: {name_ru}" + (f" / {name_en}" if name_en else "") + ")")
+    return "; ".join(lines)
+
+
 def _instructions(ui_note: str) -> str:
     catalogue = "; ".join(f"{cat.code} ({cat.ru}/{cat.en}, {cat.role})" for cat in all_categories())
     return (
@@ -183,19 +210,44 @@ def _instructions(ui_note: str) -> str:
         "`unknowns`.\n"
         "Canonical category codes (use ONLY these, never invent one): "
         f"{catalogue}.\n"
+        "Known territories (canonical slugs — `find_areas` returns these): "
+        f"{_known_areas_note()}.\n"
         "Rules:\n"
         "- A requirement is a thing the user asked for, with the verbatim "
         "fragment of their text that says so (copy it exactly).\n"
         "- strength: 'hard' only when the user made it mandatory "
         "('обязательно', 'must'), otherwise 'soft'.\n"
+        "- The lines above the request — transport, tourist_position, round_trip, "
+        "and on a refinement turn the current route, the deleted ids and the "
+        "instruction — are given to you, not asked for: never restate them as "
+        "requirements. On a refinement turn keep every stop marked (pinned), never "
+        "bring back a stop listed in deleted_stop_ids, and read the new text as a "
+        "delta against that route.\n"
+        "- A named place the user wants to SEE (a landmark, a museum, one "
+        "specific church, 'Мирский замок') is a `must_visit`: call search_places "
+        "and give its name and place_id.\n"
+        "- A named TERRITORY is the scope of the walk, not a stop: a district, a "
+        "quarter, a town, the oblast ('Старый город', 'Коложа', 'Слоним', "
+        "'Гродненская область'). Call find_areas and put the canonical slug it "
+        "returns into `areas`. A territory is never a `must_visit` and never an "
+        "`unknown` — the plan already follows it. A request may therefore "
+        "legitimately produce ZERO requirements when the user only named a "
+        "territory and a duration: that is a complete answer, not a failure.\n"
+        "- Anything the user asked for that has no canonical code, is not a "
+        "territory, and that this system cannot prove (step-free access, opening "
+        "hours not in the data, a service you could not confirm) goes into "
+        "`unknowns`, worded as the user's own ask. Never put a place or a "
+        "territory name here just because it has no category code.\n"
+        "- `result_mode`: set \"catalogue\" when the user asks for EVERY one of a "
+        "category across a territory («все костёлы Гродненской области», «все "
+        "замки области»): that is a list to choose from, not a walk, and a "
+        "pedestrian tour over 200 km is not an answer to it. Leave it unset for "
+        "a request about walking between chosen places — the default \"route\" "
+        "then stands.\n"
         "- Never decide whether a requirement is satisfied: that is not your job "
         "and there is no field for it.\n"
         "- Never invent ages: report children_ages only for ages the user "
         "actually named.\n"
-        "- Anything the user asked for that has no canonical code or that this "
-        "system cannot prove (step-free access, opening hours not in the data, "
-        "a service you could not confirm) goes into `unknowns`, worded as the "
-        "user's own ask.\n"
         "- `outside_coverage` lists the names in the request that are NOT inside "
         "the served region (Гродненская область, Belarus) — a foreign city or "
         "landmark, or a Belarusian place beyond the oblast. Copy each name "
@@ -204,6 +256,26 @@ def _instructions(ui_note: str) -> str:
         "yourself, and never guess an object into the list because it looked "
         "absent from the data you saw.\n"
         "- User language: label text in the request's own locale.\n"
+        # The examples below must stay OUT of the golden set, the benchmark and
+        # the tests: wording taken from those files teaches the model the answers
+        # instead of the rule, and the suite then passes for the wrong reason.
+        # They are concrete on purpose (a placeholder teaches a weaker lesson),
+        # but every phrase here was checked against benchmarks/, tests/ and
+        # scripts/ before it was written in.
+        "Worked shapes (the wording is yours; the shape is the point):\n"
+        "- «Погуляю по старому городу два часа» → areas=[grodno-old-town], "
+        "requirements=[] — a district and a duration, nothing to visit listed.\n"
+        "- «Хочу монастыри и костёлы Лиды» → requirements=[interest монастырь "
+        "(soft), interest костёл (soft)], areas=[lida-district]; the town itself "
+        "needs no must_visit.\n"
+        "- «перекусить недалеко, уборная — обязательно» → requirements=[service "
+        "кафе (soft), service туалет (hard)].\n"
+        "- «Любчанский замок и Новогрудок пешком» → must_visit Любчанский замок "
+        "(resolved via search_places), areas=[novogrudok-district] — a named "
+        "object is a stop, a named town is the scope.\n"
+        "- «все монастыри по области» → result_mode=catalogue, "
+        "requirements=[interest монастырь (soft)], areas=[grodno-oblast] — a "
+        "list, not a 200 km walk.\n"
         f"{ui_note}"
     )
 
@@ -243,6 +315,40 @@ def _make_model() -> Any:
     if not key:
         raise RuntimeError("no OPENROUTER_API_KEY")  # pragma: no cover — checked earlier
     return OpenRouterModel(_model_name(), provider=OpenRouterProvider(api_key=key))
+
+
+def _request_note(req: GenerateReq) -> str:
+    """Facts the model needs and cannot find in the request text.
+
+    Measured gap: the reading saw only `locale` and the raw sentence, while the
+    contract it fills carries — and the pipeline acts on — the tourist's own
+    position, the chosen transport, whether the walk returns to its start, and the
+    whole refinement state (the route as it stands, the stops the user deleted by
+    hand, and the delta instruction). Asked «убери музей» on a refinement turn the
+    model was blind to the route it was editing. These are facts about the
+    request, not asks: the instructions say not to restate them.
+    """
+    lines = [f"transport={req.profile or 'unset'}"]
+    if req.origin is not None:
+        lines.append(f"tourist_position={req.origin.lat},{req.origin.lon}")
+    else:
+        lines.append("tourist_position=unknown")
+    lines.append(f"round_trip={bool(req.round_trip)}")
+
+    ctx = req.context
+    if ctx is not None:
+        lines.append(f"refinement_instruction={ctx.instruction!r}")
+        lines.append(f"revision={ctx.revision}")
+        if ctx.excluded_ids:
+            lines.append(f"deleted_stop_ids={ctx.excluded_ids}")
+        if ctx.base_points:
+            shown = "; ".join(
+                f"{p.id if p.id is not None else '—'}:{p.name}"
+                + ("(pinned)" if p.pinned else "")
+                for p in ctx.base_points[:30]
+            )
+            lines.append(f"current_route=[{shown}]")
+    return "\n".join(lines)
 
 
 def _build_agent(model: Any, req: GenerateReq) -> Any:
@@ -348,7 +454,8 @@ def _run_agent(
     )
     model_settings = ModelSettings(max_tokens=MAX_OUTPUT_TOKENS, timeout=MODEL_TIMEOUT_S)
     prompt = (
-        f"locale={req.locale}\nrequest={query!r}\nReturn the requirement list for this request."
+        f"locale={req.locale}\n{_request_note(req)}\nrequest={query!r}\n"
+        "Return the requirement list for this request."
     )
 
     def call() -> Any:
@@ -548,7 +655,13 @@ def _merge(
         origin_lon=req.origin.lon if req.origin is not None else None,
         areas=areas,
         outside_coverage=_outside_names(reading.outside_coverage),
-        result_mode=req.result_mode,
+        # A whole-region "every one of them" request («все костёлы Гродненской
+        # области») is a list to choose from, not a walk: the pipeline builds a
+        # 17-hour pedestrian tour out of it otherwise. The model may say so; the
+        # client's own value stands when the model has no opinion. This is the one
+        # place a model answer outranks a request field, because the request's
+        # default ("route") is not an explicit choice the user made.
+        result_mode=reading.result_mode or req.result_mode,
         round_trip=req.round_trip,
         requirements=requirements,
         unknowns=_unknowns(reading, unsupported, party.mobility),
