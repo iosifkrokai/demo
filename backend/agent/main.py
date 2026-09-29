@@ -35,13 +35,15 @@ from . import (
     services as services_mod,
 )
 from .config import openrouter_api_key, settings
-from .errors import AgentError
+from .errors import AgentError, NoRoutePossible
 from .models import (
     ExplainReq,
     GenerateReq,
     HealthResponse,
+    ParsedQuery,
     RerouteReq,
     RouteResponse,
+    RouteSummary,
     ServicesAlongReq,
 )
 from .planner.agent_interpret import DEFAULT_MODEL
@@ -111,12 +113,57 @@ def _call(fn: Callable[[], Any], **kwargs: Any) -> Any:
         raise HTTPException(status_code=e.http_status, detail=str(e)) from e
 
 
+def _no_route_response(req: GenerateReq, detail: str) -> RouteResponse:
+    """Turn "there is no walk here" into an answer instead of a failed request.
+
+    The planner raises `NoRoutePossible` when nothing it retrieved can be walked
+    together (the sights pool and the services retry both end below two stops).
+    That used to leave as HTTP 422 carrying the optimizer's own English sentence:
+    the client got no plan, no reason code and nothing to render, and a wording
+    the walk cannot serve killed the request outright — the same question asked
+    with one extra clause answered 200. The coverage gate already says "no" this
+    way (an ordinary response with `status="infeasible"`), and this is the same
+    class of no, so it is the same shape: an empty plan, a machine-readable
+    reason in `debug`, and a sentence written for the tourist rather than for
+    whoever reads the logs.
+    """
+    return RouteResponse(
+        parsed=ParsedQuery(
+            time_budget_minutes=req.time_budget_minutes, source="fallback"
+        ),
+        # No stops and no line: nothing was planned, and inventing look-alikes
+        # would be worse than an honest empty answer.
+        points=[],
+        shape={},
+        summary=RouteSummary(length_km=None, time_seconds=None),
+        budget=None,
+        explanation=(
+            "Маршрут не построен: в этой зоне не нашлось остановок, между которыми "
+            "можно пройти. Уточните запрос или расширьте район."
+        ),
+        status="infeasible",
+        requirements=[],
+        costing=req.profile or "pedestrian",
+        changes=None,
+        debug={"reason": "no_walkable_route", "detail": detail},
+    )
+
+
 @app.post("/routes/generate", response_model=RouteResponse)
 def generate(req: GenerateReq) -> RouteResponse:
     """Build a route. With a `progress_id`, the work is reported as it happens."""
     progress.begin(req.progress_id)
     try:
-        return _call(app.state.planner.generate, req=req)
+        try:
+            return app.state.planner.generate(req=req)
+        except NoRoutePossible as exc:
+            # Caught before the generic AgentError mapping below, which would
+            # have re-labelled it as a 422 carrying the optimizer's sentence.
+            return _no_route_response(req, str(exc))
+        except AgentError as exc:
+            # Everything else keeps its own status (404 / 422 / 503): those are
+            # real refusals and upstream outages the client distinguishes.
+            raise HTTPException(status_code=exc.http_status, detail=str(exc)) from exc
     finally:
         # The tracker stops being interesting the moment the answer exists — and
         # on failure too, so a client polling a rejected request is told so

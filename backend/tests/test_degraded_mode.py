@@ -37,7 +37,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from agent import constants, main as agent_main
 from agent.config import openrouter_api_key, settings
-from agent.errors import NoCandidatesFound, UpstreamUnavailable
+from agent.errors import NoCandidatesFound, NoRoutePossible, UpstreamUnavailable
 from agent.models import Candidate, GenerateReq, ResolvedConstraints
 from agent.planner import (
     agent_interpret as ai,
@@ -507,6 +507,41 @@ class TestLiveDegradedRoute:
         pool = retrieve_mod.retrieve(constraints, [], live_db, query_text=QUERY)
         assert calls == []
         assert len(pool) > 0, "keyword + category signals alone must still find places"
+
+
+def test_a_route_that_cannot_be_planned_is_an_answer_not_a_failed_request():
+    """«Cannot plan here» must not leave as HTTP 422 with the optimizer's sentence.
+
+    The optimizer guard (`raise NoRoutePossible`) used to reach the client as
+    `422 {"detail": "optimizer could not produce a route with ≥ 2 stops"}`: an
+    English implementation detail, no plan, no reason code, nothing for the UI to
+    render — and a request the walk could not serve died outright, while the same
+    question asked with one extra clause answered 200. Measured live: «Старый
+    Гродно, два часа, туалет обязателен» → 422, while the same request with
+    «двое детей 6 и 9 лет … без музеев» → 200 and a three-stop plan. The coverage
+    gate already answers this class of «no» with an ordinary response, so this
+    pins the same shape for the optimizer's refusal.
+    """
+
+    class _Refusing:
+        def generate(self, req=None, **kwargs):
+            raise NoRoutePossible("optimizer could not produce a route with ≥ 2 stops")
+
+    client = _client_with_planner(_Refusing())
+    r = client.post(
+        "/routes/generate",
+        json={"query": "Старый Гродно, два часа, туалет обязателен"},
+    )
+
+    assert r.status_code == 200, "a refusal to plan is an answer, not a bad request"
+    body = r.json()
+    assert body["status"] == "infeasible"
+    assert body["points"] == [], "nothing was planned, so nothing is claimed"
+    assert body["shape"] == {}
+    assert body["result_mode"] == "route"
+    assert body["debug"]["reason"] == "no_walkable_route", "the reason stays machine-readable"
+    # The optimizer's own sentence is evidence, not the tourist's text.
+    assert "optimizer" not in (body.get("explanation") or "")
 
 
 if __name__ == "__main__":
