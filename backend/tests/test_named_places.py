@@ -18,9 +18,28 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from agent.models import Candidate, LatLon
 from agent.planner.intent import _PLACE_STOP_LIST
-from agent.planner.pipeline import _geo_focus
+from agent.planner.pipeline import _geo_focus, should_skip_geo_focus
 
-# ── Replicated token-extraction logic (mirrors intent.py exactly) ───────────
+# ── region scope must never discard the tourist's own position ──────────────
+
+
+def test_region_scope_may_keep_its_spread_without_a_position():
+    """«Все костёлы области» without a GPS fix keeps the regional spread."""
+    assert should_skip_geo_focus(region_scope=True, origin=None) is True
+
+
+def test_region_scope_does_not_discard_the_tourists_position():
+    """Measured before the rule: with an origin AND a 120-min budget, the same
+    query returned two stops 177 km apart and 38 hours of walking — GPS was
+    skipped together with the anchor-town focus."""
+    origin = LatLon(lat=53.6778, lon=23.8295)
+    assert should_skip_geo_focus(region_scope=True, origin=origin) is False
+
+
+def test_a_local_query_always_runs_the_focus():
+    assert should_skip_geo_focus(region_scope=False, origin=None) is False
+    assert should_skip_geo_focus(region_scope=False, origin=LatLon(lat=53.6, lon=23.8)) is False
+
 
 def _extract_named_place_tokens(query: str) -> list[str]:
 

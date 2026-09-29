@@ -89,6 +89,15 @@ GEO_FOCUS_KM = 12.0
 # then answered 422 "optimizer could not produce a route with ≥ 2 stops".
 GEO_FOCUS_DISCOVERY_MAX_KM = 36.0
 
+# ── Walkability of the answer ───────────────────────────────────────────────
+# The profile the tourist chose has to stay believable. «Все костёлы Гродненской
+# области» under `pedestrian` measured a 17-hour, 211-km tour: an honest answer
+# that nobody can walk. Past these bounds the plan is still returned — the request
+# really did ask for the region, and a silently trimmed dozen would lie about it —
+# but the answer also names the ways to actually make the trip.
+WALK_TOO_FAR_KM = 15.0
+WALK_TOO_LONG_MINUTES = 240
+
 # ── Unreachable pairs ───────────────────────────────────────────────────────
 # A pair Valhalla cannot connect (500 "Could not find candidate edge used for
 # label" at every snap radius — e.g. the Grodno-fortress POI at

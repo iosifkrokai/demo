@@ -61,6 +61,7 @@ from ..models import (
     OverallStatus,
     ParsedQuery,
     Place,
+    PlannedAlternative,
     RequirementSignal,
     ResolvedConstraints,
     RouteChange,
@@ -152,6 +153,21 @@ def _openrouter_embed(texts: list[str]) -> list[list[float]]:
         # the caller's side: no vector, keep going without one.
         log.warning("embed: unusable embeddings response (%s) — keyword-only retrieval", exc)
         return []
+
+
+def should_skip_geo_focus(*, region_scope: bool, origin: LatLon | None) -> bool:
+    """May the region-scope rule keep its spread, or must the focus still run?
+
+    A region-wide request («все костёлы Гродненской области») legitimately keeps its
+    spread: confining it to one walkable cluster is what made that question
+    unanswerable. The tourist's own position is not a cluster preference, though —
+    it is the start of the walk. Measured before this rule: the same query with an
+    `origin` AND a 120-minute budget came back as two stops 177 km apart with 38
+    hours of walking, because the focus was skipped wholesale, GPS included. So GPS
+    is always honoured, and region scope is allowed to skip only the anchor-town
+    focus. A catalogue request never reaches here (it returns before this step).
+    """
+    return region_scope and origin is None
 
 
 def _geo_focus(
@@ -678,6 +694,78 @@ def _services_along_evidence(
 
 
 
+def alternatives_for(
+    *, costing: str, walk_s: float, length_km: float | None
+) -> list[PlannedAlternative]:
+    """What to offer when the plan outgrows the profile the tourist chose.
+
+    Pedestrian is the default, and the honest answer to «все костёлы Гродненской
+    области» measured 17 hours and 211 km of walking — a plan nobody can walk. The
+    far stops are NOT dropped: the request really did ask for the whole region, and
+    a silently trimmed dozen would lie about it. Instead the answer says the plan
+    cannot be walked and names the ways to actually do it.
+
+    Only costings we can genuinely route are offered, because the client submits
+    them back as `profile` — a suggestion we cannot serve is its own broken
+    promise. A taxi is an `auto` route; public transport is mentioned in the
+    sentence rather than offered as a costing, because transit tiles are not
+    loaded in this deployment and Valhalla would refuse the request.
+    """
+    if costing not in ("pedestrian", "bicycle"):
+        # Already motorised: nothing in the answer is out of the profile's reach.
+        return []
+    far = (length_km or 0.0) >= constants.WALK_TOO_FAR_KM
+    long = walk_s >= constants.WALK_TOO_LONG_MINUTES * 60
+    if not (far or long):
+        return []
+    reason = "too_far_to_walk" if far else "too_long_to_walk"
+    offers: list[PlannedAlternative] = []
+    if costing == "pedestrian":
+        offers.append(
+            PlannedAlternative(
+                costing="bicycle",
+                reason=reason,
+                note=(
+                    "Пешком это далеко: на велосипеде маршрут проезжается целиком "
+                    "и занимает куда меньше времени."
+                ),
+            )
+        )
+    offers.append(
+        PlannedAlternative(
+            costing="auto",
+            reason=reason,
+            note=(
+                "На машине или такси: точки разбросаны далеко друг от друга, а "
+                "часть пути можно проехать на автобусе или троллейбусе."
+            ),
+        )
+    )
+    return offers
+
+
+#: The tourist-facing name of each costing we offer. Machine identifiers have no
+#: business in a sentence a person reads — the same rule the reason codes follow.
+_MODE_WORDS = {
+    "bicycle": "на велосипеде",
+    "auto": "на машине или такси",
+}
+
+
+def alternatives_sentence(offers: list[PlannedAlternative], walk_s: float) -> str:
+    """The tourist's version of the same news, in the request's language."""
+    if not offers:
+        return ""
+    hours = walk_s / 3600.0
+    span = f"{hours:.1f} ч" if hours >= 1 else f"{int(walk_s / 60)} мин"
+    modes = ", ".join(_MODE_WORDS.get(o.costing, o.costing) for o in offers)
+    return (
+        f"Пешком это не прогулка: {span} в пути. "
+        f"Варианты: {modes}; часть пути можно проехать на автобусе, маршрутке "
+        f"или троллейбусе."
+    )
+
+
 def _to_places(candidates: list[Candidate]) -> list[Place]:
     """Candidates → the response points (one mapping, used by every branch)."""
     return [
@@ -859,12 +947,12 @@ class Pipeline:
         # Use area_anchor (town/district geo anchor) when available — this keeps
         # the geo focus on the correct town without forcing an arbitrary POI as must-visit.
         # Fall back to must_visit_ids only when there is no separate area anchor.
-        if region_scope:
+        if should_skip_geo_focus(region_scope=region_scope, origin=req.origin):
             # "все костёлы Гродненской области" asks for the region, not for one
             # town-sized walking cluster: focusing on the anchor town here is what
             # used to return Grodno-city churches only. Keep the regional spread;
             # Valhalla still builds the walk over whatever stops get selected.
-            log.info("geo_focus skipped: region scope in query")
+            log.info("geo_focus skipped: region scope, no tourist position")
         else:
             geo_anchor = constraints.area_anchor or (
                 constraints.must_visit_ids[0] if constraints.must_visit_ids else None
@@ -1607,6 +1695,11 @@ class Pipeline:
         deadline: dict | None = None,
     ) -> RouteResponse:
         d = intent.decision
+        # A plan that outgrows the chosen profile is still the honest plan; the
+        # answer additionally says how to actually do it (offer + sentence).
+        offers = alternatives_for(costing=costing, walk_s=walk_s, length_km=length_km)
+        if offers:
+            explanation = f"{explanation}\n\n{alternatives_sentence(offers, walk_s)}"
         return RouteResponse(
             parsed=ParsedQuery(
                 keywords=d.keywords_pos,
@@ -1628,6 +1721,7 @@ class Pipeline:
                 stops_dropped=plan.stops_dropped,
             ),
             explanation=explanation,
+            alternatives=offers or None,
             status=status,
             requirements=(
                 requirements.public_requirements() if requirements is not None else None

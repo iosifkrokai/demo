@@ -322,6 +322,22 @@ class Interpretation(BaseModel):
     unknowns: list[str] = Field(default_factory=list)
 
 
+class PlannedAlternative(BaseModel):
+    """A way to actually make the plan, offered when the chosen one does not fit.
+
+    Not a silent switch of the request: the client re-submits the same query with
+    a different profile (the sidebar already does), so this is an offer with a
+    reason code, and the tourist decides.
+    """
+
+    # A Valhalla costing the app can request ("bicycle", "auto", …).
+    costing: str
+    # Machine-readable, stable: "too_far_to_walk" | "too_long_to_walk".
+    reason: str
+    # The tourist's sentence, in the request's language.
+    note: str
+
+
 class RouteResponse(BaseModel):
     parsed: ParsedQuery
     points: list[Place]
@@ -352,6 +368,9 @@ class RouteResponse(BaseModel):
     costing: str | None = None
     # Filled in on a refinement turn: what changed vs the route the user had.
     changes: RouteChanges | None = None
+    # Ways to do the plan when the requested profile cannot carry it («все костёлы
+    # области» is a 17-hour walk). Never a silent substitution — an offer.
+    alternatives: list[PlannedAlternative] | None = None
     debug: dict | None = None
 
 
