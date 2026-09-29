@@ -75,21 +75,28 @@ except ImportError as exc:  # pragma: no cover
 log = logging.getLogger(__name__)
 
 # ── Limits ──────────────────────────────────────────────────────────────────
-# Hard budgets for one interpretation. They are the whole reason this layer is
-# allowed to exist inside a request: bounded cost, bounded latency, bounded
-# blast radius. Exceeding any of them returns None.
-MAX_TOOL_CALLS = 10  # tool_calls_limit
-MAX_REQUESTS = 5  # model turns (request_limit) — no unbounded loop
-MAX_OUTPUT_TOKENS = 1500  # model_settings.max_tokens
-WALL_CLOCK_TIMEOUT_S = 25.0
-MODEL_TIMEOUT_S = 20.0  # per-request HTTP timeout, below the wall clock
+# Hard budgets for one interpretation. They bound cost, latency and blast radius;
+# exceeding any of them returns None and the request falls back to the keyword
+# reader. Measured: too tight a ceiling is what starved the reading, not the model
+# — a deep model (2.5-pro, sonnet-4.5) needed 11-14 s per call, so a 20 s per-request
+# HTTP timeout was cutting reasoning off mid-flight and the thin reading that came
+# back looked like a weak model. The ceilings are now generous enough that a
+# thinking model finishes, and still finite: one interpretation may not run away.
+MAX_TOOL_CALLS = 20  # tool_calls_limit
+MAX_REQUESTS = 8  # model turns (request_limit) — no unbounded loop
+MAX_OUTPUT_TOKENS = 4096  # model_settings.max_tokens — a full requirements contract
+WALL_CLOCK_TIMEOUT_S = 90.0
+MODEL_TIMEOUT_S = 60.0  # per-request HTTP timeout, below the wall clock
 
 # Model is a deployment fact, not a tuning knob (spec §4.2: the measurement
-# picks the model, the framework stays). Chosen by the product owner from the
-# live OpenRouter list (both tools and structured outputs supported) and set to
-# the cheapest capable candidate so the interpretation layer is affordable per
-# request. Overridable per-process with AGENT_INTERPRET_MODEL for a benchmark.
-DEFAULT_MODEL = "google/gemini-2.5-flash"
+# picks the model, the framework stays). Measured on three live requests with the
+# ceilings above: gemini-2.5-flash read «Старый город за два часа пешком» and
+# «хочу всё интересное, есть 3 часа, с детьми» as ZERO requirements, while
+# gemini-2.5-pro read 1 (архитектура) and 3 (замок, костёл, церковь) respectively
+# and tied on the third — a thin reading is what leaves the optimizer 1-2 stops.
+# 2.5-pro costs more per call and needs ~20 s, which is why the wall clock rose
+# with it. Overridable per-process with AGENT_INTERPRET_MODEL for a benchmark.
+DEFAULT_MODEL = "google/gemini-2.5-pro"
 
 
 def _model_name() -> str:

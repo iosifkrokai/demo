@@ -162,10 +162,18 @@ def test_wall_clock_guard_times_out():
 
 
 def test_limits_are_bounded():
-    assert 0 < ai.MAX_TOOL_CALLS <= 10
-    assert 0 < ai.MAX_REQUESTS <= 6
-    assert 0 < ai.MAX_OUTPUT_TOKENS <= 4000
-    assert 0 < ai.WALL_CLOCK_TIMEOUT_S <= 60
+    """The point is that every ceiling is finite — a reading may not run away.
+
+    The numbers themselves are a product decision and were raised after a
+    measurement: a deep model needed 20-23 s per call, so the old 20 s per-request
+    timeout was cutting its reasoning off mid-flight and the thin reading that came
+    back looked like a weak model. Finite, but roomy enough to finish thinking.
+    """
+    assert 0 < ai.MAX_TOOL_CALLS <= 20
+    assert 0 < ai.MAX_REQUESTS <= 8
+    assert 0 < ai.MAX_OUTPUT_TOKENS <= 8192
+    assert 0 < ai.WALL_CLOCK_TIMEOUT_S <= 120
+    assert 0 < ai.MODEL_TIMEOUT_S < ai.WALL_CLOCK_TIMEOUT_S
 
 
 # ── (b) a fake model answer fills the contract ─────────────────────────────

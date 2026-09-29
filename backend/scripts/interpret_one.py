@@ -16,10 +16,10 @@ import json
 import sys
 import time
 
-from agent.models import GenerateReq
+from agent.models import GenerateReq, LatLon
 from agent.planner.agent_interpret import interpret_with_agent
 
-ORIGIN = {"lat": 53.6778, "lon": 23.8295}
+ORIGIN = LatLon(lat=53.6778, lon=23.8295)
 
 
 def main() -> None:
@@ -28,7 +28,7 @@ def main() -> None:
     query = sys.argv[1]
     minutes = int(sys.argv[2]) if len(sys.argv) > 2 else None
 
-    request = GenerateReq(query=query, origin=ORIGIN, language="ru")
+    request = GenerateReq(query=query, origin=ORIGIN)
     if minutes:
         request.time_budget_minutes = minutes
 

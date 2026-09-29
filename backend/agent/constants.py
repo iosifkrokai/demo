@@ -17,15 +17,18 @@ from . import taxonomy
 # hang: the planner drops the optional work (Valhalla re-ordering, geometry)
 # and returns a smaller plan with an honest status instead.
 #
-# Kept at 75 s, not 40: with 40 the re-ordering was usually thrown away for want
-# of a second or two (interpretation + rerank + cost matrix took ~23 s, leaving
-# 17.2 s against a threshold of 18), and the plan came back with two stops that
-# followed the retrieval order rather than a walkable one. The ceiling exists to
-# bound the worst case, not to discard the step that makes the route good.
-REQUEST_DEADLINE_S = 75.0
+# Kept generous on purpose. With 40 the re-ordering was usually thrown away for
+# want of a second or two (interpretation + rerank + cost matrix took ~23 s,
+# leaving 17.2 s against a threshold of 18), and the plan came back with two stops
+# that followed the retrieval order rather than a walkable one. The interpretation
+# layer alone is now allowed 90 s for a deep model (a thinking model measured
+# 20-23 s per call), so a 75 s end-to-end ceiling would have guaranteed that the
+# better reading it just paid for was discarded. The ceiling exists to bound the
+# worst case, not to discard the step that makes the route good.
+REQUEST_DEADLINE_S = 240.0
 # Less than this left → trim the candidate pool before the (50×50) cost matrix.
 COST_MATRIX_MIN_LEFT_S = 26.0
-POOL_TRIM_SIZE = 12
+POOL_TRIM_SIZE = 30
 # Less than this left → do not ask Valhalla to re-order a wide tour; its
 # `optimized_route` call is unbounded over a region and was the 60 s+ tail.
 VALHALLA_ORDER_MIN_LEFT_S = 18.0
@@ -72,7 +75,14 @@ VALHALLA_MAX_LOCATIONS = 20
 
 NEGATIVE_FILTER_ENABLED = True  # drop candidates matching forbidden categories
 RETRIEVAL_POOL_SIZE = 50   # candidates after RRF fusion
-MMR_POOL_SIZE = 12         # final candidate pool for the optimizer
+# Final pool handed to the optimizer. Raised from 12: measured live, a 120-minute
+# walk in central Grodno came back as 2 stops / 20 minutes of walking because the
+# optimizer only ever saw 9 candidates of which 3 were sights — no model can build
+# a full walk out of that. This ceiling applies to the *budgeted* path, where MMR
+# trims to this size; RETRIEVAL_POOL_SIZE stays at 50 on purpose (see
+# frontend/CLAUDE.md): with no budget MMR does not trim at all, so a larger fusion
+# pool would send every candidate to a matrix that grows into hours.
+MMR_POOL_SIZE = 30
 
 # A place whose visit time exceeds a share of the total budget is dropped before
 # matrix computation (it cannot fit alongside anything else). That share lives
