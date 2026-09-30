@@ -50,12 +50,7 @@ import { ItinerariesTab } from './parts/itineraries-tab';
 import { useItineraries } from '@/hooks/use-itineraries';
 import type { Itinerary } from '@/api/types';
 import { guideModeFor } from './parts/guide-mode';
-import {
-  CHILD_FORMS,
-  STOP_FORMS,
-  decimalRu,
-  pluralCountRu,
-} from '@/utils/plural';
+import { decimalRu } from '@/utils/plural';
 import { newProgressId } from '@/api/progress';
 import { WaypointList } from './waypoint-list';
 import { Chip } from './parts/chip';
@@ -716,16 +711,20 @@ export const Sidebar = () => {
    */
   const filterSummary = useMemo(() => {
     const out: string[] = [];
-    if (partyAdults != null) out.push(`${partyAdults} взр.`);
+    if (partyAdults != null)
+      out.push(t('sidebar.summary.adults', { count: partyAdults }));
     if (partyChildren != null)
-      out.push(pluralCountRu(partyChildren, CHILD_FORMS));
-    if (childrenAges.length > 0) out.push(`возраст ${childrenAges.join(', ')}`);
+      out.push(t('sidebar.summary.children', { count: partyChildren }));
+    if (childrenAges.length > 0)
+      out.push(t('sidebar.summary.ages', { ages: childrenAges.join(', ') }));
     for (const code of hardServices)
-      out.push(`обязательно: ${filterLabel(code, t)}`);
+      out.push(t('sidebar.summary.hard', { label: filterLabel(code, t) }));
     for (const code of softAmenities)
-      out.push(`желательно: ${filterLabel(code, t)}`);
-    for (const code of interests) out.push(`интерес: ${filterLabel(code, t)}`);
-    for (const code of avoid) out.push(`без ${filterLabel(code, t)}`);
+      out.push(t('sidebar.summary.soft', { label: filterLabel(code, t) }));
+    for (const code of interests)
+      out.push(t('sidebar.summary.interest', { label: filterLabel(code, t) }));
+    for (const code of avoid)
+      out.push(t('sidebar.summary.avoid', { label: filterLabel(code, t) }));
     if (resultMode === 'catalogue') out.push(t('sidebar.ui.catalogue'));
     if (roundTrip) out.push(t('sidebar.ui.roundTrip'));
     return out;
@@ -739,6 +738,7 @@ export const Sidebar = () => {
     avoid,
     resultMode,
     roundTrip,
+    t,
   ]);
 
   /** Click the strength a row already has to clear it — off is a valid state. */
@@ -974,7 +974,7 @@ export const Sidebar = () => {
           const isMe = wp.id === ME_WAYPOINT_ID;
           return {
             id: wp.placeId ?? null,
-            name: wp.userInput || geo.title || 'точка',
+            name: wp.userInput || geo.title || t('sidebar.waypoints.unnamed'),
             lat,
             lon,
             // A stop the user placed by hand (no placeId) survives any refine.
@@ -1428,7 +1428,7 @@ export const Sidebar = () => {
               </div>
               <div
                 role="group"
-                aria-label="подсказки"
+                aria-label={t('sidebar.plan.hintsAria')}
                 className="mt-2 flex flex-wrap gap-1.5"
               >
                 {hints.map((hint) => (
@@ -1488,7 +1488,7 @@ export const Sidebar = () => {
                     items={tabs}
                     value={mode}
                     onChange={setMode}
-                    label="раздел панели"
+                    label={t('sidebar.plan.tabsAria')}
                     className="min-w-0 flex-1"
                     testId={(value) => `mode-${value}`}
                   />
@@ -1599,7 +1599,7 @@ export const Sidebar = () => {
                     onClick={() => void locateMe()}
                     disabled={geoState === 'locating'}
                     className="flex w-full items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-meta transition-colors hover:bg-muted disabled:opacity-60 max-md:min-h-11 pointer-coarse:min-h-11"
-                    title="переопределить, откуда начинается маршрут"
+                    title={t('sidebar.plan.geoOverride')}
                   >
                     <LocateFixed
                       className={
@@ -1672,7 +1672,7 @@ export const Sidebar = () => {
                           data-testid="filters-precedence"
                           className="basis-full pt-0.5"
                         >
-                          применю фильтры поверх текста запроса — они важнее
+                          {t('sidebar.plan.filtersPrecedence')}
                         </span>
                       )}
                     </div>
@@ -1687,10 +1687,10 @@ export const Sidebar = () => {
                       {/* Party: counts, plus ages only when they were typed. */}
                       <div className="flex flex-col gap-1.5">
                         <span className="text-meta text-muted-foreground">
-                          кто идёт
+                          {t('sidebar.plan.partyLabel')}
                         </span>
                         <Stepper
-                          label="взрослые"
+                          label={t('sidebar.plan.adults')}
                           testId="party-adults"
                           value={partyAdults}
                           min={1}
@@ -1698,7 +1698,7 @@ export const Sidebar = () => {
                           onChange={setPartyAdults}
                         />
                         <Stepper
-                          label="дети"
+                          label={t('sidebar.plan.children')}
                           testId="party-children"
                           value={partyChildren}
                           min={1}
@@ -1711,7 +1711,7 @@ export const Sidebar = () => {
                               htmlFor="children-ages"
                               className="text-meta text-muted-foreground"
                             >
-                              возраст детей, если знаете
+                              {t('sidebar.plan.childrenAges')}
                             </label>
                             <Input
                               id="children-ages"
@@ -1730,7 +1730,7 @@ export const Sidebar = () => {
                       {/* Amenities, each «обязательно» or «желательно». */}
                       <div className="flex flex-col gap-1.5">
                         <span className="text-meta text-muted-foreground">
-                          удобства в пути
+                          {t('sidebar.plan.amenities')}
                         </span>
                         {buildAmenityOptions(t).map((option) => (
                           <div
@@ -1747,7 +1747,7 @@ export const Sidebar = () => {
                                 data-testid={`amenity-${option.code}-hard`}
                                 className="h-7 px-2 text-meta"
                               >
-                                обязательно
+                                {t('sidebar.plan.hard')}
                               </Chip>
                               <Chip
                                 selected={amenities[option.code] === 'soft'}
@@ -1757,7 +1757,7 @@ export const Sidebar = () => {
                                 data-testid={`amenity-${option.code}-soft`}
                                 className="h-7 px-2 text-meta"
                               >
-                                желательно
+                                {t('sidebar.plan.soft')}
                               </Chip>
                             </div>
                           </div>
@@ -1767,11 +1767,11 @@ export const Sidebar = () => {
                       {/* Themes: soft by nature, they never force a detour. */}
                       <div className="flex flex-col gap-1.5">
                         <span className="text-meta text-muted-foreground">
-                          интересы
+                          {t('sidebar.plan.interests')}
                         </span>
                         <div
                           role="group"
-                          aria-label="интересы"
+                          aria-label={t('sidebar.plan.interests')}
                           className="flex flex-wrap gap-1.5"
                         >
                           {buildInterestOptions(t).map((option) => (
@@ -1790,11 +1790,11 @@ export const Sidebar = () => {
                       {/* Keep out. */}
                       <div className="flex flex-col gap-1.5">
                         <span className="text-meta text-muted-foreground">
-                          избегать
+                          {t('sidebar.plan.avoid')}
                         </span>
                         <div
                           role="group"
-                          aria-label="избегать"
+                          aria-label={t('sidebar.plan.avoid')}
                           className="flex flex-wrap gap-1.5"
                         >
                           {buildAvoidOptions(t).map((option) => (
@@ -1813,13 +1813,13 @@ export const Sidebar = () => {
                       {/* What to return, and whether to come back to the start. */}
                       <div className="flex flex-col gap-1.5">
                         <span className="text-meta text-muted-foreground">
-                          что показать
+                          {t('sidebar.plan.resultType')}
                         </span>
                         <Segmented
                           items={buildResultModeOptions(t)}
                           value={resultMode}
                           onChange={setResultMode}
-                          label="тип результата"
+                          label={t('sidebar.plan.resultTypeAria')}
                           disabled={busy}
                           testId={(value) => `result-mode-${value}`}
                         />
@@ -1829,7 +1829,7 @@ export const Sidebar = () => {
                           data-testid="round-trip"
                           className="mt-0.5 self-start"
                         >
-                          круговой маршрут
+                          {t('sidebar.ui.roundTrip')}
                         </Chip>
                       </div>
                     </div>
@@ -1845,15 +1845,17 @@ export const Sidebar = () => {
                   <PlanVerdict response={verdict} />
                   {hasRoute && (
                     <div className="flex items-center justify-between gap-2">
-                      <h2 className="text-label font-semibold">Маршрут</h2>
+                      <h2 className="text-label font-semibold">
+                        {t('sidebar.ui.route')}
+                      </h2>
                       <button
                         type="button"
                         onClick={reset}
                         className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-meta text-muted-foreground transition-colors hover:bg-muted hover:text-foreground max-md:min-h-11 pointer-coarse:min-h-11"
-                        title="очистить маршрут"
+                        title={t('sidebar.plan.resetHint')}
                       >
                         <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
-                        сброс
+                        {t('sidebar.plan.reset')}
                       </button>
                     </div>
                   )}
@@ -1872,27 +1874,35 @@ export const Sidebar = () => {
                           value={
                             summary.km != null ? fmtKm(summary.km, t) : '—'
                           }
-                          label="длина"
+                          label={t('sidebar.plan.length')}
                         />
                         <StatTile
                           value={summary.travelMinutes}
-                          label="мин в пути"
+                          label={t('sidebar.plan.travelMinutes')}
                         />
                       </StatTiles>
                       <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-meta text-muted-foreground">
                         <span className="inline-flex items-center gap-1">
                           <Clock className="h-3.5 w-3.5" aria-hidden="true" />
-                          {`в пути ~${fmtMin(summary.walkMinutes, t)}`}
+                          {t('sidebar.plan.travelSummary', {
+                            value: fmtMin(summary.walkMinutes, t),
+                          })}
                         </span>
-                        <span>{`осмотр ~${fmtMin(summary.visitMinutes, t)}`}</span>
+                        <span>
+                          {t('sidebar.plan.visitSummary', {
+                            value: fmtMin(summary.visitMinutes, t),
+                          })}
+                        </span>
                         <span>
                           {summary.budgetMinutes
-                            ? `лимит ${fmtMin(summary.budgetMinutes, t)}`
+                            ? t('sidebar.plan.budgetSummary', {
+                                value: fmtMin(summary.budgetMinutes, t),
+                              })
                             : t('sidebar.ui.noLimit')}
                         </span>
                         {!summary.fits && (
                           <span className="rounded-full bg-amber-500/15 px-2 py-0.5 font-medium text-amber-700">
-                            не влезло в лимит
+                            {t('sidebar.plan.overBudget')}
                           </span>
                         )}
                       </p>
@@ -1961,10 +1971,14 @@ export const Sidebar = () => {
                                 title={
                                   [
                                     entry.added.length
-                                      ? `добавил: ${entry.added.join(', ')}`
+                                      ? t('sidebar.plan.refinementAdded', {
+                                          names: entry.added.join(', '),
+                                        })
                                       : '',
                                     entry.removed.length
-                                      ? `убрал: ${entry.removed.join(', ')}`
+                                      ? t('sidebar.plan.refinementRemoved', {
+                                          names: entry.removed.join(', '),
+                                        })
                                       : '',
                                   ]
                                     .filter(Boolean)
@@ -1977,18 +1991,22 @@ export const Sidebar = () => {
                               </span>
                               {entry.added.length > 0 && (
                                 <span className="rounded-full bg-primary/10 px-2 py-0.5 text-meta text-primary">
-                                  добавлено {entry.added.length}
+                                  {t('sidebar.plan.addedCount', {
+                                    count: entry.added.length,
+                                  })}
                                 </span>
                               )}
                               {entry.removed.length > 0 && (
                                 <span className="rounded-full bg-muted px-2 py-0.5 text-meta text-muted-foreground">
-                                  убрано {entry.removed.length}
+                                  {t('sidebar.plan.removedCount', {
+                                    count: entry.removed.length,
+                                  })}
                                 </span>
                               )}
                               {entry.added.length === 0 &&
                                 entry.removed.length === 0 && (
                                   <span className="rounded-full bg-muted px-2 py-0.5 text-meta text-muted-foreground">
-                                    без изменений
+                                    {t('sidebar.status.noChanges')}
                                   </span>
                                 )}
                             </span>
@@ -1998,7 +2016,9 @@ export const Sidebar = () => {
                               data-testid="excluded-chip"
                               className="rounded-full bg-destructive/10 px-2.5 py-0.5 text-meta text-destructive"
                             >
-                              убрано вручную: {excludedPlaceIds.length}
+                              {t('sidebar.plan.excludedManual', {
+                                count: excludedPlaceIds.length,
+                              })}
                             </span>
                           )}
                         </div>
@@ -2019,7 +2039,7 @@ export const Sidebar = () => {
                           className="h-9 rounded-full px-3 text-label disabled:opacity-40 max-md:h-11 pointer-coarse:h-11"
                         >
                           <Undo2 className="h-3.5 w-3.5" aria-hidden="true" />
-                          отменить уточнение
+                          {t('sidebar.plan.undoRefinement')}
                         </Button>
                         <Button
                           type="button"
@@ -2034,7 +2054,7 @@ export const Sidebar = () => {
                             className="h-3.5 w-3.5"
                             aria-hidden="true"
                           />
-                          новый маршрут
+                          {t('sidebar.plan.newRoute')}
                         </Button>
                       </div>
                     </div>
@@ -2057,7 +2077,7 @@ export const Sidebar = () => {
                         }
                       }}
                       placeholder="Каложская церковь, Гродно"
-                      aria-label="добавить точку в маршрут"
+                      aria-label={t('sidebar.plan.manualAria')}
                       className="h-10 flex-1 text-body max-md:h-11"
                       disabled={manualBusy}
                     />
@@ -2067,7 +2087,7 @@ export const Sidebar = () => {
                       disabled={manualBusy || !manualQuery.trim()}
                       size="icon"
                       className="h-10 w-10 shrink-0 rounded-full max-md:h-11 max-md:w-11"
-                      aria-label="найти и добавить точку"
+                      aria-label={t('sidebar.plan.manualSearchAria')}
                     >
                       {manualBusy ? (
                         <Loader2 className="h-4 w-4 animate-spin" />
@@ -2153,7 +2173,7 @@ export const Sidebar = () => {
                   className="mb-2 h-12 w-full rounded-xl bg-primary text-body font-semibold text-primary-foreground motion-safe:transition hover:brightness-[0.97] active:scale-[0.99] motion-reduce:active:scale-100"
                 >
                   <Compass className="h-4 w-4" aria-hidden="true" />
-                  Пойти по маршруту
+                  {t('guide.enter')}
                 </Button>
               )}
               <Button
@@ -2218,37 +2238,42 @@ const Stepper = ({
   min,
   max,
   onChange,
-}: StepperProps) => (
-  <div className="flex items-center gap-2">
-    <span className="text-label">{label}</span>
-    <div className="ml-auto flex items-center gap-1">
-      <button
-        type="button"
-        aria-label={`убавить: ${label}`}
-        data-testid={`${testId}-dec`}
-        disabled={value == null}
-        onClick={() =>
-          onChange(value == null || value <= min ? null : value - 1)
-        }
-        className="flex h-7 w-7 items-center justify-center rounded-full border border-border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-40 max-md:h-11 max-md:w-11 pointer-coarse:h-11 pointer-coarse:w-11"
-      >
-        <Minus className="h-3.5 w-3.5" aria-hidden="true" />
-      </button>
-      <span
-        data-testid={`${testId}-value`}
-        className="w-5 text-center text-label font-semibold tabular-nums"
-      >
-        {value ?? '—'}
-      </span>
-      <button
-        type="button"
-        aria-label={`прибавить: ${label}`}
-        data-testid={`${testId}-inc`}
-        onClick={() => onChange(value == null ? min : Math.min(value + 1, max))}
-        className="flex h-7 w-7 items-center justify-center rounded-full border border-border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground max-md:h-11 max-md:w-11 pointer-coarse:h-11 pointer-coarse:w-11"
-      >
-        <Plus className="h-3.5 w-3.5" aria-hidden="true" />
-      </button>
+}: StepperProps) => {
+  const { t } = useTranslation();
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-label">{label}</span>
+      <div className="ml-auto flex items-center gap-1">
+        <button
+          type="button"
+          aria-label={t('sidebar.plan.decrement', { label })}
+          data-testid={`${testId}-dec`}
+          disabled={value == null}
+          onClick={() =>
+            onChange(value == null || value <= min ? null : value - 1)
+          }
+          className="flex h-7 w-7 items-center justify-center rounded-full border border-border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-40 max-md:h-11 max-md:w-11 pointer-coarse:h-11 pointer-coarse:w-11"
+        >
+          <Minus className="h-3.5 w-3.5" aria-hidden="true" />
+        </button>
+        <span
+          data-testid={`${testId}-value`}
+          className="w-5 text-center text-label font-semibold tabular-nums"
+        >
+          {value ?? '—'}
+        </span>
+        <button
+          type="button"
+          aria-label={t('sidebar.plan.increment', { label })}
+          data-testid={`${testId}-inc`}
+          onClick={() =>
+            onChange(value == null ? min : Math.min(value + 1, max))
+          }
+          className="flex h-7 w-7 items-center justify-center rounded-full border border-border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground max-md:h-11 max-md:w-11 pointer-coarse:h-11 pointer-coarse:w-11"
+        >
+          <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+        </button>
+      </div>
     </div>
-  </div>
-);
+  );
+};

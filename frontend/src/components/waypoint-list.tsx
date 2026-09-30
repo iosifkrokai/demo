@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { GripVertical, Pin, Trash2 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 import {
   ME_WAYPOINT_ID,
@@ -43,6 +44,7 @@ const stopTimeId = (wp: Waypoint): string =>
  * asks the parent to refetch the route.
  */
 export const WaypointList = ({ onChanged }: Props) => {
+  const { t } = useTranslation();
   const waypoints = useDirectionsStore((s) => s.waypoints);
   const setWaypoint = useDirectionsStore((s) => s.setWaypoint);
   const doRemoveWaypoint = useDirectionsStore((s) => s.doRemoveWaypoint);
@@ -156,7 +158,7 @@ export const WaypointList = ({ onChanged }: Props) => {
               move(from, i);
             }}
             className={cn(
-              'group flex min-h-[52px] items-center gap-2 rounded-xl px-1.5 transition-colors hover:bg-muted',
+              'group flex min-h-[52px] flex-wrap items-center gap-2 gap-y-1.5 rounded-xl px-1.5 transition-colors hover:bg-muted',
               isDragging && 'opacity-40',
               isDragTarget && 'bg-muted ring-1 ring-primary/40'
             )}
@@ -164,8 +166,8 @@ export const WaypointList = ({ onChanged }: Props) => {
             <button
               type="button"
               className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full cursor-grab text-muted-foreground transition-colors hover:bg-muted active:cursor-grabbing max-md:h-11 max-md:w-11 pointer-coarse:h-11 pointer-coarse:w-11"
-              aria-label={`переместить: ${name}`}
-              title="перетащить · стрелки вверх/вниз"
+              aria-label={t('sidebar.waypoints.move', { name })}
+              title={t('sidebar.waypoints.dragHint')}
               onKeyDown={(e) => {
                 if (e.key === 'ArrowUp' && i > 0) {
                   e.preventDefault();
@@ -189,14 +191,14 @@ export const WaypointList = ({ onChanged }: Props) => {
               )}
               {isMe ? (
                 <span
-                  aria-label="старт маршрута"
-                  title="старт"
+                  aria-label={t('sidebar.ui.start')}
+                  title={t('sidebar.waypoints.start')}
                   className="relative h-2.5 w-2.5 rounded-full bg-sky-500 ring-4 ring-card"
                 />
               ) : (
                 <span
                   className="relative flex h-6 w-6 items-center justify-center rounded-full bg-muted text-badge font-semibold text-foreground"
-                  title={`остановка ${stopNumber}`}
+                  title={t('sidebar.waypoints.stop', { number: stopNumber })}
                 >
                   {stopNumber}
                 </span>
@@ -239,11 +241,15 @@ export const WaypointList = ({ onChanged }: Props) => {
                 type="button"
                 onClick={() => togglePin(i)}
                 aria-pressed={wp.pinned === true}
-                aria-label={wp.pinned ? 'открепить' : 'закрепить'}
+                aria-label={
+                  wp.pinned
+                    ? t('sidebar.waypoints.unpin')
+                    : t('sidebar.waypoints.pin')
+                }
                 title={
                   wp.pinned
-                    ? 'уточнение не будет убирать эту точку'
-                    : 'закрепить: уточнение не уберёт эту точку'
+                    ? t('sidebar.waypoints.pinnedHint')
+                    : t('sidebar.waypoints.pinHint')
                 }
                 className={cn(
                   'flex h-7 w-7 items-center justify-center rounded-full transition-colors hover:bg-muted max-md:h-11 max-md:w-11 pointer-coarse:h-11 pointer-coarse:w-11',
@@ -260,8 +266,8 @@ export const WaypointList = ({ onChanged }: Props) => {
               <button
                 type="button"
                 onClick={() => remove(i)}
-                aria-label="удалить"
-                title="удалить"
+                aria-label={t('sidebar.waypoints.remove')}
+                title={t('sidebar.waypoints.remove')}
                 className="flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-destructive max-md:h-11 max-md:w-11 pointer-coarse:h-11 pointer-coarse:w-11"
               >
                 <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
