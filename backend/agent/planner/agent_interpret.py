@@ -115,7 +115,16 @@ MODEL_TIMEOUT_S = 90.0  # per-request HTTP timeout, below the wall clock
 # — it would force a detour the tourist never asked for), xiaomi/mimo-v2.6-flash
 # returned nothing at all, and qwen3.8-omni-flash cannot take this app's forced
 # tool_choice (400). Overridable per-process with AGENT_INTERPRET_MODEL.
-DEFAULT_MODEL = "google/gemini-2.5-flash"
+#
+# On 2026-09-30 the deployment moved off Google altogether, at the maintainer's
+# request: the 2.5 generation is old enough that its reading of this test build
+# is no longer trusted. Of the newer, cheaper families measured on the same
+# scored requests, deepseek/deepseek-v4.1-flash met 6/6 in 2.8-5.7 s and is now
+# the default. z-ai/glm-5.3-flash is half the price ($0.15/1M) and also met 6/6,
+# but took up to 98 s on one reading — at per-reading costs of a fraction of a
+# cent the difference that matters is the wait, not the price. Prefer glm only if
+# that latency is measured again and comes out bounded.
+DEFAULT_MODEL = "deepseek/deepseek-v4.1-flash"
 
 
 def _model_name() -> str:

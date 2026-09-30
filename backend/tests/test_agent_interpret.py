@@ -188,7 +188,7 @@ def test_the_default_model_is_the_measured_one():
     measured.
     """
     assert ai._model_name(), "a model must always resolve"
-    assert ai.DEFAULT_MODEL == "google/gemini-2.5-flash"
+    assert ai.DEFAULT_MODEL == "deepseek/deepseek-v4.1-flash"
     # The env override still wins, which is what the harness relies on.
     os.environ["AGENT_INTERPRET_MODEL"] = "example/override"
     try:
