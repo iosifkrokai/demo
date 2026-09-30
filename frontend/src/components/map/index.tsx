@@ -40,7 +40,7 @@ import { maxBounds } from './constants';
 import { getInitialMapPosition, LAST_CENTER_KEY } from './utils';
 import { useCommonStore } from '@/stores/common-store';
 import { useTranslation } from 'react-i18next';
-import { Coffee, LocateFixed } from 'lucide-react';
+import { Coffee, LocateFixed, Navigation } from 'lucide-react';
 import { ME_WAYPOINT_ID, useDirectionsStore } from '@/stores/directions-store';
 import { useServicesAlong } from '@/hooks/use-services-along';
 import { useIsochronesStore } from '@/stores/isochrones-store';
@@ -162,9 +162,37 @@ export const MapComponent = () => {
   const guideFix = useCommonStore((s) => s.guideFix);
   /** The bearing in force, so small course wobbles do not turn the map. */
   const bearingRef = useRef<number | null>(null);
+  const ORIENTATION_STORAGE_KEY = 'grodno-map-orientation';
+  type MapOrientation = 'heading' | 'north';
+
+  /** Map orientation preference, persisted so the tourist's choice survives a reload. */
+  const loadOrientation = (): MapOrientation => {
+    try {
+      const raw = localStorage.getItem(ORIENTATION_STORAGE_KEY);
+      if (raw === 'north' || raw === 'heading') return raw;
+      return 'heading';
+    } catch {
+      return 'heading';
+    }
+  };
+
+  const saveOrientation = (orientation: MapOrientation) => {
+    try {
+      localStorage.setItem(ORIENTATION_STORAGE_KEY, orientation);
+    } catch {
+      // private mode / quota — the value stays in memory for this session
+    }
+  };
+
   const guiding = useCommonStore((s) => s.guiding);
   /** Navigator mode: the map keeps the tourist in view until a hand moves it. */
   const [follow, setFollow] = useState(true);
+  /**
+   * Map orientation: 'heading' = map rotates with the tourist's course,
+   * 'north' = north is always up (bearing = 0). Persisted to localStorage.
+   */
+  const [orientation, setOrientation] =
+    useState<MapOrientation>(loadOrientation);
   const drawRef = useRef<MaplibreTerradrawControl | null>(null);
   const touchStartTimeRef = useRef<number | null>(null);
   const touchLocationRef = useRef<{ x: number; y: number } | null>(null);
@@ -432,8 +460,10 @@ export const MapComponent = () => {
     // wobbles by a few degrees every second and the simulated one jumps at every
     // corner; rotating for those turned the map into a spinning top. Below the
     // threshold the current bearing is kept, above it the map turns once, slowly.
+    // In 'north' orientation the bearing is never applied — north stays up.
     const seen = bearingRef.current;
     const bearing =
+      orientation === 'heading' &&
       guideFix.heading != null &&
       (seen === null ||
         Math.abs(((guideFix.heading - seen + 540) % 360) - 180) > 15)
@@ -457,12 +487,22 @@ export const MapComponent = () => {
       easing: (progress: number) => progress,
       essential: true,
     });
-  }, [guiding, follow, guideFix]);
+  }, [guiding, follow, guideFix, orientation]);
 
   // Following starts again every time the guide is entered.
   useEffect(() => {
     if (guiding) setFollow(true);
   }, [guiding]);
+
+  // When the tourist switches back to 'heading' while the guide is running,
+  // the map snaps to the current heading immediately instead of waiting for
+  // the next guideFix (which may not come if the tourist is standing still).
+  useEffect(() => {
+    if (orientation !== 'heading' || !guiding || !guideFix) return;
+    const map = mapRef.current;
+    if (!map || map.isEasing?.()) return;
+    map.easeTo({ bearing: guideFix.heading ?? 0, duration: 300 });
+  }, [orientation, guiding, guideFix]);
 
   // A hand on the map wins over the follow: dragging releases it.
   //
@@ -951,7 +991,27 @@ export const MapComponent = () => {
       )}
 
       {guiding && (
-        <div className="absolute bottom-24 right-3 z-10 md:right-4">
+        <div className="absolute bottom-24 right-3 z-10 flex flex-col gap-2 md:right-4">
+          <ToolButton
+            data-testid="guide-orientation"
+            title={
+              orientation === 'heading' ? t('map.northUp') : t('map.headingUp')
+            }
+            icon={<Navigation className="h-4 w-4" />}
+            onClick={() => {
+              const next: MapOrientation =
+                orientation === 'heading' ? 'north' : 'heading';
+              setOrientation(next);
+              saveOrientation(next);
+              const map = mapRef.current;
+              if (!map) return;
+              if (next === 'heading' && guideFix) {
+                map.easeTo({ bearing: guideFix.heading ?? 0, duration: 300 });
+              } else if (next === 'north') {
+                map.easeTo({ bearing: 0, duration: 300 });
+              }
+            }}
+          />
           <ToolButton
             data-testid="guide-follow"
             title={follow ? t('map.following') : t('map.followMe')}

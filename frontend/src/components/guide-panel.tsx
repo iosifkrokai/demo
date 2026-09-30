@@ -7,6 +7,8 @@ import {
   Play,
   RotateCcw,
   TriangleAlert,
+  Volume2,
+  VolumeX,
   WifiOff,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -31,6 +33,15 @@ import {
 
 import { useCommonStore } from '@/stores/common-store';
 import { isSimulating, setSimPath } from '@/lib/geo-sim';
+import {
+  cancelSpeech,
+  decideVoice,
+  isNewManeuver,
+  markSpoken,
+  speak,
+  type SpokenThresholds,
+  type VoiceManeuver,
+} from '@/lib/guide-voice';
 import { GuideEmpty } from './parts/guide-empty';
 import { fmtDist, metresBetween } from './parts/guide-format';
 import { guideModeFor } from './parts/guide-mode';
@@ -91,6 +102,7 @@ interface GuidePanelProps {
 }
 
 const STORAGE_KEY = 'grodno-guide-progress';
+const VOICE_MUTE_KEY = 'grodno-voice-muted';
 /** You are "at" a stop when you are this close to it. */
 const ARRIVAL_RADIUS_M = 40;
 /** Above this accuracy the fix is too coarse for a confident «через 30 м». */
@@ -357,6 +369,7 @@ export const GuidePanel = ({
   transport = null,
   onWalked,
 }: GuidePanelProps) => {
+  const { t, i18n } = useTranslation();
   const key = useMemo(() => guideRouteKey(stops), [stops]);
   /** How the guide speaks about movement: on foot, on a bike, or driving. */
   const travel = useMemo(() => guideModeFor(transport), [transport]);
@@ -412,8 +425,17 @@ export const GuidePanel = ({
   const [traveled, setTraveled] = useState(0);
   const [offRoute, setOffRoute] = useState(false);
   const [skippedSuggestions, setSkippedSuggestions] = useState<string[]>([]);
+  const [voiceMuted, setVoiceMuted] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(VOICE_MUTE_KEY) === 'true';
+    } catch {
+      return false;
+    }
+  });
   const wakeLockRef = useRef<{ release: () => Promise<void> } | null>(null);
   const offRouteFixesRef = useRef(0);
+  const spokenThresholdsRef = useRef<SpokenThresholds>(new Map());
+  const prevManeuverRef = useRef<VoiceManeuver | null>(null);
 
   const routeData = useDirectionsStore((state) => state.results.data);
 
@@ -468,6 +490,18 @@ export const GuidePanel = ({
     offRouteFixesRef.current = 0;
     setOffRoute(false);
   }, [key]);
+
+  const toggleVoiceMute = useCallback(() => {
+    setVoiceMuted((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem(VOICE_MUTE_KEY, String(next));
+      } catch {
+        // storage unavailable — value stays in memory for this session
+      }
+      return next;
+    });
+  }, []);
 
   const stopCount = stops.length;
   // Read once per mount: the flag cannot change while the app runs (it comes
@@ -653,6 +687,59 @@ export const GuidePanel = ({
       ? Math.max(0, activeManeuver.along - traveled)
       : null;
 
+  // ── Voice: announce maneuvers on distance thresholds ────────────────────────────
+  useEffect(() => {
+    if (mode !== 'moving') return;
+
+    // When the maneuver changes, cancel anything in progress and reset spoken
+    // thresholds so the new maneuver starts from scratch.
+    if (isNewManeuver(prevManeuverRef.current, activeManeuver)) {
+      cancelSpeech();
+      spokenThresholdsRef.current = new Map();
+      prevManeuverRef.current = activeManeuver;
+    }
+
+    const voiceManeuver: VoiceManeuver | null = activeManeuver
+      ? { key: activeManeuver.key, instruction: activeManeuver.instruction }
+      : null;
+
+    const decision = decideVoice({
+      maneuver: voiceManeuver,
+      distanceM: maneuverDistance,
+      quality,
+      offRoute,
+      muted: voiceMuted,
+      spoken: spokenThresholdsRef.current,
+    });
+
+    if (decision.type === 'announce' && activeManeuver) {
+      spokenThresholdsRef.current = markSpoken(
+        spokenThresholdsRef.current,
+        activeManeuver.key,
+        decision.threshold
+      );
+      // The phrase is assembled here, in the interface language, from the
+      // maneuver's own instruction (which Valhalla already sends in the route
+      // language) — the voice module itself stays free of any language.
+      const phrase = decision.arrival
+        ? decision.instruction || t('guide.voiceArrived')
+        : t('guide.voiceDistance', {
+            distance: decision.threshold,
+            instruction: decision.instruction,
+          }).trim();
+      speak(phrase, i18n.language.startsWith('en') ? 'en-US' : 'ru-RU');
+    }
+  }, [
+    mode,
+    activeManeuver,
+    maneuverDistance,
+    quality,
+    offRoute,
+    voiceMuted,
+    t,
+    i18n,
+  ]);
+
   const nextAlong = useMemo(() => {
     if (!line || !nextStop) return null;
     return locateOnLine(nextStop, line).along;
@@ -790,7 +877,11 @@ export const GuidePanel = ({
   if (stops.length === 0) {
     return (
       <section data-testid="guide-panel" className="flex flex-col gap-3">
-        <GuideHeader onReset={reset} />
+        <GuideHeader
+          onReset={reset}
+          voiceMuted={voiceMuted}
+          onVoiceMuteToggle={toggleVoiceMute}
+        />
         <SimulatedBadge active={simulated} />
         <GuideEmpty />
       </section>
@@ -926,7 +1017,11 @@ export const GuidePanel = ({
       data-mode="review"
       className="flex flex-col gap-3"
     >
-      <GuideHeader onReset={reset} />
+      <GuideHeader
+        onReset={reset}
+        voiceMuted={voiceMuted}
+        onVoiceMuteToggle={toggleVoiceMute}
+      />
       <SimulatedBadge active={simulated} />
 
       {/* The next stop, or a quiet «all done» card once there is none. */}
@@ -1160,10 +1255,16 @@ const QualityIcon = ({ quality }: { quality: FixQuality }) => {
 
 interface GuideHeaderProps {
   onReset: () => void;
+  voiceMuted: boolean;
+  onVoiceMuteToggle: () => void;
 }
 
 /** Panel title + the one destructive control, kept quiet on purpose. */
-const GuideHeader = ({ onReset }: GuideHeaderProps) => (
+const GuideHeader = ({
+  onReset,
+  voiceMuted,
+  onVoiceMuteToggle,
+}: GuideHeaderProps) => (
   <div className="flex items-center justify-between gap-2">
     <div className="flex items-center gap-2">
       <span className="flex size-8 items-center justify-center rounded-full bg-primary/10 text-primary">
@@ -1176,14 +1277,29 @@ const GuideHeader = ({ onReset }: GuideHeaderProps) => (
         </div>
       </div>
     </div>
-    <button
-      type="button"
-      onClick={onReset}
-      title="начать маршрут заново"
-      className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-meta text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-    >
-      <RotateCcw className="h-3.5 w-3.5" />
-      сбросить прогресс
-    </button>
+    <div className="flex items-center gap-1">
+      <button
+        type="button"
+        onClick={onVoiceMuteToggle}
+        title={voiceMuted ? 'включить звук' : 'выключить звук'}
+        className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-meta text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+      >
+        {voiceMuted ? (
+          <VolumeX className="h-3.5 w-3.5" />
+        ) : (
+          <Volume2 className="h-3.5 w-3.5" />
+        )}
+        {voiceMuted ? 'звук выкл' : 'звук вкл'}
+      </button>
+      <button
+        type="button"
+        onClick={onReset}
+        title="начать маршрут заново"
+        className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-meta text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+      >
+        <RotateCcw className="h-3.5 w-3.5" />
+        сбросить прогресс
+      </button>
+    </div>
   </div>
 );

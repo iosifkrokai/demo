@@ -28,6 +28,10 @@ export const guideArea = {
       again: 'пройти заново',
       stop: 'остановка',
       visitFor: 'на',
+      soundOn: 'звук вкл',
+      soundOff: 'звук выкл',
+      voiceDistance: 'Через {{distance}} метров {{instruction}}',
+      voiceArrived: 'Вы прибыли',
     },
   },
   en: {
@@ -44,6 +48,10 @@ export const guideArea = {
       again: 'walk it again',
       stop: 'stop',
       visitFor: 'for',
+      soundOn: 'sound on',
+      soundOff: 'sound off',
+      voiceDistance: 'In {{distance}} meters {{instruction}}',
+      voiceArrived: 'You have arrived',
     },
   },
 } satisfies LocaleArea<{ guide: Record<string, string> }>;

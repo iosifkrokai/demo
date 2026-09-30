@@ -16,9 +16,11 @@ const mockToast = vi.hoisted(() => ({
 }));
 
 /** Panel state the mocked common store reports; individual tests flip it. */
-const mockCommonState = vi.hoisted(() => ({
+const mockCommonState = {
   directionsPanelOpen: true,
-}));
+  guiding: false,
+  guideFix: null as { lng: number; lat: number; heading: number } | null,
+};
 
 /** The panel's handle toggles the store, so the toggle is a spy here. */
 const mockToggleDirections = vi.hoisted(() => vi.fn());
@@ -27,15 +29,22 @@ const mockQueryRenderedFeatures = vi.hoisted(() =>
   vi.fn(() => [] as unknown[])
 );
 const mockGetLayer = vi.hoisted(() => vi.fn((): unknown => true));
+const mockGetMap = vi.hoisted(() =>
+  vi.fn(() => ({
+    getCanvas: vi.fn(() => ({ style: { cursor: '' } })),
+    queryRenderedFeatures: mockQueryRenderedFeatures,
+    getLayer: mockGetLayer,
+    on: vi.fn(),
+    off: vi.fn(),
+  }))
+);
 const mockMapRef = vi.hoisted(() => ({
   getCenter: vi.fn(() => ({ lng: 13.4, lat: 52.5 })),
   getZoom: vi.fn(() => 10),
   fitBounds: vi.fn(),
-  getMap: vi.fn(() => ({
-    getCanvas: vi.fn(() => ({ style: { cursor: '' } })),
-    queryRenderedFeatures: mockQueryRenderedFeatures,
-    getLayer: mockGetLayer,
-  })),
+  easeTo: vi.fn(),
+  isEasing: vi.fn(() => false),
+  getMap: mockGetMap,
 }));
 
 vi.mock('react-map-gl/maplibre', async () => {
@@ -146,7 +155,7 @@ vi.mock('@tanstack/react-router', () => ({
 vi.mock('@/stores/common-store', () => ({
   useCommonStore: vi.fn((selector) => {
     const state = {
-      coordinates: [],
+      coordinates: [] as unknown[],
       get directionsPanelOpen() {
         return mockCommonState.directionsPanelOpen;
       },
@@ -154,8 +163,12 @@ vi.mock('@/stores/common-store', () => ({
       toggleDirections: mockToggleDirections,
       updateSettings: vi.fn(),
       focus: null,
-      guideFix: null,
-      guiding: false,
+      get guiding() {
+        return mockCommonState.guiding;
+      },
+      get guideFix() {
+        return mockCommonState.guideFix;
+      },
       focusOn: vi.fn(),
       setGuideFix: vi.fn(),
       setGuiding: vi.fn(),
@@ -270,6 +283,7 @@ vi.mock('./parts/tool-button', () => ({
     }) => (
       <button
         aria-label={title}
+        title={title}
         onClick={onClick}
         disabled={disabled}
         data-testid={testId}
@@ -334,6 +348,8 @@ describe('MapComponent', () => {
     );
 
     vi.clearAllMocks();
+    mockCommonState.guiding = false;
+    mockCommonState.guideFix = null;
     mockDirectionsState.current = {
       waypoints: [],
       results: { data: null, show: {} },
@@ -738,6 +754,104 @@ describe('MapComponent', () => {
     });
   });
 
+  describe('map orientation (compass control)', () => {
+    // The mock store holds `mockCommonState` at module level; individual tests
+    // flip its `guiding` / `guideFix` fields so the helpers reuse the same
+    // pattern as the rest of the suite.
+    const withGuiding = () => {
+      mockCommonState.guiding = true;
+      mockCommonState.guideFix = { lng: 23.8, lat: 53.9, heading: 90 };
+    };
+
+    beforeEach(() => {
+      // Reset to non-guiding defaults and clear any saved orientation.
+      localStorageMock = {};
+      vi.spyOn(Storage.prototype, 'setItem').mockImplementation(
+        (key: string, value: string) => {
+          localStorageMock[key] = value;
+        }
+      );
+      vi.spyOn(Storage.prototype, 'getItem').mockImplementation(
+        (key: string) => localStorageMock[key] ?? null
+      );
+      mockCommonState.guiding = false;
+      mockCommonState.guideFix = null;
+    });
+
+    it('компас виден только в режиме проводника', () => {
+      // Not guiding — no button.
+      render(<MapComponent />);
+      expect(screen.queryByTestId('guide-orientation')).not.toBeInTheDocument();
+
+      cleanup();
+
+      // Guiding — button present.
+      withGuiding();
+      render(<MapComponent />);
+      expect(screen.getByTestId('guide-orientation')).toBeInTheDocument();
+    });
+
+    it('нажатие переключает ориентацию и сохраняет в localStorage', async () => {
+      withGuiding();
+      const user = userEvent.setup();
+      render(<MapComponent />);
+
+      const compass = screen.getByTestId('guide-orientation');
+
+      // Starts as 'heading'; button label says what happens on press → 'север сверху'.
+      expect(compass).toHaveAttribute('aria-label', 'север сверху');
+
+      await user.click(compass);
+
+      // Now 'north'; label says what happens on press → 'по курсу'.
+      expect(compass).toHaveAttribute('aria-label', 'по курсу');
+      expect(localStorageMock['grodno-map-orientation']).toBe('north');
+
+      await user.click(compass);
+
+      expect(compass).toHaveAttribute('aria-label', 'север сверху');
+      expect(localStorageMock['grodno-map-orientation']).toBe('heading');
+    });
+
+    it('сохранённая ориентация читается при загрузке', () => {
+      localStorageMock['grodno-map-orientation'] = 'north';
+      withGuiding();
+      render(<MapComponent />);
+
+      const compass = screen.getByTestId('guide-orientation');
+      // Initial orientation is 'north'; label says what pressing does → switch to heading.
+      expect(compass).toHaveAttribute('aria-label', 'по курсу');
+    });
+
+    it('кнопка слежения остаётся рядом с компасом', () => {
+      withGuiding();
+      render(<MapComponent />);
+
+      const compass = screen.getByTestId('guide-orientation');
+      const follow = screen.getByTestId('guide-follow');
+
+      // Both are in the same wrapping div.
+      expect(compass.closest('div.z-10')).toBe(follow.closest('div.z-10'));
+    });
+
+    it('при север-сверху easeTo вызывается БЕЗ bearing', () => {
+      localStorageMock['grodno-map-orientation'] = 'north';
+      withGuiding();
+      mockMapRef.easeTo = vi.fn();
+      render(<MapComponent />);
+
+      // easeTo was called with center but without bearing.
+      const calls = mockMapRef.easeTo.mock.calls;
+      const callWithCenter = calls.find(
+        (call) => call[0] && 'center' in call[0]
+      );
+      expect(callWithCenter).toBeDefined();
+      expect(callWithCenter![0]).toHaveProperty('center');
+      expect(
+        Object.prototype.hasOwnProperty.call(callWithCenter![0], 'bearing')
+      ).toBe(false);
+    });
+  });
   describe('route provenance (spec 002 §7 — one route, one source)', () => {
     /**
      * The map only reads the geometry, the summary and the provenance fields, so
