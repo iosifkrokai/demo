@@ -1,12 +1,16 @@
 /// <reference types="vite/client" />
 
 interface ImportMetaEnv {
+  readonly BASE_URL: string;
   readonly VITE_CENTER_COORDS?: string;
   readonly VITE_NOMINATIM_URL?: string;
   readonly VITE_VALHALLA_URL?: string;
   readonly VITE_DEFAULT_COSTING_MODEL?: string;
   readonly VITE_CLIENT_ID?: string;
   readonly VITE_AGENT_URL?: string;
+  readonly DEV: boolean;
+  readonly MODE: string;
+  readonly PROD: boolean;
 }
 
 interface ImportMeta {

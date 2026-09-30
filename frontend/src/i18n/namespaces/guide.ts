@@ -32,6 +32,7 @@ export const guideArea = {
       soundOff: 'звук выкл',
       voiceDistance: 'Через {{distance}} метров {{instruction}}',
       voiceArrived: 'Вы прибыли',
+      continuingNavigation: 'Продолжаем навигацию…',
     },
   },
   en: {
@@ -52,6 +53,7 @@ export const guideArea = {
       soundOff: 'sound off',
       voiceDistance: 'In {{distance}} meters {{instruction}}',
       voiceArrived: 'You have arrived',
+      continuingNavigation: 'Continuing navigation…',
     },
   },
 } satisfies LocaleArea<{ guide: Record<string, string> }>;

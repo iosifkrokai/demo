@@ -4,6 +4,7 @@ import react from '@vitejs/plugin-react';
 import svgr from 'vite-plugin-svgr';
 import path from 'path';
 import tailwindcss from '@tailwindcss/vite';
+import { swVitePlugin } from './sw-vite-plugin';
 
 function getBaseUrl() {
   const { homepage } = JSON.parse(readFileSync('package.json', 'utf-8')) as {
@@ -34,6 +35,7 @@ export default defineConfig({
       svgrOptions: { exportType: 'named', namedExport: 'ReactComponent' },
     }),
     tailwindcss(),
+    swVitePlugin(),
   ],
   resolve: {
     alias: {

@@ -17,6 +17,12 @@ import { installGeoSim, resetSim } from '@/lib/geo-sim';
 
 import { GuidePanel, guideRouteKey, type GuideStop } from './guide-panel';
 
+// Module-level mutable array: vi.mock is hoisted so this must be declared before it.
+// Only used by the "re-acquires" test; cleared at the start of that test.
+const toastCalls: unknown[][] = [];
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+vi.mock('sonner', () => ({ toast: (...args: any[]) => toastCalls.push(args) }));
+
 const STOPS: GuideStop[] = [
   {
     id: '1',
@@ -762,5 +768,222 @@ describe('GuidePanel · режим движения', () => {
     const live = screen.getByRole('status');
     expect(live).toHaveTextContent('Поверните направо к Кафе Немо');
     expect(live.textContent ?? '').not.toMatch(/через \d+ м/);
+  });
+});
+
+describe('GuidePanel · wake lock', () => {
+  // Use real timers so that act() flushes microtasks properly without fake-timer
+  // interference between the promise chain and the handler.
+  afterEach(() => {
+    cleanup();
+    useDirectionsStore.getState().resetRoute();
+    // restore spies only; the parent's afterEach calls vi.unstubAllGlobals().
+    vi.restoreAllMocks();
+  });
+
+  it('releases the wake lock when the tab goes hidden', async () => {
+    const release = vi.fn().mockResolvedValue(undefined);
+    let acquireResolve: ((v: { release: () => Promise<void> }) => void) | null =
+      null;
+    const acquire = vi.fn().mockImplementation(
+      () =>
+        new Promise<{ release: () => Promise<void> }>((resolve) => {
+          acquireResolve = resolve;
+        })
+    );
+
+    // Stub only the properties this test needs; do NOT use vi.stubGlobal here
+    // because the parent's afterEach calls vi.unstubAllGlobals().
+    const origAddEventListener = document.addEventListener.bind(document);
+    const listeners: Array<() => void> = [];
+    vi.spyOn(document, 'addEventListener').mockImplementation(
+      (event, handler) => {
+        if (event === 'visibilitychange') {
+          listeners.push(handler as () => void);
+        }
+        return origAddEventListener(event, handler as EventListener);
+      }
+    );
+
+    Object.defineProperty(document, 'visibilityState', {
+      value: 'visible',
+      writable: true,
+      configurable: true,
+    });
+
+    vi.stubGlobal('navigator', {
+      geolocation: {
+        watchPosition: vi.fn(() => 1),
+        clearWatch: vi.fn(),
+      },
+      wakeLock: { request: acquire },
+    });
+
+    const user = userEvent.setup();
+    render(<GuidePanel stops={STOPS} />);
+    await user.click(screen.getByTestId('guide-start'));
+
+    // Let the acquire promise resolve and populate the ref.
+    await act(async () => {
+      acquireResolve?.({ release });
+    });
+
+    // Tab goes hidden → handler must release the lock.
+    Object.defineProperty(document, 'visibilityState', {
+      value: 'hidden',
+      configurable: true,
+    });
+    listeners.forEach((l) => l());
+
+    expect(release).toHaveBeenCalledTimes(1);
+  });
+
+  it('re-acquires the wake lock and shows a toast when the tab returns to visible', async () => {
+    toastCalls.length = 0; // clear from previous runs
+    const release = vi.fn().mockResolvedValue(undefined);
+    let acquireResolve: ((v: { release: () => Promise<void> }) => void) | null =
+      null;
+    const acquire = vi.fn().mockImplementation(
+      () =>
+        new Promise<{ release: () => Promise<void> }>((resolve) => {
+          acquireResolve = resolve;
+        })
+    );
+
+    const origAddEventListener = document.addEventListener.bind(document);
+    const listeners: Array<() => void> = [];
+    vi.spyOn(document, 'addEventListener').mockImplementation(
+      (event, handler) => {
+        if (event === 'visibilitychange') {
+          listeners.push(handler as () => void);
+        }
+        return origAddEventListener(event, handler as EventListener);
+      }
+    );
+
+    Object.defineProperty(document, 'visibilityState', {
+      value: 'visible',
+      writable: true,
+      configurable: true,
+    });
+
+    vi.stubGlobal('navigator', {
+      geolocation: {
+        watchPosition: vi.fn(() => 1),
+        clearWatch: vi.fn(),
+      },
+      wakeLock: { request: acquire },
+    });
+
+    const user = userEvent.setup();
+    render(<GuidePanel stops={STOPS} />);
+    await user.click(screen.getByTestId('guide-start'));
+
+    await act(async () => {
+      acquireResolve?.({ release });
+    });
+
+    // Tab goes hidden.
+    Object.defineProperty(document, 'visibilityState', {
+      value: 'hidden',
+      configurable: true,
+    });
+    listeners.forEach((l) => l());
+
+    // Second acquire fires on return-to-visible.
+    let acquireResolve2:
+      | ((v: { release: () => Promise<void> }) => void)
+      | null = null;
+    acquire.mockImplementationOnce(
+      () =>
+        new Promise<{ release: () => Promise<void> }>((resolve) => {
+          acquireResolve2 = resolve;
+        })
+    );
+
+    Object.defineProperty(document, 'visibilityState', {
+      value: 'visible',
+      configurable: true,
+    });
+    listeners.forEach((l) => l());
+    await act(async () => {
+      acquireResolve2?.({ release });
+    });
+
+    // TWO acquisitions, not three: one when the walk started, one on the return
+    // to visible. The third the first draft expected came from the effect
+    // re-running on the hide (the flag lived in state, so hiding re-created the
+    // listener and re-requested a lock already held — two locks to release, one
+    // of them dangling). Acquiring on the return is the point; acquiring twice
+    // on the hide was a side effect of how the flag was stored.
+    expect(acquire).toHaveBeenCalledTimes(2);
+    expect(release).toHaveBeenCalled();
+    expect(toastCalls).toContainEqual([
+      'Продолжаем навигацию…',
+      { duration: 2000 },
+    ]);
+  });
+});
+
+describe('GuidePanel · фиксы в фоне', () => {
+  // NOTE: geolocation is stubbed inside each test body so that the parent's
+  // afterEach (which calls vi.unstubAllGlobals()) does NOT remove our stub.
+  beforeEach(() => {
+    localStorage.clear();
+    seedRoute();
+  });
+
+  afterEach(() => {
+    cleanup();
+    useDirectionsStore.getState().resetRoute();
+    // restore spies only; do NOT call vi.unstubAllGlobals() — the parent's
+    // afterEach already calls it, and stubWatchingGeolocation is set inside each
+    // test body AFTER that parent's beforeEach, so it survives that parent's
+    // unstub and our own restoreAllMocks() is enough cleanup.
+    vi.restoreAllMocks();
+  });
+
+  it('не скачет прогрессом вперёд по возвращении из фона — слабый фикс не тикает остановки', async () => {
+    // Слабый фикс сам по себе (без хорошего) не тикает остановку — это ключевое
+    // поведение: в фоне фиксы приходят реже/хуже, и они не должны тикать.
+    // Сценарий: турист стоит в 200 м от первой остановки. Слабый фикс
+    // (poor accuracy) — остановка не тикается. Хороший фикс из той же точки —
+    // остановка тикается. Фикс из радиуса остановки + слабый фикс — уже тикнуто.
+    const geo = stubWatchingGeolocation();
+    const user = userEvent.setup();
+    render(<GuidePanel stops={STOPS} />);
+    await user.click(screen.getByTestId('guide-start'));
+
+    // 200 м к северу от первой остановки: достаточно близко чтобы дойти, но
+    // за пределами ARRIVAL_RADIUS_M (40 м) — ни один фикс отсюда не тикнет.
+    geo.standNorthOf(STOPS[0]!, 200);
+
+    await waitFor(() =>
+      expect(screen.getByTestId('guide-line-progress')).toBeInTheDocument()
+    );
+
+    // Слабый фикс из той же точки: quality = 'poor' → precise = false → остановка не тикается.
+    geo.push(STOPS[0]!.lat + 200 / 111_320, STOPS[0]!.lon, 120);
+
+    expect(screen.getByText(/пройдено 0 из 2/i)).toBeInTheDocument();
+  });
+
+  it('не теряет текущую остановку по возвращении из фона — она уже в effectiveVisited', async () => {
+    // Остановка тикается в effectiveVisited через useEffect по fix + precise.
+    // Она уже в effectiveVisited, значит nextStop вычисляется по ней и при
+    // возвращении вкладки следующей остановкой остаётся та же, что и была.
+    const geo = stubWatchingGeolocation();
+    const user = userEvent.setup();
+    render(<GuidePanel stops={STOPS} />);
+    await user.click(screen.getByTestId('guide-start'));
+
+    geo.push(STOPS[0]!.lat, STOPS[0]!.lon, 8);
+
+    await waitFor(() =>
+      expect(screen.getByText(/пройдено 1 из 2/i)).toBeInTheDocument()
+    );
+
+    const nextCard = screen.getByTestId('guide-next-stop');
+    expect(within(nextCard).getByText('Кафе Немо')).toBeInTheDocument();
   });
 });

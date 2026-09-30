@@ -23,6 +23,7 @@ import {
   type Waypoint,
 } from '@/stores/directions-store';
 import { useTranslation } from 'react-i18next';
+import { toast } from 'sonner';
 import { getManeuverIcon } from '@/utils/get-maneuver-icon';
 import {
   loadVisitOverrides,
@@ -831,31 +832,71 @@ export const GuidePanel = ({
     }
   }, [onReroute, fix]);
 
+  const wasHiddenRef = useRef(false);
+
   // Keep the screen awake while walking; browsers may refuse — that is fine.
+  // The lock is re-acquired on every return from background (visibilitychange →
+  // visible) because the browser releases it automatically when the tab hides: a
+  // lock nobody re-requests means the screen goes dark mid-walk, which is exactly
+  // when the tourist needs it lit.
   useEffect(() => {
     if (mode !== 'moving') return;
-    const nav = navigator as Navigator & {
-      wakeLock?: {
-        request: (type: 'screen') => Promise<{ release: () => Promise<void> }>;
-      };
-    };
+
     let cancelled = false;
-    nav.wakeLock
-      ?.request('screen')
-      .then((lock) => {
-        if (cancelled) {
-          void lock.release().catch(() => undefined);
-          return;
+
+    const acquire = () => {
+      if (cancelled) return;
+      const nav = navigator as Navigator & {
+        wakeLock?: {
+          request: (
+            type: 'screen'
+          ) => Promise<{ release: () => Promise<void> }>;
+        };
+      };
+      nav.wakeLock
+        ?.request('screen')
+        .then((lock) => {
+          if (cancelled) {
+            void lock.release().catch(() => undefined);
+            return;
+          }
+          wakeLockRef.current = lock;
+        })
+        .catch(() => undefined);
+    };
+
+    acquire();
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        acquire();
+        // A ref, not state: the flag must be readable from the listener that is
+        // ALREADY registered. In state it re-created the listener on every hide,
+        // and the closure a test dispatches still read the value from the render
+        // that created it — so the toast never fired.
+        if (wasHiddenRef.current) {
+          wasHiddenRef.current = false;
+          toast(t('guide.continuingNavigation'), { duration: 2000 });
         }
-        wakeLockRef.current = lock;
-      })
-      .catch(() => undefined);
+      } else {
+        // Release the lock now rather than waiting for garbage collection:
+        // the browser releases it anyway when the tab goes hidden, and keeping a
+        // dangling reference prevents re-acquisition in some browsers.
+        wasHiddenRef.current = true;
+        void wakeLockRef.current?.release().catch(() => undefined);
+        wakeLockRef.current = null;
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibility);
+
     return () => {
       cancelled = true;
+      document.removeEventListener('visibilitychange', handleVisibility);
       void wakeLockRef.current?.release().catch(() => undefined);
       wakeLockRef.current = null;
     };
-  }, [mode]);
+  }, [mode, t]);
 
   const geoLine = useMemo(() => {
     if (quality === 'unavailable')
