@@ -466,12 +466,15 @@ export const MapComponent = () => {
     // threshold the current bearing is kept, above it the map turns once, slowly.
     // In 'north' orientation the bearing is never applied — north stays up.
     const seen = bearingRef.current;
+    // The route's own course first, the device's heading only as a fallback:
+    // the phone's heading is the direction the handset points, the course is
+    // the direction the walk goes.
+    const steerTo = guideFix.course ?? guideFix.heading;
     const bearing =
       orientation === 'heading' &&
-      guideFix.heading != null &&
-      (seen === null ||
-        Math.abs(((guideFix.heading - seen + 540) % 360) - 180) > 15)
-        ? guideFix.heading
+      steerTo != null &&
+      (seen === null || Math.abs(((steerTo - seen + 540) % 360) - 180) > 15)
+        ? steerTo
         : undefined;
     if (bearing !== undefined) bearingRef.current = bearing;
 
@@ -511,7 +514,10 @@ export const MapComponent = () => {
     if (orientation !== 'heading' || !guiding || !guideFix) return;
     const map = mapRef.current;
     if (!map || map.isEasing?.()) return;
-    map.easeTo({ bearing: guideFix.heading ?? 0, duration: 300 });
+    map.easeTo({
+      bearing: guideFix.course ?? guideFix.heading ?? 0,
+      duration: 300,
+    });
   }, [orientation, guiding, guideFix]);
 
   // A hand on the map wins over the follow: dragging releases it.
@@ -1052,7 +1058,7 @@ export const MapComponent = () => {
                   if (!map) return;
                   if (next === 'heading' && guideFix) {
                     map.easeTo({
-                      bearing: guideFix.heading ?? 0,
+                      bearing: guideFix.course ?? guideFix.heading ?? 0,
                       duration: 300,
                     });
                   } else if (next === 'north') {

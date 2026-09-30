@@ -88,6 +88,13 @@ services:
       # Container-internal hosts override the host-side values from .env.
       DATABASE_URL: "postgresql://${POSTGRES_USER:-grodno}:${POSTGRES_PASSWORD:-grodno}@db:5432/${POSTGRES_DB:-grodno}"
       VALHALLA_URL: "http://valhalla:8002"
+    # Run the venv's python, not `uv run`: the image already synced its
+    # dependencies at build time, and `uv run` re-resolves them at every start —
+    # which needs PyPI and leaves the container in a restart loop the moment the
+    # network or DNS is down (`failed to lookup address information`). The agent
+    # then answers nothing and the panel shows 502 for a reason that has nothing
+    # to do with the app.
+    command: ["/app/.venv/bin/python", "-m", "agent.main"]
     ports:
       - "8080:8080"
     depends_on:

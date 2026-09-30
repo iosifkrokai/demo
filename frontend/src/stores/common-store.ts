@@ -43,6 +43,12 @@ interface CommonState {
     lat: number;
     /** Compass heading in degrees, when the device reports one. */
     heading: number | null;
+    /**
+     * Bearing along the ROUTE at the tourist's position — what the map turns
+     * to. The device's own heading is the direction the phone points, and on a
+     * walk it is the wrong number; see parts/guide-course.ts.
+     */
+    course: number | null;
     at: number;
   } | null;
   /** True while the guide (Проводник) is running. */

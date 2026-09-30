@@ -45,7 +45,9 @@ import {
   type VoiceManeuver,
 } from '@/lib/guide-voice';
 import { GuideEmpty } from './parts/guide-empty';
+import { courseAlongLine } from './parts/guide-course';
 import { fmtDist, metresBetween } from './parts/guide-format';
+import { mergeMicroManeuvers } from './parts/guide-maneuvers';
 import { guideModeFor } from './parts/guide-mode';
 import { GuideNextStop } from './parts/guide-next-stop';
 import { GuideProgress } from './parts/guide-progress';
@@ -451,7 +453,8 @@ export const GuidePanel = ({
   // The route the map draws: one line, one set of manoeuvres.
   const line = useMemo(() => buildLine(routeData), [routeData]);
   const maneuvers = useMemo(
-    () => buildManeuvers(routeData, line),
+    // Micro-steps merged into the turn that matters; see parts/guide-maneuvers.ts.
+    () => mergeMicroManeuvers(buildManeuvers(routeData, line)),
     [routeData, line]
   );
   const summary = routeData?.trip?.summary ?? null;
@@ -547,6 +550,7 @@ export const GuidePanel = ({
             typeof heading === 'number' && Number.isFinite(heading)
               ? heading
               : null,
+          course: null,
           at,
         });
       },
@@ -710,6 +714,28 @@ export const GuidePanel = ({
         : null
     );
   }, [mode, maneuverDistance, setGuideTurnDistanceM]);
+
+  /**
+   * Turn the map by the ROUTE's course, not by the phone's heading.
+   *
+   * `coords.heading` is the direction the handset points: browsers report it
+   * only while the tourist is moving, it wobbles in a hand, and it says nothing
+   * about where the route goes. The line always knows — read the bearing from
+   * the tourist's position to 25 m further along it — so it is published beside
+   * the fix the map already follows. On a route without geometry there is no
+   * course, and the map keeps its own heading rather than inventing a turn.
+   */
+  const guideFix = useCommonStore((s) => s.guideFix);
+  useEffect(() => {
+    if (mode !== 'moving' || !fix) return;
+    setGuideFix({
+      lat: fix.lat,
+      lng: fix.lon,
+      heading: guideFix?.heading ?? null,
+      course: courseAlongLine(line, traveled),
+      at: fix.at,
+    });
+  }, [mode, fix, line, traveled, setGuideFix, guideFix?.heading]);
 
   // ── Voice: announce maneuvers on distance thresholds ────────────────────────────
   useEffect(() => {
