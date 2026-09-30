@@ -9,6 +9,7 @@ describe('categoryEmoji', () => {
     expect(categoryEmoji('замок')).toBe('🏰');
     expect(categoryEmoji('  Костёл ')).toBe('⛪');
     expect(categoryEmoji('кафе')).toBe('☕');
+    expect(categoryEmoji('остановка транспорта')).toBe('🚏');
   });
 
   it('has nothing to say about a hand-placed or unknown point', () => {

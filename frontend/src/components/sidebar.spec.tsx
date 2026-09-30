@@ -1106,6 +1106,25 @@ describe('Sidebar', () => {
     expect(body(0).query).toBe('старый Гродно');
   });
 
+  it('остановка транспорта отправляется как hard_service целиком', async () => {
+    const { fetchMock, sentBodies } = agentFetch();
+
+    const user = userEvent.setup({ delay: null });
+    render(<Sidebar />);
+
+    await openAdvanced(user);
+    await user.click(screen.getByTestId('amenity-остановка транспорта-hard'));
+    await user.type(askField(), 'прогулка по городу');
+    await user.click(buildButton());
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+
+    const body = sentBodies[0]!;
+    // код из двух слов должен дойти одним элементом, не разбитым по пробелу
+    expect(body.hard_services).toContain('остановка транспорта');
+    expect(body.hard_services).not.toContain('остановка');
+    expect(body.hard_services).not.toContain('транспорта');
+  });
+
   it('группа фильтров уходит всеми своими кодами и снимается целиком', async () => {
     const { fetchMock, body } = agentFetch();
 

@@ -16,19 +16,19 @@ from typing import Literal
 from pydantic import BaseModel, Field, field_validator
 
 from . import constants
+from .taxonomy import all_codes
 
 # ============================================================================
 # HTTP — Requests
 # ============================================================================
 
-CategoryLiteral = Literal[
-    "замок", "дворец", "усадьба", "костёл", "церковь", "монастырь",
-    "храм", "музей", "архитектура", "парк", "памятник",
-    "инфраструктура", "кладбище",
-    # everyday stops (OSM amenity/tourism POIs) — keep in sync with
-    # constants.CATEGORIES
-    "кафе", "ресторан", "туалет", "гостиница",
-]
+# The category vocabulary is read from data/taxonomy.csv (via agent/taxonomy.py),
+# not re-listed here. A second list drifted the moment a category was added to
+# the CSV: the deterministic reader produced the new code («остановка», a
+# boarding point), this Literal had never heard of it, and pydantic rejected the
+# IntentDecision — a plain «остановкой у костёла» query answered HTTP 500.
+# Derived, the two can no longer disagree; a new code is added once, in the CSV.
+CategoryLiteral = Literal[*all_codes()]
 
 EraLiteral = Literal["any", "pre1900", "soviet", "modern"]
 IntentTypeLiteral = Literal["discovery", "specific", "themed", "vague"]
@@ -402,8 +402,11 @@ class PreprocessedQuery(BaseModel):
 
 class IntentDecision(BaseModel):
     intent_type: IntentTypeLiteral = "discovery"
-    categories_pos: list[CategoryLiteral] = []
-    categories_neg: list[CategoryLiteral] = []
+    # pyright cannot build a Literal from a runtime tuple, so it refuses the
+    # derived alias in a type expression; pydantic validates against the real
+    # taxonomy vocabulary at runtime, which is the guarantee we want.
+    categories_pos: list[CategoryLiteral] = []  # pyright: ignore[reportInvalidTypeForm]
+    categories_neg: list[CategoryLiteral] = []  # pyright: ignore[reportInvalidTypeForm]
     keywords_pos: list[str] = []
     keywords_neg: list[str] = []
     named_places: list[str] = []

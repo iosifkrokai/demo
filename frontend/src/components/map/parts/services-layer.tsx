@@ -3,6 +3,7 @@ import { Marker, Popup } from 'react-map-gl/maplibre';
 import { useTranslation } from 'react-i18next';
 import {
   BedDouble,
+  Bus,
   Circle,
   Coffee,
   Toilet,
@@ -30,6 +31,7 @@ const ICONS: Record<string, typeof Coffee> = {
   ресторан: UtensilsCrossed,
   гостиница: BedDouble,
   туалет: Toilet,
+  'остановка транспорта': Bus,
 };
 
 /** The glyph for a category; a plain dot for anything the map does not know. */

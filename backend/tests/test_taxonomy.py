@@ -105,7 +105,7 @@ class TestServicesNoLongerEmpty:
             "ресторан",
             "туалет",
             "гостиница",
-            "остановка",
+            "остановка транспорта",
         )
         for code in constants.CONVENIENCE_CATEGORIES:
             assert db_categories([code]) == [code]
@@ -146,6 +146,30 @@ class TestResolveCode:
     @pytest.mark.parametrize("term", ["", "   ", "вертолёт", "zzzz", None])
     def test_unknown_terms_return_none(self, term):
         assert resolve_code(term) is None
+
+    @pytest.mark.parametrize(
+        "term,expected",
+        [
+            # The transit words resolve to the boarding point…
+            ("автобус", "остановка транспорта"),
+            ("троллейбус", "остановка транспорта"),
+            ("маршрутка", "остановка транспорта"),
+            ("автобусная остановка", "остановка транспорта"),
+            # …but the bare word «остановка» means a stop ON THE WALK to a
+            # tourist («с обязательной остановкой у костёла»), and a longer code
+            # must not lend its meaning to a shorter word. It used to: the
+            # fragment fold mapped «остановка» — and «транспорт» — to the
+            # multiword code, sending a church request hunting for bus stops.
+            ("остановка", None),
+            ("транспорт", None),
+        ],
+    )
+    def test_transit_words_resolve_but_the_bare_word_does_not(self, term, expected):
+        assert resolve_code(term) == expected
+
+    def test_every_code_resolves_to_itself(self):
+        for code in all_codes():
+            assert resolve_code(code) == code, code
 
     def test_resolved_code_is_always_canonical(self):
         for term in ("туалеты", "cafe", "coffee", "замков", "hotels"):
@@ -207,3 +231,25 @@ class TestAccessorsAndConstants:
     def test_constants_visit_times_come_from_the_taxonomy(self):
         expected = {c.code: c.visit_minutes for c in all_categories()}
         assert expected == constants.VISIT_TIME_BY_CATEGORY
+
+
+class TestIntentCategoriesCantDriftFromTheTaxonomy:
+    """The vocabulary the planner accepts is the taxonomy's own, not a copy.
+
+    A hand-kept Literal drifted the moment a category was added to the CSV: the
+    deterministic reader produced the new code, the Literal had never heard of
+    it, and pydantic rejected the decision — a plain query answered HTTP 500.
+    """
+
+    def test_intent_decision_accepts_every_taxonomy_code(self):
+        from pydantic import ValidationError
+
+        from agent.models import IntentDecision
+
+        for code in all_codes():
+            assert IntentDecision(categories_pos=[code]).categories_pos == [code], code
+
+        # An invented code is still refused — the vocabulary is closed, only its
+        # source moved from this file to the CSV.
+        with pytest.raises(ValidationError):
+            IntentDecision(categories_pos=["нет такой категории"])

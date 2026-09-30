@@ -29,7 +29,10 @@ type SidebarShape = {
     | 'religious',
     string
   >;
-  amenities: Record<'toilet' | 'cafe' | 'restaurant' | 'hotel', string>;
+  amenities: Record<
+    'toilet' | 'cafe' | 'restaurant' | 'hotel' | 'transitStop',
+    string
+  >;
   avoid: Record<
     'museums' | 'cemeteries' | 'infrastructure' | 'hotels' | 'religious',
     string
@@ -168,6 +171,7 @@ export const sidebarArea = {
         cafe: 'кафе / перерыв',
         restaurant: 'ресторан',
         hotel: 'гостиница',
+        transitStop: 'остановка транспорта',
       },
       avoid: {
         museums: 'музеи',
@@ -335,6 +339,7 @@ export const sidebarArea = {
         cafe: 'cafe / a break',
         restaurant: 'restaurant',
         hotel: 'hotel',
+        transitStop: 'transit stop',
       },
       avoid: {
         museums: 'museums',

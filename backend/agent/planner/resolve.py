@@ -137,9 +137,11 @@ CATEGORY_SYNONYMS: dict[str, list[str]] = {
     # Boarding points. A tourist walking a route asks «где сесть на автобус», and
     # the deterministic fallback has to read that without a model — so the three
     # everyday words for a stop are registered here, not only in taxonomy.csv.
-    "остановка": [
-        "остановка", "остановки", "остановку", "остановке", "остановкой",
-        "остановкам", "остановками", "остановках", "остановок",
+    # The bare word «остановка» is deliberately NOT among them: to a tourist it
+    # means a stop on the walk («с обязательной остановкой у Фарного костёла»),
+    # and reading that as a bus stop sent a church request hunting for transport.
+    # Only the transport-qualified forms count.
+    "остановка транспорта": [
         "автобус", "автобуса", "автобусу", "автобусом", "автобусе",
         "автобусы", "автобусов", "автобусам", "автобусах",
         "троллейбус", "троллейбуса", "троллейбусу", "троллейбусом", "троллейбусе",
@@ -204,8 +206,10 @@ CATEGORY_SYNONYMS_EN: dict[str, list[str]] = {
     "гостиница": [
         "hotel", "hotels", "hostel", "hostels", "inn", "inns", "lodging",
     ],
-    "остановка": [
-        "stop", "stops", "bus stop", "bus stops", "trolleybus stop", "tram stop",
+    # English: "stop" alone is as ambiguous as the Russian «остановка» (a stop on
+    # the walk), so only the transport-qualified forms are registered.
+    "остановка транспорта": [
+        "bus stop", "bus stops", "trolleybus stop", "tram stop",
         "transit stop", "boarding point",
     ],
 }

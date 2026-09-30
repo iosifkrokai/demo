@@ -11,6 +11,8 @@ from __future__ import annotations
 import math
 import os
 import sys
+import threading
+from collections.abc import Callable
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -93,3 +95,70 @@ def test_drop_unreachable_keeps_a_healthy_pool_untouched():
 
     assert len(kept) == 3
     assert new_cost.walk_seconds == matrix
+
+
+def _within(deadline: float, fn: Callable[..., list[int]], *args) -> list[int]:
+    """Run `fn` and fail the test if it does not finish in time.
+
+    A daemon thread, not a signal or an executor: a search that never returns
+    must fail here in seconds instead of hanging the whole suite, and the
+    leftover thread must not keep the process alive at exit.
+    """
+    box: dict[str, list[int]] = {}
+    worker = threading.Thread(target=lambda: box.setdefault("value", fn(*args)), daemon=True)
+    worker.start()
+    worker.join(deadline)
+    assert not worker.is_alive(), f"did not finish within {deadline}s"
+    return box["value"]
+
+
+#: A matrix Valhalla can produce and 2-opt cannot survive: every pair walkable
+#: in both directions EXCEPT 0→6 (the reverse, 6→0, is fine). Valhalla snaps
+#: each end of a pair on its own, so "reachable one way only" is a real shape,
+#: and with the old boundary-only rule this exact matrix and order ran past
+#: 200 000 passes without ever settling.
+_ONE_WAY_HOLE = [
+    [0.0, 4.0, 5.0, 7.0, 1.0, 4.0, float("inf")],
+    [7.0, 0.0, 1.0, 5.0, 6.0, 3.0, 1.0],
+    [5.0, 2.0, 0.0, 6.0, 1.0, 2.0, 7.0],
+    [6.0, 7.0, 2.0, 0.0, 7.0, 9.0, 5.0],
+    [5.0, 2.0, 8.0, 7.0, 0.0, 5.0, 6.0],
+    [1.0, 1.0, 4.0, 8.0, 7.0, 0.0, 6.0],
+    [5.0, 7.0, 6.0, 8.0, 3.0, 9.0, 0.0],
+]
+
+
+def test_two_opt_terminates_on_a_one_way_unreachable_pair():
+    """It must settle, and must not leave the walk worse than it found it.
+
+    The old rule accepted a reversal whenever the two boundary edges got
+    cheaper. That is right for a symmetric matrix only; here an interior edge
+    flips direction as well, so the accepted "improvement" was fictitious and
+    the loop cycled forever — the request hung with no Valhalla call left to
+    blame (the stack sat in this loop).
+    """
+    from agent.planner.optimize import _two_opt
+
+    order = [5, 4, 6, 2, 1, 0, 3]
+    before = cost_mod.walk_cost(order, _ONE_WAY_HOLE)
+    after_order = _within(10.0, _two_opt, order, _ONE_WAY_HOLE)
+
+    assert sorted(after_order) == sorted(order), "the order must stay a permutation"
+    assert cost_mod.walk_cost(after_order, _ONE_WAY_HOLE) <= before + 1e-6
+    assert order == [5, 4, 6, 2, 1, 0, 3], "the input list must not be mutated in place"
+
+
+def test_two_opt_still_shortens_a_symmetric_route():
+    """The real-cost check must not cost us the optimization itself."""
+    from agent.planner.optimize import _two_opt
+
+    n = 8
+    matrix = [[0.0] * n for _ in range(n)]
+    for i in range(n):
+        for j in range(i + 1, n):
+            matrix[i][j] = matrix[j][i] = float(abs(i - j) * 10 + (i * j) % 7)
+    order = [0, 7, 1, 6, 2, 5, 3, 4]  # deliberately zig-zag
+    better = _within(10.0, _two_opt, order, matrix)
+
+    assert sorted(better) == sorted(order)
+    assert cost_mod.walk_cost(better, matrix) < cost_mod.walk_cost(order, matrix)

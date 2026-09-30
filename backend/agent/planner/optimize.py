@@ -447,26 +447,44 @@ def _nn_order(matrix: list[list[float]], start: int, n: int) -> list[int]:
 def _two_opt(order: list[int], matrix: list[list[float]]) -> list[int]:
     """Open-route 2-opt: we DON'T close the loop (no return-to-start).
 
-    Edge distances to neighbours outside the segment are unchanged when
-    we reverse a middle slice, so the comparison is well-defined.
+    A reversal is accepted only when it lowers the order's REAL cost — the sum
+    `walk_cost` measures — not merely the two boundary edges. The boundary sum
+    alone is right for a symmetric matrix, and Valhalla's is not one: it snaps
+    each end on its own and can connect a pair one way only, so
+    `matrix[a][c] + matrix[b][d] < matrix[a][b] + matrix[c][d]` may hold while
+    reversing the slice makes the walk longer (every interior edge flips
+    direction too). Trusting that sum made the search cycle forever on a pair
+    Valhalla could not connect one way: a request hung past every timeout, with
+    no Valhalla call left to blame and the stack parked in this loop. Requiring a
+    strict decrease of the real cost bounds it — the cost can only fall, and
+    there are finitely many orders.
     """
     if len(order) <= 3:
         return order
+    n = len(order)
+    current = walk_cost(order, matrix)
     improved = True
     while improved:
         improved = False
-        for i in range(len(order) - 1):
-            for j in range(i + 1, len(order)):
+        for i in range(n - 1):
+            for j in range(i + 1, n):
                 a = order[i - 1] if i > 0 else None
                 b = order[i]
                 c = order[j]
-                d = order[j + 1] if j + 1 < len(order) else None
+                d = order[j + 1] if j + 1 < n else None
                 if a is None or d is None:
                     # Edge of the open route — skip those edges.
                     continue
                 old = matrix[a][b] + matrix[c][d]
                 new = matrix[a][c] + matrix[b][d]
-                if new + 1e-6 < old:
-                    order[i:j + 1] = reversed(order[i:j + 1])
+                # False for a non-finite cell too, so an unreachable pair is
+                # never "improved" into the order.
+                if not new + 1e-6 < old:
+                    continue
+                candidate = order[:i] + order[i:j + 1][::-1] + order[j + 1:]
+                candidate_cost = walk_cost(candidate, matrix)
+                if candidate_cost + 1e-6 < current:
+                    order = candidate
+                    current = candidate_cost
                     improved = True
     return order

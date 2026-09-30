@@ -111,7 +111,7 @@ def test_transit_tag_maps_agree_with_the_taxonomy_osm_tags():
         ("railway", RAILWAY_CATEGORY),
     ):
         for tag_value, code in mapping.items():
-            assert code == "остановка", f"{osm_key}={tag_value} → {code!r}"
+            assert code == "остановка транспорта", f"{osm_key}={tag_value} → {code!r}"
             assert f"{osm_key}={tag_value}" in taxonomy.get(code).osm_tags, (
                 f"{osm_key}={tag_value} → {code!r}, but {code!r} lists "
                 f"{taxonomy.get(code).osm_tags}"
@@ -126,11 +126,11 @@ def test_a_transit_stop_is_a_service_not_a_sight():
     contract is `visit_minutes > 0`), not 0: a boarding point is not a place to
     spend time, and if a request ever turns it into a stop it must not cost zero.
     """
-    stop = taxonomy.get("остановка")
+    stop = taxonomy.get("остановка транспорта")
     assert stop.role == "service"
-    assert taxonomy.visit_minutes("остановка") > 0
-    assert taxonomy.visit_minutes("остановка") <= 5
-    assert "остановка" in services.service_codes(), (
+    assert taxonomy.visit_minutes("остановка транспорта") > 0
+    assert taxonomy.visit_minutes("остановка транспорта") <= 5
+    assert "остановка транспорта" in services.service_codes(), (
         "the services-along-the-route lookup reads the taxonomy, so a service code "
         "must be reachable from it or the boarding points never appear"
     )
@@ -139,11 +139,11 @@ def test_a_transit_stop_is_a_service_not_a_sight():
 def test_an_unnamed_transit_stop_survives_with_a_placeholder_name():
     """Most OSM bus stops carry no name; dropping them would hide the boarding
     point the tourist asked for."""
-    assert extract_name({"highway": "bus_stop", "addr:street": "ул. Советская"}, "остановка") == (
+    assert extract_name({"highway": "bus_stop", "addr:street": "ул. Советская"}, "остановка транспорта") == (
         "Остановка (ул. Советская)"
     )
-    assert extract_name({"highway": "bus_stop"}, "остановка") == "Остановка"
-    assert extract_name({"highway": "bus_stop", "name": "Вокзал"}, "остановка") == "Вокзал"
+    assert extract_name({"highway": "bus_stop"}, "остановка транспорта") == "Остановка"
+    assert extract_name({"highway": "bus_stop", "name": "Вокзал"}, "остановка транспорта") == "Вокзал"
 
 
 # ── districts ───────────────────────────────────────────────────────────────

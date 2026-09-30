@@ -81,6 +81,8 @@ describe('ServicesLayer', () => {
   it('значки различают категории, а незнакомую не выдумывают', () => {
     expect(serviceIcon('кафе')).not.toBe(serviceIcon('туалет'));
     expect(serviceIcon('ресторан')).not.toBe(serviceIcon('кафе'));
+    // A transit stop is a boarding point, not a café: it gets its own glyph.
+    expect(serviceIcon('остановка транспорта')).not.toBe(serviceIcon('кафе'));
     // An unknown category gets the neutral dot rather than a café icon.
     expect(serviceIcon('вертолётная площадка')).toBe(
       serviceIcon('что-то новое')

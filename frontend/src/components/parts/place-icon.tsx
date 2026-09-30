@@ -24,6 +24,7 @@ const CATEGORY_EMOJI: Record<string, string> = {
   туалет: '🚻',
   гостиница: '🏨',
   инфраструктура: '🚏',
+  'остановка транспорта': '🚏',
 };
 
 export const categoryEmoji = (category?: string | null): string | null => {

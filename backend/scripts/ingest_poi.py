@@ -113,13 +113,13 @@ TOURISM_CATEGORY = {
 # tourist standing at the kerb: a stop you can board. They are services, not sights
 # — nothing here is «visited», it is where the walk can be cut short.
 HIGHWAY_CATEGORY = {
-    "bus_stop": "остановка",
+    "bus_stop": "остановка транспорта",
 }
 PUBLIC_TRANSPORT_CATEGORY = {
-    "platform": "остановка",
+    "platform": "остановка транспорта",
 }
 RAILWAY_CATEGORY = {
-    "tram_stop": "остановка",
+    "tram_stop": "остановка транспорта",
 }
 
 # Mock fixture for --dry-run (a handful of realistic Grodno-region POIs).
@@ -256,7 +256,7 @@ def extract_name(tags: dict, category: str) -> str | None:
     name = tags.get("name") or tags.get("name:ru")
     if name:
         return name.strip()
-    if category in ("туалет", "остановка"):
+    if category in ("туалет", "остановка транспорта"):
         label = "Туалет" if category == "туалет" else "Остановка"
         street = (tags.get("addr:street") or "").strip()
         return f"{label} ({street})" if street else label

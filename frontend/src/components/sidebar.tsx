@@ -282,6 +282,7 @@ const buildAmenityOptions = (t: TFunction): FilterOption[] => [
   { code: 'кафе', label: t('sidebar.amenities.cafe') },
   { code: 'ресторан', label: t('sidebar.amenities.restaurant') },
   { code: 'гостиница', label: t('sidebar.amenities.hotel') },
+  { code: 'остановка транспорта', label: t('sidebar.amenities.transitStop') },
 ];
 
 /** Categories to keep out of the route. */

@@ -199,9 +199,15 @@ def resolve_code(term: str, locale: Locale = "ru") -> str | None:
         if candidate in index:
             return index[candidate]
 
+    # A known form may occur INSIDE the query («прогулка по костёлам» → костёл).
+    # The reverse containment is deliberately gone: it let a short query inherit
+    # a longer code's meaning, so the bare tourist word «остановка» — and even
+    # «транспорт» — resolved to the multiword code «остановка транспорта», and a
+    # church walk went hunting for bus stops. A word the index does not know
+    # returns None, and the caller reports it instead of guessing.
     longest: str | None = None
     for form in index:
-        if len(form) >= 4 and (form in norm or norm in form):
+        if len(form) >= 4 and form in norm:
             if longest is None or len(form) > len(longest):
                 longest = form
     return index[longest] if longest is not None else None
