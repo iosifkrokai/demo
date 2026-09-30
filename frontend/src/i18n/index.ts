@@ -5,6 +5,7 @@ import { en } from './en';
 import { guideArea } from './namespaces/guide';
 import { historyArea } from './namespaces/history';
 import { mapArea } from './namespaces/map';
+import { panelArea } from './namespaces/panel';
 import { photoArea } from './namespaces/photo';
 import { sidebarArea } from './namespaces/sidebar';
 import { ru } from './ru';
@@ -56,6 +57,7 @@ export const flatRu = {
   ...historyArea.ru,
   ...sidebarArea.ru,
   ...photoArea.ru,
+  ...panelArea.ru,
 };
 export const flatEn = {
   ...en,
@@ -64,6 +66,7 @@ export const flatEn = {
   ...historyArea.en,
   ...sidebarArea.en,
   ...photoArea.en,
+  ...panelArea.en,
 };
 
 void i18n.use(initReactI18next).init({

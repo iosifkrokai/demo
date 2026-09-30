@@ -45,11 +45,17 @@ export const PanelToggle = ({
       className={cn(
         'group absolute top-1/2 z-20 flex h-14 w-6 -translate-y-1/2 items-center justify-center',
         'rounded-r-md border border-l-0 border-border bg-card/95 text-muted-foreground shadow-card',
-        'transition-colors hover:text-foreground pointer-coarse:h-16 pointer-coarse:w-8',
+        // A finger needs a real target: on a touch pointer the handle grows to
+        // 44x80 (measured before: 24x56 — a sliver, and the only way in and out
+        // of the panel). The desktop column keeps the quiet thin chevron.
+        'transition-colors hover:text-foreground pointer-coarse:h-20 pointer-coarse:w-11',
         className
       )}
     >
-      <Icon className="h-4 w-4" aria-hidden="true" />
+      <Icon
+        className="h-4 w-4 pointer-coarse:h-5 pointer-coarse:w-5"
+        aria-hidden="true"
+      />
     </button>
   );
 };

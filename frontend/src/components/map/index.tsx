@@ -160,8 +160,12 @@ export const MapComponent = () => {
   const mapRef = useRef<MapRef>(null);
   const focusRequest = useCommonStore((s) => s.focus);
   const guideFix = useCommonStore((s) => s.guideFix);
+  /** Metres to the next turn — the guide publishes it, the camera acts on it. */
+  const guideTurnDistanceM = useCommonStore((s) => s.guideTurnDistanceM);
   /** The bearing in force, so small course wobbles do not turn the map. */
   const bearingRef = useRef<number | null>(null);
+  /** When the tourist last dragged the map away — following returns after a pause. */
+  const panAwayRef = useRef(0);
   const ORIENTATION_STORAGE_KEY = 'grodno-map-orientation';
   type MapOrientation = 'heading' | 'north';
 
@@ -476,7 +480,13 @@ export const MapComponent = () => {
       ...(bearing !== undefined ? { bearing } : {}),
       padding: { left: panelWidth, top: 0, right: 0, bottom: 0 },
       pitch: 45,
-      zoom: Math.max(map.getZoom(), 16.5),
+      // A navigator leans in at the turn: within 120 m the camera is at street
+      // detail, otherwise at walking detail. Never back out — zooming out from
+      // under a tourist who has just zoomed in is the camera fighting its user.
+      zoom:
+        guideTurnDistanceM != null && guideTurnDistanceM <= 120
+          ? Math.max(map.getZoom(), 18)
+          : Math.max(map.getZoom(), 16.5),
       // Linear, and as long as the gap between fixes: the camera then moves at
       // one steady speed for the whole walk instead of easing in and out on
       // every step, which is what read as jolting.
@@ -487,7 +497,7 @@ export const MapComponent = () => {
       easing: (progress: number) => progress,
       essential: true,
     });
-  }, [guiding, follow, guideFix, orientation]);
+  }, [guiding, follow, guideFix, orientation, guideTurnDistanceM]);
 
   // Following starts again every time the guide is entered.
   useEffect(() => {
@@ -515,7 +525,10 @@ export const MapComponent = () => {
     const map = mapRef.current?.getMap?.();
     if (!map || !guiding) return;
     const release = (event?: { originalEvent?: unknown }) => {
-      if (event?.originalEvent) setFollow(false);
+      if (event?.originalEvent) {
+        panAwayRef.current = Date.now();
+        setFollow(false);
+      }
     };
     map.on('dragstart', release);
     map.on('rotatestart', release);
@@ -524,6 +537,26 @@ export const MapComponent = () => {
       map.off('rotatestart', release);
     };
   }, [guiding]);
+
+  /**
+   * A navigator does not sulk. Panning away used to switch the follow off for
+   * the rest of the walk, so the guide went on to «показывать маршрут» while the
+   * tourist walked off the edge of it — the camera came back only if they found
+   * the follow button. It comes back by itself now: eight seconds after the last
+   * touch, or at once when a turn is within 60 m, which is the moment the screen
+   * has to be showing the street rather than wherever the tourist was peering.
+   */
+  useEffect(() => {
+    if (!guiding) return;
+    const id = window.setInterval(() => {
+      if (follow) return;
+      const idleMs = Date.now() - panAwayRef.current;
+      const turnIsHere =
+        guideTurnDistanceM != null && guideTurnDistanceM <= 60 && idleMs > 2000;
+      if (idleMs > 8000 || turnIsHere) setFollow(true);
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [guiding, follow, guideTurnDistanceM]);
 
   const handleMapTilesClick = useCallback(
     (event: maplibregl.MapLayerMouseEvent) => {

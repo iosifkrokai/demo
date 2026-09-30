@@ -1,5 +1,7 @@
 import { useCallback, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
+import { useTranslation } from 'react-i18next';
+
 import { cn } from '@/lib/utils';
 
 export type SheetSnap = 'peek' | 'full';
@@ -120,24 +122,34 @@ interface SheetDragHandleProps {
 /**
  * The grab bar of the bottom sheet. Hidden on desktop, where the panel is a
  * full-height column with nothing to snap.
+ *
+ * Measured on 390x844 before this: the bar was 56x16 — a 16px-tall target for
+ * the only control that changes the sheet's height — and the way out of the open
+ * panel was the 24px chevron on the map's far edge, i.e. the tourist had to
+ * leave the panel to find the control that closes it. Now the bar is a 44px
+ * target (the line itself stays thin) and the sheet carries its own ✕.
  */
 export const SheetDragHandle = ({
   snap,
   handleProps,
-}: SheetDragHandleProps) => (
-  <div className="flex justify-center pt-2 md:hidden">
-    <button
-      type="button"
-      aria-expanded={snap === 'full'}
-      aria-label={snap === 'full' ? 'свернуть панель' : 'развернуть панель'}
-      title="потянуть, чтобы развернуть"
-      className={cn(
-        'flex h-4 w-14 touch-none items-center justify-center rounded-full transition-colors',
-        'hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/50'
-      )}
-      {...handleProps}
-    >
-      <span className="h-1 w-9 rounded-full bg-border" />
-    </button>
-  </div>
-);
+}: SheetDragHandleProps) => {
+  const { t } = useTranslation();
+  return (
+    <div className="relative flex justify-center pt-1 md:hidden">
+      <button
+        type="button"
+        data-testid="sheet-handle"
+        aria-expanded={snap === 'full'}
+        aria-label={snap === 'full' ? t('panel.collapse') : t('panel.expand')}
+        title={t('panel.dragHint')}
+        className={cn(
+          'flex h-11 w-24 touch-none items-center justify-center rounded-full transition-colors',
+          'hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/50'
+        )}
+        {...handleProps}
+      >
+        <span className="h-1 w-9 rounded-full bg-border" />
+      </button>
+    </div>
+  );
+};

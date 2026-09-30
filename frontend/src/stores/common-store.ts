@@ -47,6 +47,12 @@ interface CommonState {
   } | null;
   /** True while the guide (Проводник) is running. */
   guiding: boolean;
+  /**
+   * Metres to the next turn, published by the guide so the camera can behave
+   * like a navigator instead of a viewer: it closes in as the turn comes.
+   * null while there is no line, no trusted fix, or nothing to turn into.
+   */
+  guideTurnDistanceM: number | null;
 }
 
 interface CommonActions {
@@ -65,6 +71,7 @@ interface CommonActions {
   focusOn: (lng: number, lat: number) => void;
   setGuideFix: (fix: CommonState['guideFix']) => void;
   setGuiding: (guiding: boolean) => void;
+  setGuideTurnDistanceM: (metres: number | null) => void;
 }
 
 type CommonStore = CommonState & CommonActions;
@@ -89,11 +96,14 @@ export const useCommonStore = create<CommonStore>()(
       focus: null,
       guideFix: null,
       guiding: false,
+      guideTurnDistanceM: null,
 
       focusOn: (lng, lat) =>
         set({ focus: { lng, lat, at: Date.now() } }, undefined, 'focusOn'),
       setGuideFix: (fix) => set({ guideFix: fix }, undefined, 'setGuideFix'),
       setGuiding: (guiding) => set({ guiding }, undefined, 'setGuiding'),
+      setGuideTurnDistanceM: (metres) =>
+        set({ guideTurnDistanceM: metres }, undefined, 'setGuideTurnDistanceM'),
 
       showLoading: (loading) => set({ loading }),
       zoomTo: (coordinates) => set({ coordinates }),

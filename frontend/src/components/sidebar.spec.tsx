@@ -76,9 +76,11 @@ vi.mock('@/stores/common-store', () => ({
       focus: null,
       guideFix: null,
       guiding: false,
+      guideTurnDistanceM: null,
       focusOn: vi.fn(),
       setGuideFix: vi.fn(),
       setGuiding: vi.fn(),
+      setGuideTurnDistanceM: vi.fn(),
     }),
 }));
 

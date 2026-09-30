@@ -696,6 +696,21 @@ export const GuidePanel = ({
       ? Math.max(0, activeManeuver.along - traveled)
       : null;
 
+  /**
+   * Hand the turn distance to the map, which uses it as a navigator does: it
+   * closes in for the turn and keeps the tourist on screen. Rounded to 10 m,
+   * because the camera cannot see a metre and re-rendering the map for one on
+   * every fix is how following starts to stutter.
+   */
+  const setGuideTurnDistanceM = useCommonStore((s) => s.setGuideTurnDistanceM);
+  useEffect(() => {
+    setGuideTurnDistanceM(
+      mode === 'moving' && maneuverDistance != null
+        ? Math.round(maneuverDistance / 10) * 10
+        : null
+    );
+  }, [mode, maneuverDistance, setGuideTurnDistanceM]);
+
   // ── Voice: announce maneuvers on distance thresholds ────────────────────────────
   useEffect(() => {
     if (mode !== 'moving') return;
