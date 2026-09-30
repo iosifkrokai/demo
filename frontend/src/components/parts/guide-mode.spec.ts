@@ -1,6 +1,11 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 
-import { DEFAULT_TRAVEL_MODE, guideModeFor } from './guide-mode';
+import i18n from '@/i18n';
+import { defaultTravelMode, guideModeFor } from './guide-mode';
+
+afterEach(async () => {
+  await i18n.changeLanguage('ru');
+});
 
 describe('guideModeFor', () => {
   it('walks when the plan says pedestrian', () => {
@@ -14,9 +19,10 @@ describe('guideModeFor', () => {
 
   it('walks when nothing is stated — that is what a route without a transport means', () => {
     for (const value of [undefined, null, '', 'unknown-costing']) {
-      expect(guideModeFor(value).id).toBe('foot');
+      expect(guideModeFor(value).id).toBe(defaultTravelMode().id);
     }
-    expect(guideModeFor(undefined)).toBe(DEFAULT_TRAVEL_MODE);
+    expect(guideModeFor(undefined).id).toBe('foot');
+    expect(guideModeFor(undefined).label).toBe(defaultTravelMode().label);
   });
 
   it('rides when the plan says bicycle', () => {
@@ -48,5 +54,15 @@ describe('guideModeFor', () => {
     for (const costing of ['pedestrian', 'bicycle', 'auto']) {
       expect(guideModeFor(costing).icon).toBeTruthy();
     }
+  });
+
+  it('speaks English when the interface is English', async () => {
+    await i18n.changeLanguage('en');
+
+    expect(guideModeFor('pedestrian').verb).toBe('walk');
+    expect(guideModeFor('bicycle').label).toBe('by bike');
+    expect(guideModeFor('auto').arrivalHint).toBe('park by the stop');
+    // The number of modes does not change with the language.
+    expect(defaultTravelMode().id).toBe('foot');
   });
 });

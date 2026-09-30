@@ -11,11 +11,18 @@ import {
 import userEvent from '@testing-library/user-event';
 
 import type { ParsedDirectionsGeometry } from '@/components/types';
+import i18n from '@/i18n';
 import { useDirectionsStore } from '@/stores/directions-store';
 
 import { installGeoSim, resetSim } from '@/lib/geo-sim';
 
 import { GuidePanel, guideRouteKey, type GuideStop } from './guide-panel';
+
+// The app's own language is Russian while the specs run (src/test-setup.ts), and
+// the English tests below flip it — put it back for the next test either way.
+afterEach(async () => {
+  await i18n.changeLanguage('ru');
+});
 
 // Module-level mutable array: vi.mock is hoisted so this must be declared before it.
 // Only used by the "re-acquires" test; cleared at the start of that test.
@@ -469,9 +476,7 @@ describe('GuidePanel', () => {
     await user.click(screen.getByTestId('guide-stop-2'));
     expect(screen.getByText(/маршрут пройден/i)).toBeInTheDocument();
 
-    await user.click(
-      screen.getByRole('button', { name: /сбросить прогресс/i })
-    );
+    await user.click(screen.getByRole('button', { name: 'сбросить' }));
 
     expect(screen.getByText(/пройдено 0 из 2/i)).toBeInTheDocument();
     expect(screen.getByTestId('guide-next-stop')).toHaveTextContent(
@@ -985,5 +990,74 @@ describe('GuidePanel · фиксы в фоне', () => {
 
     const nextCard = screen.getByTestId('guide-next-stop');
     expect(within(nextCard).getByText('Кафе Немо')).toBeInTheDocument();
+  });
+});
+
+describe('GuidePanel · английский интерфейс', () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  afterEach(() => {
+    cleanup();
+    useDirectionsStore.getState().resetRoute();
+    Reflect.deleteProperty(navigator, 'geolocation');
+    vi.restoreAllMocks();
+  });
+
+  it('переводит весь проводник, а не только заголовок', async () => {
+    await i18n.changeLanguage('en');
+    stubGeolocation(null);
+    render(<GuidePanel stops={STOPS} />);
+
+    // Шапка.
+    expect(screen.getByText('Guide')).toBeInTheDocument();
+    expect(screen.queryByText('Проводник')).toBeNull();
+    expect(
+      screen.getByText('walking the route stop by stop')
+    ).toBeInTheDocument();
+    expect(screen.getByText('sound on')).toBeInTheDocument();
+    expect(screen.getByText('reset')).toBeInTheDocument();
+
+    // Карточка следующей остановки и её кнопки.
+    const card = screen.getByTestId('guide-next-stop');
+    expect(card).toHaveTextContent('next stop');
+    expect(
+      screen.getByRole('link', { name: /open in maps/i })
+    ).toBeInTheDocument();
+
+    // Прогресс, статус геолокации и главное действие.
+    expect(screen.getByText(/walked 0 of 2/i)).toBeInTheDocument();
+    expect(screen.getByTestId('guide-geo-status')).toHaveTextContent(
+      'geolocation unavailable — mark the stops by hand'
+    );
+    expect(screen.getByTestId('guide-start')).toHaveTextContent(
+      'start the route'
+    );
+  });
+
+  it('объясняет пустой маршрут по-английски', async () => {
+    await i18n.changeLanguage('en');
+    stubGeolocation(null);
+    render(<GuidePanel stops={[]} />);
+
+    expect(screen.getByTestId('guide-empty')).toHaveTextContent('no route yet');
+  });
+
+  it('переносит ряд кнопок шапки, чтобы кнопки не уезжали за край на 390px', () => {
+    stubGeolocation(null);
+    render(<GuidePanel stops={STOPS} />);
+
+    const header = screen.getByTestId('guide-header');
+    // Ряд переносится, блок заголовка может сжиматься (min-w-0), группа кнопок
+    // не сжимается (shrink-0) — при 390px ни одна кнопка не выходит за экран и
+    // не накладывается на соседнюю.
+    expect(header.className).toContain('flex-wrap');
+    // The title block can shrink so it never pushes the controls out.
+    expect(header.querySelector('.min-w-0')).not.toBeNull();
+    const resetButton = screen.getByRole('button', { name: 'сбросить' });
+    expect(resetButton.className).toContain('shrink-0');
+    // Компактная подпись вместо прежней «сбросить прогресс».
+    expect(screen.queryByText('сбросить прогресс')).toBeNull();
   });
 });

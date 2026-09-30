@@ -11,6 +11,7 @@ import {
   VolumeX,
   WifiOff,
 } from 'lucide-react';
+import type { TFunction } from 'i18next';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type {
@@ -309,11 +310,12 @@ const fmtClock = (ms: number) => {
 };
 
 /** A waypoint that simply says «я здесь» — mirrors sidebar's meWaypoint. */
-const meWaypoint = (lat: number, lon: number): Waypoint => {
+const meWaypoint = (lat: number, lon: number, t: TFunction): Waypoint => {
   const lngLat: [number, number] = [lon, lat];
+  const label = t('guide.myLocation');
   const result: ActiveWaypoint = {
-    title: 'Моё местоположение',
-    description: 'старт маршрута',
+    title: label,
+    description: t('guide.routeStart'),
     selected: true,
     displaylnglat: lngLat,
     sourcelnglat: lngLat,
@@ -322,7 +324,7 @@ const meWaypoint = (lat: number, lon: number): Waypoint => {
   };
   return {
     id: ME_WAYPOINT_ID,
-    userInput: 'Моё местоположение',
+    userInput: label,
     geocodeResults: [result],
   };
 };
@@ -372,8 +374,14 @@ export const GuidePanel = ({
 }: GuidePanelProps) => {
   const { t, i18n } = useTranslation();
   const key = useMemo(() => guideRouteKey(stops), [stops]);
-  /** How the guide speaks about movement: on foot, on a bike, or driving. */
-  const travel = useMemo(() => guideModeFor(transport), [transport]);
+  /**
+   * How the guide speaks about movement: on foot, on a bike, or driving.
+   * Not memoized: the wording lives in the dictionary, and a plain call in
+   * render picks the current language up on every re-render (which a language
+   * change already triggers) — a memo keyed on the transport would keep the old
+   * language's words.
+   */
+  const travel = guideModeFor(transport);
   const [visitOverrides, setVisitOverrides] = useState<VisitOverrides>(() =>
     loadVisitOverrides(key)
   );
@@ -795,7 +803,10 @@ export const GuidePanel = ({
   const announcement = !activeManeuver
     ? ''
     : precise && maneuverDistance != null
-      ? `Через ${fmtDist(Math.round(maneuverDistance / 50) * 50)}: ${activeManeuver.instruction}`
+      ? t('guide.announceIn', {
+          distance: fmtDist(Math.round(maneuverDistance / 50) * 50),
+          instruction: activeManeuver.instruction,
+        })
       : activeManeuver.instruction;
 
   // ── Re-plan from where the tourist stands, keeping every stop ────────────
@@ -808,7 +819,7 @@ export const GuidePanel = ({
   const reroute = useCallback(() => {
     const store = useDirectionsStore.getState();
     if (fix) {
-      const mine = meWaypoint(fix.lat, fix.lon);
+      const mine = meWaypoint(fix.lat, fix.lon, t);
       const hasMe = store.waypoints.some((w) => w.id === ME_WAYPOINT_ID);
       store.setWaypoint(
         hasMe
@@ -830,7 +841,7 @@ export const GuidePanel = ({
       // No CustomEvent (a bare render) — the store update above already moved
       // the start of the next plan.
     }
-  }, [onReroute, fix]);
+  }, [onReroute, fix, t]);
 
   const wasHiddenRef = useRef(false);
 
@@ -899,17 +910,15 @@ export const GuidePanel = ({
   }, [mode, t]);
 
   const geoLine = useMemo(() => {
-    if (quality === 'unavailable')
-      return 'геолокация недоступна — отмечайте остановки вручную';
-    if (quality === 'waiting') return 'определяю, где вы…';
-    if (quality === 'stale')
-      return 'сигнал GPS потерян — отмечайте остановки вручную';
+    if (quality === 'unavailable') return t('guide.geoUnavailable');
+    if (quality === 'waiting') return t('guide.geoLocating');
+    if (quality === 'stale') return t('guide.geoStale');
     if (quality === 'poor')
-      return `GPS неточный (±${Math.round(fix?.accuracy ?? 0)} м) — подсказки приблизительные`;
+      return t('guide.geoPoor', { metres: Math.round(fix?.accuracy ?? 0) });
     return toNextMetres != null
-      ? `до следующей ${fmtDist(toNextMetres)}`
-      : 'вы на маршруте';
-  }, [quality, fix, toNextMetres]);
+      ? t('guide.geoDistanceToNext', { distance: fmtDist(toNextMetres) })
+      : t('guide.geoOnRoute');
+  }, [quality, fix, toNextMetres, t]);
 
   const activeSuggestions = suggestions.filter(
     (s) => !skippedSuggestions.includes(s.id)
@@ -945,8 +954,11 @@ export const GuidePanel = ({
           instruction={
             activeManeuver?.instruction ??
             (nextStop
-              ? `Идите к остановке «${nextStop.name}»`
-              : 'Идите по маршруту')
+              ? t('guide.goToStop', {
+                  imperative: travel.imperative,
+                  name: nextStop.name,
+                })
+              : t('guide.followRoute', { imperative: travel.imperative }))
           }
           Icon={ManeuverIcon}
           distance={maneuverDistance}
@@ -1013,7 +1025,8 @@ export const GuidePanel = ({
             disabled={!nextStop}
             className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-primary font-semibold text-primary-foreground transition hover:brightness-[0.97] active:scale-[0.99] disabled:opacity-40"
           >
-            <MapPin className="h-4 w-4" />я на месте
+            <MapPin className="h-4 w-4" />
+            {t('guide.advance')}
           </button>
           <button
             type="button"
@@ -1022,7 +1035,7 @@ export const GuidePanel = ({
             className="flex h-12 items-center justify-center gap-2 rounded-xl bg-secondary px-4 font-semibold text-secondary-foreground transition hover:brightness-[0.97] active:scale-[0.99]"
           >
             <Flag className="h-4 w-4" />
-            завершить
+            {t('guide.finish')}
           </button>
         </div>
 
@@ -1125,7 +1138,7 @@ export const GuidePanel = ({
         className="flex h-12 items-center justify-center gap-2 rounded-xl bg-primary font-semibold text-primary-foreground transition hover:brightness-[0.97] active:scale-[0.99] disabled:opacity-40"
       >
         <Play className="h-4 w-4" />
-        начать маршрут
+        {t('guide.start')}
       </button>
     </section>
   );
@@ -1151,39 +1164,43 @@ const ManeuverBanner = ({
   distance,
   precise,
   quality,
-}: ManeuverBannerProps) => (
-  <div
-    data-testid="guide-maneuver"
-    className="sticky top-0 z-10 rounded-2xl border border-border bg-card p-4 shadow-float"
-  >
-    <div className="flex items-start gap-3">
-      <span className="flex size-12 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
-        <Icon className="size-6" aria-hidden="true" />
-      </span>
-      <div className="min-w-0 flex-1">
-        <div
-          data-testid="guide-maneuver-instruction"
-          className="text-stat font-semibold leading-tight"
-        >
-          {instruction}
-        </div>
-        <div className="mt-1 text-label text-muted-foreground">
-          {precise && distance != null ? (
-            <span data-testid="guide-maneuver-distance">
-              через {fmtDist(distance)}
-            </span>
-          ) : (
-            <span data-testid="guide-maneuver-unprecise">
-              {quality === 'unavailable'
-                ? 'сигнала нет — идите по линии маршрута'
-                : 'расстояние скрыто: сигнал GPS неточный'}
-            </span>
-          )}
+}: ManeuverBannerProps) => {
+  const { t } = useTranslation();
+
+  return (
+    <div
+      data-testid="guide-maneuver"
+      className="sticky top-0 z-10 rounded-2xl border border-border bg-card p-4 shadow-float"
+    >
+      <div className="flex items-start gap-3">
+        <span className="flex size-12 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
+          <Icon className="size-6" aria-hidden="true" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <div
+            data-testid="guide-maneuver-instruction"
+            className="text-stat font-semibold leading-tight"
+          >
+            {instruction}
+          </div>
+          <div className="mt-1 text-label text-muted-foreground">
+            {precise && distance != null ? (
+              <span data-testid="guide-maneuver-distance">
+                {t('guide.maneuverIn', { distance: fmtDist(distance) })}
+              </span>
+            ) : (
+              <span data-testid="guide-maneuver-unprecise">
+                {quality === 'unavailable'
+                  ? t('guide.noSignal')
+                  : t('guide.distanceHidden')}
+              </span>
+            )}
+          </div>
         </div>
       </div>
     </div>
-  </div>
-);
+  );
+};
 
 interface OffRoutePromptProps {
   metres: number | null;
@@ -1196,47 +1213,53 @@ const OffRoutePrompt = ({
   metres,
   onReroute,
   onDismiss,
-}: OffRoutePromptProps) => (
-  <div
-    data-testid="guide-off-route"
-    role="alert"
-    className="rounded-2xl border border-border bg-card p-4 shadow-card"
-  >
-    <div className="flex items-start gap-3">
-      <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-        <TriangleAlert className="h-5 w-5" aria-hidden="true" />
-      </span>
-      <div className="min-w-0 flex-1">
-        <div className="text-body font-semibold leading-tight">
-          вы сошли с маршрута
-        </div>
-        <p className="mt-0.5 text-label text-muted-foreground">
-          {metres != null ? `вы в ~${fmtDist(metres)} от линии. ` : ''}
-          Перестроим от вас — остановки и обязательные точки сохранятся.
-        </p>
-        <div className="mt-3 flex flex-wrap gap-2">
-          <button
-            type="button"
-            data-testid="guide-reroute"
-            onClick={onReroute}
-            className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-primary px-4 text-body font-semibold text-primary-foreground transition hover:brightness-[0.97] active:scale-[0.99]"
-          >
-            <Navigation className="h-4 w-4" />
-            перестроить от меня
-          </button>
-          <button
-            type="button"
-            data-testid="guide-on-route"
-            onClick={onDismiss}
-            className="inline-flex h-10 items-center justify-center rounded-xl px-4 text-body text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-          >
-            я на маршруте
-          </button>
+}: OffRoutePromptProps) => {
+  const { t } = useTranslation();
+
+  return (
+    <div
+      data-testid="guide-off-route"
+      role="alert"
+      className="rounded-2xl border border-border bg-card p-4 shadow-card"
+    >
+      <div className="flex items-start gap-3">
+        <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+          <TriangleAlert className="h-5 w-5" aria-hidden="true" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="text-body font-semibold leading-tight">
+            {t('guide.offRouteTitle')}
+          </div>
+          <p className="mt-0.5 text-label text-muted-foreground">
+            {metres != null
+              ? `${t('guide.offRouteAt', { distance: fmtDist(metres) })} `
+              : ''}
+            {t('guide.offRouteBody')}
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              data-testid="guide-reroute"
+              onClick={onReroute}
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-primary px-4 text-body font-semibold text-primary-foreground transition hover:brightness-[0.97] active:scale-[0.99]"
+            >
+              <Navigation className="h-4 w-4" />
+              {t('guide.reroute')}
+            </button>
+            <button
+              type="button"
+              data-testid="guide-on-route"
+              onClick={onDismiss}
+              className="inline-flex h-10 items-center justify-center rounded-xl px-4 text-body text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            >
+              {t('guide.onRoute')}
+            </button>
+          </div>
         </div>
       </div>
     </div>
-  </div>
-);
+  );
+};
 
 interface SuggestionListProps {
   suggestions: GuideSuggestion[];
@@ -1249,40 +1272,44 @@ const SuggestionList = ({
   suggestions,
   onAdd,
   onSkip,
-}: SuggestionListProps) => (
-  <div
-    data-testid="guide-suggestions"
-    className="rounded-2xl border border-border bg-card p-3 shadow-card"
-  >
-    <div className="px-1 text-meta font-medium text-muted-foreground">
-      по пути — предложения, маршрут не меняют
-    </div>
-    {suggestions.map((s) => (
-      <div key={s.id} className="mt-2 flex items-center gap-2 px-1">
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-body">{s.name}</div>
-          <div className="text-meta text-muted-foreground">{s.detail}</div>
-        </div>
-        <button
-          type="button"
-          data-testid={`guide-suggestion-add-${s.id}`}
-          onClick={() => onAdd(s.id)}
-          className="h-8 shrink-0 rounded-full border border-border px-3 text-meta transition-colors hover:bg-muted"
-        >
-          добавить
-        </button>
-        <button
-          type="button"
-          data-testid={`guide-suggestion-skip-${s.id}`}
-          onClick={() => onSkip(s.id)}
-          className="h-8 shrink-0 rounded-full px-2 text-meta text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-        >
-          не надо
-        </button>
+}: SuggestionListProps) => {
+  const { t } = useTranslation();
+
+  return (
+    <div
+      data-testid="guide-suggestions"
+      className="rounded-2xl border border-border bg-card p-3 shadow-card"
+    >
+      <div className="px-1 text-meta font-medium text-muted-foreground">
+        {t('guide.suggestionsTitle')}
       </div>
-    ))}
-  </div>
-);
+      {suggestions.map((s) => (
+        <div key={s.id} className="mt-2 flex items-center gap-2 px-1">
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-body">{s.name}</div>
+            <div className="text-meta text-muted-foreground">{s.detail}</div>
+          </div>
+          <button
+            type="button"
+            data-testid={`guide-suggestion-add-${s.id}`}
+            onClick={() => onAdd(s.id)}
+            className="h-8 shrink-0 rounded-full border border-border px-3 text-meta transition-colors hover:bg-muted"
+          >
+            {t('guide.suggestionAdd')}
+          </button>
+          <button
+            type="button"
+            data-testid={`guide-suggestion-skip-${s.id}`}
+            onClick={() => onSkip(s.id)}
+            className="h-8 shrink-0 rounded-full px-2 text-meta text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          >
+            {t('guide.suggestionSkip')}
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+};
 
 const QualityIcon = ({ quality }: { quality: FixQuality }) => {
   if (quality === 'unavailable' || quality === 'stale') {
@@ -1300,47 +1327,67 @@ interface GuideHeaderProps {
   onVoiceMuteToggle: () => void;
 }
 
-/** Panel title + the one destructive control, kept quiet on purpose. */
+/**
+ * Panel title + the two quiet controls (sound, reset), kept quiet on purpose.
+ *
+ * The row must fit a 390px phone: at that width the old fixed row pushed the
+ * reset button past the right edge (x=298 w=160 → 458 on a 390 viewport) and it
+ * was clipped. The row now wraps instead of overflowing, the title block may
+ * shrink (`min-w-0` + `truncate`) so it never forces the controls out, the
+ * control group never shrinks (`shrink-0`), and the labels are compact («сбросить»,
+ * not «сбросить прогресс», and `px-2.5` instead of `px-3`). If a long language
+ * still cannot fit both on one line, the group drops to its own line rather than
+ * running off screen — no button ever leaves the viewport or overlaps another.
+ */
 const GuideHeader = ({
   onReset,
   voiceMuted,
   onVoiceMuteToggle,
-}: GuideHeaderProps) => (
-  <div className="flex items-center justify-between gap-2">
-    <div className="flex items-center gap-2">
-      <span className="flex size-8 items-center justify-center rounded-full bg-primary/10 text-primary">
-        <Footprints className="h-4 w-4" />
-      </span>
-      <div>
-        <div className="text-body font-semibold leading-tight">Проводник</div>
-        <div className="text-meta text-muted-foreground">
-          идём по маршруту остановка за остановкой
+}: GuideHeaderProps) => {
+  const { t } = useTranslation();
+
+  return (
+    <div
+      data-testid="guide-header"
+      className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1.5"
+    >
+      <div className="flex min-w-0 flex-1 items-center gap-2">
+        <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+          <Footprints className="h-4 w-4" />
+        </span>
+        <div className="min-w-0">
+          <div className="truncate text-body font-semibold leading-tight">
+            {t('guide.title')}
+          </div>
+          <div className="truncate text-meta text-muted-foreground">
+            {t('guide.subtitle')}
+          </div>
         </div>
       </div>
+      <div className="flex shrink-0 items-center gap-1">
+        <button
+          type="button"
+          onClick={onVoiceMuteToggle}
+          title={voiceMuted ? t('guide.enableSound') : t('guide.disableSound')}
+          className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-meta text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        >
+          {voiceMuted ? (
+            <VolumeX className="h-3.5 w-3.5" />
+          ) : (
+            <Volume2 className="h-3.5 w-3.5" />
+          )}
+          {voiceMuted ? t('guide.soundOff') : t('guide.soundOn')}
+        </button>
+        <button
+          type="button"
+          onClick={onReset}
+          title={t('guide.resetTitle')}
+          className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-meta text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        >
+          <RotateCcw className="h-3.5 w-3.5" />
+          {t('guide.reset')}
+        </button>
+      </div>
     </div>
-    <div className="flex items-center gap-1">
-      <button
-        type="button"
-        onClick={onVoiceMuteToggle}
-        title={voiceMuted ? 'включить звук' : 'выключить звук'}
-        className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-meta text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-      >
-        {voiceMuted ? (
-          <VolumeX className="h-3.5 w-3.5" />
-        ) : (
-          <Volume2 className="h-3.5 w-3.5" />
-        )}
-        {voiceMuted ? 'звук выкл' : 'звук вкл'}
-      </button>
-      <button
-        type="button"
-        onClick={onReset}
-        title="начать маршрут заново"
-        className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-meta text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-      >
-        <RotateCcw className="h-3.5 w-3.5" />
-        сбросить прогресс
-      </button>
-    </div>
-  </div>
-);
+  );
+};

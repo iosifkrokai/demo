@@ -19,6 +19,7 @@ route over real Valhalla road data. The UI then shows:
 - **Map** — MapLibre GL, numbered stop markers, route polyline from Valhalla.
 
 nginx in the frontend container proxies:
+
 - `POST /routes/*` → agent :8080
 - `/route`, `/status`, `/isochrone`, `/locate`, `/height`, `/tile` → Valhalla :8002
 
@@ -75,15 +76,15 @@ environment and `extra_hosts` setup.
 
 ## Key source files
 
-| Path | Purpose |
-|---|---|
-| `src/components/sidebar.tsx` | Planning panel: query input, filters, stop list |
-| `src/components/guide-panel.tsx` | Walker mode: next stop, progress, manual advance |
-| `src/components/parts/segmented.tsx` | Segmented control (Planning / Guide) |
-| `src/components/parts/guide-*.tsx` | Guide sub-components |
-| `src/components/map/index.tsx` | MapLibre map + stop markers + route line |
-| `src/index.css` | Design tokens (colours, radius, shadows) |
-| `DESIGN.md` | Visual spec: tokens, component patterns, motion |
+| Path                                 | Purpose                                          |
+| ------------------------------------ | ------------------------------------------------ |
+| `src/components/sidebar.tsx`         | Planning panel: query input, filters, stop list  |
+| `src/components/guide-panel.tsx`     | Walker mode: next stop, progress, manual advance |
+| `src/components/parts/segmented.tsx` | Segmented control (Planning / Guide)             |
+| `src/components/parts/guide-*.tsx`   | Guide sub-components                             |
+| `src/components/map/index.tsx`       | MapLibre map + stop markers + route line         |
+| `src/index.css`                      | Design tokens (colours, radius, shadows)         |
+| `DESIGN.md`                          | Visual spec: tokens, component patterns, motion  |
 
 ## Testing
 

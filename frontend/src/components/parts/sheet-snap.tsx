@@ -13,6 +13,18 @@ export const SHEET_SNAP_CLASS: Record<SheetSnap, string> = {
 };
 
 /**
+ * While the guide runs, the map IS the navigator, so the sheet drops to a strip
+ * that still shows the turn and the next stop (a drag still opens it fully).
+ *
+ * Measured on 390x844: at the peek height the sheet started at y=464 and covered
+ * every map control — the guide's own compass and follow buttons sat at y=640
+ * and y=704, i.e. behind it, and the compass overlapped the services button by
+ * 32px on top of that. A navigator whose map is a quarter of the screen and
+ * whose controls are unreachable is not a navigator.
+ */
+export const GUIDE_SHEET_CLASS = 'h-[26dvh] md:h-auto';
+
+/**
  * The panel itself: a bottom sheet under 768px (the map stays visible above it)
  * and a resizable column (420px by default) from 768px up. Built on the shared `Sheet` primitive, so
  * these classes only re-shape it — `cn()` (tailwind-merge) lets them win over

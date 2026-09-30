@@ -104,7 +104,7 @@ All build-time, prefixed `VITE_`. Defined in `.env`, typed in `src/vite-env.d.ts
 | `VITE_CENTER_COORDS`         | Initial map center `"lat,lng"`                                                   |
 | `VITE_DEFAULT_COSTING_MODEL` | Default profile (auto/bicycle/pedestrian/car/truck/bus/motor_scooter/motorcycle) |
 | `VITE_CLIENT_ID`             | Sent as `X-Client-Id` on Valhalla requests                                       |
-| `VITE_AGENT_URL`             | Grodno FastAPI agent (`/routes/generate`); falls back to `http://localhost:8080`  |
+| `VITE_AGENT_URL`             | Grodno FastAPI agent (`/routes/generate`); falls back to `http://localhost:8080` |
 
 ## Deployment
 
@@ -121,21 +121,21 @@ The sidebar (`src/components/sidebar.tsx`) drives the Grodno FastAPI agent. The 
 
 **Request body** — the sidebar sends these fields:
 
-| Field | Type | When sent |
-|---|---|---|
-| `query` | `string` | Always |
-| `time_budget_minutes` | `number` | Only when the user picked ≥ 15 min; absent or `0` = no limit |
-| `profile` | `string` (Valhalla costing name) | Only when the user explicitly picked a transport; `car` maps to `auto` |
-| `origin` | `{lat: number, lon: number}` | Browser geolocation coordinates, if available |
+| Field                 | Type                             | When sent                                                              |
+| --------------------- | -------------------------------- | ---------------------------------------------------------------------- |
+| `query`               | `string`                         | Always                                                                 |
+| `time_budget_minutes` | `number`                         | Only when the user picked ≥ 15 min; absent or `0` = no limit           |
+| `profile`             | `string` (Valhalla costing name) | Only when the user explicitly picked a transport; `car` maps to `auto` |
+| `origin`              | `{lat: number, lon: number}`     | Browser geolocation coordinates, if available                          |
 
 **Response fields the UI consumes:**
 
-| Field | Used by |
-|---|---|
-| `points[]` | Converted to waypoints and rendered on the map with `placeId` linking each to its `PlaceDetails` |
-| `budget{}` | Displayed in the route summary strip |
-| `summary{length_km, time_seconds}` | Displayed in the route summary strip |
-| `costing` | If the user did not pick a transport, the UI adopts this costing and mirrors it into the URL `?profile=` param so the webapp's own `/route` request draws the line with the same costing |
+| Field                              | Used by                                                                                                                                                                                  |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `points[]`                         | Converted to waypoints and rendered on the map with `placeId` linking each to its `PlaceDetails`                                                                                         |
+| `budget{}`                         | Displayed in the route summary strip                                                                                                                                                     |
+| `summary{length_km, time_seconds}` | Displayed in the route summary strip                                                                                                                                                     |
+| `costing`                          | If the user did not pick a transport, the UI adopts this costing and mirrors it into the URL `?profile=` param so the webapp's own `/route` request draws the line with the same costing |
 
 ### "My location" waypoint
 
@@ -151,7 +151,6 @@ The waypoint `id = 'me'` (`ME_WAYPOINT_ID`, exported from `stores/directions-sto
 - A **plain map click** (on empty ground): clears the active place card only. No coordinate popup, no Valhalla JSON popup — those were developer tools removed from the tourist-facing UI.
 - A **marker click**: opens `PlaceCardPopup` (blurb, fun facts, links). The handler sets `markerClickRef` before the delayed map-click handler fires; the ref is checked so the delayed handler does not close the card that was just opened.
 
-
 ### Waypoint chunking for long routes
 
 Valhalla's `/route` endpoint rejects requests with more than 20 locations (error `150, "Exceeded max locations: 20"`). A region-wide agent plan can have 26–29 stops, so `useDirectionsQuery()` in `src/hooks/use-directions-queries.ts` calls `chunkWaypoints()` (`src/utils/valhalla.ts`, `VALHALLA_MAX_LOCATIONS`) to split the waypoints into chained groups of at most 20 that share their joint endpoint, fetches each chunk separately, and merges the legs, geometry, and summary into a single response. Without this split the stops render on the map with no connecting line.
@@ -163,4 +162,3 @@ MMR diversity trimming in `backend/agent/planner/pipeline.py` runs **only when t
 Those two ceilings are deliberate and should **not** be raised to "return absolutely everything": a literal "give me every church in the voblast" request is rare, and lifting the caps costs paid rerank tokens per candidate plus a time matrix that grows into hours (29 stops already take ~25 s). The pipeline follows what the user actually asked for — a budget trims, no budget does not. Handling a genuinely exhaustive list is a catalogue feature (list grouped by town, route inside the chosen one), not a bigger pool.
 
 ## Working with this team
-

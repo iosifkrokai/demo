@@ -1,5 +1,6 @@
 import { Check, ChevronDown, MapPin } from 'lucide-react';
 import { useId, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { cn } from '@/lib/utils';
 
@@ -53,6 +54,7 @@ export const GuideStopList = ({
   collapsible = false,
   defaultOpen = true,
 }: GuideStopListProps) => {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(defaultOpen);
   const listId = useId();
 
@@ -162,7 +164,10 @@ export const GuideStopList = ({
         className="flex h-11 w-full items-center justify-between gap-2 rounded-2xl px-3 text-label font-medium transition-colors hover:bg-muted"
       >
         <span>
-          остановки · {visited.length} из {stops.length}
+          {t('guide.stopListTitle', {
+            visited: visited.length,
+            total: stops.length,
+          })}
         </span>
         <ChevronDown
           aria-hidden="true"

@@ -3,35 +3,65 @@
  * repeats them in the panel, in the next-stop card and in the stop list, so
  * one wording means one thing everywhere.
  *
- * Counting and number shape live in `@/utils/plural` — this module only says
- * how the guide phrases a duration, a distance and a failed request.
+ * The words themselves live in the `guide` area of the dictionary; these
+ * helpers only say how the guide phrases a duration, a distance, a counted noun
+ * and a failed request. They are plain functions, not components, so they reach
+ * i18next through the shared instance — the alternative, threading `t` through
+ * every caller, would drag the map and the history list into the guide's area.
+ *
+ * Counted nouns follow the project's two accepted ways: Russian goes through
+ * `pluralRu`/`STOP_FORMS` from `@/utils/plural`, English through the
+ * dictionary's own `_one`/`_other` pair.
  */
 
-import { formatDistanceRu, pluralCountRu, STOP_FORMS } from '@/utils/plural';
+import i18n from '@/i18n';
+import {
+  decimalRu,
+  formatDistanceRu,
+  pluralCountRu,
+  STOP_FORMS,
+} from '@/utils/plural';
 
 export { formatDistanceRu };
 
+/** True while the interface is in English — the number shape differs too. */
+const isEnglish = () => i18n.language?.toLowerCase().startsWith('en') ?? false;
+
+/** The decimal separator: a comma in Russian, a dot in English. */
+const decimal = (value: number, digits = 1) =>
+  isEnglish() ? value.toFixed(digits) : decimalRu(value, digits);
+
 /**
  * «40 мин», «1 ч 10 мин», «2 ч» — how long a stop (or the rest) takes.
- * The abbreviated «мин» is deliberate: it sits inside sentences where the full
+ * The abbreviated unit is deliberate: it sits inside sentences where the full
  * «минута/минуты/минут» would crowd the line. Use `minutesLabel` from
  * `@/utils/plural` when the word stands on its own.
  */
 export const fmtMin = (min: number) => {
-  if (min < 60) return `${min} мин`;
-  const hours = Math.floor(min / 60);
-  const rest = min % 60;
-  return rest === 0 ? `${hours} ч` : `${hours} ч ${rest} мин`;
+  const mins = Math.max(0, Math.round(min));
+  if (mins < 60) return i18n.t('guide.minutes', { count: mins });
+  const hours = Math.floor(mins / 60);
+  const rest = mins % 60;
+  const hourPart = i18n.t('guide.hours', { count: hours });
+  return rest
+    ? `${hourPart} ${i18n.t('guide.minutes', { count: rest })}`
+    : hourPart;
 };
 
 /**
  * «240 м», «1,3 км» — how far the tourist still has to walk.
- * Russian uses a comma as the decimal separator, never a dot.
+ * Russian uses a comma as the decimal separator, English a dot.
  */
-export const fmtDist = (metres: number) => formatDistanceRu(metres);
+export const fmtDist = (metres: number) =>
+  metres >= 1000
+    ? i18n.t('guide.km', { value: decimal(metres / 1000) })
+    : i18n.t('guide.metres', { value: String(Math.round(metres)) });
 
 /** «3 остановки», «1 остановка», «5 остановок» — a count with its noun. */
-export const fmtStops = (count: number) => pluralCountRu(count, STOP_FORMS);
+export const fmtStops = (count: number) =>
+  isEnglish()
+    ? i18n.t('guide.stops', { count })
+    : pluralCountRu(count, STOP_FORMS);
 
 /**
  * The one honest wording for a failed `/routes/generate` request.
@@ -44,19 +74,13 @@ export const fmtStops = (count: number) => pluralCountRu(count, STOP_FORMS);
  * message. Everything else keeps the plain «ошибкой N» wording.
  */
 export const agentErrorMessage = (status: number) => {
-  if (status === 404) {
-    return 'агент не отвечает по этому адресу (404) — похоже, приложение обращается не к тому серверу. Это ошибка настройки, а не «ничего не найдено».';
-  }
-  if (status >= 500) {
-    return `агент ответил ошибкой ${status} — попробуйте ещё раз`;
-  }
+  if (status === 404) return i18n.t('guide.agentNotFound');
+  if (status >= 500) return i18n.t('guide.agentServerError', { status });
   if (status === 401 || status === 403) {
-    return `агент отклонил запрос (${status}) — проверьте доступ к сервису.`;
+    return i18n.t('guide.agentDenied', { status });
   }
-  if (status === 422) {
-    return 'агент не понял запрос (422) — переформулируйте, что хотите посмотреть.';
-  }
-  return `агент ответил ошибкой ${status} — попробуйте ещё раз`;
+  if (status === 422) return i18n.t('guide.agentBadRequest', { status });
+  return i18n.t('guide.agentServerError', { status });
 };
 
 export const metresBetween = (

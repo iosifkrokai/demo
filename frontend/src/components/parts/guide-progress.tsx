@@ -1,5 +1,7 @@
+import { useTranslation } from 'react-i18next';
+
 import { fmtDist, fmtMin } from './guide-format';
-import { DEFAULT_TRAVEL_MODE, type GuideTravelMode } from './guide-mode';
+import { guideModeFor, type GuideTravelMode } from './guide-mode';
 
 interface GuideProgressProps {
   done: number;
@@ -32,8 +34,10 @@ export const GuideProgress = ({
   metresDone,
   metresTotal,
   remainingMinutes,
-  mode = DEFAULT_TRAVEL_MODE,
+  mode,
 }: GuideProgressProps) => {
+  const { t } = useTranslation();
+  const travel = mode ?? guideModeFor(null);
   const stopPercent = total === 0 ? 0 : Math.round((done / total) * 100);
   const hasLine = metresTotal != null && metresTotal > 0 && metresDone != null;
   const linePercent = hasLine
@@ -41,21 +45,22 @@ export const GuideProgress = ({
     : null;
   const percent = linePercent ?? stopPercent;
   const remaining = hasLine ? Math.max(0, metresTotal - metresDone) : null;
-  const doneWord = mode.doneWord;
-  const lineLabel = mode.id === 'foot' ? 'по линии' : 'по маршруту';
+  const doneWord = travel.doneWord;
+  const lineLabel =
+    travel.id === 'foot' ? t('guide.alongLine') : t('guide.alongRoute');
 
   return (
     <div>
       <div className="flex items-baseline justify-between gap-2">
         <span className="text-body font-semibold">
-          {doneWord} {done} из {total}
+          {doneWord} {t('guide.progressOf', { done, total })}
         </span>
         {minutesLeft > 0 && (
           <span
             data-testid="guide-minutes-left"
             className="text-meta text-muted-foreground"
           >
-            осталось осмотра ~{fmtMin(minutesLeft)}
+            {t('guide.visitsLeft', { time: fmtMin(minutesLeft) })}
           </span>
         )}
       </div>
@@ -64,7 +69,7 @@ export const GuideProgress = ({
           data-testid="guide-remaining"
           className="mt-1 text-meta text-muted-foreground"
         >
-          с дорогой осталось ~{fmtMin(remainingMinutes)}
+          {t('guide.withTravelLeft', { time: fmtMin(remainingMinutes) })}
         </div>
       )}
       <div
@@ -74,10 +79,10 @@ export const GuideProgress = ({
         aria-valuemax={total}
         aria-valuetext={
           linePercent != null
-            ? `${doneWord} ${linePercent}% линии`
-            : `${doneWord} ${done} из ${total}`
+            ? t('guide.progressLine', { doneWord, percent: linePercent })
+            : t('guide.progressOf', { done, total })
         }
-        aria-label="прогресс маршрута"
+        aria-label={t('guide.progressLabel')}
         data-testid="guide-progress-bar"
         className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-muted"
       >
@@ -94,7 +99,9 @@ export const GuideProgress = ({
           <span>
             {lineLabel} {doneWord} {fmtDist(metresDone)}
           </span>
-          <span>осталось {fmtDist(remaining)}</span>
+          <span>
+            {t('guide.lineRemaining', { distance: fmtDist(remaining) })}
+          </span>
         </div>
       )}
     </div>

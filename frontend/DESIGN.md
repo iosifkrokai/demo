@@ -16,21 +16,21 @@ in `src/index.css`; components keep using `bg-card`, `text-muted-foreground`, `r
 
 ## Tokens (`src/index.css`, `:root`)
 
-| Token | Value | Notes |
-|---|---|---|
-| `--background` | `#ffffff` | page / panel |
-| `--foreground` | `#222222` | primary text |
-| `--card` | `#ffffff` | cards |
-| `--muted` | `#f7f7f7` | quiet fills, chip tracks, hover rows |
-| `--muted-foreground` | `#717171` | secondary text, labels |
-| `--primary` | `#ff385c` | the accent (buttons, active states, route line) |
-| `--primary-foreground` | `#ffffff` | text on accent |
-| `--secondary` | `#f7f7f7` | secondary buttons |
-| `--secondary-foreground` | `#222222` | |
-| `--border` | `#ebebeb` | hairlines |
-| `--input` | `#ebebeb` | |
-| `--ring` | `#ff385c` | focus ring |
-| `--radius` | `1rem` | 16px base; `rounded-xl` → 20px, `rounded-2xl` → 24px |
+| Token                    | Value     | Notes                                                |
+| ------------------------ | --------- | ---------------------------------------------------- |
+| `--background`           | `#ffffff` | page / panel                                         |
+| `--foreground`           | `#222222` | primary text                                         |
+| `--card`                 | `#ffffff` | cards                                                |
+| `--muted`                | `#f7f7f7` | quiet fills, chip tracks, hover rows                 |
+| `--muted-foreground`     | `#717171` | secondary text, labels                               |
+| `--primary`              | `#ff385c` | the accent (buttons, active states, route line)      |
+| `--primary-foreground`   | `#ffffff` | text on accent                                       |
+| `--secondary`            | `#f7f7f7` | secondary buttons                                    |
+| `--secondary-foreground` | `#222222` |                                                      |
+| `--border`               | `#ebebeb` | hairlines                                            |
+| `--input`                | `#ebebeb` |                                                      |
+| `--ring`                 | `#ff385c` | focus ring                                           |
+| `--radius`               | `1rem`    | 16px base; `rounded-xl` → 20px, `rounded-2xl` → 24px |
 
 Shadows (Tailwind's scale is fine; these are the intended ones):
 
@@ -44,14 +44,14 @@ One size per role, exposed as `--text-*` theme tokens in `src/index.css`. Use th
 arbitrary value (`text-[13px]`) and never a Tailwind default (`text-sm`, `text-xs`): those were the
 main source of drift, and the audit found nine competing sizes across the panel.
 
-| Class | Size | Role |
-|---|---|---|
+| Class        | Size | Role                                                           |
+| ------------ | ---- | -------------------------------------------------------------- |
 | `text-badge` | 11px | counters, numeric badges. **Floor — nothing renders smaller.** |
-| `text-meta` | 12px | meta lines, section labels, helper copy |
-| `text-label` | 13px | card titles, chips, control labels |
-| `text-body` | 15px | body copy, inputs, buttons (the base size) |
-| `text-title` | 16px | panel/section titles |
-| `text-stat` | 19px | numbers that matter (km, minutes, stop count) in stat tiles |
+| `text-meta`  | 12px | meta lines, section labels, helper copy                        |
+| `text-label` | 13px | card titles, chips, control labels                             |
+| `text-body`  | 15px | body copy, inputs, buttons (the base size)                     |
+| `text-title` | 16px | panel/section titles                                           |
+| `text-stat`  | 19px | numbers that matter (km, minutes, stop count) in stat tiles    |
 
 All sizes carry `leading-[1.45]` except `text-title` (1.35) and `text-stat` (1.2). Body keeps
 `tracking-[-0.01em]`. Weights are unchanged: titles `font-semibold`, chips `font-medium`.
@@ -60,12 +60,12 @@ All sizes carry `leading-[1.45]` except `text-title` (1.35) and `text-stat` (1.2
 
 Four radius steps, no others:
 
-| Class | Use |
-|---|---|
-| `rounded-full` | chips, pills, icon buttons, progress bars, avatars |
-| `rounded-lg` | small inner surfaces (toggles, swatches, inline code) |
-| `rounded-xl` | primary buttons, list rows, inputs |
-| `rounded-2xl` | cards, panels, popups; `rounded-t-3xl` for the mobile sheet |
+| Class          | Use                                                         |
+| -------------- | ----------------------------------------------------------- |
+| `rounded-full` | chips, pills, icon buttons, progress bars, avatars          |
+| `rounded-lg`   | small inner surfaces (toggles, swatches, inline code)       |
+| `rounded-xl`   | primary buttons, list rows, inputs                          |
+| `rounded-2xl`  | cards, panels, popups; `rounded-t-3xl` for the mobile sheet |
 
 Shadows are only the three tokens — `shadow-card`, `shadow-float`, `shadow-sheet`. An arbitrary
 `shadow-[...]` in a component is a review failure; if a new elevation is genuinely needed, add a
@@ -74,7 +74,7 @@ token to `:root` first.
 ## Components (patterns to reuse, not reinvite)
 
 - **Primary button**: `h-12 rounded-xl bg-primary text-primary-foreground font-semibold
-  hover:brightness-[0.97] active:scale-[0.99] transition`, disabled `opacity-40`.
+hover:brightness-[0.97] active:scale-[0.99] transition`, disabled `opacity-40`.
 - **Secondary / icon button**: `h-9 w-9 rounded-full hover:bg-muted transition` with a lucide icon.
 - **Chip**: `h-8 rounded-full border border-border px-3 text-[13px] hover:bg-muted`, selected =
   `border-foreground bg-foreground text-background` (or accent) — used for query hints, time presets,
@@ -103,7 +103,7 @@ token to `:root` first.
   - `bicycle` → bike: «ехать ~14 мин», bike icon, «проехано»;
   - `auto`/`car`/`truck`/`bus`/motor\* → car: «ехать», car icon, «проехано», plus the arrival line
     «припаркуйтесь у остановки».
-  Never hardcode «идти»/«пройдено» in a guide component — read it from the mode object.
+    Never hardcode «идти»/«пройдено» in a guide component — read it from the mode object.
 - **Visit time is the tourist's number, not ours.** The dataset estimate (`visitMinutes` from the
   taxonomy) is presented as approximate: «≈ 40 мин», and opening it says «обычно здесь оставляют ≈ 40
   мин». One tap gives −/+ in 10-minute steps (5…480) and a reset back to the estimate. Their number is

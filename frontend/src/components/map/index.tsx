@@ -969,67 +969,84 @@ export const MapComponent = () => {
         {showServices && <ServicesLayer items={services.items} />}
       </Map>
 
-      {routeResult && (
-        <div className="absolute bottom-40 right-3 z-10 md:right-4">
-          <ServicesSummary
-            items={services.items}
-            state={services.state}
-            maxOffLineM={services.maxOffLineM}
-            capped={services.capped}
-            active={showServices}
-            toggle={
-              <ToolButton
-                data-testid="services-toggle"
-                title={t('map.servicesToggle')}
-                active={showServices}
-                icon={<Coffee className="h-4 w-4" />}
-                onClick={() => setShowServices((on) => !on)}
-              />
-            }
-          />
-        </div>
-      )}
+      {(routeResult || guiding) && (
+        // ONE column, not two independently pinned groups. As two groups
+        // (bottom-40 and bottom-24) they overlapped each other — measured at
+        // 390x844 the guide's compass sat at y=652..696 and the services button
+        // at y=640..684, a 32px collision — and both sat BEHIND the mobile sheet,
+        // which starts at y=464 and covers 45dvh. The sheet publishes its own
+        // height in --sheet-h (see sidebar.tsx), so the column rides above it:
+        // the tourist can reach the controls of the very mode they are in.
+        <div
+          data-testid="map-controls"
+          className="absolute bottom-[calc(var(--sheet-h,0px)+0.75rem)] right-3 z-10 flex flex-col items-end gap-2 md:bottom-24 md:right-4"
+        >
+          {routeResult && (
+            <ServicesSummary
+              items={services.items}
+              state={services.state}
+              maxOffLineM={services.maxOffLineM}
+              capped={services.capped}
+              active={showServices}
+              toggle={
+                <ToolButton
+                  data-testid="services-toggle"
+                  title={t('map.servicesToggle')}
+                  active={showServices}
+                  icon={<Coffee className="h-4 w-4" />}
+                  onClick={() => setShowServices((on) => !on)}
+                />
+              }
+            />
+          )}
 
-      {guiding && (
-        <div className="absolute bottom-24 right-3 z-10 flex flex-col gap-2 md:right-4">
-          <ToolButton
-            data-testid="guide-orientation"
-            title={
-              orientation === 'heading' ? t('map.northUp') : t('map.headingUp')
-            }
-            icon={<Navigation className="h-4 w-4" />}
-            onClick={() => {
-              const next: MapOrientation =
-                orientation === 'heading' ? 'north' : 'heading';
-              setOrientation(next);
-              saveOrientation(next);
-              const map = mapRef.current;
-              if (!map) return;
-              if (next === 'heading' && guideFix) {
-                map.easeTo({ bearing: guideFix.heading ?? 0, duration: 300 });
-              } else if (next === 'north') {
-                map.easeTo({ bearing: 0, duration: 300 });
-              }
-            }}
-          />
-          <ToolButton
-            data-testid="guide-follow"
-            title={follow ? t('map.following') : t('map.followMe')}
-            active={follow}
-            icon={<LocateFixed className="h-4 w-4" />}
-            onClick={() => {
-              setFollow(true);
-              const map = mapRef.current;
-              if (map && guideFix) {
-                map.easeTo({
-                  center: [guideFix.lng, guideFix.lat],
-                  pitch: 45,
-                  zoom: Math.max(map.getZoom(), 16.5),
-                  duration: 600,
-                });
-              }
-            }}
-          />
+          {guiding && (
+            <>
+              <ToolButton
+                data-testid="guide-orientation"
+                title={
+                  orientation === 'heading'
+                    ? t('map.northUp')
+                    : t('map.headingUp')
+                }
+                icon={<Navigation className="h-4 w-4" />}
+                onClick={() => {
+                  const next: MapOrientation =
+                    orientation === 'heading' ? 'north' : 'heading';
+                  setOrientation(next);
+                  saveOrientation(next);
+                  const map = mapRef.current;
+                  if (!map) return;
+                  if (next === 'heading' && guideFix) {
+                    map.easeTo({
+                      bearing: guideFix.heading ?? 0,
+                      duration: 300,
+                    });
+                  } else if (next === 'north') {
+                    map.easeTo({ bearing: 0, duration: 300 });
+                  }
+                }}
+              />
+              <ToolButton
+                data-testid="guide-follow"
+                title={follow ? t('map.following') : t('map.followMe')}
+                active={follow}
+                icon={<LocateFixed className="h-4 w-4" />}
+                onClick={() => {
+                  setFollow(true);
+                  const map = mapRef.current;
+                  if (map && guideFix) {
+                    map.easeTo({
+                      center: [guideFix.lng, guideFix.lat],
+                      pitch: 45,
+                      zoom: Math.max(map.getZoom(), 16.5),
+                      duration: 600,
+                    });
+                  }
+                }}
+              />
+            </>
+          )}
         </div>
       )}
 

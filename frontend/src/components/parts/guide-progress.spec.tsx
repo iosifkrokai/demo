@@ -1,9 +1,13 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { render, screen, cleanup } from '@testing-library/react';
 
+import i18n from '@/i18n';
 import { GuideProgress } from './guide-progress';
 
-afterEach(cleanup);
+afterEach(async () => {
+  cleanup();
+  await i18n.changeLanguage('ru');
+});
 
 describe('GuideProgress', () => {
   it('counts stops when there is no route line', () => {
@@ -65,6 +69,31 @@ describe('GuideProgress', () => {
     expect(screen.getByRole('progressbar')).toHaveAttribute(
       'aria-valuetext',
       'пройдено 100% линии'
+    );
+  });
+
+  it('says it in English once the interface is English', async () => {
+    await i18n.changeLanguage('en');
+    render(
+      <GuideProgress
+        done={1}
+        total={4}
+        minutesLeft={50}
+        metresDone={1500}
+        metresTotal={6000}
+        remainingMinutes={95}
+      />
+    );
+
+    expect(screen.getByText(/walked 1 of 4/i)).toBeInTheDocument();
+    expect(screen.getByTestId('guide-minutes-left')).toHaveTextContent(
+      'visits left ~50 min'
+    );
+    expect(screen.getByTestId('guide-line-progress')).toHaveTextContent(
+      'along the line walked 1.5 km'
+    );
+    expect(screen.getByTestId('guide-line-progress')).toHaveTextContent(
+      '4.5 km left'
     );
   });
 });

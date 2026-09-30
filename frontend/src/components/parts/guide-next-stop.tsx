@@ -1,4 +1,5 @@
 import { Clock, ExternalLink, MapPin, ParkingCircle } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 import { fmtDist, fmtMin } from './guide-format';
 import type { GuideTravelMode } from './guide-mode';
@@ -56,6 +57,7 @@ export const GuideNextStop = ({
   mode,
   mapsHref,
 }: GuideNextStopProps) => {
+  const { t } = useTranslation();
   const TravelIcon = mode.icon;
 
   return (
@@ -65,7 +67,7 @@ export const GuideNextStop = ({
     >
       <div className="flex items-center justify-between gap-2">
         <span className="text-meta font-medium text-muted-foreground">
-          следующая остановка
+          {t('guide.nextStop')}
         </span>
         {distance != null && (
           <span
@@ -73,7 +75,7 @@ export const GuideNextStop = ({
             className="inline-flex shrink-0 items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-meta font-medium text-foreground"
           >
             <MapPin className="h-3 w-3 text-primary" />
-            до неё {fmtDist(distance)}
+            {t('guide.distanceToStop', { distance: fmtDist(distance) })}
           </span>
         )}
       </div>
@@ -101,7 +103,7 @@ export const GuideNextStop = ({
             {visitMinutes != null && !onVisitMinutesChange && (
               <span className="inline-flex items-center gap-1.5">
                 <Clock className="h-3.5 w-3.5" />
-                осмотр ≈ {fmtMin(visitMinutes)}
+                {t('guide.visitApprox', { time: fmtMin(visitMinutes) })}
               </span>
             )}
           </div>
@@ -116,7 +118,10 @@ export const GuideNextStop = ({
               className="inline-flex items-center gap-1"
             >
               <TravelIcon className="h-3.5 w-3.5" />
-              {mode.verb} ~{fmtMin(travelMinutes)}
+              {t('guide.travelFor', {
+                verb: mode.verb,
+                time: fmtMin(travelMinutes),
+              })}
             </span>
           )}
           {etaLabel != null && (
@@ -125,7 +130,7 @@ export const GuideNextStop = ({
               className="inline-flex items-center gap-1"
             >
               <Clock className="h-3.5 w-3.5" />
-              прибытие {etaLabel}
+              {t('guide.arrival', { eta: etaLabel })}
             </span>
           )}
           {mode.arrivalHint && (
@@ -147,7 +152,7 @@ export const GuideNextStop = ({
         className="mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-secondary font-semibold text-secondary-foreground transition hover:brightness-[0.97] active:scale-[0.99]"
       >
         <ExternalLink className="h-4 w-4" />
-        открыть в картах
+        {t('guide.openInMaps')}
       </a>
     </div>
   );

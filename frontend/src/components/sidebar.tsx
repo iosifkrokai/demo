@@ -74,6 +74,7 @@ import { StatTile, StatTiles } from './parts/stat-tiles';
 import { StopsSkeleton, SummarySkeleton } from './parts/skeletons';
 import type { AgentRouteResponse, AmenityStrength, ResultMode } from './types';
 import {
+  GUIDE_SHEET_CLASS,
   PANEL_SHEET_CLASS,
   SHEET_SNAP_CLASS,
   SheetDragHandle,
@@ -1347,11 +1348,47 @@ export const Sidebar = () => {
     };
   }, [panelOpen, panel.width]);
 
+  // Same door for the sheet's HEIGHT, and for the same reason: the map's
+  // floating controls are siblings of the sheet, so they cannot see how tall it
+  // is and sat behind it on a phone. The number here must stay in step with the
+  // classes above — a mobile viewport is the only place it is non-zero, because
+  // from md up the panel is a column and covers nothing.
+  useEffect(() => {
+    const root = document.documentElement;
+    const publish = () => {
+      // An innerWidth check, not matchMedia: jsdom has no matchMedia, and the
+      // unguarded call threw inside this effect — every Sidebar test failed at
+      // once. 768 is Tailwind's `md`, the breakpoint the sheet classes use.
+      const mobile = window.innerWidth < 768;
+      const height = !mobile
+        ? '0px'
+        : guiding && snap === 'peek'
+          ? '26dvh'
+          : snap === 'full'
+            ? '90dvh'
+            : '45dvh';
+      root.style.setProperty('--sheet-h', height);
+    };
+    publish();
+    window.addEventListener('resize', publish);
+    return () => {
+      window.removeEventListener('resize', publish);
+      root.style.setProperty('--sheet-h', '0px');
+    };
+  }, [guiding, snap]);
+
   return (
     <Sheet open={panelOpen} modal={false}>
       <SheetContent
         side="left"
-        className={cn(PANEL_SHEET_CLASS, SHEET_SNAP_CLASS[snap])}
+        className={cn(
+          PANEL_SHEET_CLASS,
+          // While walking, the sheet is a strip and the map is the navigator;
+          // a drag to 'full' still opens everything.
+          guiding && snap === 'peek'
+            ? GUIDE_SHEET_CLASS
+            : SHEET_SNAP_CLASS[snap]
+        )}
         style={{ '--panel-width': `${panel.width}px` } as CSSProperties}
       >
         <div className="flex h-full min-h-0 flex-col">
@@ -1427,10 +1464,10 @@ export const Sidebar = () => {
                   <Compass className="h-4 w-4 shrink-0" aria-hidden="true" />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-label font-semibold">
-                      Проводник
+                      {t('guide.title')}
                     </p>
                     <p className="truncate text-badge opacity-90">
-                      {pluralCountRu(guideStops.length, STOP_FORMS)} ·{' '}
+                      {t('guide.stops', { count: guideStops.length })} ·{' '}
                       {guideModeFor(transport).label}
                     </p>
                   </div>
@@ -1440,7 +1477,7 @@ export const Sidebar = () => {
                     onClick={() => setGuiding(false)}
                     className="shrink-0 rounded-full bg-primary-foreground/15 px-2.5 py-1 text-badge font-semibold transition-colors hover:bg-primary-foreground/25 max-md:min-h-11 pointer-coarse:min-h-11"
                   >
-                    выйти
+                    {t('guide.exit')}
                   </button>
                 </div>
               </div>
