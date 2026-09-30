@@ -169,11 +169,32 @@ def test_limits_are_bounded():
     timeout was cutting its reasoning off mid-flight and the thin reading that came
     back looked like a weak model. Finite, but roomy enough to finish thinking.
     """
-    assert 0 < ai.MAX_TOOL_CALLS <= 20
-    assert 0 < ai.MAX_REQUESTS <= 8
+    assert 0 < ai.MAX_TOOL_CALLS <= 24
+    assert 0 < ai.MAX_REQUESTS <= 12
     assert 0 < ai.MAX_OUTPUT_TOKENS <= 8192
     assert 0 < ai.WALL_CLOCK_TIMEOUT_S <= 120
     assert 0 < ai.MODEL_TIMEOUT_S < ai.WALL_CLOCK_TIMEOUT_S
+
+
+def test_the_default_model_is_the_measured_one():
+    """A deployment fact, deliberately pinned so a change is a deliberate act.
+
+    The model is chosen by measurement (scripts/compare_interpret_models.py,
+    scored against a KNOWN-CORRECT answer per request), not by preference. The
+    incumbent 2.5-pro was re-measured on 2026-09-30 and no longer beat
+    2.5-flash — same 6/6 expectations met, four times the price and several
+    times the latency — so the default moved. Changing this line without
+    re-running that harness is how the deployment ends up on a model nobody
+    measured.
+    """
+    assert ai._model_name(), "a model must always resolve"
+    assert ai.DEFAULT_MODEL == "google/gemini-2.5-flash"
+    # The env override still wins, which is what the harness relies on.
+    os.environ["AGENT_INTERPRET_MODEL"] = "example/override"
+    try:
+        assert ai._model_name() == "example/override"
+    finally:
+        del os.environ["AGENT_INTERPRET_MODEL"]
 
 
 # ── (b) a fake model answer fills the contract ─────────────────────────────

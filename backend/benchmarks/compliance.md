@@ -1,6 +1,6 @@
 # Golden-set compliance report
 
-**Mode:** `golden-live` · **Generated:** 2026-09-29T06:12:50.277728+00:00 · **API:** `http://localhost:8080`
+**Mode:** `golden-live` · **Generated:** 2026-09-30T07:25:24.306168+00:00 · **API:** `http://localhost:8080`
 
 This measures whether the CONDITIONS of a request survived, not how close the route came to a reference walk. A case passes only if every machine-checkable expectation of its file holds; a parity group passes only if RU and EN got the same kind of answer.
 

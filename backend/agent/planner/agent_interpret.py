@@ -82,21 +82,40 @@ log = logging.getLogger(__name__)
 # HTTP timeout was cutting reasoning off mid-flight and the thin reading that came
 # back looked like a weak model. The ceilings are now generous enough that a
 # thinking model finishes, and still finite: one interpretation may not run away.
-MAX_TOOL_CALLS = 20  # tool_calls_limit
-MAX_REQUESTS = 8  # model turns (request_limit) — no unbounded loop
-MAX_OUTPUT_TOKENS = 4096  # model_settings.max_tokens — a full requirements contract
-WALL_CLOCK_TIMEOUT_S = 90.0
-MODEL_TIMEOUT_S = 60.0  # per-request HTTP timeout, below the wall clock
+# Re-measured 2026-09-30 against the live catalogue, and every one of these was
+# raised because a model hit it: a 4096 output cap cut z-ai/glm-5.3-prime off
+# BEFORE it wrote anything («Model token limit (4096) exceeded before any response
+# was generated»), and upstage/solar-mini4 blew the 20 tool calls and the 8 turns
+# on four of five requests, falling back to keywords. A ceiling a model reaches is
+# not a guard, it is a starved run — so all of them are roomier, and still finite:
+# one interpretation may not run away.
+MAX_TOOL_CALLS = 24  # tool_calls_limit
+MAX_REQUESTS = 12  # model turns (request_limit) — no unbounded loop
+MAX_OUTPUT_TOKENS = 8192  # model_settings.max_tokens — a full requirements contract
+WALL_CLOCK_TIMEOUT_S = 120.0
+MODEL_TIMEOUT_S = 90.0  # per-request HTTP timeout, below the wall clock
 
 # Model is a deployment fact, not a tuning knob (spec §4.2: the measurement
-# picks the model, the framework stays). Measured on three live requests with the
-# ceilings above: gemini-2.5-flash read «Старый город за два часа пешком» and
-# «хочу всё интересное, есть 3 часа, с детьми» as ZERO requirements, while
-# gemini-2.5-pro read 1 (архитектура) and 3 (замок, костёл, церковь) respectively
-# and tied on the third — a thin reading is what leaves the optimizer 1-2 stops.
-# 2.5-pro costs more per call and needs ~20 s, which is why the wall clock rose
-# with it. Overridable per-process with AGENT_INTERPRET_MODEL for a benchmark.
-DEFAULT_MODEL = "google/gemini-2.5-pro"
+# picks the model, the framework stays).
+#
+# The old rationale for 2.5-pro — "flash reads two of the requests as ZERO
+# requirements" — was measured BEFORE the instructions were reworked, and on
+# 2026-09-30 it no longer reproduces: measured again on the app's own requests
+# with a KNOWN-CORRECT answer per request (scripts/compare_interpret_models.py,
+# three requests: forced hard service, forced must_visit + soft café, English
+# soft service), 2.5-flash and 2.5-pro both met 6/6 expectations. Flash did it in
+# 1.8-2.7 s per reading against 2.5-pro's 8.6-19.6 s, at $0.30/1M against
+# $1.25/1M. Same reading, four times cheaper and several times faster — and the
+# tourist is waiting on this call.
+#
+# Runners-up, for the record: deepseek/deepseek-v4.1-flash also met 6/6 at
+# $0.30/1M but needed 2.8-5.7 s; z-ai/glm-5.3-flash met 6/6 at $0.15/1M yet took
+# up to 98 s on one request, which the wall clock would cut off in production.
+# cohere/command-a-plus turned a soft «a toilet on the way» into a hard one (5/6
+# — it would force a detour the tourist never asked for), xiaomi/mimo-v2.6-flash
+# returned nothing at all, and qwen3.8-omni-flash cannot take this app's forced
+# tool_choice (400). Overridable per-process with AGENT_INTERPRET_MODEL.
+DEFAULT_MODEL = "google/gemini-2.5-flash"
 
 
 def _model_name() -> str:

@@ -171,15 +171,22 @@ def prompt_hash(instructions: str) -> str:
     return _digest("prompt", instructions)
 
 
-def interpret_key(query: str, req: Any, instructions: str) -> str:
+def interpret_key(query: str, req: Any, instructions: str, model: str | None = None) -> str:
     """Everything the model is shown, and nothing else.
 
     Anything left out here would let two different questions share one answer;
     anything included that the model never sees (the travel profile, the device
     position) would only make the cache miss.
+
+    `model` is part of the identity even though the model never sees it: the
+    reading is the MODEL's output, so keying without it means a model switch
+    inside one live process is answered from the previous model's readings —
+    which is exactly how a "we measured the new model" claim turns out to be
+    false. `embed_key` already takes its model for the same reason.
     """
     return _digest(
         "interpret",
+        model,
         instructions,
         query,
         getattr(req, "locale", None),

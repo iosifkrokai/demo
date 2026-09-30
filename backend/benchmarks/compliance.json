@@ -1,10 +1,10 @@
 {
   "schema": "bench_routes/report/2",
   "mode": "golden-live",
-  "generated_at": "2026-09-29T06:12:50.277728+00:00",
+  "generated_at": "2026-09-30T07:25:24.306168+00:00",
   "base_url": "http://localhost:8080",
   "snapshot": {
-    "dir": null
+    "dir": "/workspaces/demo/backend/benchmarks/snapshots/2026-09-30"
   },
   "summary": {
     "n_cases": 13,
@@ -188,7 +188,7 @@
           },
           "too_few_places": {
             "ok": true,
-            "detail": "2 stop(s) returned (>= 1)"
+            "detail": "4 stop(s) returned (>= 1)"
           },
           "missing_mandatory_category": {
             "ok": true,
@@ -204,11 +204,11 @@
           },
           "out_of_region_point": {
             "ok": true,
-            "detail": "all 2 point(s) inside Grodno ADM1"
+            "detail": "all 4 point(s) inside Grodno ADM1"
           },
           "over_budget": {
             "ok": true,
-            "detail": "total 223.0 min <= 240 min cap"
+            "detail": "total 231.0 min <= 240 min cap"
           },
           "result_mode_mismatch": {
             "ok": true,
@@ -256,7 +256,7 @@
           },
           "over_budget": {
             "ok": true,
-            "detail": "total 100.0 min <= 120 min cap"
+            "detail": "total 96.0 min <= 120 min cap"
           },
           "result_mode_mismatch": {
             "ok": true,
@@ -399,7 +399,7 @@
           },
           "over_budget": {
             "ok": true,
-            "detail": "total 97.0 min <= 120 min cap"
+            "detail": "total 103.0 min <= 120 min cap"
           },
           "result_mode_mismatch": {
             "ok": true,
@@ -432,7 +432,8 @@
             "detail": "every mandatory category is present ['музей']",
             "missing": [],
             "seen": [
-              "музей"
+              "музей",
+              "памятник"
             ]
           },
           "forbidden_category_present": {
@@ -445,7 +446,7 @@
           },
           "over_budget": {
             "ok": true,
-            "detail": "total 85.0 min <= 120 min cap"
+            "detail": "total 66.0 min <= 120 min cap"
           },
           "result_mode_mismatch": {
             "ok": true,
@@ -471,15 +472,14 @@
           },
           "too_few_places": {
             "ok": true,
-            "detail": "3 stop(s) returned (>= 1)"
+            "detail": "2 stop(s) returned (>= 1)"
           },
           "missing_mandatory_category": {
             "ok": true,
             "detail": "every mandatory category is present ['костёл']",
             "missing": [],
             "seen": [
-              "костёл",
-              "ресторан"
+              "костёл"
             ]
           },
           "forbidden_category_present": {
@@ -492,11 +492,11 @@
           },
           "out_of_region_point": {
             "ok": true,
-            "detail": "all 3 point(s) inside Grodno ADM1"
+            "detail": "all 2 point(s) inside Grodno ADM1"
           },
           "over_budget": {
             "ok": true,
-            "detail": "total 140.0 min <= 150 min cap"
+            "detail": "total 79.0 min <= 150 min cap"
           },
           "result_mode_mismatch": {
             "ok": true,
@@ -522,7 +522,7 @@
           },
           "too_few_places": {
             "ok": true,
-            "detail": "3 stop(s) returned (>= 1)"
+            "detail": "2 stop(s) returned (>= 1)"
           },
           "missing_mandatory_category": {
             "ok": true,
@@ -530,7 +530,7 @@
             "missing": [],
             "seen": [
               "замок",
-              "музей"
+              "кафе"
             ]
           },
           "forbidden_category_present": {
@@ -543,11 +543,11 @@
           },
           "out_of_region_point": {
             "ok": true,
-            "detail": "all 3 point(s) inside Grodno ADM1"
+            "detail": "all 2 point(s) inside Grodno ADM1"
           },
           "over_budget": {
             "ok": true,
-            "detail": "total 174.0 min <= 180 min cap"
+            "detail": "total 85.0 min <= 180 min cap"
           },
           "result_mode_mismatch": {
             "ok": true,
@@ -717,7 +717,7 @@
           "repeat": 1,
           "http_status": 200,
           "api_error": null,
-          "latency_s": 2.604,
+          "latency_s": 6.479,
           "total_minutes": null,
           "n_stops": 49,
           "verdict": {
@@ -817,7 +817,7 @@
           "repeat": 1,
           "http_status": 200,
           "api_error": null,
-          "latency_s": 4.04,
+          "latency_s": 14.337,
           "total_minutes": 55.0,
           "n_stops": 2,
           "verdict": {
@@ -918,7 +918,7 @@
           "repeat": 1,
           "http_status": 200,
           "api_error": null,
-          "latency_s": 2.732,
+          "latency_s": 9.557,
           "total_minutes": 131.0,
           "n_stops": 2,
           "verdict": {
@@ -1011,9 +1011,9 @@
           "repeat": 1,
           "http_status": 200,
           "api_error": null,
-          "latency_s": 19.805,
-          "total_minutes": 223.0,
-          "n_stops": 2,
+          "latency_s": 8.333,
+          "total_minutes": 231.0,
+          "n_stops": 4,
           "verdict": {
             "case_id": "castles_half_day",
             "passed": true,
@@ -1032,7 +1032,7 @@
               },
               "too_few_places": {
                 "ok": true,
-                "detail": "2 stop(s) returned (>= 1)"
+                "detail": "4 stop(s) returned (>= 1)"
               },
               "missing_mandatory_category": {
                 "ok": true,
@@ -1048,11 +1048,11 @@
               },
               "out_of_region_point": {
                 "ok": true,
-                "detail": "all 2 point(s) inside Grodno ADM1"
+                "detail": "all 4 point(s) inside Grodno ADM1"
               },
               "over_budget": {
                 "ok": true,
-                "detail": "total 223.0 min <= 240 min cap"
+                "detail": "total 231.0 min <= 240 min cap"
               },
               "result_mode_mismatch": {
                 "ok": true,
@@ -1102,8 +1102,8 @@
           "repeat": 1,
           "http_status": 200,
           "api_error": null,
-          "latency_s": 8.96,
-          "total_minutes": 100.0,
+          "latency_s": 15.897,
+          "total_minutes": 96.0,
           "n_stops": 3,
           "verdict": {
             "case_id": "family_walk_en",
@@ -1145,7 +1145,7 @@
               },
               "over_budget": {
                 "ok": true,
-                "detail": "total 100.0 min <= 120 min cap"
+                "detail": "total 96.0 min <= 120 min cap"
               },
               "result_mode_mismatch": {
                 "ok": true,
@@ -1195,7 +1195,7 @@
           "repeat": 1,
           "http_status": 200,
           "api_error": null,
-          "latency_s": 4.907,
+          "latency_s": 11.06,
           "total_minutes": 59.0,
           "n_stops": 3,
           "verdict": {
@@ -1289,7 +1289,7 @@
           "repeat": 1,
           "http_status": 200,
           "api_error": null,
-          "latency_s": 41.717,
+          "latency_s": 45.973,
           "total_minutes": 52.0,
           "n_stops": 2,
           "verdict": {
@@ -1380,8 +1380,8 @@
           "repeat": 1,
           "http_status": 200,
           "api_error": null,
-          "latency_s": 8.852,
-          "total_minutes": 97.0,
+          "latency_s": 12.906,
+          "total_minutes": 103.0,
           "n_stops": 2,
           "verdict": {
             "case_id": "museums_budget_en",
@@ -1421,7 +1421,7 @@
               },
               "over_budget": {
                 "ok": true,
-                "detail": "total 97.0 min <= 120 min cap"
+                "detail": "total 103.0 min <= 120 min cap"
               },
               "result_mode_mismatch": {
                 "ok": true,
@@ -1469,8 +1469,8 @@
           "repeat": 1,
           "http_status": 200,
           "api_error": null,
-          "latency_s": 5.622,
-          "total_minutes": 85.0,
+          "latency_s": 13.365,
+          "total_minutes": 66.0,
           "n_stops": 2,
           "verdict": {
             "case_id": "museums_budget_ru",
@@ -1497,7 +1497,8 @@
                 "detail": "every mandatory category is present ['музей']",
                 "missing": [],
                 "seen": [
-                  "музей"
+                  "музей",
+                  "памятник"
                 ]
               },
               "forbidden_category_present": {
@@ -1510,7 +1511,7 @@
               },
               "over_budget": {
                 "ok": true,
-                "detail": "total 85.0 min <= 120 min cap"
+                "detail": "total 66.0 min <= 120 min cap"
               },
               "result_mode_mismatch": {
                 "ok": true,
@@ -1560,9 +1561,9 @@
           "repeat": 1,
           "http_status": 200,
           "api_error": null,
-          "latency_s": 16.586,
-          "total_minutes": 140.0,
-          "n_stops": 3,
+          "latency_s": 5.213,
+          "total_minutes": 79.0,
+          "n_stops": 2,
           "verdict": {
             "case_id": "named_farnyi",
             "passed": true,
@@ -1581,15 +1582,14 @@
               },
               "too_few_places": {
                 "ok": true,
-                "detail": "3 stop(s) returned (>= 1)"
+                "detail": "2 stop(s) returned (>= 1)"
               },
               "missing_mandatory_category": {
                 "ok": true,
                 "detail": "every mandatory category is present ['костёл']",
                 "missing": [],
                 "seen": [
-                  "костёл",
-                  "ресторан"
+                  "костёл"
                 ]
               },
               "forbidden_category_present": {
@@ -1602,11 +1602,11 @@
               },
               "out_of_region_point": {
                 "ok": true,
-                "detail": "all 3 point(s) inside Grodno ADM1"
+                "detail": "all 2 point(s) inside Grodno ADM1"
               },
               "over_budget": {
                 "ok": true,
-                "detail": "total 140.0 min <= 150 min cap"
+                "detail": "total 79.0 min <= 150 min cap"
               },
               "result_mode_mismatch": {
                 "ok": true,
@@ -1655,9 +1655,9 @@
           "repeat": 1,
           "http_status": 200,
           "api_error": null,
-          "latency_s": 9.758,
-          "total_minutes": 174.0,
-          "n_stops": 3,
+          "latency_s": 11.61,
+          "total_minutes": 85.0,
+          "n_stops": 2,
           "verdict": {
             "case_id": "named_mir_castle",
             "passed": true,
@@ -1676,7 +1676,7 @@
               },
               "too_few_places": {
                 "ok": true,
-                "detail": "3 stop(s) returned (>= 1)"
+                "detail": "2 stop(s) returned (>= 1)"
               },
               "missing_mandatory_category": {
                 "ok": true,
@@ -1684,7 +1684,7 @@
                 "missing": [],
                 "seen": [
                   "замок",
-                  "музей"
+                  "кафе"
                 ]
               },
               "forbidden_category_present": {
@@ -1697,11 +1697,11 @@
               },
               "out_of_region_point": {
                 "ok": true,
-                "detail": "all 3 point(s) inside Grodno ADM1"
+                "detail": "all 2 point(s) inside Grodno ADM1"
               },
               "over_budget": {
                 "ok": true,
-                "detail": "total 174.0 min <= 180 min cap"
+                "detail": "total 85.0 min <= 180 min cap"
               },
               "result_mode_mismatch": {
                 "ok": true,
@@ -1744,7 +1744,7 @@
           "repeat": 1,
           "http_status": 200,
           "api_error": null,
-          "latency_s": 2.421,
+          "latency_s": 0.043,
           "total_minutes": 0.0,
           "n_stops": 0,
           "verdict": {
@@ -1825,7 +1825,7 @@
           "repeat": 1,
           "http_status": 200,
           "api_error": null,
-          "latency_s": 4.01,
+          "latency_s": 3.024,
           "total_minutes": 237.0,
           "n_stops": 6,
           "verdict": {

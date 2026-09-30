@@ -708,7 +708,9 @@ def _interpret_cache_key(
             return None, ""
         instructions = agent_interpret._instructions(agent_interpret._ui_note(req))
         return (
-            interpret_cache.interpret_key(query, req, instructions),
+            interpret_cache.interpret_key(
+                query, req, instructions, agent_interpret._model_name()
+            ),
             interpret_cache.prompt_hash(instructions),
         )
     except Exception as exc:  # never let bookkeeping fail a request

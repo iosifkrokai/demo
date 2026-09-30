@@ -101,6 +101,22 @@ def test_editing_the_prompt_invalidates_every_entry():
     assert before != after
 
 
+def test_switching_the_model_invalidates_every_entry():
+    """A reading is the MODEL's output, so a different model is a different answer.
+
+    Without the model in the key, a process that switched models kept answering
+    from the previous model's readings — cheap to miss, expensive to believe:
+    it makes every "we measured the new model" claim false.
+    """
+    instructions = "ты читаешь запрос"
+    baseline = cache.interpret_key("замки", _req(), instructions, "google/gemini-2.5-pro")
+
+    assert cache.interpret_key(
+        "замки", _req(), instructions, "google/gemini-2.5-flash"
+    ) != baseline
+    assert cache.interpret_key("замки", _req(), instructions, None) != baseline
+
+
 # ── the store ────────────────────────────────────────────────────────────────
 
 def test_an_expired_reading_is_not_returned():
