@@ -303,6 +303,9 @@ export const sidebarArea = {
       plan: {
         geoOverride: 'переопределить, откуда начинается маршрут',
         filtersPrecedence: 'применю фильтры поверх текста запроса — они важнее',
+        /** An example query: the place name stays a real Grodno place, in the
+         *  alphabet of the interface it is shown in. */
+        queryPlaceholder: 'Каложская церковь, Гродно',
         partyLabel: 'кто идёт',
         adults: 'взрослые',
         children: 'дети',
@@ -358,6 +361,7 @@ export const sidebarArea = {
         stop: 'остановка {{number}}',
         /** A stop added by hand without a name still needs something to show. */
         unnamed: 'точка',
+        unnamedWithId: 'точка {{id}}',
         pin: 'закрепить',
         unpin: 'открепить',
         pinHint: 'закрепить: уточнение не уберёт эту точку',
@@ -536,6 +540,7 @@ export const sidebarArea = {
         geoOverride: 'change where the route starts',
         filtersPrecedence:
           'your filters are applied on top of the text — they take priority',
+        queryPlaceholder: 'Kalozha church, Grodno',
         partyLabel: 'who is going',
         adults: 'adults',
         children: 'children',
@@ -582,6 +587,7 @@ export const sidebarArea = {
       waypoints: {
         move: 'move: {{name}}',
         unnamed: 'point',
+        unnamedWithId: 'point {{id}}',
         dragHint: 'drag · arrow keys up/down',
         start: 'start',
         stop: 'stop {{number}}',

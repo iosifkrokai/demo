@@ -470,10 +470,17 @@ export const MapComponent = () => {
     // the phone's heading is the direction the handset points, the course is
     // the direction the walk goes.
     const steerTo = guideFix.course ?? guideFix.heading;
+    // The turn threshold differs by source. The device's heading wobbles by a
+    // few degrees per second, and turning for that made the map a spinning top;
+    // the route's course is a clean number that changes only at a bend, so it is
+    // followed closely — that is what makes the map turn with the path, segment
+    // by segment, the way a navigator does.
+    const turnThreshold = guideFix.course != null ? 4 : 15;
     const bearing =
       orientation === 'heading' &&
       steerTo != null &&
-      (seen === null || Math.abs(((steerTo - seen + 540) % 360) - 180) > 15)
+      (seen === null ||
+        Math.abs(((steerTo - seen + 540) % 360) - 180) > turnThreshold)
         ? steerTo
         : undefined;
     if (bearing !== undefined) bearingRef.current = bearing;
@@ -502,9 +509,23 @@ export const MapComponent = () => {
     });
   }, [guiding, follow, guideFix, orientation, guideTurnDistanceM]);
 
-  // Following starts again every time the guide is entered.
+  // Following starts again every time the guide is entered — and so does
+  // heading-up. A navigator has to be aligned with the walk the moment it
+  // starts: the stored preference belongs to browsing the map (planning a route,
+  // reading a neighbourhood), and a tourist who had left it on «north up» walked
+  // the whole route along a map that never turned. Only on entering, though: a
+  // reload that already starts inside the guide keeps the choice the tourist
+  // made there.
+  const previousGuidingRef = useRef<boolean | null>(null);
   useEffect(() => {
-    if (guiding) setFollow(true);
+    const previous = previousGuidingRef.current;
+    previousGuidingRef.current = guiding;
+    if (!guiding) return;
+    setFollow(true);
+    if (previous === false) {
+      setOrientation('heading');
+      saveOrientation('heading');
+    }
   }, [guiding]);
 
   // When the tourist switches back to 'heading' while the guide is running,

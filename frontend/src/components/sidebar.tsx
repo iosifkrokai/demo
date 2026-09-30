@@ -1259,7 +1259,10 @@ export const Sidebar = () => {
             w.placeId != null ? placeDetails[w.placeId] : undefined;
           return {
             id: w.id,
-            name: w.userInput || geo?.title || `точка ${w.id}`,
+            name:
+              w.userInput ||
+              geo?.title ||
+              t('sidebar.waypoints.unnamedWithId', { id: w.id }),
             lat,
             lon,
             placeId: w.placeId,
@@ -2076,7 +2079,7 @@ export const Sidebar = () => {
                           manualAdd();
                         }
                       }}
-                      placeholder="Каложская церковь, Гродно"
+                      placeholder={t('sidebar.plan.queryPlaceholder')}
                       aria-label={t('sidebar.plan.manualAria')}
                       className="h-10 flex-1 text-body max-md:h-11"
                       disabled={manualBusy}
