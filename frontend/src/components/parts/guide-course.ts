@@ -61,8 +61,71 @@ export const courseAlongLine = (
   if (!line) return null;
   const total = line.cum[line.cum.length - 1] ?? 0;
   const along = Math.min(Math.max(alongM, 0), total);
-  const here = pointAt(line, along);
-  const ahead = pointAt(line, along + lookaheadM);
+  return courseBetween(line, along, along + lookaheadM, lookaheadM);
+};
+
+/**
+ * The same course, but found from a position instead of a distance along the
+ * line.
+ *
+ * Needed because «how far along the route am I» only advances on a trusted fix:
+ * before the first good fix — or while the guide is not yet in its walking state
+ * — there is no progress to read a course from, yet the map still has to know
+ * which way the route goes the moment the tourist asks for «по курсу». The
+ * nearest point of the line answers that.
+ */
+export const courseAtPoint = (
+  line: CourseLine | null,
+  lat: number,
+  lon: number,
+  lookaheadM: number = COURSE_LOOKAHEAD_M
+): number | null => {
+  if (!line || line.points.length < 2) return null;
+
+  let nearest = 0;
+  let best = Number.POSITIVE_INFINITY;
+  for (let i = 1; i < line.points.length; i++) {
+    const a = line.points[i - 1];
+    const b = line.points[i];
+    if (!a || !b) continue;
+    const midLat = (a.lat + b.lat) / 2;
+    const scale = Math.cos((midLat * Math.PI) / 180);
+    const dx = (lon - a.lon) * scale;
+    const dy = lat - a.lat;
+    const ex = (b.lon - a.lon) * scale;
+    const ey = b.lat - a.lat;
+    const lengthSq = ex * ex + ey * ey;
+    const t =
+      lengthSq > 0
+        ? Math.min(Math.max((dx * ex + dy * ey) / lengthSq, 0), 1)
+        : 0;
+    const px = dx - ex * t;
+    const py = dy - ey * t;
+    const distance = px * px + py * py;
+    if (distance < best) {
+      best = distance;
+      const from = line.cum[i - 1] ?? 0;
+      const to = line.cum[i] ?? from;
+      nearest = from + (to - from) * t;
+    }
+  }
+
+  return courseBetween(line, nearest, nearest + lookaheadM, lookaheadM);
+};
+
+/** Bearing between two distances along the line, with the end-of-line rule. */
+const courseBetween = (
+  line: CourseLine,
+  fromM: number,
+  toM: number,
+  lookaheadM: number
+): number | null => {
+  const total = line.cum[line.cum.length - 1] ?? 0;
+  const start = Math.min(Math.max(fromM, 0), total);
+  const end = Math.min(Math.max(toM, 0), total);
+
+  const here = pointAt(line, start);
+  const ahead = pointAt(line, end);
 
   // Normally the course is «from here to a little further on». At the very end
   // of the line there is nothing further on, so the last segment is read
@@ -71,7 +134,7 @@ export const courseAlongLine = (
   let from = here;
   let to = ahead;
   if (from && to && from.lat === to.lat && from.lon === to.lon) {
-    from = pointAt(line, along - lookaheadM);
+    from = pointAt(line, start - lookaheadM);
     to = here;
   }
   if (!from || !to) return null;

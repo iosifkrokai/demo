@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { courseAlongLine, type CourseLine } from './guide-course';
+import {
+  courseAlongLine,
+  courseAtPoint,
+  type CourseLine,
+} from './guide-course';
 
 /** A straight line between two points ~1 km apart, with cumulative metres. */
 const straight = (
@@ -58,6 +62,30 @@ describe('курс вдоль маршрута', () => {
     expect(
       courseAlongLine({ points: [{ lat: 53.7, lon: 23.8 }], cum: [0] }, 0)
     ).toBeNull();
+  });
+
+  it('курс можно найти по точке: «по курсу» работает ещё до первого хода', () => {
+    // Прямая с востока на север: точка туриста — где-то на ней, прогресса ещё
+    // нет (traveled = 0), но курс обязан быть.
+    const line: CourseLine = {
+      points: [
+        { lat: 53.7, lon: 23.8 },
+        { lat: 53.7, lon: 23.81 },
+        { lat: 53.71, lon: 23.81 },
+      ],
+      cum: [0, 669, 1781],
+    };
+
+    // Турист стоит на восточном участке → курс на восток.
+    close(courseAtPoint(line, 53.7, 23.805), 90);
+    // Турист уже на северном участке → курс на север.
+    close(courseAtPoint(line, 53.705, 23.81), 0);
+    // Мимо линии (в стороне) — берётся ближайший участок, а не что попало.
+    close(courseAtPoint(line, 53.7005, 23.804), 90);
+  });
+
+  it('по точке без линии курса нет', () => {
+    expect(courseAtPoint(null, 53.7, 23.8)).toBeNull();
   });
 
   it('конец линии не уводит за неё: курс последнего участка', () => {

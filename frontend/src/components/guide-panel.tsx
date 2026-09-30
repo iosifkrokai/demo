@@ -45,7 +45,7 @@ import {
   type VoiceManeuver,
 } from '@/lib/guide-voice';
 import { GuideEmpty } from './parts/guide-empty';
-import { courseAlongLine } from './parts/guide-course';
+import { courseAlongLine, courseAtPoint } from './parts/guide-course';
 import { fmtDist, metresBetween } from './parts/guide-format';
 import { mergeMicroManeuvers } from './parts/guide-maneuvers';
 import { guideModeFor } from './parts/guide-mode';
@@ -727,15 +727,21 @@ export const GuidePanel = ({
    */
   const guideFix = useCommonStore((s) => s.guideFix);
   useEffect(() => {
-    if (mode !== 'moving' || !fix) return;
+    if (!fix) return;
     setGuideFix({
       lat: fix.lat,
       lng: fix.lon,
       heading: guideFix?.heading ?? null,
-      course: courseAlongLine(line, traveled),
+      // Progress along the route only moves on a trusted fix, so the course
+      // falls back to the line's nearest point: «по курсу» has to work the
+      // moment the tourist asks for it, not only once the guide has decided
+      // they are walking.
+      course:
+        courseAlongLine(line, traveled) ??
+        courseAtPoint(line, fix.lat, fix.lon),
       at: fix.at,
     });
-  }, [mode, fix, line, traveled, setGuideFix, guideFix?.heading]);
+  }, [fix, line, traveled, setGuideFix, guideFix?.heading]);
 
   // ── Voice: announce maneuvers on distance thresholds ────────────────────────────
   useEffect(() => {

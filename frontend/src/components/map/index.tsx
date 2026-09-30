@@ -1078,10 +1078,13 @@ export const MapComponent = () => {
                   const map = mapRef.current;
                   if (!map) return;
                   if (next === 'heading' && guideFix) {
-                    map.easeTo({
-                      bearing: guideFix.course ?? guideFix.heading ?? 0,
-                      duration: 300,
-                    });
+                    // Nothing to steer by yet: leave the map's bearing alone
+                    // rather than snapping it to due north, which is exactly
+                    // what an untouched «по курсу» looks like from the outside.
+                    const steerTo = guideFix.course ?? guideFix.heading;
+                    if (steerTo != null) {
+                      map.easeTo({ bearing: steerTo, duration: 300 });
+                    }
                   } else if (next === 'north') {
                     map.easeTo({ bearing: 0, duration: 300 });
                   }
