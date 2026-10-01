@@ -1,4 +1,7 @@
 import {
+  BedDouble,
+  Bus,
+  Coffee,
   Flag,
   Footprints,
   LocateFixed,
@@ -7,6 +10,7 @@ import {
   Play,
   RotateCcw,
   TriangleAlert,
+  UtensilsCrossed,
   Volume2,
   VolumeX,
   WifiOff,
@@ -23,6 +27,7 @@ import {
   useDirectionsStore,
   type Waypoint,
 } from '@/stores/directions-store';
+import type { ServiceAlong } from '@/api/types';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { getManeuverIcon } from '@/utils/get-maneuver-icon';
@@ -35,6 +40,7 @@ import {
 
 import { useCommonStore } from '@/stores/common-store';
 import { isSimulating, setSimPath } from '@/lib/geo-sim';
+import { useServicesAlong } from '@/hooks/use-services-along';
 import {
   cancelSpeech,
   decideVoice,
@@ -119,6 +125,8 @@ const OFF_ROUTE_M = 60;
 const OFF_ROUTE_FIXES = 2;
 /** How far the walk may slide back before we freeze progress (jump guard). */
 const BACKWARD_TOLERANCE_M = 15;
+/** Show a nearby POI hint when it is within this many metres ahead on the route. */
+const NEARBY_HINT_AHEAD_M = 120;
 
 const mapsUrl = (lat: number, lon: number) =>
   `https://www.google.com/maps/search/?api=1&query=${lat},${lon}`;
@@ -447,8 +455,34 @@ export const GuidePanel = ({
   const offRouteFixesRef = useRef(0);
   const spokenThresholdsRef = useRef<SpokenThresholds>(new Map());
   const prevManeuverRef = useRef<VoiceManeuver | null>(null);
+  /** Source URLs of nearby POIs already hinted — no repeat spam. */
+  const [hintedServices, setHintedServices] = useState<Set<string>>(new Set());
 
   const routeData = useDirectionsStore((state) => state.results.data);
+
+  // Nearby POI suggestions along the route, fetched only while guiding.
+  const servicesAlong = useServicesAlong(routeData, {
+    enabled: mode === 'moving',
+    profile: 'pedestrian',
+  });
+
+  /**
+   * The nearest upcoming service that is close enough ahead on the route,
+   * has not been hinted yet, and is not a stop already on the route.
+   * Computed from `traveled` (frozen progress) so the hint stays stable.
+   */
+  const nearbyHint = useMemo<ServiceAlong | null>(() => {
+    if (servicesAlong.state !== 'ready') return null;
+    const upcoming = servicesAlong.items
+      .filter(
+        (s) =>
+          s.along_m > traveled &&
+          s.along_m <= traveled + NEARBY_HINT_AHEAD_M &&
+          !hintedServices.has(s.source_url)
+      )
+      .sort((a, b) => a.along_m - b.along_m);
+    return upcoming[0] ?? null;
+  }, [servicesAlong, traveled, hintedServices]);
 
   // The route the map draws: one line, one set of manoeuvres.
   const line = useMemo(() => buildLine(routeData), [routeData]);
@@ -1013,6 +1047,19 @@ export const GuidePanel = ({
           quality={quality}
         />
 
+        {/* Nearby POI hint — «туалет в 40 м по пути» */}
+        {nearbyHint && (
+          <NearbyHint
+            service={nearbyHint}
+            distanceAhead={nearbyHint.along_m - traveled}
+            onDismiss={() => {
+              setHintedServices(
+                (prev) => new Set([...prev, nearbyHint.source_url])
+              );
+            }}
+          />
+        )}
+
         {offRoute && (
           <OffRoutePrompt
             metres={located ? Math.round(located.offRoute) : null}
@@ -1204,6 +1251,9 @@ interface ManeuverBannerProps {
 /**
  * The big arrow: what to do next, and how far — but only when the fix can
  * carry a number. A weak signal gets the instruction without the metres.
+ *
+ * Layout: distance (large, top) + instruction (medium, below) on mobile.
+ * The distance is the one thing that must be readable at a glance while walking.
  */
 const ManeuverBanner = ({
   instruction,
@@ -1220,29 +1270,46 @@ const ManeuverBanner = ({
       className="sticky top-0 z-10 rounded-2xl border border-border bg-card p-4 shadow-float"
     >
       <div className="flex items-start gap-3">
-        <span className="flex size-12 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
-          <Icon className="size-6" aria-hidden="true" />
+        <span className="flex size-14 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground md:size-12">
+          <Icon className="size-7 md:size-6" aria-hidden="true" />
         </span>
         <div className="min-w-0 flex-1">
-          <div
-            data-testid="guide-maneuver-instruction"
-            className="text-stat font-semibold leading-tight"
-          >
-            {instruction}
-          </div>
-          <div className="mt-1 text-label text-muted-foreground">
-            {precise && distance != null ? (
-              <span data-testid="guide-maneuver-distance">
-                {t('guide.maneuverIn', { distance: fmtDist(distance) })}
-              </span>
-            ) : (
-              <span data-testid="guide-maneuver-unprecise">
-                {quality === 'unavailable'
-                  ? t('guide.noSignal')
-                  : t('guide.distanceHidden')}
-              </span>
-            )}
-          </div>
+          {precise && distance != null ? (
+            <>
+              {/* Distance — the dominant number while walking. */}
+              <div
+                data-testid="guide-maneuver-distance"
+                className="text-2xl font-bold leading-none tracking-tight text-primary md:text-xl"
+              >
+                {t('guide.turnInAheadStandalone', {
+                  distance: fmtDist(distance),
+                })}
+              </div>
+              {/* Instruction — what to do. */}
+              <div
+                data-testid="guide-maneuver-instruction"
+                className="mt-0.5 text-base font-semibold leading-tight text-foreground md:text-body"
+              >
+                {instruction}
+              </div>
+            </>
+          ) : (
+            <>
+              <div
+                data-testid="guide-maneuver-instruction"
+                className="text-body font-semibold leading-tight"
+              >
+                {instruction}
+              </div>
+              <div className="mt-1 text-label text-muted-foreground">
+                <span data-testid="guide-maneuver-unprecise">
+                  {quality === 'unavailable'
+                    ? t('guide.noSignal')
+                    : t('guide.distanceHidden')}
+                </span>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -1303,6 +1370,89 @@ const OffRoutePrompt = ({
             </button>
           </div>
         </div>
+      </div>
+    </div>
+  );
+};
+
+/** Category name for the nearby POI hint, keyed through i18n. */
+const nearbyServiceName = (category: string, t: (key: string) => string) => {
+  const MAP: Record<string, string> = {
+    туалет: t('guide.nearbyToilet'),
+    кафе: t('guide.nearbyCafe'),
+    ресторан: t('guide.nearbyRestaurant'),
+    гостиница: t('guide.nearbyHotel'),
+    'остановка транспорта': t('guide.nearbyBusStop'),
+  };
+  return MAP[category] ?? t('guide.nearbyGeneric');
+};
+
+interface NearbyHintProps {
+  service: ServiceAlong;
+  distanceAhead: number;
+  onDismiss: () => void;
+}
+
+/**
+ * A navigator-style inline hint: «кафе в 40 м по пути».
+ * Shown only when a POI is within `NEARBY_HINT_AHEAD_M` ahead on the route,
+ * dismissed once and never repeated for the same source URL.
+ */
+const NearbyHint = ({ service, distanceAhead, onDismiss }: NearbyHintProps) => {
+  const { t } = useTranslation();
+
+  const ServiceIcon =
+    {
+      кафе: Coffee,
+      ресторан: UtensilsCrossed,
+      гостиница: BedDouble,
+      туалет: Bus,
+      'остановка транспорта': Bus,
+    }[service.category] ?? Bus;
+
+  return (
+    <div
+      data-testid="guide-nearby-hint"
+      className="rounded-2xl border border-border bg-card p-3 shadow-card"
+    >
+      <div className="flex items-center gap-2.5">
+        <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-blue-50 text-blue-600 dark:bg-blue-950 dark:text-blue-400">
+          <ServiceIcon className="size-4" aria-hidden="true" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <span className="text-body font-medium">
+            {t('guide.nearbyService', {
+              name: nearbyServiceName(service.category, t),
+              distance: fmtDist(distanceAhead),
+            })}
+          </span>
+          <span className="ml-1.5 text-body text-muted-foreground">
+            — {service.name}
+          </span>
+        </div>
+        <button
+          type="button"
+          data-testid="guide-nearby-hint-dismiss"
+          onClick={onDismiss}
+          className="shrink-0 rounded-full p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          aria-label={t('guide.suggestionSkip')}
+        >
+          <span className="sr-only">{t('guide.suggestionSkip')}</span>
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 14 14"
+            fill="none"
+            aria-hidden="true"
+          >
+            <path
+              d="M10.5 3.5L3.5 10.5M3.5 3.5L10.5 10.5"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+            />
+          </svg>
+        </button>
       </div>
     </div>
   );

@@ -917,21 +917,46 @@ export const MapComponent = () => {
         <HighlightSegment />
         <IsochronePolygons />
         <IsochroneLocations />
-        {/* The tourist's own position. The blue origin marker stays where the
-            route began — it is a waypoint, not a person — so without this the
-            map never showed anyone actually moving along the line. */}
+        {/* The tourist's own position: an arrow, not a dot — it shows where the
+            tourist is headed (course along the route), not just where they are.
+            Falls back to the device heading if course is not yet available. */}
         {guiding && guideFix && (
           <Marker
             anchor="center"
             longitude={guideFix.lng}
             latitude={guideFix.lat}
+            rotation={guideFix.course ?? guideFix.heading ?? 0}
+            rotationAlignment="map"
           >
             <div
               data-testid="guide-position"
-              className="relative flex h-6 w-6 items-center justify-center"
+              className="relative flex h-10 w-10 items-center justify-center"
             >
-              <span className="absolute h-6 w-6 rounded-full bg-blue-500/25 motion-safe:animate-ping" />
-              <span className="h-3.5 w-3.5 rounded-full border-2 border-white bg-blue-600 shadow-md" />
+              <span className="absolute flex h-10 w-10 items-center justify-center">
+                <svg
+                  viewBox="0 0 24 24"
+                  width="40"
+                  height="40"
+                  className="drop-shadow-md"
+                  aria-hidden="true"
+                >
+                  <circle
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    fill="#3B82F6"
+                    opacity="0.2"
+                    className="motion-safe:animate-ping"
+                  />
+                  <path
+                    d="M12 2 L20 19 L12 15 L4 19 Z"
+                    fill="#2563EB"
+                    stroke="white"
+                    strokeWidth="1.5"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </span>
             </div>
           </Marker>
         )}

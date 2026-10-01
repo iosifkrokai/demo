@@ -10,11 +10,25 @@ import {
 } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
+// ── Mocks must be declared before their corresponding imports ──────────────
+
+// Module-level mutable array: vi.mock is hoisted so this must be declared before it.
+// Only used by the "re-acquires" test; cleared at the start of that test.
+const toastCalls: unknown[][] = [];
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+vi.mock('sonner', () => ({ toast: (...args: any[]) => toastCalls.push(args) }));
+
+// Mock function for useServicesAlong (hoisted above imports).
+vi.mock('@/hooks/use-services-along', () => ({
+  useServicesAlong: vi.fn(),
+}));
+
 import type { ParsedDirectionsGeometry } from '@/components/types';
 import i18n from '@/i18n';
 import { useDirectionsStore } from '@/stores/directions-store';
 
 import { installGeoSim, resetSim } from '@/lib/geo-sim';
+import { useServicesAlong } from '@/hooks/use-services-along';
 
 import { GuidePanel, guideRouteKey, type GuideStop } from './guide-panel';
 
@@ -23,12 +37,6 @@ import { GuidePanel, guideRouteKey, type GuideStop } from './guide-panel';
 afterEach(async () => {
   await i18n.changeLanguage('ru');
 });
-
-// Module-level mutable array: vi.mock is hoisted so this must be declared before it.
-// Only used by the "re-acquires" test; cleared at the start of that test.
-const toastCalls: unknown[][] = [];
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-vi.mock('sonner', () => ({ toast: (...args: any[]) => toastCalls.push(args) }));
 
 const STOPS: GuideStop[] = [
   {
@@ -197,6 +205,16 @@ const stubWatchingGeolocation = () => {
 describe('GuidePanel', () => {
   beforeEach(() => {
     localStorage.clear();
+    // Reset to idle by default so NearbyHint stays hidden for tests that don't
+    // explicitly test it — the component only shows the hint when state === 'ready'.
+    vi.mocked(useServicesAlong).mockReturnValue({
+      items: [],
+      state: 'idle',
+      measured: null,
+      maxOffLineM: null,
+      reason: null,
+      capped: false,
+    });
   });
 
   afterEach(() => {
@@ -773,6 +791,125 @@ describe('GuidePanel · режим движения', () => {
     const live = screen.getByRole('status');
     expect(live).toHaveTextContent('Поверните направо к Кафе Немо');
     expect(live.textContent ?? '').not.toMatch(/через \d+ м/);
+  });
+
+  it('показывает крупную дистанцию, когда GPS хороший', async () => {
+    const geo = stubWatchingGeolocation();
+    await start();
+
+    geo.push(STOPS[0]!.lat, STOPS[0]!.lon, 8);
+
+    // Дистанция — крупное число над инструкцией.
+    const distance = screen.getByTestId('guide-maneuver-distance');
+    expect(distance).toHaveTextContent(/\d+ м|\d+[.,]\d км/i);
+    expect(distance.className).toContain('text-2xl');
+  });
+
+  it('скрывает крупную дистанцию, когда GPS слабый', async () => {
+    const geo = stubWatchingGeolocation();
+    await start();
+
+    geo.push(STOPS[0]!.lat, STOPS[0]!.lon, 120);
+
+    // Крупной цифры нет; инструкция видна с пометкой о слабом сигнале.
+    expect(screen.queryByTestId('guide-maneuver-distance')).toBeNull();
+    expect(screen.getByTestId('guide-maneuver-unprecise')).toBeInTheDocument();
+  });
+});
+
+describe('GuidePanel · NearbyHint', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    seedRoute();
+  });
+
+  afterEach(() => {
+    cleanup();
+    useDirectionsStore.getState().resetRoute();
+    vi.restoreAllMocks();
+  });
+
+  const toiletService = {
+    id: 1,
+    source_url: 'https://example.com/toilet',
+    name: 'Туалет у ратуши',
+    category: 'туалет',
+    town: null,
+    lat: 53.679,
+    lon: 23.831,
+    opening_hours: null,
+    hours_known: false,
+    off_line_m: 5,
+    // 50 м от начала — within NEARBY_HINT_AHEAD_M (120 м) от старта.
+    along_m: 50,
+    along_fraction: 0.07,
+    detour_confirmed: false,
+  } as const;
+
+  const start = async () => {
+    const user = userEvent.setup();
+    render(<GuidePanel stops={STOPS} />);
+    await user.click(screen.getByTestId('guide-start'));
+    return user;
+  };
+
+  it('появляется, когда POI впереди на расстоянии до 120 м', async () => {
+    vi.mocked(useServicesAlong).mockReturnValue({
+      items: [toiletService],
+      state: 'ready',
+      measured: null,
+      maxOffLineM: null,
+      reason: null,
+      capped: false,
+    });
+
+    await start();
+
+    // Показываем подсказку рядом.
+    expect(screen.getByTestId('guide-nearby-hint')).toBeInTheDocument();
+    expect(screen.getByTestId('guide-nearby-hint')).toHaveTextContent(/туалет/i);
+  });
+
+  it('не показывается, если сервисы ещё не загружены', async () => {
+    vi.mocked(useServicesAlong).mockReturnValue({
+      items: [],
+      state: 'idle',
+      measured: null,
+      maxOffLineM: null,
+      reason: null,
+      capped: false,
+    });
+
+    await start();
+
+    expect(screen.queryByTestId('guide-nearby-hint')).toBeNull();
+  });
+
+  it('не спамит — тот же POI не показывается повторно', async () => {
+    vi.mocked(useServicesAlong).mockReturnValue({
+      items: [toiletService],
+      state: 'ready',
+      measured: null,
+      maxOffLineM: null,
+      reason: null,
+      capped: false,
+    });
+
+    const geo = stubWatchingGeolocation();
+    await start();
+
+    // Первое появление.
+    expect(screen.getByTestId('guide-nearby-hint')).toBeInTheDocument();
+
+    // Dismiss.
+    await userEvent.setup().click(
+      screen.getByTestId('guide-nearby-hint-dismiss')
+    );
+    expect(screen.queryByTestId('guide-nearby-hint')).toBeNull();
+
+    // Повторный рендер (новый фикс) — подсказка не возвращается.
+    geo.push(STOPS[0]!.lat, STOPS[0]!.lon, 8);
+    expect(screen.queryByTestId('guide-nearby-hint')).toBeNull();
   });
 });
 

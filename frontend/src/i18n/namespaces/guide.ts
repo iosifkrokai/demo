@@ -79,6 +79,20 @@ export const guideArea = {
       reroute: 'перестроить от меня',
       onRoute: 'я на маршруте',
 
+      // ── Turn-by-turn banner (prominent display in moving mode) ───────────────
+      turnInAhead: '{{distance}} — {{instruction}}',
+      turnInAheadStandalone: 'через {{distance}}',
+      // ── Nearby POI hints (navigator-style inline prompts) ──────────────────
+      nearbyService: '{{name}} в {{distance}}',
+      nearbyServiceOnRoute: '{{name}} по пути',
+      nearbyServiceIfAlong: '{{name}} в {{distance}}, если по пути',
+      nearbyToilet: 'туалет',
+      nearbyCafe: 'кафе',
+      nearbyRestaurant: 'ресторан',
+      nearbyHotel: 'гостиница',
+      nearbyBusStop: 'остановка',
+      nearbyGeneric: 'место',
+
       // ── Suggestions along the way ────────────────────────────────────────
       suggestionsTitle: 'по пути — предложения, маршрут не меняют',
       suggestionAdd: 'добавить',
@@ -207,6 +221,20 @@ export const guideArea = {
         'We will re-plan from here — the stops and mandatory points are kept.',
       reroute: 're-plan from here',
       onRoute: 'I am on the route',
+
+      // ── Turn-by-turn banner (prominent display in moving mode) ───────────────
+      turnInAhead: '{{distance}} — {{instruction}}',
+      turnInAheadStandalone: 'in {{distance}}',
+      // ── Nearby POI hints (navigator-style inline prompts) ──────────────────
+      nearbyService: '{{name}} {{distance}} away',
+      nearbyServiceOnRoute: '{{name}} on the way',
+      nearbyServiceIfAlong: '{{name}} {{distance}} away, if along the way',
+      nearbyToilet: 'toilet',
+      nearbyCafe: 'cafe',
+      nearbyRestaurant: 'restaurant',
+      nearbyHotel: 'hotel',
+      nearbyBusStop: 'bus stop',
+      nearbyGeneric: 'place',
 
       // ── Suggestions along the way ────────────────────────────────────────
       suggestionsTitle:
