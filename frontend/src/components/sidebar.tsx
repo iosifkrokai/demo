@@ -75,6 +75,7 @@ import {
   SheetDragHandle,
   useSheetSnap,
 } from './parts/sheet-snap';
+import type { SheetHandleProps, SheetSnap } from './parts/sheet-snap';
 import { forward_geocode } from '@/utils/nominatim';
 
 // Same-origin by default: the webapp's nginx proxies /routes/ to the agent
@@ -415,7 +416,27 @@ const walkKey = (waypoints: readonly Waypoint[]) =>
  * so the line follows the interface language instead of freezing in one. */
 type GeoReason = 'unsupported' | 'failedShort' | 'denied';
 
-export const Sidebar = () => {
+export interface SidebarProps {
+  /**
+   * Render only the panel's contents: no `Sheet`/`SheetContent`, no desktop
+   * resize handle. The caller (the mobile shell) owns the geometry and wraps
+   * them in a sheet of its own. Because the panel's own `SheetTitle` needs the
+   * dialog context, the caller's wrapper must still be a sheet primitive.
+   */
+  bare?: boolean;
+  /** Position and drag handlers, when the caller owns them (mobile shell). */
+  snap?: SheetSnap;
+  handleProps?: SheetHandleProps;
+  /** Off when the caller publishes `--sheet-h` itself (mobile shell). */
+  publishSheetHeight?: boolean;
+}
+
+export const Sidebar = ({
+  bare = false,
+  snap: snapProp,
+  handleProps: handlePropsProp,
+  publishSheetHeight = true,
+}: SidebarProps = {}) => {
   const panelOpen = useCommonStore((s) => s.directionsPanelOpen);
   const setWaypoint = useDirectionsStore((s) => s.setWaypoint);
   const addEmptyWaypointToEnd = useDirectionsStore(
@@ -569,7 +590,10 @@ export const Sidebar = () => {
     reload: reloadItineraries,
   } = useItineraries({ enabled: mode === 'itineraries' });
 
-  const { snap, handleProps } = useSheetSnap();
+  // The caller may own the position (mobile shell); otherwise the panel does.
+  const { snap: ownSnap, handleProps: ownHandleProps } = useSheetSnap();
+  const snap = snapProp ?? ownSnap;
+  const handleProps = handlePropsProp ?? ownHandleProps;
   const taRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -1357,6 +1381,9 @@ export const Sidebar = () => {
   // classes above — a mobile viewport is the only place it is non-zero, because
   // from md up the panel is a column and covers nothing.
   useEffect(() => {
+    // The mobile shell publishes the height itself (it owns the geometry), so
+    // two writers never fight over the same custom property.
+    if (!publishSheetHeight) return;
     const root = document.documentElement;
     const publish = () => {
       // An innerWidth check, not matchMedia: jsdom has no matchMedia, and the
@@ -1378,7 +1405,818 @@ export const Sidebar = () => {
       window.removeEventListener('resize', publish);
       root.style.setProperty('--sheet-h', '0px');
     };
-  }, [guiding, snap]);
+  }, [guiding, snap, publishSheetHeight]);
+
+  const content = (
+    <div className="flex h-full min-h-0 flex-col">
+      {/* === Ask ===
+              First in the DOM, so the query field is the panel's first tab
+              stop — the tourist lands on the thing the panel is for, not on the
+              close button. `order-2` keeps it visually under the header. */}
+      {!guiding && mode === 'plan' && (
+        <section className="order-2 shrink-0 border-b border-border px-4 pb-3 pt-3 max-md:pb-2 max-md:pt-2">
+          <div className="rounded-2xl border border-border bg-card px-3 py-2.5 shadow-card transition-colors focus-within:border-ring max-md:py-2">
+            <div className="flex items-center gap-2.5">
+              <Search
+                className="h-[18px] w-[18px] shrink-0 text-muted-foreground"
+                aria-hidden="true"
+              />
+              <Textarea
+                ref={taRef}
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    submitPrompt();
+                  }
+                }}
+                placeholder={
+                  hasRoute ? t('ask.placeholderRefine') : t('ask.placeholder')
+                }
+                aria-label={t('ask.label')}
+                className="min-h-0 flex-1 resize-none border-0 bg-transparent p-0 text-body leading-6 shadow-none focus-visible:ring-0 max-md:min-h-11"
+                rows={1}
+                disabled={busy}
+              />
+            </div>
+          </div>
+          <div
+            role="group"
+            aria-label={t('sidebar.plan.hintsAria')}
+            // Mobile: ONE scrolling row. Measured at 390x844 the five chips
+            // (44px each, the touch minimum) wrapped into five lines and ate
+            // 244px of the 380px sheet — the scroll body was squeezed to 36px
+            // and the sticky footer with «Построить» was pushed out of the
+            // sheet entirely, i.e. the panel's main action was unreachable
+            // without dragging the sheet open. A row of examples does not
+            // deserve a third of the screen; `md` keeps the wrapping grid.
+            className="mt-2 flex gap-1.5 max-md:flex-nowrap max-md:overflow-x-auto max-md:pb-0.5 md:flex-wrap"
+          >
+            {hints.map((hint) => (
+              <Chip
+                key={hint.id}
+                onClick={() => {
+                  setQuery(hint.text);
+                  taRef.current?.focus();
+                }}
+                data-testid={`hint-${hint.id}`}
+              >
+                {hint.text}
+              </Chip>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* ── Header. Planning and browsing keep the tab strip, the title and
+              the quiet close row; guide mode gets its own bar instead — the
+              navigator's «маршрут идёт» state, with one obvious way out and no
+              tabs to read past. All of it sits in normal flow, so nothing can
+              slide under the close button. ── */}
+      <header className="order-1 shrink-0 border-b border-border px-4 pb-2.5 max-md:pb-1.5">
+        <SheetDragHandle snap={snap} handleProps={handleProps} />
+        {guiding ? (
+          <div className="mt-1.5 flex items-center gap-2">
+            <div className="flex min-w-0 flex-1 items-center gap-2 rounded-2xl bg-primary px-3 py-2 text-primary-foreground">
+              {/* Radix still needs a title for the dialog. */}
+              <SheetTitle className="sr-only">
+                {t('sidebar.ui.guide')}
+              </SheetTitle>
+              <Compass className="h-4 w-4 shrink-0" aria-hidden="true" />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-label font-semibold">
+                  {t('guide.title')}
+                </p>
+                <p className="truncate text-badge opacity-90">
+                  {t('guide.stops', { count: guideStops.length })} ·{' '}
+                  {guideModeFor(transport).label}
+                </p>
+              </div>
+              <button
+                type="button"
+                data-testid="guide-exit"
+                onClick={() => setGuiding(false)}
+                className="shrink-0 rounded-full bg-primary-foreground/15 px-2.5 py-1 text-badge font-semibold transition-colors hover:bg-primary-foreground/25 max-md:min-h-11 pointer-coarse:min-h-11"
+              >
+                {t('guide.exit')}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="flex items-center gap-2">
+              <Segmented
+                items={tabs}
+                value={mode}
+                onChange={setMode}
+                label={t('sidebar.plan.tabsAria')}
+                className="min-w-0 flex-1"
+                testId={(value) => `mode-${value}`}
+              />
+              {/* No ✕ here: the panel is opened and closed by its own handle
+                      on the map's left edge — one control for one thing, and it
+                      cannot fall out of step with the panel's state. */}
+              <LanguageSwitcher className="shrink-0" />
+            </div>
+            <div className="mt-2.5 flex min-w-0 items-center gap-2">
+              <RouteIcon
+                className="h-4 w-4 shrink-0 text-primary max-md:hidden"
+                aria-hidden="true"
+              />
+              <div className="min-w-0">
+                {/* sr-only on a phone, like the description: the tab strip
+                        right above already says where you are, and the title row
+                        costs 46px of the sheet's 422px. Kept in the a11y tree —
+                        it is the dialog's name. */}
+                <SheetTitle className="truncate text-body max-md:sr-only">
+                  {t('app.title')}
+                </SheetTitle>
+                {/* Radix wants a description for the dialog; the visible
+                        line below is the same sentence, so keep it out of the
+                        a11y tree. */}
+                <SheetDescription className="sr-only">
+                  {t('app.description')}
+                </SheetDescription>
+                <p className="truncate text-meta text-muted-foreground max-md:hidden">
+                  {subtitles[mode]}
+                </p>
+              </div>
+            </div>
+          </>
+        )}
+      </header>
+
+      {/* ── Body: the only part that scrolls. ── */}
+      <div className="slim-scroll order-3 flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 pb-6 pt-3">
+        {guiding ? (
+          // key: a rebuilt route remounts the guide, so the walk restarts
+          // instead of carrying progress from the route that no longer exists
+          <GuidePanel
+            key={guideRouteKey(guideStops)}
+            stops={guideStops}
+            transport={transport}
+            onWalked={handleWalked}
+          />
+        ) : mode === 'history' ? (
+          <HistoryTab
+            entries={routeHistory}
+            onRestore={restoreFromHistory}
+            onRemove={removeFromHistory}
+            onClear={clearHistory}
+          />
+        ) : mode === 'itineraries' ? (
+          <ItinerariesTab
+            itineraries={itineraries}
+            missing={itinerariesMissing}
+            isLoading={itinerariesLoading}
+            error={itinerariesError}
+            onReload={reloadItineraries}
+            onOpen={openItinerary}
+            disabled={busy}
+          />
+        ) : (
+          <>
+            {/* === Constraints: time + transport. Both are the user's call —
+                    nothing is invented for them. === */}
+            <section className="flex flex-col gap-2.5">
+              <div className="flex flex-col gap-1.5">
+                <span
+                  id="time-budget-label"
+                  className="text-meta text-muted-foreground"
+                >
+                  {t('sidebar.ui.timeLabel')}
+                </span>
+                <div
+                  role="group"
+                  aria-labelledby="time-budget-label"
+                  className="flex flex-wrap gap-1.5"
+                >
+                  {buildTimeBudgetOptions(t).map((option) => (
+                    <Chip
+                      key={option.value}
+                      selected={timeBudget === option.value}
+                      onClick={() => setTimeBudget(option.value)}
+                      data-testid={`budget-${option.value}`}
+                    >
+                      {option.label}
+                    </Chip>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <span className="text-meta text-muted-foreground">
+                  {t('sidebar.ui.transportLabel')}
+                </span>
+                <Segmented
+                  items={buildTransportOptions(t)}
+                  value={transport}
+                  onChange={setTransportEverywhere}
+                  label={t('sidebar.ui.transportLabel')}
+                  stacked
+                  disabled={busy}
+                  testId={(value) => `transport-${value || 'any'}`}
+                />
+              </div>
+
+              <button
+                type="button"
+                onClick={() => void locateMe()}
+                disabled={geoState === 'locating'}
+                className="flex w-full items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-meta transition-colors hover:bg-muted disabled:opacity-60 max-md:min-h-11 pointer-coarse:min-h-11"
+                title={t('sidebar.plan.geoOverride')}
+              >
+                <LocateFixed
+                  className={
+                    geoState === 'ok'
+                      ? 'h-3.5 w-3.5 shrink-0 text-emerald-600'
+                      : 'h-3.5 w-3.5 shrink-0 text-muted-foreground'
+                  }
+                />
+                <span className={`truncate ${geoBadge.tone}`}>
+                  {geoState === 'idle'
+                    ? t('sidebar.geo.detect')
+                    : geoBadge.text}
+                </span>
+                <span className="ml-auto shrink-0 text-muted-foreground">
+                  {geoState === 'locating' ? '…' : t('sidebar.ui.refresh')}
+                </span>
+              </button>
+
+              {/* Progressive disclosure (spec 002): the two controls above
+                      are always visible; everything else waits behind this. */}
+              <button
+                type="button"
+                data-testid="more-filters"
+                aria-expanded={advancedOpen}
+                aria-controls="advanced-filters"
+                onClick={() => setAdvancedOpen((v) => !v)}
+                className="flex w-full items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-meta transition-colors hover:bg-muted max-md:min-h-11 pointer-coarse:min-h-11"
+              >
+                <SlidersHorizontal
+                  className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+                  aria-hidden="true"
+                />
+                <span>{t('sidebar.ui.moreFilters')}</span>
+                {filterSummary.length > 0 && (
+                  <span
+                    data-testid="filters-count"
+                    className="rounded-full bg-muted px-1.5 py-0.5 text-badge font-semibold text-foreground"
+                  >
+                    {filterSummary.length}
+                  </span>
+                )}
+                <ChevronDown
+                  className={cn(
+                    'ml-auto h-3.5 w-3.5 text-muted-foreground transition-transform',
+                    advancedOpen && 'rotate-180'
+                  )}
+                  aria-hidden="true"
+                />
+              </button>
+
+              {/* The summary is always visible once anything is chosen, so
+                      no condition is applied invisibly. */}
+              {filterSummary.length > 0 && (
+                <div
+                  data-testid="filters-summary"
+                  role="status"
+                  className="flex flex-wrap items-center gap-1 rounded-xl bg-muted px-3 py-2 text-meta text-muted-foreground"
+                >
+                  <span>{t('sidebar.ui.considering')}</span>
+                  {filterSummary.map((item) => (
+                    <span
+                      key={item}
+                      className="rounded-full bg-card px-2 py-0.5 text-foreground"
+                    >
+                      {item}
+                    </span>
+                  ))}
+                  {query.trim() !== '' && (
+                    <span
+                      data-testid="filters-precedence"
+                      className="basis-full pt-0.5"
+                    >
+                      {t('sidebar.plan.filtersPrecedence')}
+                    </span>
+                  )}
+                </div>
+              )}
+
+              {advancedOpen && (
+                <div
+                  id="advanced-filters"
+                  data-testid="advanced-filters"
+                  className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-3"
+                >
+                  {/* Party: counts, plus ages only when they were typed. */}
+                  <div className="flex flex-col gap-1.5">
+                    <span className="text-meta text-muted-foreground">
+                      {t('sidebar.plan.partyLabel')}
+                    </span>
+                    <Stepper
+                      label={t('sidebar.plan.adults')}
+                      testId="party-adults"
+                      value={partyAdults}
+                      min={1}
+                      max={50}
+                      onChange={setPartyAdults}
+                    />
+                    <Stepper
+                      label={t('sidebar.plan.children')}
+                      testId="party-children"
+                      value={partyChildren}
+                      min={1}
+                      max={20}
+                      onChange={setPartyChildren}
+                    />
+                    {partyChildren != null && partyChildren > 0 && (
+                      <div className="flex flex-col gap-1">
+                        <label
+                          htmlFor="children-ages"
+                          className="text-meta text-muted-foreground"
+                        >
+                          {t('sidebar.plan.childrenAges')}
+                        </label>
+                        <Input
+                          id="children-ages"
+                          data-testid="children-ages"
+                          value={childrenAgesText}
+                          onChange={(e) => setChildrenAgesText(e.target.value)}
+                          placeholder="4, 7"
+                          className="h-9 text-label"
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Amenities, each «обязательно» or «желательно». */}
+                  <div className="flex flex-col gap-1.5">
+                    <span className="text-meta text-muted-foreground">
+                      {t('sidebar.plan.amenities')}
+                    </span>
+                    {buildAmenityOptions(t).map((option) => (
+                      <div
+                        key={option.code}
+                        className="flex items-center gap-2"
+                      >
+                        <span className="text-label">{option.label}</span>
+                        <div className="ml-auto flex gap-1">
+                          <Chip
+                            selected={amenities[option.code] === 'hard'}
+                            onClick={() => toggleAmenity(option.code, 'hard')}
+                            data-testid={`amenity-${option.code}-hard`}
+                            className="h-7 px-2 text-meta"
+                          >
+                            {t('sidebar.plan.hard')}
+                          </Chip>
+                          <Chip
+                            selected={amenities[option.code] === 'soft'}
+                            onClick={() => toggleAmenity(option.code, 'soft')}
+                            data-testid={`amenity-${option.code}-soft`}
+                            className="h-7 px-2 text-meta"
+                          >
+                            {t('sidebar.plan.soft')}
+                          </Chip>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Themes: soft by nature, they never force a detour. */}
+                  <div className="flex flex-col gap-1.5">
+                    <span className="text-meta text-muted-foreground">
+                      {t('sidebar.plan.interests')}
+                    </span>
+                    <div
+                      role="group"
+                      aria-label={t('sidebar.plan.interests')}
+                      className="flex flex-wrap gap-1.5"
+                    >
+                      {buildInterestOptions(t).map((option) => (
+                        <Chip
+                          key={option.code}
+                          selected={optionSelected(option, interests)}
+                          onClick={() => toggleOption(setInterests, option)}
+                          data-testid={`interest-${option.code}`}
+                        >
+                          {option.label}
+                        </Chip>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Keep out. */}
+                  <div className="flex flex-col gap-1.5">
+                    <span className="text-meta text-muted-foreground">
+                      {t('sidebar.plan.avoid')}
+                    </span>
+                    <div
+                      role="group"
+                      aria-label={t('sidebar.plan.avoid')}
+                      className="flex flex-wrap gap-1.5"
+                    >
+                      {buildAvoidOptions(t).map((option) => (
+                        <Chip
+                          key={option.code}
+                          selected={optionSelected(option, avoid)}
+                          onClick={() => toggleOption(setAvoid, option)}
+                          data-testid={`avoid-${option.code}`}
+                        >
+                          {option.label}
+                        </Chip>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* What to return, and whether to come back to the start. */}
+                  <div className="flex flex-col gap-1.5">
+                    <span className="text-meta text-muted-foreground">
+                      {t('sidebar.plan.resultType')}
+                    </span>
+                    <Segmented
+                      items={buildResultModeOptions(t)}
+                      value={resultMode}
+                      onChange={setResultMode}
+                      label={t('sidebar.plan.resultTypeAria')}
+                      disabled={busy}
+                      testId={(value) => `result-mode-${value}`}
+                    />
+                    <Chip
+                      selected={roundTrip}
+                      onClick={() => setRoundTrip((v) => !v)}
+                      data-testid="round-trip"
+                      className="mt-0.5 self-start"
+                    >
+                      {t('sidebar.ui.roundTrip')}
+                    </Chip>
+                  </div>
+                </div>
+              )}
+            </section>
+
+            {/* === Route === */}
+            <section className="flex flex-col gap-2.5">
+              {/* The plan's own verdict, above the stops: for a degraded plan
+                      it heads the summary it qualifies, and for an infeasible
+                      one it shows at all precisely because there is no route —
+                      that is when the tourist most needs to hear why. */}
+              <PlanVerdict response={verdict} />
+              {hasRoute && (
+                <div className="flex items-center justify-between gap-2">
+                  <h2 className="text-label font-semibold">
+                    {t('sidebar.ui.route')}
+                  </h2>
+                  <button
+                    type="button"
+                    onClick={reset}
+                    className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-meta text-muted-foreground transition-colors hover:bg-muted hover:text-foreground max-md:min-h-11 pointer-coarse:min-h-11"
+                    title={t('sidebar.plan.resetHint')}
+                  >
+                    <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
+                    {t('sidebar.plan.reset')}
+                  </button>
+                </div>
+              )}
+
+              {summary ? (
+                <>
+                  <StatTiles>
+                    {/* The tile inflects the noun itself: «2 точки», not
+                            «2 точек» — the count is right there. */}
+                    <StatTile
+                      value={summary.stops}
+                      count={summary.stops}
+                      unit="points"
+                    />
+                    <StatTile
+                      value={summary.km != null ? fmtKm(summary.km, t) : '—'}
+                      label={t('sidebar.plan.length')}
+                    />
+                    <StatTile
+                      value={summary.travelMinutes}
+                      label={t('sidebar.plan.travelMinutes')}
+                    />
+                  </StatTiles>
+                  <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-meta text-muted-foreground">
+                    <span className="inline-flex items-center gap-1">
+                      <Clock className="h-3.5 w-3.5" aria-hidden="true" />
+                      {t('sidebar.plan.travelSummary', {
+                        value: fmtMin(summary.walkMinutes, t),
+                      })}
+                    </span>
+                    <span>
+                      {t('sidebar.plan.visitSummary', {
+                        value: fmtMin(summary.visitMinutes, t),
+                      })}
+                    </span>
+                    <span>
+                      {summary.budgetMinutes
+                        ? t('sidebar.plan.budgetSummary', {
+                            value: fmtMin(summary.budgetMinutes, t),
+                          })
+                        : t('sidebar.ui.noLimit')}
+                    </span>
+                    {!summary.fits && (
+                      <span className="rounded-full bg-amber-500/15 px-2 py-0.5 font-medium text-amber-700">
+                        {t('sidebar.plan.overBudget')}
+                      </span>
+                    )}
+                  </p>
+                </>
+              ) : (
+                busy && <SummarySkeleton />
+              )}
+
+              {busy ? (
+                <StopsSkeleton />
+              ) : hasRoute ? (
+                <WaypointList onChanged={() => setStatus(null)} />
+              ) : (
+                /* Never a bare blank panel: say what to do instead. The hint
+                       chips under the ask field are the empty state's chips. */
+                <div
+                  data-testid="plan-empty"
+                  className="flex flex-col items-center gap-2 rounded-2xl border border-border bg-card px-4 py-7 text-center"
+                >
+                  <Compass
+                    className="h-7 w-7 text-muted-foreground"
+                    aria-hidden="true"
+                  />
+                  <p className="text-label text-muted-foreground">
+                    {t('sidebar.ui.emptyStops')}
+                  </p>
+                </div>
+              )}
+
+              {status && (
+                <div
+                  role={status.kind === 'err' ? 'alert' : 'status'}
+                  aria-live={status.kind === 'err' ? 'assertive' : 'polite'}
+                  data-testid={
+                    status.kind === 'warn'
+                      ? 'toilet-missing-warning'
+                      : undefined
+                  }
+                  className={[
+                    'rounded-xl px-3 py-2 text-meta',
+                    status.kind === 'ok'
+                      ? 'bg-primary/10 text-primary'
+                      : status.kind === 'warn'
+                        ? 'bg-amber-500/15 text-amber-800'
+                        : 'bg-destructive/10 text-destructive',
+                  ].join(' ')}
+                >
+                  {status.text}
+                </div>
+              )}
+
+              {/* What the refinement turns changed, and the two ways out of
+                      them. Stays visible for the whole route, not just while
+                      there is a log: the manual deletions outlive it. */}
+              {hasRoute && (
+                <div className="flex flex-col gap-2 rounded-2xl border border-border bg-card p-3">
+                  {(refinementLog.length > 0 ||
+                    excludedPlaceIds.length > 0) && (
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {refinementLog.map((entry) => (
+                        <span
+                          key={entry.id}
+                          className="inline-flex flex-wrap items-center gap-1"
+                        >
+                          <span
+                            title={
+                              [
+                                entry.added.length
+                                  ? t('sidebar.plan.refinementAdded', {
+                                      names: entry.added.join(', '),
+                                    })
+                                  : '',
+                                entry.removed.length
+                                  ? t('sidebar.plan.refinementRemoved', {
+                                      names: entry.removed.join(', '),
+                                    })
+                                  : '',
+                              ]
+                                .filter(Boolean)
+                                .join(' · ') || t('sidebar.status.noChanges')
+                            }
+                            className="rounded-full border border-border bg-muted px-2.5 py-0.5 text-meta text-muted-foreground"
+                          >
+                            {entry.instruction}
+                          </span>
+                          {entry.added.length > 0 && (
+                            <span className="rounded-full bg-primary/10 px-2 py-0.5 text-meta text-primary">
+                              {t('sidebar.plan.addedCount', {
+                                count: entry.added.length,
+                              })}
+                            </span>
+                          )}
+                          {entry.removed.length > 0 && (
+                            <span className="rounded-full bg-muted px-2 py-0.5 text-meta text-muted-foreground">
+                              {t('sidebar.plan.removedCount', {
+                                count: entry.removed.length,
+                              })}
+                            </span>
+                          )}
+                          {entry.added.length === 0 &&
+                            entry.removed.length === 0 && (
+                              <span className="rounded-full bg-muted px-2 py-0.5 text-meta text-muted-foreground">
+                                {t('sidebar.status.noChanges')}
+                              </span>
+                            )}
+                        </span>
+                      ))}
+                      {excludedPlaceIds.length > 0 && (
+                        <span
+                          data-testid="excluded-chip"
+                          className="rounded-full bg-destructive/10 px-2.5 py-0.5 text-meta text-destructive"
+                        >
+                          {t('sidebar.plan.excludedManual', {
+                            count: excludedPlaceIds.length,
+                          })}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={() => {
+                        undoRefinement();
+                        setStatus({
+                          kind: 'ok',
+                          text: t('sidebar.status.restoredPrevious'),
+                        });
+                        refetchDirections();
+                      }}
+                      disabled={routeSnapshots.length === 0}
+                      className="h-9 rounded-full px-3 text-label disabled:opacity-40 max-md:h-11 pointer-coarse:h-11"
+                    >
+                      <Undo2 className="h-3.5 w-3.5" aria-hidden="true" />
+                      {t('sidebar.plan.undoRefinement')}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={() => {
+                        resetRoute();
+                        reset();
+                      }}
+                      className="h-9 rounded-full px-3 text-label font-normal text-muted-foreground hover:text-foreground max-md:h-11 pointer-coarse:h-11"
+                    >
+                      <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
+                      {t('sidebar.plan.newRoute')}
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </section>
+
+            {/* === Manual add === */}
+            <section className="flex flex-col gap-2 rounded-2xl border border-border bg-card p-3 shadow-card">
+              <h2 className="text-label font-semibold">
+                {t('sidebar.ui.addPoint')}
+              </h2>
+              <div className="flex gap-2">
+                <Input
+                  value={manualQuery}
+                  onChange={(e) => setManualQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      manualAdd();
+                    }
+                  }}
+                  placeholder={t('sidebar.plan.queryPlaceholder')}
+                  aria-label={t('sidebar.plan.manualAria')}
+                  className="h-10 flex-1 text-body max-md:h-11"
+                  disabled={manualBusy}
+                />
+                <Button
+                  type="button"
+                  onClick={manualAdd}
+                  disabled={manualBusy || !manualQuery.trim()}
+                  size="icon"
+                  className="h-10 w-10 shrink-0 rounded-full max-md:h-11 max-md:w-11"
+                  aria-label={t('sidebar.plan.manualSearchAria')}
+                >
+                  {manualBusy ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Plus className="h-4 w-4" />
+                  )}
+                </Button>
+              </div>
+              {manualErr && (
+                <p className="text-meta text-destructive">{manualErr}</p>
+              )}
+              <button
+                type="button"
+                onClick={addEmptyWaypointToEnd}
+                className="inline-flex items-center gap-1 self-start rounded-full px-2 py-1 text-meta text-muted-foreground transition-colors hover:bg-muted hover:text-foreground max-md:min-h-11 pointer-coarse:min-h-11"
+              >
+                <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />{' '}
+                {t('sidebar.ui.emptyPoint')}
+              </button>
+            </section>
+          </>
+        )}
+      </div>
+
+      {/* ── Sticky footer: the one action the panel exists for. Outside the
+              scroll area, so it is reachable at either snap point. The guide
+              brings its own actions, so the footer steps out of its way. ── */}
+      {!guiding && mode === 'plan' && (
+        <footer className="order-4 shrink-0 border-t border-border bg-background px-4 py-3">
+          {/* Honest waiting: only what the client can observe — the request
+                  is in flight, or the plan has arrived and the line is being
+                  drawn — plus the seconds that have passed and a real cancel.
+                  No invented stages, and no bare spinner for 23 seconds. */}
+          {busy && (
+            <div
+              role="status"
+              aria-live="polite"
+              data-testid="route-progress"
+              data-stage={stage}
+              className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl bg-muted px-3 py-2 text-meta"
+            >
+              <Loader2
+                className="h-3.5 w-3.5 shrink-0 animate-spin text-muted-foreground"
+                aria-hidden="true"
+              />
+              <span className="text-foreground">
+                {serverStage
+                  ? t(routeServerStageKey(serverStage)!)
+                  : t(
+                      stage === 'requesting'
+                        ? 'sidebar.progress.waitingRequest'
+                        : 'sidebar.progress.waitingLine'
+                    )}
+              </span>
+              <span className="tabular-nums text-muted-foreground">
+                {t('sidebar.progress.elapsed', {
+                  count: routeElapsedSeconds(elapsed),
+                })}
+              </span>
+              <button
+                type="button"
+                onClick={cancelRouteRequest}
+                data-testid="route-cancel"
+                className="ml-auto inline-flex h-8 shrink-0 items-center rounded-full border border-border bg-card px-3 text-label font-medium text-foreground transition-colors hover:bg-muted max-md:h-11 pointer-coarse:h-11"
+              >
+                {t('sidebar.progress.cancel')}
+              </button>
+              {elapsed >= LONG_WAIT_SECONDS && (
+                <span className="basis-full text-muted-foreground">
+                  {t('sidebar.progress.longWait')}
+                </span>
+              )}
+            </div>
+          )}
+          {/* Entering the guide is its own, louder action: walking a route
+                  is a different activity from planning one, and in a navigator
+                  it is a button you press once, not a tab you visit. */}
+          {canGuide && (
+            <Button
+              type="button"
+              data-testid="guide-enter"
+              onClick={() => setGuiding(true)}
+              className="mb-2 h-12 w-full rounded-xl bg-primary text-body font-semibold text-primary-foreground motion-safe:transition hover:brightness-[0.97] active:scale-[0.99] motion-reduce:active:scale-100"
+            >
+              <Compass className="h-4 w-4" aria-hidden="true" />
+              {t('guide.enter')}
+            </Button>
+          )}
+          <Button
+            type="button"
+            data-testid="build-route"
+            onClick={() => submitPrompt()}
+            disabled={busy || !query.trim()}
+            className={cn(
+              'h-12 w-full rounded-xl text-body font-semibold transition hover:brightness-[0.97] active:scale-[0.99] motion-reduce:active:scale-100 disabled:opacity-40',
+              // With a route in hand, starting it is the hero action — the
+              // build button steps back to the quieter style.
+              canGuide
+                ? 'bg-secondary text-secondary-foreground'
+                : 'bg-primary text-primary-foreground'
+            )}
+          >
+            {busy && (
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+            )}
+            {busy ? t('sidebar.ui.plan') : t('sidebar.ui.build')}
+          </Button>
+        </footer>
+      )}
+    </div>
+  );
+
+  // The mobile shell owns the sheet (geometry, position, drag handle), so the
+  // panel renders its contents only and the caller wraps them.
+  if (bare) return content;
 
   return (
     <Sheet open={panelOpen} modal={false}>
@@ -1394,827 +2232,7 @@ export const Sidebar = () => {
         )}
         style={{ '--panel-width': `${panel.width}px` } as CSSProperties}
       >
-        <div className="flex h-full min-h-0 flex-col">
-          {/* === Ask ===
-              First in the DOM, so the query field is the panel's first tab
-              stop — the tourist lands on the thing the panel is for, not on the
-              close button. `order-2` keeps it visually under the header. */}
-          {!guiding && mode === 'plan' && (
-            <section className="order-2 shrink-0 border-b border-border px-4 pb-3 pt-3 max-md:pb-2 max-md:pt-2">
-              <div className="rounded-2xl border border-border bg-card px-3 py-2.5 shadow-card transition-colors focus-within:border-ring max-md:py-2">
-                <div className="flex items-center gap-2.5">
-                  <Search
-                    className="h-[18px] w-[18px] shrink-0 text-muted-foreground"
-                    aria-hidden="true"
-                  />
-                  <Textarea
-                    ref={taRef}
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && !e.shiftKey) {
-                        e.preventDefault();
-                        submitPrompt();
-                      }
-                    }}
-                    placeholder={
-                      hasRoute
-                        ? t('ask.placeholderRefine')
-                        : t('ask.placeholder')
-                    }
-                    aria-label={t('ask.label')}
-                    className="min-h-0 flex-1 resize-none border-0 bg-transparent p-0 text-body leading-6 shadow-none focus-visible:ring-0 max-md:min-h-11"
-                    rows={1}
-                    disabled={busy}
-                  />
-                </div>
-              </div>
-              <div
-                role="group"
-                aria-label={t('sidebar.plan.hintsAria')}
-                // Mobile: ONE scrolling row. Measured at 390x844 the five chips
-                // (44px each, the touch minimum) wrapped into five lines and ate
-                // 244px of the 380px sheet — the scroll body was squeezed to 36px
-                // and the sticky footer with «Построить» was pushed out of the
-                // sheet entirely, i.e. the panel's main action was unreachable
-                // without dragging the sheet open. A row of examples does not
-                // deserve a third of the screen; `md` keeps the wrapping grid.
-                className="mt-2 flex gap-1.5 max-md:flex-nowrap max-md:overflow-x-auto max-md:pb-0.5 md:flex-wrap"
-              >
-                {hints.map((hint) => (
-                  <Chip
-                    key={hint.id}
-                    onClick={() => {
-                      setQuery(hint.text);
-                      taRef.current?.focus();
-                    }}
-                    data-testid={`hint-${hint.id}`}
-                  >
-                    {hint.text}
-                  </Chip>
-                ))}
-              </div>
-            </section>
-          )}
-
-          {/* ── Header. Planning and browsing keep the tab strip, the title and
-              the quiet close row; guide mode gets its own bar instead — the
-              navigator's «маршрут идёт» state, with one obvious way out and no
-              tabs to read past. All of it sits in normal flow, so nothing can
-              slide under the close button. ── */}
-          <header className="order-1 shrink-0 border-b border-border px-4 pb-2.5 max-md:pb-1.5">
-            <SheetDragHandle snap={snap} handleProps={handleProps} />
-            {guiding ? (
-              <div className="mt-1.5 flex items-center gap-2">
-                <div className="flex min-w-0 flex-1 items-center gap-2 rounded-2xl bg-primary px-3 py-2 text-primary-foreground">
-                  {/* Radix still needs a title for the dialog. */}
-                  <SheetTitle className="sr-only">
-                    {t('sidebar.ui.guide')}
-                  </SheetTitle>
-                  <Compass className="h-4 w-4 shrink-0" aria-hidden="true" />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-label font-semibold">
-                      {t('guide.title')}
-                    </p>
-                    <p className="truncate text-badge opacity-90">
-                      {t('guide.stops', { count: guideStops.length })} ·{' '}
-                      {guideModeFor(transport).label}
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    data-testid="guide-exit"
-                    onClick={() => setGuiding(false)}
-                    className="shrink-0 rounded-full bg-primary-foreground/15 px-2.5 py-1 text-badge font-semibold transition-colors hover:bg-primary-foreground/25 max-md:min-h-11 pointer-coarse:min-h-11"
-                  >
-                    {t('guide.exit')}
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <>
-                <div className="flex items-center gap-2">
-                  <Segmented
-                    items={tabs}
-                    value={mode}
-                    onChange={setMode}
-                    label={t('sidebar.plan.tabsAria')}
-                    className="min-w-0 flex-1"
-                    testId={(value) => `mode-${value}`}
-                  />
-                  {/* No ✕ here: the panel is opened and closed by its own handle
-                      on the map's left edge — one control for one thing, and it
-                      cannot fall out of step with the panel's state. */}
-                  <LanguageSwitcher className="shrink-0" />
-                </div>
-                <div className="mt-2.5 flex min-w-0 items-center gap-2">
-                  <RouteIcon
-                    className="h-4 w-4 shrink-0 text-primary max-md:hidden"
-                    aria-hidden="true"
-                  />
-                  <div className="min-w-0">
-                    {/* sr-only on a phone, like the description: the tab strip
-                        right above already says where you are, and the title row
-                        costs 46px of the sheet's 422px. Kept in the a11y tree —
-                        it is the dialog's name. */}
-                    <SheetTitle className="truncate text-body max-md:sr-only">
-                      {t('app.title')}
-                    </SheetTitle>
-                    {/* Radix wants a description for the dialog; the visible
-                        line below is the same sentence, so keep it out of the
-                        a11y tree. */}
-                    <SheetDescription className="sr-only">
-                      {t('app.description')}
-                    </SheetDescription>
-                    <p className="truncate text-meta text-muted-foreground max-md:hidden">
-                      {subtitles[mode]}
-                    </p>
-                  </div>
-                </div>
-              </>
-            )}
-          </header>
-
-          {/* ── Body: the only part that scrolls. ── */}
-          <div className="slim-scroll order-3 flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 pb-6 pt-3">
-            {guiding ? (
-              // key: a rebuilt route remounts the guide, so the walk restarts
-              // instead of carrying progress from the route that no longer exists
-              <GuidePanel
-                key={guideRouteKey(guideStops)}
-                stops={guideStops}
-                transport={transport}
-                onWalked={handleWalked}
-              />
-            ) : mode === 'history' ? (
-              <HistoryTab
-                entries={routeHistory}
-                onRestore={restoreFromHistory}
-                onRemove={removeFromHistory}
-                onClear={clearHistory}
-              />
-            ) : mode === 'itineraries' ? (
-              <ItinerariesTab
-                itineraries={itineraries}
-                missing={itinerariesMissing}
-                isLoading={itinerariesLoading}
-                error={itinerariesError}
-                onReload={reloadItineraries}
-                onOpen={openItinerary}
-                disabled={busy}
-              />
-            ) : (
-              <>
-                {/* === Constraints: time + transport. Both are the user's call —
-                    nothing is invented for them. === */}
-                <section className="flex flex-col gap-2.5">
-                  <div className="flex flex-col gap-1.5">
-                    <span
-                      id="time-budget-label"
-                      className="text-meta text-muted-foreground"
-                    >
-                      {t('sidebar.ui.timeLabel')}
-                    </span>
-                    <div
-                      role="group"
-                      aria-labelledby="time-budget-label"
-                      className="flex flex-wrap gap-1.5"
-                    >
-                      {buildTimeBudgetOptions(t).map((option) => (
-                        <Chip
-                          key={option.value}
-                          selected={timeBudget === option.value}
-                          onClick={() => setTimeBudget(option.value)}
-                          data-testid={`budget-${option.value}`}
-                        >
-                          {option.label}
-                        </Chip>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="flex flex-col gap-1.5">
-                    <span className="text-meta text-muted-foreground">
-                      {t('sidebar.ui.transportLabel')}
-                    </span>
-                    <Segmented
-                      items={buildTransportOptions(t)}
-                      value={transport}
-                      onChange={setTransportEverywhere}
-                      label={t('sidebar.ui.transportLabel')}
-                      stacked
-                      disabled={busy}
-                      testId={(value) => `transport-${value || 'any'}`}
-                    />
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => void locateMe()}
-                    disabled={geoState === 'locating'}
-                    className="flex w-full items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-meta transition-colors hover:bg-muted disabled:opacity-60 max-md:min-h-11 pointer-coarse:min-h-11"
-                    title={t('sidebar.plan.geoOverride')}
-                  >
-                    <LocateFixed
-                      className={
-                        geoState === 'ok'
-                          ? 'h-3.5 w-3.5 shrink-0 text-emerald-600'
-                          : 'h-3.5 w-3.5 shrink-0 text-muted-foreground'
-                      }
-                    />
-                    <span className={`truncate ${geoBadge.tone}`}>
-                      {geoState === 'idle'
-                        ? t('sidebar.geo.detect')
-                        : geoBadge.text}
-                    </span>
-                    <span className="ml-auto shrink-0 text-muted-foreground">
-                      {geoState === 'locating' ? '…' : t('sidebar.ui.refresh')}
-                    </span>
-                  </button>
-
-                  {/* Progressive disclosure (spec 002): the two controls above
-                      are always visible; everything else waits behind this. */}
-                  <button
-                    type="button"
-                    data-testid="more-filters"
-                    aria-expanded={advancedOpen}
-                    aria-controls="advanced-filters"
-                    onClick={() => setAdvancedOpen((v) => !v)}
-                    className="flex w-full items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-meta transition-colors hover:bg-muted max-md:min-h-11 pointer-coarse:min-h-11"
-                  >
-                    <SlidersHorizontal
-                      className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
-                      aria-hidden="true"
-                    />
-                    <span>{t('sidebar.ui.moreFilters')}</span>
-                    {filterSummary.length > 0 && (
-                      <span
-                        data-testid="filters-count"
-                        className="rounded-full bg-muted px-1.5 py-0.5 text-badge font-semibold text-foreground"
-                      >
-                        {filterSummary.length}
-                      </span>
-                    )}
-                    <ChevronDown
-                      className={cn(
-                        'ml-auto h-3.5 w-3.5 text-muted-foreground transition-transform',
-                        advancedOpen && 'rotate-180'
-                      )}
-                      aria-hidden="true"
-                    />
-                  </button>
-
-                  {/* The summary is always visible once anything is chosen, so
-                      no condition is applied invisibly. */}
-                  {filterSummary.length > 0 && (
-                    <div
-                      data-testid="filters-summary"
-                      role="status"
-                      className="flex flex-wrap items-center gap-1 rounded-xl bg-muted px-3 py-2 text-meta text-muted-foreground"
-                    >
-                      <span>{t('sidebar.ui.considering')}</span>
-                      {filterSummary.map((item) => (
-                        <span
-                          key={item}
-                          className="rounded-full bg-card px-2 py-0.5 text-foreground"
-                        >
-                          {item}
-                        </span>
-                      ))}
-                      {query.trim() !== '' && (
-                        <span
-                          data-testid="filters-precedence"
-                          className="basis-full pt-0.5"
-                        >
-                          {t('sidebar.plan.filtersPrecedence')}
-                        </span>
-                      )}
-                    </div>
-                  )}
-
-                  {advancedOpen && (
-                    <div
-                      id="advanced-filters"
-                      data-testid="advanced-filters"
-                      className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-3"
-                    >
-                      {/* Party: counts, plus ages only when they were typed. */}
-                      <div className="flex flex-col gap-1.5">
-                        <span className="text-meta text-muted-foreground">
-                          {t('sidebar.plan.partyLabel')}
-                        </span>
-                        <Stepper
-                          label={t('sidebar.plan.adults')}
-                          testId="party-adults"
-                          value={partyAdults}
-                          min={1}
-                          max={50}
-                          onChange={setPartyAdults}
-                        />
-                        <Stepper
-                          label={t('sidebar.plan.children')}
-                          testId="party-children"
-                          value={partyChildren}
-                          min={1}
-                          max={20}
-                          onChange={setPartyChildren}
-                        />
-                        {partyChildren != null && partyChildren > 0 && (
-                          <div className="flex flex-col gap-1">
-                            <label
-                              htmlFor="children-ages"
-                              className="text-meta text-muted-foreground"
-                            >
-                              {t('sidebar.plan.childrenAges')}
-                            </label>
-                            <Input
-                              id="children-ages"
-                              data-testid="children-ages"
-                              value={childrenAgesText}
-                              onChange={(e) =>
-                                setChildrenAgesText(e.target.value)
-                              }
-                              placeholder="4, 7"
-                              className="h-9 text-label"
-                            />
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Amenities, each «обязательно» or «желательно». */}
-                      <div className="flex flex-col gap-1.5">
-                        <span className="text-meta text-muted-foreground">
-                          {t('sidebar.plan.amenities')}
-                        </span>
-                        {buildAmenityOptions(t).map((option) => (
-                          <div
-                            key={option.code}
-                            className="flex items-center gap-2"
-                          >
-                            <span className="text-label">{option.label}</span>
-                            <div className="ml-auto flex gap-1">
-                              <Chip
-                                selected={amenities[option.code] === 'hard'}
-                                onClick={() =>
-                                  toggleAmenity(option.code, 'hard')
-                                }
-                                data-testid={`amenity-${option.code}-hard`}
-                                className="h-7 px-2 text-meta"
-                              >
-                                {t('sidebar.plan.hard')}
-                              </Chip>
-                              <Chip
-                                selected={amenities[option.code] === 'soft'}
-                                onClick={() =>
-                                  toggleAmenity(option.code, 'soft')
-                                }
-                                data-testid={`amenity-${option.code}-soft`}
-                                className="h-7 px-2 text-meta"
-                              >
-                                {t('sidebar.plan.soft')}
-                              </Chip>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-
-                      {/* Themes: soft by nature, they never force a detour. */}
-                      <div className="flex flex-col gap-1.5">
-                        <span className="text-meta text-muted-foreground">
-                          {t('sidebar.plan.interests')}
-                        </span>
-                        <div
-                          role="group"
-                          aria-label={t('sidebar.plan.interests')}
-                          className="flex flex-wrap gap-1.5"
-                        >
-                          {buildInterestOptions(t).map((option) => (
-                            <Chip
-                              key={option.code}
-                              selected={optionSelected(option, interests)}
-                              onClick={() => toggleOption(setInterests, option)}
-                              data-testid={`interest-${option.code}`}
-                            >
-                              {option.label}
-                            </Chip>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Keep out. */}
-                      <div className="flex flex-col gap-1.5">
-                        <span className="text-meta text-muted-foreground">
-                          {t('sidebar.plan.avoid')}
-                        </span>
-                        <div
-                          role="group"
-                          aria-label={t('sidebar.plan.avoid')}
-                          className="flex flex-wrap gap-1.5"
-                        >
-                          {buildAvoidOptions(t).map((option) => (
-                            <Chip
-                              key={option.code}
-                              selected={optionSelected(option, avoid)}
-                              onClick={() => toggleOption(setAvoid, option)}
-                              data-testid={`avoid-${option.code}`}
-                            >
-                              {option.label}
-                            </Chip>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* What to return, and whether to come back to the start. */}
-                      <div className="flex flex-col gap-1.5">
-                        <span className="text-meta text-muted-foreground">
-                          {t('sidebar.plan.resultType')}
-                        </span>
-                        <Segmented
-                          items={buildResultModeOptions(t)}
-                          value={resultMode}
-                          onChange={setResultMode}
-                          label={t('sidebar.plan.resultTypeAria')}
-                          disabled={busy}
-                          testId={(value) => `result-mode-${value}`}
-                        />
-                        <Chip
-                          selected={roundTrip}
-                          onClick={() => setRoundTrip((v) => !v)}
-                          data-testid="round-trip"
-                          className="mt-0.5 self-start"
-                        >
-                          {t('sidebar.ui.roundTrip')}
-                        </Chip>
-                      </div>
-                    </div>
-                  )}
-                </section>
-
-                {/* === Route === */}
-                <section className="flex flex-col gap-2.5">
-                  {/* The plan's own verdict, above the stops: for a degraded plan
-                      it heads the summary it qualifies, and for an infeasible
-                      one it shows at all precisely because there is no route —
-                      that is when the tourist most needs to hear why. */}
-                  <PlanVerdict response={verdict} />
-                  {hasRoute && (
-                    <div className="flex items-center justify-between gap-2">
-                      <h2 className="text-label font-semibold">
-                        {t('sidebar.ui.route')}
-                      </h2>
-                      <button
-                        type="button"
-                        onClick={reset}
-                        className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-meta text-muted-foreground transition-colors hover:bg-muted hover:text-foreground max-md:min-h-11 pointer-coarse:min-h-11"
-                        title={t('sidebar.plan.resetHint')}
-                      >
-                        <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
-                        {t('sidebar.plan.reset')}
-                      </button>
-                    </div>
-                  )}
-
-                  {summary ? (
-                    <>
-                      <StatTiles>
-                        {/* The tile inflects the noun itself: «2 точки», not
-                            «2 точек» — the count is right there. */}
-                        <StatTile
-                          value={summary.stops}
-                          count={summary.stops}
-                          unit="points"
-                        />
-                        <StatTile
-                          value={
-                            summary.km != null ? fmtKm(summary.km, t) : '—'
-                          }
-                          label={t('sidebar.plan.length')}
-                        />
-                        <StatTile
-                          value={summary.travelMinutes}
-                          label={t('sidebar.plan.travelMinutes')}
-                        />
-                      </StatTiles>
-                      <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-meta text-muted-foreground">
-                        <span className="inline-flex items-center gap-1">
-                          <Clock className="h-3.5 w-3.5" aria-hidden="true" />
-                          {t('sidebar.plan.travelSummary', {
-                            value: fmtMin(summary.walkMinutes, t),
-                          })}
-                        </span>
-                        <span>
-                          {t('sidebar.plan.visitSummary', {
-                            value: fmtMin(summary.visitMinutes, t),
-                          })}
-                        </span>
-                        <span>
-                          {summary.budgetMinutes
-                            ? t('sidebar.plan.budgetSummary', {
-                                value: fmtMin(summary.budgetMinutes, t),
-                              })
-                            : t('sidebar.ui.noLimit')}
-                        </span>
-                        {!summary.fits && (
-                          <span className="rounded-full bg-amber-500/15 px-2 py-0.5 font-medium text-amber-700">
-                            {t('sidebar.plan.overBudget')}
-                          </span>
-                        )}
-                      </p>
-                    </>
-                  ) : (
-                    busy && <SummarySkeleton />
-                  )}
-
-                  {busy ? (
-                    <StopsSkeleton />
-                  ) : hasRoute ? (
-                    <WaypointList onChanged={() => setStatus(null)} />
-                  ) : (
-                    /* Never a bare blank panel: say what to do instead. The hint
-                       chips under the ask field are the empty state's chips. */
-                    <div
-                      data-testid="plan-empty"
-                      className="flex flex-col items-center gap-2 rounded-2xl border border-border bg-card px-4 py-7 text-center"
-                    >
-                      <Compass
-                        className="h-7 w-7 text-muted-foreground"
-                        aria-hidden="true"
-                      />
-                      <p className="text-label text-muted-foreground">
-                        {t('sidebar.ui.emptyStops')}
-                      </p>
-                    </div>
-                  )}
-
-                  {status && (
-                    <div
-                      role={status.kind === 'err' ? 'alert' : 'status'}
-                      aria-live={status.kind === 'err' ? 'assertive' : 'polite'}
-                      data-testid={
-                        status.kind === 'warn'
-                          ? 'toilet-missing-warning'
-                          : undefined
-                      }
-                      className={[
-                        'rounded-xl px-3 py-2 text-meta',
-                        status.kind === 'ok'
-                          ? 'bg-primary/10 text-primary'
-                          : status.kind === 'warn'
-                            ? 'bg-amber-500/15 text-amber-800'
-                            : 'bg-destructive/10 text-destructive',
-                      ].join(' ')}
-                    >
-                      {status.text}
-                    </div>
-                  )}
-
-                  {/* What the refinement turns changed, and the two ways out of
-                      them. Stays visible for the whole route, not just while
-                      there is a log: the manual deletions outlive it. */}
-                  {hasRoute && (
-                    <div className="flex flex-col gap-2 rounded-2xl border border-border bg-card p-3">
-                      {(refinementLog.length > 0 ||
-                        excludedPlaceIds.length > 0) && (
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          {refinementLog.map((entry) => (
-                            <span
-                              key={entry.id}
-                              className="inline-flex flex-wrap items-center gap-1"
-                            >
-                              <span
-                                title={
-                                  [
-                                    entry.added.length
-                                      ? t('sidebar.plan.refinementAdded', {
-                                          names: entry.added.join(', '),
-                                        })
-                                      : '',
-                                    entry.removed.length
-                                      ? t('sidebar.plan.refinementRemoved', {
-                                          names: entry.removed.join(', '),
-                                        })
-                                      : '',
-                                  ]
-                                    .filter(Boolean)
-                                    .join(' · ') ||
-                                  t('sidebar.status.noChanges')
-                                }
-                                className="rounded-full border border-border bg-muted px-2.5 py-0.5 text-meta text-muted-foreground"
-                              >
-                                {entry.instruction}
-                              </span>
-                              {entry.added.length > 0 && (
-                                <span className="rounded-full bg-primary/10 px-2 py-0.5 text-meta text-primary">
-                                  {t('sidebar.plan.addedCount', {
-                                    count: entry.added.length,
-                                  })}
-                                </span>
-                              )}
-                              {entry.removed.length > 0 && (
-                                <span className="rounded-full bg-muted px-2 py-0.5 text-meta text-muted-foreground">
-                                  {t('sidebar.plan.removedCount', {
-                                    count: entry.removed.length,
-                                  })}
-                                </span>
-                              )}
-                              {entry.added.length === 0 &&
-                                entry.removed.length === 0 && (
-                                  <span className="rounded-full bg-muted px-2 py-0.5 text-meta text-muted-foreground">
-                                    {t('sidebar.status.noChanges')}
-                                  </span>
-                                )}
-                            </span>
-                          ))}
-                          {excludedPlaceIds.length > 0 && (
-                            <span
-                              data-testid="excluded-chip"
-                              className="rounded-full bg-destructive/10 px-2.5 py-0.5 text-meta text-destructive"
-                            >
-                              {t('sidebar.plan.excludedManual', {
-                                count: excludedPlaceIds.length,
-                              })}
-                            </span>
-                          )}
-                        </div>
-                      )}
-                      <div className="flex items-center gap-2">
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          onClick={() => {
-                            undoRefinement();
-                            setStatus({
-                              kind: 'ok',
-                              text: t('sidebar.status.restoredPrevious'),
-                            });
-                            refetchDirections();
-                          }}
-                          disabled={routeSnapshots.length === 0}
-                          className="h-9 rounded-full px-3 text-label disabled:opacity-40 max-md:h-11 pointer-coarse:h-11"
-                        >
-                          <Undo2 className="h-3.5 w-3.5" aria-hidden="true" />
-                          {t('sidebar.plan.undoRefinement')}
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          onClick={() => {
-                            resetRoute();
-                            reset();
-                          }}
-                          className="h-9 rounded-full px-3 text-label font-normal text-muted-foreground hover:text-foreground max-md:h-11 pointer-coarse:h-11"
-                        >
-                          <RotateCcw
-                            className="h-3.5 w-3.5"
-                            aria-hidden="true"
-                          />
-                          {t('sidebar.plan.newRoute')}
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-                </section>
-
-                {/* === Manual add === */}
-                <section className="flex flex-col gap-2 rounded-2xl border border-border bg-card p-3 shadow-card">
-                  <h2 className="text-label font-semibold">
-                    {t('sidebar.ui.addPoint')}
-                  </h2>
-                  <div className="flex gap-2">
-                    <Input
-                      value={manualQuery}
-                      onChange={(e) => setManualQuery(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault();
-                          manualAdd();
-                        }
-                      }}
-                      placeholder={t('sidebar.plan.queryPlaceholder')}
-                      aria-label={t('sidebar.plan.manualAria')}
-                      className="h-10 flex-1 text-body max-md:h-11"
-                      disabled={manualBusy}
-                    />
-                    <Button
-                      type="button"
-                      onClick={manualAdd}
-                      disabled={manualBusy || !manualQuery.trim()}
-                      size="icon"
-                      className="h-10 w-10 shrink-0 rounded-full max-md:h-11 max-md:w-11"
-                      aria-label={t('sidebar.plan.manualSearchAria')}
-                    >
-                      {manualBusy ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Plus className="h-4 w-4" />
-                      )}
-                    </Button>
-                  </div>
-                  {manualErr && (
-                    <p className="text-meta text-destructive">{manualErr}</p>
-                  )}
-                  <button
-                    type="button"
-                    onClick={addEmptyWaypointToEnd}
-                    className="inline-flex items-center gap-1 self-start rounded-full px-2 py-1 text-meta text-muted-foreground transition-colors hover:bg-muted hover:text-foreground max-md:min-h-11 pointer-coarse:min-h-11"
-                  >
-                    <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />{' '}
-                    {t('sidebar.ui.emptyPoint')}
-                  </button>
-                </section>
-              </>
-            )}
-          </div>
-
-          {/* ── Sticky footer: the one action the panel exists for. Outside the
-              scroll area, so it is reachable at either snap point. The guide
-              brings its own actions, so the footer steps out of its way. ── */}
-          {!guiding && mode === 'plan' && (
-            <footer className="order-4 shrink-0 border-t border-border bg-background px-4 py-3">
-              {/* Honest waiting: only what the client can observe — the request
-                  is in flight, or the plan has arrived and the line is being
-                  drawn — plus the seconds that have passed and a real cancel.
-                  No invented stages, and no bare spinner for 23 seconds. */}
-              {busy && (
-                <div
-                  role="status"
-                  aria-live="polite"
-                  data-testid="route-progress"
-                  data-stage={stage}
-                  className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl bg-muted px-3 py-2 text-meta"
-                >
-                  <Loader2
-                    className="h-3.5 w-3.5 shrink-0 animate-spin text-muted-foreground"
-                    aria-hidden="true"
-                  />
-                  <span className="text-foreground">
-                    {serverStage
-                      ? t(routeServerStageKey(serverStage)!)
-                      : t(
-                          stage === 'requesting'
-                            ? 'sidebar.progress.waitingRequest'
-                            : 'sidebar.progress.waitingLine'
-                        )}
-                  </span>
-                  <span className="tabular-nums text-muted-foreground">
-                    {t('sidebar.progress.elapsed', {
-                      count: routeElapsedSeconds(elapsed),
-                    })}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={cancelRouteRequest}
-                    data-testid="route-cancel"
-                    className="ml-auto inline-flex h-8 shrink-0 items-center rounded-full border border-border bg-card px-3 text-label font-medium text-foreground transition-colors hover:bg-muted max-md:h-11 pointer-coarse:h-11"
-                  >
-                    {t('sidebar.progress.cancel')}
-                  </button>
-                  {elapsed >= LONG_WAIT_SECONDS && (
-                    <span className="basis-full text-muted-foreground">
-                      {t('sidebar.progress.longWait')}
-                    </span>
-                  )}
-                </div>
-              )}
-              {/* Entering the guide is its own, louder action: walking a route
-                  is a different activity from planning one, and in a navigator
-                  it is a button you press once, not a tab you visit. */}
-              {canGuide && (
-                <Button
-                  type="button"
-                  data-testid="guide-enter"
-                  onClick={() => setGuiding(true)}
-                  className="mb-2 h-12 w-full rounded-xl bg-primary text-body font-semibold text-primary-foreground motion-safe:transition hover:brightness-[0.97] active:scale-[0.99] motion-reduce:active:scale-100"
-                >
-                  <Compass className="h-4 w-4" aria-hidden="true" />
-                  {t('guide.enter')}
-                </Button>
-              )}
-              <Button
-                type="button"
-                data-testid="build-route"
-                onClick={() => submitPrompt()}
-                disabled={busy || !query.trim()}
-                className={cn(
-                  'h-12 w-full rounded-xl text-body font-semibold transition hover:brightness-[0.97] active:scale-[0.99] motion-reduce:active:scale-100 disabled:opacity-40',
-                  // With a route in hand, starting it is the hero action — the
-                  // build button steps back to the quieter style.
-                  canGuide
-                    ? 'bg-secondary text-secondary-foreground'
-                    : 'bg-primary text-primary-foreground'
-                )}
-              >
-                {busy && (
-                  <Loader2
-                    className="h-4 w-4 animate-spin"
-                    aria-hidden="true"
-                  />
-                )}
-                {busy ? t('sidebar.ui.plan') : t('sidebar.ui.build')}
-              </Button>
-            </footer>
-          )}
-        </div>
+        {content}
         {/* Last in the DOM on purpose: it is positioned absolutely on the right
             edge, and the panel's first tab stop must stay the query field —
             not a resize handle. */}
