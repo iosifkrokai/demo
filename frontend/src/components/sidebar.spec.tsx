@@ -572,6 +572,26 @@ describe('Sidebar', () => {
     expect(buildButton()).toBeDisabled();
   });
 
+  it('keeps the main action in a footer outside the scroll area', () => {
+    // Measured at 390x844 before this: the hint chips wrapped into five 44px
+    // lines, the panel's content grew to 612px inside a 380px sheet, the body
+    // was squeezed to 36px and the sticky footer was pushed clean out of the
+    // sheet — «Построить» was not on the screen at all. The invariant that
+    // broke is structural: the action must be a sibling of the scrolling body,
+    // in the sheet's own flex column, not inside the part that scrolls.
+    render(<Sidebar />);
+
+    const action = buildButton();
+    expect(action.closest('footer')).not.toBeNull();
+    expect(action.closest('.slim-scroll')).toBeNull();
+    // and the examples stay in the panel, just as one row on a phone
+    const hints = screen.getByTestId('hint-old-town').parentElement;
+    expect(hints?.getAttribute('role')).toBe('group');
+    expect(hints?.querySelectorAll('button').length).toBe(5);
+    expect(hints?.className).toContain('max-md:flex-nowrap');
+    expect(hints?.className).toContain('max-md:overflow-x-auto');
+  });
+
   it('once a route exists the chips edit it instead of starting a new one', () => {
     // A route with one real stop: planning is over, so the same field now asks
     // a different question and must not re-offer the starting questions.

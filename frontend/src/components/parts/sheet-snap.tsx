@@ -6,11 +6,16 @@ import { cn } from '@/lib/utils';
 
 export type SheetSnap = 'peek' | 'full';
 
-/** DESIGN.md: the mobile sheet snaps to ~45% and ~90% of the viewport. From md up
+/** DESIGN.md: the mobile sheet snaps to ~50% and ~90% of the viewport. From md up
  * the panel is a full-height column again (`md:h-auto` + `md:inset-0`), otherwise
- * the snap height would leave the desktop sidebar 45 % tall. */
+ * the snap height would leave the desktop sidebar 45 % tall.
+ *
+ * Measured at 390x844 with the old 45dvh peek: the form's scroll window came out
+ * 36px high — the budget presets were cut off mid-row — while the map above kept
+ * 55% of the screen for a preview nobody reads during planning. Half and half is
+ * what a phone map app does, and it buys the panel ~80px of room. */
 export const SHEET_SNAP_CLASS: Record<SheetSnap, string> = {
-  peek: 'h-[45dvh] md:h-auto',
+  peek: 'h-[50dvh] md:h-auto',
   full: 'h-[90dvh] md:h-auto',
 };
 

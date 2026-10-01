@@ -1369,7 +1369,7 @@ export const Sidebar = () => {
           ? '26dvh'
           : snap === 'full'
             ? '90dvh'
-            : '45dvh';
+            : '50dvh';
       root.style.setProperty('--sheet-h', height);
     };
     publish();
@@ -1400,8 +1400,8 @@ export const Sidebar = () => {
               stop — the tourist lands on the thing the panel is for, not on the
               close button. `order-2` keeps it visually under the header. */}
           {!guiding && mode === 'plan' && (
-            <section className="order-2 shrink-0 border-b border-border px-4 pb-3 pt-3">
-              <div className="rounded-2xl border border-border bg-card px-3 py-2.5 shadow-card transition-colors focus-within:border-ring">
+            <section className="order-2 shrink-0 border-b border-border px-4 pb-3 pt-3 max-md:pb-2 max-md:pt-2">
+              <div className="rounded-2xl border border-border bg-card px-3 py-2.5 shadow-card transition-colors focus-within:border-ring max-md:py-2">
                 <div className="flex items-center gap-2.5">
                   <Search
                     className="h-[18px] w-[18px] shrink-0 text-muted-foreground"
@@ -1432,7 +1432,14 @@ export const Sidebar = () => {
               <div
                 role="group"
                 aria-label={t('sidebar.plan.hintsAria')}
-                className="mt-2 flex flex-wrap gap-1.5"
+                // Mobile: ONE scrolling row. Measured at 390x844 the five chips
+                // (44px each, the touch minimum) wrapped into five lines and ate
+                // 244px of the 380px sheet — the scroll body was squeezed to 36px
+                // and the sticky footer with «Построить» was pushed out of the
+                // sheet entirely, i.e. the panel's main action was unreachable
+                // without dragging the sheet open. A row of examples does not
+                // deserve a third of the screen; `md` keeps the wrapping grid.
+                className="mt-2 flex gap-1.5 max-md:flex-nowrap max-md:overflow-x-auto max-md:pb-0.5 md:flex-wrap"
               >
                 {hints.map((hint) => (
                   <Chip
@@ -1455,7 +1462,7 @@ export const Sidebar = () => {
               navigator's «маршрут идёт» state, with one obvious way out and no
               tabs to read past. All of it sits in normal flow, so nothing can
               slide under the close button. ── */}
-          <header className="order-1 shrink-0 border-b border-border px-4 pb-2.5">
+          <header className="order-1 shrink-0 border-b border-border px-4 pb-2.5 max-md:pb-1.5">
             <SheetDragHandle snap={snap} handleProps={handleProps} />
             {guiding ? (
               <div className="mt-1.5 flex items-center gap-2">
@@ -1502,11 +1509,15 @@ export const Sidebar = () => {
                 </div>
                 <div className="mt-2.5 flex min-w-0 items-center gap-2">
                   <RouteIcon
-                    className="h-4 w-4 shrink-0 text-primary"
+                    className="h-4 w-4 shrink-0 text-primary max-md:hidden"
                     aria-hidden="true"
                   />
                   <div className="min-w-0">
-                    <SheetTitle className="truncate text-body">
+                    {/* sr-only on a phone, like the description: the tab strip
+                        right above already says where you are, and the title row
+                        costs 46px of the sheet's 422px. Kept in the a11y tree —
+                        it is the dialog's name. */}
+                    <SheetTitle className="truncate text-body max-md:sr-only">
                       {t('app.title')}
                     </SheetTitle>
                     {/* Radix wants a description for the dialog; the visible
@@ -1515,7 +1526,7 @@ export const Sidebar = () => {
                     <SheetDescription className="sr-only">
                       {t('app.description')}
                     </SheetDescription>
-                    <p className="truncate text-meta text-muted-foreground">
+                    <p className="truncate text-meta text-muted-foreground max-md:hidden">
                       {subtitles[mode]}
                     </p>
                   </div>

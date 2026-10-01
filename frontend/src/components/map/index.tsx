@@ -1059,7 +1059,7 @@ export const MapComponent = () => {
         // (bottom-40 and bottom-24) they overlapped each other — measured at
         // 390x844 the guide's compass sat at y=652..696 and the services button
         // at y=640..684, a 32px collision — and both sat BEHIND the mobile sheet,
-        // which starts at y=464 and covers 45dvh. The sheet publishes its own
+        // which starts at y=464 and covers 50dvh. The sheet publishes its own
         // height in --sheet-h (see sidebar.tsx), so the column rides above it:
         // the tourist can reach the controls of the very mode they are in.
         <div

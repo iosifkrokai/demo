@@ -67,7 +67,7 @@ export function ServicesSummary({
     <div className="flex flex-col items-end gap-2">
       <div
         data-testid="services-summary"
-        className="max-w-[15rem] rounded-lg border border-border bg-card/95 px-2.5 py-2 text-right shadow-card"
+        className="max-w-[15rem] rounded-lg border border-border bg-card/95 px-2.5 py-2 text-right shadow-card max-md:max-w-[11rem]"
       >
         {state === 'loading' && (
           <span className="text-meta text-muted-foreground">
@@ -110,7 +110,10 @@ export function ServicesSummary({
                 {t('map.servicesWithin', { metres: maxOffLineM })}
               </span>
             )}
-            <ul className="mt-1 flex flex-wrap justify-end gap-x-2 gap-y-0.5">
+            {/* On a phone the per-category row is four lines over the map; the
+                count and the distance are the part that answers «что там есть»,
+                and the toggle right below still opens the marks themselves. */}
+            <ul className="mt-1 flex flex-wrap justify-end gap-x-2 gap-y-0.5 max-md:hidden">
               {counts.map(({ category, count }) => {
                 const Icon = serviceIcon(category);
                 return (
