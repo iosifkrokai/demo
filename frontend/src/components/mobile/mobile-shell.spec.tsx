@@ -46,7 +46,7 @@ describe('MobileShell', () => {
     expect(screen.getByText('содержимое')).toBeInTheDocument();
     const sheet = screen.getByTestId('mobile-sheet');
     expect(sheet).toHaveAttribute('data-snap', 'peek');
-    expect(sheet).toHaveStyle({ height: '45dvh' });
+    expect(sheet).toHaveStyle({ height: '39dvh' });
   });
 
   it('publishes its own height, so the map controls ride above it', () => {
@@ -55,7 +55,7 @@ describe('MobileShell', () => {
     // panel publishes it too — the shell takes over that job on a phone).
     render(<MobileShell panel={stubPanel} />);
     expect(document.documentElement.style.getPropertyValue('--sheet-h')).toBe(
-      '45dvh'
+      '39dvh'
     );
   });
 

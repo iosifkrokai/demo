@@ -64,7 +64,7 @@ describe('useMobileSheetSnap', () => {
   it('keeps every height in one place, the guide strip included', () => {
     expect(MOBILE_SHEET_HEIGHT).toEqual({
       bar: '132px',
-      peek: '45dvh',
+      peek: '39dvh',
       full: '90dvh',
     });
     expect(MOBILE_GUIDE_HEIGHT).toBe('26dvh');

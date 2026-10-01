@@ -1414,8 +1414,8 @@ export const Sidebar = ({
               stop — the tourist lands on the thing the panel is for, not on the
               close button. `order-2` keeps it visually under the header. */}
       {!guiding && mode === 'plan' && (
-        <section className="order-2 shrink-0 border-b border-border px-4 pb-3 pt-3 max-md:pb-2 max-md:pt-2">
-          <div className="rounded-2xl border border-border bg-card px-3 py-2.5 shadow-card transition-colors focus-within:border-ring max-md:py-2">
+        <section className="order-2 shrink-0 border-b border-border px-4 pb-3 pt-3 max-md:px-3 max-md:pb-1.5 max-md:pt-1.5">
+          <div className="rounded-2xl border border-border bg-card px-3 py-2.5 shadow-card transition-colors focus-within:border-ring max-md:py-1.5">
             <div className="flex items-center gap-2.5">
               <Search
                 className="h-[18px] w-[18px] shrink-0 text-muted-foreground"
@@ -1435,7 +1435,7 @@ export const Sidebar = ({
                   hasRoute ? t('ask.placeholderRefine') : t('ask.placeholder')
                 }
                 aria-label={t('ask.label')}
-                className="min-h-0 flex-1 resize-none border-0 bg-transparent p-0 text-body leading-6 shadow-none focus-visible:ring-0 max-md:min-h-11"
+                className="min-h-0 flex-1 resize-none border-0 bg-transparent p-0 text-body leading-6 shadow-none focus-visible:ring-0 max-md:min-h-10"
                 rows={1}
                 disabled={busy}
               />
@@ -1474,7 +1474,7 @@ export const Sidebar = ({
               navigator's «маршрут идёт» state, with one obvious way out and no
               tabs to read past. All of it sits in normal flow, so nothing can
               slide under the close button. ── */}
-      <header className="order-1 shrink-0 border-b border-border px-4 pb-2.5 max-md:pb-1.5">
+      <header className="order-1 shrink-0 border-b border-border px-4 pb-2.5 max-md:px-3 max-md:pb-1.5">
         <SheetDragHandle snap={snap} handleProps={handleProps} />
         {guiding ? (
           <div className="mt-1.5 flex items-center gap-2">
@@ -1519,7 +1519,7 @@ export const Sidebar = ({
                       cannot fall out of step with the panel's state. */}
               <LanguageSwitcher className="shrink-0" />
             </div>
-            <div className="mt-2.5 flex min-w-0 items-center gap-2">
+            <div className="mt-2.5 flex min-w-0 items-center gap-2 max-md:mt-1">
               <RouteIcon
                 className="h-4 w-4 shrink-0 text-primary max-md:hidden"
                 aria-hidden="true"
@@ -1548,7 +1548,7 @@ export const Sidebar = ({
       </header>
 
       {/* ── Body: the only part that scrolls. ── */}
-      <div className="slim-scroll order-3 flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 pb-6 pt-3">
+      <div className="slim-scroll order-3 flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 pb-6 pt-3 max-md:px-3 max-md:pb-4">
         {guiding ? (
           // key: a rebuilt route remounts the guide, so the walk restarts
           // instead of carrying progress from the route that no longer exists
@@ -2130,7 +2130,7 @@ export const Sidebar = ({
               scroll area, so it is reachable at either snap point. The guide
               brings its own actions, so the footer steps out of its way. ── */}
       {!guiding && mode === 'plan' && (
-        <footer className="order-4 shrink-0 border-t border-border bg-background px-4 py-3">
+        <footer className="order-4 shrink-0 border-t border-border bg-background px-4 py-3 max-md:px-3 max-md:py-1.5">
           {/* Honest waiting: only what the client can observe — the request
                   is in flight, or the plan has arrived and the line is being
                   drawn — plus the seconds that have passed and a real cancel.

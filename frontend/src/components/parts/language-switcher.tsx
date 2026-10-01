@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next';
 
 import { LANGUAGES, setLanguage, type Language } from '@/i18n';
+import { DENSITY } from '@/components/mobile/density';
 import { cn } from '@/lib/utils';
 
 /** What the button shows: the switch itself has to be readable in any language. */
@@ -40,7 +41,8 @@ export const LanguageSwitcher = ({ className }: { className?: string }) => {
           title={t(`language.${lng}`)}
           onClick={() => setLanguage(lng)}
           className={cn(
-            'h-7 min-w-8 rounded-full px-2 text-badge font-semibold uppercase transition-colors max-md:h-9',
+            'h-7 min-w-8 rounded-full px-2 text-badge font-semibold uppercase transition-colors',
+            DENSITY.languageItem,
             current === lng
               ? 'bg-primary text-primary-foreground'
               : 'text-muted-foreground hover:text-foreground'

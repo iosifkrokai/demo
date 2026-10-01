@@ -1,4 +1,5 @@
 import type { ButtonHTMLAttributes, ReactNode } from 'react';
+import { DENSITY } from '@/components/mobile/density';
 import { cn } from '@/lib/utils';
 
 interface ChipProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -24,6 +25,7 @@ export const Chip = ({
       // target on a phone (DESIGN.md "Touch"); the desktop look is unchanged.
       'h-8 shrink-0 rounded-full border px-3 text-label font-medium transition-colors',
       'max-md:h-11 max-md:px-4 pointer-coarse:h-11',
+      DENSITY.chip,
       'disabled:pointer-events-none disabled:opacity-40',
       selected
         ? 'border-foreground bg-foreground text-background'

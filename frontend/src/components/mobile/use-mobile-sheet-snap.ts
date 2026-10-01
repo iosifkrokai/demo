@@ -7,15 +7,17 @@ export type MobileSnap = 'bar' | 'peek' | 'full';
 /**
  * What the shell publishes as `--sheet-h`, so the map's own controls ride above it.
  *
- * `peek` is 45dvh, not the 38dvh the plan aims at, and this is measured, not
- * taste: with today's block sizes the panel's fixed parts (header 140 + ask 133
- * + footer 72 = 345px) do not fit a 321px sheet, so the main action was clipped
- * by 21px. Ф2 (density) brings those three blocks to ~256px — then the plan's
- * 38dvh (map 62%) fits with a real scroll window and this constant drops.
+ * `peek` was 50dvh, then 45dvh while the panel was still dense; it is 39dvh now
+ * that Ф2 (density) shrank the fixed blocks, and every step was measured:
+ *   - before density: header 140 + ask 133 + footer 72 = 345px fixed, and at a
+ *     321px sheet the main action was clipped by 21px;
+ *   - after density (chips 40, field 40, paddings 12, RU/EN 44x44, tighter
+ *     header/ask/footer): 287px fixed, i.e. a 42px scroll window at 39dvh —
+ *     map 61%, the plan's >= 60%, with the action still inside the sheet.
  */
 export const MOBILE_SHEET_HEIGHT: Record<MobileSnap, string> = {
   bar: '132px',
-  peek: '45dvh',
+  peek: '39dvh',
   full: '90dvh',
 };
 

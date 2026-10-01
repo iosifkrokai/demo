@@ -1,6 +1,7 @@
 import { useRef } from 'react';
 import type { KeyboardEvent } from 'react';
 import type { LucideIcon } from 'lucide-react';
+import { DENSITY } from '@/components/mobile/density';
 import { cn } from '@/lib/utils';
 
 export interface SegmentedItem<T extends string> {
@@ -92,7 +93,11 @@ export function Segmented<T extends string>({
     <div
       role="radiogroup"
       aria-label={label}
-      className={cn('flex rounded-full bg-muted p-1', className)}
+      className={cn(
+        'flex rounded-full bg-muted p-1',
+        DENSITY.segmented,
+        className
+      )}
     >
       {items.map((item, index) => {
         const Icon = item.icon;
@@ -117,10 +122,14 @@ export function Segmented<T extends string>({
             title={item.label}
             className={cn(
               'flex min-w-0 flex-1 items-center justify-center rounded-full transition-colors',
-              // 44px tap target on phones; the desktop pill keeps its 32px.
+              // 44px tap target on touch; the desktop pill keeps its 32px, and a
+              // phone gets the plan's 40 (one condition, not two competing ones).
               stacked
                 ? 'min-h-11 flex-col gap-0.5 px-1 py-1.5 text-badge'
-                : 'h-8 gap-1 px-2 text-label max-md:h-11 pointer-coarse:h-11',
+                : cn(
+                    'h-8 gap-1 px-2 text-label max-md:h-11 pointer-coarse:h-11',
+                    DENSITY.segmentedItem
+                  ),
               'disabled:pointer-events-none disabled:opacity-50',
               active
                 ? 'bg-card font-semibold text-foreground shadow-sm'

@@ -1372,13 +1372,21 @@ describe('Sidebar — felt quality', () => {
     expect(tabOrder(screen.getByRole('dialog'))[0]).toBe(askField());
   });
 
-  it('поднимает вкладки, чипы и поле запроса до 44px на телефоне', () => {
+  it('держит плотность телефона: ничто тоньше 40px, вкладки и чипы — 40', () => {
+    // Порог изменён по замеру (спека 004, §3): на телефоне табло и чипы — 40px,
+    // а не 44: 44-е чипы переносились по одному в строку и съедали половину
+    // листа, выдавливая главное действие из панели. Минимум для пальца 40,
+    // ниже — нельзя; тач-указатели вне телефона (планшеты) остаются 44.
     render(<Sidebar />);
 
-    expect(screen.getByTestId('mode-plan').className).toMatch(/max-md:h-11/);
-    expect(screen.getByTestId('mode-itineraries').className).toMatch(
-      /max-md:h-11/
-    );
+    for (const id of ['mode-plan', 'mode-itineraries']) {
+      const tabs = screen.getByTestId(id);
+      expect(tabs.className).toMatch(/max-md:h-10/);
+      expect(tabs.className).toMatch(/pointer-coarse:h-11/);
+      // Телефон перекрывает pointer-coarse явно: иначе на телефоне совпадают
+      // оба условия и решает порядок CSS, а не замысел.
+      expect(tabs.className).toMatch(/pointer-coarse:max-md:h-10/);
+    }
     for (const id of [
       'old-town',
       'castles-churches',
@@ -1386,16 +1394,28 @@ describe('Sidebar — felt quality', () => {
       'evening',
       'with-children',
     ]) {
-      expect(screen.getByTestId(`hint-${id}`).className).toMatch(/max-md:h-11/);
+      const chip = screen.getByTestId(`hint-${id}`);
+      expect(chip.className).toMatch(/max-md:h-10/);
+      expect(chip.className).toMatch(/pointer-coarse:max-md:h-10/);
     }
-    expect(askField().className).toMatch(/max-md:min-h-11/);
-    // …and coarse pointers (tablets, touch laptops) get the same target
+    expect(askField().className).toMatch(/max-md:min-h-10/);
+    // …and coarse pointers (tablets, touch laptops) get the fuller target
     expect(screen.getByTestId('mode-plan').className).toMatch(
       /pointer-coarse:h-11/
     );
     expect(screen.getByTestId('hint-old-town').className).toMatch(
       /pointer-coarse:h-11/
     );
+  });
+
+  it('даёт переключателю языка полноценную мишень на телефоне', () => {
+    // Замер до правки: RU/EN были 33x36 — ниже порога пальца, при том что это
+    // единственный контрол языка в шапке.
+    render(<Sidebar />);
+
+    const ru = screen.getByTestId('language-ru');
+    expect(ru.className).toMatch(/max-md:h-11/);
+    expect(ru.className).toMatch(/max-md:min-w-11/);
   });
 
   it('shows elapsed time and a real cancel, and cancelling is not an error', async () => {
