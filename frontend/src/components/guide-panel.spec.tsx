@@ -424,6 +424,38 @@ describe('GuidePanel', () => {
     expect(within(card).getByText('2')).toBeInTheDocument();
   });
 
+  it('starts in moving mode when a trusted GPS fix is already available', () => {
+    // When the tourist already has a good fix (accuracy ≤ 50 m), the guide
+    // opens directly into moving mode — no second button required.
+    const geo = stubWatchingGeolocation();
+    render(<GuidePanel stops={STOPS} />);
+
+    // The first stubbed fix is already a good one.
+    geo.push(STOPS[0]!.lat, STOPS[0]!.lon, 8);
+
+    expect(screen.getByTestId('guide-panel')).toHaveAttribute(
+      'data-mode',
+      'moving'
+    );
+    expect(screen.getByTestId('guide-maneuver')).toBeInTheDocument();
+    expect(screen.getByTestId('guide-advance')).toBeInTheDocument();
+    // No guide-start button: the navigator already started.
+    expect(screen.queryByTestId('guide-start')).toBeNull();
+  });
+
+  it('falls back to review mode when GPS is not yet available', () => {
+    // Without a trusted fix the guide opens in review, where the start button
+    // lets the tourist decide when to begin.
+    stubWatchingGeolocation();
+    render(<GuidePanel stops={STOPS} />);
+
+    expect(screen.getByTestId('guide-panel')).toHaveAttribute(
+      'data-mode',
+      'review'
+    );
+    expect(screen.getByTestId('guide-start')).toBeInTheDocument();
+  });
+
   it('mutes the stops already walked and keeps the next one in the accent', async () => {
     stubGeolocation(null);
     const user = userEvent.setup();
@@ -867,7 +899,9 @@ describe('GuidePanel · NearbyHint', () => {
 
     // Показываем подсказку рядом.
     expect(screen.getByTestId('guide-nearby-hint')).toBeInTheDocument();
-    expect(screen.getByTestId('guide-nearby-hint')).toHaveTextContent(/туалет/i);
+    expect(screen.getByTestId('guide-nearby-hint')).toHaveTextContent(
+      /туалет/i
+    );
   });
 
   it('не показывается, если сервисы ещё не загружены', async () => {
@@ -896,20 +930,47 @@ describe('GuidePanel · NearbyHint', () => {
     });
 
     const geo = stubWatchingGeolocation();
-    await start();
+    // Go straight to moving — no need for guide-start since we're testing the
+    // hint itself, not the entry flow.
+    render(<GuidePanel stops={STOPS} />);
+    geo.push(STOPS[0]!.lat, STOPS[0]!.lon, 8);
 
     // Первое появление.
     expect(screen.getByTestId('guide-nearby-hint')).toBeInTheDocument();
 
     // Dismiss.
-    await userEvent.setup().click(
-      screen.getByTestId('guide-nearby-hint-dismiss')
-    );
+    await userEvent
+      .setup()
+      .click(screen.getByTestId('guide-nearby-hint-dismiss'));
     expect(screen.queryByTestId('guide-nearby-hint')).toBeNull();
 
     // Повторный рендер (новый фикс) — подсказка не возвращается.
     geo.push(STOPS[0]!.lat, STOPS[0]!.lon, 8);
     expect(screen.queryByTestId('guide-nearby-hint')).toBeNull();
+  });
+
+  it('появляется сразу при входе в moving, если POI уже в пределах 120 м', async () => {
+    // Near the start (50 m in), so it is within NEARBY_HINT_AHEAD_M (120 m).
+    vi.mocked(useServicesAlong).mockReturnValue({
+      items: [toiletService],
+      state: 'ready',
+      measured: null,
+      maxOffLineM: null,
+      reason: null,
+      capped: false,
+    });
+
+    const geo = stubWatchingGeolocation();
+    render(<GuidePanel stops={STOPS} />);
+    // Directly push a good fix — this puts the guide into moving mode
+    // (trusted fix) AND provides the position that makes nearbyHint computable.
+    geo.push(STOPS[0]!.lat, STOPS[0]!.lon, 8);
+
+    // NearbyHint must appear without any extra interaction.
+    expect(screen.getByTestId('guide-nearby-hint')).toBeInTheDocument();
+    expect(screen.getByTestId('guide-nearby-hint')).toHaveTextContent(
+      /туалет/i
+    );
   });
 });
 

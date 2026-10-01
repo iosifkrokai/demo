@@ -2,7 +2,6 @@ import {
   BedDouble,
   Bus,
   Coffee,
-  Flag,
   Footprints,
   LocateFixed,
   MapPin,
@@ -433,7 +432,6 @@ export const GuidePanel = ({
   const [progress, setProgress] = useState<StoredProgress>(() =>
     loadProgress(key)
   );
-  const [mode, setMode] = useState<'review' | 'moving'>('review');
   const [fix, setFix] = useState<Fix | null>(null);
   const [geoState, setGeoState] = useState<'idle' | 'ok' | 'denied'>(() =>
     typeof navigator === 'undefined' || !('geolocation' in navigator)
@@ -441,6 +439,31 @@ export const GuidePanel = ({
       : 'idle'
   );
   const [now, setNow] = useState(() => Date.now());
+
+  /** A fix good enough to start guiding immediately without a second button. */
+  const hasTrustedFix =
+    geoState === 'ok' &&
+    fix?.accuracy != null &&
+    fix.accuracy <= WEAK_ACCURACY_M;
+
+  /**
+   * How the guide enters — the tourist's own call, not a required detour.
+   *
+   * When a trusted fix is already in hand, the guide opens straight into
+   * `moving` so the navigator starts without a second button press.
+   * Without a fix the guide opens in `review`; the button in that view starts
+   * the walk once a fix arrives. Either way the tourist decides when to move.
+   *
+   * Initial state is always 'review' (useState initializer is synchronous and
+   * cannot read a GPS fix that arrives asynchronously). The useEffect below
+   * upgrades to 'moving' the moment a trusted fix is already present — which
+   * happens in tests that push a fix before mount, and in production when the
+   * browser already had a cached fix.
+   */
+  const [mode, setMode] = useState<'review' | 'moving'>('review');
+  useEffect(() => {
+    if (hasTrustedFix) setMode('moving');
+  }, [hasTrustedFix]);
   const [traveled, setTraveled] = useState(0);
   const [offRoute, setOffRoute] = useState(false);
   const [skippedSuggestions, setSkippedSuggestions] = useState<string[]>([]);
@@ -695,7 +718,6 @@ export const GuidePanel = ({
   //
   // Both effects mirror an external stream (the device's GPS fixes) rather than
   // deriving from props, which is exactly what setState-in-effect is for.
-  /* eslint-disable react-hooks/set-state-in-effect -- GPS-derived state, not derived-from-render state */
   useEffect(() => {
     if (!precise || !located) return;
     setTraveled((prev) => Math.max(prev, located.along - BACKWARD_TOLERANCE_M));
@@ -719,7 +741,6 @@ export const GuidePanel = ({
       setOffRoute(false);
     }
   }, [mode, precise, located, fix, nextStop]);
-  /* eslint-enable react-hooks/set-state-in-effect */
 
   // ── Active manoeuvre + remaining line progress ───────────────────────────
   // The turn ahead of the (frozen) progress point; a weak fix never advances
@@ -1124,12 +1145,11 @@ export const GuidePanel = ({
           </button>
           <button
             type="button"
-            data-testid="guide-finish"
+            data-testid="guide-overview"
             onClick={() => setMode('review')}
             className="flex h-12 items-center justify-center gap-2 rounded-xl bg-secondary px-4 font-semibold text-secondary-foreground transition hover:brightness-[0.97] active:scale-[0.99]"
           >
-            <Flag className="h-4 w-4" />
-            {t('guide.finish')}
+            {t('guide.overview')}
           </button>
         </div>
 
@@ -1233,6 +1253,15 @@ export const GuidePanel = ({
       >
         <Play className="h-4 w-4" />
         {t('guide.start')}
+      </button>
+
+      <button
+        type="button"
+        data-testid="guide-overview"
+        onClick={() => setMode('review')}
+        className="flex h-12 items-center justify-center gap-2 rounded-xl bg-secondary px-4 font-semibold text-secondary-foreground transition hover:brightness-[0.97] active:scale-[0.99]"
+      >
+        {t('guide.overview')}
       </button>
     </section>
   );

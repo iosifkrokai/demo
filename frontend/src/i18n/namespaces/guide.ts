@@ -49,6 +49,7 @@ export const guideArea = {
 
       // ── Route actions ────────────────────────────────────────────────────
       start: 'начать маршрут',
+      overview: 'обзор',
       advance: 'я на месте',
       finish: 'завершить',
       again: 'пройти заново',
@@ -192,6 +193,7 @@ export const guideArea = {
 
       // ── Route actions ────────────────────────────────────────────────────
       start: 'start the route',
+      overview: 'overview',
       advance: 'I am here',
       finish: 'finish',
       again: 'walk it again',
