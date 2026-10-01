@@ -79,15 +79,22 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: grodno-agent
+    # Host networking on purpose. In this sandbox containers cannot reach each
+    # other over the compose network: measured from inside grodno-agent, DNS
+    # resolved `db` to 172.18.0.4 and `valhalla` to 172.18.0.2, yet psycopg
+    # timed out after 8.4s and http://valhalla:8002 never answered — the agent
+    # hung in startup («Waiting for application startup»), never bound :8080 and
+    # the panel showed 502 for a reason that had nothing to do with the app. On
+    # the host's network the agent reaches the same localhost:5432 and
+    # localhost:8002 the host process uses (they are published ports), while the
+    # frontend still finds it on host.docker.internal:8080 (AGENT_UPSTREAM).
+    network_mode: host
     # The single project env file — the same one the frontend and local runs use.
     env_file:
       - .env
     environment:
       AGENT_HOST: "0.0.0.0"
       AGENT_PORT: "8080"
-      # Container-internal hosts override the host-side values from .env.
-      DATABASE_URL: "postgresql://${POSTGRES_USER:-grodno}:${POSTGRES_PASSWORD:-grodno}@db:5432/${POSTGRES_DB:-grodno}"
-      VALHALLA_URL: "http://valhalla:8002"
     # Run the venv's python, not `uv run`: the image already synced its
     # dependencies at build time, and `uv run` re-resolves them at every start —
     # which needs PyPI and leaves the container in a restart loop the moment the
@@ -95,8 +102,6 @@ services:
     # then answers nothing and the panel shows 502 for a reason that has nothing
     # to do with the app.
     command: ["/app/.venv/bin/python", "-m", "agent.main"]
-    ports:
-      - "8080:8080"
     depends_on:
       - db
       - valhalla
