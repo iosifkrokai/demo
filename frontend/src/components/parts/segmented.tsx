@@ -136,7 +136,15 @@ export function Segmented<T extends string>({
                 : 'text-muted-foreground hover:text-foreground'
             )}
           >
-            {Icon && <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />}
+            {/* On a phone the label IS the tab: with the 44x44 language
+                switcher beside it, the icon costs the room that keeps «Routes»
+                from becoming «Rou…». Desktop keeps the icons. */}
+            {Icon && (
+              <Icon
+                className="h-4 w-4 shrink-0 max-md:hidden"
+                aria-hidden="true"
+              />
+            )}
             <span className="truncate">{item.short ?? item.label}</span>
           </button>
         );
