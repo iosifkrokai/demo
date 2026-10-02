@@ -1418,6 +1418,51 @@ describe('Sidebar — felt quality', () => {
     expect(ru.className).toMatch(/max-md:min-w-11/);
   });
 
+  it('называет группы фильтров и на десктопе, и на телефоне', async () => {
+    // Найденный дефект: мобильные строки-секции заменили заголовки групп, и на
+    // десктопе «Участники / Удобства / Интересы / Избегать / Тип результата»
+    // исчезли — панель стала безымянной стеной полей. Группа обязана быть
+    // названа в обоих режимах: заголовок для десктопа, строка для телефона.
+    const user = userEvent.setup({ delay: null });
+    render(<Sidebar />);
+
+    await user.click(screen.getByTestId('more-filters'));
+
+    for (const id of [
+      'party',
+      'amenities',
+      'interests',
+      'avoid',
+      'result-type',
+    ]) {
+      expect(screen.getByTestId(`section-title-${id}`)).toBeInTheDocument();
+      const row = screen.getByTestId(`section-toggle-${id}`);
+      expect(row).toHaveAttribute('aria-expanded');
+      expect(row.getAttribute('aria-controls')).toBeTruthy();
+    }
+  });
+
+  it('показывает в свёрнутой строке, сколько уже выбрано, а не «0»', async () => {
+    const user = userEvent.setup({ delay: null });
+    render(<Sidebar />);
+
+    await user.click(screen.getByTestId('more-filters'));
+    // Ничего не выбрано — счётчика нет: «0» не сообщает ничего.
+    expect(screen.queryByTestId('section-count-interests')).toBeNull();
+
+    await user.click(screen.getByTestId('section-toggle-interests'));
+    await user.click(screen.getByTestId('interest-замок'));
+    expect(screen.getByTestId('section-count-interests')).toHaveTextContent(
+      '1'
+    );
+
+    // Свёрнутая строка по-прежнему говорит, что внутри что-то есть.
+    await user.click(screen.getByTestId('section-toggle-interests'));
+    expect(screen.getByTestId('section-count-interests')).toHaveTextContent(
+      '1'
+    );
+  });
+
   it('shows elapsed time and a real cancel, and cancelling is not an error', async () => {
     let aborted = false;
     const fetchMock = vi.fn(

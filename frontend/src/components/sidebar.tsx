@@ -44,6 +44,7 @@ import {
 } from '@/stores/directions-store';
 import { useDirectionsQuery } from '@/hooks/use-directions-queries';
 import { GuidePanel, guideRouteKey, type GuideStop } from './guide-panel';
+import { MobileSection } from './mobile/mobile-section';
 import { HistoryTab } from './parts/history-tab';
 import { PlanVerdict } from './parts/plan-verdict';
 import { ItinerariesTab } from './parts/itineraries-tab';
@@ -1711,84 +1712,93 @@ export const Sidebar = ({
                   className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-3"
                 >
                   {/* Party: counts, plus ages only when they were typed. */}
-                  <div className="flex flex-col gap-1.5">
-                    <span className="text-meta text-muted-foreground">
-                      {t('sidebar.plan.partyLabel')}
-                    </span>
-                    <Stepper
-                      label={t('sidebar.plan.adults')}
-                      testId="party-adults"
-                      value={partyAdults}
-                      min={1}
-                      max={50}
-                      onChange={setPartyAdults}
-                    />
-                    <Stepper
-                      label={t('sidebar.plan.children')}
-                      testId="party-children"
-                      value={partyChildren}
-                      min={1}
-                      max={20}
-                      onChange={setPartyChildren}
-                    />
-                    {partyChildren != null && partyChildren > 0 && (
-                      <div className="flex flex-col gap-1">
-                        <label
-                          htmlFor="children-ages"
-                          className="text-meta text-muted-foreground"
-                        >
-                          {t('sidebar.plan.childrenAges')}
-                        </label>
-                        <Input
-                          id="children-ages"
-                          data-testid="children-ages"
-                          value={childrenAgesText}
-                          onChange={(e) => setChildrenAgesText(e.target.value)}
-                          placeholder="4, 7"
-                          className="h-9 text-label"
-                        />
-                      </div>
-                    )}
-                  </div>
+                  <MobileSection
+                    id="party"
+                    title={t('sidebar.plan.partyLabel')}
+                    defaultOpen={true}
+                  >
+                    <div className="flex flex-col gap-1.5">
+                      <Stepper
+                        label={t('sidebar.plan.adults')}
+                        testId="party-adults"
+                        value={partyAdults}
+                        min={1}
+                        max={50}
+                        onChange={setPartyAdults}
+                      />
+                      <Stepper
+                        label={t('sidebar.plan.children')}
+                        testId="party-children"
+                        value={partyChildren}
+                        min={1}
+                        max={20}
+                        onChange={setPartyChildren}
+                      />
+                      {partyChildren != null && partyChildren > 0 && (
+                        <div className="flex flex-col gap-1">
+                          <label
+                            htmlFor="children-ages"
+                            className="text-meta text-muted-foreground"
+                          >
+                            {t('sidebar.plan.childrenAges')}
+                          </label>
+                          <Input
+                            id="children-ages"
+                            data-testid="children-ages"
+                            value={childrenAgesText}
+                            onChange={(e) =>
+                              setChildrenAgesText(e.target.value)
+                            }
+                            placeholder="4, 7"
+                            className="h-9 text-label"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </MobileSection>
 
                   {/* Amenities, each «обязательно» or «желательно». */}
-                  <div className="flex flex-col gap-1.5">
-                    <span className="text-meta text-muted-foreground">
-                      {t('sidebar.plan.amenities')}
-                    </span>
-                    {buildAmenityOptions(t).map((option) => (
-                      <div
-                        key={option.code}
-                        className="flex items-center gap-2"
-                      >
-                        <span className="text-label">{option.label}</span>
-                        <div className="ml-auto flex gap-1">
-                          <Chip
-                            selected={amenities[option.code] === 'hard'}
-                            onClick={() => toggleAmenity(option.code, 'hard')}
-                            data-testid={`amenity-${option.code}-hard`}
-                            className="h-7 px-2 text-meta"
-                          >
-                            {t('sidebar.plan.hard')}
-                          </Chip>
-                          <Chip
-                            selected={amenities[option.code] === 'soft'}
-                            onClick={() => toggleAmenity(option.code, 'soft')}
-                            data-testid={`amenity-${option.code}-soft`}
-                            className="h-7 px-2 text-meta"
-                          >
-                            {t('sidebar.plan.soft')}
-                          </Chip>
+                  <MobileSection
+                    id="amenities"
+                    title={t('sidebar.plan.amenities')}
+                    summary={Object.keys(amenities).length || undefined}
+                  >
+                    <div className="flex flex-col gap-1.5">
+                      {buildAmenityOptions(t).map((option) => (
+                        <div
+                          key={option.code}
+                          className="flex items-center gap-2"
+                        >
+                          <span className="text-label">{option.label}</span>
+                          <div className="ml-auto flex gap-1">
+                            <Chip
+                              selected={amenities[option.code] === 'hard'}
+                              onClick={() => toggleAmenity(option.code, 'hard')}
+                              data-testid={`amenity-${option.code}-hard`}
+                              className="h-7 px-2 text-meta"
+                            >
+                              {t('sidebar.plan.hard')}
+                            </Chip>
+                            <Chip
+                              selected={amenities[option.code] === 'soft'}
+                              onClick={() => toggleAmenity(option.code, 'soft')}
+                              data-testid={`amenity-${option.code}-soft`}
+                              className="h-7 px-2 text-meta"
+                            >
+                              {t('sidebar.plan.soft')}
+                            </Chip>
+                          </div>
                         </div>
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
+                  </MobileSection>
 
                   {/* Themes: soft by nature, they never force a detour. */}
-                  <div className="flex flex-col gap-1.5">
-                    <span className="text-meta text-muted-foreground">
-                      {t('sidebar.plan.interests')}
-                    </span>
+                  <MobileSection
+                    id="interests"
+                    title={t('sidebar.plan.interests')}
+                    summary={interests.length || undefined}
+                  >
                     <div
                       role="group"
                       aria-label={t('sidebar.plan.interests')}
@@ -1805,13 +1815,14 @@ export const Sidebar = ({
                         </Chip>
                       ))}
                     </div>
-                  </div>
+                  </MobileSection>
 
                   {/* Keep out. */}
-                  <div className="flex flex-col gap-1.5">
-                    <span className="text-meta text-muted-foreground">
-                      {t('sidebar.plan.avoid')}
-                    </span>
+                  <MobileSection
+                    id="avoid"
+                    title={t('sidebar.plan.avoid')}
+                    summary={avoid.length || undefined}
+                  >
                     <div
                       role="group"
                       aria-label={t('sidebar.plan.avoid')}
@@ -1828,30 +1839,43 @@ export const Sidebar = ({
                         </Chip>
                       ))}
                     </div>
-                  </div>
+                  </MobileSection>
 
                   {/* What to return, and whether to come back to the start. */}
-                  <div className="flex flex-col gap-1.5">
-                    <span className="text-meta text-muted-foreground">
-                      {t('sidebar.plan.resultType')}
-                    </span>
-                    <Segmented
-                      items={buildResultModeOptions(t)}
-                      value={resultMode}
-                      onChange={setResultMode}
-                      label={t('sidebar.plan.resultTypeAria')}
-                      disabled={busy}
-                      testId={(value) => `result-mode-${value}`}
-                    />
-                    <Chip
-                      selected={roundTrip}
-                      onClick={() => setRoundTrip((v) => !v)}
-                      data-testid="round-trip"
-                      className="mt-0.5 self-start"
-                    >
-                      {t('sidebar.ui.roundTrip')}
-                    </Chip>
-                  </div>
+                  <MobileSection
+                    id="result-type"
+                    title={t('sidebar.plan.resultType')}
+                    defaultOpen={true}
+                    summary={
+                      resultMode === 'catalogue' || roundTrip
+                        ? [
+                            resultMode === 'catalogue' ? 'каталог' : null,
+                            roundTrip ? '↩' : null,
+                          ]
+                            .filter(Boolean)
+                            .join(' ')
+                        : undefined
+                    }
+                  >
+                    <div className="flex flex-col gap-1.5">
+                      <Segmented
+                        items={buildResultModeOptions(t)}
+                        value={resultMode}
+                        onChange={setResultMode}
+                        label={t('sidebar.plan.resultTypeAria')}
+                        disabled={busy}
+                        testId={(value) => `result-mode-${value}`}
+                      />
+                      <Chip
+                        selected={roundTrip}
+                        onClick={() => setRoundTrip((v) => !v)}
+                        data-testid="round-trip"
+                        className="mt-0.5 self-start"
+                      >
+                        {t('sidebar.ui.roundTrip')}
+                      </Chip>
+                    </div>
+                  </MobileSection>
                 </div>
               )}
             </section>
