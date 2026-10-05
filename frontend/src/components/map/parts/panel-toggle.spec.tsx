@@ -1,8 +1,12 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, cleanup } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi, afterEach } from 'vitest';
 
 import { PanelToggle } from './panel-toggle';
+
+// jsdom shares one document across the files of a worker: without this, the
+// handle left behind by one case is found again by the next.
+afterEach(cleanup);
 
 describe('PanelToggle', () => {
   it('называет себя вслух и говорит, открыта ли панель', () => {
@@ -68,5 +72,26 @@ describe('PanelToggle', () => {
     const handle = screen.getByTestId('panel-toggle');
     expect(handle.className).toContain('--panel-width');
     expect(handle.className).toContain('top-1/2');
+  });
+
+  it('на телефоне не рисуется вовсе: у шторки нет своего левого края', () => {
+    // On a phone the panel is a sheet across the bottom of the screen, so there
+    // is no vertical left edge for an edge-handle to stand on — and the clamped
+    // position parked it in the middle of the map as a floating tab. The way in
+    // and out there belongs to the sheet itself (its grab bar, a flick down to
+    // dismiss) and to the button on the map; see MobileShell.
+    render(
+      <PanelToggle
+        open={false}
+        onToggle={() => {}}
+        label="панель"
+        className="left-[min(var(--panel-width,0px),calc(100vw-1.75rem))]"
+      />
+    );
+
+    const handle = screen.getByTestId('panel-toggle');
+    // `hidden md:flex`: not moved off the map, not rendered there.
+    expect(handle.className).toContain('hidden');
+    expect(handle.className).toContain('md:flex');
   });
 });

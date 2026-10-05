@@ -113,8 +113,16 @@ vi.mock('react-map-gl/maplibre', async () => {
         );
       }
     ),
-    Marker: vi.fn(({ children, longitude, latitude }) => (
-      <div data-testid="marker" data-lng={longitude} data-lat={latitude}>
+    // `onClick` is forwarded so a test can tap a marker the way the tourist
+    // does. Dropping it made every marker inert, which is exactly the
+    // interaction the place card hangs off.
+    Marker: vi.fn(({ children, longitude, latitude, onClick }) => (
+      <div
+        data-testid="marker"
+        data-lng={longitude}
+        data-lat={latitude}
+        onClick={onClick}
+      >
         {children}
       </div>
     )),
@@ -360,6 +368,11 @@ describe('MapComponent', () => {
   });
 
   afterEach(() => {
+    // `cleanup()` explicitly: vitest runs here without `globals: true`, so
+    // Testing Library's automatic afterEach never registers, and this file's
+    // markers and popups would otherwise be left in the document shared by the
+    // rest of the worker.
+    cleanup();
     vi.restoreAllMocks();
   });
 
@@ -425,6 +438,19 @@ describe('MapComponent', () => {
     );
     expect(handle.className).toContain('top-1/2');
     expect(handle.className).toContain('--panel-width');
+  });
+
+  // On a phone the panel is a sheet across the bottom, so it has no vertical
+  // left edge for an edge-handle to stand on — and the clamped position parked
+  // it in the middle of the map as a floating tab. The way in and out there is
+  // the sheet's own grab bar plus a flick down to dismiss (MobileShell); this
+  // test pins that the desktop control stays off a phone.
+  it('на телефоне ручка панели не рисуется: у шторки нет левого края', () => {
+    render(<MapComponent />);
+
+    const handle = screen.getByTestId('panel-toggle');
+    expect(handle.className).toContain('hidden');
+    expect(handle.className).toContain('md:flex');
   });
 
   // The upstream map put four more controls on the canvas: an elevation
@@ -519,6 +545,101 @@ describe('MapComponent', () => {
     } finally {
       mockCommonState.directionsPanelOpen = true;
     }
+  });
+
+  // ── Reading about a point ────────────────────────────────────────────────
+  //
+  // One place has exactly one reader on screen: the popup by the pin on a wide
+  // screen, the card at the bottom of the map on a phone. Rendering both would
+  // put the same text about the same point on the display twice.
+
+  const withAPlace = (placeId: number) => {
+    mockDirectionsState.current.placeDetails = {
+      [placeId]: {
+        name: 'Старый замок',
+        category: 'замок',
+        blurb: 'Резиденция великих князей.',
+        funFact: 'Дошла лишь одна башня.',
+        funFacts: [],
+        links: [],
+        visitMinutes: 30,
+      },
+    };
+    mockDirectionsState.current.waypoints = [
+      {
+        id: 'wp-1',
+        placeId,
+        userInput: 'Старый замок',
+        geocodeResults: [
+          {
+            selected: true,
+            sourcelnglat: [23.83, 53.69],
+            displaylnglat: [23.83, 53.69],
+            title: 'Старый замок',
+          },
+        ],
+      },
+    ];
+  };
+
+  it('на широком экране о месте читает всплывающая карточка у метки', async () => {
+    const user = userEvent.setup();
+    withAPlace(7);
+    render(<MapComponent />);
+
+    await user.click(screen.getByTestId('marker'));
+
+    expect(screen.getByTestId('popup')).toBeInTheDocument();
+    expect(screen.queryByTestId('mobile-place-card')).not.toBeInTheDocument();
+  });
+
+  it('на телефоне о месте читает карточка у нижнего края карты', async () => {
+    // A 340px popup anchored to a pin is 87 % of a 390px screen, sits wherever
+    // the pin happens to be — often under the map's own controls — and is read
+    // with a thumb over its bottom. Every phone map app puts the place card on
+    // the bottom of the map instead, and so does this one.
+    const original = window.matchMedia;
+    window.matchMedia = ((query: string) => ({
+      matches: query.includes('767'),
+      media: query,
+      onchange: null,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+      dispatchEvent: () => false,
+    })) as unknown as typeof window.matchMedia;
+
+    try {
+      const user = userEvent.setup();
+      withAPlace(7);
+      render(<MapComponent />);
+
+      await user.click(screen.getByTestId('marker'));
+
+      const card = screen.getByTestId('mobile-place-card');
+      expect(card).toHaveTextContent('Старый замок');
+      expect(card).toHaveTextContent('Дошла лишь одна башня.');
+      // And not the popup as well.
+      expect(screen.queryByTestId('popup')).not.toBeInTheDocument();
+    } finally {
+      window.matchMedia = original;
+    }
+  });
+
+  it('название выбранной точки остаётся на карте, остальные уходят сами', async () => {
+    const user = userEvent.setup();
+    withAPlace(7);
+    render(<MapComponent />);
+
+    await user.click(screen.getByTestId('marker'));
+
+    // The tapped point's caption is being read on purpose, so it opts out of
+    // the 6s auto-hide; nothing else on the map changes.
+    expect(screen.getByTestId('place-marker-label')).toHaveAttribute(
+      'data-active',
+      'true'
+    );
   });
 
   it('should NOT open the Valhalla coordinate popup on a plain map click', async () => {

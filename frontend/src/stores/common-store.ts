@@ -66,6 +66,14 @@ interface CommonActions {
   zoomTo: (coordinates: number[][]) => void;
   toggleSettings: () => void;
   toggleDirections: () => void;
+  /**
+   * Open or close the panel outright.
+   *
+   * Distinct from the toggle because the mobile sheet can now be *dismissed by
+   * a flick down*, and a dismiss must close rather than reopen: calling the
+   * toggle from there would be a coin toss if anything else closed it first.
+   */
+  setDirectionsPanelOpen: (open: boolean) => void;
   updateSettings: (
     name: keyof PossibleSettings,
     value: PossibleSettings[keyof PossibleSettings]
@@ -129,6 +137,14 @@ export const useCommonStore = create<CommonStore>()(
           },
           undefined,
           'toggleDirections'
+        ),
+      setDirectionsPanelOpen: (open) =>
+        set(
+          (state) => {
+            state.directionsPanelOpen = open;
+          },
+          undefined,
+          'setDirectionsPanelOpen'
         ),
       updateSettings: (name, value) =>
         set(

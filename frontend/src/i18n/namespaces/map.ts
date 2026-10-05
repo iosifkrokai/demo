@@ -13,6 +13,15 @@ export const mapArea = {
       planRoute: 'Планировать маршрут',
       panelToggle: 'открыть или закрыть панель маршрута',
       panelOpen: 'панель маршрута открыта',
+      // The place card, on both surfaces: the popup by the pin on a wide screen
+      // and the card at the bottom of the map on a phone. The headings used to
+      // be Russian-only strings baked into the popup, which meant an
+      // English-language tourist read «Ещё факты» on an otherwise English card.
+      placeClose: 'Закрыть',
+      placeMore: 'Ещё о месте',
+      placeLess: 'Свернуть',
+      placeMoreFacts: 'Ещё факты',
+      placeReadMore: 'Почитать',
       dragHint: 'перетащить · стрелки вверх/вниз',
       lineFromApp: 'Линия маршрута — построена в приложении',
       lineFromAgent: 'Линия маршрута — из проверенного плана агента',
@@ -58,6 +67,11 @@ export const mapArea = {
       planRoute: 'Plan a route',
       panelToggle: 'open or close the route panel',
       panelOpen: 'the route panel is open',
+      placeClose: 'Close',
+      placeMore: 'More about this place',
+      placeLess: 'Show less',
+      placeMoreFacts: 'More facts',
+      placeReadMore: 'Read more',
       dragHint: 'drag · arrow keys',
       lineFromApp: 'Line drawn in this app',
       lineFromAgent: "Line comes from the agent's verified plan",

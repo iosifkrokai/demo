@@ -267,6 +267,28 @@ body {
   .animate-appear {
     animation: grodno-appear 180ms ease-out both;
   }
+
+  /* A marker caption that has said its piece and leaves: visible for 6s (the
+     map has settled, the route is drawn, the eye has read the names), then out
+     over 400ms, and it does not come back — `forwards`, so the plate stays gone
+     instead of reappearing on the next repaint. Declared as one utility rather
+     than a per-marker timer: a 12-stop route would otherwise run twelve
+     intervals that all have to be torn down when the route changes.
+     Phone only — see place-marker-label.tsx. */
+  .animate-place-label-out {
+    animation: grodno-label-out 400ms ease-out 6s forwards;
+  }
+}
+
+@keyframes grodno-label-out {
+  from {
+    opacity: 1;
+    visibility: visible;
+  }
+  to {
+    opacity: 0;
+    visibility: hidden;
+  }
 }
 
 @keyframes grodno-appear {
@@ -298,6 +320,15 @@ body {
   .animate-appear {
     animation-name: none !important;
     opacity: 1 !important;
+  }
+
+  /* A caption that fades on its own is motion, and motion nobody asked for.
+     Reduced motion means it stays up: the name is information, not decoration,
+     and the alternative is a route whose stop names are silently missing. */
+  .animate-place-label-out {
+    animation: none !important;
+    opacity: 1 !important;
+    visibility: visible !important;
   }
 }
 

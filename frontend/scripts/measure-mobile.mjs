@@ -14,7 +14,9 @@
 import { chromium } from '@playwright/test';
 
 const PHASE = Number(
-  (process.argv.find((a) => a.startsWith('--phase=')) ?? '--phase=1').split('=')[1]
+  (process.argv.find((a) => a.startsWith('--phase=')) ?? '--phase=1').split(
+    '='
+  )[1]
 );
 const TARGET_URL =
   process.env.MEASURE_URL ?? 'http://localhost/directions?profile=pedestrian';
@@ -95,11 +97,14 @@ const measureMobile = async (context) => {
   await page.goto(TARGET_URL, { waitUntil: 'load' });
   await page.waitForTimeout(4000);
 
-  const closedByDefault = (await page.locator('[data-testid="mobile-sheet"]').count()) === 0;
+  const closedByDefault =
+    (await page.locator('[data-testid="mobile-sheet"]').count()) === 0;
   // On a phone the panel starts folded by design (`DEFAULT_PANEL_OPEN`): the map
-  // is the first thing the tourist sees. Open it the way they would.
+  // is the first thing the tourist sees. Open it the way they would — the button
+  // on the map. (The desktop chevron on the panel's own edge is `hidden md:flex`,
+  // so on a phone it is not there to click.)
   if (closedByDefault) {
-    await page.locator('[data-testid="panel-toggle"]').click();
+    await page.locator('[data-testid="mobile-panel-open"]').click();
     await page.waitForTimeout(1200);
   }
 
@@ -121,7 +126,9 @@ const measureMobile = async (context) => {
     const sb = box(shell);
     const body = q('.slim-scroll');
     const action = box(q('[data-testid="build-route"]'));
-    const buttons = [...document.querySelectorAll('[data-testid="mobile-sheet"] button')]
+    const buttons = [
+      ...document.querySelectorAll('[data-testid="mobile-sheet"] button'),
+    ]
       .map((el) => box(el))
       .filter((b) => b && b.w > 0 && b.h > 0);
     const taps = buttons.map((b) => Math.min(b.w, b.h));
@@ -130,7 +137,12 @@ const measureMobile = async (context) => {
     const mapH = sb ? sb.y : window.innerHeight;
     const chrome = [
       ...document.querySelectorAll('[data-testid="map-controls"] > *'),
-      ...document.querySelectorAll('[data-testid="place-label"], [data-testid="mobile-map-chrome"] > *'),
+      // `place-marker-label` is the marker's own caption (place-marker-label.tsx);
+      // the old selector said `place-label`, which matched nothing, so the
+      // marker plates were never counted against the 8 % budget at all.
+      ...document.querySelectorAll(
+        '[data-testid="place-marker-label"], [data-testid="mobile-place-card"], [data-testid="mobile-map-chrome"] > *'
+      ),
     ]
       .map((el) => box(el))
       .filter(Boolean);
@@ -148,8 +160,12 @@ const measureMobile = async (context) => {
     return {
       shellPresent: !!shell,
       panelH: sb ? sb.h : null,
-      panelSharePct: sb ? Math.round((sb.h / window.innerHeight) * 1000) / 10 : null,
-      mapSharePct: sb ? Math.round((sb.y / window.innerHeight) * 1000) / 10 : 100,
+      panelSharePct: sb
+        ? Math.round((sb.h / window.innerHeight) * 1000) / 10
+        : null,
+      mapSharePct: sb
+        ? Math.round((sb.y / window.innerHeight) * 1000) / 10
+        : 100,
       scrollWindowPx: body ? body.clientHeight : null,
       actionVisible: !!(
         action &&
@@ -159,12 +175,15 @@ const measureMobile = async (context) => {
         action.y2 <= window.innerHeight
       ),
       minTapPx: taps.length ? Math.min(...taps) : null,
-      chromeSharePct: Math.round((chromeArea / (window.innerWidth * mapH)) * 1000) / 10,
+      chromeSharePct:
+        Math.round((chromeArea / (window.innerWidth * mapH)) * 1000) / 10,
       chromeOverlapPx2: overlaps,
       sheetVar: getComputedStyle(document.documentElement)
         .getPropertyValue('--sheet-h')
         .trim(),
-      overflowX: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      overflowX:
+        document.documentElement.scrollWidth -
+        document.documentElement.clientWidth,
     };
   });
 
@@ -179,15 +198,21 @@ const measureDesktop = async (context) => {
   const measured = await page.evaluate(() => {
     const panel = document.querySelector('[role="dialog"]');
     const b = panel?.getBoundingClientRect();
-    const hints = document.querySelector('[data-testid="hint-old-town"]')?.parentElement;
-    const title = [...document.querySelectorAll('[data-slot="sheet-title"]')][0];
+    const hints = document.querySelector(
+      '[data-testid="hint-old-town"]'
+    )?.parentElement;
+    const title = [
+      ...document.querySelectorAll('[data-slot="sheet-title"]'),
+    ][0];
     const tb = title?.getBoundingClientRect();
     return {
       panelW: b ? Math.round(b.width) : null,
       panelH: b ? Math.round(b.height) : null,
       hintsWrap: hints ? getComputedStyle(hints).flexWrap : null,
       titleVisible: !!tb && tb.height > 0,
-      overflowX: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      overflowX:
+        document.documentElement.scrollWidth -
+        document.documentElement.clientWidth,
     };
   });
   await page.close();
@@ -208,7 +233,9 @@ const verdicts = (m, d) => ({
 
 const facts = (m, d) => ({
   shell: m.shellPresent ? 'есть' : 'нет',
-  'main-action': m.actionVisible ? 'да' : `нет (кнопка ${m.actionVisible ? '' : 'обрезана'})`,
+  'main-action': m.actionVisible
+    ? 'да'
+    : `нет (кнопка ${m.actionVisible ? '' : 'обрезана'})`,
   'peek-panel': `${m.panelSharePct} % (${m.panelH} px, --sheet-h ${m.sheetVar})`,
   'no-overflow-x': `${m.overflowX} px`,
   'scroll-window': `${m.scrollWindowPx} px`,
@@ -228,15 +255,21 @@ const main = async () => {
       locale: 'ru-RU',
     })
   );
-  const desktop = await measureDesktop(await browser.newContext(DESKTOP_VIEWPORT));
+  const desktop = await measureDesktop(
+    await browser.newContext(DESKTOP_VIEWPORT)
+  );
   await browser.close();
 
   const v = verdicts(mobile, desktop);
   const f = facts(mobile, desktop);
 
   console.log(`\nЗамер мобильного фронта · фаза ${PHASE} · ${TARGET_URL}`);
-  console.log(`панель по умолчанию ${mobile.closedByDefault ? 'свёрнута (как и задумано на телефоне)' : 'открыта'}\n`);
-  console.log('метрика                       порог                          факт');
+  console.log(
+    `панель по умолчанию ${mobile.closedByDefault ? 'свёрнута (как и задумано на телефоне)' : 'открыта'}\n`
+  );
+  console.log(
+    'метрика                       порог                          факт'
+  );
   console.log('-'.repeat(96));
   let failed = 0;
   for (const gate of GATES) {

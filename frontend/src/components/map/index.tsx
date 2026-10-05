@@ -36,6 +36,8 @@ import { ServicesLayer } from './parts/services-layer';
 import { ServicesSummary } from './parts/services-summary';
 import { PlaceCardPopup } from './parts/place-card-popup';
 import { PlaceMarkerLabel } from './parts/place-marker-label';
+import { MobilePlaceCard } from '@/components/mobile/mobile-place-card';
+import { useIsMobile } from '@/components/mobile/use-is-mobile';
 import { maxBounds } from './constants';
 import { getInitialMapPosition, LAST_CENTER_KEY } from './utils';
 import { useCommonStore } from '@/stores/common-store';
@@ -72,6 +74,11 @@ interface MarkerData {
 export const MapComponent = () => {
   const { activeTab } = useParams({ from: '/$activeTab' });
   const navigate = useNavigate({ from: '/$activeTab' });
+  // Which surface reads about a point: a popup by the pin on a wide screen, a
+  // card on the bottom of the map on a phone. The one viewport predicate, used
+  // here for a presentation choice rather than for a second shell — the shells
+  // themselves are still chosen in app.tsx alone.
+  const isMobile = useIsMobile();
   const coordinates = useCommonStore((state) => state.coordinates);
   const directionsPanelOpen = useCommonStore(
     (state) => state.directionsPanelOpen
@@ -996,13 +1003,20 @@ export const MapComponent = () => {
             >
               <div className="relative">
                 <MarkerIcon color={marker.color!} number={marker.number} />
-                {details && <PlaceMarkerLabel details={details} />}
+                {details && (
+                  <PlaceMarkerLabel
+                    details={details}
+                    active={activePlace?.id === marker.placeId}
+                  />
+                )}
               </div>
             </Marker>
           );
         })}
 
-        {activePlace && activeDetails && (
+        {/* One place, one reader. A popup and a bottom card for the same point
+            would put two copies of the same text on the screen at once. */}
+        {activePlace && activeDetails && !isMobile && (
           <PlaceCardPopup
             lng={activePlace.lng}
             lat={activePlace.lat}
@@ -1141,13 +1155,28 @@ export const MapComponent = () => {
       {/* The panel's own handle, on the panel's own edge — the same line the
           resize grip sits on, so opening, closing and resizing read as one
           control instead of three buttons fighting for the map's corners. The
-          label is the only thing said out loud, for a screen reader. */}
+          label is the only thing said out loud, for a screen reader.
+
+          Desktop only (see PanelToggle): on a phone the panel is a sheet across
+          the bottom, so it has no left edge to stand on, and the way in and out
+          belongs to the sheet itself. */}
       <PanelToggle
         open={directionsPanelOpen}
         onToggle={handlePanelToggle}
         label={t('map.panelToggle')}
         className="left-[min(var(--panel-width,0px),calc(100vw-1.75rem))]"
       />
+
+      {/* About a point, on a phone: a card at the bottom of the map rather than
+          a popup over it. Rendered here, next to the map's other floating
+          chrome, because it is chrome over the map — and `md:hidden`, so it is
+          never in the DOM on a wide screen. */}
+      {isMobile && activePlace && activeDetails && (
+        <MobilePlaceCard
+          details={activeDetails}
+          onClose={() => setActivePlace(null)}
+        />
+      )}
 
       {/* Only the two cases that carry information are shown. A line this app
           drew itself is the ordinary case; a badge saying so is noise a tourist

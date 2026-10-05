@@ -133,6 +133,13 @@ interface SheetDragHandleProps {
  * panel was the 24px chevron on the map's far edge, i.e. the tourist had to
  * leave the panel to find the control that closes it. Now the bar is a 44px
  * target (the line itself stays thin) and the sheet carries its own ✕.
+ *
+ * The target is now the **full width** of the sheet, not a 96px pill in the
+ * middle. A 44px-tall, 96px-wide target is legal and still awkward: a thumb
+ * resting slightly off centre misses it entirely, and the miss costs the whole
+ * gesture. The visible line stays exactly as it was — a wide, invisible, easy
+ * target around it is what a phone sheet wants. Nothing else in the sheet is
+ * inside this row, so the extra width costs no other control.
  */
 export const SheetDragHandle = ({
   snap,
@@ -148,7 +155,7 @@ export const SheetDragHandle = ({
         aria-label={snap === 'full' ? t('panel.collapse') : t('panel.expand')}
         title={t('panel.dragHint')}
         className={cn(
-          'flex h-11 w-24 touch-none items-center justify-center rounded-full transition-colors',
+          'flex h-11 w-full touch-none items-center justify-center rounded-full transition-colors',
           'hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/50'
         )}
         {...handleProps}

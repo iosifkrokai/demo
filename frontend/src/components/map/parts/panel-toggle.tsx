@@ -17,8 +17,15 @@ import { cn } from '@/lib/utils';
  *
  * Its `className` comes from the caller, which places it on the panel's own edge
  * and clamps that position so the handle stays on screen where the panel is
- * wider than the viewport (a phone); otherwise the only control would sit
- * off-screen exactly when it is needed.
+ * wider than the viewport; otherwise the only control would sit off-screen
+ * exactly when it is needed.
+ *
+ * **Desktop only.** On a phone this control has nothing to stand on: the panel
+ * is a sheet across the bottom edge, so there is no vertical left edge for the
+ * chevron to sit on, and the clamped position parked it in the middle of the map
+ * as a floating tab — an edge handle for an edge that did not exist. A phone
+ * opens and closes its sheet with the sheet's own grab bar (a flick down
+ * dismisses it) and, to get in, the button on the map; see MobileShell.
  */
 export interface PanelToggleProps {
   open: boolean;
@@ -43,7 +50,10 @@ export const PanelToggle = ({
       title={label}
       onClick={onToggle}
       className={cn(
-        'group absolute top-1/2 z-20 flex h-14 w-6 -translate-y-1/2 items-center justify-center',
+        // `hidden md:flex`: the panel's edge is a desktop concept. Below md the
+        // chevron is not moved off the map, it is not rendered at all — the
+        // mobile sheet carries its own way in and out.
+        'group absolute top-1/2 z-20 hidden h-14 w-6 -translate-y-1/2 items-center justify-center md:flex',
         'rounded-r-md border border-l-0 border-border bg-card/95 text-muted-foreground shadow-card',
         // A finger needs a real target: on a touch pointer the handle grows to
         // 44x80 (measured before: 24x56 — a sliver, and the only way in and out
