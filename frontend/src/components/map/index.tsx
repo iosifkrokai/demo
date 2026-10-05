@@ -32,7 +32,11 @@ import {
   VALHALLA_ACCESS_RESTRICTIONS_TIMED_LAYER_ID,
 } from '@/components/tiles/valhalla-layers';
 import { MarkerIcon, type MarkerColor } from './parts/marker-icon';
-import { ServicesLayer } from './parts/services-layer';
+import {
+  PHONE_MAX_MARKS,
+  PHONE_MIN_GAP_PX,
+  ServicesLayer,
+} from './parts/services-layer';
 import { PlaceCardPopup } from './parts/place-card-popup';
 import { PlaceMarkerLabel } from './parts/place-marker-label';
 import { MobilePlaceCard } from '@/components/mobile/mobile-place-card';
@@ -78,6 +82,7 @@ export const MapComponent = () => {
   // here for a presentation choice rather than for a second shell — the shells
   // themselves are still chosen in app.tsx alone.
   const isMobile = useIsMobile();
+
   const coordinates = useCommonStore((state) => state.coordinates);
   const directionsPanelOpen = useCommonStore(
     (state) => state.directionsPanelOpen
@@ -1087,7 +1092,28 @@ export const MapComponent = () => {
           </Popup>
         )}
 
-        {servicesVisible && <ServicesLayer items={services.items} />}
+        {/* On a phone only a handful of marks are drawn — see ServicesLayer for
+            the measurement that set it. A wide screen has the room for all. */}
+        {servicesVisible && (
+          <ServicesLayer
+            items={services.items}
+            thin={
+              isMobile
+                ? {
+                    max: PHONE_MAX_MARKS,
+                    minGapPx: PHONE_MIN_GAP_PX,
+                    // The route's own place names are the widest thing on the
+                    // map — 156px on a phone — and a service mark that covers
+                    // one hides the name of the stop it sits next to. The layer
+                    // reads their boxes itself, at the moment it thins: passed
+                    // in from here they would be a frame stale, because the
+                    // captions are re-laid-out by the same camera move.
+                    avoidLabels: true,
+                  }
+                : undefined
+            }
+          />
+        )}
       </Map>
 
       {(routeResult || guiding) && (

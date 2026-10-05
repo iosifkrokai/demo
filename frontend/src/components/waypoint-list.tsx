@@ -236,12 +236,19 @@ export const WaypointList = ({ onChanged }: Props) => {
                   selected?.sourcelnglat ?? selected?.displaylnglat;
                 if (lngLat) focusOn(lngLat[0], lngLat[1]);
               }}
-              // The name is a button, and on a phone its text box is only 22px
-              // tall — so the finger has to hit the letters themselves. A
-              // pseudo-element covers the row instead: the tap target becomes
-              // the full 52px of the row without the text wrapping onto a second
-              // line, and without stealing the columns the controls need.
-              className="min-w-0 flex-1 break-words text-left text-body transition-colors hover:text-primary max-md:col-start-3 max-md:row-start-1 max-md:flex-none max-md:truncate max-md:break-normal max-md:relative max-md:self-center after:absolute after:inset-y-0 after:-inset-x-1 after:content-['']"
+              // The name is a button whose text is only 22px tall inside a 52px
+              // row, so a finger has to land on the letters themselves — and the
+              // whole point of the name being a button is to look at the place
+              // on the map. On a phone the button therefore fills the row's
+              // height (`self-stretch`) with the line centred in it, which makes
+              // the target the full 52px. Truncation keeps it on one line, so
+              // the taller button does not make the row taller.
+              //
+              // An earlier attempt used a pseudo-element stretched by `inset-y-0`;
+              // that resolves against the *button's* box, not the row's, so it
+              // widened the target by 4px sideways and left the height at 22px —
+              // measured, and the comment claimed otherwise.
+              className="min-w-0 flex-1 break-words text-left text-body transition-colors hover:text-primary max-md:col-start-3 max-md:row-start-1 max-md:flex-none max-md:self-stretch max-md:truncate max-md:break-normal max-md:flex max-md:items-center max-md:py-0"
               title={name}
               data-testid={`focus-place-${wp.id}`}
             >

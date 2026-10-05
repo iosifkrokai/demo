@@ -2,7 +2,13 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 
 import type { ServiceAlong } from '@/api/types';
-import { ServicesLayer, serviceIcon } from './services-layer';
+import {
+  PHONE_MAX_MARKS,
+  PHONE_MIN_GAP_PX,
+  ServicesLayer,
+  serviceIcon,
+  visibleServices,
+} from './services-layer';
 
 vi.mock('react-map-gl/maplibre', () => ({
   Marker: ({
@@ -25,6 +31,10 @@ vi.mock('react-map-gl/maplibre', () => ({
   Popup: ({ children }: { children: React.ReactNode }) => (
     <div data-testid="popup">{children}</div>
   ),
+  // The layer reads the camera to thin the marks for a phone. Outside a real
+  // map there is none, so `current` is null and the layer draws everything it is
+  // given — which is what the desktop path and these cases do.
+  useMap: () => ({ current: null }),
 }));
 
 /**
@@ -118,5 +128,79 @@ describe('ServicesLayer', () => {
   it('на метке нет номера: услуга не становится остановкой маршрута', () => {
     render(<ServicesLayer items={[service()]} />);
     expect(screen.getByTestId('service-marker').textContent).toBe('');
+  });
+
+  // On a phone the marks are thinned, because drawn all at once they made 29
+  // overlapping pairs on a 12-place route: clumps of four to six icons, ten of
+  // them lying across the route's own place names. These pin the rule.
+  describe('прореживание меток на телефоне', () => {
+    /** A place `dLat` degrees north of the origin — roughly 111km per degree. */
+    const near = (i: number, dLat: number) =>
+      service({
+        id: i,
+        source_url: `https://x/${i}`,
+        lon: 23.8,
+        lat: 53.68 + dLat,
+      });
+
+    const centre = { lat: 53.68, lon: 23.8 };
+    const thin = { max: PHONE_MAX_MARKS, minGapPx: PHONE_MIN_GAP_PX };
+
+    it('рисует всё, когда прореживание не просят (десктоп)', () => {
+      const items = [near(1, 0), near(2, 0.001), near(3, 0.002)];
+      expect(visibleServices(items, centre, null)).toHaveLength(3);
+    });
+
+    it('не превышает четыре метки, даже когда мест двенадцать', () => {
+      const items = Array.from({ length: 12 }, (_, i) => near(i, i * 0.02));
+      const shown = visibleServices(items, centre, thin);
+      expect(shown).toHaveLength(PHONE_MAX_MARKS);
+    });
+
+    it('разносит метки по экрану, а не по метрам', () => {
+      // Три подряд в пределах 40 м друг от друга: в кучу им нельзя ни там,
+      // ни там. Без экранных координат падает на географический запас.
+      const items = [near(1, 0), near(2, 0.0002), near(3, 0.0004)];
+      expect(visibleServices(items, centre, thin)).toHaveLength(1);
+
+      // Две метки, далеко друг от друга по карте, но рядом на экране —
+      // всё равно вторая лишняя.
+      const two = [near(1, 0), near(2, 0.0003)];
+      const screen = [
+        { x: 200, y: 300 },
+        { x: 210, y: 305 },
+      ];
+      const pos = new Map(two.map((s, i) => [s.source_url, screen[i]]));
+      expect(
+        visibleServices(
+          two,
+          centre,
+          thin,
+          (item) => pos.get(item.source_url) ?? null
+        )
+      ).toHaveLength(1);
+    });
+
+    it('берёт ближайшие к центру карты, а не первые попавшиеся', () => {
+      // Дальняя метка (55 км) не проходит порог близости к уже взятым, но
+      // расстояние между взятыми всё равно должно быть убывающим.
+      const items = [near(1, 0.5), near(2, 0.001), near(3, 0.002)];
+      const shown = visibleServices(items, centre, thin).map((s) => s.id);
+      expect(shown).toEqual([2, 3, 1]);
+
+      // А когда мест больше предела, дальние отбрасываются первыми.
+      const many = Array.from({ length: 8 }, (_, i) =>
+        near(i, 0.001 * (i + 1))
+      );
+      const four = visibleServices(many, centre, { ...thin, minGapPx: 10 });
+      expect(four).toHaveLength(PHONE_MAX_MARKS);
+      // `many[0]` is the closest to the centre, and the ids run 0..7.
+      expect(four.map((s) => s.id)).toEqual([0, 1, 2, 3]);
+    });
+
+    it('без центра (карта ещё не готова) рисует все — иначе мигнут пустой карты', () => {
+      const items = Array.from({ length: 12 }, (_, i) => near(i, i * 0.02));
+      expect(visibleServices(items, null, thin)).toHaveLength(12);
+    });
   });
 });
