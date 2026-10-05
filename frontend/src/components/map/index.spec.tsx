@@ -582,6 +582,94 @@ describe('MapComponent', () => {
     ];
   };
 
+  // The owner read «по пути: 12 мест» on a phone as noise to get past: it began
+  // as a 176x130 card over the map and was already down to one line by the time
+  // it was removed. On a phone the map now carries nothing but the map.
+  //
+  // What stays is the marks themselves — `/routes/services` still runs and a
+  // café still opens its own card when tapped. Only the chrome about them went.
+  // The alternative was marks that could not be reached at all.
+  it('на телефоне не показывает ничего о местах рядом, но сами метки рисует', async () => {
+    const original = window.matchMedia;
+    window.matchMedia = ((query: string) => ({
+      matches: query.includes('767'),
+      media: query,
+      onchange: null,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+      dispatchEvent: () => false,
+    })) as unknown as typeof window.matchMedia;
+
+    try {
+      render(<MapComponent />);
+      const isPhone = () => window.matchMedia('(max-width: 767px)').matches;
+
+      // No count block, no card, no button to reveal anything.
+      expect(
+        screen.queryByTestId('mobile-services-chip')
+      ).not.toBeInTheDocument();
+      expect(screen.queryByTestId('services-summary')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('services-toggle')).not.toBeInTheDocument();
+      expect(isPhone()).toBe(true);
+    } finally {
+      window.matchMedia = original;
+    }
+  });
+
+  // The «по пути: 12 мест» block is gone from EVERY screen, the wide one too:
+  // it sat above the guide's own compass, and the count it printed is not lost —
+  // `/routes/services` still runs and the marks still say their distance and
+  // hours when tapped. What remains is the bare button that turns the marks on,
+  // which is what it was before the card grew around it.
+  it('не рисует сводку «по пути» ни на телефоне, ни на десктопе', async () => {
+    render(<MapComponent />);
+
+    expect(screen.queryByTestId('services-summary')).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId('services-summary-count')
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId('services-summary-category')
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId('services-summary-capped')
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId('services-summary-empty')
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId('mobile-services-chip')
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId('mobile-services-capped')
+    ).not.toBeInTheDocument();
+  });
+
+  it('оставляет кнопку меток: без неё они недостижимы', async () => {
+    // The card is gone, but the marks it used to reveal still need a door.
+    // It rides with the route, so the test has to have one.
+    mockDirectionsState.current.results.data = {
+      legs: [],
+      summary: { length: 1000, time: 600 },
+      shape: {
+        type: 'LineString',
+        coordinates: [
+          [23.8, 53.6],
+          [23.9, 53.7],
+        ],
+      },
+      waypoints: [],
+    } as unknown as typeof mockDirectionsState.current.results.data;
+
+    render(<MapComponent />);
+
+    const toggle = screen.queryByTestId('services-toggle');
+    expect(toggle).not.toBeNull();
+    expect(toggle).toHaveAttribute('title', 'что рядом по пути');
+  });
+
   it('на широком экране о месте читает всплывающая карточка у метки', async () => {
     const user = userEvent.setup();
     withAPlace(7);

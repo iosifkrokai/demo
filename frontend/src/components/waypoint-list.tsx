@@ -159,13 +159,24 @@ export const WaypointList = ({ onChanged }: Props) => {
             }}
             className={cn(
               'group flex min-h-[52px] flex-wrap items-center gap-2 gap-y-1.5 rounded-xl px-1.5 transition-colors hover:bg-muted',
+              // A phone cannot fit six controls — grip, number, icon, name,
+              // visit time, pin, remove — so `flex-wrap` broke the row across
+              // up to four lines and the tail dropped below: measured on
+              // 390x844 a row came out 152px tall instead of 52px, which is the
+              // «text stretches down» report, and six stops needed 539px of a
+              // 760px sheet. On a phone the row is a grid of one line instead:
+              // the category emoji is dropped (the stop number already orders
+              // the route) and the name truncates rather than wrapping, so what
+              // is left fits and every control keeps its own column. From md up
+              // it stays the single flex row it has always been.
+              'max-md:grid max-md:grid-cols-[2.5rem_1.25rem_minmax(0,1fr)_auto_auto] max-md:gap-x-1.5 max-md:flex-nowrap',
               isDragging && 'opacity-40',
               isDragTarget && 'bg-muted ring-1 ring-primary/40'
             )}
           >
             <button
               type="button"
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full cursor-grab text-muted-foreground transition-colors hover:bg-muted active:cursor-grabbing max-md:h-11 max-md:w-11 pointer-coarse:h-11 pointer-coarse:w-11"
+              className="flex h-9 w-9 shrink-0 cursor-grab items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted active:cursor-grabbing max-md:col-start-1 max-md:row-start-1 max-md:h-10 max-md:w-10 pointer-coarse:h-11 pointer-coarse:w-11"
               aria-label={t('sidebar.waypoints.move', { name })}
               title={t('sidebar.waypoints.dragHint')}
               onKeyDown={(e) => {
@@ -182,7 +193,7 @@ export const WaypointList = ({ onChanged }: Props) => {
             </button>
 
             {/* The number column carries the 1px timeline rule between rows. */}
-            <div className="relative flex w-6 shrink-0 self-stretch items-center justify-center">
+            <div className="relative flex w-6 shrink-0 self-stretch items-center justify-center max-md:col-start-2 max-md:row-start-1 max-md:w-5 max-md:self-center">
               {!isLast && (
                 <span
                   aria-hidden="true"
@@ -205,7 +216,13 @@ export const WaypointList = ({ onChanged }: Props) => {
               )}
             </div>
 
-            <PlaceIcon category={details?.category} />
+            <PlaceIcon
+              category={details?.category}
+              // Dropped on a phone: as its own grid cell it stole a column from
+              // a name that has ~150px, and the stop number already says where
+              // the stop is in the route. The emoji is decorative anyway.
+              className="max-md:hidden"
+            />
 
             {/* Tapping the name looks at the place on the map: picking a stop
                 in the panel and then hunting for it on the map was the gap. */}
@@ -219,7 +236,12 @@ export const WaypointList = ({ onChanged }: Props) => {
                   selected?.sourcelnglat ?? selected?.displaylnglat;
                 if (lngLat) focusOn(lngLat[0], lngLat[1]);
               }}
-              className="min-w-0 flex-1 break-words text-left text-body transition-colors hover:text-primary"
+              // The name is a button, and on a phone its text box is only 22px
+              // tall — so the finger has to hit the letters themselves. A
+              // pseudo-element covers the row instead: the tap target becomes
+              // the full 52px of the row without the text wrapping onto a second
+              // line, and without stealing the columns the controls need.
+              className="min-w-0 flex-1 break-words text-left text-body transition-colors hover:text-primary max-md:col-start-3 max-md:row-start-1 max-md:flex-none max-md:truncate max-md:break-normal max-md:relative max-md:self-center after:absolute after:inset-y-0 after:-inset-x-1 after:content-['']"
               title={name}
               data-testid={`focus-place-${wp.id}`}
             >
@@ -232,11 +254,12 @@ export const WaypointList = ({ onChanged }: Props) => {
                 estimate={estimate}
                 value={overrides[timeId] ?? null}
                 onChange={(minutes) => setVisitMinutes(timeId, minutes)}
+                className="max-md:col-start-4 max-md:row-start-1 max-md:self-center"
               />
             )}
 
             {/* Always reachable on touch (no hover), revealed on hover on desktop. */}
-            <div className="flex shrink-0 items-center gap-0.5 transition-opacity md:opacity-0 md:group-focus-within:opacity-100 md:group-hover:opacity-100">
+            <div className="flex shrink-0 items-center gap-0.5 transition-opacity max-md:col-start-5 max-md:row-start-1 max-md:self-center max-md:gap-0 md:opacity-0 md:group-focus-within:opacity-100 md:group-hover:opacity-100">
               <button
                 type="button"
                 onClick={() => togglePin(i)}
@@ -252,7 +275,7 @@ export const WaypointList = ({ onChanged }: Props) => {
                     : t('sidebar.waypoints.pinHint')
                 }
                 className={cn(
-                  'flex h-7 w-7 items-center justify-center rounded-full transition-colors hover:bg-muted max-md:h-11 max-md:w-11 pointer-coarse:h-11 pointer-coarse:w-11',
+                  'flex h-7 w-7 items-center justify-center rounded-full transition-colors hover:bg-muted max-md:h-10 max-md:w-10 pointer-coarse:h-11 pointer-coarse:w-11',
                   wp.pinned
                     ? 'text-primary'
                     : 'text-muted-foreground hover:text-foreground'
@@ -268,7 +291,7 @@ export const WaypointList = ({ onChanged }: Props) => {
                 onClick={() => remove(i)}
                 aria-label={t('sidebar.waypoints.remove')}
                 title={t('sidebar.waypoints.remove')}
-                className="flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-destructive max-md:h-11 max-md:w-11 pointer-coarse:h-11 pointer-coarse:w-11"
+                className="flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-destructive max-md:h-10 max-md:w-10 pointer-coarse:h-11 pointer-coarse:w-11"
               >
                 <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
               </button>

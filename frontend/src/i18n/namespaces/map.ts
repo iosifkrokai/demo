@@ -32,25 +32,11 @@ export const mapArea = {
       northUp: 'север сверху',
       headingUp: 'по курсу',
       servicesToggle: 'что рядом по пути',
-      servicesEmpty: 'рядом с маршрутом ничего не нашлось',
-      servicesUnavailable: 'не удалось проверить, что рядом',
-      // What the guide knows about services beside the route, said plainly:
-      // how many, of what kind, and *how close* — a count on its own would leave
-      // the tourist guessing whether «по пути» means ten metres or ten minutes.
-      servicesOnRoute_one: 'по пути: {{count}} место',
-      servicesOnRoute_few: 'по пути: {{count}} места',
-      servicesOnRoute_many: 'по пути: {{count}} мест',
-      servicesOnRoute_other: 'по пути: {{count}} мест',
-      servicesWithin: 'в пределах {{metres}} м от маршрута',
-      servicesShow: 'показать на карте',
-      servicesCapped: 'показаны не все — список рядом обрезан',
-      servicesHide: 'скрыть с карты',
-      servicesSearching: 'ищу, что рядом…',
-      serviceCat_кафе: 'кафе',
-      serviceCat_ресторан: 'рестораны',
-      serviceCat_гостиница: 'гостиницы',
-      serviceCat_туалет: 'туалеты',
-      'serviceCat_остановка транспорта': 'остановки транспорта',
+      // What the guide knows about the places beside the route, said plainly
+      // when one is tapped: how far off the line it is, whether its hours are
+      // known at all, and that the walk to reach it has not been worked out.
+      // The count that used to live here moved out with the summary card; the
+      // guide is never asked to *count* things, only to place them.
       serviceOffLine: '{{metres}} м в сторону от маршрута',
       serviceHoursUnknown: 'часы неизвестны',
       serviceNoDetour: 'время на заход не рассчитано',
@@ -82,23 +68,11 @@ export const mapArea = {
       northUp: 'north up',
       headingUp: 'heading up',
       servicesToggle: "what's along the way",
-      servicesEmpty: 'nothing found beside this route',
-      servicesUnavailable: 'could not check what is beside the route',
-      // What the guide knows about services beside the route, said plainly:
-      // how many, of what kind, and *how close* — a count on its own would leave
-      // the tourist guessing whether «along the way» means ten metres or ten minutes.
-      servicesOnRoute_one: '{{count}} place along the way',
-      servicesOnRoute_other: '{{count}} places along the way',
-      servicesWithin: 'within {{metres}} m of the route',
-      servicesShow: 'show on the map',
-      servicesCapped: 'not all of them are shown — the nearby list was trimmed',
-      servicesHide: 'hide from the map',
-      servicesSearching: 'looking for what is nearby…',
-      serviceCat_кафе: 'cafés',
-      serviceCat_ресторан: 'restaurants',
-      serviceCat_гостиница: 'hotels',
-      serviceCat_туалет: 'toilets',
-      'serviceCat_остановка транспорта': 'transit stops',
+      // What the guide knows about the places beside the route, said plainly
+      // when one is tapped: how far off the line it is, whether its hours are
+      // known at all, and that the walk to reach it has not been worked out.
+      // The count that used to live here moved out with the summary card; the
+      // guide is never asked to *count* things, only to place them.
       serviceOffLine: '{{metres}} m off the route',
       serviceHoursUnknown: 'hours unknown',
       serviceNoDetour: 'time to reach it is not computed',

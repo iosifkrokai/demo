@@ -70,9 +70,12 @@ export function PlaceCardBody({
       onClick={(e) => e.stopPropagation()}
       onMouseDown={(e) => e.stopPropagation()}
     >
+      {/* `icon-lg` (40px), not `icon` (36px): the close button is the way out
+          of the card, and 40px is this project's floor for a finger target
+          (mobile/density.ts). Measured on the phone card before: 36×36. */}
       <Button
         variant="ghost"
-        size={mobile ? 'icon' : 'icon-xs'}
+        size={mobile ? 'icon-lg' : 'icon-xs'}
         onClick={onClose}
         className={
           mobile

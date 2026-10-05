@@ -1,6 +1,18 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
 
+/* `src/components/ui/` is NOT scanned by Tailwind's automatic source detection,
+   so a class referenced only from a shadcn primitive — a `cva` variant such as
+   button.tsx's `icon-lg: 'size-10'` — was silently dropped from the build: the
+   rule never existed, and the element fell back to whatever size it inherited.
+   Measured on the phone place card: its close button came out 16x16 instead of
+   the 40x40 the variant asks for, because `size-10` was missing while
+   `h-10`/`w-10` (referenced from our own components) were present.
+
+   Naming the directory makes those primitives part of the scan. `@source` is
+   additive, so the automatic detection keeps working for everything else. */
+@source './components/ui';
+
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {

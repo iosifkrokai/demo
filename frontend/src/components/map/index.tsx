@@ -33,7 +33,6 @@ import {
 } from '@/components/tiles/valhalla-layers';
 import { MarkerIcon, type MarkerColor } from './parts/marker-icon';
 import { ServicesLayer } from './parts/services-layer';
-import { ServicesSummary } from './parts/services-summary';
 import { PlaceCardPopup } from './parts/place-card-popup';
 import { PlaceMarkerLabel } from './parts/place-marker-label';
 import { MobilePlaceCard } from '@/components/mobile/mobile-place-card';
@@ -99,11 +98,21 @@ export const MapComponent = () => {
   const waypoints = useDirectionsStore((state) => state.waypoints);
   const placeDetails = useDirectionsStore((state) => state.placeDetails);
   const routeResult = useDirectionsStore((state) => state.results.data);
-  // Off by default and asked for by hand: a guide that *marks* cafés uninvited
-  // stops being a guide. The measurement itself runs whenever there is a route,
-  // because the count is what the guide owes the tourist («по пути: 12 мест») —
-  // it is the marks appearing unasked that would be pushy, not the number.
+  /**
+   * Whether the places beside the route are drawn.
+   *
+   * Asked for by hand on a wide screen, where the summary card offers the
+   * button: a guide that *marks* cafés uninvited stops being a guide.
+   *
+   * On a phone there is no card and no button — the owner read the count block
+   * as noise to get past — so the marks are simply always on. The alternative
+   * was marks that cannot be reached at all, which is worse than marks the
+   * tourist did not ask for: on a phone the map is the whole screen, a café
+   * icon on it reads as a thing that is there, and tapping it still says what
+   * it is and that its hours are unknown.
+   */
   const [showServices, setShowServices] = useState(false);
+  const servicesVisible = showServices || isMobile;
   const services = useServicesAlong(routeResult, {
     enabled: Boolean(routeResult),
   });
@@ -839,6 +848,14 @@ export const MapComponent = () => {
     []
   );
 
+  /** A real finger rather than a mouse: no hover, so no hover popup. */
+  const isTouch = useMemo(
+    () =>
+      typeof window !== 'undefined' &&
+      (window.matchMedia?.('(pointer: coarse)')?.matches ?? false),
+    []
+  );
+
   const handleMouseMove = useCallback(
     (event: maplibregl.MapLayerMouseEvent) => {
       if (!mapRef.current) return;
@@ -860,7 +877,12 @@ export const MapComponent = () => {
           features[0]?.layer?.id ===
             VALHALLA_ACCESS_RESTRICTIONS_TIMED_LAYER_ID);
 
-      if (isOverRoute) {
+      // A finger cannot hover, so on a touch screen there is nothing to hover
+      // with — and the popup it leaves behind (measured on 390x844: «Route
+      // Summary 7.2 km 1h 25m» sitting on the map under a synthetic pointer
+      // move) is a stale card the tourist cannot dismiss. The summary is on the
+      // panel and on the stops list anyway, so it is the mouse's job alone.
+      if (isOverRoute && !isTouch) {
         onRouteLineHover(event);
       } else if (isOverTiles) {
         const map = mapRef.current.getMap();
@@ -876,7 +898,7 @@ export const MapComponent = () => {
         }
       }
     },
-    [routeHoverPopup, onRouteLineHover]
+    [routeHoverPopup, onRouteLineHover, isTouch]
   );
 
   const handleMouseLeave = useCallback(() => {
@@ -1065,7 +1087,7 @@ export const MapComponent = () => {
           </Popup>
         )}
 
-        {showServices && <ServicesLayer items={services.items} />}
+        {servicesVisible && <ServicesLayer items={services.items} />}
       </Map>
 
       {(routeResult || guiding) && (
@@ -1080,22 +1102,29 @@ export const MapComponent = () => {
           data-testid="map-controls"
           className="absolute bottom-[calc(var(--sheet-h,0px)+0.75rem)] right-3 z-10 flex flex-col items-end gap-2 md:bottom-24 md:right-4"
         >
+          {/*
+            The «по пути: N мест» block is gone from every screen.
+
+            It began as a 176x130 card over the map and was already down to one
+            line on a phone by the time the owner asked for it to go — and it
+            was still the first thing between the tourist and the map, on the
+            wide screen too, where it sits above the guide's own compass. What
+            it said is not lost, only relocated: `/routes/services` still runs,
+            the marks still carry their names, distance and hours when tapped,
+            and the count a tourist wants is on the panel's stops list.
+
+            The button that turned the marks on stays, because without it they
+            could not be reached at all. It is a bare icon with the same
+            «что рядом по пути» label, which is what it was before the card grew
+            around it.
+          */}
           {routeResult && (
-            <ServicesSummary
-              items={services.items}
-              state={services.state}
-              maxOffLineM={services.maxOffLineM}
-              capped={services.capped}
+            <ToolButton
+              data-testid="services-toggle"
+              title={t('map.servicesToggle')}
               active={showServices}
-              toggle={
-                <ToolButton
-                  data-testid="services-toggle"
-                  title={t('map.servicesToggle')}
-                  active={showServices}
-                  icon={<Coffee className="h-4 w-4" />}
-                  onClick={() => setShowServices((on) => !on)}
-                />
-              }
+              icon={<Coffee className="h-4 w-4" />}
+              onClick={() => setShowServices((on) => !on)}
             />
           )}
 

@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 
@@ -149,6 +152,21 @@ describe('PlaceCardBody', () => {
     // English-language tourist read «Ещё факты» on an otherwise English card.
     render(<PlaceCardBody details={details()} onClose={() => {}} />);
     expect(screen.getByLabelText('Закрыть')).toBeInTheDocument();
+  });
+
+  // The close button's 40px comes from `size-10`, and `size-10` is referenced
+  // only inside src/components/ui/button.tsx. Tailwind does not scan that
+  // directory on its own, so before index.css named it as a source the class was
+  // dropped from the build with no error at all — and this button measured
+  // 16x16 on the phone while every test was green. Both halves are pinned here:
+  // the button asks for a real utility, and the stylesheet really scans the
+  // directory that defines it.
+  it('берёт мишень закрытия из реальной утилиты, а не из воздуха', () => {
+    render(<PlaceCardBody details={details()} onClose={() => {}} mobile />);
+    expect(screen.getByLabelText('Закрыть').className).toContain('size-10');
+
+    const css = readFileSync(resolve(process.cwd(), 'src/index.css'), 'utf8');
+    expect(css).toMatch(/@source\s+['\"]\.\/components\/ui['\"]/);
   });
 
   it('closes on the close button', () => {

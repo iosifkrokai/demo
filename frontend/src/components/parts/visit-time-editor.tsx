@@ -64,7 +64,11 @@ export const VisitTimeEditor = ({
     'inline-flex items-center gap-1 rounded-full border border-border bg-card px-2 py-0.5',
     'text-meta text-muted-foreground transition-colors hover:bg-muted hover:text-foreground',
     'data-[state=open]:border-ring data-[state=open]:text-foreground',
-    compact && 'px-1.5'
+    compact && 'px-1.5',
+    // In a list row on a phone the chip gets its own column now, so it keeps
+    // its pill — but 40px tall, because it is a button the tourist taps, and a
+    // 20px one is under the finger floor. Desktop is unchanged.
+    compact && 'max-md:h-10'
   );
 
   const stepClass =
