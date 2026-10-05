@@ -1,0 +1,153 @@
+<mxfile host="app.diagrams.net">
+  <diagram id="agent-flow" name="Флоу агента">
+    <mxGraphModel dx="1600" dy="1200" grid="1" gridSize="10" page="1" pageWidth="1400" pageHeight="2200" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- ============ main column ============ -->
+        <mxCell id="client" value="Клиент (фронт)&#10;телефон: GPS + запрос" style="rounded=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="440" y="40" width="240" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="api" value="POST /routes/generate&#10;(main.py) + GET /routes/progress/{id}" style="rounded=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="440" y="130" width="240" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="base_q" value="context.base_points&#10;есть?" style="rhombus;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="500" y="210" width="120" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="pre" value="0. Preprocess — нормализация текста, язык, fingerprint" style="rounded=1;whiteSpace=wrap;" vertex="1" parent="1">
+          <mxGeometry x="440" y="320" width="240" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="interp" value="1. Interpret → TripRequirements&#10;planner/agent_interpret.py: LLM-агент (deepseek v4.1 flash через OpenRouter, ≤24 tool calls, ≤12 ходов, 8192 ток.)&#10;инструменты: find_areas, search_places, get_place_facts, services_near_route&#10;фолбэк без ключа/при сбое: детерминированный intent.py; кэш interpret_cache" style="rounded=1;fillColor=#e1d5e7;strokeColor=#9673a6;whiteSpace=wrap;align=left;spacingLeft=8;" vertex="1" parent="1">
+          <mxGeometry x="400" y="400" width="320" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="resolve" value="2. Resolve → Constraints&#10;(scope: город/область, бюджет времени, must-visit, bbox)" style="rounded=1;whiteSpace=wrap;" vertex="1" parent="1">
+          <mxGeometry x="440" y="530" width="240" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="cov_q" value="Имя вне покрытия&#10;(Вильнюс и пр.)?" style="rhombus;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="500" y="620" width="120" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="refuse" value="Отказ out-of-coverage&#10;(не маршрут в Лида!)" style="rounded=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="760" y="635" width="200" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="embed" value="Embed запроса (openai/text-embedding-3-small)&#10;нет ключа/сбой → пустой вектор, keyword-only" style="rounded=1;whiteSpace=wrap;" vertex="1" parent="1">
+          <mxGeometry x="420" y="730" width="280" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="retrieve" value="3. Retrieve: RRF(вектор + ключевые слова) + geo-якорь&#10;(GPS туриста / area_anchor / must-visit)" style="rounded=1;whiteSpace=wrap;" vertex="1" parent="1">
+          <mxGeometry x="420" y="810" width="280" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="dedupe" value="Дедуп физ. дублей (один замок под двумя именами)&#10;+ выкинуть excluded_ids («убери форт» руками)" style="rounded=1;whiteSpace=wrap;" vertex="1" parent="1">
+          <mxGeometry x="420" y="890" width="280" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="cat_q" value="result_mode&#10;= catalogue?" style="rhombus;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="500" y="970" width="120" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="catalogue" value="Каталог по городам, без оптимизации&#10;(«покажи что есть» — выбор за туристом)" style="rounded=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="760" y="985" width="220" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="geo" value="3.6 Geo focus (радиус от якоря, skip при region_scope)&#10;4. MMR-разнообразие — только при заданном бюджете времени" style="rounded=1;whiteSpace=wrap;" vertex="1" parent="1">
+          <mxGeometry x="420" y="1080" width="280" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="sights" value="Разделение: достопримечательности — стопы,&#10;сервисы (кафе/туалеты) — на линию. Если достопримечательностей &lt;3&#10;→ повторный retrieve без слов запроса" style="rounded=1;whiteSpace=wrap;" vertex="1" parent="1">
+          <mxGeometry x="420" y="1170" width="280" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="trim" value="Дедлайн-трим: осталось &lt; COST_MATRIX_MIN_LEFT_S&#10;→ режем пул до POOL_TRIM_SIZE по релевантности" style="rounded=1;whiteSpace=wrap;" vertex="1" parent="1">
+          <mxGeometry x="420" y="1270" width="280" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="cost" value="5. Матрица стоимостей (Valhalla matrix sources_to_targets)&#10;+ выкинуть несоединимые кандидаты" style="rounded=1;whiteSpace=wrap;" vertex="1" parent="1">
+          <mxGeometry x="420" y="1350" width="280" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="opt" value="6. Optimize порядок&#10;ретраи: collapse → только достопримечательности →&#10;весь пул с сервисами; иначе 422" style="rounded=1;whiteSpace=wrap;" vertex="1" parent="1">
+          <mxGeometry x="420" y="1430" width="280" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="vorder" value="6b. Valhalla optimized_route пере-упорядочивает&#10;(skip при дедлайне, region-тур и без него 60 с+)" style="rounded=1;whiteSpace=wrap;" vertex="1" parent="1">
+          <mxGeometry x="420" y="1520" width="280" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="prune" value="6c. Prune несоединимых стопов; must-visit не бросаем —&#10;отчёт в verifier" style="rounded=1;whiteSpace=wrap;" vertex="1" parent="1">
+          <mxGeometry x="420" y="1600" width="280" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="validate" value="7. Validate → Plan" style="rounded=1;whiteSpace=wrap;" vertex="1" parent="1">
+          <mxGeometry x="420" y="1680" width="280" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="render" value="8. Render: Valhalla /route — геометрия от GPS-старта&#10;(skip при дедлайне → degraded, geometry_missing)" style="rounded=1;whiteSpace=wrap;" vertex="1" parent="1">
+          <mxGeometry x="420" y="1750" width="280" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="explain" value="9. Explain — человекочитаемый текст маршрута" style="rounded=1;whiteSpace=wrap;" vertex="1" parent="1">
+          <mxGeometry x="420" y="1830" width="280" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="verify" value="9b. Verify (ДЕТЕРМИНИРОВАННЫЙ, модель не голосует)&#10;по каждому требованию против финального маршрута +&#10;services along route; unmet hard — честно reported" style="rounded=1;fillColor=#e1d5e7;strokeColor=#9673a6;whiteSpace=wrap;" vertex="1" parent="1">
+          <mxGeometry x="400" y="1900" width="320" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="resp" value="RouteResponse: stops, geometry, explanation, status, debug (дедлайн, refinement)&#10;прогресс стадий клиенту через /routes/progress" style="rounded=1;fillColor=#d5e8d4;strokeColor=#82b366;whiteSpace=wrap;" vertex="1" parent="1">
+          <mxGeometry x="400" y="2000" width="320" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- ============ refinement column ============ -->
+        <mxCell id="ref_title" value="ДОРАБОТКА (refinement) — базовые стопы святы, 422 невозможен" style="rounded=1;fillColor=#ffe6cc;strokeColor=#d79b00;whiteSpace=wrap;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="80" y="320" width="260" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="rbase" value="Базовый маршрут из context&#10;(_refinement_base)" style="rounded=1;whiteSpace=wrap;" vertex="1" parent="1">
+          <mxGeometry x="90" y="400" width="240" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="rinterp" value="interpret_refinement (детерминированный)&#10;→ операция: reorder / add / remove / none / unsupported" style="rounded=1;whiteSpace=wrap;" vertex="1" parent="1">
+          <mxGeometry x="90" y="490" width="240" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="rops" value="reorder: по времени/расстоянию&#10;add: кафе/туалеты вдоль маршрута, база сохраняется&#10;remove/unsupported: маршрут без изменений + reason_code" style="rounded=1;whiteSpace=wrap;align=left;spacingLeft=8;" vertex="1" parent="1">
+          <mxGeometry x="90" y="590" width="240" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="rcost" value="Матрица best-effort (база выживает даже без неё)&#10;→ validate → render → verify → ответ с debug.refinement" style="rounded=1;whiteSpace=wrap;" vertex="1" parent="1">
+          <mxGeometry x="90" y="700" width="240" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- ============ edges ============ -->
+        <mxCell id="e1" style="edgeStyle=orthogonalEdgeStyle;" edge="1" parent="1" source="client" target="api"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e2" style="edgeStyle=orthogonalEdgeStyle;" edge="1" parent="1" source="api" target="base_q"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e3" value="нет — новый запрос" style="edgeStyle=orthogonalEdgeStyle;fontSize=10;" edge="1" parent="1" source="base_q" target="pre"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e4" value="да" style="edgeStyle=orthogonalEdgeStyle;exitX=0;exitY=0.5;fontSize=10;" edge="1" parent="1" source="base_q" target="rbase"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e5" style="edgeStyle=orthogonalEdgeStyle;" edge="1" parent="1" source="pre" target="interp"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e6" style="edgeStyle=orthogonalEdgeStyle;" edge="1" parent="1" source="interp" target="resolve"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e7" style="edgeStyle=orthogonalEdgeStyle;" edge="1" parent="1" source="resolve" target="cov_q"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e8" value="да" style="edgeStyle=orthogonalEdgeStyle;exitX=1;exitY=0.5;fontSize=10;" edge="1" parent="1" source="cov_q" target="refuse"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e9" value="нет" style="edgeStyle=orthogonalEdgeStyle;fontSize=10;" edge="1" parent="1" source="cov_q" target="embed"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e10" style="edgeStyle=orthogonalEdgeStyle;" edge="1" parent="1" source="embed" target="retrieve"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e11" style="edgeStyle=orthogonalEdgeStyle;" edge="1" parent="1" source="retrieve" target="dedupe"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e12" style="edgeStyle=orthogonalEdgeStyle;" edge="1" parent="1" source="dedupe" target="cat_q"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e13" value="да" style="edgeStyle=orthogonalEdgeStyle;exitX=1;exitY=0.5;fontSize=10;" edge="1" parent="1" source="cat_q" target="catalogue"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e14" value="нет — прогулка" style="edgeStyle=orthogonalEdgeStyle;fontSize=10;" edge="1" parent="1" source="cat_q" target="geo"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e15" style="edgeStyle=orthogonalEdgeStyle;" edge="1" parent="1" source="geo" target="sights"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e16" style="edgeStyle=orthogonalEdgeStyle;" edge="1" parent="1" source="sights" target="trim"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e17" style="edgeStyle=orthogonalEdgeStyle;" edge="1" parent="1" source="trim" target="cost"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e18" style="edgeStyle=orthogonalEdgeStyle;" edge="1" parent="1" source="cost" target="opt"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e19" style="edgeStyle=orthogonalEdgeStyle;" edge="1" parent="1" source="opt" target="vorder"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e20" style="edgeStyle=orthogonalEdgeStyle;" edge="1" parent="1" source="vorder" target="prune"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e21" style="edgeStyle=orthogonalEdgeStyle;" edge="1" parent="1" source="prune" target="validate"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e22" style="edgeStyle=orthogonalEdgeStyle;" edge="1" parent="1" source="validate" target="render"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e23" style="edgeStyle=orthogonalEdgeStyle;" edge="1" parent="1" source="render" target="explain"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e24" style="edgeStyle=orthogonalEdgeStyle;" edge="1" parent="1" source="explain" target="verify"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e25" style="edgeStyle=orthogonalEdgeStyle;" edge="1" parent="1" source="verify" target="resp"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="er1" style="edgeStyle=orthogonalEdgeStyle;" edge="1" parent="1" source="rbase" target="rinterp"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="er2" style="edgeStyle=orthogonalEdgeStyle;" edge="1" parent="1" source="rinterp" target="rops"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="er3" style="edgeStyle=orthogonalEdgeStyle;" edge="1" parent="1" source="rops" target="rcost"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="er4" value="тот же RouteResponse" style="edgeStyle=orthogonalEdgeStyle;entryX=0;entryY=0.5;fontSize=10;" edge="1" parent="1" source="rcost" target="resp"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <!-- external deps -->
+        <mxCell id="valhalla" value="Valhalla :8002&#10;matrix / optimized_route / route&#10;лимиты: пешеход 250 км, ≤50 точек" style="rounded=0;dashed=1;fillColor=#f5f5f5;strokeColor=#666666;whiteSpace=wrap;" vertex="1" parent="1">
+          <mxGeometry x="840" y="1350" width="240" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="ev1" style="dashed=1;exitX=0;exitY=0.5;" edge="1" parent="1" source="valhalla" target="cost"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ev2" style="dashed=1;exitX=0.5;exitY=0;" edge="1" parent="1" source="valhalla" target="vorder"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ev3" style="dashed=1;exitX=0.75;exitY=0;entryX=1;entryY=0.5;" edge="1" parent="1" source="valhalla" target="render"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="db" value="PostgreSQL (pgdata)&#10;POI, области, эмбеддинги 1536" style="rounded=0;dashed=1;fillColor=#f5f5f5;strokeColor=#666666;whiteSpace=wrap;" vertex="1" parent="1">
+          <mxGeometry x="840" y="900" width="240" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="edb1" style="dashed=1;exitX=0;exitY=0.5;entryX=1;entryY=0.5;" edge="1" parent="1" source="db" target="retrieve"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="edb2" style="dashed=1;exitX=0.25;exitY=0;entryX=1;entryY=0.5;" edge="1" parent="1" source="db" target="interp"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="llm" value="OpenRouter&#10;deepseek/deepseek-v4.1-flash (AGENT_INTERPRET_MODEL)&#10;лимит $11 исчерпан — платные вызовы упрутся" style="rounded=0;dashed=1;fillColor=#f5f5f5;strokeColor=#666666;whiteSpace=wrap;" vertex="1" parent="1">
+          <mxGeometry x="840" y="410" width="240" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="ellm" style="dashed=1;exitX=0;exitY=0.5;entryX=1;entryY=0.5;" edge="1" parent="1" source="llm" target="interp"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
