@@ -13,6 +13,7 @@ import {
   History,
   Loader2,
   LocateFixed,
+  MapPin,
   Minus,
   Plus,
   RotateCcw,
@@ -48,7 +49,9 @@ import { MobileSection } from './mobile/mobile-section';
 import { HistoryTab } from './parts/history-tab';
 import { PlanVerdict } from './parts/plan-verdict';
 import { ItinerariesTab } from './parts/itineraries-tab';
+import { PlacesTab } from './parts/places-tab';
 import { useItineraries } from '@/hooks/use-itineraries';
+import { usePlaces } from '@/hooks/use-places';
 import type { Itinerary } from '@/api/types';
 import { guideModeFor } from './parts/guide-mode';
 import { decimalRu } from '@/utils/plural';
@@ -138,7 +141,7 @@ const buildTransportOptions = (
  * navigation UI takes over, tabs and all. So `guiding` is a separate state (see
  * the panel header and the footer), not a view.
  */
-export type PanelView = 'plan' | 'history' | 'itineraries';
+export type PanelView = 'plan' | 'history' | 'itineraries' | 'places';
 
 /**
  * The strip's tabs, in the order the tourist actually works: plan a route, take
@@ -159,6 +162,12 @@ const buildViews = (t: TFunction): SegmentedItem<PanelView>[] => [
     short: t('tabs.itinerariesShort'),
     icon: Sparkles,
   },
+  {
+    value: 'places',
+    label: t('tabs.places'),
+    short: t('tabs.placesShort'),
+    icon: MapPin,
+  },
   { value: 'history', label: t('tabs.history'), icon: History },
 ];
 
@@ -166,6 +175,7 @@ const buildViews = (t: TFunction): SegmentedItem<PanelView>[] => [
 const buildViewSubtitles = (t: TFunction): Record<PanelView, string> => ({
   plan: t('tabSubtitles.plan'),
   itineraries: t('tabSubtitles.itineraries'),
+  places: t('tabSubtitles.places'),
   history: t('tabSubtitles.history'),
 });
 
@@ -464,6 +474,7 @@ export const Sidebar = ({
   // action on a ready route, left by «выйти» in its own header.
   const [guiding, setGuiding] = useState(false);
   const setGuidingStore = useCommonStore((s) => s.setGuiding);
+  const setPlacesVisible = useCommonStore((s) => s.setPlacesVisible);
   const placeDetails = useDirectionsStore((s) => s.placeDetails);
   const [timeBudget, setTimeBudget] = useState(0); // 0 = без ограничения
   // '' = «как удобно»: no transport constraint, the agent picks the costing
@@ -590,6 +601,20 @@ export const Sidebar = ({
     error: itinerariesError,
     reload: reloadItineraries,
   } = useItineraries({ enabled: mode === 'itineraries' });
+
+  const {
+    places,
+    total: placesTotal,
+    isLoading: placesLoading,
+    error: placesError,
+    reload: reloadPlaces,
+  } = usePlaces({ enabled: mode === 'places' });
+
+  // The map draws the whole catalogue only while this tab is on screen. Publish
+  // it on every switch so the two never disagree about what is being looked at.
+  useEffect(() => {
+    setPlacesVisible(mode === 'places');
+  }, [mode, setPlacesVisible]);
 
   // The caller may own the position (mobile shell); otherwise the panel does.
   const { snap: ownSnap, handleProps: ownHandleProps } = useSheetSnap();
@@ -1575,6 +1600,14 @@ export const Sidebar = ({
             onReload={reloadItineraries}
             onOpen={openItinerary}
             disabled={busy}
+          />
+        ) : mode === 'places' ? (
+          <PlacesTab
+            places={places}
+            total={placesTotal}
+            isLoading={placesLoading}
+            error={placesError}
+            onReload={reloadPlaces}
           />
         ) : (
           <>

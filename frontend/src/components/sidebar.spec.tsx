@@ -67,6 +67,17 @@ vi.mock('@/hooks/use-itineraries', () => ({
   }),
 }));
 
+vi.mock('@/hooks/use-places', () => ({
+  usePlaces: () => ({
+    places: [],
+    total: 0,
+    capped: false,
+    isLoading: false,
+    error: null,
+    reload: vi.fn(),
+  }),
+}));
+
 vi.mock('@/stores/common-store', () => ({
   useCommonStore: (selector: (s: Record<string, unknown>) => unknown) =>
     selector({
@@ -81,6 +92,8 @@ vi.mock('@/stores/common-store', () => ({
       setGuideFix: vi.fn(),
       setGuiding: vi.fn(),
       setGuideTurnDistanceM: vi.fn(),
+      placesVisible: false,
+      setPlacesVisible: vi.fn(),
     }),
 }));
 

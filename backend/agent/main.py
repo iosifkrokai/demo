@@ -31,6 +31,7 @@ from . import (
     clients_api,
     constants,
     itineraries as itineraries_mod,
+    places as places_mod,
     progress,
     services as services_mod,
 )
@@ -215,6 +216,15 @@ def itineraries() -> dict:
             status_code=503, detail={"reason": "itineraries_unavailable"}
         ) from exc
     return {"items": items, "missing": missing}
+
+
+@app.get("/places")
+def places() -> dict:
+    """The full point catalogue — every place in the dataset, for the «все точки»
+    tab. A browse, not a search: no model is involved and nothing is capped by a
+    query, so the tourist can see all of it at once.
+    """
+    return places_mod.list_places(app.state.planner.db)
 
 
 @app.post("/routes/services")

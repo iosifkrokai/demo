@@ -54,6 +54,12 @@ interface CommonState {
   /** True while the guide (Проводник) is running. */
   guiding: boolean;
   /**
+   * True while the panel is on the «Все точки» tab. The map reads this to draw
+   * the whole catalogue as a layer, and the panel writes it on every tab switch
+   * so the two never disagree about what is on screen.
+   */
+  placesVisible: boolean;
+  /**
    * Metres to the next turn, published by the guide so the camera can behave
    * like a navigator instead of a viewer: it closes in as the turn comes.
    * null while there is no line, no trusted fix, or nothing to turn into.
@@ -85,6 +91,7 @@ interface CommonActions {
   focusOn: (lng: number, lat: number) => void;
   setGuideFix: (fix: CommonState['guideFix']) => void;
   setGuiding: (guiding: boolean) => void;
+  setPlacesVisible: (visible: boolean) => void;
   setGuideTurnDistanceM: (metres: number | null) => void;
 }
 
@@ -110,12 +117,15 @@ export const useCommonStore = create<CommonStore>()(
       focus: null,
       guideFix: null,
       guiding: false,
+      placesVisible: false,
       guideTurnDistanceM: null,
 
       focusOn: (lng, lat) =>
         set({ focus: { lng, lat, at: Date.now() } }, undefined, 'focusOn'),
       setGuideFix: (fix) => set({ guideFix: fix }, undefined, 'setGuideFix'),
       setGuiding: (guiding) => set({ guiding }, undefined, 'setGuiding'),
+      setPlacesVisible: (placesVisible) =>
+        set({ placesVisible }, undefined, 'setPlacesVisible'),
       setGuideTurnDistanceM: (metres) =>
         set({ guideTurnDistanceM: metres }, undefined, 'setGuideTurnDistanceM'),
 

@@ -180,6 +180,7 @@ vi.mock('@/stores/common-store', () => ({
       focusOn: vi.fn(),
       setGuideFix: vi.fn(),
       setGuiding: vi.fn(),
+      placesVisible: false,
     };
     return selector(state);
   }),
@@ -235,6 +236,17 @@ vi.mock('@/hooks/use-isochrones-queries', () => ({
   })),
   useReverseGeocodeIsochrones: vi.fn(() => ({
     reverseGeocode: vi.fn().mockResolvedValue([]),
+  })),
+}));
+
+vi.mock('@/hooks/use-places', () => ({
+  usePlaces: vi.fn(() => ({
+    places: [],
+    total: 0,
+    capped: false,
+    isLoading: false,
+    error: null,
+    reload: vi.fn(),
   })),
 }));
 
