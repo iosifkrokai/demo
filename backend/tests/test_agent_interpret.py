@@ -28,7 +28,7 @@ from pydantic_ai.models.function import AgentInfo, FunctionModel
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agent import areas as areas_mod, tools
+from agent import areas as areas_mod, tools, trace
 from agent.config import settings
 from agent.models import GenerateReq
 from agent.planner import agent_interpret as ai
@@ -377,6 +377,66 @@ def test_llm_only_reading_is_tagged_llm(fake_key, no_db, monkeypatch):
     tr = ai.interpret_with_agent("замки", GenerateReq(query="замки"))
     assert tr is not None and tr.source == "llm"
     assert tr.interest_codes() == ["замок"]
+
+
+# ── (b2) what the trace says about the call to the model ────────────────────
+# A reader of a trace can see the reading the pipeline got; only the prompt says
+# *why* it got it. These pin the prompt, the tokens and the failure case.
+
+
+def _model_spans(trace_id: str) -> list:
+    tracked = trace._traces.get(trace_id)
+    return [s for s in tracked.spans if s.kind == "generation"] if tracked else []
+
+
+def test_the_model_call_carries_the_prompt_it_was_given(fake_run):
+    trace.begin("job-model")
+    try:
+        tr = ai.interpret_with_agent(QUERY, GenerateReq(query=QUERY, locale="ru"))
+        call, = _model_spans("job-model")
+    finally:
+        trace.finish()
+
+    assert tr is not None
+    assert call.name == "interpret · model"
+    assert call.model == ai.DEFAULT_MODEL
+    system, user = call.input
+    assert system["role"] == "system" and "Grodno region" in system["content"]
+    assert user["role"] == "user"
+    # The request as the model saw it, not only the reading that came back.
+    assert f"request={QUERY!r}" in user["content"]
+    assert call.output["children"] == 2  # the answer, as the model returned it
+    assert set(call.usage) == {"input", "output", "total"}
+    assert call.usage["total"] == call.usage["input"] + call.usage["output"]
+    assert call.facts["requests"] >= 1
+
+
+def test_an_answer_that_is_not_a_reading_is_recorded_as_an_error():
+    """«The agent fell back to the deterministic path» must be explainable."""
+
+    class Response:
+        text = "не JSON вовсе"
+
+    class Result:
+        output = "не JSON вовсе"
+        usage = None
+        response = Response()
+
+    trace.begin("job-bad-answer")
+    try:
+        ai._record_model_call(GenerateReq(query=QUERY), "request='...'", Result())
+        call, = _model_spans("job-bad-answer")
+    finally:
+        trace.finish()
+
+    assert call.status == "error"
+    # What it actually said, so the failure is readable rather than merely known.
+    assert call.output == "не JSON вовсе"
+    # No usage was reported, so there is nothing to say about tokens — but the
+    # call did reach the model, and saying so is the point of the flag: the
+    # cache-hit span carries `cached=True`, and without this one a reader could
+    # not tell the two apart.
+    assert call.usage is None and call.facts == {"cached": False}
 
 
 # ── (c) tool caps, and tools never raise at the agent ──────────────────────

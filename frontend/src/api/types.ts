@@ -193,6 +193,25 @@ export interface ItineraryList {
 }
 
 /**
+ * One point of the full catalogue (`GET /places`), for the «все точки» tab.
+ *
+ * Same shape as a ready-made route stop: the agent reads both from the same
+ * `places` table through the same payload, so a card prints identical facts
+ * whether the point came from a plan, an itinerary or the whole-map browse.
+ */
+export type Place = ItineraryStop;
+
+export interface PlacesAnswer {
+  items: Place[];
+  total: number;
+  /**
+   * True when the agent cut the list at its own cap — a backstop against a
+   * runaway query, never a feature. The Grodno dataset fits in one answer.
+   */
+  capped: boolean;
+}
+
+/**
  * A route line as Valhalla and the agent both speak it (WGS84, GeoJSON).
  *
  * The app already holds this for the line it draws, so asking «что есть по

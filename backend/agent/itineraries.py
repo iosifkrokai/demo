@@ -75,30 +75,13 @@ def _resolve_stops(conn: Any, keys: list[str]) -> tuple[dict[str, dict], list[st
 def _stop_payload(row: dict) -> dict:
     """One stop, in the shape the panel prints. Numbers stay numbers.
 
-    `fun_facts` and `links` are text columns holding JSON; they are read with the
-    planner's own parsers so a card and a planned route cannot disagree about the
-    same place.
+    A stop is a place like any other, so the payload is the catalogue's own
+    (`places.place_payload`): a card and a planned route must not disagree about
+    the same point.
     """
-    from .planner.retrieve import parse_fun_facts, parse_links, parse_photo
+    from .places import place_payload
 
-    return {
-        "place_id": row["id"],
-        "source_url": row["source_url"],
-        "name": row["name"],
-        "category": row["category"],
-        "town": row["town"],
-        "district": row["district"],
-        "lat": row["lat"],
-        "lon": row["lon"],
-        "visit_minutes": row["visit_minutes"],
-        "opening_hours": row["opening_hours"],
-        "blurb": row["blurb"],
-        "fun_fact": row["fun_fact"],
-        "fun_facts": parse_fun_facts(row.get("fun_facts")),
-        "links": parse_links(row.get("links")),
-        "photo": parse_photo(row),
-        "ticket_price": row.get("ticket_price"),
-    }
+    return place_payload(row)
 
 
 def _split_by_role(payloads: list[dict[str, Any]]) -> tuple[list[dict], list[dict]]:

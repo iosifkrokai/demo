@@ -37,6 +37,7 @@ import {
   PHONE_MIN_GAP_PX,
   ServicesLayer,
 } from './parts/services-layer';
+import { PlacesLayer, PLACES_POINTS_LAYER_ID } from './parts/places-layer';
 import { PlaceCardPopup } from './parts/place-card-popup';
 import { PlaceMarkerLabel } from './parts/place-marker-label';
 import { MobilePlaceCard } from '@/components/mobile/mobile-place-card';
@@ -46,8 +47,14 @@ import { getInitialMapPosition, LAST_CENTER_KEY } from './utils';
 import { useCommonStore } from '@/stores/common-store';
 import { useTranslation } from 'react-i18next';
 import { Coffee, LocateFixed, Navigation } from 'lucide-react';
-import { ME_WAYPOINT_ID, useDirectionsStore } from '@/stores/directions-store';
+import {
+  ME_WAYPOINT_ID,
+  useDirectionsStore,
+  type PlaceDetails,
+} from '@/stores/directions-store';
 import { useServicesAlong } from '@/hooks/use-services-along';
+import { usePlaces } from '@/hooks/use-places';
+import type { Place } from '@/api/types';
 import { useIsochronesStore } from '@/stores/isochrones-store';
 import {
   useDirectionsQuery,
@@ -73,6 +80,24 @@ interface MarkerData {
   // Set for agent-generated stops: drives the label + card next to the marker.
   placeId?: number;
 }
+
+/** A catalogue row → the card the map already knows how to draw. The «все
+ * точки» circles reuse the waypoint card, so the raw row is shaped into the
+ * same `PlaceDetails` the agent route publishes. */
+const placeToDetails = (place: Place): PlaceDetails => ({
+  name: place.name,
+  category: place.category,
+  blurb: place.blurb,
+  funFact: place.fun_fact,
+  funFacts: place.fun_facts,
+  links: place.links,
+  visitMinutes: place.visit_minutes,
+  openingHours: place.opening_hours,
+  ticketPrice: place.ticket_price,
+  town: place.town,
+  district: place.district,
+  photo: place.photo,
+});
 
 export const MapComponent = () => {
   const { activeTab } = useParams({ from: '/$activeTab' });
@@ -102,6 +127,11 @@ export const MapComponent = () => {
   } | null>(null);
   const waypoints = useDirectionsStore((state) => state.waypoints);
   const placeDetails = useDirectionsStore((state) => state.placeDetails);
+  const placesVisible = useCommonStore((state) => state.placesVisible);
+  // The whole catalogue, fetched once and shared with the panel list through
+  // the ['places'] query key. `placesVisible` gates the fetch, so a tourist who
+  // never opens the «Все точки» tab never downloads ~2.5k rows.
+  const { places } = usePlaces({ enabled: placesVisible });
   const routeResult = useDirectionsStore((state) => state.results.data);
   /**
    * Whether the places beside the route are drawn.
@@ -153,8 +183,18 @@ export const MapComponent = () => {
     lng: number;
     lat: number;
   } | null>(null);
+  // The card shows whichever source knows this stop: the agent route's curated
+  // `placeDetails`, or the raw catalogue when the tourist tapped a circle.
+  const placesDetails = useMemo<Record<number, PlaceDetails>>(() => {
+    const map: Record<number, PlaceDetails> = {};
+    for (const place of places) map[place.place_id] = placeToDetails(place);
+    return map;
+  }, [places]);
+
   const activeDetails =
-    activePlace != null ? placeDetails[activePlace.id] : undefined;
+    activePlace != null
+      ? (placesDetails[activePlace.id] ?? placeDetails[activePlace.id])
+      : undefined;
   const [viewState, setViewState] = useState({
     longitude: center[0],
     latitude: center[1],
@@ -678,6 +718,27 @@ export const MapComponent = () => {
         return;
       }
 
+      // A tap on a «все точки» circle: open the same card a waypoint marker
+      // opens, keyed by the feature's own placeId. Any pending plain-click
+      // timer is dropped so it cannot close the card that just opened.
+      const placeFeature = event.features?.find(
+        (f) => f.layer?.id === PLACES_POINTS_LAYER_ID
+      );
+      if (
+        placeFeature &&
+        typeof placeFeature.properties?.placeId === 'number'
+      ) {
+        cancelPendingClick();
+        markerClickRef.current = true;
+        const geometry = placeFeature.geometry;
+        const [lng, lat] =
+          geometry != null && geometry.type === 'Point'
+            ? (geometry.coordinates as [number, number])
+            : [event.lngLat.lng, event.lngLat.lat];
+        setActivePlace({ id: placeFeature.properties.placeId, lng, lat });
+        return;
+      }
+
       const { lngLat } = event;
 
       cancelPendingClick();
@@ -881,6 +942,7 @@ export const MapComponent = () => {
             VALHALLA_ACCESS_RESTRICTIONS_PERMANENT_LAYER_ID ||
           features[0]?.layer?.id ===
             VALHALLA_ACCESS_RESTRICTIONS_TIMED_LAYER_ID);
+      const isOverPlaces = topLayerId === PLACES_POINTS_LAYER_ID;
 
       // A finger cannot hover, so on a touch screen there is nothing to hover
       // with — and the popup it leaves behind (measured on 390x844: «Route
@@ -889,7 +951,7 @@ export const MapComponent = () => {
       // panel and on the stops list anyway, so it is the mouse's job alone.
       if (isOverRoute && !isTouch) {
         onRouteLineHover(event);
-      } else if (isOverTiles) {
+      } else if (isOverTiles || isOverPlaces) {
         const map = mapRef.current.getMap();
         map.getCanvas().style.cursor = 'pointer';
       } else {
@@ -936,8 +998,9 @@ export const MapComponent = () => {
                 VALHALLA_SHORTCUTS_LAYER_ID,
                 VALHALLA_ACCESS_RESTRICTIONS_PERMANENT_LAYER_ID,
                 VALHALLA_ACCESS_RESTRICTIONS_TIMED_LAYER_ID,
+                PLACES_POINTS_LAYER_ID,
               ]
-            : ['routes-line', 'routes-hit-target']
+            : ['routes-line', 'routes-hit-target', PLACES_POINTS_LAYER_ID]
         }
         mapStyle={resolvedMapStyle}
         style={{ width: '100%', height: '100vh' }}
@@ -1091,6 +1154,8 @@ export const MapComponent = () => {
             />
           </Popup>
         )}
+
+        {placesVisible && <PlacesLayer places={places} />}
 
         {/* On a phone only a handful of marks are drawn — see ServicesLayer for
             the measurement that set it. A wide screen has the room for all. */}

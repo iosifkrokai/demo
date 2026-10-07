@@ -18,6 +18,7 @@ own AgentError onto HTTP and never turns a degraded upstream into a bare 500.
 from __future__ import annotations
 
 import logging
+import uuid
 from collections.abc import Callable
 from contextlib import asynccontextmanager
 from typing import Any
@@ -31,8 +32,10 @@ from . import (
     clients_api,
     constants,
     itineraries as itineraries_mod,
+    places as places_mod,
     progress,
     services as services_mod,
+    trace,
 )
 from .config import openrouter_api_key, settings
 from .errors import AgentError, NoRoutePossible
@@ -73,6 +76,7 @@ async def lifespan(_: FastAPI):
             + "deterministic interpretation (routes are still built)"
         )
     yield
+    trace.shutdown()
     db.close()
 
 
@@ -153,22 +157,59 @@ def _no_route_response(req: GenerateReq, detail: str) -> RouteResponse:
 def generate(req: GenerateReq) -> RouteResponse:
     """Build a route. With a `progress_id`, the work is reported as it happens."""
     progress.begin(req.progress_id)
+    trace.begin(req.progress_id, session_id=req.session_id)
     try:
         try:
             return app.state.planner.generate(req=req)
         except NoRoutePossible as exc:
             # Caught before the generic AgentError mapping below, which would
             # have re-labelled it as a 422 carrying the optimizer's sentence.
+            # ``plan_status``, not ``status``: the second argument to record() is
+            # the step's fate (ok/skipped/error) — a verdict passed there is
+            # swallowed into the level and lost from the trace.
+            trace.record(
+                "response",
+                input={"query": req.query, "budget_minutes": req.time_budget_minutes},
+                plan_status="infeasible",
+                reason="no_route_possible",
+            )
             return _no_route_response(req, str(exc))
         except AgentError as exc:
             # Everything else keeps its own status (404 / 422 / 503): those are
             # real refusals and upstream outages the client distinguishes.
+            trace.record(
+                "response",
+                "error",  # this one really is a failed step, so it is marked red
+                input={"query": req.query, "budget_minutes": req.time_budget_minutes},
+                plan_status="error",
+                reason=type(exc).__name__,
+                http_status=exc.http_status,
+            )
             raise HTTPException(status_code=exc.http_status, detail=str(exc)) from exc
     finally:
         # The tracker stops being interesting the moment the answer exists — and
         # on failure too, so a client polling a rejected request is told so
         # instead of watching a stage freeze.
         progress.finish()
+        trace.finish()
+
+
+@app.get("/routes/trace/{trace_id}")
+def route_trace(trace_id: str) -> dict:
+    """The structured spans of one run, for a client that wants them raw.
+
+    The same spans are exported to the self-hosted Langfuse (see trace.py); this
+    endpoint is the machine-readable fallback. An unknown id is a 404 with a
+    reason code, not an empty trace — «этого запуска нет» and «запуск ещё
+    ничего не сделал» are different things.
+    """
+    data = trace.get(trace_id)
+    if data is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"reason": "unknown_trace_id"},
+        )
+    return data
 
 
 @app.get("/routes/progress/{progress_id}")
@@ -217,6 +258,15 @@ def itineraries() -> dict:
     return {"items": items, "missing": missing}
 
 
+@app.get("/places")
+def places() -> dict:
+    """The full point catalogue — every place in the dataset, for the «все точки»
+    tab. A browse, not a search: no model is involved and nothing is capped by a
+    query, so the tourist can see all of it at once.
+    """
+    return places_mod.list_places(app.state.planner.db)
+
+
 @app.post("/routes/services")
 def services_along_route(req: ServicesAlongReq) -> dict:
     """Secondary points beside the line: cafés, toilets, hotels — never stops.
@@ -230,17 +280,39 @@ def services_along_route(req: ServicesAlongReq) -> dict:
     A shape that cannot be measured is a 422 with a reason code: an empty list
     must always mean «измерили, рядом ничего нет».
     """
+    # Traced under a server-minted id: the answer carries no id for the client to
+    # poll, but the span still groups into the same Langfuse session as the
+    # generate that drew the line, through req.session_id.
+    trace.begin(uuid.uuid4().hex, session_id=req.session_id)
     try:
-        return services_mod.services_along(
-            app.state.planner.db,
-            req.shape,
-            categories=req.categories,
-            profile=req.profile or services_mod.DEFAULT_PROFILE,
-            max_off_line_m=req.max_off_line_m,
-            limit=req.limit or services_mod.MAX_SERVICES,
+        try:
+            answer = services_mod.services_along(
+                app.state.planner.db,
+                req.shape,
+                categories=req.categories,
+                profile=req.profile or services_mod.DEFAULT_PROFILE,
+                max_off_line_m=req.max_off_line_m,
+                limit=req.limit or services_mod.MAX_SERVICES,
+            )
+        except ValueError as exc:
+            # A failed step, so the span is marked as one; the machine reason
+            # rides beside it instead of taking the level's place.
+            trace.record(
+                "services",
+                "error",
+                input={"categories": req.categories, "limit": req.limit},
+                reason=str(exc),
+            )
+            raise HTTPException(status_code=422, detail={"reason": str(exc)}) from exc
+        trace.record(
+            "services",
+            input={"categories": req.categories, "limit": req.limit},
+            found=len(answer["items"]),
+            capped=answer["capped"],
         )
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail={"reason": str(exc)}) from exc
+        return answer
+    finally:
+        trace.finish()
 
 
 @app.get("/health", response_model=HealthResponse)

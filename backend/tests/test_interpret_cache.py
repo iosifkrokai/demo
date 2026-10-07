@@ -25,6 +25,7 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from agent import trace
 from agent.models import GenerateReq
 from agent.planner import intent, interpret_cache as cache
 from agent.requirements import Requirement, TripRequirements
@@ -205,3 +206,32 @@ def test_without_an_agent_nothing_is_cached(monkeypatch):
     intent.build_requirements("замки Гродно", _req())
 
     assert cache.INTERPRET_CACHE.stats()["size"] == 0
+
+
+def test_a_cached_reading_says_so_in_the_trace(monkeypatch):
+    """No model call happened, and the trace must not leave that to guesswork.
+
+    A hit that records nothing looks exactly like a call nobody recorded — the
+    one reading of the trace that is wrong.
+    """
+
+    def fake_agent(query, req, db, wall_clock_s=None):
+        return _contract()
+
+    monkeypatch.setattr(intent, "_agent_contract", fake_agent)
+    monkeypatch.setattr(
+        intent, "_interpret_cache_key", lambda query, req: ("trace-key", "prompt-hash")
+    )
+
+    intent.build_requirements("старый город за два часа", _req())  # fills the cache, untraced
+
+    trace.begin("job-cache")
+    try:
+        intent.build_requirements("старый город за два часа", _req())
+        span, = trace._traces["job-cache"].spans
+    finally:
+        trace.finish()
+
+    assert span.name == "interpret · model"
+    assert span.status == "skipped"  # the step did not run; it is not an error
+    assert span.facts == {"cached": True}

@@ -20,11 +20,14 @@ export const en: Dictionary = {
     planShort: 'Plan',
     itineraries: 'Ready-made routes',
     itinerariesShort: 'Routes',
+    places: 'All points',
+    placesShort: 'Points',
     history: 'History',
   },
   tabSubtitles: {
     plan: 'Describe what you want — I will build a route on real roads',
     itineraries: 'Ready-made routes — start from one of them',
+    places: 'The whole catalogue — on the map and as a list',
     history: 'Routes you have already built',
   },
   ask: {
@@ -102,6 +105,16 @@ export const en: Dictionary = {
     alongTheWay: 'along the way',
     onFoot: 'on foot',
     byCar: 'by car',
+  },
+  places: {
+    loading: 'Loading all points…',
+    loadFailed:
+      'Could not load the points. The data is fine — the agent did not answer.',
+    retry: 'retry',
+    search: 'Name, town or category',
+    intro:
+      '{{count}} in the dataset — the whole catalogue, on the map and as a list.',
+    noMatch: 'Nothing matched — try another word.',
   },
   language: {
     label: 'Interface language',

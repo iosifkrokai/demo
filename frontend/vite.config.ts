@@ -63,6 +63,12 @@ export default defineConfig({
         target: process.env.VITE_DEV_AGENT_TARGET || 'http://localhost:8080',
         changeOrigin: true,
       },
+      // The full point catalogue (GET /places) — a top-level agent path, not
+      // under /routes, so it needs its own entry to reach the agent in dev.
+      '/places': {
+        target: process.env.VITE_DEV_AGENT_TARGET || 'http://localhost:8080',
+        changeOrigin: true,
+      },
       // Valhalla endpoints the map talks to directly (route, status, ...).
       // The trailing (?|\$) matters: these URLs carry a ?json=... query, and a
       // \$-anchored pattern silently misses them — Vite then answers with
