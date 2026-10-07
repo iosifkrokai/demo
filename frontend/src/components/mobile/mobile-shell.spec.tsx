@@ -106,8 +106,29 @@ describe('MobileShell', () => {
     expect(screen.getByTestId('mobile-sheet')).toHaveStyle({
       height: MOBILE_GUIDE_HEIGHT,
     });
+    expect(screen.getByTestId('mobile-sheet')).toHaveClass(
+      'bg-transparent',
+      'border-t-transparent',
+      'shadow-none'
+    );
     expect(document.documentElement.style.getPropertyValue('--sheet-h')).toBe(
       MOBILE_GUIDE_HEIGHT
+    );
+  });
+
+  it('expands the navigator sheet to a full route overview', () => {
+    mockCommon.guiding = true;
+    render(<MobileShell panel={stubPanel} />);
+
+    fireEvent.click(screen.getByTestId('sheet-handle'));
+
+    expect(screen.getByTestId('mobile-sheet')).toHaveAttribute(
+      'data-snap',
+      'full'
+    );
+    expect(screen.getByTestId('mobile-sheet')).toHaveStyle({ height: '90dvh' });
+    expect(document.documentElement.style.getPropertyValue('--sheet-h')).toBe(
+      '90dvh'
     );
   });
 

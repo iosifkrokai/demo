@@ -29,8 +29,6 @@ export const mapArea = {
         'Агент вернул остановки без проверенной линии — линия не показана',
       followMe: 'следить за мной',
       following: 'слежу за вами',
-      northUp: 'север сверху',
-      headingUp: 'по курсу',
       servicesToggle: 'что рядом по пути',
       // What the guide knows about the places beside the route, said plainly
       // when one is tapped: how far off the line it is, whether its hours are
@@ -65,8 +63,6 @@ export const mapArea = {
         'The agent returned stops without a verified line — no line shown',
       followMe: 'follow me',
       following: 'following you',
-      northUp: 'north up',
-      headingUp: 'heading up',
       servicesToggle: "what's along the way",
       // What the guide knows about the places beside the route, said plainly
       // when one is tapped: how far off the line it is, whether its hours are

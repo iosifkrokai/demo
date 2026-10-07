@@ -88,10 +88,12 @@ vi.mock('@/stores/common-store', () => ({
       focus: null,
       guideFix: null,
       guiding: false,
+      guideVoiceMuted: false,
       guideTurnDistanceM: null,
       focusOn: vi.fn(),
       setGuideFix: vi.fn(),
       setGuiding: vi.fn(),
+      setGuideVoiceMuted: vi.fn(),
       setGuideTurnDistanceM: vi.fn(),
       placesVisible: false,
       setPlacesVisible: vi.fn(),
@@ -535,8 +537,11 @@ describe('Sidebar', () => {
       expect(screen.queryByTestId('mode-plan')).toBeNull();
       expect(screen.queryByTestId('mode-history')).toBeNull();
       expect(screen.queryByTestId('guide-enter')).toBeNull();
+      expect(screen.queryByTestId('guide-exit')).toBeNull();
+      expect(screen.queryByTestId('guide-mobile-actions')).toBeNull();
+      expect(screen.queryByTestId('guide-exit-mobile-hud')).toBeNull();
 
-      await user.click(screen.getByTestId('guide-exit'));
+      await user.click(screen.getByTestId('guide-exit-hud'));
       expect(screen.queryByTestId('guide-panel')).toBeNull();
       // …and back to where the tourist was, with the route still in hand.
       expect(screen.getByTestId('mode-plan')).toBeInTheDocument();

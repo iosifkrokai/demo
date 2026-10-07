@@ -46,7 +46,7 @@ import { maxBounds } from './constants';
 import { getInitialMapPosition, LAST_CENTER_KEY } from './utils';
 import { useCommonStore } from '@/stores/common-store';
 import { useTranslation } from 'react-i18next';
-import { Coffee, LocateFixed, Navigation } from 'lucide-react';
+import { Coffee, LocateFixed, Volume2, VolumeX } from 'lucide-react';
 import {
   ME_WAYPOINT_ID,
   useDirectionsStore,
@@ -227,37 +227,19 @@ export const MapComponent = () => {
   const bearingRef = useRef<number | null>(null);
   /** When the tourist last dragged the map away — following returns after a pause. */
   const panAwayRef = useRef(0);
-  const ORIENTATION_STORAGE_KEY = 'grodno-map-orientation';
-  type MapOrientation = 'heading' | 'north';
-
-  /** Map orientation preference, persisted so the tourist's choice survives a reload. */
-  const loadOrientation = (): MapOrientation => {
-    try {
-      const raw = localStorage.getItem(ORIENTATION_STORAGE_KEY);
-      if (raw === 'north' || raw === 'heading') return raw;
-      return 'heading';
-    } catch {
-      return 'heading';
-    }
-  };
-
-  const saveOrientation = (orientation: MapOrientation) => {
-    try {
-      localStorage.setItem(ORIENTATION_STORAGE_KEY, orientation);
-    } catch {
-      // private mode / quota — the value stays in memory for this session
-    }
-  };
-
   const guiding = useCommonStore((s) => s.guiding);
+  const guideVoiceMuted = useCommonStore((s) => s.guideVoiceMuted);
+  const setGuideVoiceMuted = useCommonStore((s) => s.setGuideVoiceMuted);
   /** Navigator mode: the map keeps the tourist in view until a hand moves it. */
   const [follow, setFollow] = useState(true);
   /**
-   * Map orientation: 'heading' = map rotates with the tourist's course,
-   * 'north' = north is always up (bearing = 0). Persisted to localStorage.
+   * While the guide runs the map is always north-up-free: it turns with the walk,
+   * because a navigator that can be talked out of turning is not one. There used
+   * to be a «по курсу / север сверху» button here with the choice remembered in
+   * localStorage; it was a control nobody pressed mid-walk and one more thing
+   * between the tourist and the map, so the bearing is now applied
+   * unconditionally and there is nothing to remember.
    */
-  const [orientation, setOrientation] =
-    useState<MapOrientation>(loadOrientation);
   const drawRef = useRef<MaplibreTerradrawControl | null>(null);
   const touchStartTimeRef = useRef<number | null>(null);
   const touchLocationRef = useRef<{ x: number; y: number } | null>(null);
@@ -525,7 +507,6 @@ export const MapComponent = () => {
     // wobbles by a few degrees every second and the simulated one jumps at every
     // corner; rotating for those turned the map into a spinning top. Below the
     // threshold the current bearing is kept, above it the map turns once, slowly.
-    // In 'north' orientation the bearing is never applied — north stays up.
     const seen = bearingRef.current;
     // The route's own course first, the device's heading only as a fallback:
     // the phone's heading is the direction the handset points, the course is
@@ -538,7 +519,6 @@ export const MapComponent = () => {
     // by segment, the way a navigator does.
     const turnThreshold = guideFix.course != null ? 4 : 15;
     const bearing =
-      orientation === 'heading' &&
       steerTo != null &&
       (seen === null ||
         Math.abs(((steerTo - seen + 540) % 360) - 180) > turnThreshold)
@@ -568,40 +548,17 @@ export const MapComponent = () => {
       easing: (progress: number) => progress,
       essential: true,
     });
-  }, [guiding, follow, guideFix, orientation, guideTurnDistanceM]);
+  }, [guiding, follow, guideFix, guideTurnDistanceM]);
 
-  // Following starts again every time the guide is entered — and so does
-  // heading-up. A navigator has to be aligned with the walk the moment it
-  // starts: the stored preference belongs to browsing the map (planning a route,
-  // reading a neighbourhood), and a tourist who had left it on «north up» walked
-  // the whole route along a map that never turned. Only on entering, though: a
-  // reload that already starts inside the guide keeps the choice the tourist
-  // made there.
-  const previousGuidingRef = useRef<boolean | null>(null);
+  // Following starts again every time the guide is entered: a navigator has to
+  // re-centre the tourist the moment the walk starts.
   useEffect(() => {
-    const previous = previousGuidingRef.current;
-    previousGuidingRef.current = guiding;
-    if (!guiding) return;
-    setFollow(true);
-    if (previous === false) {
-      setOrientation('heading');
-      saveOrientation('heading');
-    }
+    if (guiding) setFollow(true);
   }, [guiding]);
 
   // When the tourist switches back to 'heading' while the guide is running,
   // the map snaps to the current heading immediately instead of waiting for
   // the next guideFix (which may not come if the tourist is standing still).
-  useEffect(() => {
-    if (orientation !== 'heading' || !guiding || !guideFix) return;
-    const map = mapRef.current;
-    if (!map || map.isEasing?.()) return;
-    map.easeTo({
-      bearing: guideFix.course ?? guideFix.heading ?? 0,
-      duration: 300,
-    });
-  }, [orientation, guiding, guideFix]);
-
   // A hand on the map wins over the follow: dragging releases it.
   //
   // Only a real hand does. `easeTo` — the very call that makes the map follow —
@@ -1003,6 +960,7 @@ export const MapComponent = () => {
             : ['routes-line', 'routes-hit-target', PLACES_POINTS_LAYER_ID]
         }
         mapStyle={resolvedMapStyle}
+        attributionControl={false}
         style={{ width: '100%', height: '100vh' }}
         maxBounds={maxBounds}
         minZoom={2}
@@ -1182,16 +1140,16 @@ export const MapComponent = () => {
       </Map>
 
       {(routeResult || guiding) && (
-        // ONE column, not two independently pinned groups. As two groups
-        // (bottom-40 and bottom-24) they overlapped each other — measured at
-        // 390x844 the guide's compass sat at y=652..696 and the services button
-        // at y=640..684, a 32px collision — and both sat BEHIND the mobile sheet,
-        // which starts at y=464 and covers 50dvh. The sheet publishes its own
-        // height in --sheet-h (see sidebar.tsx), so the column rides above it:
-        // the tourist can reach the controls of the very mode they are in.
+        // The planner controls ride above the mobile sheet. During navigation,
+        // the HUD owns the bottom-right stack, so the map controls move to the
+        // open top-left corner instead of hiding underneath its cards.
         <div
           data-testid="map-controls"
-          className="absolute bottom-[calc(var(--sheet-h,0px)+0.75rem)] right-3 z-10 flex flex-col items-end gap-2 md:bottom-24 md:right-4"
+          className={`absolute flex flex-col gap-2 ${
+            isMobile && guiding
+              ? 'left-3 top-[calc(max(env(safe-area-inset-top),0.75rem)+10rem)] z-10 items-start'
+              : 'bottom-[calc(var(--sheet-h,0px)+0.75rem)] right-3 z-10 items-end md:bottom-24 md:right-4'
+          }`}
         >
           {/*
             The «по пути: N мест» block is gone from every screen.
@@ -1222,32 +1180,21 @@ export const MapComponent = () => {
           {guiding && (
             <>
               <ToolButton
-                data-testid="guide-orientation"
+                data-testid="guide-voice-toggle-map"
                 title={
-                  orientation === 'heading'
-                    ? t('map.northUp')
-                    : t('map.headingUp')
+                  guideVoiceMuted
+                    ? t('guide.enableSound')
+                    : t('guide.disableSound')
                 }
-                icon={<Navigation className="h-4 w-4" />}
-                onClick={() => {
-                  const next: MapOrientation =
-                    orientation === 'heading' ? 'north' : 'heading';
-                  setOrientation(next);
-                  saveOrientation(next);
-                  const map = mapRef.current;
-                  if (!map) return;
-                  if (next === 'heading' && guideFix) {
-                    // Nothing to steer by yet: leave the map's bearing alone
-                    // rather than snapping it to due north, which is exactly
-                    // what an untouched «по курсу» looks like from the outside.
-                    const steerTo = guideFix.course ?? guideFix.heading;
-                    if (steerTo != null) {
-                      map.easeTo({ bearing: steerTo, duration: 300 });
-                    }
-                  } else if (next === 'north') {
-                    map.easeTo({ bearing: 0, duration: 300 });
-                  }
-                }}
+                active={guideVoiceMuted}
+                icon={
+                  guideVoiceMuted ? (
+                    <VolumeX className="h-4 w-4" />
+                  ) : (
+                    <Volume2 className="h-4 w-4" />
+                  )
+                }
+                onClick={() => setGuideVoiceMuted(!guideVoiceMuted)}
               />
               <ToolButton
                 data-testid="guide-follow"

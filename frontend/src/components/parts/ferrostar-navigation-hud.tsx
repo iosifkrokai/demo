@@ -13,11 +13,8 @@ import {
 import { useTranslation } from 'react-i18next';
 import type { PlaceDetails } from '@/stores/directions-store';
 import { PlaceCardBody } from '@/components/map/parts/place-card-body';
-import { cn } from '@/lib/utils';
-import { GuideNextStop } from './guide-next-stop';
-import { GuideRouteDone } from './guide-route-done';
-import { guideModeFor } from './guide-mode';
 import { GuideProgress } from './guide-progress';
+import { GuideRouteDone } from './guide-route-done';
 import { GuideStopList } from './guide-stop-list';
 
 type FerrostarViewElement = HTMLElement & {
@@ -60,12 +57,10 @@ interface FerrostarNavigationHudProps {
   state: TripState | null;
   maneuverFallback: ReactNode;
   alerts?: ReactNode;
-  geoStatus?: ReactNode;
   announcement: string;
   /** Leaves navigation for good — the guide is done, the planner is back. */
   onExit: () => void;
   onAdvance: () => void;
-  onOverview: () => void;
   onVoiceToggle: () => void;
   onDetailsToggle: () => void;
   voiceMuted: boolean;
@@ -90,17 +85,6 @@ interface FerrostarNavigationHudProps {
   nextStopName: string | null;
   nextStopId: string | null;
   nextPlaceDetails: PlaceDetails | null;
-  nextStopNumber?: number;
-  nextStopCategory?: string | null;
-  nextStopVisitMinutes?: number | null;
-  nextStopVisitOverride?: number | null;
-  nextStopEstimateMinutes?: number | null;
-  onNextStopVisitMinutesChange?: (minutes: number | null) => void;
-  nextStopDistance?: number | null;
-  nextStopTravelMinutes?: number | null;
-  nextStopEtaLabel?: string | null;
-  nextStopModeLabel?: string;
-  nextStopMapsHref?: string;
 }
 
 /**
@@ -109,8 +93,8 @@ interface FerrostarNavigationHudProps {
  * Layout (390 px mobile, sheet = 26 dvh ≈ 219 px from bottom):
  *   TOP:    maneuver banner → geo pill → (alerts stack here)
  *   BOTTOM: one column anchored above the sheet, holding — top to bottom —
- *           the route-details panel (only while open), the next-stop card, the
- *           trip-progress strip and the button row.
+ *           the route-details panel (only while open), trip progress and the
+ *           button row.
  *
  * The bottom blocks are ONE flex column, not four separately-fixed boxes each
  * with its own `bottom:`. Four independent anchors is what made them overlap:
@@ -125,11 +109,9 @@ export const FerrostarNavigationHud = ({
   state,
   maneuverFallback,
   alerts,
-  geoStatus,
   announcement,
   onExit,
   onAdvance,
-  onOverview,
   onVoiceToggle,
   onDetailsToggle,
   voiceMuted,
@@ -154,17 +136,6 @@ export const FerrostarNavigationHud = ({
   nextStopName,
   nextStopId,
   nextPlaceDetails,
-  nextStopNumber,
-  nextStopCategory,
-  nextStopVisitMinutes,
-  nextStopVisitOverride,
-  nextStopEstimateMinutes,
-  onNextStopVisitMinutesChange,
-  nextStopDistance,
-  nextStopTravelMinutes,
-  nextStopEtaLabel,
-  nextStopModeLabel,
-  nextStopMapsHref,
 }: FerrostarNavigationHudProps) => {
   const { t } = useTranslation();
   /**
@@ -218,13 +189,12 @@ export const FerrostarNavigationHud = ({
       aria-label={t('guide.title')}
       className="pointer-events-none fixed inset-0 z-[60]"
     >
-      {/* ── Top column: maneuver banner → geo pill → alerts.
+      {/* ── Top column: maneuver banner → alerts.
           One flex column pinned to the top, for the same reason the bottom is one
           column: each of these was separately `fixed` at a guessed `top:` offset
           (+5.25rem, +8rem), and those guesses drifted out of step with the real
-          banner height — the geo pill ended up underneath the banner and the
-          alerts underneath the geo pill. In one column each block sits below the
-          one above it and grows downward, whatever the banner turns out to be. ── */}
+          banner height. In one column each block sits below the one above it
+          and grows downward, whatever the banner turns out to be. ── */}
       <div
         data-testid="guide-top-stack"
         className="fixed inset-x-3 top-[max(env(safe-area-inset-top),0.75rem)] z-[62] flex max-h-[calc(100dvh-var(--sheet-h,0px)-16rem)] flex-col gap-2 md:left-[calc(var(--panel-width,0px)+0.75rem)] md:right-3"
@@ -243,12 +213,6 @@ export const FerrostarNavigationHud = ({
           </div>
         </div>
 
-        {geoStatus && (
-          <div className="pointer-events-auto mx-auto w-fit max-w-full rounded-full border border-border bg-background/90 px-3 py-1.5 text-meta text-muted-foreground shadow-card backdrop-blur">
-            {geoStatus}
-          </div>
-        )}
-
         {alerts && (
           <div className="pointer-events-auto mx-auto flex w-[min(88vw,540px)] shrink-0 flex-col gap-2 overflow-y-auto">
             {alerts}
@@ -256,17 +220,14 @@ export const FerrostarNavigationHud = ({
         )}
       </div>
 
-      {/* ── Bottom column: details panel → next-stop card → progress → buttons.
+      {/* ── Bottom column: details panel → progress → buttons.
           One flex column anchored to the sheet, so the blocks stack instead of
           overlapping, and the whole thing grows upward as details open.
 
           The height budget is explicit, because a phone does not have it to
-          spare. At 390×844 with the guide sheet at 26dvh (219px) and the
-          maneuver banner + geo pill + alerts taking the top ~176px, there are
-          ~449px left. The stack claims at most that much (12rem of reserved
-          chrome above it), and the two flexible blocks inside divide it: the
-          details panel takes what it needs and scrolls, the next-stop card is
-          capped and scrolls rather than pushing the stop list off the screen.  */}
+          spare. The stack is capped above the sheet; if the route details are
+          open, their list scrolls rather than pushing the navigation controls
+          off the screen. */}
       <div
         data-testid="guide-bottom-stack"
         className="fixed inset-x-3 z-[61] flex max-h-[calc(100dvh-var(--sheet-h,0px)-15rem)] flex-col gap-2 md:left-[calc(var(--panel-width,0px)+1rem)] md:right-3"
@@ -394,39 +355,11 @@ export const FerrostarNavigationHud = ({
           </div>
         )}
 
-        {/* Next-stop card — always visible, the one thing the walk is about.
-
-            It yields height to the details panel: while the stop list is open the
-            card drops to a single-line summary (name + distance) and scrolls for
-            the rest. An uncapped card is what squeezed the list down to 28px —
-            the tourist who opened «маршрут · 1 из 3» came for the stops. */}
-        <div
-          data-testid="guide-next-place"
-          className={cn(
-            'slim-scroll pointer-events-auto shrink overflow-y-auto rounded-2xl border border-border bg-background/95 shadow-float backdrop-blur',
-            detailsOpen ? 'max-h-[6.5rem]' : 'max-h-[13rem]'
-          )}
-        >
-          {nextStopName ? (
-            <GuideNextStop
-              compact
-              number={nextStopNumber ?? 1}
-              name={nextStopName}
-              category={nextStopCategory ?? null}
-              visitMinutes={nextStopVisitMinutes ?? null}
-              visitOverride={nextStopVisitOverride ?? null}
-              estimateMinutes={nextStopEstimateMinutes ?? null}
-              onVisitMinutesChange={onNextStopVisitMinutesChange}
-              distance={nextStopDistance ?? null}
-              travelMinutes={nextStopTravelMinutes ?? undefined}
-              etaLabel={nextStopEtaLabel ?? undefined}
-              mode={guideModeFor(nextStopModeLabel ?? null)}
-              mapsHref={nextStopMapsHref ?? '#'}
-            />
-          ) : (
+        {!nextStopName && (
+          <div className="pointer-events-auto shrink-0">
             <GuideRouteDone total={totalStops} />
-          )}
-        </div>
+          </div>
+        )}
 
         {/* Trip progress strip. */}
         <div className="pointer-events-auto shrink-0">
@@ -495,12 +428,12 @@ export const FerrostarNavigationHud = ({
           while walking (it would be an empty 420px column with nothing in it),
           so a control that only existed there would take the way out of
           navigation with it. ── */}
-      <div className="fixed right-4 top-[calc(max(env(safe-area-inset-top),0.75rem)+7rem)] z-[60] flex flex-col gap-2 md:right-5">
+      <div className="fixed right-4 top-[calc(max(env(safe-area-inset-top),0.75rem)+7rem)] z-[60] hidden flex-col gap-2 md:right-5 md:flex">
         <button
           type="button"
           data-testid="guide-exit-hud"
           onClick={onExit}
-          className="pointer-events-auto flex size-11 items-center justify-center rounded-full border border-border bg-background/95 text-foreground shadow-float transition hover:bg-muted"
+          className="pointer-events-auto hidden size-11 items-center justify-center rounded-full border border-border bg-background/95 text-foreground shadow-float transition hover:bg-muted md:flex"
           aria-label={t('guide.exit')}
           title={t('guide.exit')}
         >
@@ -520,16 +453,6 @@ export const FerrostarNavigationHud = ({
           ) : (
             <Volume2 className="size-5" aria-hidden="true" />
           )}
-        </button>
-        <button
-          type="button"
-          data-testid="guide-overview"
-          onClick={onOverview}
-          className="pointer-events-auto flex size-11 items-center justify-center rounded-full border border-border bg-background/95 text-foreground shadow-float transition hover:bg-muted"
-          aria-label={t('guide.overview')}
-          title={t('guide.overview')}
-        >
-          <span aria-hidden="true">···</span>
         </button>
       </div>
 

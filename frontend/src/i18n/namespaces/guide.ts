@@ -71,15 +71,6 @@ export const guideArea = {
       distanceHidden: 'расстояние скрыто: сигнал GPS неточный',
       announceIn: 'Через {{distance}}: {{instruction}}',
 
-      // ── The quiet line that says where the position came from ────────────
-      geoUnavailable: 'геолокация недоступна — отмечайте остановки вручную',
-      geoLocating: 'определяю, где вы…',
-      // Honest about a lost fix, and never a promise it cannot keep.
-      geoStale: 'сигнал GPS потерян — отмечайте остановки вручную',
-      geoPoor: 'GPS неточный (±{{metres}} м) — подсказки приблизительные',
-      geoDistanceToNext: 'до следующей {{distance}}',
-      geoOnRoute: 'вы на маршруте',
-
       // ── Off route ────────────────────────────────────────────────────────
       offRouteTitle: 'вы сошли с маршрута',
       offRouteAt: 'вы в ~{{distance}} от линии.',
@@ -227,15 +218,6 @@ export const guideArea = {
       noSignal: 'no signal — follow the route line',
       distanceHidden: 'distance hidden: the GPS fix is inaccurate',
       announceIn: 'In {{distance}}: {{instruction}}',
-
-      // ── The quiet line that says where the position came from ────────────
-      geoUnavailable: 'geolocation unavailable — mark the stops by hand',
-      geoLocating: 'finding out where you are…',
-      // Honest about a lost fix, and never a promise it cannot keep.
-      geoStale: 'GPS signal lost — mark the stops by hand',
-      geoPoor: 'GPS inaccurate (±{{metres}} m) — the prompts are approximate',
-      geoDistanceToNext: '{{distance}} to the next stop',
-      geoOnRoute: 'you are on the route',
 
       // ── Off route ────────────────────────────────────────────────────────
       offRouteTitle: 'you have left the route',

@@ -1507,44 +1507,18 @@ export const Sidebar = ({
         </section>
       )}
 
-      {/* ── Header. Planning and browsing keep the tab strip, the title and
-              the quiet close row; guide mode gets its own bar instead — the
-              navigator's «маршрут идёт» state, with one obvious way out and no
-              tabs to read past. All of it sits in normal flow, so nothing can
-              slide under the close button. ── */}
-      <header className="order-1 shrink-0 border-b border-border px-4 pb-2.5 max-md:px-3 max-md:pb-1.5 max-md:[&:has([data-testid=guide-exit])]:pb-1">
+      {/* ── Header. Planning and browsing keep the tab strip and title.
+              While guiding, the sheet only keeps its grab handle; navigation
+              actions live with the HUD instead of in a second red footer bar. ── */}
+      <header
+        className={cn(
+          'order-1 shrink-0 border-b border-border px-4 pb-2.5 max-md:px-3 max-md:pb-1.5',
+          guiding && snap === 'peek' && 'border-b-transparent'
+        )}
+      >
         <SheetDragHandle snap={snap} handleProps={handleProps} />
         {guiding ? (
-          <div className="mt-1.5 flex items-center gap-2 max-md:mt-0">
-            <div className="flex min-w-0 flex-1 items-center gap-2 rounded-2xl bg-primary px-3 py-2 text-primary-foreground max-md:py-1">
-              {/* Radix still needs a title for the dialog. */}
-              <SheetTitle className="sr-only">
-                {t('sidebar.ui.guide')}
-              </SheetTitle>
-              <Compass className="h-4 w-4 shrink-0" aria-hidden="true" />
-              <div className="min-w-0 flex-1 max-md:hidden">
-                {/* On a phone the strip is 219px and this row ate 121px of it —
-                    the turn banner below showed only its top 27px. The strip
-                    needs the row, not the subtitles: title and stops line are
-                    sr-only there, the banner carries the state. */}
-                <p className="truncate text-label font-semibold max-md:sr-only">
-                  {t('guide.title')}
-                </p>
-                <p className="truncate text-badge opacity-90 max-md:sr-only">
-                  {t('guide.stops', { count: guideStops.length })} ·{' '}
-                  {guideModeFor(transport).label}
-                </p>
-              </div>
-              <button
-                type="button"
-                data-testid="guide-exit"
-                onClick={() => setGuiding(false)}
-                className="shrink-0 rounded-full bg-primary-foreground/15 px-2.5 py-1 text-badge font-semibold transition-colors hover:bg-primary-foreground/25 max-md:min-h-11 pointer-coarse:min-h-11"
-              >
-                {t('guide.exit')}
-              </button>
-            </div>
-          </div>
+          <SheetTitle className="sr-only">{t('sidebar.ui.guide')}</SheetTitle>
         ) : (
           <>
             <div className="flex items-center gap-2">
@@ -1599,6 +1573,8 @@ export const Sidebar = ({
           <GuidePanel
             key={guideRouteKey(guideStops)}
             stops={guideStops}
+            startInMoving
+            overviewOpen={snap === 'full'}
             transport={transport}
             onWalked={handleWalked}
             onExit={() => setGuiding(false)}
@@ -2305,8 +2281,8 @@ export const Sidebar = ({
           // While walking, the navigator IS the screen: the panel would be an
           // empty 420px column (its body renders nothing but the portaled HUD),
           // so from md up it is hidden outright and the map keeps the whole
-          // viewport. On a phone it stays, because there it is the bottom strip
-          // carrying the grab handle and «выйти».
+          // viewport. On a phone it stays as a handle-only strip; navigation
+          // actions are part of the HUD.
           //
           // Hidden, never unmounted: Radix `Presence` tears the content down on
           // `open={false}`, and the HUD is a portal *from* this subtree, so an

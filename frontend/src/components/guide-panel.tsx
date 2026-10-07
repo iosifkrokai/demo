@@ -3,7 +3,6 @@ import {
   Bus,
   Coffee,
   Footprints,
-  LocateFixed,
   Navigation,
   Play,
   RotateCcw,
@@ -11,7 +10,7 @@ import {
   UtensilsCrossed,
   Volume2,
   VolumeX,
-  WifiOff,
+  XIcon,
 } from 'lucide-react';
 import type { TFunction } from 'i18next';
 import type { TripState } from '@stadiamaps/ferrostar';
@@ -69,9 +68,7 @@ import { fmtDist, metresBetween } from './parts/guide-format';
 import { mergeMicroManeuvers } from './parts/guide-maneuvers-stub';
 import { guideModeFor } from './parts/guide-mode';
 import { FerrostarNavigationHud } from './parts/ferrostar-navigation-hud';
-import { GuideNextStop } from './parts/guide-next-stop';
 import { GuideProgress } from './parts/guide-progress';
-import { GuideRouteDone } from './parts/guide-route-done';
 import { GuideStopList } from './parts/guide-stop-list';
 
 /** One stop of the built route, as the guide walks it. */
@@ -99,6 +96,10 @@ export interface GuideSuggestion {
 
 interface GuidePanelProps {
   stops: GuideStop[];
+  /** Enter directly into the live navigator from the route's primary action. */
+  startInMoving?: boolean;
+  /** Show the route overview while the mobile sheet is fully expanded. */
+  overviewOpen?: boolean;
   /**
    * Off-route re-plan override. The integration layer can wire this to
    * `POST /reroute`; without it the panel re-requests the same stops from the
@@ -132,7 +133,6 @@ interface GuidePanelProps {
 }
 
 const STORAGE_KEY = 'grodno-guide-progress';
-const VOICE_MUTE_KEY = 'grodno-voice-muted';
 /** You are "at" a stop when you are this close to it. */
 const ARRIVAL_RADIUS_M = 40;
 /** Above this accuracy the fix is too coarse for a confident «через 30 м». */
@@ -395,6 +395,8 @@ const SimulatedBadge = ({ active }: { active: boolean }) => {
 
 export const GuidePanel = ({
   stops,
+  startInMoving = false,
+  overviewOpen = false,
   onReroute,
   suggestions = [],
   onAddSuggestion,
@@ -466,10 +468,6 @@ export const GuidePanel = ({
     geoState === 'ok' &&
     fix?.accuracy != null &&
     fix.accuracy <= WEAK_ACCURACY_M;
-  const setDirectionsPanelOpen = useCommonStore(
-    (s) => s.setDirectionsPanelOpen
-  );
-
   /**
    * How the guide enters — the tourist's own call, not a required detour.
    *
@@ -484,12 +482,18 @@ export const GuidePanel = ({
    * happens in tests that push a fix before mount, and in production when the
    * browser already had a cached fix.
    */
-  const [mode, setMode] = useState<'review' | 'moving'>('review');
+  const [mode, setMode] = useState<'review' | 'moving'>(() =>
+    startInMoving ? 'moving' : 'review'
+  );
+  useEffect(() => {
+    if (overviewOpen) setMode('review');
+    else if (startInMoving) setMode('moving');
+  }, [overviewOpen, startInMoving]);
   /** Details stay open until the tourist deliberately collapses them. */
   const [detailsOpen, setDetailsOpen] = useState(true);
   useEffect(() => {
-    if (hasTrustedFix) setMode('moving');
-  }, [hasTrustedFix]);
+    if (hasTrustedFix && !overviewOpen) setMode('moving');
+  }, [hasTrustedFix, overviewOpen]);
   /**
    * The panel is NOT closed on entering moving mode. It used to be, to give the
    * map more room — and that unmounted the navigator with it: this panel lives
@@ -500,7 +504,7 @@ export const GuidePanel = ({
    * advance button.
    *
    * The room the walk wanted is already given by the shells instead: while
-   * `guiding`, the sheet drops to a 26dvh strip (`MOBILE_GUIDE_HEIGHT` /
+   * `guiding`, the sheet drops to a compact grab-handle strip (`MOBILE_GUIDE_HEIGHT` /
    * `GUIDE_SHEET_CLASS`) instead of a half-screen panel, and the HUD rides
    * above it on `--sheet-h`. The panel stays mounted and so does the guide.
    */
@@ -511,13 +515,10 @@ export const GuidePanel = ({
   const [traveled, setTraveled] = useState(0);
   const [offRoute, setOffRoute] = useState(false);
   const [skippedSuggestions, setSkippedSuggestions] = useState<string[]>([]);
-  const [voiceMuted, setVoiceMuted] = useState<boolean>(() => {
-    try {
-      return localStorage.getItem(VOICE_MUTE_KEY) === 'true';
-    } catch {
-      return false;
-    }
-  });
+  const voiceMuted = useCommonStore((state) => state.guideVoiceMuted);
+  const setGuideVoiceMuted = useCommonStore(
+    (state) => state.setGuideVoiceMuted
+  );
   const wakeLockRef = useRef<{ release: () => Promise<void> } | null>(null);
   const offRouteFixesRef = useRef(0);
   const spokenThresholdsRef = useRef<SpokenThresholds>(new Map());
@@ -631,16 +632,8 @@ export const GuidePanel = ({
   }, [key]);
 
   const toggleVoiceMute = useCallback(() => {
-    setVoiceMuted((prev) => {
-      const next = !prev;
-      try {
-        localStorage.setItem(VOICE_MUTE_KEY, String(next));
-      } catch {
-        // storage unavailable — value stays in memory for this session
-      }
-      return next;
-    });
-  }, []);
+    setGuideVoiceMuted(!voiceMuted);
+  }, [setGuideVoiceMuted, voiceMuted]);
 
   const stopCount = stops.length;
   // Read once per mount: the flag cannot change while the app runs (it comes
@@ -809,11 +802,6 @@ export const GuidePanel = ({
   useEffect(() => {
     onWalked?.({ visited: walked, total: stops.length });
   }, [onWalked, walked, stops.length]);
-  const nextIndex = useMemo(
-    () => (nextStop ? stops.findIndex((s) => s.id === nextStop.id) : -1),
-    [stops, nextStop]
-  );
-
   // ── Progress along the line, frozen against backward jumps ───────────────
   const located = useMemo(
     () => (fix && line ? locateOnLine(fix, line) : null),
@@ -1395,17 +1383,6 @@ export const GuidePanel = ({
     };
   }, [mode, t]);
 
-  const geoLine = useMemo(() => {
-    if (quality === 'unavailable') return t('guide.geoUnavailable');
-    if (quality === 'waiting') return t('guide.geoLocating');
-    if (quality === 'stale') return t('guide.geoStale');
-    if (quality === 'poor')
-      return t('guide.geoPoor', { metres: Math.round(fix?.accuracy ?? 0) });
-    return toNextMetres != null
-      ? t('guide.geoDistanceToNext', { distance: fmtDist(toNextMetres) })
-      : t('guide.geoOnRoute');
-  }, [quality, fix, toNextMetres, t]);
-
   const activeSuggestions = suggestions.filter(
     (s) => !skippedSuggestions.includes(s.id)
   );
@@ -1415,6 +1392,7 @@ export const GuidePanel = ({
       <section data-testid="guide-panel" className="flex flex-col gap-3">
         <GuideHeader
           onReset={reset}
+          onExit={onExit}
           voiceMuted={voiceMuted}
           onVoiceMuteToggle={toggleVoiceMute}
         />
@@ -1424,7 +1402,7 @@ export const GuidePanel = ({
     );
   }
 
-  if (mode === 'moving') {
+  if (mode === 'moving' && !overviewOpen) {
     const ManeuverIcon = activeManeuver
       ? getManeuverIcon(activeManeuver.type)
       : Footprints;
@@ -1449,15 +1427,6 @@ export const GuidePanel = ({
             precise={precise}
             quality={quality}
           />
-        }
-        geoStatus={
-          <p
-            data-testid="guide-geo-status"
-            className="flex items-center gap-1.5"
-          >
-            <QualityIcon quality={quality} />
-            {geoLine}
-          </p>
         }
         alerts={
           <>
@@ -1495,10 +1464,11 @@ export const GuidePanel = ({
             setFerroState(ferroNav.state);
           }
         }}
-        onOverview={() => {
-          setMode('review');
-          setDirectionsPanelOpen(true);
-        }}
+        // The panel is NOT closed on entering moving mode, and the HUD cannot
+        // close it either: this subtree lives inside Radix `Presence`, so
+        // closing the sheet unmounts the guide and takes the portaled HUD with
+        // it — a bare map, no navigator. The panel hides itself instead (see
+        // GUIDE_SHEET_CLASS in sidebar.tsx) and the way out moved into the HUD.
         onExit={onExit}
         onVoiceToggle={toggleVoiceMute}
         onDetailsToggle={() => setDetailsOpen((o) => !o)}
@@ -1533,25 +1503,6 @@ export const GuidePanel = ({
             ? (placeDetails[nextStop.placeId] ?? null)
             : null
         }
-        nextStopNumber={nextStop ? nextIndex + 1 : undefined}
-        nextStopCategory={nextStop?.category ?? null}
-        nextStopVisitMinutes={nextStop ? visitMinutesOf(nextStop) : undefined}
-        nextStopVisitOverride={
-          nextStop ? (visitOverrides[nextStop.id] ?? null) : null
-        }
-        nextStopEstimateMinutes={nextStop?.visitMinutes ?? null}
-        onNextStopVisitMinutesChange={
-          nextStop
-            ? (minutes) => setStopVisitMinutes(nextStop.id, minutes)
-            : undefined
-        }
-        nextStopDistance={toNextMetres ?? undefined}
-        nextStopTravelMinutes={travelMinutes ?? undefined}
-        nextStopEtaLabel={etaLabel ?? undefined}
-        nextStopModeLabel={travel.label}
-        nextStopMapsHref={
-          nextStop ? mapsUrl(nextStop.lat, nextStop.lon) : undefined
-        }
       />
     );
   }
@@ -1564,35 +1515,11 @@ export const GuidePanel = ({
     >
       <GuideHeader
         onReset={reset}
+        onExit={onExit}
         voiceMuted={voiceMuted}
         onVoiceMuteToggle={toggleVoiceMute}
       />
       <SimulatedBadge active={simulated} />
-
-      {/* The next stop, or a quiet «all done» card once there is none. */}
-      {nextStop ? (
-        // key: remounting on a new stop replays the small fade+slide instead of
-        // swapping the text in place (DESIGN.md, Motion).
-        <GuideNextStop
-          key={nextStop.id}
-          number={nextIndex + 1}
-          name={nextStop.name}
-          category={nextStop.category ?? null}
-          visitMinutes={visitMinutesOf(nextStop)}
-          visitOverride={visitOverrides[nextStop.id] ?? null}
-          estimateMinutes={nextStop.visitMinutes ?? null}
-          onVisitMinutesChange={(minutes) =>
-            setStopVisitMinutes(nextStop.id, minutes)
-          }
-          distance={toNextMetres}
-          travelMinutes={travelMinutes}
-          etaLabel={etaLabel}
-          mode={travel}
-          mapsHref={mapsUrl(nextStop.lat, nextStop.lon)}
-        />
-      ) : (
-        <GuideRouteDone total={stops.length} />
-      )}
 
       <GuideProgress
         done={done}
@@ -1603,14 +1530,6 @@ export const GuidePanel = ({
         remainingMinutes={remainingMinutes}
         mode={travel}
       />
-
-      <p
-        data-testid="guide-geo-status"
-        className="flex items-center gap-1.5 text-meta text-muted-foreground"
-      >
-        <QualityIcon quality={quality} />
-        {geoLine}
-      </p>
 
       <GuideStopList
         stops={listStops}
@@ -1630,15 +1549,6 @@ export const GuidePanel = ({
       >
         <Play className="h-4 w-4" />
         {t('guide.start')}
-      </button>
-
-      <button
-        type="button"
-        data-testid="guide-overview"
-        onClick={() => setMode('review')}
-        className="flex h-12 items-center justify-center gap-2 rounded-xl bg-secondary px-4 font-semibold text-secondary-foreground transition hover:brightness-[0.97] active:scale-[0.99]"
-      >
-        {t('guide.overview')}
       </button>
     </section>
   );
@@ -1720,7 +1630,7 @@ const ManeuverBanner = ({
 };
 
 interface OffRoutePromptProps {
-metres: number | null;
+  metres: number | null;
   onReroute: () => void;
   onDismiss: () => void;
 }
@@ -1861,18 +1771,9 @@ const NearbyHint = ({ service, distanceAhead, onDismiss }: NearbyHintProps) => {
   );
 };
 
-const QualityIcon = ({ quality }: { quality: FixQuality }) => {
-  if (quality === 'unavailable' || quality === 'stale') {
-    return <WifiOff className="h-3.5 w-3.5" aria-hidden="true" />;
-  }
-  if (quality === 'waiting' || quality === 'poor') {
-    return <LocateFixed className="h-3.5 w-3.5" aria-hidden="true" />;
-  }
-  return <Navigation className="h-3.5 w-3.5" aria-hidden="true" />;
-};
-
 interface GuideHeaderProps {
   onReset: () => void;
+  onExit: () => void;
   voiceMuted: boolean;
   onVoiceMuteToggle: () => void;
 }
@@ -1891,6 +1792,7 @@ interface GuideHeaderProps {
  */
 const GuideHeader = ({
   onReset,
+  onExit,
   voiceMuted,
   onVoiceMuteToggle,
 }: GuideHeaderProps) => {
@@ -1917,6 +1819,37 @@ const GuideHeader = ({
       <div className="flex shrink-0 items-center gap-1">
         <button
           type="button"
+          data-testid="guide-exit-overview"
+          onClick={onExit}
+          title={t('guide.exit')}
+          aria-label={t('guide.exit')}
+          className="inline-flex size-9 shrink-0 items-center justify-center rounded-full text-meta text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        >
+          <XIcon className="size-4" aria-hidden="true" />
+        </button>
+        <button
+          type="button"
           onClick={onVoiceMuteToggle}
           title={voiceMuted ? t('guide.enableSound') : t('guide.disableSound')}
-          className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-meta text-muted-foreground transition-colors hover:bg-muted hov
+          className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-meta text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        >
+          {voiceMuted ? (
+            <VolumeX className="h-3.5 w-3.5" />
+          ) : (
+            <Volume2 className="h-3.5 w-3.5" />
+          )}
+          {voiceMuted ? t('guide.soundOff') : t('guide.soundOn')}
+        </button>
+        <button
+          type="button"
+          onClick={onReset}
+          title={t('guide.resetTitle')}
+          className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-meta text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        >
+          <RotateCcw className="h-3.5 w-3.5" />
+          {t('guide.reset')}
+        </button>
+      </div>
+    </div>
+  );
+};

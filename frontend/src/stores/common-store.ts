@@ -53,6 +53,8 @@ interface CommonState {
   } | null;
   /** True while the guide (Проводник) is running. */
   guiding: boolean;
+  /** Whether spoken navigation instructions are muted. */
+  guideVoiceMuted: boolean;
   /**
    * True while the panel is on the «Все точки» tab. The map reads this to draw
    * the whole catalogue as a layer, and the panel writes it on every tab switch
@@ -91,6 +93,7 @@ interface CommonActions {
   focusOn: (lng: number, lat: number) => void;
   setGuideFix: (fix: CommonState['guideFix']) => void;
   setGuiding: (guiding: boolean) => void;
+  setGuideVoiceMuted: (muted: boolean) => void;
   setPlacesVisible: (visible: boolean) => void;
   setGuideTurnDistanceM: (metres: number | null) => void;
 }
@@ -100,6 +103,17 @@ type CommonStore = CommonState & CommonActions;
 // Open the left panel by default on non-mobile viewports (Tailwind md breakpoint).
 const DEFAULT_PANEL_OPEN =
   typeof window !== 'undefined' && window.innerWidth >= 768;
+
+const initialGuideVoiceMuted = (): boolean => {
+  try {
+    return (
+      typeof localStorage !== 'undefined' &&
+      localStorage.getItem('grodno-voice-muted') === 'true'
+    );
+  } catch {
+    return false;
+  }
+};
 
 export const useCommonStore = create<CommonStore>()(
   devtools(
@@ -117,6 +131,7 @@ export const useCommonStore = create<CommonStore>()(
       focus: null,
       guideFix: null,
       guiding: false,
+      guideVoiceMuted: initialGuideVoiceMuted(),
       placesVisible: false,
       guideTurnDistanceM: null,
 
@@ -124,6 +139,14 @@ export const useCommonStore = create<CommonStore>()(
         set({ focus: { lng, lat, at: Date.now() } }, undefined, 'focusOn'),
       setGuideFix: (fix) => set({ guideFix: fix }, undefined, 'setGuideFix'),
       setGuiding: (guiding) => set({ guiding }, undefined, 'setGuiding'),
+      setGuideVoiceMuted: (muted) => {
+        set({ guideVoiceMuted: muted }, undefined, 'setGuideVoiceMuted');
+        try {
+          localStorage.setItem('grodno-voice-muted', String(muted));
+        } catch {
+          // storage unavailable — value stays in memory for this session
+        }
+      },
       setPlacesVisible: (placesVisible) =>
         set({ placesVisible }, undefined, 'setPlacesVisible'),
       setGuideTurnDistanceM: (metres) =>

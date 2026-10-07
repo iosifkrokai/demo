@@ -214,17 +214,21 @@ describe('buildFerrostarRoute', () => {
     expect(built?.route.steps[1]?.roadName).toBeUndefined();
   });
 
-  it('speaks each step at the four trigger distances, under its own key', () => {
+  it('speaks each step at the four trigger distances with valid UUIDs', () => {
     const step = built!.route.steps[1]!;
     expect(
       step.spokenInstructions.map((s) => s.triggerDistanceBeforeManeuver)
     ).toEqual([400, 200, 50, 0]);
-    expect(step.spokenInstructions.map((s) => s.utteranceId)).toEqual([
-      '0-1-400',
-      '0-1-200',
-      '0-1-50',
-      '0-1-0',
-    ]);
+    expect(
+      step.spokenInstructions.every((s) =>
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+          s.utteranceId
+        )
+      )
+    ).toBe(true);
+    expect(
+      new Set(step.spokenInstructions.map((s) => s.utteranceId)).size
+    ).toBe(4);
     // The text is the maneuver's own; «через X метров» is the panel's wording.
     expect(
       step.spokenInstructions.every((s) => s.text === 'Поверните направо')

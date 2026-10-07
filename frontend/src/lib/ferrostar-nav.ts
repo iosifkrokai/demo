@@ -24,6 +24,7 @@ import type {
   Route,
   RouteStep,
   SerializableNavigationControllerConfig,
+  SerializableNavState,
   SpokenInstruction,
   TripState,
   UserLocation,
@@ -173,14 +174,16 @@ const pointAtCum = (line: LineGeometry, dist: number): GeographicCoordinate => {
  */
 const generateSpokenInstructions = (
   instruction: string,
-  stepKey: string
+  stepIndex: number
 ): SpokenInstruction[] => {
   const triggers = [400, 200, 50, 0];
   return triggers.map((trigger) => ({
     text: instruction,
     ssml: undefined,
     triggerDistanceBeforeManeuver: trigger,
-    utteranceId: `${stepKey}-${trigger}`,
+    utteranceId: `00000000-0000-4000-8000-${stepIndex
+      .toString(16)
+      .padStart(8, '0')}${trigger.toString(16).padStart(4, '0')}`,
   }));
 };
 
@@ -256,7 +259,10 @@ export const buildFerrostarRoute = (
       const distanceM = Math.max(0, endDist - beginDist);
       const durationS = mnv.time ?? 0;
 
-      const spokenInstructions = generateSpokenInstructions(instruction, key);
+      const spokenInstructions = generateSpokenInstructions(
+        instruction,
+        stepIndex
+      );
 
       // Ferrostar requires at least 2 geometry points per step
       const safeStepCoords =
@@ -397,6 +403,7 @@ const DEFAULT_ACCURACY_M = 25;
  */
 export class FerrostarNavigator {
   private session: NavigationSession | null;
+  private _navState: SerializableNavState | null = null;
   private _state: TripState | null = null;
 
   /**
@@ -435,12 +442,16 @@ export class FerrostarNavigator {
     };
 
     try {
-      const state = this.session.updateUserLocation(
+      const current =
+        this._navState ??
+        (this.session.getInitialState(location) as SerializableNavState);
+      const next = this.session.updateUserLocation(
         location,
-        null
-      ) as TripState;
-      this._state = state;
-      return state;
+        current
+      ) as SerializableNavState;
+      this._navState = next;
+      this._state = next.tripState;
+      return this._state;
     } catch (error) {
       console.error('Ferrostar could not process a location update.', error);
       return null;
@@ -456,8 +467,11 @@ export class FerrostarNavigator {
    * Advance to the next step manually (used by the "я на месте" button).
    */
   advanceToNextStep(): void {
-    if (this.session && this._state) {
-      this._state = this.session.advanceToNextStep(this._state) as TripState;
+    if (this.session && this._navState) {
+      this._navState = this.session.advanceToNextStep(
+        this._navState
+      ) as SerializableNavState;
+      this._state = this._navState.tripState;
     }
   }
 
@@ -465,6 +479,8 @@ export class FerrostarNavigator {
   destroy(): void {
     this.session?.free();
     this.session = null;
+    this._navState = null;
+    this._state = null;
   }
 }
 

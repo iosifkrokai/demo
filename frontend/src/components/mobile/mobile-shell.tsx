@@ -5,6 +5,7 @@ import { Sidebar } from '@/components/sidebar';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { useCommonStore } from '@/stores/common-store';
+import { cn } from '@/lib/utils';
 import { useNavigate } from '@tanstack/react-router';
 import { useTranslation } from 'react-i18next';
 import { Route as RouteIcon } from 'lucide-react';
@@ -68,20 +69,19 @@ export const MobileShell = ({
     (s) => s.setDirectionsPanelOpen
   );
 
-  // While walking, the map IS the navigator, so the sheet drops to a strip — and
-  // the strip is then where a drag starts from, not 39dvh. Otherwise the hook
-  // works it out from the current position itself, which stays right as the
-  // sheet moves between positions.
-  const restingHeight = guiding ? MOBILE_GUIDE_HEIGHT : null;
-
   const { snap, height, dragHeight, dragging, handleProps, setSnap } =
     useMobileSheetSnap(initialSnap, {
       restingPx: guiding ? guidePx() : undefined,
       onDismiss: () => setDirectionsPanelOpen(false),
     });
 
-  // The strip while walking, the position's own height otherwise — and, while a
-  // finger is down, exactly what the finger is asking for.
+  // Keep the compact navigator strip at peek, but let the same handle expand it
+  // to a full route overview when needed.
+  const guideCollapsed = guiding && snap === 'peek';
+  const restingHeight = guideCollapsed ? MOBILE_GUIDE_HEIGHT : null;
+
+  // The position's own height, except for the compact guide strip — and, while
+  // a finger is down, exactly what the finger is asking for.
   const settled = restingHeight ?? height;
   const sheetHeight =
     dragHeight !== null ? `${Math.round(dragHeight)}px` : settled;
@@ -144,7 +144,10 @@ export const MobileShell = ({
           data-testid="mobile-sheet"
           data-snap={snap}
           data-dragging={dragging}
-          className={SHEET_CLASS}
+          className={cn(
+            SHEET_CLASS,
+            guideCollapsed && 'bg-transparent border-t-transparent shadow-none'
+          )}
           style={{ height: sheetHeight } as CSSProperties}
         >
           {panel ? (

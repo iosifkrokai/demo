@@ -159,7 +159,7 @@ describe('useMobileSheetSnap', () => {
   });
 
   it('starts a drag from the strip while walking, not from 39dvh', () => {
-    // Otherwise the first pointer move snaps the panel from the 7.5rem strip up
+    // Otherwise the first pointer move snaps the panel from the handle strip up
     // to 39dvh before it has tracked anything — a jump nobody asked for.
     const { result } = renderHook(() =>
       useMobileSheetSnap('peek', { restingPx: guidePx() })
@@ -254,7 +254,7 @@ describe('useMobileSheetSnap', () => {
       peek: '39dvh',
       full: '90dvh',
     });
-    expect(MOBILE_GUIDE_HEIGHT).toBe('7.5rem');
+    expect(MOBILE_GUIDE_HEIGHT).toBe('3.5rem');
   });
 
   it('turns the CSS heights into the pixels the drag maths needs', () => {
@@ -264,7 +264,7 @@ describe('useMobileSheetSnap', () => {
     expect(snapPx('full')).toBe(Math.round(vh * 0.9));
     // The strip the drag starts from has to be the strip the CSS shows, or the
     // panel jumps on the first move.
-    expect(guidePx()).toBe(120);
+    expect(guidePx()).toBe(56);
     // The one thing the damping and the projection depend on: the strip is
     // below the planning height, which is below the full height.
     expect(snapPx('bar')).toBeLessThan(snapPx('peek'));

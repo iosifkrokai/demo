@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { cn } from '@/lib/utils';
@@ -27,9 +28,10 @@ export const SHEET_SNAP_CLASS: Record<SheetSnap, string> = {
  * Measured on 390x844: at the old 26dvh (219px) the sheet started at y=625 and
  * the navigator showed 23 % of the map. Its own body was 113px of empty space —
  * `GuidePanel` renders nothing but the portal in moving mode — so the strip is
- * now sized to its header (105px) plus the safe-area inset.
+ * now sized to the grab handle only; the guide sheet is transparent while
+ * collapsed so the map remains visible to the bottom edge.
  */
-export const GUIDE_SHEET_CLASS = 'h-[7.5rem] md:h-auto';
+export const GUIDE_SHEET_CLASS = 'h-14 md:h-auto';
 
 /**
  * The panel itself: a bottom sheet under 768px (the map stays visible above it)
@@ -146,6 +148,7 @@ export const SheetDragHandle = ({
   handleProps,
 }: SheetDragHandleProps) => {
   const { t } = useTranslation();
+  const Chevron = snap === 'full' ? ChevronDown : ChevronUp;
   return (
     <div className="relative flex justify-center pt-1 md:hidden">
       <button
@@ -161,6 +164,10 @@ export const SheetDragHandle = ({
         {...handleProps}
       >
         <span className="h-1 w-9 rounded-full bg-border" />
+        <Chevron
+          className="ml-2 size-4 text-muted-foreground"
+          aria-hidden="true"
+        />
       </button>
     </div>
   );

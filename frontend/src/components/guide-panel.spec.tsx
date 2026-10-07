@@ -25,6 +25,7 @@ vi.mock('@/hooks/use-services-along', () => ({
 
 import type { ParsedDirectionsGeometry } from '@/components/types';
 import i18n from '@/i18n';
+import { useCommonStore } from '@/stores/common-store';
 import { useDirectionsStore } from '@/stores/directions-store';
 
 import { installGeoSim, resetSim } from '@/lib/geo-sim';
@@ -36,6 +37,7 @@ import { GuidePanel, guideRouteKey, type GuideStop } from './guide-panel';
 // the English tests below flip it — put it back for the next test either way.
 afterEach(async () => {
   await i18n.changeLanguage('ru');
+  useCommonStore.setState({ guideVoiceMuted: false });
 });
 
 const STOPS: GuideStop[] = [
@@ -329,15 +331,14 @@ describe('GuidePanel', () => {
     );
   });
 
-  it('falls back to tapping when the browser refuses geolocation', async () => {
+  it('keeps manual stop marking available without a GPS status banner', async () => {
     stubGeolocation(null);
+    const user = userEvent.setup();
     render(<GuidePanel stops={STOPS} onExit={noop} />);
 
-    await waitFor(() =>
-      expect(
-        screen.getByText(/геолокация недоступна — отмечайте остановки вручную/i)
-      ).toBeInTheDocument()
-    );
+    expect(screen.queryByTestId('guide-geo-status')).toBeNull();
+    await user.click(screen.getByTestId('guide-stop-1'));
+    expect(screen.getByText(/пройдено 1 из 2/i)).toBeInTheDocument();
   });
 
   it('starts a fresh walk when the route is rebuilt', async () => {
@@ -362,71 +363,58 @@ describe('GuidePanel', () => {
     expect(screen.getByText(/пройдено 0 из 3/i)).toBeInTheDocument();
   });
 
-  it('offers the next stop in a maps app', () => {
+  it('keeps route stops in the list without duplicating the next stop card', () => {
     stubGeolocation(null);
     render(<GuidePanel stops={STOPS} onExit={noop} />);
 
-    const link = screen.getByRole('link', { name: /открыть в картах/i });
-    expect(link).toHaveAttribute(
-      'href',
-      `https://www.google.com/maps/search/?api=1&query=${STOPS[0]!.lat},${STOPS[0]!.lon}`
+    expect(screen.queryByTestId('guide-next-stop')).toBeNull();
+    expect(screen.getByTestId('guide-stop-1')).toHaveTextContent(
+      'Монастырь бригиток'
     );
-  });
-
-  it('gives the next stop a card with its number, category and visit time', () => {
-    stubGeolocation(null);
-    render(<GuidePanel stops={STOPS} onExit={noop} />);
-
-    const card = screen.getByTestId('guide-next-stop');
-    // 1 — the badge is the stop's place on the route, not a list index.
-    expect(within(card).getByText('1')).toBeInTheDocument();
-    expect(within(card).getByText('Монастырь бригиток')).toBeInTheDocument();
-    expect(within(card).getByText('монастырь')).toBeInTheDocument();
-    // The visit time is the dataset's estimate, so it is offered as approximate
-    // and stays editable: «≈ 30 мин», not a claim about this visit.
-    expect(within(card).getByTestId('visit-time-chip')).toHaveTextContent(
-      '≈ 30 мин'
-    );
+    expect(
+      screen.getByRole('button', {
+        name: /время осмотра: примерно 30 минут, изменить/i,
+      })
+    ).toBeInTheDocument();
   });
 
   it('lets the tourist set their own time at a stop, and keeps it for the totals', () => {
     stubGeolocation(null);
     render(<GuidePanel stops={STOPS} onExit={noop} />);
 
-    const card = screen.getByTestId('guide-next-stop');
-    fireEvent.click(within(card).getByTestId('visit-time-chip'));
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: /время осмотра: примерно 30 минут, изменить/i,
+      })
+    );
     // The controls live in a popover, which renders in a portal outside the
-    // card — deliberately, so a scrolling panel cannot clip them.
+    // list — deliberately, so a scrolling panel cannot clip them.
     fireEvent.click(screen.getByTestId('visit-time-plus'));
 
-    // Their number replaces the estimate and drops the «≈».
-    expect(within(card).getByTestId('visit-time-chip')).toHaveTextContent(
-      '40 мин'
-    );
+    expect(
+      screen.getByRole('button', {
+        name: /время осмотра: 40 минут, изменить/i,
+      })
+    ).toBeInTheDocument();
     // 40 (chosen) + 40 (the other stop) = 1 ч 20 мин of visits still ahead.
     expect(screen.getByTestId('guide-minutes-left')).toHaveTextContent(
       'осталось осмотра ~1 ч 20 мин'
     );
   });
 
-  it('shows how far the next stop is and walks the card forward', () => {
+  it('updates route progress as GPS advances without adding a duplicate stop card', () => {
     const geo = stubWatchingGeolocation();
     render(<GuidePanel stops={STOPS} onExit={noop} />);
 
     // 240 m short of the first stop: close enough to aim at, too far to count.
     geo.standNorthOf(STOPS[0]!, 240);
-    expect(screen.getByTestId('guide-next-distance')).toHaveTextContent(
-      'до неё 240 м'
-    );
-    expect(screen.getByText(/до следующей 240 м/i)).toBeInTheDocument();
     expect(screen.getByText(/пройдено 0 из 2/i)).toBeInTheDocument();
+    expect(screen.queryByTestId('guide-next-stop')).toBeNull();
 
-    // Walk the last stretch: within 40 m the stop is done and the card moves on.
+    // Walk the last stretch: within 40 m the stop is done.
     geo.standNorthOf(STOPS[0]!, 20);
     expect(screen.getByText(/пройдено 1 из 2/i)).toBeInTheDocument();
-    const card = screen.getByTestId('guide-next-stop');
-    expect(within(card).getByText('Кафе Немо')).toBeInTheDocument();
-    expect(within(card).getByText('2')).toBeInTheDocument();
+    expect(screen.getByTestId('guide-stop-2')).toHaveTextContent('Кафе Немо');
   });
 
   it('starts in moving mode when a trusted GPS fix is already available', () => {
@@ -459,6 +447,61 @@ describe('GuidePanel', () => {
       'review'
     );
     expect(screen.getByTestId('guide-start')).toBeInTheDocument();
+  });
+
+  it('starts navigating immediately when opened from the route action', () => {
+    stubGeolocation(null);
+    const onExit = vi.fn();
+    render(<GuidePanel stops={STOPS} startInMoving onExit={onExit} />);
+
+    expect(screen.getByTestId('guide-panel')).toHaveAttribute(
+      'data-mode',
+      'moving'
+    );
+    expect(screen.queryByTestId('guide-start')).not.toBeInTheDocument();
+    expect(screen.getByTestId('guide-advance')).toBeInTheDocument();
+    expect(screen.queryByTestId('guide-mobile-actions')).toBeNull();
+    expect(screen.queryByTestId('guide-exit-mobile-hud')).toBeNull();
+    expect(screen.queryByTestId('guide-voice-toggle-mobile')).toBeNull();
+    expect(screen.queryByTestId('guide-geo-status')).toBeNull();
+    expect(onExit).not.toHaveBeenCalled();
+  });
+
+  it('shows the route overview when the mobile sheet is expanded, then resumes', () => {
+    stubGeolocation(null);
+    const onExit = vi.fn();
+    const { rerender } = render(
+      <GuidePanel stops={STOPS} startInMoving onExit={onExit} />
+    );
+
+    expect(screen.getByTestId('guide-panel')).toHaveAttribute(
+      'data-mode',
+      'moving'
+    );
+
+    rerender(
+      <GuidePanel stops={STOPS} startInMoving overviewOpen onExit={onExit} />
+    );
+
+    expect(screen.getByTestId('guide-panel')).toHaveAttribute(
+      'data-mode',
+      'review'
+    );
+    expect(screen.queryByTestId('guide-maneuver')).toBeNull();
+    expect(screen.queryByTestId('guide-bottom-stack')).toBeNull();
+    expect(screen.queryByTestId('guide-next-stop')).toBeNull();
+    expect(screen.getByTestId('guide-header')).toBeInTheDocument();
+    expect(screen.getByTestId('guide-stop-1')).toBeInTheDocument();
+    expect(screen.getByTestId('guide-exit-overview')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('guide-exit-overview'));
+    expect(onExit).toHaveBeenCalledOnce();
+
+    rerender(<GuidePanel stops={STOPS} startInMoving onExit={noop} />);
+
+    expect(screen.getByTestId('guide-panel')).toHaveAttribute(
+      'data-mode',
+      'moving'
+    );
   });
 
   it('mutes the stops already walked and keeps the next one in the accent', async () => {
@@ -529,29 +572,17 @@ describe('GuidePanel', () => {
 
     await user.click(screen.getByTestId('guide-stop-1'));
     await user.click(screen.getByTestId('guide-stop-2'));
-    expect(screen.getByText(/маршрут пройден/i)).toBeInTheDocument();
+    expect(screen.getByText(/пройдено 2 из 2/i)).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'сбросить' }));
 
     expect(screen.getByText(/пройдено 0 из 2/i)).toBeInTheDocument();
-    expect(screen.getByTestId('guide-next-stop')).toHaveTextContent(
-      'Монастырь бригиток'
-    );
+    expect(screen.queryByTestId('guide-next-stop')).toBeNull();
     // The reset itself is persisted, so a reload does not bring the ticks back.
     const stored = JSON.parse(
       localStorage.getItem('grodno-guide-progress') ?? '{}'
     ) as { visited: string[] };
     expect(stored.visited).toEqual([]);
-  });
-
-  it('keeps the cards calm for anyone who asked for less motion', () => {
-    stubGeolocation(null);
-    render(<GuidePanel stops={STOPS} onExit={noop} />);
-
-    // The slide is behind motion-safe, so prefers-reduced-motion only fades.
-    expect(screen.getByTestId('guide-next-stop')).toHaveClass(
-      'motion-safe:slide-in-from-bottom-1'
-    );
   });
 });
 
@@ -613,9 +644,7 @@ describe('GuidePanel · режим движения', () => {
     expect(screen.getByTestId('guide-maneuver-unprecise')).toHaveTextContent(
       /расстояние скрыто/i
     );
-    expect(screen.getByTestId('guide-geo-status')).toHaveTextContent(
-      /GPS неточный/i
-    );
+    expect(screen.queryByTestId('guide-geo-status')).toBeNull();
     // …and it must not silently complete the stop it is "standing at".
     expect(screen.getByText(/пройдено 0 из 2/i)).toBeInTheDocument();
   });
@@ -625,17 +654,13 @@ describe('GuidePanel · режим движения', () => {
     const user = await start();
 
     geo.fail();
-    await waitFor(() =>
-      expect(screen.getByTestId('guide-geo-status')).toHaveTextContent(
-        /геолокация недоступна/i
-      )
-    );
+    expect(screen.queryByTestId('guide-geo-status')).toBeNull();
 
     await user.click(screen.getByTestId('guide-advance'));
     expect(screen.getByText(/пройдено 1 из 2/i)).toBeInTheDocument();
 
     await user.click(screen.getByTestId('guide-advance'));
-    expect(screen.getByText(/маршрут пройден/i)).toBeInTheDocument();
+    expect(screen.getByText(/пройдено 2 из 2/i)).toBeInTheDocument();
   });
 
   it('сообщает, насколько пройден маршрут, — это забирает история', async () => {
@@ -666,10 +691,43 @@ describe('GuidePanel · режим движения', () => {
     );
   });
 
-  it('says once when the tourist is clearly off route, and offers no re-plan', async () => {
+  it('offers a re-plan once the tourist is clearly off route', async () => {
     const geo = stubWatchingGeolocation();
+    const onReroute = vi.fn();
     const user = userEvent.setup();
-    render(<GuidePanel stops={STOPS} onExit={noop} />);
+    useDirectionsStore.getState().setWaypoint([
+      {
+        id: 'me',
+        userInput: 'Моё местоположение',
+        geocodeResults: [
+          {
+            title: 'Моё местоположение',
+            selected: true,
+            displaylnglat: [STOPS[0]!.lon, STOPS[0]!.lat],
+            sourcelnglat: [STOPS[0]!.lon, STOPS[0]!.lat],
+            key: 0,
+            addressindex: 0,
+          },
+        ],
+      },
+      {
+        id: '1',
+        userInput: STOPS[0]!.name,
+        placeId: 101,
+        geocodeResults: [
+          {
+            title: STOPS[0]!.name,
+            selected: true,
+            displaylnglat: [STOPS[0]!.lon, STOPS[0]!.lat],
+            sourcelnglat: [STOPS[0]!.lon, STOPS[0]!.lat],
+            key: 1,
+            addressindex: 0,
+          },
+        ],
+      },
+    ]);
+
+    render(<GuidePanel stops={STOPS} onReroute={onReroute} onExit={noop} />);
     await user.click(screen.getByTestId('guide-start'));
 
     // One straggling fix is noise; the prompt waits for the second.
@@ -677,14 +735,51 @@ describe('GuidePanel · режим движения', () => {
     expect(screen.queryByTestId('guide-off-route')).toBeNull();
 
     geo.push(STOPS[0]!.lat + 0.004, STOPS[0]!.lon, 8);
-    const prompt = screen.getByTestId('guide-off-route');
-    expect(prompt).toBeInTheDocument();
-    // Re-planning is the navigator's own business while walking; a second
-    // button for it here was one more control in the way.
-    expect(screen.queryByTestId('guide-reroute')).toBeNull();
+    expect(screen.getByTestId('guide-off-route')).toBeInTheDocument();
 
-    await user.click(screen.getByTestId('guide-on-route'));
-    expect(screen.queryByTestId('guide-off-route')).toBeNull();
+    await user.click(screen.getByTestId('guide-reroute'));
+    expect(onReroute).toHaveBeenCalledTimes(1);
+
+    // Every stop survives the re-plan — only the start moved to the fix.
+    const ids = useDirectionsStore
+      .getState()
+      .waypoints.map((w) => w.id)
+      .sort();
+    expect(ids).toEqual(['1', 'me']);
+  });
+
+  it('drops no stop when the re-plan falls back to the store', async () => {
+    const geo = stubWatchingGeolocation();
+    const user = await start();
+    useDirectionsStore.getState().setWaypoint([
+      {
+        id: '1',
+        userInput: STOPS[0]!.name,
+        placeId: 101,
+        geocodeResults: [
+          {
+            title: STOPS[0]!.name,
+            selected: true,
+            displaylnglat: [STOPS[0]!.lon, STOPS[0]!.lat],
+            sourcelnglat: [STOPS[0]!.lon, STOPS[0]!.lat],
+            key: 0,
+            addressindex: 0,
+          },
+        ],
+      },
+    ]);
+
+    geo.push(STOPS[0]!.lat + 0.004, STOPS[0]!.lon, 8);
+    geo.push(STOPS[0]!.lat + 0.004, STOPS[0]!.lon, 8);
+    expect(screen.getByTestId('guide-off-route')).toBeInTheDocument();
+
+    await user.click(screen.getByTestId('guide-reroute'));
+
+    const ids = useDirectionsStore
+      .getState()
+      .waypoints.map((w) => w.id)
+      .sort();
+    expect(ids).toEqual(['1', 'me']);
   });
 
   it('opens the stops from the map HUD and lets the tourist mark one', async () => {
@@ -726,13 +821,9 @@ describe('GuidePanel · режим движения', () => {
     });
     const user = await start();
 
-    // The walking card is name + distance only: on a phone the full card was
-    // 208px of a 844px screen and left the map with 4 % of itself. The writing
-    // about the place moved into the route details, which the HUD opens — still
-    // without the planner, which is what this test is about.
-    expect(screen.getByTestId('guide-next-place')).toHaveTextContent(
-      'Монастырь бригиток'
-    );
+    // Place information lives in the explicit route details, not in a second
+    // always-visible card competing with the map.
+    expect(screen.queryByTestId('guide-next-place')).toBeNull();
     expect(screen.queryByTestId('guide-place-details-toggle')).toBeNull();
 
     await user.click(screen.getByTestId('guide-route-details-toggle'));
@@ -1179,8 +1270,11 @@ describe('GuidePanel · фиксы в фоне', () => {
       expect(screen.getByText(/пройдено 1 из 2/i)).toBeInTheDocument()
     );
 
-    const nextCard = screen.getByTestId('guide-next-stop');
-    expect(within(nextCard).getByText('Кафе Немо')).toBeInTheDocument();
+    expect(screen.queryByTestId('guide-next-place')).toBeNull();
+    expect(screen.getByTestId('guide-advance')).toHaveAttribute(
+      'aria-label',
+      expect.stringContaining('Кафе Немо')
+    );
   });
 });
 
@@ -1210,18 +1304,14 @@ describe('GuidePanel · английский интерфейс', () => {
     expect(screen.getByText('sound on')).toBeInTheDocument();
     expect(screen.getByText('reset')).toBeInTheDocument();
 
-    // Карточка следующей остановки и её кнопки.
-    const card = screen.getByTestId('guide-next-stop');
-    expect(card).toHaveTextContent('next stop');
-    expect(
-      screen.getByRole('link', { name: /open in maps/i })
-    ).toBeInTheDocument();
-
-    // Прогресс, статус геолокации и главное действие.
-    expect(screen.getByText(/walked 0 of 2/i)).toBeInTheDocument();
-    expect(screen.getByTestId('guide-geo-status')).toHaveTextContent(
-      'geolocation unavailable — mark the stops by hand'
+    expect(screen.queryByTestId('guide-next-stop')).toBeNull();
+    expect(screen.getByTestId('guide-stop-1')).toHaveTextContent(
+      'Монастырь бригиток'
     );
+
+    // Прогресс и главное действие.
+    expect(screen.getByText(/walked 0 of 2/i)).toBeInTheDocument();
+    expect(screen.queryByTestId('guide-geo-status')).toBeNull();
     expect(screen.getByTestId('guide-start')).toHaveTextContent(
       'start the route'
     );

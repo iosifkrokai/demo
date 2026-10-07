@@ -21,20 +21,8 @@ export const MOBILE_SHEET_HEIGHT: Record<MobileSnap, string> = {
   full: '90dvh',
 };
 
-/** While the guide runs the map IS the navigator, so the panel gives the map
- * back its room and keeps only the bar the guide cannot work without — the
- * grab handle and «выйти».
- *
- * It was 26dvh (219px at 844) back when the panel itself carried the turn and
- * the next stop. It does not any more: in moving mode `GuidePanel` renders only
- * the portaled HUD, so those 219px held a 105px header and 113px of nothing.
- * With the HUD on top of it, the sheet was the larger half of the chrome — the
- * navigator showed 23 % of the map. Measured at 390×844 the header is 105px,
- * so 7.5rem (127px) covers it with room for the safe-area inset.
- *
- * Same value the desktop sheet uses (`GUIDE_SHEET_CLASS`) — see the measurement
- * note there. */
-export const MOBILE_GUIDE_HEIGHT = '7.5rem';
+/** The guide sheet is transparent while collapsed; only its grab handle remains. */
+export const MOBILE_GUIDE_HEIGHT = '3.5rem';
 
 const ORDER: MobileSnap[] = ['bar', 'peek', 'full'];
 
@@ -99,12 +87,9 @@ export const snapPx = (snap: MobileSnap): number => {
  * The guide strip in pixels — the height the drag starts from while walking.
  *
  * Must be the same number as `MOBILE_GUIDE_HEIGHT` above, which is what the CSS
- * actually renders. It was still `0.26 * vh` (219px at 844) after the strip
- * became 7.5rem (120px): the sheet stood at 120 and every drag started from
- * 219, so the first pointer move jumped it 99px down before tracking anything.
- * 7.5rem is a fixed rem, so it converts without looking at the viewport at all.
+ * actually renders. The 3.5rem strip fits the 44px grab handle and its spacing.
  */
-export const guidePx = (): number => 120;
+export const guidePx = (): number => 56;
 
 /**
  * The height a drag is allowed to reach, with the pull past the outermost
@@ -276,7 +261,10 @@ export const useMobileSheetSnap = (
     }
     gesture.current = {
       originY: event.clientY,
-      originPx: latest.current.restingPx ?? snapPx(snapRef.current),
+      originPx:
+        snapRef.current === 'peek'
+          ? (latest.current.restingPx ?? snapPx(snapRef.current))
+          : snapPx(snapRef.current),
       samples: [{ y: event.clientY, at: now() }],
       moved: false,
     };
