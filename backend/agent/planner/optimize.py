@@ -97,7 +97,17 @@ def optimize(
     )
     if constrained != list(range(n)):
         new_order = [i for i in constrained if i < len(candidates)]
-        info = {**info, "stops_dropped": dropped, "order": new_order}
+        # The count alone cannot answer «почему этой остановки нет в маршруте»,
+        # so the names travel with it — in the order they would have been
+        # visited, which is the order the traveller would have experienced them.
+        kept = set(new_order)
+        dropped_names = [candidates[i].name for i in order if i not in kept]
+        info = {
+            **info,
+            "stops_dropped": dropped,
+            "stops_dropped_names": dropped_names,
+            "order": new_order,
+        }
         order = new_order
 
     info = _report_missing_must(info, order, candidates, constraints)

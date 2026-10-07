@@ -56,6 +56,7 @@ import type { Itinerary } from '@/api/types';
 import { guideModeFor } from './parts/guide-mode';
 import { decimalRu } from '@/utils/plural';
 import { newProgressId } from '@/api/progress';
+import { currentRunSession, startRunSession } from '@/utils/run-session';
 import { WaypointList } from './waypoint-list';
 import { Chip } from './parts/chip';
 import { agentErrorMessage } from './parts/guide-format';
@@ -986,6 +987,7 @@ export const Sidebar = ({
           }[];
         };
         progress_id?: string;
+        session_id?: string;
       } = { query: q, progress_id: requestProgressId };
       if (timeBudget >= 15) body.time_budget_minutes = timeBudget;
       const chosen = buildTransportOptions(t).find(
@@ -1046,6 +1048,10 @@ export const Sidebar = ({
           base_points: basePoints,
         };
       }
+      // One run per topic: a refinement continues the current session, a first
+      // query on a cleared route opens a new one. The agent forwards this to
+      // Langfuse, so a run reads as one thread rather than separate traces.
+      body.session_id = isRefinement ? currentRunSession() : startRunSession();
 
       const r = await fetch(`${AGENT_URL}/routes/generate`, {
         method: 'POST',

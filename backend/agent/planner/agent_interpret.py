@@ -35,6 +35,7 @@ filter.
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
@@ -43,7 +44,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-from .. import constants, tools
+from .. import constants, tools, trace
 from ..config import openrouter_api_key
 from ..models import GenerateReq
 from ..requirements import PartyComposition, Requirement, TripRequirements
@@ -481,10 +482,7 @@ def _run_agent(
         tool_calls_limit=MAX_TOOL_CALLS,
     )
     model_settings = ModelSettings(max_tokens=MAX_OUTPUT_TOKENS, timeout=MODEL_TIMEOUT_S)
-    prompt = (
-        f"locale={req.locale}\n{_request_note(req)}\nrequest={query!r}\n"
-        "Return the requirement list for this request."
-    )
+    prompt = _build_prompt(query, req)
 
     def call() -> Any:
         agent = _build_agent(model, req)
@@ -497,10 +495,195 @@ def _run_agent(
         bound = min(bound, float(wall_clock_s))
     result, failure = _run_with_timeout(call, bound)
     if failure is not None:
+        _record_model_failure(failure, prompt)
         return None, failure
-    if result is None or not isinstance(getattr(result, "output", None), AgentReading):
+    if result is None:
+        _record_model_failure("unexpected_output", prompt)
+        return None, "unexpected_output"
+    # Recorded before the answer is judged, so an answer that failed validation
+    # is visible too: «the agent fell back to the deterministic path» is a fact
+    # somebody will have to explain, and the prompt is how they explain it.
+    _record_model_call(req, prompt, result)
+    if not isinstance(getattr(result, "output", None), AgentReading):
         return None, "unexpected_output"
     return result.output, None
+
+
+#: Failures that mean "there was no model to call", not "the call went wrong":
+#: a missing key or SDK is a supported deployment, and marking it red would cry
+#: wolf on every request of a Langfuse-less installation.
+_NO_MODEL = {"agent_unavailable", "pydantic_ai_unavailable", "model_unavailable"}
+
+
+def _build_prompt(query: str, req: Any) -> str:
+    """The text handed to the model, built in one place.
+
+    ``_run_agent`` sends it; the failure span shows it. Two copies of a format
+    string is one copy too many when the reader's whole job is to compare what
+    was asked with what came back.
+    """
+    return (
+        f"locale={req.locale}\n{_request_note(req)}\nrequest={query!r}\n"
+        "Return the requirement list for this request."
+    )
+
+
+def _record_model_failure(reason: str, prompt: str = "") -> None:
+    """Say in the trace why no model reading was recorded.
+
+    The pipeline reports ``source=deterministic`` when the agent did not answer,
+    which is the *what*; the reason is the *why* — a timeout reads very
+    differently from a deployment with no key at all. The prompt rides along
+    when there was one, so a failed call still shows what was about to be asked
+    — an empty input panel on the one span that explains a fallback is exactly
+    where a reader has nothing to go on.
+    """
+    trace.record(
+        "interpret · model",
+        "skipped" if reason in _NO_MODEL else "error",
+        input=prompt or None,
+        reason=reason,
+    )
+
+
+def _token_usage(usage: Any) -> dict[str, int] | None:
+    """The tokens one agent run spent, under Langfuse's own key names."""
+    if usage is None:
+        return None
+    spent_in = int(getattr(usage, "input_tokens", 0) or 0)
+    spent_out = int(getattr(usage, "output_tokens", 0) or 0)
+    return {"input": spent_in, "output": spent_out, "total": spent_in + spent_out}
+
+
+#: How much of a tool call the trace carries. The caps are small on purpose: the
+#: point is to show *what the model asked*, and a trace that ships whole tool
+#: payloads stops being something a person can read.
+_TOOL_ARGS_MAX = 300
+_TOOL_ANSWER_MAX = 400
+
+
+def _clip(text: str, limit: int) -> str:
+    """``text`` cut to ``limit`` characters, with the cut left visible."""
+    return text if len(text) <= limit else text[:limit] + "…"
+
+
+def _as_text(value: Any) -> str:
+    """A tool argument or answer as one compact string: JSON for structures.
+
+    A provider may hand the arguments back as a JSON *string* rather than a
+    structure, and that string arrives with ``\\u0413``-style escapes: dumped
+    into the trace as-is it would be read twice-escaped («\\u0413\\u0440...»
+    instead of «Гр...»), which is exactly the reading this field exists for.
+    """
+    text: Any = value
+    if isinstance(text, str):
+        # The arguments arrive as a JSON string, and that string can carry a
+        # second layer of the same; unwrap for as long as it keeps decoding to
+        # another string, then stop.
+        for _ in range(3):
+            try:
+                decoded = json.loads(text)
+            except (TypeError, ValueError):  # a plain string, not JSON at all
+                break
+            text = decoded
+            if not isinstance(text, str):
+                break
+    if isinstance(text, str):
+        return text
+    try:
+        return json.dumps(text, ensure_ascii=False, default=str)
+    except (TypeError, ValueError):  # a payload json cannot represent
+        return repr(text)
+
+
+def _tool_exchanges(result: Any) -> list[dict[str, Any]]:
+    """What the model asked its tools, and what came back — one entry per call.
+
+    ``requests`` and ``tool_calls`` say how many turns a run took; they do not
+    say what the model asked. That is the product's own defence left invisible:
+    the four tools exist to hold the model inside bounded windows (eight places
+    a search, one place's facts), and a trace that records the caps but not the
+    questions can neither show the defence working nor show a model spending
+    three of its twenty-four calls on the same terms. The arguments travel as
+    they were written; an answer travels as its size plus its head, because the
+    answer is the part that can be long.
+    """
+    try:
+        from pydantic_ai.messages import ToolCallPart, ToolReturnPart
+    except Exception:  # SDK absent — that path records no call to explain
+        return []
+    all_messages = getattr(result, "all_messages", None)
+    if all_messages is None:
+        return []
+    exchanges: list[dict[str, Any]] = []
+    by_id: dict[str, dict[str, Any]] = {}
+    for message in all_messages():
+        for part in getattr(message, "parts", ()):
+            if isinstance(part, ToolCallPart):
+                entry: dict[str, Any] = {
+                    "tool": part.tool_name,
+                    "args": _clip(_as_text(part.args), _TOOL_ARGS_MAX),
+                }
+                exchanges.append(entry)
+                if part.tool_call_id:
+                    by_id[part.tool_call_id] = entry
+            elif isinstance(part, ToolReturnPart):
+                answered: dict[str, Any] | None = by_id.get(part.tool_call_id or "")
+                if answered is None:  # a return without its call — still worth seeing
+                    answered = {"tool": part.tool_name}
+                    exchanges.append(answered)
+                answer = _as_text(part.content)
+                answered["answer_chars"] = len(answer)
+                answered["answer"] = _clip(answer, _TOOL_ANSWER_MAX)
+    return exchanges
+
+
+def _record_model_call(req: GenerateReq, prompt: str, result: Any) -> None:
+    """Record the interpretation call itself: prompt, answer, model, tokens.
+
+    The pipeline records *that* interpretation happened and what came of it;
+    this records the conversation behind it — the instructions the model was
+    given, the request as it saw it, the reading it returned and what the call
+    cost. It is the only place the prompt exists in the trace, and Langfuse
+    shows a generation in a panel of its own, next to the steps around it.
+
+    One observation stands for the whole run. PydanticAI may ask the model
+    several times inside it (once per tool call), and those turns are not
+    replayed as separate observations; ``requests`` and ``tool_calls`` say how
+    many turns there really were, and ``tools`` says what was asked in them.
+
+    ``cached=False`` is the counterpart of the cache-hit span's ``cached=True``
+    (``intent.py``): the two roads to a reading look identical in the trace
+    otherwise — same name, same output — and the difference is exactly what a
+    reader is trying to work out when a run is slower or costs more than before.
+    """
+    usage = getattr(result, "usage", None)
+    reading = getattr(result, "output", None)
+    usable = isinstance(reading, AgentReading)
+    answer: Any = (
+        reading.model_dump()
+        if usable
+        else getattr(getattr(result, "response", None), "text", None)
+    )
+    facts: dict[str, Any] = {"cached": False}
+    if usage is not None:
+        facts = {**facts, "requests": usage.requests, "tool_calls": usage.tool_calls}
+    exchanges = _tool_exchanges(result)
+    if exchanges:
+        facts["tools"] = exchanges
+    trace.record(
+        "interpret · model",
+        "ok" if usable else "error",
+        input=[
+            {"role": "system", "content": _instructions(_ui_note(req))},
+            {"role": "user", "content": prompt},
+        ],
+        output=answer,
+        kind="generation",
+        model=_model_name(),
+        usage=_token_usage(usage),
+        **facts,
+    )
 
 
 # ── Merging the reading into the contract ───────────────────────────────────
@@ -752,6 +935,9 @@ def interpret_with_agent(
         return None
     if not available():
         log.info("agent_interpret: agent unavailable (no key/model) — deterministic path")
+        # The single most common reason a trace shows no prompt at all, so it is
+        # said in the trace rather than only in the log line nobody reads.
+        _record_model_failure("agent_unavailable", _build_prompt(query, req))
         return None
 
     deps = InterpretDeps(db=db)

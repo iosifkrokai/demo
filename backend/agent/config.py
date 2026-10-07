@@ -22,6 +22,14 @@ class Settings:
     # ── Secrets ──
     OPENROUTER_API_KEY: str | None = os.environ.get("OPENROUTER_API_KEY") or None
 
+    # ── Observability (self-hosted Langfuse) ──
+    # Optional: with no public/secret key the trace exporter is a no-op and the
+    # agent answers as before. HOST defaults to the local compose mapping; the
+    # agent container overrides it to the compose service name (langfuse-web).
+    LANGFUSE_HOST: str | None = os.environ.get("LANGFUSE_HOST")
+    LANGFUSE_PUBLIC_KEY: str | None = os.environ.get("LANGFUSE_PUBLIC_KEY")
+    LANGFUSE_SECRET_KEY: str | None = os.environ.get("LANGFUSE_SECRET_KEY")
+
     # ── Addresses ──
     HOST: str = os.environ.get("AGENT_HOST", "0.0.0.0")
     PORT: int = int(os.environ.get("AGENT_PORT", "8080"))
@@ -49,3 +57,15 @@ def openrouter_api_key() -> str | None:
     exactly one answer in the process, and /health can report it honestly.
     """
     return os.environ.get("OPENROUTER_API_KEY") or settings.OPENROUTER_API_KEY
+
+
+def langfuse_configured() -> bool:
+    """True when both Langfuse keys are present (a host alone is not enough).
+
+    The trace exporter checks this before touching the SDK: without keys the
+    client would still try to POST to Langfuse, and a tracing target that is
+    only half-configured must not cost a request anything.
+    """
+    return bool(
+        os.environ.get("LANGFUSE_PUBLIC_KEY") or settings.LANGFUSE_PUBLIC_KEY
+    ) and bool(os.environ.get("LANGFUSE_SECRET_KEY") or settings.LANGFUSE_SECRET_KEY)

@@ -97,6 +97,11 @@ class GenerateReq(BaseModel):
     # the pipeline is doing. Absent → nothing is tracked and nothing changes
     # (the benchmarks and the golden harness send no id).
     progress_id: str | None = Field(default=None, max_length=64)
+    # The guide run this request belongs to («полный прогон»): every generate on
+    # one topic — the first and each refinement — carries the same id, so the
+    # traces group into one Langfuse session instead of scattering. Absent →
+    # the trace stands alone, exactly as before this field existed.
+    session_id: str | None = Field(default=None, max_length=128)
     # The only limit on a route is the time the tourist names. 0 (and a missing
     # field) both mean "без ограничения" — the UI selector's default — so they map
     # to no budget at all instead of a zero-minute one.
@@ -189,6 +194,9 @@ class ServicesAlongReq(BaseModel):
     # An explicit gate in metres; None means «по профилю» (150 m walking).
     max_off_line_m: float | None = Field(default=None, ge=10, le=1500)
     limit: int | None = Field(default=None, ge=1, le=20)
+    # The guide run this «что по пути» belongs to — same id the generate that
+    # drew the line carried, so its trace lands in the same Langfuse session.
+    session_id: str | None = Field(default=None, max_length=128)
 
 
 # ============================================================================
