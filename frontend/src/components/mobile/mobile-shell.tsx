@@ -97,6 +97,21 @@ export const MobileShell = ({
     wasOpen.current = panelOpen;
   }, [panelOpen, setSnap]);
 
+  // Entering the guide puts the panel at the strip, whatever position the
+  // planning left it in. Without this the collapsed state below depended on the
+  // sheet happening to be at `peek`: pressing «начать маршрут» from the full
+  // height started walking behind a 90dvh sheet, with the navigator's map —
+  // the thing being watched — pushed off the screen entirely.
+  //
+  // Only on the *transition*: a drag up to the route overview while walking is
+  // meant to stick, and an effect that ran on every render would fold it back
+  // the moment the next render came.
+  const wasGuiding = useRef(guiding);
+  useEffect(() => {
+    if (guiding && !wasGuiding.current) setSnap('peek');
+    wasGuiding.current = guiding;
+  }, [guiding, setSnap]);
+
   useEffect(() => {
     const root = document.documentElement;
     root.style.setProperty(

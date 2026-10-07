@@ -486,14 +486,16 @@ export const GuidePanel = ({
     startInMoving ? 'moving' : 'review'
   );
   useEffect(() => {
-    if (overviewOpen) setMode('review');
-    else if (startInMoving) setMode('moving');
-  }, [overviewOpen, startInMoving]);
+    console.log('[GuidePanel] effect1: startInMoving=', startInMoving, 'overviewOpen=', overviewOpen, 'setting mode to', startInMoving ? 'moving' : (overviewOpen ? 'review' : '???'));
+    if (startInMoving) setMode('moving');
+    else if (overviewOpen) setMode('review');
+  }, [startInMoving, overviewOpen]);
   /** Details stay open until the tourist deliberately collapses them. */
   const [detailsOpen, setDetailsOpen] = useState(true);
   useEffect(() => {
-    if (hasTrustedFix && !overviewOpen) setMode('moving');
-  }, [hasTrustedFix, overviewOpen]);
+    console.log('[GuidePanel] effect2: startInMoving=', startInMoving, 'hasTrustedFix=', hasTrustedFix, 'overviewOpen=', overviewOpen, 'condition=', !startInMoving && hasTrustedFix && !overviewOpen);
+    if (!startInMoving && hasTrustedFix && !overviewOpen) setMode('moving');
+  }, [hasTrustedFix, overviewOpen, startInMoving]);
   /**
    * The panel is NOT closed on entering moving mode. It used to be, to give the
    * map more room — and that unmounted the navigator with it: this panel lives
@@ -1402,13 +1404,24 @@ export const GuidePanel = ({
     );
   }
 
-  if (mode === 'moving' && !overviewOpen) {
+  console.log('[GuidePanel] render: mode=', mode, 'stops.length=', stops.length);
+
+  if (mode === 'moving') {
+    console.log('[GuidePanel] returning FerrostarNavigationHud only');
+    // Check sheet position
+    const sheet = document.querySelector('[data-slot="sheet-content"]');
+    console.log('[GuidePanel] sheet element:', sheet);
+    if (sheet) {
+      const rect = sheet.getBoundingClientRect();
+      console.log('[GuidePanel] sheet rect:', rect);
+      const style = window.getComputedStyle(sheet);
+      console.log('[GuidePanel] sheet transform:', style.transform, 'position:', style.position, 'top:', style.top);
+    }
     const ManeuverIcon = activeManeuver
       ? getManeuverIcon(activeManeuver.type)
       : Footprints;
     return (
       <FerrostarNavigationHud
-        state={ferrostarActive ? ferroState : null}
         maneuverFallback={
           <ManeuverBanner
             instruction={
@@ -1581,7 +1594,7 @@ const ManeuverBanner = ({
   const { t } = useTranslation();
 
   return (
-    <div className="sticky top-0 z-10 rounded-2xl border border-border bg-card p-4 shadow-float">
+    <div className="rounded-2xl border border-border bg-card p-4 shadow-float">
       <div className="flex items-start gap-3">
         <span className="flex size-14 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground md:size-12">
           <Icon className="size-7 md:size-6" aria-hidden="true" />

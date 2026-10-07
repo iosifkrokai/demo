@@ -132,6 +132,43 @@ describe('MobileShell', () => {
     );
   });
 
+  it('сложится в полоску, если в проводник войти с развёрнутого листа', () => {
+    // «Начать маршрут» стоит в подвале панели, то есть его нажимают с любой
+    // высоты. Полоска получается только из `peek`, поэтому без сброса вход в
+    // проводник с полной высоты оставлял карту позади листа на 90dvh — а карта
+    // во время ведения и есть навигатор.
+    const { rerender } = render(<MobileShell panel={stubPanel} />);
+
+    fireEvent.click(screen.getByTestId('sheet-handle'));
+    expect(screen.getByTestId('mobile-sheet')).toHaveAttribute(
+      'data-snap',
+      'full'
+    );
+
+    mockCommon.guiding = true;
+    rerender(<MobileShell panel={stubPanel} />);
+
+    const sheet = screen.getByTestId('mobile-sheet');
+    expect(sheet).toHaveStyle({ height: MOBILE_GUIDE_HEIGHT });
+    expect(document.documentElement.style.getPropertyValue('--sheet-h')).toBe(
+      MOBILE_GUIDE_HEIGHT
+    );
+  });
+
+  it('разворот в обзор маршрута во время ведения не сбрасывается', () => {
+    // Сброс только на переходе: раскрытая во время ходьбы карта маршрута должна
+    // остаться открытой, а не складываться обратно каждое перерисовывание.
+    mockCommon.guiding = true;
+    render(<MobileShell panel={stubPanel} />);
+
+    fireEvent.click(screen.getByTestId('sheet-handle'));
+
+    expect(screen.getByTestId('mobile-sheet')).toHaveAttribute(
+      'data-snap',
+      'full'
+    );
+  });
+
   it('folds down to the strip when the panel is closed', () => {
     mockCommon.directionsPanelOpen = false;
     render(<MobileShell panel={stubPanel} />);

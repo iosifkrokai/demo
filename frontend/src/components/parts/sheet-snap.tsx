@@ -31,7 +31,7 @@ export const SHEET_SNAP_CLASS: Record<SheetSnap, string> = {
  * now sized to the grab handle only; the guide sheet is transparent while
  * collapsed so the map remains visible to the bottom edge.
  */
-export const GUIDE_SHEET_CLASS = 'h-14 md:h-auto';
+export const GUIDE_SHEET_CLASS = 'h-14 md:hidden';
 
 /**
  * The panel itself: a bottom sheet under 768px (the map stays visible above it)

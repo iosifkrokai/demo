@@ -1,7 +1,6 @@
-import { createElement, useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import type { ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import type { TripState } from '@stadiamaps/ferrostar';
 import {
   BookOpenText,
   ListChecks,
@@ -16,27 +15,6 @@ import { PlaceCardBody } from '@/components/map/parts/place-card-body';
 import { GuideProgress } from './guide-progress';
 import { GuideRouteDone } from './guide-route-done';
 import { GuideStopList } from './guide-stop-list';
-
-type FerrostarViewElement = HTMLElement & {
-  tripState: TripState | null;
-  system: 'metric' | 'imperial' | 'imperialWithYards';
-  maxDecimalPlaces: number;
-};
-
-let viewsPromise: Promise<boolean> | null = null;
-
-const loadViews = () => {
-  viewsPromise ??= import('@stadiamaps/ferrostar-webcomponents')
-    .then(() => true)
-    .catch((error: unknown) => {
-      console.warn(
-        'Ferrostar web UI could not be loaded; using the local navigation HUD.',
-        error
-      );
-      return false;
-    });
-  return viewsPromise;
-};
 
 interface StopListItem {
   id: string;
@@ -54,7 +32,6 @@ interface SuggestionItem {
 }
 
 interface FerrostarNavigationHudProps {
-  state: TripState | null;
   maneuverFallback: ReactNode;
   alerts?: ReactNode;
   announcement: string;
@@ -106,7 +83,6 @@ interface FerrostarNavigationHudProps {
  * Alerts (z-62) render above the stack (z-61).
  */
 export const FerrostarNavigationHud = ({
-  state,
   maneuverFallback,
   alerts,
   announcement,
@@ -147,19 +123,6 @@ export const FerrostarNavigationHud = ({
   const [placeDetailsFor, setPlaceDetailsFor] = useState<string | null>(null);
   const placeDetailsOpen = nextStopId != null && placeDetailsFor === nextStopId;
 
-  const isNavigating = state != null && 'Navigating' in state;
-  const bindView = useCallback(
-    (element: HTMLElement | null) => {
-      if (!element) return;
-      const view = element as FerrostarViewElement;
-      view.tripState = state;
-      view.system = 'metric';
-      view.maxDecimalPlaces = 0;
-      view.style.display = 'block';
-    },
-    [state]
-  );
-
   /**
    * Skipping a suggestion is reported to the panel, which owns the «skipped» set
    * for the whole guide — the HUD keeps no second copy that could disagree with
@@ -169,17 +132,7 @@ export const FerrostarNavigationHud = ({
     if (onSkipSuggestion) onSkipSuggestion(id);
   };
 
-  const [viewsReady, setViewsReady] = useState(false);
-  useEffect(() => {
-    let cancelled = false;
-    void loadViews().then((ready) => {
-      if (!cancelled) setViewsReady(ready);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
+  console.log('[FerrostarNavigationHud] rendering');
   if (typeof document === 'undefined') return null;
 
   return createPortal(
@@ -187,34 +140,33 @@ export const FerrostarNavigationHud = ({
       data-testid="guide-panel"
       data-mode="moving"
       aria-label={t('guide.title')}
-      className="pointer-events-none fixed inset-0 z-[60]"
+      className="fixed inset-0 z-[100]"
     >
       {/* ── Top column: maneuver banner → alerts.
           One flex column pinned to the top, for the same reason the bottom is one
           column: each of these was separately `fixed` at a guessed `top:` offset
           (+5.25rem, +8rem), and those guesses drifted out of step with the real
           banner height. In one column each block sits below the one above it
-          and grows downward, whatever the banner turns out to be. ── */}
+          and grows downward, whatever the banner turns out to be.
+
+          `md:right-[4.5rem]` leaves the right gutter to the floating cluster
+          (выход / звук) further down: the stack used to run under it, and an
+          alert under those buttons was unreachable. */}
       <div
         data-testid="guide-top-stack"
-        className="fixed inset-x-3 top-[max(env(safe-area-inset-top),0.75rem)] z-[62] flex max-h-[calc(100dvh-var(--sheet-h,0px)-16rem)] flex-col gap-2 md:left-[calc(var(--panel-width,0px)+0.75rem)] md:right-3"
+        className="fixed inset-x-3 top-[max(env(safe-area-inset-top),0.75rem)] z-[62] flex max-h-[calc(100dvh-var(--sheet-h,0px)-16rem)] flex-col gap-2 md:left-[calc(var(--panel-width,0px)+0.75rem)] md:right-[4.5rem]"
       >
         <div className="flex shrink-0 items-start gap-2">
           <div
             data-testid="guide-maneuver"
-            className="pointer-events-auto min-w-0 max-w-[540px] flex-1 overflow-hidden rounded-2xl border border-black/10 bg-white shadow-[0_8px_28px_rgba(0,0,0,0.24)]"
+            className="pointer-events-auto min-w-0 max-w-[540px] flex-1 overflow-hidden rounded-2xl border border-border bg-card shadow-float"
           >
-            {viewsReady && isNavigating
-              ? createElement('instructions-view', {
-                  ref: bindView,
-                  'aria-label': t('guide.nextManeuver'),
-                })
-              : maneuverFallback}
+            {maneuverFallback}
           </div>
         </div>
 
         {alerts && (
-          <div className="pointer-events-auto mx-auto flex w-[min(88vw,540px)] shrink-0 flex-col gap-2 overflow-y-auto">
+          <div className="pointer-events-auto mx-auto flex w-[min(88vw,540px)] shrink-0 flex-col gap-2 overflow-y-auto md:mx-0 md:w-[540px]">
             {alerts}
           </div>
         )}
@@ -224,13 +176,19 @@ export const FerrostarNavigationHud = ({
           One flex column anchored to the sheet, so the blocks stack instead of
           overlapping, and the whole thing grows upward as details open.
 
-          The height budget is explicit, because a phone does not have it to
-          spare. The stack is capped above the sheet; if the route details are
-          open, their list scrolls rather than pushing the navigation controls
-          off the screen. */}
+           The height budget is explicit, because a phone does not have it to
+           spare. The stack is capped above the sheet; if the route details are
+           open, their list scrolls rather than pushing the navigation controls
+           off the screen.
+
+           `md:max-w-[560px]` is what makes this a navigator on a monitor rather
+           than a phone row stretched across it: unbounded, the two ends of the
+           button row sat 992px apart — «маршрут · 0 из 2» pinned to the far left
+           and «я на месте» to the far right of a 1440px display, with nothing
+           between them but empty map. */}
       <div
         data-testid="guide-bottom-stack"
-        className="fixed inset-x-3 z-[61] flex max-h-[calc(100dvh-var(--sheet-h,0px)-15rem)] flex-col gap-2 md:left-[calc(var(--panel-width,0px)+1rem)] md:right-3"
+        className="fixed inset-x-3 z-[61] flex max-h-[calc(100dvh-var(--sheet-h,0px)-15rem)] flex-col gap-2 md:left-[calc(var(--panel-width,0px)+1rem)] md:right-3 md:max-w-[560px]"
         style={{
           bottom:
             'calc(var(--sheet-h,0px) + env(safe-area-inset-bottom) + 0.5rem)',
@@ -361,29 +319,25 @@ export const FerrostarNavigationHud = ({
           </div>
         )}
 
-        {/* Trip progress strip. */}
+        {/* Trip progress strip. Our own, always: the Ferrostar web component was
+            a bare `13:49 | 29m 57s | 2 км` with no labels and its own sans-serif,
+            so the one number the tourist watches while walking was the one thing
+            on screen that said nothing. */}
         <div className="pointer-events-auto shrink-0">
-          {viewsReady && isNavigating ? (
-            createElement('trip-progress-view', {
-              ref: bindView,
-              'aria-label': t('guide.tripProgress'),
-            })
-          ) : (
-            <div
-              data-testid="guide-trip-progress"
-              className="rounded-2xl border border-border bg-background/95 px-3 py-2 shadow-float backdrop-blur"
-            >
-              <GuideProgress
-                compact
-                done={progressDone}
-                total={totalStops}
-                minutesLeft={progressMinutesLeft}
-                metresDone={progressMetresDone}
-                metresTotal={progressMetresTotal}
-                remainingMinutes={progressRemainingMinutes}
-              />
-            </div>
-          )}
+          <div
+            data-testid="guide-trip-progress"
+            className="rounded-2xl border border-border bg-background/95 px-3 py-2 shadow-float backdrop-blur"
+          >
+            <GuideProgress
+              compact
+              done={progressDone}
+              total={totalStops}
+              minutesLeft={progressMinutesLeft}
+              metresDone={progressMetresDone}
+              metresTotal={progressMetresTotal}
+              remainingMinutes={progressRemainingMinutes}
+            />
+          </div>
         </div>
 
         {/* Details toggle + advance. */}
@@ -441,6 +395,7 @@ export const FerrostarNavigationHud = ({
         </button>
         <button
           type="button"
+          data-testid="guide-voice-toggle-hud"
           aria-label={
             voiceMuted ? t('guide.enableSound') : t('guide.disableSound')
           }

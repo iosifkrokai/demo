@@ -219,6 +219,24 @@ export const MapComponent = () => {
   ]) as unknown as maplibregl.StyleSpecification;
 
   const mapRef = useRef<MapRef>(null);
+
+  /**
+   * How much of the canvas's left edge the docked panel covers, right now.
+   *
+   * The panel publishes it as `--panel-width` and zeroes it whenever it is not
+   * actually there — closed, on a phone (where the panel is a bottom sheet), and
+   * while the guide runs (where the column hides itself). Read from the property
+   * rather than from the store so the camera never reserves space for a panel
+   * nobody can see.
+   */
+  const panelWidthPx = () => {
+    const raw = getComputedStyle(document.documentElement).getPropertyValue(
+      '--panel-width'
+    );
+    const parsed = Number.parseFloat(raw);
+    return Number.isFinite(parsed) ? parsed : 0;
+  };
+
   const focusRequest = useCommonStore((s) => s.focus);
   const guideFix = useCommonStore((s) => s.guideFix);
   /** Metres to the next turn — the guide publishes it, the camera acts on it. */
@@ -388,6 +406,56 @@ export const MapComponent = () => {
     return newMarkers;
   }, [waypoints, geocodeResults]);
 
+  /**
+   * The bounding box of the line the map draws, or null when there is none.
+   *
+   * Shared by the two things that frame a route: the effect that reacts to the
+   * coordinates changing, and the one that reframes it when the guide is left.
+   */
+  const routeBounds = (): [[number, number], [number, number]] | null => {
+    if (!coordinates || coordinates.length === 0) return null;
+    const first = coordinates[0];
+    if (!first || !first[0] || !first[1]) return null;
+    return coordinates.reduce<[[number, number], [number, number]]>(
+      (acc, coord) => {
+        if (!coord || !coord[0] || !coord[1]) return acc;
+        return [
+          [Math.min(acc[0][0], coord[1]), Math.min(acc[0][1], coord[0])],
+          [Math.max(acc[1][0], coord[1]), Math.max(acc[1][1], coord[0])],
+        ];
+      },
+      [
+        [first[1], first[0]],
+        [first[1], first[0]],
+      ]
+    );
+  };
+
+  /**
+   * Fit the whole route into the room the panel actually leaves.
+   *
+   * The padding is read from `--panel-width`, not from a constant: it used to be
+   * a hardcoded 450px whenever the panel was open, wrong at both ends of its own
+   * range — the panel is resizable from 340 to 720px, so at 720 the route's east
+   * end landed under the panel and at 340 the map kept 110px of nothing. The
+   * property is 0 whenever there is no column to make room for.
+   */
+  const fitRoute = (maxZoom: number) => {
+    const bounds = routeBounds();
+    if (!bounds || !mapRef.current) return false;
+    const left = panelWidthPx();
+    mapRef.current.fitBounds(bounds, {
+      padding: {
+        top: 80,
+        bottom: 80,
+        left: left > 0 ? left + 40 : 80,
+        right: 80,
+      },
+      maxZoom,
+    });
+    return true;
+  };
+
   //Stores the route content
   const lastZoomedCoordKeyRef = useRef<string | null>(null);
 
@@ -423,46 +491,7 @@ export const MapComponent = () => {
     //Store thr new Key
     lastZoomedCoordKeyRef.current = coordKey;
 
-    const bounds: [[number, number], [number, number]] = coordinates.reduce<
-      [[number, number], [number, number]]
-    >(
-      (acc, coord) => {
-        if (!coord || !coord[0] || !coord[1]) return acc;
-        return [
-          [Math.min(acc[0][0], coord[1]), Math.min(acc[0][1], coord[0])],
-          [Math.max(acc[1][0], coord[1]), Math.max(acc[1][1], coord[0])],
-        ];
-      },
-      [
-        [firstCoord[1], firstCoord[0]],
-        [firstCoord[1], firstCoord[0]],
-      ]
-    );
-
-    //Read panel from the store directly
-    //avoids re-running the effect when panels open or close
-    const state = useCommonStore.getState();
-    const dpOpen = state.directionsPanelOpen;
-    const spOpen = state.settingsPanelOpen;
-
-    const paddingTopLeft = [
-      window.innerWidth < 550 ? 80 : dpOpen ? 450 : 80,
-      80,
-    ];
-    const paddingBottomRight = [
-      window.innerWidth < 550 ? 80 : spOpen ? 450 : 80,
-      80,
-    ];
-
-    mapRef.current.fitBounds(bounds, {
-      padding: {
-        top: paddingTopLeft[1] as number,
-        bottom: paddingBottomRight[1] as number,
-        left: paddingTopLeft[0] as number,
-        right: paddingBottomRight[0] as number,
-      },
-      maxZoom: coordinates.length === 1 ? 11 : 18,
-    });
+    fitRoute(coordinates.length === 1 ? 11 : 18);
     //only rerun when coordinates change
     //panel change no longer rerun this
   }, [coordinates]);
@@ -496,13 +525,11 @@ export const MapComponent = () => {
     if (map.isEasing?.()) return;
     // The panel covers the left of the canvas, so centring on the canvas would
     // park the tourist's dot behind it. The padding puts the dot in the middle
-    // of the map the tourist can actually see.
-    const panelWidth =
-      Number.parseFloat(
-        getComputedStyle(document.documentElement).getPropertyValue(
-          '--panel-width'
-        )
-      ) || 0;
+    // of the map the tourist can actually see. `--panel-width` is 0 while the
+    // panel hides itself (sidebar.tsx), so the whole canvas is used then — which
+    // is what stopped the dot from sitting 210px right of centre on a 1440px
+    // screen.
+    const panelWidth = panelWidthPx();
     // The heading is read once it has moved far enough to matter. A GPS course
     // wobbles by a few degrees every second and the simulated one jumps at every
     // corner; rotating for those turned the map into a spinning top. Below the
@@ -602,6 +629,35 @@ export const MapComponent = () => {
     }, 1000);
     return () => window.clearInterval(id);
   }, [guiding, follow, guideTurnDistanceM]);
+
+  /**
+   * Leaving the walk hands the map back in the state a planner expects.
+   *
+   * The navigator leaves the camera tilted 45°, turned to the course and at
+   * street zoom — and nothing undid that. Measured after «выйти»: the tourist is
+   * left looking at one park from 18 zoom while the route they just walked is
+   * somewhere off screen, with no control that frames it again (the fit-bounds
+   * effect only fires when the coordinates themselves change).
+   *
+   * So the exit is an event the map can see: level the camera, forget the
+   * bearing, and frame the whole route in whatever room the panel leaves.
+   */
+  const wasGuiding = useRef(false);
+  useEffect(() => {
+    const map = mapRef.current?.getMap?.();
+    if (guiding) {
+      wasGuiding.current = true;
+      return;
+    }
+    if (!wasGuiding.current || !map) return;
+    wasGuiding.current = false;
+    map.easeTo({ pitch: 0, bearing: 0, duration: 500, essential: true });
+    // Refit once the panel is back: it publishes its width from an effect of its
+    // own, so on the same tick the property is still 0 and the route would be
+    // framed for a screen the panel is about to take a third of.
+    const id = window.setTimeout(() => fitRoute(17), 550);
+    return () => window.clearTimeout(id);
+  }, [guiding]);
 
   const handleMapTilesClick = useCallback(
     (event: maplibregl.MapLayerMouseEvent) => {
@@ -1140,15 +1196,27 @@ export const MapComponent = () => {
       </Map>
 
       {(routeResult || guiding) && (
-        // The planner controls ride above the mobile sheet. During navigation,
-        // the HUD owns the bottom-right stack, so the map controls move to the
-        // open top-left corner instead of hiding underneath its cards.
+        // The planner controls ride above the mobile sheet. During navigation the
+        // HUD owns the bottom of the screen, so the controls get out of its way:
+        // on a phone the open top-left corner, on a monitor the column under the
+        // HUD's own exit/voice cluster.
+        //
+        // They used to sit at `md:bottom-24 md:right-4` while guiding too, which
+        // put «следовать» (y 760-804) underneath the HUD's bottom stack
+        // (y 777-892) — measured 1188px² of overlap, the button half hidden
+        // behind the progress bar.
         <div
           data-testid="map-controls"
-          className={`absolute flex flex-col gap-2 ${
-            isMobile && guiding
-              ? 'left-3 top-[calc(max(env(safe-area-inset-top),0.75rem)+10rem)] z-10 items-start'
-              : 'bottom-[calc(var(--sheet-h,0px)+0.75rem)] right-3 z-10 items-end md:bottom-24 md:right-4'
+          className={`absolute z-10 flex flex-col gap-2 ${
+            isMobile
+              ? guiding
+                ? 'left-3 top-[calc(max(env(safe-area-inset-top),0.75rem)+10rem)] items-start'
+                : 'bottom-[calc(var(--sheet-h,0px)+0.75rem)] right-3 items-end'
+              : guiding
+                ? // Under the HUD cluster (exit + sound, 2x44 + 8 gap = 96px),
+                  // which starts 7rem below the same top inset.
+                  'right-4 top-[calc(max(env(safe-area-inset-top),0.75rem)+13.5rem)] items-end'
+                : 'bottom-24 right-4 items-end'
           }`}
         >
           {/*
@@ -1179,6 +1247,10 @@ export const MapComponent = () => {
 
           {guiding && (
             <>
+              {/* Sound is `md:hidden` here: from md up the HUD's own cluster
+                  already carries a mute button (guide-voice-toggle-hud), and two
+                  of them on one screen is one too many. On a phone this column is
+                  the only place the switch exists, so it stays. */}
               <ToolButton
                 data-testid="guide-voice-toggle-map"
                 title={
@@ -1187,6 +1259,7 @@ export const MapComponent = () => {
                     : t('guide.disableSound')
                 }
                 active={guideVoiceMuted}
+                className="md:hidden"
                 icon={
                   guideVoiceMuted ? (
                     <VolumeX className="h-4 w-4" />
@@ -1226,13 +1299,20 @@ export const MapComponent = () => {
 
           Desktop only (see PanelToggle): on a phone the panel is a sheet across
           the bottom, so it has no left edge to stand on, and the way in and out
-          belongs to the sheet itself. */}
-      <PanelToggle
-        open={directionsPanelOpen}
-        onToggle={handlePanelToggle}
-        label={t('map.panelToggle')}
-        className="left-[min(var(--panel-width,0px),calc(100vw-1.75rem))]"
-      />
+          belongs to the sheet itself.
+
+          Hidden while walking: the panel hides itself then (`GUIDE_SHEET_CLASS`),
+          so the chevron would sit on the map's far edge pointing at nothing, and
+          it measured — parked on the left edge at x=0 in the middle of the map.
+          The way out of navigation is the HUD's exit button. */}
+      {!guiding && (
+        <PanelToggle
+          open={directionsPanelOpen}
+          onToggle={handlePanelToggle}
+          label={t('map.panelToggle')}
+          className="left-[min(var(--panel-width,0px),calc(100vw-1.75rem))]"
+        />
+      )}
 
       {/* About a point, on a phone: a card at the bottom of the map rather than
           a popup over it. Rendered here, next to the map's other floating

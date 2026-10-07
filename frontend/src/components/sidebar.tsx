@@ -46,6 +46,7 @@ import {
 import { useDirectionsQuery } from '@/hooks/use-directions-queries';
 import { GuidePanel, guideRouteKey, type GuideStop } from './guide-panel';
 import { MobileSection } from './mobile/mobile-section';
+import { MOBILE_MAX_WIDTH } from './mobile/use-is-mobile';
 import {
   MOBILE_GUIDE_HEIGHT,
   MOBILE_SHEET_HEIGHT,
@@ -1400,16 +1401,31 @@ export const Sidebar = ({
   // never reached them: they stayed at left-4 and were drawn on top of the
   // panel. Publish the width where both sides can read it, and 0 while the
   // panel is closed so the map keeps its full width.
+  //
+  // Zero in the two cases where there is no column on the left to reserve:
+  //
+  // * **on a phone** the panel is a sheet across the bottom edge, so a 420px
+  //   left reservation pushed the navigating camera (which pads by this number)
+  //   half a screen off centre;
+  // * **while guiding** the desktop column hides itself outright (see
+  //   GUIDE_SHEET_CLASS below), and a non-zero width left the map, the camera
+  //   and the whole navigation HUD reserving 420px of screen for a panel that
+  //   is not drawn — measured: an empty band down the left and the tourist's own
+  //   dot 210px right of the centre of a 1440px display.
   useEffect(() => {
     const root = document.documentElement;
-    root.style.setProperty(
-      '--panel-width',
-      panelOpen ? `${panel.width}px` : '0px'
-    );
+    const publish = () => {
+      const desktop = window.innerWidth > MOBILE_MAX_WIDTH;
+      const width = panelOpen && desktop && !guiding ? panel.width : 0;
+      root.style.setProperty('--panel-width', `${width}px`);
+    };
+    publish();
+    window.addEventListener('resize', publish);
     return () => {
+      window.removeEventListener('resize', publish);
       root.style.setProperty('--panel-width', '0px');
     };
-  }, [panelOpen, panel.width]);
+  }, [panelOpen, panel.width, guiding]);
 
   // Same door for the sheet's HEIGHT, and for the same reason: the map's
   // floating controls are siblings of the sheet, so they cannot see how tall it
@@ -2276,6 +2292,7 @@ export const Sidebar = ({
         side="left"
         className={cn(
           PANEL_SHEET_CLASS,
+          console.log('[SheetContent] guiding=', guiding, 'class will be:', guiding ? GUIDE_SHEET_CLASS : SHEET_SNAP_CLASS[snap]) || true,
           // While walking, the sheet is a strip and the map is the navigator;
           // a drag to 'full' still opens everything.
           // While walking, the navigator IS the screen: the panel would be an
@@ -2287,7 +2304,7 @@ export const Sidebar = ({
           // Hidden, never unmounted: Radix `Presence` tears the content down on
           // `open={false}`, and the HUD is a portal *from* this subtree, so an
           // unmount takes the navigator with it.
-          guiding ? `${GUIDE_SHEET_CLASS} md:hidden` : SHEET_SNAP_CLASS[snap]
+          guiding ? GUIDE_SHEET_CLASS : SHEET_SNAP_CLASS[snap]
         )}
         style={{ '--panel-width': `${panel.width}px` } as CSSProperties}
       >
