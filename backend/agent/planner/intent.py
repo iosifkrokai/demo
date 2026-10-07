@@ -38,7 +38,7 @@ import re as _re
 import time
 from dataclasses import dataclass, field
 
-from .. import constants
+from .. import constants, trace
 from ..models import GenerateReq, IntentDecision, IntentResult
 from ..requirements import PartyComposition, Requirement, TripRequirements
 from . import interpret_cache
@@ -977,6 +977,9 @@ def build_requirements(
         cached = interpret_cache.INTERPRET_CACHE.get(cache_key)
         if cached is not None:
             log.info("requirements: cached reading (no model call)")
+            # Said out loud, because the absence of a model call is otherwise
+            # indistinguishable in the trace from a call nobody recorded.
+            trace.record("interpret · model", "skipped", cached=True)
             # The contract is MUTATED downstream — resolve() attaches place ids,
             # the verifier writes statuses — so the stored copy is never handed
             # out: the next request would otherwise inherit this one's verdicts.

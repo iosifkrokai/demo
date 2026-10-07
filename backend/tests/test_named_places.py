@@ -178,12 +178,18 @@ class TestGeoFocus:
         assert ids == {1, 2}   # only anchor and near1 (both within 3x radius)
 
     def test_no_anchor_doubles_radius_until_3(self):
-        """Without a named anchor the radius doubles until ≥ 3 candidates found."""
-        anchor_c = _c(1, "Anchor", lat=53.95, lon=26.47, rrf_score=1.0)
-        c12 = _c(2, "At12km", lat=53.95, lon=26.58, rrf_score=0.9)   # ≈ 8.5 km
-        c20 = _c(3, "At20km", lat=53.95, lon=26.65, rrf_score=0.8)   # ≈ 14 km
+        """Without a named anchor the radius doubles until ≥ 3 candidates found.
 
-        # Only 1 within 12 km → radius doubles → c20 included
+        The coordinates matter: 0.18° of longitude at this latitude is only
+        11.8 km, so the previous pair sat *inside* the 12 km radius and the
+        doubling this test is named for never ran — three stops were kept on the
+        first pass.
+        """
+        anchor_c = _c(1, "Anchor", lat=53.95, lon=26.47, rrf_score=1.0)
+        c12 = _c(2, "At7km", lat=53.95, lon=26.58, rrf_score=0.9)    # ≈ 7.2 km
+        c20 = _c(3, "At18km", lat=53.95, lon=26.75, rrf_score=0.8)   # ≈ 18.3 km
+
+        # Only 2 within 12 km → radius doubles to 24 km → c20 included
         result = _geo_focus([anchor_c, c12, c20])
         ids = {c.id for c in result}
         assert ids == {1, 2, 3}   # doubling includes c20

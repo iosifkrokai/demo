@@ -13,6 +13,7 @@
  */
 
 import type { RouteLine, ServicesAlongAnswer } from './types';
+import { currentRunSession } from '@/utils/run-session';
 
 /** Same-origin by default; VITE_AGENT_URL only points at a remote agent. */
 const AGENT_URL = (import.meta.env.VITE_AGENT_URL as string | undefined) ?? '';
@@ -66,6 +67,9 @@ export async function fetchServicesAlong(
         shape,
         profile,
         ...(categories ? { categories } : {}),
+        // «Что по пути» belongs to the run that drew the line, so its trace
+        // lands in the same Langfuse session as the generate.
+        session_id: currentRunSession(),
       }),
       signal,
     });

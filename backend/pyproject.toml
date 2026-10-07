@@ -30,6 +30,10 @@ dependencies = [
     "pydantic-ai-slim[openrouter]>=1.0,<2",
     # ML — embeddings + cross-encoder rerank
     "numpy>=1.26",                  # MMR diversity step
+    # Observability — traces into a self-hosted Langfuse (see docker-compose.yml
+    # `observability` profile). Optional: when no key is configured the exporter
+    # is a no-op and the agent still answers.
+    "langfuse>=3.0",
 ]
 
 [project.optional-dependencies]
@@ -73,6 +77,21 @@ dev = [
     "requests>=2.31",
     "beautifulsoup4>=4.12",
 ]
+
+# ─────────────────────────────────────────────────────────────────────────────
+# uv — constraints on transitive dependencies
+# ─────────────────────────────────────────────────────────────────────────────
+
+[tool.uv]
+# genai-prices 0.1.0 started reporting `output_reasoning_tokens`, a field
+# pydantic-ai 1.107's RequestUsage does not accept. Its extract() builds the
+# usage object as RequestUsage(**extracted), so the extra field raised on every
+# provider candidate — and pydantic-ai swallows that per candidate and returns
+# an empty usage. Every model call then reported 0 tokens, which is worse than
+# no number at all: the trace claims the call was free. 0.0.73 is the newest
+# release that reports only what pydantic-ai understands. Revisit when the
+# pydantic-ai pin moves to 2.x, where RequestUsage accepts the field.
+constraint-dependencies = ["genai-prices<0.1"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
