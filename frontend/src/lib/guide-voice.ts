@@ -45,6 +45,42 @@ export type VoiceDecision =
       arrival: boolean;
     };
 
+export type TriggeredVoiceDecision =
+  | { type: 'silent' }
+  | {
+      type: 'announce';
+      distanceM: number;
+      instruction: string;
+    };
+
+const canSpeak = ({
+  quality,
+  offRoute,
+  muted,
+}: {
+  quality: FixQuality;
+  offRoute: boolean;
+  muted: boolean;
+}) => !muted && quality === 'good' && !offRoute;
+
+/**
+ * Accept an announcement whose distance trigger was selected by the navigation
+ * engine rather than by this module's legacy distance thresholds.
+ */
+export const decideTriggeredVoice = (params: {
+  instruction: string;
+  distanceM: number;
+  quality: FixQuality;
+  offRoute: boolean;
+  muted: boolean;
+}): TriggeredVoiceDecision => {
+  const { instruction, distanceM } = params;
+  if (!canSpeak(params) || !Number.isFinite(distanceM) || distanceM < 0) {
+    return { type: 'silent' };
+  }
+  return { type: 'announce', distanceM, instruction };
+};
+
 /**
  * Distance bands at which a maneuver is announced.  Sorted ascending so that
  * `0` is checked first (most urgent) and the loop returns the *smallest*
@@ -97,13 +133,13 @@ export const decideVoice = (params: {
   /** What has already been spoken. */
   spoken: SpokenThresholds;
 }): VoiceDecision => {
-  const { maneuver, distanceM, quality, offRoute, muted, spoken } = params;
+  const { maneuver, distanceM, spoken } = params;
 
   // Always silence when:
   // - muted in the UI
   // - GPS cannot be trusted
   // - the tourist has left the route (the panel is already showing re-plan)
-  if (muted || quality !== 'good' || offRoute) {
+  if (!canSpeak(params)) {
     return { type: 'silent' };
   }
 

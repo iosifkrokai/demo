@@ -82,6 +82,7 @@ vi.mock('@/stores/common-store', () => ({
   useCommonStore: (selector: (s: Record<string, unknown>) => unknown) =>
     selector({
       directionsPanelOpen: true,
+      setDirectionsPanelOpen: vi.fn(),
       toggleDirections: vi.fn(),
       resetSettings: mockResetSettings,
       focus: null,
@@ -205,6 +206,7 @@ const stubAgentFetch = (
 
 describe('Sidebar', () => {
   beforeEach(() => {
+    vi.unstubAllGlobals();
     // The panel now reads `waypoints` to decide whether the field is planning or
     // refining, so a route left behind by an earlier test would silently change
     // which chips the next one sees. Start every test with no route.

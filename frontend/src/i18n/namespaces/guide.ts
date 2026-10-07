@@ -51,6 +51,14 @@ export const guideArea = {
       start: 'начать маршрут',
       overview: 'обзор',
       advance: 'я на месте',
+      markNextStop: 'отметить остановку «{{name}}»',
+      routeDetails: 'маршрут',
+      nextPlaceInfo: 'место, куда вы идёте',
+      readPlaceInfo: 'читать о месте',
+      hidePlaceInfo: 'свернуть описание',
+      hidePanel: 'скрыть панель маршрута',
+      nextManeuver: 'следующий манёвр',
+      tripProgress: 'прогресс маршрута',
       finish: 'завершить',
       again: 'пройти заново',
       nextStop: 'следующая остановка',
@@ -79,6 +87,11 @@ export const guideArea = {
         'Перестроим от вас — остановки и обязательные точки сохранятся.',
       reroute: 'перестроить от меня',
       onRoute: 'я на маршруте',
+
+      // ── Navigator HUD ─────────────────────────────────────────────────
+      detailsToggle: 'маршрут · {{visited}} из {{total}}',
+      activityTitle: 'детали маршрута',
+      activityHide: 'свернуть детали',
 
       // ── Turn-by-turn banner (prominent display in moving mode) ───────────────
       turnInAhead: '{{distance}} — {{instruction}}',
@@ -195,6 +208,14 @@ export const guideArea = {
       start: 'start the route',
       overview: 'overview',
       advance: 'I am here',
+      markNextStop: 'mark stop “{{name}}”',
+      routeDetails: 'route',
+      nextPlaceInfo: 'your next place',
+      readPlaceInfo: 'read about this place',
+      hidePlaceInfo: 'hide place details',
+      hidePanel: 'hide route panel',
+      nextManeuver: 'next maneuver',
+      tripProgress: 'trip progress',
       finish: 'finish',
       again: 'walk it again',
       nextStop: 'next stop',
@@ -223,6 +244,11 @@ export const guideArea = {
         'We will re-plan from here — the stops and mandatory points are kept.',
       reroute: 're-plan from here',
       onRoute: 'I am on the route',
+
+      // ── Navigator HUD ─────────────────────────────────────────────────
+      detailsToggle: 'route · {{visited}} of {{total}}',
+      activityTitle: 'route details',
+      activityHide: 'collapse details',
 
       // ── Turn-by-turn banner (prominent display in moving mode) ───────────────
       turnInAhead: '{{distance}} — {{instruction}}',

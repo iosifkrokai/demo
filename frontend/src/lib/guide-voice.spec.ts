@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import {
+  decideTriggeredVoice,
   decideVoice,
   isNewManeuver,
   markSpoken,
@@ -273,6 +274,53 @@ describe('decideVoice', () => {
       spoken: spokenNone,
     });
     expect(result).toMatchObject({ type: 'announce', threshold: 30 });
+  });
+});
+
+describe('decideTriggeredVoice', () => {
+  it.each([400, 200, 50, 0])(
+    'accepts the navigation engine %i m trigger',
+    (distanceM) => {
+      expect(
+        decideTriggeredVoice({
+          instruction: 'Поверните направо',
+          distanceM,
+          ...good(),
+          offRoute: false,
+          muted: false,
+        })
+      ).toEqual({
+        type: 'announce',
+        distanceM,
+        instruction: 'Поверните направо',
+      });
+    }
+  );
+
+  it.each([
+    { quality: 'poor' as const, offRoute: false, muted: false },
+    { quality: 'good' as const, offRoute: true, muted: false },
+    { quality: 'good' as const, offRoute: false, muted: true },
+  ])('keeps the existing quality, off-route and mute gates', (gates) => {
+    expect(
+      decideTriggeredVoice({
+        instruction: 'Поверните направо',
+        distanceM: 200,
+        ...gates,
+      })
+    ).toEqual({ type: 'silent' });
+  });
+
+  it('rejects invalid trigger distances', () => {
+    expect(
+      decideTriggeredVoice({
+        instruction: 'Поверните направо',
+        distanceM: Number.NaN,
+        ...good(),
+        offRoute: false,
+        muted: false,
+      })
+    ).toEqual({ type: 'silent' });
   });
 });
 

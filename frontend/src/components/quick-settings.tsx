@@ -216,9 +216,11 @@ export const QuickSettings = ({
       const newLanguage = value as DirectionsLanguage;
       setDirectionsLanguage(newLanguage);
       setLanguage(newLanguage);
-      refetchDirections();
+      // Both, like every other control in this panel: the isochrones tab keeps
+      // its own result in the store and would otherwise stay as it was.
+      refetchAll();
     },
-    [refetchDirections]
+    [refetchAll]
   );
 
   return (

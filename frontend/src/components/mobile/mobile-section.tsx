@@ -58,7 +58,7 @@ export const MobileSection = ({
         aria-expanded={open}
         aria-controls={panelId}
         onClick={() => setOpen((v) => !v)}
-        className="hidden w-full items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-left text-label transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/50 max-md:flex max-md:min-h-9"
+        className="hidden w-full items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-left text-label transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/50 max-md:flex max-md:min-h-11"
       >
         <span className="min-w-0 truncate font-medium">{title}</span>
         {summary && (

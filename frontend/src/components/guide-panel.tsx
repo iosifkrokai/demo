@@ -4,7 +4,6 @@ import {
   Coffee,
   Footprints,
   LocateFixed,
-  MapPin,
   Navigation,
   Play,
   RotateCcw,
@@ -15,10 +14,12 @@ import {
   WifiOff,
 } from 'lucide-react';
 import type { TFunction } from 'i18next';
+import type { TripState } from '@stadiamaps/ferrostar';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type {
   ActiveWaypoint,
+  GuideManeuver,
   ParsedDirectionsGeometry,
 } from '@/components/types';
 import {
@@ -42,6 +43,7 @@ import { isSimulating, setSimPath } from '@/lib/geo-sim';
 import { useServicesAlong } from '@/hooks/use-services-along';
 import {
   cancelSpeech,
+  decideTriggeredVoice,
   decideVoice,
   isNewManeuver,
   markSpoken,
@@ -49,11 +51,24 @@ import {
   type SpokenThresholds,
   type VoiceManeuver,
 } from '@/lib/guide-voice';
+import {
+  buildFerrostarRoute,
+  extractCourse,
+  extractDistanceRemaining,
+  extractDistanceToNextManeuver,
+  extractRemainingSteps,
+  extractSpokenInstruction,
+  ferrostarReady,
+  isCompletelyOffRoute,
+  FerrostarNavigator,
+  type FerrostarRouteResult,
+} from '@/lib/ferrostar-nav';
 import { GuideEmpty } from './parts/guide-empty';
 import { courseAlongLine, courseAtPoint } from './parts/guide-course';
 import { fmtDist, metresBetween } from './parts/guide-format';
-import { mergeMicroManeuvers } from './parts/guide-maneuvers';
+import { mergeMicroManeuvers } from './parts/guide-maneuvers-stub';
 import { guideModeFor } from './parts/guide-mode';
+import { FerrostarNavigationHud } from './parts/ferrostar-navigation-hud';
 import { GuideNextStop } from './parts/guide-next-stop';
 import { GuideProgress } from './parts/guide-progress';
 import { GuideRouteDone } from './parts/guide-route-done';
@@ -108,6 +123,12 @@ interface GuidePanelProps {
    * stop off behind the tourist's back.
    */
   onWalked?: (progress: { visited: number; total: number }) => void;
+  /**
+   * Leaves navigation entirely — the guide is over, the planner comes back.
+   * Required, because the panel that hosts this guide is hidden while walking,
+   * so the exit cannot live in the panel's own header.
+   */
+  onExit: () => void;
 }
 
 const STORAGE_KEY = 'grodno-guide-progress';
@@ -196,6 +217,13 @@ interface Fix extends LatLon {
   /** Metres of 68 % confidence; null when the browser did not say. */
   accuracy: number | null;
   at: number;
+  /**
+   * The direction the handset points, in degrees; null when the browser did
+   * not say. Carried on the fix itself rather than pushed straight into the
+   * store, so one effect owns everything the map is told about the position
+   * (see the `setGuideFix` publication below).
+   */
+  heading: number | null;
 }
 
 type FixQuality = 'unavailable' | 'waiting' | 'stale' | 'poor' | 'good';
@@ -205,14 +233,6 @@ interface LineGeometry {
   /** Cumulative metres at each vertex. */
   cum: number[];
   total: number;
-}
-
-interface GuideManeuver {
-  key: string;
-  type: number;
-  instruction: string;
-  /** Metres from the start of the line to the manoeuvre's begin point. */
-  along: number;
 }
 
 const buildLine = (
@@ -380,6 +400,7 @@ export const GuidePanel = ({
   onAddSuggestion,
   transport = null,
   onWalked,
+  onExit,
 }: GuidePanelProps) => {
   const { t, i18n } = useTranslation();
   const key = useMemo(() => guideRouteKey(stops), [stops]);
@@ -445,6 +466,9 @@ export const GuidePanel = ({
     geoState === 'ok' &&
     fix?.accuracy != null &&
     fix.accuracy <= WEAK_ACCURACY_M;
+  const setDirectionsPanelOpen = useCommonStore(
+    (s) => s.setDirectionsPanelOpen
+  );
 
   /**
    * How the guide enters — the tourist's own call, not a required detour.
@@ -461,9 +485,29 @@ export const GuidePanel = ({
    * browser already had a cached fix.
    */
   const [mode, setMode] = useState<'review' | 'moving'>('review');
+  /** Details stay open until the tourist deliberately collapses them. */
+  const [detailsOpen, setDetailsOpen] = useState(true);
   useEffect(() => {
     if (hasTrustedFix) setMode('moving');
   }, [hasTrustedFix]);
+  /**
+   * The panel is NOT closed on entering moving mode. It used to be, to give the
+   * map more room — and that unmounted the navigator with it: this panel lives
+   * inside the sheet's Radix `Presence`, so closing the sheet took the whole
+   * subtree down, and the HUD went with it even though it is portaled to
+   * `document.body` (a portal is still part of its parent's React tree).
+   * Walking therefore showed a bare map: no turn banner, no stop list, no
+   * advance button.
+   *
+   * The room the walk wanted is already given by the shells instead: while
+   * `guiding`, the sheet drops to a 26dvh strip (`MOBILE_GUIDE_HEIGHT` /
+   * `GUIDE_SHEET_CLASS`) instead of a half-screen panel, and the HUD rides
+   * above it on `--sheet-h`. The panel stays mounted and so does the guide.
+   */
+  /** Keep the details panel collapsed when entering moving mode so the view is clean. */
+  useEffect(() => {
+    if (mode === 'moving') setDetailsOpen(false);
+  }, [mode]);
   const [traveled, setTraveled] = useState(0);
   const [offRoute, setOffRoute] = useState(false);
   const [skippedSuggestions, setSkippedSuggestions] = useState<string[]>([]);
@@ -481,7 +525,32 @@ export const GuidePanel = ({
   /** Source URLs of nearby POIs already hinted — no repeat spam. */
   const [hintedServices, setHintedServices] = useState<Set<string>>(new Set());
 
+  // ── Ferrostar navigation engine ────────────────────────────────────────
+  /** The live session for the current route; null until the WASM core is up. */
+  const [ferroNav, setFerroNav] = useState<FerrostarNavigator | null>(null);
+  /** The last TripState the session produced — Idle | Navigating | Complete. */
+  const [ferroState, setFerroState] = useState<TripState | null>(null);
+  /** Route metadata aligned with Ferrostar's remaining step list. */
+  const [ferroRoute, setFerroRoute] = useState<FerrostarRouteResult | null>(
+    null
+  );
+  /**
+   * Set the moment Ferrostar cannot be used — no WASM core, or a route it will
+   * not build. It is the fallback switch: every old effect below it comes back
+   * to life, permanently, for the rest of this mount.
+   */
+  const [ferroFailed, setFerroFailed] = useState(false);
+  /** Kept in a ref as well, so unmount can free the session without a dep. */
+  const ferroNavRef = useRef<FerrostarNavigator | null>(null);
+  /** Consecutive CompletelyOffRoute fixes — the old effect's hysteresis. */
+  const ferroOffRouteRef = useRef(0);
+  /** The utteranceId we last spoke — Ferrostar hands a new one per trigger. */
+  const ferroUtteranceRef = useRef<string | null>(null);
+
   const routeData = useDirectionsStore((state) => state.results.data);
+  const placeDetails = useDirectionsStore((state) => state.placeDetails);
+  /** Use the geometry engine when there is no Valhalla route to navigate. */
+  const ferrostarActive = routeData != null && !ferroFailed;
 
   // Nearby POI suggestions along the route, fetched only while guiding.
   const servicesAlong = useServicesAlong(routeData, {
@@ -495,7 +564,7 @@ export const GuidePanel = ({
    * Computed from `traveled` (frozen progress) so the hint stays stable.
    */
   const nearbyHint = useMemo<ServiceAlong | null>(() => {
-    if (servicesAlong.state !== 'ready') return null;
+    if (!servicesAlong || servicesAlong.state !== 'ready') return null;
     const upcoming = servicesAlong.items
       .filter(
         (s) =>
@@ -510,7 +579,7 @@ export const GuidePanel = ({
   // The route the map draws: one line, one set of manoeuvres.
   const line = useMemo(() => buildLine(routeData), [routeData]);
   const maneuvers = useMemo(
-    // Micro-steps merged into the turn that matters; see parts/guide-maneuvers.ts.
+    // Micro-steps merged into the turn that matters; see parts/guide-maneuvers-stub.ts.
     () => mergeMicroManeuvers(buildManeuvers(routeData, line)),
     [routeData, line]
   );
@@ -557,6 +626,7 @@ export const GuidePanel = ({
     saveProgress(fresh);
     setTraveled(0);
     offRouteFixesRef.current = 0;
+    ferroOffRouteRef.current = 0;
     setOffRoute(false);
   }, [key]);
 
@@ -588,6 +658,13 @@ export const GuidePanel = ({
         setGeoState('ok');
         const at =
           typeof pos.timestamp === 'number' ? pos.timestamp : Date.now();
+        const heading = pos.coords.heading;
+        // The position is recorded here and nothing else: what the map is told
+        // is published by the single effect further down, which owns the whole
+        // fix (position, heading and the route's own course). Publishing from
+        // both places meant whichever ran last decided what the map saw — and
+        // the course-less half of it won often enough to turn the map's arrow
+        // off for a frame on every fix.
         setFix({
           lat: pos.coords.latitude,
           lon: pos.coords.longitude,
@@ -596,19 +673,10 @@ export const GuidePanel = ({
               ? pos.coords.accuracy
               : null,
           at,
-        });
-        // The map follows this: the guide is a navigator, not a list next to a
-        // still map the tourist has to find themselves on.
-        const heading = pos.coords.heading;
-        setGuideFix({
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude,
           heading:
             typeof heading === 'number' && Number.isFinite(heading)
               ? heading
               : null,
-          course: null,
-          at,
         });
       },
       () => setGeoState('denied'),
@@ -616,9 +684,8 @@ export const GuidePanel = ({
     );
     return () => {
       geo.clearWatch?.(watch);
-      setGuideFix(null);
     };
-  }, [stopCount, setGuideFix]);
+  }, [stopCount]);
 
   // Staleness only matters while walking: a fix that stops updating must not
   // keep looking like a live position.
@@ -654,10 +721,32 @@ export const GuidePanel = ({
   const effectiveVisited = useMemo(() => {
     const seen = new Set(progress.visited);
     if (precise && fix) {
-      for (const stop of stops) {
-        if (seen.has(stop.id)) continue;
-        if (metresBetween(fix, stop) > ARRIVAL_RADIUS_M) continue;
-        seen.add(stop.id);
+      const reachedIndex = stops.findIndex(
+        (stop) => metresBetween(fix, stop) <= ARRIVAL_RADIUS_M
+      );
+      if (reachedIndex >= 0) {
+        // A single reliable fix can legitimately move the tourist to a later stop
+        // without proving every earlier stop was touched in sequence. Preserve the
+        // route's current progress, but only advance through neighbouring stops in
+        // the order we've already been following; this prevents a late or weak fix
+        // from silently jumping a route ahead while still keeping contiguous stops
+        // marked when the tourist walks the route normally.
+        const lastVisitedIndex = stops.reduce(
+          (maxIndex, stop, index) =>
+            seen.has(stop.id) ? Math.max(maxIndex, index) : maxIndex,
+          -1
+        );
+        const indicesToMark =
+          lastVisitedIndex < 0
+            ? [reachedIndex]
+            : Array.from(
+                { length: reachedIndex - lastVisitedIndex },
+                (_, offset) => lastVisitedIndex + 1 + offset
+              ).filter((index) => index <= reachedIndex);
+        for (const index of indicesToMark) {
+          const stop = stops[index];
+          if (stop) seen.add(stop.id);
+        }
       }
     }
     return stops.filter((s) => seen.has(s.id)).map((s) => s.id);
@@ -672,12 +761,29 @@ export const GuidePanel = ({
   // the stop then lives in the stored progress.
   useEffect(() => {
     if (!precise || !fix) return;
-    const withinReach = stops.find(
-      (stop) =>
-        !progress.visited.includes(stop.id) &&
-        metresBetween(fix, stop) <= ARRIVAL_RADIUS_M
+    const reachedIndex = stops.findIndex(
+      (stop) => metresBetween(fix, stop) <= ARRIVAL_RADIUS_M
     );
-    if (withinReach) setVisited(withinReach.id, true);
+    if (reachedIndex < 0) return;
+    const lastVisitedIndex = stops.reduce(
+      (maxIndex, stop, index) =>
+        progress.visited.includes(stop.id)
+          ? Math.max(maxIndex, index)
+          : maxIndex,
+      -1
+    );
+    const indicesToMark =
+      lastVisitedIndex < 0
+        ? [reachedIndex]
+        : Array.from(
+            { length: reachedIndex - lastVisitedIndex },
+            (_, offset) => lastVisitedIndex + 1 + offset
+          ).filter((index) => index <= reachedIndex);
+    for (const index of indicesToMark) {
+      const stop = stops[index];
+      if (!stop || progress.visited.includes(stop.id)) continue;
+      setVisited(stop.id, true);
+    }
   }, [precise, fix, stops, progress.visited, setVisited]);
 
   // The replayed walk follows the route's own geometry, not straight lines
@@ -719,11 +825,13 @@ export const GuidePanel = ({
   // Both effects mirror an external stream (the device's GPS fixes) rather than
   // deriving from props, which is exactly what setState-in-effect is for.
   useEffect(() => {
+    if (ferrostarActive) return;
     if (!precise || !located) return;
     setTraveled((prev) => Math.max(prev, located.along - BACKWARD_TOLERANCE_M));
-  }, [precise, located]);
+  }, [precise, located, ferrostarActive]);
 
   useEffect(() => {
+    if (ferrostarActive) return;
     if (mode !== 'moving' || !precise || !located || !fix) {
       offRouteFixesRef.current = 0;
       setOffRoute(false);
@@ -740,18 +848,29 @@ export const GuidePanel = ({
       offRouteFixesRef.current = 0;
       setOffRoute(false);
     }
-  }, [mode, precise, located, fix, nextStop]);
+  }, [mode, precise, located, fix, nextStop, ferrostarActive]);
 
-  // ── Active manoeuvre + remaining line progress ───────────────────────────
-  // The turn ahead of the (frozen) progress point; a weak fix never advances
-  // this, because `traveled` only moves on a trusted fix.
-  const activeManeuver = useMemo(
-    () => maneuvers.find((m) => m.along > traveled + 5) ?? null,
-    [maneuvers, traveled]
+  // ── Active maneuver + remaining line progress ───────────────────────────
+  const remainingSteps = useMemo(
+    () => (ferrostarActive ? extractRemainingSteps(ferroState) : []),
+    [ferrostarActive, ferroState]
   );
+  const activeManeuver = useMemo(() => {
+    if (!ferrostarActive) {
+      return maneuvers.find((m) => m.along > traveled + 5) ?? null;
+    }
+    const step = remainingSteps[0];
+    if (!step || !ferroRoute) return null;
+    const index = ferroRoute.route.steps.length - remainingSteps.length;
+    const maneuver = ferroRoute.maneuvers[index];
+    return maneuver ? { ...maneuver, instruction: step.instruction } : null;
+  }, [ferrostarActive, ferroRoute, maneuvers, remainingSteps, traveled]);
 
-  const maneuverDistance =
-    precise && activeManeuver
+  const maneuverDistance = ferrostarActive
+    ? precise
+      ? extractDistanceToNextManeuver(ferroState)
+      : null
+    : precise && activeManeuver
       ? Math.max(0, activeManeuver.along - traveled)
       : null;
 
@@ -763,12 +882,13 @@ export const GuidePanel = ({
    */
   const setGuideTurnDistanceM = useCommonStore((s) => s.setGuideTurnDistanceM);
   useEffect(() => {
+    if (ferrostarActive) return;
     setGuideTurnDistanceM(
       mode === 'moving' && maneuverDistance != null
         ? Math.round(maneuverDistance / 10) * 10
         : null
     );
-  }, [mode, maneuverDistance, setGuideTurnDistanceM]);
+  }, [mode, maneuverDistance, setGuideTurnDistanceM, ferrostarActive]);
 
   /**
    * Turn the map by the ROUTE's course, not by the phone's heading.
@@ -780,13 +900,26 @@ export const GuidePanel = ({
    * the fix the map already follows. On a route without geometry there is no
    * course, and the map keeps its own heading rather than inventing a turn.
    */
-  const guideFix = useCommonStore((s) => s.guideFix);
+  /**
+   * The one publication of the tourist's position to the map.
+   *
+   * It used to be written from two places — the geolocation watcher and this
+   * effect — each with its own idea of the fix, so the last writer decided what
+   * the map saw and a course-less half could land on top of a course-bearing
+   * one. Everything the map needs is computed here from the same `fix`.
+   */
   useEffect(() => {
-    if (!fix) return;
+    if (ferrostarActive) return;
+    if (!fix) {
+      // No fix any more (the route is gone, or the watch was cleared): the map
+      // must stop drawing a dot rather than keep the last one forever.
+      setGuideFix(null);
+      return;
+    }
     setGuideFix({
       lat: fix.lat,
       lng: fix.lon,
-      heading: guideFix?.heading ?? null,
+      heading: fix.heading,
       // Progress along the route only moves on a trusted fix, so the course
       // falls back to the line's nearest point: «по курсу» has to work the
       // moment the tourist asks for it, not only once the guide has decided
@@ -796,19 +929,33 @@ export const GuidePanel = ({
         courseAtPoint(line, fix.lat, fix.lon),
       at: fix.at,
     });
-  }, [fix, line, traveled, setGuideFix, guideFix?.heading]);
+  }, [fix, line, traveled, setGuideFix, ferrostarActive]);
+
+  /**
+   * Remember which turn was last announced — on its own, keyed only on the turn
+   * itself.
+   *
+   * It used to be written from inside the announcing effect below, which runs on
+   * every fix, every quality change and every language change. Under StrictMode
+   * that effect is invoked twice per commit, so the first pass moved the
+   * bookkeeping and the second found «the same turn, nothing new» — a turn that
+   * had just changed was therefore announced against the previous turn's spoken
+   * thresholds and stayed silent for the rest of the walk. Deciding *whether* the
+   * turn changed is one thing (here, from `activeManeuver` alone) and deciding
+   * *what to say* is another (below); mixing them is what raced.
+   */
+  useEffect(() => {
+    if (ferrostarActive) return;
+    if (!isNewManeuver(prevManeuverRef.current, activeManeuver)) return;
+    cancelSpeech();
+    spokenThresholdsRef.current = new Map();
+    prevManeuverRef.current = activeManeuver;
+  }, [activeManeuver, ferrostarActive]);
 
   // ── Voice: announce maneuvers on distance thresholds ────────────────────────────
   useEffect(() => {
+    if (ferrostarActive) return;
     if (mode !== 'moving') return;
-
-    // When the maneuver changes, cancel anything in progress and reset spoken
-    // thresholds so the new maneuver starts from scratch.
-    if (isNewManeuver(prevManeuverRef.current, activeManeuver)) {
-      cancelSpeech();
-      spokenThresholdsRef.current = new Map();
-      prevManeuverRef.current = activeManeuver;
-    }
 
     const voiceManeuver: VoiceManeuver | null = activeManeuver
       ? { key: activeManeuver.key, instruction: activeManeuver.instruction }
@@ -844,6 +991,242 @@ export const GuidePanel = ({
     mode,
     activeManeuver,
     maneuverDistance,
+    quality,
+    offRoute,
+    voiceMuted,
+    t,
+    i18n,
+    ferrostarActive,
+  ]);
+
+  // ── Ferrostar navigation engine ─────────────────────────────────────────
+  //
+  // The mirror of the five effects above, computed by Ferrostar instead of by
+  // this file's geometry helpers. Same four publications, same honesty rules —
+  // only the arithmetic moves from `locateOnLine` to a NavigationSession:
+  //
+  //   old effect                        →  here
+  //   ───────────────────────────────     ────────────────────────────────────
+  //   setTraveled (locateOnLine.along)  →  line.total − distanceRemaining
+  //   setOffRoute (offRoute > 60 m)     →  isCompletelyOffRoute, 2 fixes running
+  //   setGuideTurnDistanceM (10 m steps)→  distanceToNextManeuver, 10 m steps
+  //   setGuideFix course (line bearing) →  extractCourse of the snapped location
+  //   decideVoice (thresholds 0/10/30/80)→ Ferrostar's own utteranceId triggers
+  //
+  // Everything the engine cannot answer (an Idle or
+  // Complete state, a session that died) leaves the value it had — the panel
+  // freezes rather than inventing progress. And if Ferrostar is not available
+  // at all, `ferroFailed` sends `ferrostarActive` back to false and every old
+  // effect above comes back to life for good.
+
+  /** Length of the line the map draws — the denominator for distanceRemaining. */
+  const lineTotal = line?.total ?? 0;
+
+  /**
+   * Build a session when movement starts, once the WASM core is up.
+   *
+   * Recreated whenever movement starts or the route changes — the session is
+   * bound to the route it was constructed with. A failure hands navigation to
+   * the panel's geometry fallback for the rest of this mount.
+   */
+  useEffect(() => {
+    ferroNavRef.current?.destroy();
+    ferroNavRef.current = null;
+    setFerroNav(null);
+    setFerroRoute(null);
+    setFerroState(null);
+    ferroUtteranceRef.current = null;
+    ferroOffRouteRef.current = 0;
+    if (!ferrostarActive || mode !== 'moving' || !routeData) return;
+
+    let cancelled = false;
+    let createdNav: FerrostarNavigator | null = null;
+    void ferrostarReady
+      .then((mod) => {
+        if (cancelled) return;
+        if (!mod) {
+          setFerroFailed(true);
+          return;
+        }
+        try {
+          const built = buildFerrostarRoute(routeData);
+          if (!built) {
+            console.warn(
+              'Ferrostar could not build this route; using guide fallback.'
+            );
+            setFerroFailed(true);
+            return;
+          }
+          const nav = new FerrostarNavigator(built.route, mod);
+          createdNav = nav;
+          ferroNavRef.current = nav;
+          setFerroRoute(built);
+          ferroOffRouteRef.current = 0;
+          setFerroNav(nav);
+        } catch (error) {
+          console.warn(
+            'Ferrostar session could not start; using guide fallback.',
+            error
+          );
+          setFerroFailed(true);
+        }
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return;
+        console.warn(
+          'Ferrostar initialization failed; using guide fallback.',
+          error
+        );
+        setFerroFailed(true);
+      });
+    return () => {
+      cancelled = true;
+      createdNav?.destroy();
+      if (ferroNavRef.current === createdNav) ferroNavRef.current = null;
+    };
+  }, [mode, routeData, ferrostarActive]);
+
+  /** Release the WASM session when the guide goes away — see ferrostar-nav.ts. */
+  useEffect(
+    () => () => {
+      ferroNavRef.current?.destroy();
+      ferroNavRef.current = null;
+    },
+    []
+  );
+
+  /**
+   * Every fix through the session, and the four publications the old effects
+   * made. Mirroring an external stream (the GPS) is what setState-in-effect is
+   * for; the session itself is stateful and must see the fixes in order, which
+   * is why this is an effect and not a render-time call.
+   *
+   * The map's fix and its course go out on *every* fix (the old course effect
+   * did not wait for a trustworthy one either) — a tourist who asks «по курсу»
+   * must get an answer immediately. Progress and off-route keep the old
+   * `precise` gate: a weak fix must not move the walk forward.
+   */
+  useEffect(() => {
+    if (!ferrostarActive) return;
+    const nav = ferroNav;
+    if (mode !== 'moving' || !nav) return;
+    if (!fix) {
+      setGuideFix(null);
+      return;
+    }
+
+    const state = nav.update({
+      lat: fix.lat,
+      lon: fix.lon,
+      accuracy: fix.accuracy,
+      at: fix.at,
+    });
+    if (!state) {
+      setFerroFailed(true);
+      return;
+    }
+    setFerroState(state);
+
+    setGuideFix({
+      lat: fix.lat,
+      lng: fix.lon,
+      heading: null,
+      course: extractCourse(state),
+      at: fix.at,
+    });
+
+    const toManeuver = extractDistanceToNextManeuver(state);
+    setGuideTurnDistanceM(
+      toManeuver == null ? null : Math.round(toManeuver / 10) * 10
+    );
+
+    if (!precise) {
+      ferroOffRouteRef.current = 0;
+      setOffRoute(false);
+      return;
+    }
+
+    const remaining = extractDistanceRemaining(state);
+    if (remaining != null && line) {
+      const along = Math.max(0, lineTotal - remaining - BACKWARD_TOLERANCE_M);
+      setTraveled((prev) => Math.max(prev, along));
+    }
+
+    const off = isCompletelyOffRoute(state);
+    // Standing at a POI a few metres off the line is not "off route" — the same
+    // allowance the old effect made.
+    const atStop = nextStop
+      ? metresBetween(fix, nextStop) <= ARRIVAL_RADIUS_M * 2
+      : false;
+    if (mode === 'moving' && off === true && !atStop) {
+      ferroOffRouteRef.current += 1;
+      if (ferroOffRouteRef.current >= OFF_ROUTE_FIXES) setOffRoute(true);
+    } else {
+      // `off === null` (Idle / Complete) is «unknown», so it counts as on
+      // route rather than as an off-route report the tourist cannot act on.
+      ferroOffRouteRef.current = 0;
+      setOffRoute(false);
+    }
+  }, [
+    ferroNav,
+    ferrostarActive,
+    fix,
+    precise,
+    mode,
+    line,
+    lineTotal,
+    nextStop,
+    setGuideFix,
+    setGuideTurnDistanceM,
+  ]);
+
+  /** Off moving mode the camera has nothing to close in on. */
+  useEffect(() => {
+    if (!ferrostarActive) return;
+    if (mode !== 'moving') setGuideTurnDistanceM(null);
+  }, [mode, setGuideTurnDistanceM, ferrostarActive]);
+
+  /**
+   * Voice, driven by Ferrostar's own triggers instead of our thresholds.
+   *
+   * Ferrostar decides *when*: it carries one utterance per trigger distance
+   * (400 / 200 / 50 / 0 m) with a stable `utteranceId`, and announces it once
+   * the tourist crosses that band. This effect decides *whether* and *what*,
+   * by handing the fresh utterance to the trigger-aware voice gate
+   * — so the mute switch, the «only on a good fix» rule and the off-route
+   * silence still apply, and the phrase is still assembled in the interface
+   * language. Ferrostar's trigger distance is not reinterpreted as a legacy
+   * distance band.
+   */
+  useEffect(() => {
+    if (!ferrostarActive) return;
+    if (mode !== 'moving' || !ferroState) return;
+
+    const spoken = extractSpokenInstruction(ferroState);
+    const utteranceId = spoken?.utteranceId;
+    if (!spoken || !utteranceId || utteranceId === ferroUtteranceRef.current) {
+      return;
+    }
+
+    const decision = decideTriggeredVoice({
+      instruction: spoken.text,
+      distanceM: spoken.triggerDistanceBeforeManeuver,
+      quality,
+      offRoute,
+      muted: voiceMuted,
+    });
+    if (decision.type !== 'announce') return;
+
+    ferroUtteranceRef.current = utteranceId;
+    const phrase = t('guide.voiceDistance', {
+      distance: decision.distanceM,
+      instruction: decision.instruction,
+    }).trim();
+    speak(phrase, i18n.language.startsWith('en') ? 'en-US' : 'ru-RU');
+  }, [
+    ferroState,
+    ferrostarActive,
+    mode,
     quality,
     offRoute,
     voiceMuted,
@@ -931,6 +1314,7 @@ export const GuidePanel = ({
     }
     setTraveled(0);
     offRouteFixesRef.current = 0;
+    ferroOffRouteRef.current = 0;
     setOffRoute(false);
     onReroute?.();
     try {
@@ -1045,137 +1429,130 @@ export const GuidePanel = ({
       ? getManeuverIcon(activeManeuver.type)
       : Footprints;
     return (
-      <section
-        data-testid="guide-panel"
-        data-mode="moving"
-        className="flex min-h-full flex-col gap-3"
-      >
-        <SimulatedBadge active={simulated} />
-        {/* The turn the tourist is walking into — the one big thing on screen. */}
-        <ManeuverBanner
-          instruction={
-            activeManeuver?.instruction ??
-            (nextStop
-              ? t('guide.goToStop', {
-                  imperative: travel.imperative,
-                  name: nextStop.name,
-                })
-              : t('guide.followRoute', { imperative: travel.imperative }))
-          }
-          Icon={ManeuverIcon}
-          distance={maneuverDistance}
-          precise={precise}
-          quality={quality}
-        />
-
-        {/* Nearby POI hint — «туалет в 40 м по пути» */}
-        {nearbyHint && (
-          <NearbyHint
-            service={nearbyHint}
-            distanceAhead={nearbyHint.along_m - traveled}
-            onDismiss={() => {
-              setHintedServices(
-                (prev) => new Set([...prev, nearbyHint.source_url])
-              );
-            }}
-          />
-        )}
-
-        {offRoute && (
-          <OffRoutePrompt
-            metres={located ? Math.round(located.offRoute) : null}
-            onReroute={reroute}
-            onDismiss={() => {
-              offRouteFixesRef.current = 0;
-              setOffRoute(false);
-            }}
-          />
-        )}
-
-        {nextStop ? (
-          <GuideNextStop
-            key={nextStop.id}
-            number={nextIndex + 1}
-            name={nextStop.name}
-            category={nextStop.category ?? null}
-            visitMinutes={visitMinutesOf(nextStop)}
-            visitOverride={visitOverrides[nextStop.id] ?? null}
-            estimateMinutes={nextStop.visitMinutes ?? null}
-            onVisitMinutesChange={(minutes) =>
-              setStopVisitMinutes(nextStop.id, minutes)
+      <FerrostarNavigationHud
+        state={ferrostarActive ? ferroState : null}
+        maneuverFallback={
+          <ManeuverBanner
+            instruction={
+              activeManeuver?.instruction ??
+              (nextStop
+                ? t('guide.goToStop', {
+                    imperative: travel.imperative,
+                    name: nextStop.name,
+                  })
+                : t('guide.followRoute', {
+                    imperative: travel.imperative,
+                  }))
             }
-            distance={toNextMetres}
-            travelMinutes={travelMinutes}
-            etaLabel={etaLabel}
-            mode={travel}
-            mapsHref={mapsUrl(nextStop.lat, nextStop.lon)}
+            Icon={ManeuverIcon}
+            distance={maneuverDistance}
+            precise={precise}
+            quality={quality}
           />
-        ) : (
-          <GuideRouteDone total={stops.length} />
-        )}
-
-        <GuideProgress
-          done={done}
-          total={stops.length}
-          minutesLeft={minutesLeft}
-          metresDone={metresDone}
-          metresTotal={metresTotal}
-          remainingMinutes={remainingMinutes}
-          mode={travel}
-        />
-
-        <p
-          data-testid="guide-geo-status"
-          className="flex items-center gap-1.5 text-meta text-muted-foreground"
-        >
-          <QualityIcon quality={quality} />
-          {geoLine}
-        </p>
-
-        <div className="flex gap-2">
-          <button
-            type="button"
-            data-testid="guide-advance"
-            onClick={() => nextStop && setVisited(nextStop.id, true)}
-            disabled={!nextStop}
-            className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-primary font-semibold text-primary-foreground transition hover:brightness-[0.97] active:scale-[0.99] disabled:opacity-40"
+        }
+        geoStatus={
+          <p
+            data-testid="guide-geo-status"
+            className="flex items-center gap-1.5"
           >
-            <MapPin className="h-4 w-4" />
-            {t('guide.advance')}
-          </button>
-          <button
-            type="button"
-            data-testid="guide-overview"
-            onClick={() => setMode('review')}
-            className="flex h-12 items-center justify-center gap-2 rounded-xl bg-secondary px-4 font-semibold text-secondary-foreground transition hover:brightness-[0.97] active:scale-[0.99]"
-          >
-            {t('guide.overview')}
-          </button>
-        </div>
-
-        {activeSuggestions.length > 0 && (
-          <SuggestionList
-            suggestions={activeSuggestions}
-            onAdd={(id) => onAddSuggestion?.(id)}
-            onSkip={(id) => setSkippedSuggestions((prev) => [...prev, id])}
-          />
-        )}
-
-        <GuideStopList
-          stops={listStops}
-          visited={effectiveVisited}
-          nextId={nextStop?.id ?? null}
-          nextDistance={toNextMetres}
-          onToggle={toggle}
-          onVisitMinutesChange={setStopVisitMinutes}
-          collapsible
-          defaultOpen={false}
-        />
-
-        <p aria-live="polite" role="status" className="sr-only">
-          {announcement}
-        </p>
-      </section>
+            <QualityIcon quality={quality} />
+            {geoLine}
+          </p>
+        }
+        alerts={
+          <>
+            {nearbyHint && (
+              <NearbyHint
+                service={nearbyHint}
+                distanceAhead={nearbyHint.along_m - traveled}
+                onDismiss={() => {
+                  setHintedServices(
+                    (prev) => new Set([...prev, nearbyHint.source_url])
+                  );
+                }}
+              />
+            )}
+            {offRoute && (
+              <OffRoutePrompt
+                metres={located ? Math.round(located.offRoute) : null}
+                onReroute={reroute}
+                onDismiss={() => {
+                  offRouteFixesRef.current = 0;
+                  ferroOffRouteRef.current = 0;
+                  setOffRoute(false);
+                }}
+              />
+            )}
+          </>
+        }
+        announcement={announcement}
+        onAdvance={() => {
+          if (!nextStop) return;
+          setVisited(nextStop.id, true);
+          const state = ferroNav?.state;
+          if (ferrostarActive && state && 'Navigating' in state) {
+            ferroNav.advanceToNextStep();
+            setFerroState(ferroNav.state);
+          }
+        }}
+        onOverview={() => {
+          setMode('review');
+          setDirectionsPanelOpen(true);
+        }}
+        onExit={onExit}
+        onVoiceToggle={toggleVoiceMute}
+        onDetailsToggle={() => setDetailsOpen((o) => !o)}
+        voiceMuted={voiceMuted}
+        advanceDisabled={!nextStop}
+        detailsToggleLabel={t('guide.detailsToggle', {
+          visited: done,
+          total: stops.length,
+        })}
+        detailsOpen={detailsOpen}
+        totalStops={stops.length}
+        progressDone={done}
+        progressMinutesLeft={minutesLeft}
+        progressMetresDone={metresDone}
+        progressMetresTotal={metresTotal}
+        progressRemainingMinutes={remainingMinutes}
+        stopListItems={listStops}
+        stopListVisited={effectiveVisited}
+        stopListNextId={nextStop?.id ?? null}
+        stopListNextDistance={toNextMetres}
+        onStopListToggle={toggle}
+        onStopListVisitMinutesChange={setStopVisitMinutes}
+        suggestions={activeSuggestions}
+        onAddSuggestion={onAddSuggestion}
+        onSkipSuggestion={(id) =>
+          setSkippedSuggestions((prev) => [...prev, id])
+        }
+        nextStopName={nextStop?.name ?? null}
+        nextStopId={nextStop?.id ?? null}
+        nextPlaceDetails={
+          nextStop?.placeId != null
+            ? (placeDetails[nextStop.placeId] ?? null)
+            : null
+        }
+        nextStopNumber={nextStop ? nextIndex + 1 : undefined}
+        nextStopCategory={nextStop?.category ?? null}
+        nextStopVisitMinutes={nextStop ? visitMinutesOf(nextStop) : undefined}
+        nextStopVisitOverride={
+          nextStop ? (visitOverrides[nextStop.id] ?? null) : null
+        }
+        nextStopEstimateMinutes={nextStop?.visitMinutes ?? null}
+        onNextStopVisitMinutesChange={
+          nextStop
+            ? (minutes) => setStopVisitMinutes(nextStop.id, minutes)
+            : undefined
+        }
+        nextStopDistance={toNextMetres ?? undefined}
+        nextStopTravelMinutes={travelMinutes ?? undefined}
+        nextStopEtaLabel={etaLabel ?? undefined}
+        nextStopModeLabel={travel.label}
+        nextStopMapsHref={
+          nextStop ? mapsUrl(nextStop.lat, nextStop.lon) : undefined
+        }
+      />
     );
   }
 
@@ -1294,10 +1671,7 @@ const ManeuverBanner = ({
   const { t } = useTranslation();
 
   return (
-    <div
-      data-testid="guide-maneuver"
-      className="sticky top-0 z-10 rounded-2xl border border-border bg-card p-4 shadow-float"
-    >
+    <div className="sticky top-0 z-10 rounded-2xl border border-border bg-card p-4 shadow-float">
       <div className="flex items-start gap-3">
         <span className="flex size-14 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground md:size-12">
           <Icon className="size-7 md:size-6" aria-hidden="true" />
@@ -1346,7 +1720,7 @@ const ManeuverBanner = ({
 };
 
 interface OffRoutePromptProps {
-  metres: number | null;
+metres: number | null;
   onReroute: () => void;
   onDismiss: () => void;
 }
@@ -1487,56 +1861,6 @@ const NearbyHint = ({ service, distanceAhead, onDismiss }: NearbyHintProps) => {
   );
 };
 
-interface SuggestionListProps {
-  suggestions: GuideSuggestion[];
-  onAdd: (id: string) => void;
-  onSkip: (id: string) => void;
-}
-
-/** Contextual POIs. Adding one hands the choice on; it never edits the route. */
-const SuggestionList = ({
-  suggestions,
-  onAdd,
-  onSkip,
-}: SuggestionListProps) => {
-  const { t } = useTranslation();
-
-  return (
-    <div
-      data-testid="guide-suggestions"
-      className="rounded-2xl border border-border bg-card p-3 shadow-card"
-    >
-      <div className="px-1 text-meta font-medium text-muted-foreground">
-        {t('guide.suggestionsTitle')}
-      </div>
-      {suggestions.map((s) => (
-        <div key={s.id} className="mt-2 flex items-center gap-2 px-1">
-          <div className="min-w-0 flex-1">
-            <div className="truncate text-body">{s.name}</div>
-            <div className="text-meta text-muted-foreground">{s.detail}</div>
-          </div>
-          <button
-            type="button"
-            data-testid={`guide-suggestion-add-${s.id}`}
-            onClick={() => onAdd(s.id)}
-            className="h-8 shrink-0 rounded-full border border-border px-3 text-meta transition-colors hover:bg-muted"
-          >
-            {t('guide.suggestionAdd')}
-          </button>
-          <button
-            type="button"
-            data-testid={`guide-suggestion-skip-${s.id}`}
-            onClick={() => onSkip(s.id)}
-            className="h-8 shrink-0 rounded-full px-2 text-meta text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-          >
-            {t('guide.suggestionSkip')}
-          </button>
-        </div>
-      ))}
-    </div>
-  );
-};
-
 const QualityIcon = ({ quality }: { quality: FixQuality }) => {
   if (quality === 'unavailable' || quality === 'stale') {
     return <WifiOff className="h-3.5 w-3.5" aria-hidden="true" />;
@@ -1595,25 +1919,4 @@ const GuideHeader = ({
           type="button"
           onClick={onVoiceMuteToggle}
           title={voiceMuted ? t('guide.enableSound') : t('guide.disableSound')}
-          className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-meta text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-        >
-          {voiceMuted ? (
-            <VolumeX className="h-3.5 w-3.5" />
-          ) : (
-            <Volume2 className="h-3.5 w-3.5" />
-          )}
-          {voiceMuted ? t('guide.soundOff') : t('guide.soundOn')}
-        </button>
-        <button
-          type="button"
-          onClick={onReset}
-          title={t('guide.resetTitle')}
-          className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-meta text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-        >
-          <RotateCcw className="h-3.5 w-3.5" />
-          {t('guide.reset')}
-        </button>
-      </div>
-    </div>
-  );
-};
+          className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-meta text-muted-foreground transition-colors hover:bg-muted hov

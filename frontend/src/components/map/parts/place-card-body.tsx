@@ -95,7 +95,9 @@ export function PlaceCardBody({
             : 'pr-6 text-body font-semibold leading-tight'
         }
       >
-        {details.name}
+        {/* A point the dataset has no name for still needs a heading: without
+            one the card opens on a blank line and reads as broken. */}
+        {details.name || t('sidebar.waypoints.unnamed')}
       </div>
 
       {/* Badges: category + visit time */}
@@ -114,11 +116,13 @@ export function PlaceCardBody({
       </div>
 
       {/* The picture, when the dataset has one. Most points do not. */}
-      <PlacePhoto
-        photo={details.photo}
-        name={details.name}
-        className="mt-0.5"
-      />
+      {details.photo && (
+        <PlacePhoto
+          photo={details.photo}
+          name={details.name}
+          className="mt-0.5"
+        />
+      )}
 
       {/* Visitor info: opening hours, ticket price, location. Before the
           blurb on a phone — «when can I go and what does it cost» is what makes
@@ -231,7 +235,16 @@ export function PlaceCardBody({
                       {t('map.placeMoreFacts')}
                     </span>
                     {details.funFacts.slice(0, 3).map((fact, i) => (
-                      <div key={i} className="flex items-start gap-1.5">
+                      // Keyed by the fact's own text, not by its position: the
+                      // extras arrive from the server and can be replaced between
+                      // two opens of the card, and an index key then hands the
+                      // old DOM node (and its styling) to a different fact.
+                      // A repeated fact keeps the index as a tiebreaker so the
+                      // keys stay unique.
+                      <div
+                        key={`fact-${i}-${fact.slice(0, 24)}`}
+                        className="flex items-start gap-1.5"
+                      >
                         <span className="mt-1 size-1.5 shrink-0 rounded-full bg-primary/40" />
                         <p className="text-label leading-snug text-muted-foreground">
                           {fact}
@@ -249,7 +262,7 @@ export function PlaceCardBody({
                     <div className="flex flex-col gap-0.5">
                       {details.links.slice(0, 4).map((link, i) => (
                         <a
-                          key={i}
+                          key={`link-${i}-${link.url}`}
                           href={link.url}
                           target="_blank"
                           rel="noopener noreferrer"
@@ -275,7 +288,10 @@ export function PlaceCardBody({
                 {t('map.placeMoreFacts')}
               </span>
               {details.funFacts.slice(0, 3).map((fact, i) => (
-                <div key={i} className="flex items-start gap-1.5">
+                <div
+                  key={`fact-${i}-${fact.slice(0, 24)}`}
+                  className="flex items-start gap-1.5"
+                >
                   <span className="mt-1 size-1.5 shrink-0 rounded-full bg-primary/40" />
                   <p className="text-meta leading-snug text-muted-foreground">
                     {fact}
@@ -294,7 +310,7 @@ export function PlaceCardBody({
               <div className="flex flex-col gap-0.5">
                 {details.links.slice(0, 4).map((link, i) => (
                   <a
-                    key={i}
+                    key={`link-${i}-${link.url}`}
                     href={link.url}
                     target="_blank"
                     rel="noopener noreferrer"

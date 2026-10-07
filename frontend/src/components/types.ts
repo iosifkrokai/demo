@@ -147,6 +147,19 @@ export interface Location {
   original_index: number;
 }
 
+/**
+ * One maneuver as the guide UI consumes it: Valhalla's own maneuver `type` (the
+ * banner icon is drawn from it — Ferrostar reports written instructions, not type
+ * numbers) plus the position of the maneuver along the decoded line, in metres.
+ */
+export interface GuideManeuver {
+  key: string;
+  type: number;
+  instruction: string;
+  /** Metres from the start of the line to the manoeuvre's begin point. */
+  along: number;
+}
+
 export interface Leg {
   maneuvers: Maneuver[];
   summary: Summary;

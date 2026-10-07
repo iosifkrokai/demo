@@ -1,5 +1,7 @@
 import { useTranslation } from 'react-i18next';
 
+import { cn } from '@/lib/utils';
+
 import { fmtDist, fmtMin } from './guide-format';
 import { guideModeFor, type GuideTravelMode } from './guide-mode';
 
@@ -16,6 +18,16 @@ interface GuideProgressProps {
   remainingMinutes?: number | null;
   /** «пройдено» on foot, «проехано» by bike or car. */
   mode?: GuideTravelMode;
+  /**
+   * The navigator's shape: «пройдено 1 из 3 · 787 м» + the bar, on one row.
+   *
+   * Not a smaller version of the same three rows — the same three rows. The full
+   * card measured 97px on a phone and its two secondary lines said the same thing
+   * as the line row below them. Compact drops the standalone «including travel»
+   * line and folds the distance into the heading; every number it reported is
+   * still reported.
+   */
+  compact?: boolean;
 }
 
 /**
@@ -35,6 +47,7 @@ export const GuideProgress = ({
   metresTotal,
   remainingMinutes,
   mode,
+  compact = false,
 }: GuideProgressProps) => {
   const { t } = useTranslation();
   const travel = mode ?? guideModeFor(null);
@@ -64,14 +77,17 @@ export const GuideProgress = ({
           </span>
         )}
       </div>
-      {hasLine && remainingMinutes != null && remainingMinutes > 0 && (
-        <div
-          data-testid="guide-remaining"
-          className="mt-1 text-meta text-muted-foreground"
-        >
-          {t('guide.withTravelLeft', { time: fmtMin(remainingMinutes) })}
-        </div>
-      )}
+      {!compact &&
+        hasLine &&
+        remainingMinutes != null &&
+        remainingMinutes > 0 && (
+          <div
+            data-testid="guide-remaining"
+            className="mt-1 text-meta text-muted-foreground"
+          >
+            {t('guide.withTravelLeft', { time: fmtMin(remainingMinutes) })}
+          </div>
+        )}
       <div
         role="progressbar"
         aria-valuenow={done}
@@ -84,7 +100,10 @@ export const GuideProgress = ({
         }
         aria-label={t('guide.progressLabel')}
         data-testid="guide-progress-bar"
-        className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-muted"
+        className={cn(
+          'h-1.5 w-full overflow-hidden rounded-full bg-muted',
+          compact ? 'mt-1' : 'mt-1.5'
+        )}
       >
         <div
           className="h-full rounded-full bg-primary transition-[width] duration-200 ease-out motion-reduce:transition-none"
@@ -94,7 +113,10 @@ export const GuideProgress = ({
       {hasLine && remaining != null && (
         <div
           data-testid="guide-line-progress"
-          className="mt-1.5 flex items-baseline justify-between gap-2 text-meta text-muted-foreground"
+          className={cn(
+            'flex items-baseline justify-between gap-2 text-meta text-muted-foreground',
+            compact ? 'mt-1' : 'mt-1.5'
+          )}
         >
           <span>
             {lineLabel} {doneWord} {fmtDist(metresDone)}

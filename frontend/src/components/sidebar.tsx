@@ -46,6 +46,10 @@ import {
 import { useDirectionsQuery } from '@/hooks/use-directions-queries';
 import { GuidePanel, guideRouteKey, type GuideStop } from './guide-panel';
 import { MobileSection } from './mobile/mobile-section';
+import {
+  MOBILE_GUIDE_HEIGHT,
+  MOBILE_SHEET_HEIGHT,
+} from './mobile/use-mobile-sheet-snap';
 import { HistoryTab } from './parts/history-tab';
 import { PlanVerdict } from './parts/plan-verdict';
 import { ItinerariesTab } from './parts/itineraries-tab';
@@ -1422,13 +1426,14 @@ export const Sidebar = ({
       // unguarded call threw inside this effect — every Sidebar test failed at
       // once. 768 is Tailwind's `md`, the breakpoint the sheet classes use.
       const mobile = window.innerWidth < 768;
+      // Same three positions the mobile shell uses, guide strip included.
       const height = !mobile
         ? '0px'
         : guiding && snap === 'peek'
-          ? '26dvh'
+          ? MOBILE_GUIDE_HEIGHT
           : snap === 'full'
-            ? '90dvh'
-            : '50dvh';
+            ? MOBILE_SHEET_HEIGHT.full
+            : MOBILE_SHEET_HEIGHT.peek;
       root.style.setProperty('--sheet-h', height);
     };
     publish();
@@ -1488,6 +1493,7 @@ export const Sidebar = ({
             {hints.map((hint) => (
               <Chip
                 key={hint.id}
+                className="truncate max-w-[12rem]"
                 onClick={() => {
                   setQuery(hint.text);
                   taRef.current?.focus();
@@ -1506,21 +1512,25 @@ export const Sidebar = ({
               navigator's «маршрут идёт» state, with one obvious way out and no
               tabs to read past. All of it sits in normal flow, so nothing can
               slide under the close button. ── */}
-      <header className="order-1 shrink-0 border-b border-border px-4 pb-2.5 max-md:px-3 max-md:pb-1.5">
+      <header className="order-1 shrink-0 border-b border-border px-4 pb-2.5 max-md:px-3 max-md:pb-1.5 max-md:[&:has([data-testid=guide-exit])]:pb-1">
         <SheetDragHandle snap={snap} handleProps={handleProps} />
         {guiding ? (
-          <div className="mt-1.5 flex items-center gap-2">
-            <div className="flex min-w-0 flex-1 items-center gap-2 rounded-2xl bg-primary px-3 py-2 text-primary-foreground">
+          <div className="mt-1.5 flex items-center gap-2 max-md:mt-0">
+            <div className="flex min-w-0 flex-1 items-center gap-2 rounded-2xl bg-primary px-3 py-2 text-primary-foreground max-md:py-1">
               {/* Radix still needs a title for the dialog. */}
               <SheetTitle className="sr-only">
                 {t('sidebar.ui.guide')}
               </SheetTitle>
               <Compass className="h-4 w-4 shrink-0" aria-hidden="true" />
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-label font-semibold">
+              <div className="min-w-0 flex-1 max-md:hidden">
+                {/* On a phone the strip is 219px and this row ate 121px of it —
+                    the turn banner below showed only its top 27px. The strip
+                    needs the row, not the subtitles: title and stops line are
+                    sr-only there, the banner carries the state. */}
+                <p className="truncate text-label font-semibold max-md:sr-only">
                   {t('guide.title')}
                 </p>
-                <p className="truncate text-badge opacity-90">
+                <p className="truncate text-badge opacity-90 max-md:sr-only">
                   {t('guide.stops', { count: guideStops.length })} ·{' '}
                   {guideModeFor(transport).label}
                 </p>
@@ -1581,14 +1591,17 @@ export const Sidebar = ({
 
       {/* ── Body: the only part that scrolls. ── */}
       <div className="slim-scroll order-3 flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 pb-6 pt-3 max-md:px-3 max-md:pb-4">
+        {/* When guiding, the HUD (FerrostarNavigationHud inside GuidePanel)
+            owns the whole navigation screen. The sidebar body still renders
+            GuidePanel so the HUD appears, but the panel itself is hidden
+            by GUIDE_SHEET_CLASS so only the strip is visible. */}
         {guiding ? (
-          // key: a rebuilt route remounts the guide, so the walk restarts
-          // instead of carrying progress from the route that no longer exists
           <GuidePanel
             key={guideRouteKey(guideStops)}
             stops={guideStops}
             transport={transport}
             onWalked={handleWalked}
+            onExit={() => setGuiding(false)}
           />
         ) : mode === 'history' ? (
           <HistoryTab
@@ -2181,7 +2194,7 @@ export const Sidebar = ({
                 onClick={addEmptyWaypointToEnd}
                 className="inline-flex items-center gap-1 self-start rounded-full px-2 py-1 text-meta text-muted-foreground transition-colors hover:bg-muted hover:text-foreground max-md:min-h-11 pointer-coarse:min-h-11"
               >
-                <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />{' '}
+                <Plus className="h-3.5 w-3.5" aria-hidden="true" />{' '}
                 {t('sidebar.ui.emptyPoint')}
               </button>
             </section>
@@ -2289,9 +2302,16 @@ export const Sidebar = ({
           PANEL_SHEET_CLASS,
           // While walking, the sheet is a strip and the map is the navigator;
           // a drag to 'full' still opens everything.
-          guiding && snap === 'peek'
-            ? GUIDE_SHEET_CLASS
-            : SHEET_SNAP_CLASS[snap]
+          // While walking, the navigator IS the screen: the panel would be an
+          // empty 420px column (its body renders nothing but the portaled HUD),
+          // so from md up it is hidden outright and the map keeps the whole
+          // viewport. On a phone it stays, because there it is the bottom strip
+          // carrying the grab handle and «выйти».
+          //
+          // Hidden, never unmounted: Radix `Presence` tears the content down on
+          // `open={false}`, and the HUD is a portal *from* this subtree, so an
+          // unmount takes the navigator with it.
+          guiding ? `${GUIDE_SHEET_CLASS} md:hidden` : SHEET_SNAP_CLASS[snap]
         )}
         style={{ '--panel-width': `${panel.width}px` } as CSSProperties}
       >
@@ -2337,7 +2357,7 @@ const Stepper = ({
   const { t } = useTranslation();
   return (
     <div className="flex items-center gap-2">
-      <span className="text-label">{label}</span>
+      <span className="min-w-0 flex-1 truncate text-label">{label}</span>
       <div className="ml-auto flex items-center gap-1">
         <button
           type="button"
@@ -2347,7 +2367,7 @@ const Stepper = ({
           onClick={() =>
             onChange(value == null || value <= min ? null : value - 1)
           }
-          className="flex h-7 w-7 items-center justify-center rounded-full border border-border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-40 max-md:h-11 max-md:w-11 pointer-coarse:h-11 pointer-coarse:w-11"
+          className="flex h-9 w-9 items-center justify-center rounded-full border border-border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-40 max-md:h-11 max-md:w-11 pointer-coarse:h-11 pointer-coarse:w-11"
         >
           <Minus className="h-3.5 w-3.5" aria-hidden="true" />
         </button>
@@ -2364,7 +2384,7 @@ const Stepper = ({
           onClick={() =>
             onChange(value == null ? min : Math.min(value + 1, max))
           }
-          className="flex h-7 w-7 items-center justify-center rounded-full border border-border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground max-md:h-11 max-md:w-11 pointer-coarse:h-11 pointer-coarse:w-11"
+          className="flex h-9 w-9 items-center justify-center rounded-full border border-border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground max-md:h-11 max-md:w-11 pointer-coarse:h-11 pointer-coarse:w-11"
         >
           <Plus className="h-3.5 w-3.5" aria-hidden="true" />
         </button>

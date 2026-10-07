@@ -342,7 +342,12 @@ export function ServicesLayer({ items, thin }: ServicesLayerProps) {
                 event.stopPropagation();
                 setOpen(service);
               }}
-              className="flex h-6 w-6 items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-card transition-colors hover:text-foreground pointer-coarse:h-9 pointer-coarse:w-9"
+              // 44px on a finger (`pointer-coarse`, the same rule the panel's
+              // steppers use): 24px marks a miss as a map click, which closes
+              // the popup the tourist was reaching for. The 44px is the touch
+              // area only — the visible dot stays the size it was measured at,
+              // so marks keep their spacing and the collision rules with it.
+              className="relative flex size-6 items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-card transition-colors hover:text-foreground before:absolute before:size-11 before:content-[''] pointer-coarse:before:size-11"
             >
               <Icon className="h-3.5 w-3.5" aria-hidden="true" />
             </button>

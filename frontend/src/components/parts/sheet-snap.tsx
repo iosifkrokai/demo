@@ -21,15 +21,15 @@ export const SHEET_SNAP_CLASS: Record<SheetSnap, string> = {
 
 /**
  * While the guide runs, the map IS the navigator, so the sheet drops to a strip
- * that still shows the turn and the next stop (a drag still opens it fully).
+ * carrying only the grab handle and «выход» (a drag still opens it fully). The
+ * turn and the next stop live in the portaled HUD, not here.
  *
- * Measured on 390x844: at the peek height the sheet started at y=464 and covered
- * every map control — the guide's own compass and follow buttons sat at y=640
- * and y=704, i.e. behind it, and the compass overlapped the services button by
- * 32px on top of that. A navigator whose map is a quarter of the screen and
- * whose controls are unreachable is not a navigator.
+ * Measured on 390x844: at the old 26dvh (219px) the sheet started at y=625 and
+ * the navigator showed 23 % of the map. Its own body was 113px of empty space —
+ * `GuidePanel` renders nothing but the portal in moving mode — so the strip is
+ * now sized to its header (105px) plus the safe-area inset.
  */
-export const GUIDE_SHEET_CLASS = 'h-[26dvh] md:h-auto';
+export const GUIDE_SHEET_CLASS = 'h-[7.5rem] md:h-auto';
 
 /**
  * The panel itself: a bottom sheet under 768px (the map stays visible above it)

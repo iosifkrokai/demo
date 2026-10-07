@@ -122,12 +122,10 @@ export function Segmented<T extends string>({
             title={item.label}
             className={cn(
               'flex min-w-0 flex-1 items-center justify-center rounded-full transition-colors',
-              // 44px tap target on touch; the desktop pill keeps its 32px, and a
-              // phone gets the plan's 40 (one condition, not two competing ones).
               stacked
                 ? 'min-h-11 flex-col gap-0.5 px-1 py-1.5 text-badge'
                 : cn(
-                    'h-8 gap-1 px-2 text-label max-md:h-11 pointer-coarse:h-11',
+                    'h-8 gap-1 px-2 text-label pointer-coarse:h-11',
                     DENSITY.segmentedItem
                   ),
               'disabled:pointer-events-none disabled:opacity-50',

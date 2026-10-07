@@ -129,6 +129,9 @@ const ROUTE = {
   },
 } as unknown as ParsedDirectionsGeometry;
 
+/** Leaving navigation is the sidebar's business; the panel only reports it. */
+const noop = () => {};
+
 const seedRoute = () =>
   useDirectionsStore.getState().receiveRouteResults({ data: ROUTE });
 
@@ -241,7 +244,7 @@ describe('GuidePanel', () => {
       },
     });
 
-    render(<GuidePanel stops={STOPS} />);
+    render(<GuidePanel stops={STOPS} onExit={noop} />);
     act(() => {
       push?.({
         coords: {
@@ -264,14 +267,14 @@ describe('GuidePanel', () => {
     // первой же непройденной остановке дальше радиуса, и все следующие
     // оставались неотмеченными, хотя турист шёл прямо по ним.
     stubGeolocation({ latitude: STOPS[1]!.lat, longitude: STOPS[1]!.lon });
-    render(<GuidePanel stops={STOPS} />);
+    render(<GuidePanel stops={STOPS} onExit={noop} />);
 
     expect(screen.getByText(/пройдено 1 из 2/i)).toBeInTheDocument();
   });
 
   it('explains itself when there is no route yet', () => {
     stubGeolocation(null);
-    render(<GuidePanel stops={[]} />);
+    render(<GuidePanel stops={[]} onExit={noop} />);
 
     expect(
       screen.getByText(/соберите маршрут в режиме планирования/i)
@@ -282,7 +285,7 @@ describe('GuidePanel', () => {
     // The badge is the whole point of the simulation being allowed in a build:
     // a replayed position must never look like something the phone reported.
     stubGeolocation(null);
-    render(<GuidePanel stops={STOPS} />);
+    render(<GuidePanel stops={STOPS} onExit={noop} />);
 
     expect(screen.queryByTestId('guide-simulated')).not.toBeInTheDocument();
   });
@@ -291,7 +294,7 @@ describe('GuidePanel', () => {
     installGeoSim('?sim=walk&sim-speed=20');
     try {
       stubGeolocation(null);
-      render(<GuidePanel stops={STOPS} />);
+      render(<GuidePanel stops={STOPS} onExit={noop} />);
 
       expect(screen.getByTestId('guide-simulated')).toHaveTextContent(
         /СИМУЛЯЦИЯ GPS/
@@ -304,14 +307,14 @@ describe('GuidePanel', () => {
   it('marks stops by hand and keeps the progress across a reload', async () => {
     stubGeolocation(null);
     const user = userEvent.setup();
-    const { unmount } = render(<GuidePanel stops={STOPS} />);
+    const { unmount } = render(<GuidePanel stops={STOPS} onExit={noop} />);
 
     await user.click(screen.getByTestId('guide-stop-1'));
     expect(screen.getByText(/пройдено 1 из 2/i)).toBeInTheDocument();
 
     // A reload must not lose where the tourist got to.
     unmount();
-    render(<GuidePanel stops={STOPS} />);
+    render(<GuidePanel stops={STOPS} onExit={noop} />);
     expect(screen.getByText(/пройдено 1 из 2/i)).toBeInTheDocument();
   });
 
@@ -319,7 +322,7 @@ describe('GuidePanel', () => {
     // Standing at the next stop on the route (order is kept: a walk marks its
     // current stop, not whichever one happens to be nearby).
     stubGeolocation({ latitude: STOPS[0]!.lat, longitude: STOPS[0]!.lon });
-    render(<GuidePanel stops={STOPS} />);
+    render(<GuidePanel stops={STOPS} onExit={noop} />);
 
     await waitFor(() =>
       expect(screen.getByText(/пройдено 1 из 2/i)).toBeInTheDocument()
@@ -328,7 +331,7 @@ describe('GuidePanel', () => {
 
   it('falls back to tapping when the browser refuses geolocation', async () => {
     stubGeolocation(null);
-    render(<GuidePanel stops={STOPS} />);
+    render(<GuidePanel stops={STOPS} onExit={noop} />);
 
     await waitFor(() =>
       expect(
@@ -340,7 +343,7 @@ describe('GuidePanel', () => {
   it('starts a fresh walk when the route is rebuilt', async () => {
     stubGeolocation(null);
     const user = userEvent.setup();
-    const { unmount } = render(<GuidePanel stops={STOPS} />);
+    const { unmount } = render(<GuidePanel stops={STOPS} onExit={noop} />);
 
     await user.click(screen.getByTestId('guide-stop-1'));
     expect(screen.getByText(/пройдено 1 из 2/i)).toBeInTheDocument();
@@ -352,14 +355,16 @@ describe('GuidePanel', () => {
       { id: '3', name: 'Туалет', lat: 53.68, lon: 23.83 },
     ];
     unmount();
-    render(<GuidePanel key={guideRouteKey(rebuilt)} stops={rebuilt} />);
+    render(
+      <GuidePanel key={guideRouteKey(rebuilt)} stops={rebuilt} onExit={noop} />
+    );
 
     expect(screen.getByText(/пройдено 0 из 3/i)).toBeInTheDocument();
   });
 
   it('offers the next stop in a maps app', () => {
     stubGeolocation(null);
-    render(<GuidePanel stops={STOPS} />);
+    render(<GuidePanel stops={STOPS} onExit={noop} />);
 
     const link = screen.getByRole('link', { name: /открыть в картах/i });
     expect(link).toHaveAttribute(
@@ -370,7 +375,7 @@ describe('GuidePanel', () => {
 
   it('gives the next stop a card with its number, category and visit time', () => {
     stubGeolocation(null);
-    render(<GuidePanel stops={STOPS} />);
+    render(<GuidePanel stops={STOPS} onExit={noop} />);
 
     const card = screen.getByTestId('guide-next-stop');
     // 1 — the badge is the stop's place on the route, not a list index.
@@ -386,7 +391,7 @@ describe('GuidePanel', () => {
 
   it('lets the tourist set their own time at a stop, and keeps it for the totals', () => {
     stubGeolocation(null);
-    render(<GuidePanel stops={STOPS} />);
+    render(<GuidePanel stops={STOPS} onExit={noop} />);
 
     const card = screen.getByTestId('guide-next-stop');
     fireEvent.click(within(card).getByTestId('visit-time-chip'));
@@ -406,7 +411,7 @@ describe('GuidePanel', () => {
 
   it('shows how far the next stop is and walks the card forward', () => {
     const geo = stubWatchingGeolocation();
-    render(<GuidePanel stops={STOPS} />);
+    render(<GuidePanel stops={STOPS} onExit={noop} />);
 
     // 240 m short of the first stop: close enough to aim at, too far to count.
     geo.standNorthOf(STOPS[0]!, 240);
@@ -428,7 +433,7 @@ describe('GuidePanel', () => {
     // When the tourist already has a good fix (accuracy ≤ 50 m), the guide
     // opens directly into moving mode — no second button required.
     const geo = stubWatchingGeolocation();
-    render(<GuidePanel stops={STOPS} />);
+    render(<GuidePanel stops={STOPS} onExit={noop} />);
 
     // The first stubbed fix is already a good one.
     geo.push(STOPS[0]!.lat, STOPS[0]!.lon, 8);
@@ -447,7 +452,7 @@ describe('GuidePanel', () => {
     // Without a trusted fix the guide opens in review, where the start button
     // lets the tourist decide when to begin.
     stubWatchingGeolocation();
-    render(<GuidePanel stops={STOPS} />);
+    render(<GuidePanel stops={STOPS} onExit={noop} />);
 
     expect(screen.getByTestId('guide-panel')).toHaveAttribute(
       'data-mode',
@@ -459,7 +464,7 @@ describe('GuidePanel', () => {
   it('mutes the stops already walked and keeps the next one in the accent', async () => {
     stubGeolocation(null);
     const user = userEvent.setup();
-    render(<GuidePanel stops={STOPS} />);
+    render(<GuidePanel stops={STOPS} onExit={noop} />);
 
     const first = screen.getByTestId('guide-stop-1');
     const second = screen.getByTestId('guide-stop-2');
@@ -485,7 +490,7 @@ describe('GuidePanel', () => {
   it('counts the walk in the progress bar and in the remaining time', async () => {
     stubGeolocation(null);
     const user = userEvent.setup();
-    render(<GuidePanel stops={STOPS} />);
+    render(<GuidePanel stops={STOPS} onExit={noop} />);
 
     const bar = screen.getByRole('progressbar', { name: /прогресс/i });
     expect(bar).toHaveAttribute('aria-valuenow', '0');
@@ -512,7 +517,7 @@ describe('GuidePanel', () => {
       'grodno-guide-progress',
       JSON.stringify({ route: 'some-other-route', visited: ['1', '2'] })
     );
-    render(<GuidePanel stops={STOPS} />);
+    render(<GuidePanel stops={STOPS} onExit={noop} />);
 
     expect(screen.getByText(/пройдено 0 из 2/i)).toBeInTheDocument();
   });
@@ -520,7 +525,7 @@ describe('GuidePanel', () => {
   it('resets the walk on request', async () => {
     stubGeolocation(null);
     const user = userEvent.setup();
-    render(<GuidePanel stops={STOPS} />);
+    render(<GuidePanel stops={STOPS} onExit={noop} />);
 
     await user.click(screen.getByTestId('guide-stop-1'));
     await user.click(screen.getByTestId('guide-stop-2'));
@@ -541,7 +546,7 @@ describe('GuidePanel', () => {
 
   it('keeps the cards calm for anyone who asked for less motion', () => {
     stubGeolocation(null);
-    render(<GuidePanel stops={STOPS} />);
+    render(<GuidePanel stops={STOPS} onExit={noop} />);
 
     // The slide is behind motion-safe, so prefers-reduced-motion only fades.
     expect(screen.getByTestId('guide-next-stop')).toHaveClass(
@@ -566,7 +571,7 @@ describe('GuidePanel · режим движения', () => {
 
   const start = async () => {
     const user = userEvent.setup();
-    render(<GuidePanel stops={STOPS} />);
+    render(<GuidePanel stops={STOPS} onExit={noop} />);
     await user.click(screen.getByTestId('guide-start'));
     return user;
   };
@@ -637,7 +642,7 @@ describe('GuidePanel · режим движения', () => {
     const onWalked = vi.fn();
     const geo = stubWatchingGeolocation();
     const user = userEvent.setup();
-    render(<GuidePanel stops={STOPS} onWalked={onWalked} />);
+    render(<GuidePanel stops={STOPS} onWalked={onWalked} onExit={noop} />);
 
     // До начала прогулки прогресса нет, но он уже честно равен нулю.
     await waitFor(() =>
@@ -661,43 +666,10 @@ describe('GuidePanel · режим движения', () => {
     );
   });
 
-  it('offers a re-plan once the tourist is clearly off route', async () => {
+  it('says once when the tourist is clearly off route, and offers no re-plan', async () => {
     const geo = stubWatchingGeolocation();
-    const onReroute = vi.fn();
     const user = userEvent.setup();
-    useDirectionsStore.getState().setWaypoint([
-      {
-        id: 'me',
-        userInput: 'Моё местоположение',
-        geocodeResults: [
-          {
-            title: 'Моё местоположение',
-            selected: true,
-            displaylnglat: [STOPS[0]!.lon, STOPS[0]!.lat],
-            sourcelnglat: [STOPS[0]!.lon, STOPS[0]!.lat],
-            key: 0,
-            addressindex: 0,
-          },
-        ],
-      },
-      {
-        id: '1',
-        userInput: STOPS[0]!.name,
-        placeId: 101,
-        geocodeResults: [
-          {
-            title: STOPS[0]!.name,
-            selected: true,
-            displaylnglat: [STOPS[0]!.lon, STOPS[0]!.lat],
-            sourcelnglat: [STOPS[0]!.lon, STOPS[0]!.lat],
-            key: 1,
-            addressindex: 0,
-          },
-        ],
-      },
-    ]);
-
-    render(<GuidePanel stops={STOPS} onReroute={onReroute} />);
+    render(<GuidePanel stops={STOPS} onExit={noop} />);
     await user.click(screen.getByTestId('guide-start'));
 
     // One straggling fix is noise; the prompt waits for the second.
@@ -705,67 +677,83 @@ describe('GuidePanel · режим движения', () => {
     expect(screen.queryByTestId('guide-off-route')).toBeNull();
 
     geo.push(STOPS[0]!.lat + 0.004, STOPS[0]!.lon, 8);
-    expect(screen.getByTestId('guide-off-route')).toBeInTheDocument();
+    const prompt = screen.getByTestId('guide-off-route');
+    expect(prompt).toBeInTheDocument();
+    // Re-planning is the navigator's own business while walking; a second
+    // button for it here was one more control in the way.
+    expect(screen.queryByTestId('guide-reroute')).toBeNull();
 
-    await user.click(screen.getByTestId('guide-reroute'));
-    expect(onReroute).toHaveBeenCalledTimes(1);
-
-    // Every stop survives the re-plan — only the start moved to the fix.
-    const ids = useDirectionsStore
-      .getState()
-      .waypoints.map((w) => w.id)
-      .sort();
-    expect(ids).toEqual(['1', 'me']);
+    await user.click(screen.getByTestId('guide-on-route'));
+    expect(screen.queryByTestId('guide-off-route')).toBeNull();
   });
 
-  it('drops no stop when the re-plan falls back to the store', async () => {
-    const geo = stubWatchingGeolocation();
-    const user = await start();
-    useDirectionsStore.getState().setWaypoint([
-      {
-        id: '1',
-        userInput: STOPS[0]!.name,
-        placeId: 101,
-        geocodeResults: [
-          {
-            title: STOPS[0]!.name,
-            selected: true,
-            displaylnglat: [STOPS[0]!.lon, STOPS[0]!.lat],
-            sourcelnglat: [STOPS[0]!.lon, STOPS[0]!.lat],
-            key: 0,
-            addressindex: 0,
-          },
-        ],
-      },
-    ]);
-
-    geo.push(STOPS[0]!.lat + 0.004, STOPS[0]!.lon, 8);
-    geo.push(STOPS[0]!.lat + 0.004, STOPS[0]!.lon, 8);
-    expect(screen.getByTestId('guide-off-route')).toBeInTheDocument();
-
-    await user.click(screen.getByTestId('guide-reroute'));
-
-    const ids = useDirectionsStore
-      .getState()
-      .waypoints.map((w) => w.id)
-      .sort();
-    expect(ids).toEqual(['1', 'me']);
-  });
-
-  it('folds the stop list behind a toggle while moving', async () => {
+  it('opens the stops from the map HUD and lets the tourist mark one', async () => {
     const geo = stubWatchingGeolocation();
     const user = await start();
     geo.push(STOPS[0]!.lat - 0.0005, STOPS[0]!.lon, 8);
 
-    expect(screen.queryByTestId('guide-stop-1')).toBeNull();
-    const toggle = screen.getByTestId('guide-stop-list-toggle');
-    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    const detailsToggle = screen.getByTestId('guide-route-details-toggle');
+    expect(screen.queryByTestId('guide-details-panel')).toBeNull();
 
-    await user.click(toggle);
-    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    await user.click(detailsToggle);
+    expect(screen.getByTestId('guide-details-panel')).toBeInTheDocument();
     expect(screen.getByTestId('guide-stop-1')).toHaveTextContent(
       'Монастырь бригиток'
     );
+    expect(screen.getByTestId('guide-advance')).toHaveAccessibleName(
+      'отметить остановку «Монастырь бригиток»'
+    );
+
+    await user.click(screen.getByTestId('guide-stop-1'));
+    expect(screen.getByTestId('guide-stop-1')).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+  });
+
+  it('shows information for the next place without opening the planner', async () => {
+    stubGeolocation(null);
+    useDirectionsStore.getState().setPlaceDetails({
+      101: {
+        name: 'Монастырь бригиток',
+        category: 'монастырь',
+        blurb: 'Барочный монастырский комплекс в центре города.',
+        funFact: 'Здесь сохранились старинные фрески.',
+        funFacts: ['История монастыря'],
+        links: [],
+        visitMinutes: 30,
+      },
+    });
+    const user = await start();
+
+    // The walking card is name + distance only: on a phone the full card was
+    // 208px of a 844px screen and left the map with 4 % of itself. The writing
+    // about the place moved into the route details, which the HUD opens — still
+    // without the planner, which is what this test is about.
+    expect(screen.getByTestId('guide-next-place')).toHaveTextContent(
+      'Монастырь бригиток'
+    );
+    expect(screen.queryByTestId('guide-place-details-toggle')).toBeNull();
+
+    await user.click(screen.getByTestId('guide-route-details-toggle'));
+
+    expect(screen.getByTestId('guide-details-panel')).toHaveTextContent(
+      'Барочный монастырский комплекс в центре города.'
+    );
+    expect(screen.getByTestId('guide-place-details-toggle')).toHaveAttribute(
+      'aria-expanded',
+      'false'
+    );
+
+    await user.click(screen.getByTestId('guide-place-details-toggle'));
+
+    expect(screen.getByTestId('guide-place-details-toggle')).toHaveAttribute(
+      'aria-expanded',
+      'true'
+    );
+    expect(
+      screen.getByText('Здесь сохранились старинные фрески.')
+    ).toBeInTheDocument();
   });
 
   it('never lets a suggestion change the route by itself', async () => {
@@ -779,10 +767,13 @@ describe('GuidePanel · режим движения', () => {
           { id: 'w1', name: 'Туалет у ратуши', detail: 'отклонение 4 мин' },
         ]}
         onAddSuggestion={onAdd}
+        onExit={noop}
       />
     );
     await user.click(screen.getByTestId('guide-start'));
 
+    // Suggestions live inside the details panel — open it first.
+    await user.click(screen.getByTestId('guide-route-details-toggle'));
     expect(screen.getByTestId('guide-suggestions')).toHaveTextContent(
       'Туалет у ратуши'
     );
@@ -880,7 +871,7 @@ describe('GuidePanel · NearbyHint', () => {
 
   const start = async () => {
     const user = userEvent.setup();
-    render(<GuidePanel stops={STOPS} />);
+    render(<GuidePanel stops={STOPS} onExit={noop} />);
     await user.click(screen.getByTestId('guide-start'));
     return user;
   };
@@ -932,7 +923,7 @@ describe('GuidePanel · NearbyHint', () => {
     const geo = stubWatchingGeolocation();
     // Go straight to moving — no need for guide-start since we're testing the
     // hint itself, not the entry flow.
-    render(<GuidePanel stops={STOPS} />);
+    render(<GuidePanel stops={STOPS} onExit={noop} />);
     geo.push(STOPS[0]!.lat, STOPS[0]!.lon, 8);
 
     // Первое появление.
@@ -961,7 +952,7 @@ describe('GuidePanel · NearbyHint', () => {
     });
 
     const geo = stubWatchingGeolocation();
-    render(<GuidePanel stops={STOPS} />);
+    render(<GuidePanel stops={STOPS} onExit={noop} />);
     // Directly push a good fix — this puts the guide into moving mode
     // (trusted fix) AND provides the position that makes nearbyHint computable.
     geo.push(STOPS[0]!.lat, STOPS[0]!.lon, 8);
@@ -1023,7 +1014,7 @@ describe('GuidePanel · wake lock', () => {
     });
 
     const user = userEvent.setup();
-    render(<GuidePanel stops={STOPS} />);
+    render(<GuidePanel stops={STOPS} onExit={noop} />);
     await user.click(screen.getByTestId('guide-start'));
 
     // Let the acquire promise resolve and populate the ref.
@@ -1079,7 +1070,7 @@ describe('GuidePanel · wake lock', () => {
     });
 
     const user = userEvent.setup();
-    render(<GuidePanel stops={STOPS} />);
+    render(<GuidePanel stops={STOPS} onExit={noop} />);
     await user.click(screen.getByTestId('guide-start'));
 
     await act(async () => {
@@ -1132,6 +1123,8 @@ describe('GuidePanel · фиксы в фоне', () => {
   // NOTE: geolocation is stubbed inside each test body so that the parent's
   // afterEach (which calls vi.unstubAllGlobals()) does NOT remove our stub.
   beforeEach(() => {
+    vi.unstubAllGlobals();
+    Reflect.deleteProperty(navigator, 'geolocation');
     localStorage.clear();
     seedRoute();
   });
@@ -1154,7 +1147,7 @@ describe('GuidePanel · фиксы в фоне', () => {
     // остановка тикается. Фикс из радиуса остановки + слабый фикс — уже тикнуто.
     const geo = stubWatchingGeolocation();
     const user = userEvent.setup();
-    render(<GuidePanel stops={STOPS} />);
+    render(<GuidePanel stops={STOPS} onExit={noop} />);
     await user.click(screen.getByTestId('guide-start'));
 
     // 200 м к северу от первой остановки: достаточно близко чтобы дойти, но
@@ -1177,7 +1170,7 @@ describe('GuidePanel · фиксы в фоне', () => {
     // возвращении вкладки следующей остановкой остаётся та же, что и была.
     const geo = stubWatchingGeolocation();
     const user = userEvent.setup();
-    render(<GuidePanel stops={STOPS} />);
+    render(<GuidePanel stops={STOPS} onExit={noop} />);
     await user.click(screen.getByTestId('guide-start'));
 
     geo.push(STOPS[0]!.lat, STOPS[0]!.lon, 8);
@@ -1206,7 +1199,7 @@ describe('GuidePanel · английский интерфейс', () => {
   it('переводит весь проводник, а не только заголовок', async () => {
     await i18n.changeLanguage('en');
     stubGeolocation(null);
-    render(<GuidePanel stops={STOPS} />);
+    render(<GuidePanel stops={STOPS} onExit={noop} />);
 
     // Шапка.
     expect(screen.getByText('Guide')).toBeInTheDocument();
@@ -1237,14 +1230,14 @@ describe('GuidePanel · английский интерфейс', () => {
   it('объясняет пустой маршрут по-английски', async () => {
     await i18n.changeLanguage('en');
     stubGeolocation(null);
-    render(<GuidePanel stops={[]} />);
+    render(<GuidePanel stops={[]} onExit={noop} />);
 
     expect(screen.getByTestId('guide-empty')).toHaveTextContent('no route yet');
   });
 
   it('переносит ряд кнопок шапки, чтобы кнопки не уезжали за край на 390px', () => {
     stubGeolocation(null);
-    render(<GuidePanel stops={STOPS} />);
+    render(<GuidePanel stops={STOPS} onExit={noop} />);
 
     const header = screen.getByTestId('guide-header');
     // Ряд переносится, блок заголовка может сжиматься (min-w-0), группа кнопок

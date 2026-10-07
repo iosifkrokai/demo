@@ -12,6 +12,7 @@ import { SheetDragHandle } from '@/components/parts/sheet-snap';
 import type { SheetHandleProps } from '@/components/parts/sheet-snap';
 
 import { MobileShell } from './mobile-shell';
+import { MOBILE_GUIDE_HEIGHT } from './use-mobile-sheet-snap';
 
 /** The panel state the shell reads; individual tests flip it. */
 const mockCommon = vi.hoisted(() => ({
@@ -103,10 +104,10 @@ describe('MobileShell', () => {
     mockCommon.guiding = true;
     render(<MobileShell panel={stubPanel} />);
     expect(screen.getByTestId('mobile-sheet')).toHaveStyle({
-      height: '26dvh',
+      height: MOBILE_GUIDE_HEIGHT,
     });
     expect(document.documentElement.style.getPropertyValue('--sheet-h')).toBe(
-      '26dvh'
+      MOBILE_GUIDE_HEIGHT
     );
   });
 

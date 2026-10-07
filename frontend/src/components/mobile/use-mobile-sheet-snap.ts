@@ -21,10 +21,20 @@ export const MOBILE_SHEET_HEIGHT: Record<MobileSnap, string> = {
   full: '90dvh',
 };
 
-/** While the guide runs the map IS the navigator: the panel is a strip that
- * still carries the next turn and the next stop. Same value the desktop sheet
- * uses (`GUIDE_SHEET_CLASS`) — see the measurement note there. */
-export const MOBILE_GUIDE_HEIGHT = '26dvh';
+/** While the guide runs the map IS the navigator, so the panel gives the map
+ * back its room and keeps only the bar the guide cannot work without — the
+ * grab handle and «выйти».
+ *
+ * It was 26dvh (219px at 844) back when the panel itself carried the turn and
+ * the next stop. It does not any more: in moving mode `GuidePanel` renders only
+ * the portaled HUD, so those 219px held a 105px header and 113px of nothing.
+ * With the HUD on top of it, the sheet was the larger half of the chrome — the
+ * navigator showed 23 % of the map. Measured at 390×844 the header is 105px,
+ * so 7.5rem (127px) covers it with room for the safe-area inset.
+ *
+ * Same value the desktop sheet uses (`GUIDE_SHEET_CLASS`) — see the measurement
+ * note there. */
+export const MOBILE_GUIDE_HEIGHT = '7.5rem';
 
 const ORDER: MobileSnap[] = ['bar', 'peek', 'full'];
 
@@ -85,8 +95,16 @@ export const snapPx = (snap: MobileSnap): number => {
   }
 };
 
-/** The guide strip in pixels — the height the drag starts from while walking. */
-export const guidePx = (): number => Math.round(viewportHeight() * 0.26);
+/**
+ * The guide strip in pixels — the height the drag starts from while walking.
+ *
+ * Must be the same number as `MOBILE_GUIDE_HEIGHT` above, which is what the CSS
+ * actually renders. It was still `0.26 * vh` (219px at 844) after the strip
+ * became 7.5rem (120px): the sheet stood at 120 and every drag started from
+ * 219, so the first pointer move jumped it 99px down before tracking anything.
+ * 7.5rem is a fixed rem, so it converts without looking at the viewport at all.
+ */
+export const guidePx = (): number => 120;
 
 /**
  * The height a drag is allowed to reach, with the pull past the outermost
@@ -220,7 +238,7 @@ export const useMobileSheetSnap = (
   const latest = useRef({ snap, restingPx, onDismiss });
   useEffect(() => {
     latest.current = { snap, restingPx, onDismiss };
-  });
+  }, [snap, restingPx, onDismiss]);
 
   const snapRef = useRef<MobileSnap>(snap);
   const setSnap = useCallback((next: MobileSnap) => {
@@ -228,11 +246,34 @@ export const useMobileSheetSnap = (
     setSnapState(next);
   }, []);
 
+  /**
+   * The element this gesture captured the pointer on, so the capture can be given
+   * back. A cancelled drag has to hand it over rather than leave the sheet holding
+   * the pointer — the release that never comes would keep routing to it.
+   */
+  const captured = useRef<{ target: HTMLElement; pointerId: number } | null>(
+    null
+  );
+
+  const releaseCapture = useCallback(() => {
+    const held = captured.current;
+    captured.current = null;
+    // `hasPointerCapture` is what keeps a second hand-over from throwing: the
+    // browser already releases the capture implicitly on pointerup/pointercancel.
+    if (held?.target.hasPointerCapture?.(held.pointerId)) {
+      held.target.releasePointerCapture(held.pointerId);
+    }
+  }, []);
+
   const onPointerDown = useCallback((event: ReactPointerEvent<HTMLElement>) => {
     // Capture the pointer: without it a drag that outruns the grab bar stops
     // being tracked the moment the finger crosses its edge, which is most of
     // the movement in a sheet drag.
-    event.currentTarget?.setPointerCapture?.(event.pointerId);
+    const target = event.currentTarget;
+    if (target?.setPointerCapture) {
+      target.setPointerCapture(event.pointerId);
+      captured.current = { target, pointerId: event.pointerId };
+    }
     gesture.current = {
       originY: event.clientY,
       originPx: latest.current.restingPx ?? snapPx(snapRef.current),
@@ -256,6 +297,7 @@ export const useMobileSheetSnap = (
     (event: ReactPointerEvent<HTMLElement> | null) => {
       const g = gesture.current;
       gesture.current = null;
+      releaseCapture();
       if (!g) return;
 
       if (!g.moved) {
@@ -293,18 +335,20 @@ export const useMobileSheetSnap = (
       } else if (releaseVelocity <= -FLICK_PX_PER_MS) {
         next = ORDER[Math.max(index - 1, 0)] ?? 'bar';
       } else {
-        next = ORDER.reduce((best, candidate) =>
-          Math.abs(snapPx(candidate) - projected) <
-          Math.abs(snapPx(best) - projected)
-            ? candidate
-            : best
+        next = ORDER.reduce(
+          (best, candidate) =>
+            Math.abs(snapPx(candidate) - projected) <
+            Math.abs(snapPx(best) - projected)
+              ? candidate
+              : best,
+          ORDER[ORDER.length - 1] ?? 'full'
         );
       }
 
       setDragHeight(null);
       setSnap(next);
     },
-    [setSnap]
+    [setSnap, onDismiss, releaseCapture]
   );
 
   const onPointerUp = useCallback(
@@ -313,9 +357,10 @@ export const useMobileSheetSnap = (
   );
 
   const onPointerCancel = useCallback(() => {
+    releaseCapture();
     gesture.current = null;
     setDragHeight(null);
-  }, []);
+  }, [releaseCapture]);
 
   const onClick = useCallback(() => {
     if (swallowClick.current) {

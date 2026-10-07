@@ -37,14 +37,17 @@ export const CheckboxSetting = ({
               type="button"
               variant="ghost"
               size="icon-xs"
-              className="text-muted-foreground hover:text-foreground hover:bg-transparent"
+              className="relative text-muted-foreground hover:text-foreground hover:bg-transparent after:absolute after:left-1/2 after:top-1/2 after:size-11 after:-translate-x-1/2 after:-translate-y-1/2 after:content-['']"
             >
               <AccessibleIcon label={`More info about ${label}`}>
                 <HelpCircle className="size-3.5" />
               </AccessibleIcon>
             </Button>
           </PopoverTrigger>
-          <PopoverContent side="top" className="w-64 p-3">
+          <PopoverContent
+            side="top"
+            className="max-h-[300px] w-64 overflow-y-auto p-3"
+          >
             <p className="text-xs text-muted-foreground">{description}</p>
           </PopoverContent>
         </Popover>

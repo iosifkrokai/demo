@@ -21,6 +21,7 @@ import {
 } from '@/components/ui/sheet';
 import { X, Copy, RotateCcw, SlidersHorizontal, Settings2 } from 'lucide-react';
 import { useParams, useSearch } from '@tanstack/react-router';
+import { toast } from 'sonner';
 import { useDirectionsQuery } from '@/hooks/use-directions-queries';
 import { useIsochronesQuery } from '@/hooks/use-isochrones-queries';
 import { CollapsibleSection } from '@/components/ui/collapsible-section';
@@ -77,11 +78,23 @@ export const SettingsPanel = () => {
     const text = JSON.stringify(
       filterProfileSettings(profile as ProfileWithSettings, settings)
     );
-    await navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => {
-      setCopied(false);
-    }, 1000);
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => {
+        setCopied(false);
+      }, 1000);
+    } catch {
+      // A clipboard write needs a secure context and a permission the browser
+      // may simply refuse — neither is the app's to grant, so the refusal is
+      // reported instead of swallowed into a button that never changes.
+      toast.warning('Copy failed', {
+        description: 'The browser refused clipboard access.',
+        position: 'bottom-center',
+        duration: 5000,
+        closeButton: true,
+      });
+    }
   }, [profile, settings]);
 
   const resetConfigSettings = useCallback(() => {

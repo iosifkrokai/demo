@@ -4,6 +4,8 @@ import react from '@vitejs/plugin-react';
 import svgr from 'vite-plugin-svgr';
 import path from 'path';
 import tailwindcss from '@tailwindcss/vite';
+import wasm from 'vite-plugin-wasm';
+import topLevelAwait from 'vite-plugin-top-level-await';
 import { swVitePlugin } from './sw-vite-plugin';
 
 function getBaseUrl() {
@@ -35,6 +37,10 @@ export default defineConfig({
       svgrOptions: { exportType: 'named', namedExport: 'ReactComponent' },
     }),
     tailwindcss(),
+    // Ferrostar's navigation core ships as WASM — without these plugins the
+    // ESM module fails to load in both dev and build.
+    wasm(),
+    topLevelAwait(),
     swVitePlugin(),
   ],
   resolve: {

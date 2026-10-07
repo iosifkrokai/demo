@@ -950,7 +950,12 @@ export const settingsInitTruckOverride = {
   height: 4.11,
 };
 
-const gateSettings = [maneuverPenalty, gateCost, gatePenalty] as const;
+// `turnPenaltyCost` and `maneuverPenalty` below are two sliders bound to the same
+// `maneuver_penalty` key. A profile must therefore carry exactly one of them: the
+// last control written wins, so a profile listing both shows two sliders that
+// move each other and fight over one store key.
+const gateSettings = [gateCost, gatePenalty] as const;
+const maneuverSettings = [maneuverPenalty] as const;
 const borderSettings = [countryCrossingCost, countryCrossingPenalty] as const;
 const serviceSettings = [servicePenalty, serviceFactor] as const;
 const tollSettings = [useTollways, tollBoothCost, tollBoothPenalty] as const;
@@ -977,8 +982,11 @@ const commonVehicleProfileBoolean = [
   ignoreHierarchies,
 ] as const;
 
+// The turn-penalty control is spelled out per profile instead of shared: it goes
+// in the *general* settings of the profiles whose profile settings do not already
+// bind `maneuver_penalty` (car, bus, bicycle), and stays out of the ones that do
+// (truck, motorcycle, motor_scooter). See `gateSettings` above.
 const commonGeneralNumeric = [
-  turnPenaltyCost,
   useHighways,
   ...tollSettings,
   ...ferrySettings,
@@ -1003,6 +1011,7 @@ export const profileSettings: Record<SettingsProfile, SettingsGroup> = {
       axleCount,
       topSpeed,
       fixedSpeed,
+      ...maneuverSettings,
       ...gateSettings,
       privateAccessPenalty,
       closureFactor,
@@ -1054,6 +1063,7 @@ export const profileSettings: Record<SettingsProfile, SettingsGroup> = {
       topSpeed,
       usePrimary,
       useLivingStreets,
+      ...maneuverSettings,
       ...gateSettings,
       ...borderSettings,
     ],
@@ -1069,7 +1079,7 @@ export const profileSettings: Record<SettingsProfile, SettingsGroup> = {
   ),
 
   motorcycle: createSettings(
-    [...commonVehicleProfileNumeric],
+    [...maneuverSettings, ...commonVehicleProfileNumeric],
     [...commonVehicleProfileBoolean],
     [],
     [speedTypes]
@@ -1084,7 +1094,10 @@ export const generalSettings: Record<SettingsProfile, SettingsGroup> & {
     [...commonGeneralBoolean, ...hovFlags]
   ),
 
-  car: createSettings([...commonGeneralNumeric], [...commonGeneralBoolean]),
+  car: createSettings(
+    [turnPenaltyCost, ...commonGeneralNumeric],
+    [...commonGeneralBoolean]
+  ),
 
   bus: createSettings(
     [
@@ -1119,7 +1132,6 @@ export const generalSettings: Record<SettingsProfile, SettingsGroup> & {
 
   motorcycle: createSettings(
     [
-      turnPenaltyCost,
       useHighways,
       useTrails,
       ...tollSettings,

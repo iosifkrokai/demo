@@ -31,6 +31,19 @@ interface GuideNextStopProps {
   /** How the tourist moves: «идти» on foot, «ехать» by bike or car. */
   mode: GuideTravelMode;
   mapsHref: string;
+  /**
+   * The navigator's version of the card: name, number and distance only.
+   *
+   * On a phone the full card is the wrong shape for the thing it is shown in.
+   * Over a map, with the turn banner above and the buttons below, it stood 208px
+   * tall — the category, the visit-time editor, the travel/arrival line and a
+   * 48px «open in maps» button. That is planning information on a screen that
+   * has none to spare: measured at 390×844 the whole HUD plus the guide sheet
+   * left 4 % of the map visible, against the ≥66 % the mobile spec asks for.
+   * So the walking card keeps what a walker reads at a glance and drops the rest,
+   * which stays one tap away in the route details.
+   */
+  compact?: boolean;
 }
 
 /**
@@ -56,6 +69,7 @@ export const GuideNextStop = ({
   etaLabel,
   mode,
   mapsHref,
+  compact = false,
 }: GuideNextStopProps) => {
   const { t } = useTranslation();
   const TravelIcon = mode.icon;
@@ -63,7 +77,11 @@ export const GuideNextStop = ({
   return (
     <div
       data-testid="guide-next-stop"
-      className="animate-in fade-in-0 motion-safe:slide-in-from-bottom-1 rounded-2xl border border-border bg-card p-4 shadow-card duration-200 ease-out"
+      className={
+        compact
+          ? 'relative animate-in fade-in-0 motion-safe:slide-in-from-bottom-1 rounded-2xl border border-border bg-card p-3 pr-14 shadow-card duration-200 ease-out'
+          : 'animate-in fade-in-0 motion-safe:slide-in-from-bottom-1 rounded-2xl border border-border bg-card p-4 shadow-card duration-200 ease-out'
+      }
     >
       <div className="flex items-center justify-between gap-2">
         <span className="text-meta font-medium text-muted-foreground">
@@ -80,80 +98,109 @@ export const GuideNextStop = ({
         )}
       </div>
 
-      <div className="mt-2.5 flex items-start gap-3">
+      <div
+        className={
+          compact
+            ? 'mt-1.5 flex items-center gap-2.5'
+            : 'mt-2.5 flex items-start gap-3'
+        }
+      >
         <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary text-body font-semibold text-primary-foreground">
           {number}
         </span>
         <div className="min-w-0 flex-1">
           <div className="text-title font-semibold leading-tight">{name}</div>
-          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-meta text-muted-foreground">
-            {category && (
-              <span className="inline-flex items-center gap-1.5">
-                <PlaceIcon category={category} />
-                {category}
-              </span>
-            )}
-            {visitMinutes != null && onVisitMinutesChange && (
-              <VisitTimeEditor
-                estimate={estimateMinutes}
-                value={visitOverride}
-                onChange={onVisitMinutesChange}
-              />
-            )}
-            {visitMinutes != null && !onVisitMinutesChange && (
-              <span className="inline-flex items-center gap-1.5">
-                <Clock className="h-3.5 w-3.5" />
-                {t('guide.visitApprox', { time: fmtMin(visitMinutes) })}
-              </span>
-            )}
-          </div>
+          {/* Category and visit time are planning facts, and both are editable in
+              the route details. On the walking card they cost a second line for
+              information nobody reads with one thumb on a map. */}
+          {!compact && (
+            <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-meta text-muted-foreground">
+              {category && (
+                <span className="inline-flex items-center gap-1.5">
+                  <PlaceIcon category={category} />
+                  {category}
+                </span>
+              )}
+              {visitMinutes != null && onVisitMinutesChange && (
+                <VisitTimeEditor
+                  estimate={estimateMinutes}
+                  value={visitOverride}
+                  onChange={onVisitMinutesChange}
+                />
+              )}
+              {visitMinutes != null && !onVisitMinutesChange && (
+                <span className="inline-flex items-center gap-1.5">
+                  <Clock className="h-3.5 w-3.5" />
+                  {t('guide.visitApprox', { time: fmtMin(visitMinutes) })}
+                </span>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
-      {(travelMinutes != null || etaLabel != null || mode.arrivalHint) && (
-        <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-border pt-2.5 text-meta text-muted-foreground">
-          {travelMinutes != null && (
-            <span
-              data-testid="guide-next-travel"
-              className="inline-flex items-center gap-1"
-            >
-              <TravelIcon className="h-3.5 w-3.5" />
-              {t('guide.travelFor', {
-                verb: mode.verb,
-                time: fmtMin(travelMinutes),
-              })}
-            </span>
-          )}
-          {etaLabel != null && (
-            <span
-              data-testid="guide-next-eta"
-              className="inline-flex items-center gap-1"
-            >
-              <Clock className="h-3.5 w-3.5" />
-              {t('guide.arrival', { eta: etaLabel })}
-            </span>
-          )}
-          {mode.arrivalHint && (
-            <span
-              data-testid="guide-next-arrival-hint"
-              className="inline-flex items-center gap-1"
-            >
-              <ParkingCircle className="h-3.5 w-3.5" />
-              {mode.arrivalHint}
-            </span>
-          )}
-        </div>
-      )}
+      {!compact &&
+        (travelMinutes != null || etaLabel != null || mode.arrivalHint) && (
+          <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-border pt-2.5 text-meta text-muted-foreground">
+            {travelMinutes != null && (
+              <span
+                data-testid="guide-next-travel"
+                className="inline-flex items-center gap-1"
+              >
+                <TravelIcon className="h-3.5 w-3.5" />
+                {t('guide.travelFor', {
+                  verb: mode.verb,
+                  time: fmtMin(travelMinutes),
+                })}
+              </span>
+            )}
+            {etaLabel != null && (
+              <span
+                data-testid="guide-next-eta"
+                className="inline-flex items-center gap-1"
+              >
+                <Clock className="h-3.5 w-3.5" />
+                {t('guide.arrival', { eta: etaLabel })}
+              </span>
+            )}
+            {mode.arrivalHint && (
+              <span
+                data-testid="guide-next-arrival-hint"
+                className="inline-flex items-center gap-1"
+              >
+                <ParkingCircle className="h-3.5 w-3.5" />
+                {mode.arrivalHint}
+              </span>
+            )}
+          </div>
+        )}
 
-      <a
-        href={mapsHref}
-        target="_blank"
-        rel="noreferrer"
-        className="mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-secondary font-semibold text-secondary-foreground transition hover:brightness-[0.97] active:scale-[0.99]"
-      >
-        <ExternalLink className="h-4 w-4" />
-        {t('guide.openInMaps')}
-      </a>
+      {/* In the navigator the maps link is a 48px button — a whole row of a screen
+          that has no whole row to spare. It shrinks to an icon in the corner
+          rather than disappearing: handing the next stop to a maps app is still
+          something a tourist does mid-walk, and a 44px target keeps it honest. */}
+      {compact ? (
+        <a
+          href={mapsHref}
+          target="_blank"
+          rel="noreferrer"
+          aria-label={t('guide.openInMaps')}
+          title={t('guide.openInMaps')}
+          className="absolute right-2 top-2 flex size-11 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted hover:text-foreground"
+        >
+          <ExternalLink className="size-4" aria-hidden="true" />
+        </a>
+      ) : (
+        <a
+          href={mapsHref}
+          target="_blank"
+          rel="noreferrer"
+          className="mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-secondary font-semibold text-secondary-foreground transition hover:brightness-[0.97] active:scale-[0.99]"
+        >
+          <ExternalLink className="h-4 w-4" />
+          {t('guide.openInMaps')}
+        </a>
+      )}
     </div>
   );
 };
