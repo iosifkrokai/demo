@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 
 import type { Place } from '@/api/types';
 
-import { AdminPlaceMap } from './admin-place-map';
+import { PlaceMap } from './place-map';
 
 const fitBounds = vi.hoisted(() => vi.fn());
 const flyTo = vi.hoisted(() => vi.fn());
@@ -18,8 +18,9 @@ interface MarkerProps {
 }
 
 /**
- * The map itself needs WebGL; what is asserted here is the panel's contract —
- * a pin per place, coordinates, which pin is draggable, and what a drop reports.
+ * The map itself needs WebGL; what is asserted here is the contract both pages
+ * lean on — a pin per place, coordinates, which pin is draggable, what a drop
+ * reports, and that a click travels back with the place id.
  */
 vi.mock('react-map-gl/maplibre', async () => {
   const React = await import('react');
@@ -100,33 +101,27 @@ beforeEach(() => {
   flyTo.mockClear();
 });
 
-describe('AdminPlaceMap', () => {
-  it('draws a pin for every place in the list', () => {
-    render(
-      <AdminPlaceMap places={PLACES} selectedId={null} onSelect={() => {}} />
-    );
+describe('PlaceMap', () => {
+  it('draws a pin for every place on the page', () => {
+    render(<PlaceMap places={PLACES} selectedId={null} onSelect={() => {}} />);
 
-    expect(screen.getByTestId('admin-pin-1')).toBeInTheDocument();
-    expect(screen.getByTestId('admin-pin-2')).toBeInTheDocument();
+    expect(screen.getByTestId('place-pin-1')).toBeInTheDocument();
+    expect(screen.getByTestId('place-pin-2')).toBeInTheDocument();
     expect(
-      screen.getByTestId('admin-pin-1').closest('[data-testid="marker"]')
+      screen.getByTestId('place-pin-1').closest('[data-testid="marker"]')
     ).toHaveAttribute('data-lat', '53.6');
   });
 
   it('reports the clicked pin, so a map click can select a row', () => {
     const onSelect = vi.fn();
-    render(
-      <AdminPlaceMap places={PLACES} selectedId={null} onSelect={onSelect} />
-    );
+    render(<PlaceMap places={PLACES} selectedId={null} onSelect={onSelect} />);
 
-    fireEvent.click(screen.getByTestId('admin-pin-2'));
+    fireEvent.click(screen.getByTestId('place-pin-2'));
     expect(onSelect).toHaveBeenCalledWith(2);
   });
 
-  it('frames the whole list on mount', () => {
-    render(
-      <AdminPlaceMap places={PLACES} selectedId={null} onSelect={() => {}} />
-    );
+  it('frames the whole page on mount', () => {
+    render(<PlaceMap places={PLACES} selectedId={null} onSelect={() => {}} />);
 
     expect(fitBounds).toHaveBeenCalledWith(
       [
@@ -140,7 +135,7 @@ describe('AdminPlaceMap', () => {
   it('is view-only until a row is edited: no pin is draggable', () => {
     const onMove = vi.fn();
     render(
-      <AdminPlaceMap
+      <PlaceMap
         places={PLACES}
         selectedId={1}
         onSelect={() => {}}
@@ -149,7 +144,7 @@ describe('AdminPlaceMap', () => {
     );
 
     const marker = screen
-      .getByTestId('admin-pin-1')
+      .getByTestId('place-pin-1')
       .closest('[data-testid="marker"]')!;
     expect(marker).toHaveAttribute('data-draggable', 'false');
 
@@ -160,7 +155,7 @@ describe('AdminPlaceMap', () => {
   it('makes the edited pin draggable and reports the drop as (lat, lon)', () => {
     const onMove = vi.fn();
     render(
-      <AdminPlaceMap
+      <PlaceMap
         places={PLACES}
         selectedId={2}
         editingId={2}
@@ -172,7 +167,7 @@ describe('AdminPlaceMap', () => {
     );
 
     const marker = screen
-      .getByTestId('admin-pin-2')
+      .getByTestId('place-pin-2')
       .closest('[data-testid="marker"]')!;
     expect(marker).toHaveAttribute('data-draggable', 'true');
     // The edited pin follows the draft, not the stored row.
@@ -183,9 +178,7 @@ describe('AdminPlaceMap', () => {
   });
 
   it('centres on the picked row', () => {
-    render(
-      <AdminPlaceMap places={PLACES} selectedId={2} onSelect={() => {}} />
-    );
+    render(<PlaceMap places={PLACES} selectedId={2} onSelect={() => {}} />);
 
     expect(flyTo).toHaveBeenCalledWith(
       expect.objectContaining({ center: [23.9, 53.7] })

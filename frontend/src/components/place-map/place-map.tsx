@@ -1,13 +1,15 @@
 /**
- * The always-on map of the admin places panel (spec 005 §3).
+ * A small map of a set of places, shared by the admin «Места» tab and the
+ * tourist's «посещённые» page (spec 005 §3).
  *
- * Not a substitute for the list and not a preview of one row: it shows *every*
- * place currently listed, so the two views are two windows on the same page. A
- * click travels both ways — a row highlights its pin, a pin highlights its row.
+ * One implementation on purpose: the two pages must not drift apart about which
+ * point is where — the same reason the place card body is shared. It is
+ * deliberately *not* the app map (`components/map`): that one owns layers, the
+ * planner, the guide and half the stores, none of which belong on these pages.
  *
- * It is deliberately not the app map (`components/map`): that one owns layers,
- * the planner, the guide and half the stores, none of which belong in a settings
- * page. This is the minimum that answers «где эта точка и туда ли она стоит».
+ * A click travels both ways: a row highlights its pin, a pin reports the place
+ * so the caller can highlight its row. With `editingId` set, that pin becomes
+ * draggable and a drop reports the new coordinates.
  */
 
 import { useEffect, useMemo, useRef } from 'react';
@@ -20,19 +22,28 @@ import {
 import 'maplibre-gl/dist/maplibre-gl.css';
 
 import { DEFAULT_CENTER, DEFAULT_MAP_STYLE } from '@/components/map/constants';
-import type { Place } from '@/api/types';
 
-export interface AdminPlaceMapProps {
-  /** Exactly what the list shows — the map frames this set. */
-  places: Place[];
+/** What the map needs of a place — `Place` and `VisitedPlace` both satisfy it. */
+export interface MapPlace {
+  place_id: number;
+  name: string;
+  lat: number;
+  lon: number;
+}
+
+export interface PlaceMapProps {
+  /** Every place to pin — the page frames this set. */
+  places: MapPlace[];
   selectedId: number | null;
+  onSelect: (placeId: number) => void;
   /** The row being edited: its pin is larger and draggable. */
   editingId?: number | null;
   /** Draft coordinates of the edited pin (fall back to the row's own). */
   editLat?: number;
   editLon?: number;
-  onSelect: (placeId: number) => void;
   onMove?: (lat: number, lon: number) => void;
+  /** Height of the map box; the two pages want different room. */
+  className?: string;
 }
 
 const PIN_SELECTED = '#ff385c';
@@ -42,7 +53,7 @@ const ZOOM_FIT_MAX = 15;
 
 type Bounds = [[number, number], [number, number]];
 
-const boundsOf = (places: Place[]): Bounds | null => {
+const boundsOf = (places: MapPlace[]): Bounds | null => {
   if (places.length === 0) return null;
   let minLon = Infinity;
   let minLat = Infinity;
@@ -60,19 +71,20 @@ const boundsOf = (places: Place[]): Bounds | null => {
   ];
 };
 
-export function AdminPlaceMap({
+export function PlaceMap({
   places,
   selectedId,
+  onSelect,
   editingId = null,
   editLat,
   editLon,
-  onSelect,
   onMove,
-}: AdminPlaceMapProps) {
+  className = 'h-[22rem]',
+}: PlaceMapProps) {
   const mapRef = useRef<MapRef | null>(null);
   const bounds = useMemo(() => boundsOf(places), [places]);
 
-  // Frame whatever the list currently holds — a filter change re-frames the map.
+  // Frame whatever is currently on the page — a filter change re-frames the map.
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !bounds) return;
@@ -109,8 +121,8 @@ export function AdminPlaceMap({
 
   return (
     <div
-      data-testid="admin-place-map"
-      className="relative h-[22rem] w-full overflow-hidden rounded-2xl border border-border bg-muted"
+      data-testid="place-map"
+      className={`relative w-full overflow-hidden rounded-2xl border border-border bg-muted ${className}`}
     >
       <Map
         ref={mapRef}
@@ -140,7 +152,7 @@ export function AdminPlaceMap({
             >
               <button
                 type="button"
-                data-testid={`admin-pin-${place.place_id}`}
+                data-testid={`place-pin-${place.place_id}`}
                 data-selected={isSelected ? 'true' : 'false'}
                 title={place.name}
                 aria-label={place.name}

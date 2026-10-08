@@ -210,7 +210,9 @@ export DATABASE_URL=postgresql://grodno:***@localhost:5432/grodno
 
 UI: `/login`, `/register`, `/visited`, `/admin` are full pages (not map tabs), with
 an account control rendered on every page (`components/account/account-bar.tsx`).
-A place card offers «отметить посещённым» to signed-in tourists. The admin «Места»
+A place card offers «отметить посещённым» to signed-in tourists. `/visited` shows the
+marked places **as a list and on a map** (the same shared `PlaceMap` the admin uses:
+a row click frames its pin, a pin click highlights its row). The admin «Места»
 tab keeps the list and a map side by side **at all times**: the map pins every place
 in the list, a row click frames its pin, and a pin click highlights and reveals its
 row. In edit mode that pin is draggable — dropping it rewrites `lat`/`lon` and

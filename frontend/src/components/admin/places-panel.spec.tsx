@@ -41,8 +41,8 @@ vi.mock('@/hooks/use-admin', () => ({
 
 // The real map needs WebGL. This stands in for it and lets a test play the map's
 // side of the link: a pin click, and a dropped pin.
-vi.mock('./admin-place-map', () => ({
-  AdminPlaceMap: ({
+vi.mock('@/components/place-map/place-map', () => ({
+  PlaceMap: ({
     places,
     selectedId,
     editingId,

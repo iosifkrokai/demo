@@ -13,7 +13,8 @@ import {
 } from '@/hooks/use-admin';
 import type { AdminPlaceInput, Place } from '@/api/types';
 
-import { AdminPlaceMap } from './admin-place-map';
+import { PlaceMap } from '@/components/place-map/place-map';
+
 import {
   fieldsOf,
   formatCoord,
@@ -347,7 +348,7 @@ export function PlacesPanel({ enabled }: { enabled: boolean }) {
       </div>
 
       <aside className="w-full shrink-0 lg:sticky lg:top-4 lg:w-[22rem]">
-        <AdminPlaceMap
+        <PlaceMap
           places={places.items}
           selectedId={selectedId}
           editingId={editingId}
