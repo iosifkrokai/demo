@@ -211,10 +211,11 @@ export DATABASE_URL=postgresql://grodno:***@localhost:5432/grodno
 UI: `/login`, `/register`, `/visited`, `/admin` are full pages (not map tabs), with
 an account control rendered on every page (`components/account/account-bar.tsx`).
 A place card offers «отметить посещённым» to signed-in tourists. The admin «Места»
-tab is the list beside a small map of the picked point: «на карте» shows it, and in
-edit mode the pin is draggable — dropping it rewrites `lat`/`lon` and «сохранить»
-PATCHes them (blank coordinates are *omitted* from the body, since a present key
-would write the NOT NULL column). The webapp's nginx
+tab keeps the list and a map side by side **at all times**: the map pins every place
+in the list, a row click frames its pin, and a pin click highlights and reveals its
+row. In edit mode that pin is draggable — dropping it rewrites `lat`/`lon` and
+«сохранить» PATCHes them (blank coordinates are *omitted* from the body, since a
+present key would write the NOT NULL column). The webapp's nginx
 proxies `/auth/`, `/me/` and `/admin/` to the agent; the *bare* `/admin`, `/login`
 and `/visited` stay SPA routes.
 
