@@ -263,3 +263,112 @@ export interface ServicesAlongAnswer {
   /** Set when the answer is empty on purpose (e.g. no service categories). */
   reason?: string;
 }
+
+// ============================================================================
+// Accounts, visits and the admin panel (spec 005)
+// ============================================================================
+//
+// Same honesty rule as everywhere else: `null` means «не указано» — a field the
+// server did not send — never a stand-in for a real value.
+
+/** A user's authority. Drives whether the admin panel is reachable at all. */
+export type UserRole = 'user' | 'admin';
+
+/** A signed-in account as every response carries it — never the password hash. */
+export interface AccountUser {
+  id: string;
+  email: string;
+  display_name: string | null;
+  role: UserRole;
+  created_at: string | null;
+}
+
+/** `GET /auth/me` — the honest state, anonymous included. */
+export interface AuthState {
+  authenticated: boolean;
+  user: AccountUser | null;
+}
+
+/** One row of `GET /admin/users`, with the counts an admin asks about. */
+export interface AdminUser extends AccountUser {
+  client_id: string | null;
+  last_login_at: string | null;
+  saved_routes: number;
+  visited: number;
+}
+
+export interface AdminUserList {
+  items: AdminUser[];
+  total: number;
+}
+
+export interface AdminPlaceList {
+  items: Place[];
+  total: number;
+}
+
+/** `GET /admin/stats` — the numbers in the admin header. */
+export interface AdminStats {
+  users: number;
+  admins: number;
+  places: number;
+  visited: number;
+  saved_routes: number;
+}
+
+/** A visited place: the whole catalogue payload plus *when* it was marked. */
+export interface VisitedPlace extends Place {
+  visited_at: string | null;
+}
+
+export interface VisitedList {
+  items: VisitedPlace[];
+  count: number;
+}
+
+/** `POST /admin/places` / `PATCH /admin/places/{id}` body. */
+export interface AdminPlaceInput {
+  name?: string;
+  lat?: number;
+  lon?: number;
+  source_url?: string;
+  category?: string | null;
+  town?: string | null;
+  district?: string | null;
+  blurb?: string | null;
+  fun_fact?: string | null;
+  visit_minutes?: number | null;
+  opening_hours?: string | null;
+  ticket_price?: string | null;
+}
+
+/**
+ * Machine reason codes the accounts API answers with (spec 005 §3).
+ * `network_unavailable` / `bad_response` / `server_error` are added on the client,
+ * the way `client.ts` does it — a request that never reached the server is the
+ * same class of failure as a typed refusal.
+ */
+export type AccountApiErrorCode =
+  | 'storage_unavailable'
+  | 'not_authenticated'
+  | 'not_admin'
+  | 'invalid_credentials'
+  | 'email_taken'
+  | 'weak_password'
+  | 'invalid_email'
+  | 'user_not_found'
+  | 'place_not_found'
+  | 'source_taken'
+  | 'last_admin'
+  | 'self_role'
+  | 'self_delete'
+  | 'invalid_request'
+  | 'network_unavailable'
+  | 'bad_response'
+  | 'server_error';
+
+/** Codes that mean «the store is unreachable right now» — never a real answer. */
+export const STORAGE_DOWN_CODES: readonly AccountApiErrorCode[] = [
+  'storage_unavailable',
+  'network_unavailable',
+];
