@@ -179,6 +179,51 @@ the reading by the tool-using PydanticAI agent (`planner/agent_interpret.py`) ov
 OpenRouter. There is no re-scoring stage — `retrieve()` already fuses the signals with
 RRF and that order *is* the relevance order. No local models, no first-call download.
 
+## 5a. Accounts, visits and the admin panel (spec 005)
+
+Signed-in accounts sit **beside** the anonymous client of spec 003, not on top of
+it: the browser's `X-Client-Id` is *adopted* on register/login, so routes and
+preferences saved before signing in stay reachable. Migration
+`db/migrations/0008_accounts_visits.sql` (mirrored in `db/init.sql`) adds `users`,
+`user_sessions` (only `sha256(token)` is stored) and `visited_places`.
+
+Endpoints — all answer machine reason codes, and the session is an **HttpOnly
+cookie** (`grodno_session`), never a JS-readable token (see
+`docs/specs/005-accounts-visits-admin/`):
+
+| Method & path | What |
+|---|---|
+| `POST /auth/register` `/auth/login` `/auth/logout`, `GET /auth/me` | account + session cookie |
+| `GET /me/visited`, `PUT`/`DELETE /me/visited/{place_id}`, `POST /me/visited` | the tourist's «посещённые места» (bulk for a walked route) |
+| `GET /admin/users`, `PATCH`/`DELETE /admin/users/{id}` | list users, change role, delete |
+| `GET`/`POST /admin/places`, `PATCH`/`DELETE /admin/places/{id}`, `GET /admin/stats` | place management + dashboard |
+
+The first administrator is created by a script — there is **no** «first sign-up
+wins admin»:
+
+```bash
+cd backend
+export DATABASE_URL=postgresql://grodno:***@localhost:5432/grodno
+.venv/bin/python scripts/create_admin.py --email boss@example.com      # password prompt
+# or non-interactive: GRODNO_ADMIN_PASSWORD=... .venv/bin/python scripts/create_admin.py --email boss@example.com
+```
+
+UI: `/login`, `/register`, `/visited`, `/admin` are full pages (not map tabs), with
+an account control rendered on every page (`components/account/account-bar.tsx`).
+A place card offers «отметить посещённым» to signed-in tourists. The admin «Места»
+tab is the list beside a small map of the picked point: «на карте» shows it, and in
+edit mode the pin is draggable — dropping it rewrites `lat`/`lon` and «сохранить»
+PATCHes them (blank coordinates are *omitted* from the body, since a present key
+would write the NOT NULL column). The webapp's nginx
+proxies `/auth/`, `/me/` and `/admin/` to the agent; the *bare* `/admin`, `/login`
+and `/visited` stay SPA routes.
+
+**Sign-in is mandatory**: the map (`/`, `/$activeTab`), `/visited` and `/admin` are
+gated by a router `beforeLoad` guard (`utils/auth-guard.ts` + `authQueryOptions`) that
+redirects an unauthenticated visitor to `/login?redirect=<path>`; only `/login` and
+`/register` are public. The gate is client-side; the stateless planner endpoints
+(`/routes/*`, `/places`) stay open by design (see spec 005 §5a).
+
 ## 6. Smoke tests
 
 ```bash
@@ -365,7 +410,8 @@ Browser → nginx :80  (frontend container)
 nginx rule: `location /routes/` proxies the whole prefix to the agent; individual
 Valhalla paths are matched by the regex `^/(route|isochrone|optimized_route|status|locate|height|tile)$`
 (see `frontend/nginx.conf`). `/clients/` is proxied to the agent too, and its preflight
-allows `X-Client-Id`.
+allows `X-Client-Id`. `/auth/`, `/me/` and `/admin/` (spec 005) are proxied as well —
+the trailing slash is deliberate, so the *bare* `/admin` page stays an SPA route.
 
 Two request fields change the shape of the answer, and both are honoured by the pipeline
 rather than merely accepted:
