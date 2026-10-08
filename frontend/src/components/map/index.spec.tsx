@@ -11,6 +11,23 @@ import userEvent from '@testing-library/user-event';
 import { MapComponent } from './index';
 import type { ParsedDirectionsGeometry } from '@/components/types';
 
+// The account bar and the card's «посещено» toggle (spec 005) have their own
+// specs; here they are anonymous mocks so the map tests need no QueryClient.
+vi.mock('@/hooks/use-auth', () => ({
+  useAuth: () => ({
+    user: null,
+    authenticated: false,
+    isAdmin: false,
+    isLoading: false,
+    refetch: () => {},
+  }),
+  describeAccountError: () => '',
+}));
+vi.mock('@/hooks/use-visited', () => ({
+  useVisitedIds: () => new Set<number>(),
+  useToggleVisited: () => ({ mutate: () => {}, isPending: false }),
+}));
+
 const mockToast = vi.hoisted(() => ({
   error: vi.fn(),
 }));

@@ -1125,6 +1125,7 @@ export const MapComponent = () => {
             lng={activePlace.lng}
             lat={activePlace.lat}
             details={activeDetails}
+            placeId={activePlace.id}
             onClose={() => setActivePlace(null)}
           />
         )}
@@ -1321,6 +1322,7 @@ export const MapComponent = () => {
       {isMobile && activePlace && activeDetails && (
         <MobilePlaceCard
           details={activeDetails}
+          placeId={activePlace.id}
           onClose={() => setActivePlace(null)}
         />
       )}

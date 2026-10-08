@@ -5,6 +5,23 @@ import type { PlaceDetails } from '@/stores/directions-store';
 
 import { MobilePlaceCard } from './mobile-place-card';
 
+// The «посещено» toggle (spec 005) has its own spec; mocked so a layout test needs
+// no QueryClient, and anonymous, which is what the hint renders for.
+vi.mock('@/hooks/use-auth', () => ({
+  useAuth: () => ({
+    user: null,
+    authenticated: false,
+    isAdmin: false,
+    isLoading: false,
+    refetch: () => {},
+  }),
+  describeAccountError: () => '',
+}));
+vi.mock('@/hooks/use-visited', () => ({
+  useVisitedIds: () => new Set<number>(),
+  useToggleVisited: () => ({ mutate: () => {}, isPending: false }),
+}));
+
 const details = (overrides: Partial<PlaceDetails> = {}): PlaceDetails => ({
   name: 'Старый замок',
   category: 'замок',

@@ -29,6 +29,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from . import (
+    accounts_api,
     clients_api,
     constants,
     itineraries as itineraries_mod,
@@ -83,6 +84,9 @@ async def lifespan(_: FastAPI):
 app = FastAPI(title="grodno-poc-agent", lifespan=lifespan)
 
 app.include_router(clients_api.router)
+# Accounts, roles, visits and the admin panel (spec 005) — one router, so the
+# whole capability is wired in here.
+app.include_router(accounts_api.router)
 
 app.add_middleware(
     CORSMiddleware,
@@ -94,12 +98,17 @@ app.add_middleware(
         "http://127.0.0.1:3000",
         "http://host.docker.internal",
     ],
-    allow_credentials=False,
+    # Sessions live in a cookie, so a credentialed cross-origin call (a remote
+    # VITE_AGENT_URL) must be allowed to carry it. Same-origin — the demo's own
+    # nginx — needs no CORS at all; this only widens the door for the listed
+    # origins, never to "*" (which the browser rejects together with credentials).
+    allow_credentials=True,
     allow_methods=["POST", "GET", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    # X-Client-Id carries the anonymous client id the /clients/* routes read; a
-    # preflight that does not allow it makes the client entity unreachable from a
-    # browser talking to the agent directly (nginx already allows it).
-    allow_headers=["Content-Type", "X-Client-Id"],
+    # X-Client-Id carries the anonymous client id the /clients/* routes read and
+    # /auth/register adopts; a preflight that does not allow it makes the client
+    # entity unreachable from a browser talking to the agent directly (nginx
+    # already allows it).
+    allow_headers=["Content-Type", "X-Client-Id", "Authorization"],
 )
 
 

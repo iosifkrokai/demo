@@ -12,3 +12,7 @@ global.ResizeObserver = class ResizeObserver {
   unobserve() {}
   disconnect() {}
 };
+
+// jsdom has no layout engine, so `scrollIntoView` is missing. The admin places
+// list calls it to bring a map-picked row into view; a no-op is enough here.
+Element.prototype.scrollIntoView = () => {};

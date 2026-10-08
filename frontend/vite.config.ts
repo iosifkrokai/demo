@@ -75,6 +75,17 @@ export default defineConfig({
         target: process.env.VITE_DEV_AGENT_TARGET || 'http://localhost:8080',
         changeOrigin: true,
       },
+      // Accounts, visits and the admin panel (spec 005). Same-origin like the
+      // rest, so the HttpOnly session cookie rides along without any CORS.
+      //
+      // A regex key, not '/admin': a plain prefix would also swallow the *SPA*
+      // route `/admin` (the page itself) and answer JSON instead of index.html.
+      // The trailing slash is what separates the API (`/admin/users`) from the
+      // page (`/admin`), exactly as in nginx.conf.
+      '^/(auth|me|admin)/': {
+        target: process.env.VITE_DEV_AGENT_TARGET || 'http://localhost:8080',
+        changeOrigin: true,
+      },
       // Valhalla endpoints the map talks to directly (route, status, ...).
       // The trailing (?|\$) matters: these URLs carry a ?json=... query, and a
       // \$-anchored pattern silently misses them — Vite then answers with

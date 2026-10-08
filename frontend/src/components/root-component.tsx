@@ -1,5 +1,7 @@
-import { Outlet } from '@tanstack/react-router';
+import { Outlet, useRouterState } from '@tanstack/react-router';
 import { lazy, Suspense } from 'react';
+
+import { AccountBar } from './account/account-bar';
 
 /**
  * Devtools are opt-in: they used to mount (and open a panel) over the map in
@@ -34,9 +36,17 @@ const TanStackRouterDevtoolsPanel = DEVTOOLS_ENABLED
   : () => null;
 
 export const RootComponent = () => {
+  // The account bar belongs over the app, not over the sign-in forms: on `/login`
+  // and `/register` a «Войти» pill would be asking for the thing already on screen.
+  const pathname = useRouterState({
+    select: (state) => state.location.pathname,
+  });
+  const showAccountBar = pathname !== '/login' && pathname !== '/register';
+
   return (
     <>
       <Outlet />
+      {showAccountBar && <AccountBar />}
       {DEVTOOLS_ENABLED && (
         <Suspense fallback={null}>
           <TanStackDevtools

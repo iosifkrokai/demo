@@ -10,6 +10,8 @@
 CREATE EXTENSION IF NOT EXISTS postgis;
 CREATE EXTENSION IF NOT EXISTS vector;
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
+-- Case-insensitive email for accounts (spec 005). See db/migrations/0008.
+CREATE EXTENSION IF NOT EXISTS citext;
 
 CREATE TABLE IF NOT EXISTS places (
   id            SERIAL PRIMARY KEY,
@@ -171,3 +173,46 @@ CREATE TABLE IF NOT EXISTS saved_routes (
 
 CREATE INDEX IF NOT EXISTS saved_routes_client_created_ix
     ON saved_routes (client_id, created_at DESC);
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- Mirrors db/migrations/0008_accounts_visits.sql — accounts, roles, server-side
+-- visits (spec 005). Kept in step with the migration the same way the 0004/0005
+-- blocks above are: a fresh pgdata volume must come up with every table the app
+-- uses, not just the ones from earlier specs.
+-- ═══════════════════════════════════════════════════════════════════════════
+
+CREATE TABLE IF NOT EXISTS users (
+    id            UUID PRIMARY KEY,
+    email         CITEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    display_name  TEXT,
+    role          TEXT NOT NULL DEFAULT 'user'
+                  CHECK (role IN ('user', 'admin')),
+    client_id     UUID UNIQUE REFERENCES clients (id) ON DELETE SET NULL,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    last_login_at TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS users_role_ix ON users (role);
+
+CREATE TABLE IF NOT EXISTS user_sessions (
+    token_hash   TEXT PRIMARY KEY,
+    user_id      UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    expires_at   TIMESTAMPTZ NOT NULL,
+    last_seen_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS user_sessions_user_ix ON user_sessions (user_id);
+CREATE INDEX IF NOT EXISTS user_sessions_expires_ix ON user_sessions (expires_at);
+
+CREATE TABLE IF NOT EXISTS visited_places (
+    user_id    UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+    place_id   INTEGER NOT NULL REFERENCES places (id) ON DELETE CASCADE,
+    visited_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (user_id, place_id)
+);
+
+CREATE INDEX IF NOT EXISTS visited_places_user_ix
+    ON visited_places (user_id, visited_at DESC);
