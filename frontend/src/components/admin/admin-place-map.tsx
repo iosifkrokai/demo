@@ -1,74 +1,167 @@
 /**
- * A small self-contained map for the admin places panel (spec 005 §3).
+ * The always-on map of the admin places panel (spec 005 §3).
  *
- * It is deliberately *not* the app map: that one owns layers, the planner, the
- * guide and half the stores, and mounting it inside a settings page would drag
- * all of that along. This is the minimum that answers «где эта точка и туда ли
- * она стоит»: the point, and a pin you can drag to correct it.
+ * Not a substitute for the list and not a preview of one row: it shows *every*
+ * place currently listed, so the two views are two windows on the same page. A
+ * click travels both ways — a row highlights its pin, a pin highlights its row.
  *
- * The `Map` is keyed by `placeKey`, so selecting another place re-centres, while
- * dragging the same place does not remount anything (the pin just follows the
- * coordinates it is given).
+ * It is deliberately not the app map (`components/map`): that one owns layers,
+ * the planner, the guide and half the stores, none of which belong in a settings
+ * page. This is the minimum that answers «где эта точка и туда ли она стоит».
  */
 
-import { Map, Marker, NavigationControl } from 'react-map-gl/maplibre';
+import { useEffect, useMemo, useRef } from 'react';
+import {
+  Map,
+  Marker,
+  NavigationControl,
+  type MapRef,
+} from 'react-map-gl/maplibre';
 import 'maplibre-gl/dist/maplibre-gl.css';
 
-import { DEFAULT_MAP_STYLE } from '@/components/map/constants';
+import { DEFAULT_CENTER, DEFAULT_MAP_STYLE } from '@/components/map/constants';
+import type { Place } from '@/api/types';
 
 export interface AdminPlaceMapProps {
-  /** Re-centres the map when this changes — the selected/edited place, not coords. */
-  placeKey: string | number;
-  lat: number;
-  lon: number;
-  label: string;
-  /** Only an editable pin is draggable; a viewed one is not. */
-  draggable?: boolean;
+  /** Exactly what the list shows — the map frames this set. */
+  places: Place[];
+  selectedId: number | null;
+  /** The row being edited: its pin is larger and draggable. */
+  editingId?: number | null;
+  /** Draft coordinates of the edited pin (fall back to the row's own). */
+  editLat?: number;
+  editLon?: number;
+  onSelect: (placeId: number) => void;
   onMove?: (lat: number, lon: number) => void;
 }
 
-const PIN_COLOR = '#ff385c';
-const ZOOM = 16;
+const PIN_SELECTED = '#ff385c';
+const PIN_OTHER = '#64748b';
+const ZOOM_SELECTED = 16;
+const ZOOM_FIT_MAX = 15;
+
+type Bounds = [[number, number], [number, number]];
+
+const boundsOf = (places: Place[]): Bounds | null => {
+  if (places.length === 0) return null;
+  let minLon = Infinity;
+  let minLat = Infinity;
+  let maxLon = -Infinity;
+  let maxLat = -Infinity;
+  for (const place of places) {
+    minLon = Math.min(minLon, place.lon);
+    maxLon = Math.max(maxLon, place.lon);
+    minLat = Math.min(minLat, place.lat);
+    maxLat = Math.max(maxLat, place.lat);
+  }
+  return [
+    [minLon, minLat],
+    [maxLon, maxLat],
+  ];
+};
 
 export function AdminPlaceMap({
-  placeKey,
-  lat,
-  lon,
-  label,
-  draggable = false,
+  places,
+  selectedId,
+  editingId = null,
+  editLat,
+  editLon,
+  onSelect,
   onMove,
 }: AdminPlaceMapProps) {
+  const mapRef = useRef<MapRef | null>(null);
+  const bounds = useMemo(() => boundsOf(places), [places]);
+
+  // Frame whatever the list currently holds — a filter change re-frames the map.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !bounds) return;
+    const [[west, south], [east, north]] = bounds;
+    if (west === east && south === north) {
+      map.flyTo({ center: [west, south], zoom: ZOOM_SELECTED, duration: 0 });
+      return;
+    }
+    map.fitBounds(bounds, { padding: 48, maxZoom: ZOOM_FIT_MAX, duration: 0 });
+  }, [bounds]);
+
+  // Picking a row centres its pin. Keyed on the id, so dragging (same id) does
+  // not yank the map out from under the finger.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || selectedId == null || editingId != null) return;
+    const target = places.find((place) => place.place_id === selectedId);
+    if (!target) return;
+    map.flyTo({
+      center: [target.lon, target.lat],
+      zoom: ZOOM_SELECTED,
+      duration: 400,
+    });
+  }, [selectedId, places, editingId]);
+
+  const initialViewState = useMemo(() => {
+    const first = places[0];
+    return {
+      longitude: first?.lon ?? DEFAULT_CENTER[0],
+      latitude: first?.lat ?? DEFAULT_CENTER[1],
+      zoom: ZOOM_FIT_MAX,
+    };
+  }, [places]);
+
   return (
     <div
       data-testid="admin-place-map"
-      data-draggable={draggable ? 'true' : 'false'}
-      className="relative h-[20rem] w-full overflow-hidden rounded-2xl border border-border bg-muted"
+      className="relative h-[22rem] w-full overflow-hidden rounded-2xl border border-border bg-muted"
     >
       <Map
-        key={placeKey}
-        initialViewState={{ longitude: lon, latitude: lat, zoom: ZOOM }}
+        ref={mapRef}
+        initialViewState={initialViewState}
         mapStyle={DEFAULT_MAP_STYLE}
         style={{ width: '100%', height: '100%' }}
         attributionControl={false}
       >
         <NavigationControl position="top-right" showCompass={false} />
-        <Marker
-          longitude={lon}
-          latitude={lat}
-          anchor="center"
-          color={PIN_COLOR}
-          draggable={draggable}
-          onDragEnd={
-            draggable
-              ? (event) => onMove?.(event.lngLat.lat, event.lngLat.lng)
-              : undefined
-          }
-        />
+        {places.map((place) => {
+          const isSelected = place.place_id === selectedId;
+          const isEditing = editingId === place.place_id;
+          const lat = isEditing && editLat != null ? editLat : place.lat;
+          const lon = isEditing && editLon != null ? editLon : place.lon;
+          return (
+            <Marker
+              key={place.place_id}
+              longitude={lon}
+              latitude={lat}
+              anchor="bottom"
+              draggable={isEditing}
+              onDragEnd={
+                isEditing
+                  ? (event) => onMove?.(event.lngLat.lat, event.lngLat.lng)
+                  : undefined
+              }
+            >
+              <button
+                type="button"
+                data-testid={`admin-pin-${place.place_id}`}
+                data-selected={isSelected ? 'true' : 'false'}
+                title={place.name}
+                aria-label={place.name}
+                onClick={() => onSelect(place.place_id)}
+                style={{
+                  backgroundColor: isSelected ? PIN_SELECTED : PIN_OTHER,
+                }}
+                className={`block rounded-full border-2 border-white shadow-md transition-transform ${
+                  isSelected ? 'size-4 scale-125' : 'size-3'
+                } ${isEditing ? 'cursor-grab ring-2 ring-primary/60' : ''}`}
+              />
+            </Marker>
+          );
+        })}
       </Map>
 
       <div className="pointer-events-none absolute inset-x-0 bottom-0 truncate bg-card/90 px-2 py-1 text-meta shadow-card">
-        {label}
-        {draggable && (
+        {places.length === 0
+          ? 'ничего не найдено'
+          : `точек на карте: ${places.length}`}
+        {editingId != null && (
           <span className="text-muted-foreground"> · перетащите маркер</span>
         )}
       </div>

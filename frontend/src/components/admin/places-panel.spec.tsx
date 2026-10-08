@@ -5,10 +5,10 @@ import type { Place } from '@/api/types';
 
 import { PlacesPanel } from './places-panel';
 
-const PLACE: Place = {
-  place_id: 79,
-  source_url: 'city:wwii-memorial',
-  name: 'Землякам погибшим в ВОВ',
+const one = (id: number, name: string): Place => ({
+  place_id: id,
+  source_url: `city:${id}`,
+  name,
   category: 'памятник',
   town: 'Гродно',
   district: null,
@@ -22,33 +22,59 @@ const PLACE: Place = {
   links: [],
   ticket_price: null,
   photo: null,
-};
+});
+
+const PLACES = [one(79, 'Землякам погибшим в ВОВ'), one(80, 'Второе место')];
 
 const mutate = vi.hoisted(() => vi.fn());
 
 vi.mock('@/hooks/use-admin', () => ({
-  useAdminPlaces: () => ({ items: [PLACE], total: 1, isLoading: false }),
+  useAdminPlaces: () => ({
+    items: PLACES,
+    total: PLACES.length,
+    isLoading: false,
+  }),
   useUpdatePlace: () => ({ mutate, isPending: false }),
   useDeletePlace: () => ({ mutate: vi.fn(), isPending: false }),
   useCreatePlace: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
-// The real map needs WebGL; what this test is about is the panel's half of the
-// contract — that a dropped pin's coordinates land in the form and in the PATCH.
+// The real map needs WebGL. This stands in for it and lets a test play the map's
+// side of the link: a pin click, and a dropped pin.
 vi.mock('./admin-place-map', () => ({
   AdminPlaceMap: ({
-    draggable,
+    places,
+    selectedId,
+    editingId,
+    onSelect,
     onMove,
   }: {
-    draggable?: boolean;
+    places: Place[];
+    selectedId: number | null;
+    editingId?: number | null;
+    onSelect: (placeId: number) => void;
     onMove?: (lat: number, lon: number) => void;
   }) => (
-    <button
-      type="button"
-      data-testid="fake-pin"
-      data-draggable={draggable ? 'true' : 'false'}
-      onClick={() => onMove?.(53.9, 23.7)}
-    />
+    <div
+      data-testid="fake-map"
+      data-selected-id={selectedId ?? ''}
+      data-editing-id={editingId ?? ''}
+      data-pin-count={places.length}
+    >
+      {places.map((place) => (
+        <button
+          key={place.place_id}
+          type="button"
+          data-testid={`fake-pin-${place.place_id}`}
+          onClick={() => onSelect(place.place_id)}
+        />
+      ))}
+      <button
+        type="button"
+        data-testid="fake-drag"
+        onClick={() => onMove?.(53.9, 23.7)}
+      />
+    </div>
   ),
 }));
 
@@ -56,22 +82,62 @@ beforeEach(() => {
   mutate.mockClear();
 });
 
-describe('PlacesPanel — moving a point', () => {
+describe('PlacesPanel — list and map are two windows on one page', () => {
+  it('shows the map always, with the whole list on it', () => {
+    render(<PlacesPanel enabled />);
+
+    expect(screen.getByTestId('fake-map')).toBeInTheDocument();
+    expect(screen.getByTestId('fake-map')).toHaveAttribute(
+      'data-pin-count',
+      '2'
+    );
+  });
+
+  it('highlights the row when a pin is clicked on the map', () => {
+    render(<PlacesPanel enabled />);
+
+    expect(screen.getByTestId('admin-place-80')).toHaveAttribute(
+      'data-selected',
+      'false'
+    );
+
+    fireEvent.click(screen.getByTestId('fake-pin-80'));
+
+    expect(screen.getByTestId('admin-place-80')).toHaveAttribute(
+      'data-selected',
+      'true'
+    );
+    expect(screen.getByTestId('admin-selected-name')).toHaveTextContent(
+      'Второе место'
+    );
+  });
+
+  it('points the map at the place whose row is clicked', () => {
+    render(<PlacesPanel enabled />);
+
+    fireEvent.click(screen.getByTestId('admin-place-select-79'));
+
+    expect(screen.getByTestId('fake-map')).toHaveAttribute(
+      'data-selected-id',
+      '79'
+    );
+  });
+
   it('writes a dropped pin into the coordinate fields and saves them', () => {
     render(<PlacesPanel enabled />);
 
     fireEvent.click(screen.getByTestId('admin-place-edit-79'));
+    expect(screen.getByTestId('fake-map')).toHaveAttribute(
+      'data-editing-id',
+      '79'
+    );
 
     const lat = screen.getByTestId('admin-place-lat');
     const lon = screen.getByTestId('admin-place-lon');
     expect(lat).toHaveValue(53.61817);
     expect(lon).toHaveValue(26.17673);
-    expect(screen.getByTestId('fake-pin')).toHaveAttribute(
-      'data-draggable',
-      'true'
-    );
 
-    fireEvent.click(screen.getByTestId('fake-pin'));
+    fireEvent.click(screen.getByTestId('fake-drag'));
     expect(lat).toHaveValue(53.9);
     expect(lon).toHaveValue(23.7);
 

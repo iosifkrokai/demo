@@ -1,102 +1,194 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
+import type { ReactNode } from 'react';
+
+import type { Place } from '@/api/types';
 
 import { AdminPlaceMap } from './admin-place-map';
 
-/**
- * The map is replaced by plain elements that record the props they were handed:
- * what matters is that the pin sits on the place's coordinates, that only an
- * editable pin is draggable, and that a drag end reports the new position.
- */
+const fitBounds = vi.hoisted(() => vi.fn());
+const flyTo = vi.hoisted(() => vi.fn());
+
 interface MarkerProps {
+  children?: ReactNode;
   longitude: number;
   latitude: number;
   draggable?: boolean;
   onDragEnd?: (event: { lngLat: { lat: number; lng: number } }) => void;
 }
 
-vi.mock('react-map-gl/maplibre', () => ({
-  Map: ({
-    children,
-    initialViewState,
-  }: {
-    children?: React.ReactNode;
-    initialViewState: { longitude: number; latitude: number };
-  }) => (
-    <div
-      data-testid="map"
-      data-lon={initialViewState.longitude}
-      data-lat={initialViewState.latitude}
-    >
-      {children}
-    </div>
-  ),
-  Marker: ({ longitude, latitude, draggable, onDragEnd }: MarkerProps) => (
-    <button
-      type="button"
-      data-testid="marker"
-      data-lon={longitude}
-      data-lat={latitude}
-      data-draggable={draggable ? 'true' : 'false'}
-      onClick={() => onDragEnd?.({ lngLat: { lat: 53.7, lng: 23.9 } })}
-    />
-  ),
-  NavigationControl: () => <div data-testid="nav" />,
-}));
+/**
+ * The map itself needs WebGL; what is asserted here is the panel's contract —
+ * a pin per place, coordinates, which pin is draggable, and what a drop reports.
+ */
+vi.mock('react-map-gl/maplibre', async () => {
+  const React = await import('react');
+  return {
+    Map: React.forwardRef(function MockMap(
+      {
+        children,
+        initialViewState,
+      }: {
+        children?: ReactNode;
+        initialViewState: { longitude: number; latitude: number };
+      },
+      ref: React.ForwardedRef<unknown>
+    ) {
+      React.useImperativeHandle(ref, () => ({
+        fitBounds,
+        flyTo,
+        getZoom: () => 10,
+      }));
+      return (
+        <div
+          data-testid="map"
+          data-lon={initialViewState.longitude}
+          data-lat={initialViewState.latitude}
+        >
+          {children}
+        </div>
+      );
+    }),
+    Marker: ({
+      children,
+      longitude,
+      latitude,
+      draggable,
+      onDragEnd,
+    }: MarkerProps) => (
+      <div
+        data-testid="marker"
+        data-lon={longitude}
+        data-lat={latitude}
+        data-draggable={draggable ? 'true' : 'false'}
+      >
+        {children}
+        <button
+          type="button"
+          data-testid="marker-drag"
+          onClick={() => onDragEnd?.({ lngLat: { lat: 53.9, lng: 23.7 } })}
+        />
+      </div>
+    ),
+    NavigationControl: () => null,
+  };
+});
+
+const place = (id: number, lat: number, lon: number): Place => ({
+  place_id: id,
+  source_url: `city:${id}`,
+  name: `Место ${id}`,
+  category: 'памятник',
+  town: 'Гродно',
+  district: null,
+  lat,
+  lon,
+  visit_minutes: 15,
+  opening_hours: null,
+  blurb: null,
+  fun_fact: null,
+  fun_facts: [],
+  links: [],
+  ticket_price: null,
+  photo: null,
+});
+
+const PLACES = [place(1, 53.6, 23.8), place(2, 53.7, 23.9)];
+
+beforeEach(() => {
+  fitBounds.mockClear();
+  flyTo.mockClear();
+});
 
 describe('AdminPlaceMap', () => {
-  it('puts the pin on the place coordinates', () => {
+  it('draws a pin for every place in the list', () => {
     render(
-      <AdminPlaceMap
-        placeKey="view-7"
-        lat={53.6768}
-        lon={23.8223}
-        label="Старый замок"
-      />
+      <AdminPlaceMap places={PLACES} selectedId={null} onSelect={() => {}} />
     );
 
-    expect(screen.getByTestId('marker')).toHaveAttribute('data-lat', '53.6768');
-    expect(screen.getByTestId('marker')).toHaveAttribute('data-lon', '23.8223');
+    expect(screen.getByTestId('admin-pin-1')).toBeInTheDocument();
+    expect(screen.getByTestId('admin-pin-2')).toBeInTheDocument();
+    expect(
+      screen.getByTestId('admin-pin-1').closest('[data-testid="marker"]')
+    ).toHaveAttribute('data-lat', '53.6');
   });
 
-  it('is view-only by default: the pin is not draggable and a drag reports nothing', () => {
+  it('reports the clicked pin, so a map click can select a row', () => {
+    const onSelect = vi.fn();
+    render(
+      <AdminPlaceMap places={PLACES} selectedId={null} onSelect={onSelect} />
+    );
+
+    fireEvent.click(screen.getByTestId('admin-pin-2'));
+    expect(onSelect).toHaveBeenCalledWith(2);
+  });
+
+  it('frames the whole list on mount', () => {
+    render(
+      <AdminPlaceMap places={PLACES} selectedId={null} onSelect={() => {}} />
+    );
+
+    expect(fitBounds).toHaveBeenCalledWith(
+      [
+        [23.8, 53.6],
+        [23.9, 53.7],
+      ],
+      expect.objectContaining({ maxZoom: 15 })
+    );
+  });
+
+  it('is view-only until a row is edited: no pin is draggable', () => {
     const onMove = vi.fn();
     render(
       <AdminPlaceMap
-        placeKey="view-7"
-        lat={53.6768}
-        lon={23.8223}
-        label="Старый замок"
+        places={PLACES}
+        selectedId={1}
+        onSelect={() => {}}
         onMove={onMove}
       />
     );
 
-    const marker = screen.getByTestId('marker');
+    const marker = screen
+      .getByTestId('admin-pin-1')
+      .closest('[data-testid="marker"]')!;
     expect(marker).toHaveAttribute('data-draggable', 'false');
 
-    fireEvent.click(marker);
+    fireEvent.click(marker.querySelector('[data-testid="marker-drag"]')!);
     expect(onMove).not.toHaveBeenCalled();
   });
 
-  it('reports the dropped position as (lat, lon) when draggable', () => {
+  it('makes the edited pin draggable and reports the drop as (lat, lon)', () => {
     const onMove = vi.fn();
     render(
       <AdminPlaceMap
-        placeKey="edit-7"
-        lat={53.6768}
-        lon={23.8223}
-        label="Старый замок"
-        draggable
+        places={PLACES}
+        selectedId={2}
+        editingId={2}
+        editLat={53.71}
+        editLon={23.91}
+        onSelect={() => {}}
         onMove={onMove}
       />
     );
 
-    expect(screen.getByTestId('marker')).toHaveAttribute(
-      'data-draggable',
-      'true'
-    );
-    fireEvent.click(screen.getByTestId('marker'));
+    const marker = screen
+      .getByTestId('admin-pin-2')
+      .closest('[data-testid="marker"]')!;
+    expect(marker).toHaveAttribute('data-draggable', 'true');
+    // The edited pin follows the draft, not the stored row.
+    expect(marker).toHaveAttribute('data-lat', '53.71');
 
-    expect(onMove).toHaveBeenCalledWith(53.7, 23.9);
+    fireEvent.click(marker.querySelector('[data-testid="marker-drag"]')!);
+    expect(onMove).toHaveBeenCalledWith(53.9, 23.7);
+  });
+
+  it('centres on the picked row', () => {
+    render(
+      <AdminPlaceMap places={PLACES} selectedId={2} onSelect={() => {}} />
+    );
+
+    expect(flyTo).toHaveBeenCalledWith(
+      expect.objectContaining({ center: [23.9, 53.7] })
+    );
   });
 });

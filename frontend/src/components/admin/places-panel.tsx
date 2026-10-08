@@ -1,5 +1,5 @@
-import { MapPin, Pencil, Plus, Trash2, X } from 'lucide-react';
-import { useState } from 'react';
+import { Pencil, Plus, Trash2, X } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
@@ -24,11 +24,13 @@ import {
 /**
  * The places half of the admin panel (spec 005 §3).
  *
- * A list alone cannot answer «туда ли поставлена точка», so the panel is two
- * columns: the list, and a map of the row you picked. Selecting «изменить» makes
- * the pin draggable — dragging rewrites the coordinate fields, and «сохранить»
- * PATCHes them like any other field. Editing a place changes the same row the map,
- * the «все точки» tab and the planner read; there is no separate admin copy.
+ * List and map are two windows on the same page, side by side and always both
+ * visible: clicking a row points the map at it, clicking a pin highlights its
+ * row. «изменить» makes that pin draggable — dragging rewrites the coordinate
+ * fields, and «сохранить» PATCHes them like any other field.
+ *
+ * Editing a place changes the same row the map, the «все точки» tab and the
+ * planner read; there is no separate admin copy.
  */
 
 const fieldLabel = 'flex flex-col gap-1 text-meta font-medium';
@@ -52,12 +54,21 @@ export function PlacesPanel({ enabled }: { enabled: boolean }) {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [draft, setDraft] = useState<EditableFields | null>(null);
   const [creating, setCreating] = useState(false);
-  const [selected, setSelected] = useState<Place | null>(null);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
 
   const editing = editingId != null && draft != null;
+  const selected = places.items.find((p) => p.place_id === selectedId) ?? null;
+
+  // A pin clicked on the map is off-screen in a long list more often than not.
+  useEffect(() => {
+    if (selectedId == null) return;
+    document
+      .querySelector(`[data-testid="admin-place-${selectedId}"]`)
+      ?.scrollIntoView({ block: 'nearest' });
+  }, [selectedId]);
 
   const startEdit = (place: Place) => {
-    setSelected(place);
+    setSelectedId(place.place_id);
     setEditingId(place.place_id);
     setDraft(fieldsOf(place));
   };
@@ -82,7 +93,7 @@ export function PlacesPanel({ enabled }: { enabled: boolean }) {
     if (!window.confirm(`Удалить место «${place.name}»?`)) return;
     deletePlace.mutate(place.place_id, {
       onSuccess: () => {
-        if (selected?.place_id === place.place_id) setSelected(null);
+        if (selectedId === place.place_id) setSelectedId(null);
       },
       onError: (error) => toast.error(describeAccountError(error)),
     });
@@ -93,31 +104,8 @@ export function PlacesPanel({ enabled }: { enabled: boolean }) {
       value ? { ...value, lat: formatCoord(lat), lon: formatCoord(lon) } : value
     );
 
-  // What the map should show: the draft while editing, the picked row otherwise.
-  let map: {
-    key: string;
-    lat: number;
-    lon: number;
-    label: string;
-    draggable: boolean;
-  } | null = null;
-  if (editing && draft && selected) {
-    map = {
-      key: `edit-${editingId}`,
-      lat: finiteOr(draft.lat, selected.lat),
-      lon: finiteOr(draft.lon, selected.lon),
-      label: draft.name || selected.name,
-      draggable: true,
-    };
-  } else if (selected) {
-    map = {
-      key: `view-${selected.place_id}`,
-      lat: selected.lat,
-      lon: selected.lon,
-      label: selected.name,
-      draggable: false,
-    };
-  }
+  const editLat = editing && draft ? finiteOr(draft.lat, 0) : undefined;
+  const editLon = editing && draft ? finiteOr(draft.lon, 0) : undefined;
 
   return (
     <section
@@ -176,9 +164,10 @@ export function PlacesPanel({ enabled }: { enabled: boolean }) {
             <li
               key={place.place_id}
               data-testid={`admin-place-${place.place_id}`}
+              data-selected={selectedId === place.place_id ? 'true' : 'false'}
               className={`rounded-2xl border bg-card p-3 shadow-card ${
-                selected?.place_id === place.place_id
-                  ? 'border-primary'
+                selectedId === place.place_id
+                  ? 'border-primary ring-1 ring-primary/30'
                   : 'border-border'
               }`}
             >
@@ -293,7 +282,15 @@ export function PlacesPanel({ enabled }: { enabled: boolean }) {
                 </div>
               ) : (
                 <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
+                  {/* The name is the list's half of the two-way link: clicking it
+                      points the map at this place. A real button, so it is also
+                      reachable by keyboard. */}
+                  <button
+                    type="button"
+                    onClick={() => setSelectedId(place.place_id)}
+                    data-testid={`admin-place-select-${place.place_id}`}
+                    className="min-w-0 flex-1 rounded-lg text-left transition-colors hover:bg-muted/60"
+                  >
                     <div className="truncate text-body font-semibold">
                       {place.name}
                     </div>
@@ -314,18 +311,8 @@ export function PlacesPanel({ enabled }: { enabled: boolean }) {
                         {place.blurb}
                       </div>
                     )}
-                  </div>
+                  </button>
                   <div className="flex shrink-0 gap-1">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      data-testid={`admin-place-show-${place.place_id}`}
-                      onClick={() => setSelected(place)}
-                    >
-                      <MapPin className="size-4" aria-hidden="true" />
-                      на карте
-                    </Button>
                     <Button
                       type="button"
                       variant="outline"
@@ -360,20 +347,22 @@ export function PlacesPanel({ enabled }: { enabled: boolean }) {
       </div>
 
       <aside className="w-full shrink-0 lg:sticky lg:top-4 lg:w-[22rem]">
-        {map ? (
-          <AdminPlaceMap
-            placeKey={map.key}
-            lat={map.lat}
-            lon={map.lon}
-            label={map.label}
-            draggable={map.draggable}
-            onMove={map.draggable ? moveMarker : undefined}
-          />
-        ) : (
-          <div className="flex h-[20rem] items-center justify-center rounded-2xl border border-dashed border-border bg-card p-4 text-center text-meta text-muted-foreground">
-            выберите место слева («на карте») — покажу точку; в режиме правки
-            маркер можно перетащить.
-          </div>
+        <AdminPlaceMap
+          places={places.items}
+          selectedId={selectedId}
+          editingId={editingId}
+          editLat={editLat}
+          editLon={editLon}
+          onSelect={setSelectedId}
+          onMove={editing ? moveMarker : undefined}
+        />
+        {selected && (
+          <p
+            data-testid="admin-selected-name"
+            className="mt-1.5 truncate text-meta text-muted-foreground"
+          >
+            выбрано: {selected.name}
+          </p>
         )}
       </aside>
     </section>
