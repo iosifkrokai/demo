@@ -8,6 +8,23 @@ import type { PlaceDetails } from '@/stores/directions-store';
 
 import { PlaceCardBody } from './place-card-body';
 
+// The «посещено» toggle (spec 005) has its own spec; here it is mocked so a pure
+// layout test does not need a QueryClient. Anonymous: the card shows the hint.
+vi.mock('@/hooks/use-auth', () => ({
+  useAuth: () => ({
+    user: null,
+    authenticated: false,
+    isAdmin: false,
+    isLoading: false,
+    refetch: () => {},
+  }),
+  describeAccountError: () => '',
+}));
+vi.mock('@/hooks/use-visited', () => ({
+  useVisitedIds: () => new Set<number>(),
+  useToggleVisited: () => ({ mutate: () => {}, isPending: false }),
+}));
+
 const details = (overrides: Partial<PlaceDetails> = {}): PlaceDetails => ({
   name: 'Костел Франциска Ассизского',
   category: 'place_of_worship',

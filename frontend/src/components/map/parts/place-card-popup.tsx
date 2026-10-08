@@ -7,6 +7,8 @@ interface PlaceCardPopupProps {
   lng: number;
   lat: number;
   details: PlaceDetails;
+  /** The DB `places.id`, threaded through so the card can toggle «посещено». */
+  placeId?: number | null;
   onClose: () => void;
 }
 
@@ -24,6 +26,7 @@ export function PlaceCardPopup({
   lng,
   lat,
   details,
+  placeId = null,
   onClose,
 }: PlaceCardPopupProps) {
   return (
@@ -36,7 +39,7 @@ export function PlaceCardPopup({
       closeOnClick={false}
       maxWidth="340px"
     >
-      <PlaceCardBody details={details} onClose={onClose} />
+      <PlaceCardBody details={details} onClose={onClose} placeId={placeId} />
     </Popup>
   );
 }

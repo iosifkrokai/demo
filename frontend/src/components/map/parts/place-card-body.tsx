@@ -13,6 +13,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import type { PlaceDetails } from '@/stores/directions-store';
 import { PlacePhoto } from '@/components/parts/place-photo';
+import { VisitedToggle } from '@/components/visited/visited-toggle';
 import { fmtMin } from '@/components/parts/guide-format';
 
 /**
@@ -34,12 +35,15 @@ export interface PlaceCardBodyProps {
   details: PlaceDetails;
   onClose: () => void;
   mobile?: boolean;
+  /** The DB `places.id`, so the card can offer the «посещено» toggle (spec 005). */
+  placeId?: number | null;
 }
 
 export function PlaceCardBody({
   details,
   onClose,
   mobile = false,
+  placeId = null,
 }: PlaceCardBodyProps) {
   const { t } = useTranslation();
   const [moreOpen, setMoreOpen] = useState(false);
@@ -112,6 +116,9 @@ export function PlaceCardBody({
           </Badge>
         )}
       </div>
+
+      {/* The tourist's own mark: durable, per account (spec 005). */}
+      <VisitedToggle placeId={placeId} />
 
       {/* The picture, when the dataset has one. Most points do not. */}
       <PlacePhoto
