@@ -384,8 +384,13 @@ class RouteResponse(BaseModel):
 
 class HealthResponse(BaseModel):
     status: Literal["ok", "starting", "degraded"]
+    # embedder is the LOCAL CPU model (agent.embeddings): available whenever the
+    # image is built, with or without OPENROUTER_API_KEY.
     embedder: bool
+    # llm is the interpretation agent over OpenRouter — optional.
     llm: bool
+    # Which reader answers the query: the LLM agent or the deterministic parser.
+    interpretation: Literal["llm", "deterministic"]
     db: bool
     valhalla: bool
 

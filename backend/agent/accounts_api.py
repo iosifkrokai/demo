@@ -230,7 +230,7 @@ def register(
 ) -> Any:
     """Create an account (always ``role=user``) and sign it in.
 
-    The first administrator is made by ``scripts/create_admin.py``, not by
+    The first administrator is made by ``python -m seed admin``, not by
     registering first — «first caller wins admin» is a hole, not a feature.
     """
     email = normalize_email(body.email)

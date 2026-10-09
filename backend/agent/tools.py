@@ -30,7 +30,7 @@ Integration
 ``find_areas`` resolves through ``agent.areas`` / ``data/areas.json`` — the
 versioned single source of area definitions. If that module is absent the tool
 falls back to the ``areas`` table (db/migrations/0004_places_taxonomy.sql,
-loaded by ``scripts/seed_all.py``); if the registry exists but is unusable, the
+loaded by ``python -m seed``); if the registry exists but is unusable, the
 tool answers ``error="area_registry_unavailable"`` rather than guessing.
 ``places.category`` is still a free-text column, so category values are mapped
 through ``taxonomy.db_values`` — the single source of codes — and unknown codes

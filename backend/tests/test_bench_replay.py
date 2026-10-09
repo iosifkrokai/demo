@@ -1,4 +1,4 @@
-"""Freeze-and-replay harness for scripts/bench_routes.py.
+"""Freeze-and-replay harness for quality/runner.py.
 
 No network and no agent: every response is hand-built, so each expected number
 is derivable by hand and the whole file runs offline in CI.
@@ -32,7 +32,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import pytest
 
-from scripts import bench_routes as b
+from quality import runner as b
 
 # --------------------------------------------------------------------------
 # fixtures / builders
@@ -164,7 +164,7 @@ def write_snapshot(directory: Path, groups: list[list[b.RunRecord]], *,
 
 def golden_file(directory: Path, case: str, name: str, stops: list[dict],
                 **extra) -> Path:
-    """Write a benchmarks/routes/<case>.json the loader accepts."""
+    """Write a quality/cases/routes/<case>.json the loader accepts."""
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / f"{case}.json"
     payload = {

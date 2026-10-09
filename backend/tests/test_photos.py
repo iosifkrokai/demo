@@ -28,7 +28,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from agent.itineraries import _stop_payload
 from agent.models import Photo, Place
 from agent.planner.retrieve import parse_photo
-from scripts.seed_photos import (
+from seed.photos import (
     commons_file_title,
     parse_wikipedia,
 )
@@ -79,7 +79,7 @@ def test_a_wikipedia_hint_that_is_not_a_wiki_is_not_used():
 
 def test_the_article_comes_from_our_own_links():
     """No searching: the curated dataset already names its Wikipedia article."""
-    from scripts.seed_photos import article_from_links
+    from seed.photos import article_from_links
 
     raw = '[{"title":"Старый замок — Wikipedia","url":"https://ru.wikipedia.org/wiki/%D0%A1%D1%82%D0%B0%D1%80%D1%8B%D0%B9_%D0%B7%D0%B0%D0%BC%D0%BE%D0%BA_(%D0%93%D1%80%D0%BE%D0%B4%D0%BD%D0%BE)"}]'
     assert article_from_links(raw) == ("ru", "Старый замок (Гродно)")
@@ -95,7 +95,7 @@ def test_the_article_comes_from_our_own_links():
 
 
 def test_distance_is_metres_not_degrees():
-    from scripts.seed_photos import haversine_m
+    from seed.photos import haversine_m
 
     # One thousandth of a degree of latitude is ~111 m anywhere on Earth.
     assert haversine_m(53.0, 24.0, 53.001, 24.0) == pytest.approx(111, abs=2)
@@ -105,7 +105,7 @@ def test_distance_is_metres_not_degrees():
 def test_a_redirect_still_answers_under_the_name_we_asked(monkeypatch):
     """Half of our titles are redirects; a stub without properties is not an
     answer, and without the redirect the point silently loses its photo."""
-    import scripts.seed_photos as seed
+    import seed.photos as seed
 
     def fake_api(endpoint, params):
         return {
@@ -129,7 +129,7 @@ def test_a_redirect_still_answers_under_the_name_we_asked(monkeypatch):
 
 def test_wikidata_gives_the_image_and_the_coordinate_together(monkeypatch):
     """One call per batch, and P625 is the half that answers for more points."""
-    import scripts.seed_photos as seed
+    import seed.photos as seed
 
     def fake_api(endpoint, params):
         return {
@@ -154,7 +154,7 @@ def test_wikidata_gives_the_image_and_the_coordinate_together(monkeypatch):
 
 def test_an_article_only_counts_when_its_own_coordinates_agree():
     """The whole safety of this path: a name is not evidence, a position is."""
-    from scripts.seed_photos import match_article
+    from seed.photos import match_article
 
     place = {"name": "Костёл Святого Михаила Архангела (Сморгонь)", "lat": 54.48, "lon": 26.4}
 
@@ -174,7 +174,7 @@ def test_an_article_only_counts_when_its_own_coordinates_agree():
 def test_the_town_article_is_not_the_article_about_the_place():
     """«Гродно» sits a kilometre from Sovetskaya street and would pass a
     distance check while illustrating the wrong thing."""
-    from scripts.seed_photos import is_settlement_article, match_article
+    from seed.photos import is_settlement_article, match_article
 
     place = {"name": "Улица Советская", "town": "Гродно", "lat": 53.68, "lon": 23.82}
     assert is_settlement_article(place, "Гродно") is True
@@ -185,7 +185,7 @@ def test_the_town_article_is_not_the_article_about_the_place():
 
 
 def test_an_article_without_coordinates_is_not_used():
-    from scripts.seed_photos import match_article
+    from seed.photos import match_article
 
     assert (
         match_article(
@@ -198,7 +198,7 @@ def test_an_article_without_coordinates_is_not_used():
 
 def test_a_credit_line_is_a_name_not_a_link():
     """Real Artist fields carry HTML, link text and doubled credits."""
-    from scripts.seed_photos import clean_author
+    from seed.photos import clean_author
 
     assert clean_author('<a href="x">Александр Липилин</a>') == "Александр Липилин"
     assert clean_author("Валацуга (https://fgb.by/view/1)") == "Валацуга"
@@ -212,7 +212,7 @@ def test_a_rate_limit_is_waited_out_not_fatal(monkeypatch):
     import io
     import urllib.error
 
-    import scripts.seed_photos as seed
+    import seed.photos as seed
 
     monkeypatch.setattr(seed, "SLEEP", 0)
     monkeypatch.setattr(seed, "BACKOFF", (0,))
@@ -242,7 +242,7 @@ def test_a_rate_limit_is_waited_out_not_fatal(monkeypatch):
 
 def test_a_dead_wiki_does_not_break_the_reseed(monkeypatch):
     """A hint can name any wiki; an unreachable one must not stop the pass."""
-    import scripts.seed_photos as seed
+    import seed.photos as seed
 
     def boom(url: str) -> dict:
         raise OSError("no such wiki")

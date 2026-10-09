@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-ROUTES_DIR = Path(__file__).resolve().parents[1] / "benchmarks" / "routes"
+ROUTES_DIR = Path(__file__).resolve().parents[1] / "quality" / "cases" / "routes"
 
 # The three walks that predate the benchmark_meta convention. They are grandfathered
 # deliberately: anything new must carry provenance.

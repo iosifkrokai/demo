@@ -12,8 +12,11 @@ What must hold, per step:
   * the interpretation agent — when it fails (or has no key) `build_requirements`
     silently takes the deterministic contract; when it answers, its contract
     drives the reading the planner uses.
-  * embed   — no vector, retrieval runs keyword/category-only.
-  * health  — still reports llm/embedder false, so the flags stay honest.
+  * embed   — local and key-free: the query vector comes from the CPU model, and
+    the vector signal drops to keyword/category-only ONLY if that model cannot
+    load (then retrieval still runs, and no exception escapes).
+  * health  — reports llm false but embedder true without a key: retrieval is
+    full-strength, only the interpretation degrades.
   * HTTP    — an upstream error that escapes the planner is a 503 with a
     detail, never an opaque 500.
 
@@ -28,14 +31,13 @@ import sys
 from collections.abc import Iterator
 from contextlib import contextmanager
 
-import httpx
 import psycopg
 import pytest
 from fastapi.testclient import TestClient
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agent import constants, main as agent_main
+from agent import constants, embeddings, main as agent_main
 from agent.config import openrouter_api_key, settings
 from agent.errors import NoCandidatesFound, NoRoutePossible, UpstreamUnavailable
 from agent.models import Candidate, GenerateReq, ResolvedConstraints
@@ -46,7 +48,7 @@ from agent.planner import (
     retrieve as retrieve_mod,
 )
 from agent.planner.intent import build_requirements, extract_intent, fallback_intent
-from agent.planner.pipeline import Pipeline, _openrouter_embed
+from agent.planner.pipeline import Pipeline, _embed_query
 from agent.requirements import PartyComposition, Requirement, TripRequirements
 from agent.valhalla_client import ping as valhalla_ping
 
@@ -114,59 +116,34 @@ def _warnings(caplog, logger: str) -> list[str]:
     return [r.getMessage() for r in caplog.records if r.name == logger and r.levelname == "WARNING"]
 
 
-class _Resp:
-    """Stand-in for an httpx response."""
+class _FakeModel:
+    """A stand-in for the local fastembed model (no download, no CPU)."""
 
-    def __init__(self, status: int = 200, body: dict | None = None):
-        self._status = status
-        self._body = body or {"answers": {}}
+    def __init__(self, *, fail: bool = False, vectors: list[list[float]] | None = None):
+        self._fail = fail
+        self._vectors = vectors
+        self.calls: list[list[str]] = []
 
-    def raise_for_status(self):
-        if self._status >= 400:
-            raise httpx.HTTPStatusError(
-                f"status {self._status}",
-                request=httpx.Request("POST", "https://openrouter.ai"),
-                response=httpx.Response(self._status),
-            )
-
-    def json(self) -> dict:
-        return self._body
+    def embed(self, texts):
+        self.calls.append(list(texts))
+        if self._fail:
+            raise RuntimeError("model not baked into this image")
+        if self._vectors is not None:
+            return self._vectors
+        return [[0.1, 0.2, 0.3] for _ in texts]
 
 
-def _fake_post_client(response: _Resp):
-    """An httpx.Client whose post() answers with `response`."""
+@pytest.fixture
+def fake_model(monkeypatch):
+    """Install a fake local model; tests must never load the real one."""
+    from agent.planner import interpret_cache
 
-    class _Client:
-        def __init__(self, **_kw):
-            pass
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *_exc):
-            return False
-
-        def post(self, *_a, **_kw):
-            return response
-
-    return _Client
-
-
-def _boom_client(exc: BaseException):
-    class _Client:
-        def __init__(self, **_kw):
-            pass
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *_exc):
-            return False
-
-        def post(self, *_a, **_kw):
-            raise exc
-
-    return _Client
+    interpret_cache.EMBED_CACHE.clear()
+    model = _FakeModel()
+    monkeypatch.setattr(embeddings._state, "model", model, raising=False)
+    monkeypatch.setattr(embeddings._state, "available", None, raising=False)
+    yield model
+    interpret_cache.EMBED_CACHE.clear()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -297,35 +274,33 @@ class TestIntentFallback:
 
 # ─────────────────────────────────────────────────────────────────────────────
 # ─────────────────────────────────────────────────────────────────────────────
-# Embeddings — keyword-only retrieval, never an exception
+# Embeddings — local and key-free; keyword-only only if the model cannot load
 # ─────────────────────────────────────────────────────────────────────────────
 
-class TestEmbedDegraded:
+class TestEmbedLocal:
 
-    def test_no_key_returns_no_vector(self, no_key, monkeypatch):
-        monkeypatch.setattr(httpx, "Client", _explode)
-        assert _openrouter_embed([QUERY]) == []
+    def test_local_vector_is_used(self, fake_model):
+        assert _embed_query(QUERY) == [0.1, 0.2, 0.3]
 
-    def test_upstream_failure_returns_no_vector(self, with_key, monkeypatch):
-        monkeypatch.setattr(httpx, "Client", _boom_client(httpx.ConnectError("no route to host")))
-        assert _openrouter_embed([QUERY]) == []
+    def test_query_gets_the_query_prefix(self, fake_model):
+        _embed_query(QUERY)
+        assert fake_model.calls and all(t.startswith("query: ") for t in fake_model.calls[0])
 
-    def test_malformed_embedding_response_returns_no_vector(self, with_key, monkeypatch):
-        monkeypatch.setattr(httpx, "Client", _fake_post_client(_Resp(body={"data": "nope"})))
-        assert _openrouter_embed([QUERY]) == []
+    def test_embeds_without_any_key(self, no_key, fake_model):
+        # Embeddings no longer depend on OPENROUTER_API_KEY at all.
+        assert _embed_query(QUERY) == [0.1, 0.2, 0.3]
 
-    def test_logs_one_warning_naming_the_reason(self, no_key, monkeypatch, caplog):
-        monkeypatch.setattr(httpx, "Client", _explode)
+    def test_a_broken_local_model_returns_no_vector(self, monkeypatch):
+        monkeypatch.setattr(embeddings._state, "model", _FakeModel(fail=True), raising=False)
+        assert _embed_query(QUERY) == []
+
+    def test_logs_one_warning_naming_the_reason(self, monkeypatch, caplog):
+        monkeypatch.setattr(embeddings._state, "model", _FakeModel(fail=True), raising=False)
         with caplog.at_level("WARNING", logger="agent.planner.pipeline"):
-            _openrouter_embed([QUERY])
+            assert _embed_query(QUERY) == []
         warnings = _warnings(caplog, "agent.planner.pipeline")
         assert len(warnings) == 1
-        assert "OPENROUTER_API_KEY" in warnings[0]
-
-    def test_a_good_response_is_used(self, with_key, monkeypatch):
-        body = {"data": [{"embedding": [0.1, 0.2, 0.3]}]}
-        monkeypatch.setattr(httpx, "Client", _fake_post_client(_Resp(body=body)))
-        assert _openrouter_embed([QUERY]) == [[0.1, 0.2, 0.3]]
+        assert "local model" in warnings[0]
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -411,22 +386,33 @@ class TestHttpDegraded:
         assert r.status_code == 404
         assert "no candidates" in r.json()["detail"]
 
-    def test_health_flags_are_honest_without_a_key(self, no_key, monkeypatch, _restore_planner):
-        _HealthOnly(monkeypatch)
+    def test_health_without_a_key_keeps_embedder_and_degraded_llm(
+            self, no_key, monkeypatch, fake_model, _restore_planner):
         body = _client_with_planner(_HealthOnly(monkeypatch)).get("/health").json()
-        assert body["embedder"] is False
+        # Embeddings are local: a missing key no longer disables retrieval.
+        assert body["embedder"] is True
         assert body["llm"] is False
+        assert body["interpretation"] == "deterministic"
         assert body["db"] is True
         assert body["valhalla"] is True
-        # Degraded, and honest about which part is degraded.
-        assert body["status"] == "degraded"
+        # Full-strength retrieval + deterministic reader is an ok product state.
+        assert body["status"] == "ok"
 
-    def test_health_flags_are_honest_with_a_key(self, with_key, monkeypatch, _restore_planner):
-        _HealthOnly(monkeypatch)
+    def test_health_flags_are_honest_with_a_key(
+            self, with_key, monkeypatch, fake_model, _restore_planner):
         body = _client_with_planner(_HealthOnly(monkeypatch)).get("/health").json()
         assert body["llm"] is True
         assert body["embedder"] is True
+        assert body["interpretation"] == "llm"
         assert body["status"] == "ok"
+
+    def test_health_is_degraded_when_the_local_model_cannot_load(
+            self, monkeypatch, _restore_planner):
+        monkeypatch.setattr(embeddings._state, "model", None, raising=False)
+        monkeypatch.setattr(embeddings._state, "available", False, raising=False)
+        body = _client_with_planner(_HealthOnly(monkeypatch)).get("/health").json()
+        assert body["embedder"] is False
+        assert body["status"] == "degraded"
 
 
 # ─────────────────────────────────────────────────────────────────────────────

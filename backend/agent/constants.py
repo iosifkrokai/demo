@@ -46,8 +46,8 @@ RENDER_MIN_LEFT_S = 6.0
 # the agent that uses it, and is overridable per-process with
 # AGENT_INTERPRET_MODEL so a benchmark can pick one.
 
-# Text-embedding model for the vector retrieval signal.
-EMBED_MODEL = "openai/text-embedding-3-small"
+# The embedding model is no longer a constant here: it lives with the local
+# embedder in agent/embeddings.py (MODEL_NAME / EMBED_DIM).
 
 # ── Intent taxonomy ─────────────────────────────────────────────────────────
 INTENT_TYPES = ("discovery", "specific", "themed", "vague")
@@ -84,7 +84,7 @@ RETRIEVAL_POOL_SIZE = 50   # candidates after RRF fusion
 # optimizer only ever saw 9 candidates of which 3 were sights — no model can build
 # a full walk out of that. This ceiling applies to the *budgeted* path, where MMR
 # trims to this size; RETRIEVAL_POOL_SIZE stays at 50 on purpose (see
-# frontend/CLAUDE.md): with no budget MMR does not trim at all, so a larger fusion
+# frontend sidebar): with no budget MMR does not trim at all, so a larger fusion
 # pool would send every candidate to a matrix that grows into hours.
 MMR_POOL_SIZE = 30
 

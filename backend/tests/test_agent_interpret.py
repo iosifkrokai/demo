@@ -179,7 +179,7 @@ def test_limits_are_bounded():
 def test_the_default_model_is_the_measured_one():
     """A deployment fact, deliberately pinned so a change is a deliberate act.
 
-    The model is chosen by measurement (scripts/compare_interpret_models.py,
+    The model is chosen by measurement (
     scored against a KNOWN-CORRECT answer per request), not by preference. The
     incumbent 2.5-pro was re-measured on 2026-09-30 and no longer beat
     2.5-flash — same 6/6 expectations met, four times the price and several

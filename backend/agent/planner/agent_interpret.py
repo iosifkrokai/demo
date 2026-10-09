@@ -102,7 +102,7 @@ MODEL_TIMEOUT_S = 90.0  # per-request HTTP timeout, below the wall clock
 # The old rationale for 2.5-pro — "flash reads two of the requests as ZERO
 # requirements" — was measured BEFORE the instructions were reworked, and on
 # 2026-09-30 it no longer reproduces: measured again on the app's own requests
-# with a KNOWN-CORRECT answer per request (scripts/compare_interpret_models.py,
+# with a KNOWN-CORRECT answer per request (
 # three requests: forced hard service, forced must_visit + soft café, English
 # soft service), 2.5-flash and 2.5-pro both met 6/6 expectations. Flash did it in
 # 1.8-2.7 s per reading against 2.5-pro's 8.6-19.6 s, at $0.30/1M against

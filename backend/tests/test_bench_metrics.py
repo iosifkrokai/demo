@@ -1,4 +1,4 @@
-"""Metric arithmetic for scripts/bench_routes.py.
+"""Metric arithmetic for quality/runner.py.
 
 No network and no agent: every case is either made-up coordinates or a
 monkeypatched `call_generate`, so each expected number can be derived by hand.
@@ -27,7 +27,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import pytest
 
-from scripts import bench_routes as b
+from quality import runner as b
 
 # --------------------------------------------------------------------------
 # geometry helpers

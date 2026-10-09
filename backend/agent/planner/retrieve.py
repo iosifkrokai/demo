@@ -11,8 +11,8 @@ Negative filter is applied AFTER fusion — places matching
 forbidden_categories or forbidden_keywords are dropped before hydration.
 
 Degraded mode: the vector signal is skipped whenever the caller passes an
-empty `query_embedding` — no OPENROUTER_API_KEY, or an OpenRouter that
-failed (see planner/pipeline.py `_openrouter_embed`).  The remaining five
+empty `query_embedding` — the local model could not be loaded (see
+agent/embeddings.py).  The remaining five
 signals are enough to build a route: explicit category words in the query
 still drive category-first retrieval, and named places still resolve
 through must_visit_ids / the geo anchor.
@@ -327,7 +327,7 @@ def parse_links(raw: str | None) -> list[dict]:
 def parse_photo(row: dict) -> dict | None:
     """The point's picture with its credit — or nothing at all.
 
-    All four fields are written by one resolution pass (`scripts/seed_photos.py`).
+    All four fields are written by one resolution pass (`python -m seed photos --apply`).
     A URL without its author and licence is deliberately not shown: Wikimedia
     files are licensed, and a credit-less image is a licence violation rather
     than a nice-to-have.

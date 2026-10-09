@@ -35,9 +35,9 @@ CREATE TABLE IF NOT EXISTS places (
   lon           DOUBLE PRECISION NOT NULL,
   geom          GEOGRAPHY(POINT, 4326) GENERATED ALWAYS AS
                   (ST_SetSRID(ST_MakePoint(lon, lat), 4326)::geography) STORED,
-  -- embedding dim MUST match the model in scripts/enrich_places.py and agent/main.py.
-  -- Default: OpenRouter text-embedding-3-small (1536-d).
-  embedding     VECTOR(1536),
+  -- embedding dim MUST match agent/embeddings.EMBED_DIM: the local CPU model
+  -- intfloat/multilingual-e5-small (384-d). See db/migrations/0009.
+  embedding     VECTOR(384),
   source_url    TEXT UNIQUE NOT NULL,
   -- A photo is only ever stored with its attribution: Wikimedia files are
   -- licensed, and "photo_url set, author NULL" would be a licence violation

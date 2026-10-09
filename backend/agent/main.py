@@ -31,7 +31,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from . import (
     accounts_api,
     clients_api,
-    constants,
+    embeddings,
     itineraries as itineraries_mod,
     places as places_mod,
     progress,
@@ -68,13 +68,16 @@ async def lifespan(_: FastAPI):
         # (agent/search.py); mirrors db/migrations/0003_trgm_search.sql
         cur.execute("SET pg_trgm.word_similarity_threshold = 0.45")
     app.state.planner = Pipeline(db=db)
-    log.info("agent ready (OpenRouter: embed=%s, interpret=%s, key=%s)",
-             constants.EMBED_MODEL, DEFAULT_MODEL,
+    # Warm the local embedding model so the first request does not pay the load.
+    embeddings.embed_query("warmup")
+    log.info("agent ready (embeddings=%s local, interpret=%s, key=%s)",
+             embeddings.MODEL_NAME, DEFAULT_MODEL,
              "set" if openrouter_api_key() else "MISSING")
     if not openrouter_api_key():
         log.warning(
-            "no OPENROUTER_API_KEY — degraded keyword-only mode: no embeddings, "
-            + "deterministic interpretation (routes are still built)"
+            "no OPENROUTER_API_KEY — deterministic interpretation only: the query "
+            + "is read by the regex/keyword parser; retrieval keeps local embeddings "
+            + "(routes are still built)"
         )
     yield
     trace.shutdown()

@@ -36,5 +36,9 @@ jobs:
       - name: Type-check (pyright)
         run: .venv/bin/pyright
 
+      - name: Seed data contract (offline)
+        # "Data is code": the committed CSVs must still validate. No DB, no network.
+        run: .venv/bin/python -m seed --dry-run
+
       - name: Tests (pytest)
         run: .venv/bin/python -m pytest -q

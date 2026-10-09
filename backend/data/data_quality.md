@@ -50,9 +50,13 @@ Result: 0% `другое`, vs. 43% before.
 4. **`places.fun_fact`** — one trivia sentence per place, shown in the marker's info card
    (click/tap the marker). Surfaced verbatim: the agent copies it from the DB, the LLM never
    rewrites it, so whatever is in the CSV is exactly what the user reads.
-5. **Embeddings** — computed from `name + description` only
-   (`scripts/enrich_places.py`). Editing `blurb` or `fun_fact` therefore needs **no**
-   re-embedding; editing `name` does.
+5. **Embeddings** — computed locally from `name + blurb` (`agent/embeddings.py`, run by
+   `python -m seed`). Editing `fun_fact` needs **no** re-embedding; editing `name` or
+   `blurb` does (the next `python -m seed` re-embeds changed rows only if their vector is
+   cleared — see the note below).
+
+   To force a re-embed of a row whose `name`/`blurb` changed:
+   `UPDATE places SET embedding = NULL WHERE id = …;` then `python -m seed`.
 
 ## Fun facts are drafts — review before publishing
 
@@ -68,21 +72,21 @@ skew retrieval — but it *will* show up in the UI. Same review rule as for `cat
 ## When to re-curate
 
 Re-run `data/places_curated.csv` review when:
-* `scripts/parse_places.py` adds new rows (no automation — hand-label them).
+* `python -m seed fetch` brings in new rows (no automation — hand-label them).
 * `places.category` falls back to `другое` for known real places.
 * A new taxonomy bucket is introduced.
 
 ## How to apply after editing the CSV
 
 ```bash
-. .venv/bin/activate
-python scripts/apply_curated.py --dry-run   # prints the plan, writes nothing
-python scripts/apply_curated.py             # UPDATE name/category/blurb/fun_fact by id
+cd backend
+.venv/bin/python -m seed --dry-run   # validate + report, writes nothing
+.venv/bin/python -m seed             # apply: matches by name, sets category_source='curated'
 ```
 
-The script never deletes rows and warns about ids missing from the DB (usually means
-`scripts/parse_places.py` has not run yet). It accepts both the committed commented-header
-file and a plain header row.
+It never deletes rows and reports curated names it could not match in the DB (usually means
+the source rows are not loaded yet). It accepts both the committed commented-header file
+and a plain header row.
 
 `db/init.sql` only runs on a fresh `pgdata` volume, so on an existing DB add new columns
 first:

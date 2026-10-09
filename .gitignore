@@ -26,13 +26,10 @@ cache/
 .legacy_backup/
 *.log
 
-# Generated benchmark output (regenerate with scripts/bench_routes.py)
-backend/benchmarks/report.json
-backend/benchmarks/report.md
+# Generated quality output — regenerate with `python -m quality`
+backend/quality/reports/
 
 # Рабочие артефакты прогонов: логи агентов, записи демо, скачанные страницы
-tmp-fresh-pgdata/
-tmp-fresh-valhalla/
 cache/logs/
 cache/video/
 cache/headcheck/

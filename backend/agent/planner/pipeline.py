@@ -10,7 +10,7 @@ Steps in order:
                          fallback when no key/model), then →
                         IntentResult for resolve()
   2  resolve            IntentResult + client params → ResolvedConstraints
-  -- embed query         text → vec (OpenRouter; skipped when unavailable)
+  -- embed query         text → vec (local CPU model; skipped only if it fails to load)
   3  retrieve           vec + constraints → list[Candidate] (RRF-fused)
   4  diversity          candidates → top-N (MMR)
   5  cost               candidates + constraints → CostMatrix
@@ -23,12 +23,13 @@ Steps in order:
                         verifier, NOT the model)
 
 Degraded mode (no OPENROUTER_API_KEY, or the agent/OpenRouter unreachable)
-    The interpretation step degrades to the deterministic parse in
-    planner/intent.py (`build_requirements` → `_deterministic_requirements`)
-    while keeping every explicit UI filter; the vector signal is dropped so
-    retrieval runs on keywords + categories alone.  A route request still
-    returns points; /health keeps reporting `llm`/`embedder` as false because
-    no key is held.
+    Only the interpretation step degrades: it falls back to the deterministic
+    parse in planner/intent.py (`build_requirements` →
+    `_deterministic_requirements`) while keeping every explicit UI filter.
+    Retrieval stays full-strength because embeddings are local
+    (agent/embeddings.py) and need no key.  A route request still returns
+    points; /health reports `llm: false` and `interpretation: "deterministic"`,
+    while `embedder` stays true.
 
 Returns: RouteResponse (Pydantic) — what main.py serves over HTTP.  Its
 `status`/`requirements` fields are the verifier's verdict, not the model's.
@@ -41,7 +42,6 @@ import re as _re
 import time as _time
 from typing import Any
 
-import httpx
 import psycopg
 
 from .. import constants, progress, taxonomy, trace
@@ -104,55 +104,34 @@ from .verify import overall_status, verify, verify_catalogue
 log = logging.getLogger(__name__)
 
 
-def _openrouter_embed(texts: list[str]) -> list[list[float]]:
-    """Call OpenRouter embeddings API. Returns list of embedding vectors.
+def _embed_query(text: str) -> list[float]:
+    """Embed a search query with the LOCAL model (agent.embeddings).
 
-    Returns [] when OpenRouter is not usable — no key, or a request that
-    times out / 5xx — which is the signal for keyword-only retrieval.  One
-    WARNING per call, naming the reason, so a log reader can tell "no key"
-    apart from "key but upstream down".
+    Embeddings are computed in-process on the CPU, so they need no API key and
+    normally never fail. Returns [] only when the local model cannot be loaded
+    (not baked / broken install), which is the honest signal for keyword-only
+    retrieval. One WARNING per call, naming the reason.
     """
-    api_key = openrouter_api_key()
-    if not api_key:
-        log.warning("embed: no OPENROUTER_API_KEY — keyword-only retrieval")
-        return []
+    from .. import embeddings
 
     # An embedding is a pure function of the text and the model, so it is the
     # safest thing here to remember: no verdict, no measurement, nothing that
     # can go stale about the world.
-    cache_key = interpret_cache.embed_key(texts, constants.EMBED_MODEL)
+    cache_key = interpret_cache.embed_key([text], embeddings.MODEL_NAME)
     cached = interpret_cache.EMBED_CACHE.get(cache_key)
-    if cached is not None:
-        return cached
+    if cached:
+        return cached[0]
 
     try:
-        with httpx.Client(timeout=30.0) as client:
-            r = client.post(
-                "https://openrouter.ai/api/v1/embeddings",
-                headers={
-                    "Authorization": f"Bearer {api_key}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": constants.EMBED_MODEL,
-                    "input": texts,
-                },
-            )
-            r.raise_for_status()
-            body = r.json()
-            vectors = [item["embedding"] for item in body["data"]]
-            interpret_cache.EMBED_CACHE.put(cache_key, vectors)
-            return vectors
-    except httpx.HTTPError as exc:
-        # Timeout, connect error, 4xx/5xx — OpenRouter is not answering.
-        log.warning("embed: OpenRouter unreachable (%s) — keyword-only retrieval", exc)
+        vec = embeddings.embed_query(text)
+    except Exception as exc:
+        log.warning("embed: local model unavailable (%s) — keyword-only retrieval", exc)
         return []
-    except (KeyError, IndexError, TypeError, ValueError) as exc:
-        # A 200 whose body carries no usable vectors (not JSON, missing
-        # "data", a string where an item belongs) is the same situation from
-        # the caller's side: no vector, keep going without one.
-        log.warning("embed: unusable embeddings response (%s) — keyword-only retrieval", exc)
+    if not vec:
+        log.warning("embed: local model returned no vector — keyword-only retrieval")
         return []
+    interpret_cache.EMBED_CACHE.put(cache_key, [vec])
+    return vec
 
 
 def should_skip_geo_focus(*, region_scope: bool, origin: LatLon | None) -> bool:
@@ -1072,11 +1051,10 @@ class Pipeline:
                 req, requirements, intent, constraints, outside_left, t0
             )
 
-        # Embed query (OpenRouter). Without an API key — or when the call
-        # fails — the pipeline degrades gracefully: retrieval falls back to
-        # the keyword signal only and the route is still built.
-        vecs = _openrouter_embed([req.query])
-        qvec: list[float] = vecs[0] if vecs else []
+        # Embed query (local CPU model). The vector signal is full-strength
+        # without any API key; it drops to keyword-only only if the local model
+        # itself cannot be loaded, and the route is still built.
+        qvec = _embed_query(req.query)
         trace.record("embed", input=req.query, embedded=bool(qvec))
 
         # Anchor point for locality: the tourist's GPS start, else the row behind
@@ -1886,12 +1864,19 @@ class Pipeline:
         except Exception:
             valhalla_ok = False
 
-        openrouter_ok = bool(openrouter_api_key())
+        from .. import embeddings
+
+        embedder_ok = embeddings.is_available()
+        llm_ok = bool(openrouter_api_key())
 
         return {
-            "status": "ok" if (db_ok and valhalla_ok and openrouter_ok) else "degraded",
-            "embedder": openrouter_ok,  # embeddings + intent share the OpenRouter key
-            "llm": openrouter_ok,
+            # A missing interpretation key alone does not degrade the product:
+            # retrieval is full-strength (local embeddings) and the
+            # deterministic parser reads the query.
+            "status": "ok" if (db_ok and valhalla_ok and embedder_ok) else "degraded",
+            "embedder": embedder_ok,
+            "llm": llm_ok,
+            "interpretation": "llm" if llm_ok else "deterministic",
             "db": db_ok,
             "valhalla": valhalla_ok,
         }

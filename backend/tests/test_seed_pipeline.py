@@ -17,14 +17,15 @@ import pytest
 
 BACKEND = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BACKEND))
-sys.path.insert(0, str(BACKEND / "scripts"))
-
-import seed_all  # noqa: E402
 
 from agent import constants  # noqa: E402
+from seed import (  # noqa: E402
+    cli as seed_cli,
+    datasets,
+    pipeline,
+)
 
 MIGRATION = BACKEND / "db" / "migrations" / "0004_places_taxonomy.sql"
-ENRICH = BACKEND / "scripts" / "enrich_places.py"
 
 HEADER = ("# name|category|district|town|lat|lon|blurb|fun_fact|fun_facts|"
           "opening_hours|ticket_price|visit_minutes|links|source_url")
@@ -102,11 +103,11 @@ def test_dry_run_needs_no_db_and_no_network(fixture_dir, tmp_path, monkeypatch):
     def _explode(*_args, **_kwargs):  # pragma: no cover - must not be reached
         raise AssertionError("--dry-run touched the database")
 
-    monkeypatch.setattr(seed_all, "_connect", _explode)
+    monkeypatch.setattr(pipeline, "connect", _explode)
     monkeypatch.setattr(socket, "create_connection", _explode)
 
     report_path = tmp_path / "report.json"
-    rc = seed_all.main(["--dry-run", "--data-dir", str(fixture_dir),
+    rc = seed_cli.main(["--dry-run", "--data-dir", str(fixture_dir),
                         "--report", str(report_path)])
 
     assert rc == 0
@@ -117,9 +118,9 @@ def test_dry_run_needs_no_db_and_no_network(fixture_dir, tmp_path, monkeypatch):
 
 def test_dry_run_report_is_stable_across_runs(fixture_dir):
     def _report():
-        datasets = [d.with_data_dir(fixture_dir) for d in seed_all.default_datasets()]
-        return seed_all.build_coverage_report(
-            seed_all.collect_records(datasets), mode="dry-run", generated_at="fixed")
+        datasets_ = [d.with_data_dir(fixture_dir) for d in datasets.default_datasets()]
+        return datasets.build_coverage_report(
+            datasets.collect_records(datasets_), mode="dry-run", generated_at="fixed")
 
     first, second = _report(), _report()
     assert first == second  # no counters drift between runs
@@ -130,17 +131,17 @@ def test_dry_run_report_is_stable_across_runs(fixture_dir):
 # ─────────────────────────────────────────────────────────────────────────────
 
 def test_collect_records_tags_category_source(fixture_dir):
-    datasets = [d.with_data_dir(fixture_dir) for d in seed_all.default_datasets()]
-    collected = seed_all.collect_records(datasets)
+    datasets_ = [d.with_data_dir(fixture_dir) for d in datasets.default_datasets()]
+    collected = datasets.collect_records(datasets_)
     sources = {r["_dataset"]: r["_category_source"] for r in collected["records"]}
-    assert sources["city"] == seed_all.SOURCE_DATASET
-    assert sources["region"] == seed_all.SOURCE_DATASET
-    assert sources["osm"] == seed_all.SOURCE_AUTO
+    assert sources["city"] == datasets.SOURCE_DATASET
+    assert sources["region"] == datasets.SOURCE_DATASET
+    assert sources["osm"] == datasets.SOURCE_AUTO
 
 
 def test_geofence_rejects_are_quarantined_and_not_fatal(fixture_dir):
-    datasets = [d.with_data_dir(fixture_dir) for d in seed_all.default_datasets()]
-    collected = seed_all.collect_records(datasets)
+    datasets_ = [d.with_data_dir(fixture_dir) for d in datasets.default_datasets()]
+    collected = datasets.collect_records(datasets_)
     assert collected["fatal"] is False
     rejected = [r for r in collected["rejects"] if r["dataset"] == "osm"]
     assert len(rejected) == 1
@@ -157,7 +158,7 @@ def test_bad_category_in_hand_authored_dataset_is_fatal(tmp_path):
         region_rows=[],
         osm_rows=[],
     )
-    rc = seed_all.main(["--dry-run", "--data-dir", str(tmp_path)])
+    rc = seed_cli.main(["--dry-run", "--data-dir", str(tmp_path)])
     assert rc == 2  # region/city must never be half-loaded
 
 
@@ -168,8 +169,8 @@ def test_non_finite_coordinates_are_invalid_not_geofence(tmp_path):
         region_rows=[],
         osm_rows=[_row("Странная точка", "музей", "osm:node/9", "nan", "nan")],
     )
-    datasets = [d.with_data_dir(tmp_path) for d in seed_all.default_datasets()]
-    collected = seed_all.collect_records(datasets)
+    datasets_ = [d.with_data_dir(tmp_path) for d in datasets.default_datasets()]
+    collected = datasets.collect_records(datasets_)
     assert collected["fatal"] is False
     kinds = {r["kind"] for r in collected["rejects"]}
     assert kinds == {"invalid"}
@@ -180,10 +181,10 @@ def test_non_finite_coordinates_are_invalid_not_geofence(tmp_path):
 # ─────────────────────────────────────────────────────────────────────────────
 
 def test_coverage_counts_and_shares(fixture_dir):
-    datasets = [d.with_data_dir(fixture_dir) for d in seed_all.default_datasets()]
-    collected = seed_all.collect_records(datasets)
-    curated = seed_all.read_curated(fixture_dir / "places_curated.csv")
-    report = seed_all.build_coverage_report(
+    datasets_ = [d.with_data_dir(fixture_dir) for d in datasets.default_datasets()]
+    collected = datasets.collect_records(datasets_)
+    curated = datasets.read_curated(fixture_dir / "places_curated.csv")
+    report = datasets.build_coverage_report(
         collected, mode="dry-run", curated=curated,
         curated_stats={"rows": len(curated), "applied": False})
 
@@ -206,20 +207,20 @@ def test_coverage_counts_and_shares(fixture_dir):
 
 
 def test_duplicate_detection_flags_close_same_name(fixture_dir):
-    datasets = [d.with_data_dir(fixture_dir) for d in seed_all.default_datasets()]
-    collected = seed_all.collect_records(datasets)
-    dups = seed_all.find_suspected_duplicates(collected["records"])
+    datasets_ = [d.with_data_dir(fixture_dir) for d in datasets.default_datasets()]
+    collected = datasets.collect_records(datasets_)
+    dups = datasets.find_suspected_duplicates(collected["records"])
     assert len(dups) == 1
     pair = dups[0]
     assert pair["name"] == "лидский замок"
-    assert pair["distance_m"] < seed_all.DEFAULT_DUP_RADIUS_M
+    assert pair["distance_m"] < datasets.DEFAULT_DUP_RADIUS_M
     assert {pair["a"]["source_url"], pair["b"]["source_url"]} == {"osm:way/1", "osm:way/2"}
 
 
 def test_alias_coverage_counts_ru_names(fixture_dir):
-    datasets = [d.with_data_dir(fixture_dir) for d in seed_all.default_datasets()]
-    collected = seed_all.collect_records(datasets)
-    report = seed_all.build_coverage_report(collected, mode="dry-run")
+    datasets_ = [d.with_data_dir(fixture_dir) for d in datasets.default_datasets()]
+    collected = datasets.collect_records(datasets_)
+    report = datasets.build_coverage_report(collected, mode="dry-run")
     aliases = report["aliases"]
     assert aliases["ru_script_names"]["count"] == 5
     assert aliases["en_script_names"]["count"] == 0
@@ -228,7 +229,7 @@ def test_alias_coverage_counts_ru_names(fixture_dir):
 
 def test_report_json_roundtrip(fixture_dir, tmp_path):
     report_path = tmp_path / "r.json"
-    assert seed_all.main(["--dry-run", "--data-dir", str(fixture_dir),
+    assert seed_cli.main(["--dry-run", "--data-dir", str(fixture_dir),
                           "--report", str(report_path)]) == 0
     report = json.loads(report_path.read_text(encoding="utf-8"))
     for key in ("totals", "by_category", "by_district", "coverage", "aliases",
@@ -244,11 +245,11 @@ def test_report_json_roundtrip(fixture_dir, tmp_path):
     ("curated", True), ("dataset", True), ("auto", False), (None, False),
 ])
 def test_curated_category_is_protected(source, expected):
-    assert seed_all.curated_category_is_protected(source) is expected
+    assert pipeline.curated_category_is_protected(source) is expected
 
 
 def test_upsert_sql_never_overwrites_protected_categories():
-    sql = seed_all.upsert_sql()
+    sql = pipeline.upsert_sql()
     assert "ON CONFLICT (source_url) DO UPDATE" in sql
     assert "CASE WHEN places.category_source IN ('curated', 'dataset')" in sql
     # Protected rows keep their category against automatic writers only.
@@ -257,20 +258,11 @@ def test_upsert_sql_never_overwrites_protected_categories():
     assert sql.count("THEN places.category_source ELSE EXCLUDED.category_source END") == 1
 
 
-def test_enrich_places_only_classifies_auto_rows():
-    src = ENRICH.read_text(encoding="utf-8")
-    # The category pass is guarded in both the SELECT and the UPDATE…
-    assert "WHERE COALESCE(category_source, 'auto') = 'auto' ORDER BY id" in src
-    assert "WHERE id = %s AND COALESCE(category_source, 'auto') = 'auto'" in src
-    # …and the old unconditional overwrite is gone.
-    assert "UPDATE places SET category = %s WHERE id = %s" not in src
-
-
 def test_source_fields_maps_providers():
-    assert seed_all.source_fields("osm:way/1")["provider"] == "openstreetmap"
-    assert seed_all.source_fields("osm:way/1")["external_id"] == "way/1"
-    assert seed_all.source_fields("city:old-castle")["provider"] == "planetabelarus"
-    assert seed_all.source_fields("city:old-castle")["url"] is None
+    assert pipeline.source_fields("osm:way/1")["provider"] == "openstreetmap"
+    assert pipeline.source_fields("osm:way/1")["external_id"] == "way/1"
+    assert pipeline.source_fields("city:old-castle")["provider"] == "planetabelarus"
+    assert pipeline.source_fields("city:old-castle")["url"] is None
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -305,7 +297,7 @@ def test_migration_guard_reverts_protected_category_changes():
 # ─────────────────────────────────────────────────────────────────────────────
 
 def test_real_curated_csv_is_parseable_and_in_taxonomy():
-    curated = seed_all.read_curated(BACKEND / "data" / "places_curated.csv")
+    curated = datasets.read_curated(BACKEND / "data" / "places_curated.csv")
     assert len(curated) == 76
     for row in curated:
         assert row["category"] in constants.CATEGORIES, row["name"]

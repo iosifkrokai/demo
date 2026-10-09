@@ -15,7 +15,7 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from reports.quality import read_golden
+from quality.report import read_golden
 
 
 def _report() -> dict:
@@ -73,8 +73,16 @@ def test_read_golden_reads_the_reports_own_keys(tmp_path):
     assert "wrong_status" in data["failed_cases"][0]["detail"]
 
 
-def test_read_golden_default_path_finds_the_committed_report():
-    """The repository ships one; the reader must not call it «не измерялось»."""
+def test_read_golden_finds_the_report_at_the_default_path(tmp_path, monkeypatch):
+    """A run written to the default path must not read as «не измерялось».
+
+    Nothing generated is committed any more, so the artifact is staged here.
+    """
+    report = tmp_path / "compliance.json"
+    report.write_text(json.dumps(_report(), ensure_ascii=False), encoding="utf-8")
+    monkeypatch.setattr("quality.report.COMPLIANCE", report)
+    monkeypatch.setattr("quality.report.SNAPSHOTS", tmp_path / "snapshots")
+
     data = read_golden()
 
     assert data["measured"] is True, data.get("how")
@@ -85,10 +93,10 @@ def test_read_golden_default_path_finds_the_committed_report():
 
 
 def test_read_golden_without_any_report_says_how_to_make_one(tmp_path, monkeypatch):
-    monkeypatch.setattr("reports.quality.COMPLIANCE", tmp_path / "missing.json")
-    monkeypatch.setattr("reports.quality.SNAPSHOTS", tmp_path / "snapshots")
+    monkeypatch.setattr("quality.report.COMPLIANCE", tmp_path / "missing.json")
+    monkeypatch.setattr("quality.report.SNAPSHOTS", tmp_path / "snapshots")
 
     data = read_golden()
 
     assert data["measured"] is False
-    assert "bench_routes.py --golden" in data["how"]
+    assert "-m quality --golden" in data["how"]
