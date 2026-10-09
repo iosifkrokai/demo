@@ -28,7 +28,7 @@ from domain import taxonomy
 # INVARIANT: every timeout in front of this one must be larger, or the front door
 # becomes the limit and a slow-but-valid plan dies as a 504 the tourist reads as
 # «всё сломалось». Dependents: frontend/nginx.conf proxy_read/send_timeout (300 s)
-# and scripts/bench_routes.py REQUEST_TIMEOUT_S (300 s). Raise them together.
+# and quality/runner.py REQUEST_TIMEOUT_S (300 s). Raise them together.
 REQUEST_DEADLINE_S = 240.0
 # Less than this left → trim the candidate pool before the (50×50) cost matrix.
 COST_MATRIX_MIN_LEFT_S = 26.0
@@ -36,6 +36,13 @@ POOL_TRIM_SIZE = 30
 # Less than this left → do not ask Valhalla to re-order a wide tour; its
 # `optimized_route` call is unbounded over a region and was the 60 s+ tail.
 VALHALLA_ORDER_MIN_LEFT_S = 18.0
+# The re-order is an optimisation, not a requirement: when the router cannot
+# solve a region-wide tour it answers nothing at all, so the call is given a
+# short single-shot budget and no retries. With the shared 20 s / 2-retry
+# defaults the same call burned 3×20 s + backoff ≈ 61 s before falling back to
+# the matrix order (measured live on «замки Гродненской области»).
+VALHALLA_ORDER_TIMEOUT_S = 10.0
+VALHALLA_ORDER_RETRIES = 0
 # Less than this left → skip the geometry call: the plan is returned with
 # `geometry_missing`, which the verifier reports as `degraded`.
 RENDER_MIN_LEFT_S = 6.0

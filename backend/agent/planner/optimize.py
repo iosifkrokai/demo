@@ -631,7 +631,12 @@ def _two_opt(order: list[int], matrix: list[list[float]]) -> list[int]:
 
 
 def _valhalla_order(
-    route: list[Candidate], info: dict, *, costing: str
+    route: list[Candidate],
+    info: dict,
+    *,
+    costing: str,
+    timeout: float | None = None,
+    retries: int | None = None,
 ) -> tuple[list[Candidate], dict]:
     """Let Valhalla order the walk when nothing pins the sequence.
 
@@ -639,12 +644,18 @@ def _valhalla_order(
     own solver, so the order the tourist sees is the one Valhalla built. With a
     fixed start or must-visit stops the planned order wins and Valhalla only
     draws it.
+
+    The call is optional: over a region-wide tour the solver does not answer at
+    all, so the caller passes a short single-shot budget and the planned order
+    stands when it is exceeded (UpstreamUnavailable).
     """
     if len(route) < 3:
         return route, info
     coords = [{"lat": c.lat, "lon": c.lon} for c in route]
     try:
-        v_order, _, _ = valhalla_optimized_route(coords, costing=costing)
+        v_order, _, _ = valhalla_optimized_route(
+            coords, costing=costing, timeout=timeout, retries=retries
+        )
     except UpstreamUnavailable:
         return route, info
     if len(v_order) != len(route) or sorted(v_order) != list(range(len(route))):

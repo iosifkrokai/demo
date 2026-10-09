@@ -24,7 +24,12 @@ from types import SimpleNamespace
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agent.planner import intent as intent_mod, pipeline as pipeline_mod, render as render_mod
+from agent.planner import (
+    intent as intent_mod,
+    optimize as optimize_mod,
+    pipeline as pipeline_mod,
+    render as render_mod,
+)
 from agent.planner.cost import (
     REASON_MUST_VISIT_UNROUTABLE,
     PrunedStop,
@@ -38,6 +43,7 @@ from agent.planner.verify import (
     verify,
 )
 from contracts.planner import Candidate, CostMatrix, ResolvedConstraints
+from core.errors import UpstreamUnavailable
 from domain import constants
 from domain.requirements import Requirement, TripRequirements
 from infra.valhalla_client import RouteResult, RouteStatus
@@ -168,6 +174,40 @@ def test_the_order_follows_the_stops_a_prune_removed():
     plan = validate([a, c], cost, ResolvedConstraints(), info)
     assert plan.walk_seconds == 600.0, "priced a→c, not the unroutable a→b"
     assert plan.trace["walk_times_unknown"] == 0
+
+
+def test_the_optional_tour_reorder_is_bounded_and_degrades(monkeypatch):
+    """The Valhalla re-order must get a short single-shot budget.
+
+    It is an optimisation, not a requirement: over a region-wide tour the solver
+    answers nothing at all, and with the shared 20 s / 2-retry defaults the call
+    burned ≈61 s (3×20 s + backoff) before the matrix order was used anyway. The
+    cap and the zero retries are what keep that tail off the request — and a
+    failure still falls back to the planned order instead of propagating.
+    """
+    captured: dict = {}
+
+    def fake(coords, costing="pedestrian", timeout=None, retries=None):
+        captured["timeout"] = timeout
+        captured["retries"] = retries
+        raise UpstreamUnavailable("the solver will not answer this tour")
+
+    monkeypatch.setattr(optimize_mod, "valhalla_optimized_route", fake)
+    route = [_cand(1, "A", "замок"), _cand(2, "B", "музей"), _cand(3, "C", "парк")]
+    info = {"order": [0, 1, 2]}
+
+    out_route, out_info = optimize_mod._valhalla_order(
+        route,
+        info,
+        costing="auto",
+        timeout=constants.VALHALLA_ORDER_TIMEOUT_S,
+        retries=constants.VALHALLA_ORDER_RETRIES,
+    )
+
+    assert out_route == route and out_info == info, "the planned order stands"
+    assert captured["timeout"] == constants.VALHALLA_ORDER_TIMEOUT_S
+    assert captured["retries"] == 0
+    assert constants.VALHALLA_ORDER_TIMEOUT_S < constants.VALHALLA_TIMEOUT_S
 
 
 def test_verify_marks_a_kept_but_unroutable_must_visit_as_unmet():

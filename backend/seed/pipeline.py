@@ -1,9 +1,7 @@
 """The database-writing primitives of the seed — the one place rows are written.
 
-Consolidated from ``scripts/seed_all.py`` (upsert, sources, areas, stats) and
-``scripts/purge_foreign_places.py`` (prune). Every dataset upserts through the
-single :func:`upsert_sql`, so the curated-category guard can never be bypassed by
-a dataset-specific SQL such as the old ``seed_region.UPSERT_SQL``.
+Every dataset upserts through the single :func:`upsert_sql`, so the
+curated-category guard cannot be bypassed by a dataset-specific SQL.
 
 Imported lazily by the CLI so ``--dry-run`` needs no database driver.
 """
@@ -232,7 +230,25 @@ def gather_db_stats(conn) -> dict:
         stats["place_aliases"] = {r[0]: r[1] for r in cur.fetchall()}
         cur.execute("SELECT count(*) FROM areas")
         stats["areas"] = cur.fetchone()[0]
+        cur.execute("SELECT count(*) FROM places WHERE photo_url IS NOT NULL")
+        stats["with_photo"] = cur.fetchone()[0]
     return stats
+
+
+def apply_photos(conn, data_dir: Path) -> int:
+    """Write the committed ``place_photos.json`` onto ``places`` (no network).
+
+    The file is data like the CSVs, so a clean restore must produce the same
+    database whether or not Wikimedia is reachable: this reads what the resolve
+    stage wrote instead of re-resolving it. A checkout without the file simply
+    gets no photos — not an error.
+    """
+    path = data_dir / "place_photos.json"
+    if not path.exists():
+        return 0
+    from .photos import apply_to_db
+
+    return apply_to_db(conn, json.loads(path.read_text(encoding="utf-8")))
 
 
 def prune_foreign(conn, *, apply: bool = False) -> int:

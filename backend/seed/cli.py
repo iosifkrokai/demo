@@ -67,6 +67,7 @@ def cmd_apply(args: argparse.Namespace) -> int:
                 areas_written = 0
                 if not args.no_areas:
                     areas_written = pipeline.load_areas(conn, collected["records"], data_dir)
+                photos_written = pipeline.apply_photos(conn, data_dir)
                 conn.commit()
 
                 embedded = 0
@@ -76,6 +77,7 @@ def cmd_apply(args: argparse.Namespace) -> int:
                     embedded = embeddings.embed_missing(conn)
                 db_stats = pipeline.gather_db_stats(conn)
                 db_stats.update({"upserted": totals, "areas_written": areas_written,
+                                 "photos_written": photos_written,
                                  "embedded": embedded, "embeddings_skipped": args.no_embed})
         except Exception as exc:
             sys.stderr.write(f"[seed] apply failed: {exc}\n")

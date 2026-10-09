@@ -932,7 +932,16 @@ class Pipeline:
         # order stands, and the response says so.
         matrix_order = [c.name for c in route]
         if self._left(turn.t0) >= constants.VALHALLA_ORDER_MIN_LEFT_S:
-            route, info = _valhalla_order(route, info, costing=costing)
+            route, info = _valhalla_order(
+                route,
+                info,
+                costing=costing,
+                # The re-order is optional and can hang on a region-wide tour:
+                # bound it so a router that cannot answer costs seconds, not a
+                # minute, and the matrix order stands.
+                timeout=constants.VALHALLA_ORDER_TIMEOUT_S,
+                retries=constants.VALHALLA_ORDER_RETRIES,
+            )
         else:
             log.info(
                 "deadline: %.1fs left — skipping Valhalla re-ordering",

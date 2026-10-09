@@ -216,15 +216,28 @@ def _matrix_chunk_indices(
         yield start, min(start + chunk_max, total)
 
 
-def _request_with_retry(method: str, url: str, *, params: dict, timeout: float) -> dict:
+def _request_with_retry(
+    method: str,
+    url: str,
+    *,
+    params: dict,
+    timeout: float,
+    retries: int | None = None,
+) -> dict:
     """GET with bounded retries on transient failures.
 
     httpx raises on connect errors / timeouts / 5xx. We catch and retry up to
-    VALHALLA_MAX_RETRIES times with linear backoff. The last error is wrapped
-    as UpstreamUnavailable so main.py can return 503.
+    ``retries`` (VALHALLA_MAX_RETRIES by default) times with linear backoff. The
+    last error is wrapped as UpstreamUnavailable so main.py can return 503.
+
+    An optional call that can afford to give up — the tour re-order, where the
+    planned order is a fine fallback — passes ``retries=0`` so one timeout is
+    not multiplied into a minute of dead time.
     """
+    if retries is None:
+        retries = constants.VALHALLA_MAX_RETRIES
     last_exc: Exception | None = None
-    for attempt in range(1, constants.VALHALLA_MAX_RETRIES + 2):  # 1 + retries
+    for attempt in range(1, retries + 2):  # 1 + retries
         try:
             with httpx.Client(timeout=timeout) as client:
                 r = client.request(method, url, params=params)
@@ -247,7 +260,7 @@ def _request_with_retry(method: str, url: str, *, params: dict, timeout: float) 
             status = getattr(getattr(e, "response", None), "status_code", None)
             if status is not None and 400 <= status < 500 and status != 429:
                 break
-            if attempt > constants.VALHALLA_MAX_RETRIES:
+            if attempt > retries:
                 break
             _time.sleep(0.5 * attempt)  # 0.5s, 1.0s between retries
     raise UpstreamUnavailable(f"valhalla {method} {url} failed after retries: {last_exc}")
@@ -817,6 +830,7 @@ def optimized_route(
     costing: str = "pedestrian",
     language: str = "ru",
     timeout: float | None = None,
+    retries: int | None = None,
 ) -> tuple[list[int], dict, dict | None]:
     """Valhalla's own stop ordering: GET /optimized_route.
 
@@ -839,6 +853,7 @@ def optimized_route(
         f"{settings.VALHALLA_URL.rstrip('/')}/optimized_route",
         params={"json": json.dumps(payload, separators=(",", ":"))},
         timeout=timeout or constants.VALHALLA_TIMEOUT_S,
+        retries=retries,
     )
     trip = body.get("trip") or {}
     order: list[int] = []
