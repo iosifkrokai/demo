@@ -2,7 +2,7 @@
  * Mobile density tokens — everything that makes a phone-sized screen fit in one
  * file, instead of a `max-md:h-*` scattered through every caller (that sprinkle
  * is what made the panel's own blocks grow until the main action fell out of the
- * sheet: see docs/specs/004-mobile-first-frontend).
+ * sheet).
  *
  * The classes are width-based on purpose. The panel's contents are one tree
  * shared by both shells, so the phone density has to come from the viewport, not

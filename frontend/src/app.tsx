@@ -8,7 +8,7 @@ import { Toaster } from '@/components/ui/sonner';
 export const App = () => {
   // The ONE viewport branch in the app. Everything below belongs to exactly one
   // of the two shells — the desktop column or the mobile sheet — and neither
-  // reaches into the other (docs/specs/004-mobile-first-frontend).
+  // reaches into the other.
   const isMobile = useIsMobile();
 
   return (

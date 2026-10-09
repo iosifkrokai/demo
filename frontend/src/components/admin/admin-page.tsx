@@ -103,12 +103,20 @@ export function AdminPage() {
         </div>
       )}
 
-      <div className="flex gap-1 rounded-2xl border border-border bg-card p-1">
+      <div
+        role="tablist"
+        aria-label="Разделы админки"
+        className="flex gap-1 rounded-2xl border border-border bg-card p-1"
+      >
         <button
           type="button"
+          role="tab"
+          id="admin-tab-users"
+          aria-selected={tab === 'users'}
+          aria-controls="admin-panel"
           data-testid="admin-tab-users"
           onClick={() => setTab('users')}
-          className={`flex-1 rounded-xl px-3 py-1.5 text-meta font-medium transition-colors ${
+          className={`flex-1 rounded-xl px-3 py-1.5 text-meta font-medium transition-colors max-md:min-h-10 ${
             tab === 'users'
               ? 'bg-primary text-primary-foreground'
               : 'hover:bg-muted'
@@ -118,9 +126,13 @@ export function AdminPage() {
         </button>
         <button
           type="button"
+          role="tab"
+          id="admin-tab-places"
+          aria-selected={tab === 'places'}
+          aria-controls="admin-panel"
           data-testid="admin-tab-places"
           onClick={() => setTab('places')}
-          className={`flex-1 rounded-xl px-3 py-1.5 text-meta font-medium transition-colors ${
+          className={`flex-1 rounded-xl px-3 py-1.5 text-meta font-medium transition-colors max-md:min-h-10 ${
             tab === 'places'
               ? 'bg-primary text-primary-foreground'
               : 'hover:bg-muted'
@@ -130,11 +142,17 @@ export function AdminPage() {
         </button>
       </div>
 
-      {tab === 'users' ? (
-        <UsersPanel enabled={isAdmin} currentUserId={user?.id ?? null} />
-      ) : (
-        <PlacesPanel enabled={isAdmin} />
-      )}
+      <div
+        role="tabpanel"
+        id="admin-panel"
+        aria-labelledby={`admin-tab-${tab}`}
+      >
+        {tab === 'users' ? (
+          <UsersPanel enabled={isAdmin} currentUserId={user?.id ?? null} />
+        ) : (
+          <PlacesPanel enabled={isAdmin} />
+        )}
+      </div>
     </main>
   );
 }

@@ -1,5 +1,5 @@
 /**
- * The agent's client API (docs/specs/003-client-entity §3), in one place.
+ * The agent's client API, in one place.
  *
  * Every call goes to a same-origin relative path: the webapp's nginx (and the
  * dev Vite proxy) forwards `/clients/*` to the agent, so nothing here hardcodes

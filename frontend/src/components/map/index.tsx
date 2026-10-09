@@ -1031,7 +1031,10 @@ export const MapComponent = () => {
         }
         mapStyle={resolvedMapStyle}
         attributionControl={false}
-        style={{ width: '100%', height: '100vh' }}
+        // dvh, not vh: on mobile the dynamic browser chrome makes 100vh taller
+        // than the visible viewport, pushing the bottom-anchored controls off
+        // screen. Every other shell here already uses dvh.
+        style={{ width: '100%', height: '100dvh' }}
         maxBounds={maxBounds}
         minZoom={2}
         maxZoom={18}
@@ -1226,7 +1229,7 @@ export const MapComponent = () => {
             isMobile
               ? guiding
                 ? 'left-3 top-[calc(max(env(safe-area-inset-top),0.75rem)+10rem)] items-start'
-                : 'bottom-[calc(var(--sheet-h,0px)+0.75rem)] right-3 items-end'
+                : 'bottom-[calc(env(safe-area-inset-bottom)+var(--sheet-h,0px)+0.75rem)] right-3 items-end'
               : guiding
                 ? // Under the HUD cluster (exit + sound, 2x44 + 8 gap = 96px),
                   // which starts 7rem below the same top inset.

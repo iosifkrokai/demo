@@ -1818,7 +1818,7 @@ export const Sidebar = ({
                               selected={amenities[option.code] === 'hard'}
                               onClick={() => toggleAmenity(option.code, 'hard')}
                               data-testid={`amenity-${option.code}-hard`}
-                              className="h-7 px-2 text-meta"
+                              className="px-2 text-meta"
                             >
                               {t('sidebar.plan.hard')}
                             </Chip>
@@ -1826,7 +1826,7 @@ export const Sidebar = ({
                               selected={amenities[option.code] === 'soft'}
                               onClick={() => toggleAmenity(option.code, 'soft')}
                               data-testid={`amenity-${option.code}-soft`}
-                              className="h-7 px-2 text-meta"
+                              className="px-2 text-meta"
                             >
                               {t('sidebar.plan.soft')}
                             </Chip>
@@ -2197,7 +2197,7 @@ export const Sidebar = ({
               scroll area, so it is reachable at either snap point. The guide
               brings its own actions, so the footer steps out of its way. ── */}
       {!guiding && mode === 'plan' && (
-        <footer className="order-4 shrink-0 border-t border-border bg-background px-4 py-3 max-md:px-3 max-md:py-1.5">
+        <footer className="order-4 shrink-0 border-t border-border bg-background px-4 py-3 max-md:px-3 max-md:pt-1.5 max-md:pb-[calc(env(safe-area-inset-bottom)+0.375rem)]">
           {/* Honest waiting: only what the client can observe — the request
                   is in flight, or the plan has arrived and the line is being
                   drawn — plus the seconds that have passed and a real cancel.

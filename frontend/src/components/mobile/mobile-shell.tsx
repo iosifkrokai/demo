@@ -24,7 +24,7 @@ import type { SheetHandleProps } from '@/components/parts/sheet-snap';
  * map controls ride above, the strip used while walking) and renders the same
  * panel contents inside it. Contents do not know how tall they are — that is
  * what went wrong when the panel's own blocks grew and pushed the main action
- * out of the sheet (see docs/specs/004-mobile-first-frontend).
+ * out of the sheet.
  *
  * Still a Radix sheet on purpose: the panel contains `SheetTitle`/`SheetDescription`,
  * which need the dialog context — and the dialog role/name is what screen
@@ -32,6 +32,10 @@ import type { SheetHandleProps } from '@/components/parts/sheet-snap';
  */
 const SHEET_CLASS = [
   'bg-background p-0 gap-0 overflow-hidden rounded-t-3xl border-t border-border shadow-sheet',
+  // Keep the sheet's own content (the primary CTA) clear of the home indicator
+  // on notched devices — the floating controls ride above `--sheet-h`, but the
+  // content inside the sheet sits at its bottom edge.
+  'pb-[env(safe-area-inset-bottom)]',
   // The height is animated only when it is *not* being dragged. During a drag the
   // height is rewritten on every pointer move to follow the finger, and a 200ms
   // transition on top of that is what made the panel feel like it was being
@@ -136,7 +140,7 @@ export const MobileShell = ({
       {!panelOpen && (
         <div
           data-testid="mobile-sheet-opener"
-          className="absolute inset-x-0 bottom-[calc(var(--sheet-h,0px)+0.75rem)] z-10 flex justify-center px-3 md:hidden"
+          className="absolute inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+var(--sheet-h,0px)+0.75rem)] z-10 flex justify-center px-3 md:hidden"
         >
           <Button
             type="button"

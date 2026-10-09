@@ -4,12 +4,13 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { describeAccountError, useRegister } from '@/hooks/use-auth';
+import { appPath } from '@/utils/app-path';
 
 /**
  * Create an account (spec 005 §3).
  *
  * Registration always makes a plain `user`; the first administrator is created by
- * `scripts/create_admin.py`, not by being first to sign up.
+ * `python -m seed admin`, not by being first to sign up.
  *
  * The anonymous client is adopted here: the browser's `X-Client-Id` (sent by
  * `api/account.ts`) becomes this account's, so routes and preferences saved
@@ -36,7 +37,9 @@ export function RegisterPage() {
       {
         onSuccess: () =>
           window.location.assign(
-            returnTo && returnTo.startsWith('/') ? returnTo : '/directions'
+            appPath(
+              returnTo && returnTo.startsWith('/') ? returnTo : '/directions'
+            )
           ),
         onError: (err) => setError(describeAccountError(err)),
       }
@@ -103,6 +106,7 @@ export function RegisterPage() {
 
         {error && (
           <p
+            role="alert"
             data-testid="register-error"
             className="text-meta text-destructive"
           >

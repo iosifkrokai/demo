@@ -1,5 +1,5 @@
 /**
- * The wire types of the client entity (docs/specs/003-client-entity, §2–§3).
+ * The wire types of the client entity.
  *
  * Honesty rule that runs through this file: `null` means «не указано» — a
  * field the tourist never filled in, or one the server did not send. It is

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { describeAccountError, useLogin } from '@/hooks/use-auth';
+import { appPath } from '@/utils/app-path';
 
 /**
  * Enter an existing account (spec 005 §3).
@@ -30,7 +31,9 @@ export function LoginPage() {
           // A full navigation, not a router push: the app re-reads the session on
           // load, so the guard sees the fresh cookie instead of a stale cache.
           window.location.assign(
-            returnTo && returnTo.startsWith('/') ? returnTo : '/directions'
+            appPath(
+              returnTo && returnTo.startsWith('/') ? returnTo : '/directions'
+            )
           ),
         onError: (err) => setError(describeAccountError(err)),
       }
@@ -76,7 +79,11 @@ export function LoginPage() {
         </label>
 
         {error && (
-          <p data-testid="login-error" className="text-meta text-destructive">
+          <p
+            role="alert"
+            data-testid="login-error"
+            className="text-meta text-destructive"
+          >
             {error}
           </p>
         )}

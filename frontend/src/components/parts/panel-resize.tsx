@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type {
   KeyboardEvent as ReactKeyboardEvent,
   PointerEvent as ReactPointerEvent,
@@ -106,6 +106,15 @@ export const usePanelWidth = (): PanelWidth => {
   }, []);
 
   const reset = useCallback(() => setWidth(PANEL_WIDTH_DEFAULT), [setWidth]);
+
+  // The viewport share is re-applied on resize: a width chosen on a wide screen
+  // must not keep eating the map after the window is narrowed. The stored value
+  // is not rewritten, so the tourist's actual choice survives a reload.
+  useEffect(() => {
+    const onResize = () => setWidthState((current) => clampPanelWidth(current));
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
 
   const onPointerDown = useCallback(
     (event: ReactPointerEvent<HTMLElement>) => {

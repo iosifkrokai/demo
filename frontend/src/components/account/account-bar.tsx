@@ -1,9 +1,10 @@
 import { Link } from '@tanstack/react-router';
 import { LogOut, MapPinned, ShieldCheck, UserRound } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { useAuth, useLogout } from '@/hooks/use-auth';
+import { appPath } from '@/utils/app-path';
 
 const menuLink =
   'flex items-center gap-2 rounded-xl px-2.5 py-2 text-meta transition-colors hover:bg-muted';
@@ -19,13 +20,33 @@ export function AccountBar() {
   const { user, authenticated, isAdmin, isLoading } = useAuth();
   const logout = useLogout();
   const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Dismissal beyond the toggle itself: Escape and a click/tap anywhere else.
+  // Without these the menu only closed by pressing the same button again.
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false);
+    };
+    const onPointerDown = (event: PointerEvent) => {
+      if (!containerRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener('keydown', onKeyDown);
+    document.addEventListener('pointerdown', onPointerDown);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      document.removeEventListener('pointerdown', onPointerDown);
+    };
+  }, [open]);
 
   if (isLoading) return null;
 
   return (
     <div
+      ref={containerRef}
       data-testid="account-bar"
-      className="pointer-events-auto fixed right-2 top-2 z-40 flex flex-col items-end gap-1"
+      className="pointer-events-auto fixed right-2 top-[calc(env(safe-area-inset-top)+0.5rem)] z-40 flex flex-col items-end gap-1"
     >
       {!authenticated ? (
         <Button asChild size="sm" variant="outline" data-testid="account-login">
@@ -41,6 +62,8 @@ export function AccountBar() {
             size="sm"
             variant="outline"
             aria-expanded={open}
+            aria-haspopup="menu"
+            aria-controls="account-menu"
             data-testid="account-menu-button"
             onClick={() => setOpen((value) => !value)}
           >
@@ -52,6 +75,9 @@ export function AccountBar() {
 
           {open && (
             <div
+              id="account-menu"
+              role="menu"
+              aria-label="Меню аккаунта"
               data-testid="account-menu"
               className="flex w-56 flex-col gap-0.5 rounded-2xl border border-border bg-card p-1.5 shadow-float"
             >
@@ -60,6 +86,7 @@ export function AccountBar() {
               </div>
               <Link
                 to="/visited"
+                role="menuitem"
                 className={menuLink}
                 onClick={() => setOpen(false)}
                 data-testid="account-visited"
@@ -70,6 +97,7 @@ export function AccountBar() {
               {isAdmin && (
                 <Link
                   to="/admin"
+                  role="menuitem"
                   className={menuLink}
                   onClick={() => setOpen(false)}
                   data-testid="account-admin"
@@ -80,6 +108,7 @@ export function AccountBar() {
               )}
               <button
                 type="button"
+                role="menuitem"
                 className={`${menuLink} text-left`}
                 data-testid="account-logout"
                 onClick={() => {
@@ -87,7 +116,7 @@ export function AccountBar() {
                   // Signing out must leave the gated app: without this the page
                   // the guard would refuse on the next navigation stays on screen.
                   logout.mutate(undefined, {
-                    onSettled: () => window.location.assign('/login'),
+                    onSettled: () => window.location.assign(appPath('/login')),
                   });
                 }}
               >

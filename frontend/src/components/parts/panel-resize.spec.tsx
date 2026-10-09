@@ -83,6 +83,17 @@ describe('ширина панели', () => {
     expect(widthNow()).toBe(540);
   });
 
+  it('сжимается до доли экрана при сужении окна', () => {
+    render(<Harness />);
+    expect(widthNow()).toBe(PANEL_WIDTH_DEFAULT);
+
+    // Тот же турист сузил окно: панель не должна съесть карту.
+    window.innerWidth = 500; // потолок = max(340, min(720, 300)) = 340
+    fireEvent(window, new Event('resize'));
+
+    expect(widthNow()).toBe(PANEL_WIDTH_MIN);
+  });
+
   it('управляется с клавиатуры, а Shift двигает крупнее', async () => {
     const user = userEvent.setup();
     render(<Harness />);

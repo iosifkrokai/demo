@@ -1,5 +1,5 @@
 /**
- * The accounts / visits / admin API (docs/specs/005-accounts-visits-admin §3).
+ * The accounts / visits / admin API.
  *
  * Every call is same-origin relative: nginx (and the dev Vite proxy) forwards
  * `/auth/*`, `/me/*` and `/admin/*` to the agent, so nothing hardcodes a host.
