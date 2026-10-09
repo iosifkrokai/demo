@@ -21,6 +21,25 @@ vi.mock('@/hooks/use-services-along', () => ({
   useServicesAlong: vi.fn(),
 }));
 
+// The route details panel renders PlaceCardBody → VisitedToggle, which reaches
+// for the session and the visited registry. Both are react-query hooks, and this
+// spec renders the panel with no QueryClientProvider, so they are stubbed the way
+// useServicesAlong is. Anonymous is enough: the toggle then shows its
+// «войдите, чтобы отмечать» hint and asks the server nothing.
+vi.mock('@/hooks/use-auth', () => ({
+  useAuth: () => ({
+    user: null,
+    authenticated: false,
+    isAdmin: false,
+    isLoading: false,
+  }),
+  describeAccountError: (error: unknown) => String(error),
+}));
+vi.mock('@/hooks/use-visited', () => ({
+  useVisitedIds: () => new Set<number>(),
+  useToggleVisited: () => ({ mutate: vi.fn(), isPending: false }),
+}));
+
 import type { ParsedDirectionsGeometry } from '@/components/types';
 import i18n from '@/i18n';
 import { useCommonStore } from '@/stores/common-store';

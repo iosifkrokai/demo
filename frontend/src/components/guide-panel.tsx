@@ -475,8 +475,12 @@ export const GuidePanel = ({
     startInMoving ? 'moving' : 'review'
   );
   useEffect(() => {
-    if (startInMoving) setMode('moving');
-    else if (overviewOpen) setMode('review');
+    // The overview wins: expanding the sheet to look at the route is a
+    // deliberate act, and the moving HUD has no room for it. Checking
+    // `startInMoving` first made «показать маршрут во время ходьбы» impossible —
+    // the mode stayed 'moving' and the overview never appeared.
+    if (overviewOpen) setMode('review');
+    else if (startInMoving) setMode('moving');
   }, [startInMoving, overviewOpen]);
   /** Details stay open until the tourist deliberately collapses them. */
   const [detailsOpen, setDetailsOpen] = useState(true);
