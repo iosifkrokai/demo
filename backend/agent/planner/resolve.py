@@ -7,7 +7,7 @@ Merges IntentDecision with explicit client parameters:
 
 Rule for named-place resolution:
   - A NAME match (similarity threshold MET) → the POI is a real place the user
-    explicitly asked for → must_visit_ids.  Example: "Мирскому замку" → Мирский замок.
+    explicitly asked for → must_visit_ids.  Example: "Мирскому замку" → Mir Castle.
   - A TOWN / DISTRICT match only → the token names an area, not a specific POI →
     area_anchor.  The pipeline uses it to set the geo focus; it does NOT force
     a POI into the route.  Example: "Гродно" in "замки Гродно" → geo anchor only.
@@ -38,7 +38,7 @@ log = logging.getLogger(__name__)
 # intent fallback (planner/intent.py) inverts it to fill categories_pos —
 # the taxonomy lives HERE, never duplicated per call site.
 CATEGORY_SYNONYMS: dict[str, list[str]] = {
-    # ── heritage taxonomy ──
+    # heritage taxonomy
     "замок": [
         "замок", "замка", "замку", "замком", "замке",
         "замки", "замков", "замкам", "замками", "замках",
@@ -48,7 +48,7 @@ CATEGORY_SYNONYMS: dict[str, list[str]] = {
     "костёл": [
         "костёл", "костёла", "костёлу", "костёлом", "костёле",
         "костёлы", "костёлов", "костёлам", "костёлами", "костёлах",
-        # без ё — как пишут в запросах и в OSM-названиях
+        # without ё — as written in queries and OSM names
         "костел", "костела", "костелу", "костелем", "костеле",
         "костелы", "костелов", "костелам", "костелами", "костелах",
     ],
@@ -108,7 +108,7 @@ CATEGORY_SYNONYMS: dict[str, list[str]] = {
         "кладбищам", "кладбищами", "кладбищах",
         "некрополь", "некрополя", "некрополю", "некрополем", "некрополе",
     ],
-    # ── everyday stops (OSM amenity/tourism POIs) ──
+    # everyday stops (OSM amenity/tourism POIs)
     "кафе": [
         "кафе",
         "кофейня", "кофейни", "кофейне", "кофейню", "кофейной",
@@ -226,7 +226,7 @@ def resolve(
 ) -> ResolvedConstraints:
     d = intent.decision
 
-    # ── Time budget: explicit > LLM > none ──
+    # Time budget: explicit > LLM > none
     # No time limit stated by the user → no limit at all. A default of 120 min
     # used to be applied silently, which trimmed the route to whatever fit two
     # hours the user never asked for. 0 is the UI's "без ограничения" value and
@@ -239,14 +239,14 @@ def resolve(
     if budget is not None:
         budget = max(constants.MIN_BUDGET_MIN, min(budget, constants.MAX_BUDGET_MIN))
 
-    # ── Bbox: explicit wins; else None. Format: (W, S, E, N) — matches ST_MakeEnvelope.
+    # Bbox: explicit wins; else None. Format: (W, S, E, N) — matches ST_MakeEnvelope.
     bbox: tuple[float, float, float, float] | None = None
     if explicit_bbox is not None and len(explicit_bbox) == 4:
         # Reorder from [south, west, north, east] (HTTP) to (W, S, E, N).
         s, w, n, e = (float(v) for v in explicit_bbox)
         bbox = (w, s, e, n)
 
-    # ── Named places → must_visit_ids + area_anchor ──
+    # Named places → must_visit_ids + area_anchor
     #   must_visit_ids  : real POI name matches (definite places the user named)
     #   area_anchor     : first town/district-only match (for geo focus), or None
     must_visit_ids, area_anchor, resolved_names = _resolve_named_places(
@@ -262,11 +262,11 @@ def resolve(
     # verifier reports it honestly as absent.
     must_visit_ids = _without_forbidden(must_visit_ids, d.categories_neg, db)
 
-    # ── Build must_visit_keywords (used by retrieval as a strong positive signal) ──
+    # Build must_visit_keywords (used by retrieval as a strong positive signal)
     must_visit_keywords = _expand_categories_to_keywords(d.categories_pos)
     must_visit_keywords.extend(d.keywords_pos)
 
-    # ── Era hint: pass through ──
+    # Era hint: pass through
     era_hint = d.era_hint if d.era_hint in ("any", "pre1900", "soviet", "modern") else "any"
 
     return ResolvedConstraints(

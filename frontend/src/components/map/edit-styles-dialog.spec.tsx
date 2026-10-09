@@ -151,7 +151,8 @@ describe('EditStylesDialog', () => {
 
     expect(screen.getByText('Invalid JSON syntax')).toBeInTheDocument();
 
-    // specific syntax causing issues with user-event, simple character type is enough to trigger onChange and clear error
+    // user-event cannot type the brace characters, so one plain character is
+    // enough to fire onChange and clear the error.
     await user.type(textarea, 'a');
 
     await waitFor(() => {

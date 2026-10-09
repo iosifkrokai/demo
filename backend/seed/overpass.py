@@ -23,9 +23,7 @@ from typing import Any
 
 import httpx
 
-# ---------------------------------------------------------------------------
 # Constants
-# ---------------------------------------------------------------------------
 
 # Grodno region bbox in the public (W, S, E, N) order — the same box as
 # agent/constants.py GRODNO_BBOX = {south: 52.75, west: 23.35, north: 54.80,
@@ -113,9 +111,7 @@ RAION_CENTRES: dict[str, tuple[float, float]] = {
     "Слонимский": (53.0936, 25.3203),
 }
 
-# ---------------------------------------------------------------------------
 # Helpers
-# ---------------------------------------------------------------------------
 
 
 def haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -317,6 +313,5 @@ def write_pipe_csv(rows: list[dict[str, Any]], path: Path, columns: Sequence[str
     with path.open("w", encoding="utf-8") as fh:
         fh.write("# " + "|".join(fieldnames) + "\n")
         writer = csv.DictWriter(fh, fieldnames=fieldnames, delimiter="|", quoting=csv.QUOTE_MINIMAL)
-        # header already written as comment
         for row in rows:
             writer.writerow(row)

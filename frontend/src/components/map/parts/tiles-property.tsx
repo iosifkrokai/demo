@@ -29,7 +29,6 @@ export function TilesProperty({
   propertyKey,
   value,
 }: TilesPropertyProps): ReactNode {
-  // OSM ID - link to OpenStreetMap
   if (
     (propertyKey === 'osm_id' || propertyKey === 'osm_way_id') &&
     (typeof value === 'number' || typeof value === 'string')

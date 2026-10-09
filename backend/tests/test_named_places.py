@@ -20,7 +20,7 @@ from agent.models import Candidate, LatLon
 from agent.planner.intent import _PLACE_STOP_LIST
 from agent.planner.pipeline import _geo_focus, should_skip_geo_focus
 
-# ── region scope must never discard the tourist's own position ──────────────
+# region scope must never discard the tourist's own position
 
 
 def test_region_scope_may_keep_its_spread_without_a_position():
@@ -47,7 +47,7 @@ def _extract_named_place_tokens(query: str) -> list[str]:
     return [t for t in tokens if t.lower() not in _PLACE_STOP_LIST]
 
 
-# ── Fake Candidate builder ──────────────────────────────────────────────────
+# Fake Candidate builder
 
 def _c(id: int, name: str, lat: float, lon: float, rrf_score: float = 0.0) -> Candidate:
     return Candidate(
@@ -60,7 +60,7 @@ def _c(id: int, name: str, lat: float, lon: float, rrf_score: float = 0.0) -> Ca
     )
 
 
-# ── Token-extraction tests ───────────────────────────────────────────────────
+# Token-extraction tests
 
 class TestExtractNamedPlaceTokens:
     """Defect 1: stop-list was comparing t.lower() against CAPITALISED entries,
@@ -104,7 +104,7 @@ class TestExtractNamedPlaceTokens:
         assert "Новогрудок" in tokens   # real place survives
 
 
-# ── _geo_focus tests ─────────────────────────────────────────────────────────
+# _geo_focus tests
 
 class TestGeoFocus:
     """Defect 4: anchor_id branch had dead assignment `anchor3 = anchor` and
@@ -154,7 +154,7 @@ class TestGeoFocus:
         ids = {c.id for c in result}
         assert 38 in ids      # anchor itself always included
         assert 39 in ids      # nearby — within 36 km
-        assert 49 not in ids  # Groдно — > 36 km, must NOT be pulled in
+        assert 49 not in ids  # Grodno — > 36 km, must NOT be pulled in
 
     def test_named_anchor_isolated_keeps_radius(self):
         """An isolated named place returns just the anchor — we never inflate the
@@ -199,7 +199,7 @@ class TestGeoFocus:
         assert _geo_focus([], anchor_id=1) == []
 
 
-# ── extract_intent integration (mock LLM) ────────────────────────────────────
+# extract_intent integration (mock LLM)
 
 class TestExtractIntentNamedPlaces:
     """Verify that extract_intent populates named_places correctly.  The reader

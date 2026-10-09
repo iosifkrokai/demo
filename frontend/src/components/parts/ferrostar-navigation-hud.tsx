@@ -149,7 +149,7 @@ export const FerrostarNavigationHud = ({
           and grows downward, whatever the banner turns out to be.
 
           `md:right-[4.5rem]` leaves the right gutter to the floating cluster
-          (выход / звук) further down: the stack used to run under it, and an
+          (exit / sound) further down: the stack used to run under it, and an
           alert under those buttons was unreachable. */}
       <div
         data-testid="guide-top-stack"
@@ -193,7 +193,6 @@ export const FerrostarNavigationHud = ({
             'calc(var(--sheet-h,0px) + env(safe-area-inset-bottom) + 0.5rem)',
         }}
       >
-        {/* Details panel — the stop list, on demand. */}
         {detailsOpen && (
           <div
             data-testid="guide-details-panel"
@@ -339,7 +338,6 @@ export const FerrostarNavigationHud = ({
           </div>
         </div>
 
-        {/* Details toggle + advance. */}
         <div className="pointer-events-auto flex shrink-0 items-center justify-between gap-2">
           <button
             type="button"

@@ -39,7 +39,7 @@ GEOJSON = {
 }
 
 
-# ── Fixtures: the OpenRouter key is the switch between modes ─────────────────
+# Fixtures: the OpenRouter key is the switch between modes
 
 @pytest.fixture
 def no_key(monkeypatch):
@@ -73,7 +73,7 @@ def _plan(*stops: Candidate) -> ValidatedPlan:
     )
 
 
-# ── (1) No key → deterministic reading, honest provenance ────────────────────
+# (1) No key → deterministic reading, honest provenance
 
 class TestNoKeyIsDeterministic:
 
@@ -116,7 +116,7 @@ class TestNoKeyIsDeterministic:
         assert intent.decision.categories_pos == ["замок"]
 
 
-# ── (2) A visible UI filter is never overridden by the model ─────────────────
+# (2) A visible UI filter is never overridden by the model
 
 class TestUiFilterWins:
 
@@ -172,7 +172,7 @@ class TestUiFilterWins:
         assert "музей" in tr.interest_codes()
 
 
-# ── (3) A tool/upstream failure degrades, never a 500 ───────────────────────
+# (3) A tool/upstream failure degrades, never a 500
 
 class TestFailuresDegrade:
 
@@ -218,7 +218,7 @@ class TestFailuresDegrade:
         assert "502" in exc.value.detail
 
 
-# ── (4) verify.py decides, not the model ────────────────────────────────────
+# (4) verify.py decides, not the model
 
 class TestVerifierDecides:
 
@@ -264,7 +264,7 @@ class TestVerifierDecides:
         assert overall_status(tr) == "degraded"
 
 
-# ── (5) The client-visible interpretation block, unmet included ─────────────
+# (5) The client-visible interpretation block, unmet included
 
 class TestInterpretationBlock:
     """`RouteResponse.interpretation` — what the system understood, one place.

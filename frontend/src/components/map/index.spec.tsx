@@ -101,7 +101,6 @@ vi.mock('react-map-gl/maplibre', async () => {
         },
         ref: React.Ref<typeof mockMapRef>
       ) => {
-        // Set up the ref to return our mock map
         React.useImperativeHandle(ref, () => mockMapRef);
 
         return (
@@ -598,7 +597,7 @@ describe('MapComponent', () => {
     }
   });
 
-  // ── Reading about a point ────────────────────────────────────────────────
+  // Reading about a point
   //
   // One place has exactly one reader on screen: the popup by the pin on a wide
   // screen, the card at the bottom of the map on a phone. Rendering both would
@@ -657,7 +656,6 @@ describe('MapComponent', () => {
       render(<MapComponent />);
       const isPhone = () => window.matchMedia('(max-width: 767px)').matches;
 
-      // No count block, no card, no button to reveal anything.
       expect(
         screen.queryByTestId('mobile-services-chip')
       ).not.toBeInTheDocument();
@@ -928,7 +926,6 @@ describe('MapComponent', () => {
         touches: [{ identifier: 0, target: map }],
       });
 
-      // first tap
       fireEvent.touchStart(map, createTouchEvent());
       fireEvent.click(map);
 
@@ -995,7 +992,6 @@ describe('MapComponent', () => {
 
       const map = screen.getByTestId('map');
 
-      // first tap
       fireEvent.touchStart(map, {
         touches: [{ identifier: 0, target: map }],
       });

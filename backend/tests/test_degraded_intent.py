@@ -42,7 +42,7 @@ from agent.requirements import PartyComposition, Requirement, TripRequirements
 QUERY = "Хочу погулять по замкам Гродно"
 
 
-# ── Fixtures: the key is the switch between degraded and full mode ───────────
+# Fixtures: the key is the switch between degraded and full mode
 
 @pytest.fixture
 def no_key(monkeypatch):
@@ -78,9 +78,7 @@ def _agent_contract(*, source: str = "llm") -> TripRequirements:
     )
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Categories: the shared map, read off the query text
-# ─────────────────────────────────────────────────────────────────────────────
 
 class TestFallbackCategories:
 
@@ -175,7 +173,7 @@ class TestFallbackCategories:
         assert res.raw_response is None
         assert res.decision.intent_type in constants.INTENT_TYPES
 
-    # ── The map is reused, never duplicated ─────────────────────────────────
+    # The map is reused, never duplicated
 
     def test_inverted_index_is_the_shared_map_turned_around(self):
         """The fallback's lookup must be exactly resolve.CATEGORY_SYNONYMS,
@@ -215,9 +213,7 @@ class TestFallbackCategories:
         assert not (sightseeing & set(d.categories_neg)), "sightseeing categories must not be exclusive"
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Time budget: only what the query itself states
-# ─────────────────────────────────────────────────────────────────────────────
 
 class TestFallbackTimeBudget:
 
@@ -251,9 +247,7 @@ class TestFallbackTimeBudget:
         assert d.time_budget_minutes == 180
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Named places: DB-driven, unchanged
-# ─────────────────────────────────────────────────────────────────────────────
 
 class TestFallbackNamedPlaces:
 
@@ -275,9 +269,7 @@ class TestFallbackNamedPlaces:
         assert d.time_budget_minutes is None
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # English in the degraded path: the shared map is RU *and* EN
-# ─────────────────────────────────────────────────────────────────────────────
 
 class TestFallbackEnglish:
 
@@ -303,9 +295,7 @@ class TestFallbackEnglish:
         assert set(constants.CATEGORIES) <= set(_SURFACE_FORMS.values())
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # The requirements entry point in the degraded path (spec 002 §4.1/§4.2)
-# ─────────────────────────────────────────────────────────────────────────────
 
 class TestDegradedRequirements:
 
@@ -349,9 +339,7 @@ class TestDegradedRequirements:
         assert tr.source == "fallback"
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # With the agent answering: its contract drives, the map does not
-# ─────────────────────────────────────────────────────────────────────────────
 
 class TestAgentContractPath:
 

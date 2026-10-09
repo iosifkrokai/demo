@@ -69,9 +69,7 @@ def _now() -> datetime:
     return datetime.now(UTC)
 
 
-# ============================================================================
 # Fakes
-# ============================================================================
 
 class FakeRepo:
     """In-memory ClientRepository with real cascade semantics.
@@ -192,9 +190,7 @@ def _save_route(client, *, plan=PLAN, query="замки Гродно",
     return client.post("/clients/me/routes", json=body, headers=headers)
 
 
-# ============================================================================
 # No X-Client-Id at all — work, but honestly without saving
-# ============================================================================
 
 class TestNoClientId:
 
@@ -238,9 +234,7 @@ class TestNoClientId:
         assert r.status_code == 200
 
 
-# ============================================================================
 # Preferences — partial update, explicit null clears
-# ============================================================================
 
 class TestPreferences:
 
@@ -303,9 +297,7 @@ class TestPreferences:
         assert other["transport"] is None
 
 
-# ============================================================================
 # Routes — save verbatim, read back byte-identical
-# ============================================================================
 
 class TestRoutes:
 
@@ -414,9 +406,7 @@ class TestRoutes:
             del agent_main.app.state.clients_repository
 
 
-# ============================================================================
 # DELETE /clients/me — cascades
-# ============================================================================
 
 class TestDeleteClient:
 
@@ -437,9 +427,7 @@ class TestDeleteClient:
         assert client.delete("/clients/me", headers=HEADERS).status_code == 204
 
 
-# ============================================================================
 # Storage down — 503 storage_unavailable everywhere, never a 500
-# ============================================================================
 
 class TestStorageDown:
 
@@ -466,9 +454,7 @@ class TestStorageDown:
         assert r.json() == {"reason": "storage_unavailable"}
 
 
-# ============================================================================
 # The storage layer itself
-# ============================================================================
 
 class FakeCursor:
     def __init__(self, conn):
@@ -610,9 +596,7 @@ class TestStore:
                 call()
 
 
-# ============================================================================
 # route_metrics — the derivation the list leans on
-# ============================================================================
 
 class TestRouteMetrics:
 
@@ -631,9 +615,7 @@ class TestRouteMetrics:
         assert m == {"stop_count": 0, "distance_m": None, "duration_min": None}
 
 
-# ============================================================================
 # The real thing: live Postgres, skipped when unreachable
-# ============================================================================
 
 def _db_up() -> bool:
     try:

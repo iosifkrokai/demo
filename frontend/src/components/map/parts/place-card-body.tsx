@@ -91,7 +91,6 @@ export function PlaceCardBody({
         <X className={mobile ? 'size-4' : 'size-3.5'} />
       </Button>
 
-      {/* Header: name + category */}
       <div
         className={
           mobile
@@ -104,7 +103,6 @@ export function PlaceCardBody({
         {details.name || t('sidebar.waypoints.unnamed')}
       </div>
 
-      {/* Badges: category + visit time */}
       <div className="flex flex-wrap items-center gap-1.5">
         {details.category && (
           <Badge variant="secondary" className="capitalize">
@@ -122,7 +120,6 @@ export function PlaceCardBody({
       {/* The tourist's own mark: durable, per account (spec 005). */}
       <VisitedToggle placeId={placeId} />
 
-      {/* The picture, when the dataset has one. Most points do not. */}
       {details.photo && (
         <PlacePhoto
           photo={details.photo}
@@ -169,7 +166,6 @@ export function PlaceCardBody({
         </div>
       )}
 
-      {/* Description */}
       {details.blurb && (
         <p
           className={
@@ -288,7 +284,6 @@ export function PlaceCardBody({
         )
       ) : (
         <>
-          {/* Extra facts */}
           {details.funFacts && details.funFacts.length > 0 && (
             <div className="flex flex-col gap-1.5 border-l-2 border-primary/20 pl-3">
               <span className="text-badge uppercase tracking-wide text-muted-foreground">
@@ -308,7 +303,6 @@ export function PlaceCardBody({
             </div>
           )}
 
-          {/* Links */}
           {details.links && details.links.length > 0 && (
             <div className="flex flex-col gap-1">
               <span className="text-badge uppercase tracking-wide text-muted-foreground">

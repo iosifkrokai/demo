@@ -75,7 +75,7 @@ except ImportError as exc:  # pragma: no cover
 
 log = logging.getLogger(__name__)
 
-# ── Limits ──────────────────────────────────────────────────────────────────
+# Limits
 # Hard budgets for one interpretation. They bound cost, latency and blast radius;
 # exceeding any of them returns None and the request falls back to the keyword
 # reader. Measured: too tight a ceiling is what starved the reading, not the model
@@ -132,7 +132,7 @@ def _model_name() -> str:
     return os.environ.get("AGENT_INTERPRET_MODEL") or DEFAULT_MODEL
 
 
-# ── The agent's output schema ───────────────────────────────────────────────
+# The agent's output schema
 # Deliberately NOT `TripRequirements`: there is no `status`, no `place_ids`, no
 # `reason`. The model fills meaning; the verifier fills verdicts.
 
@@ -178,7 +178,7 @@ class AgentReading(BaseModel):
     # None means "no opinion": the request's value stands.
     result_mode: Literal["route", "catalogue"] | None = None
     # Names in the request that lie outside the region this system serves
-    # (Гродненская область, Belarus): a foreign city or landmark ("Вильнюс",
+    # (the Grodno region, Belarus): a foreign city or landmark ("Вильнюс",
     # "Кафедральный собор Святого Станислава в Вильнюсе"), or a Belarusian place
     # beyond the oblast. Reading geography is the model's job; what follows from
     # it — refusing to plan a route somewhere else — is decided deterministically
@@ -186,7 +186,7 @@ class AgentReading(BaseModel):
     outside_coverage: list[str] = Field(default_factory=list)
 
 
-# ── Dependencies handed to the tools ────────────────────────────────────────
+# Dependencies handed to the tools
 
 
 @dataclass
@@ -202,7 +202,7 @@ class InterpretDeps:
     observed_ids: set[int] = field(default_factory=set)
 
 
-# ── Agent construction ──────────────────────────────────────────────────────
+# Agent construction
 
 
 def _known_areas_note() -> str:
@@ -686,7 +686,7 @@ def _record_model_call(req: GenerateReq, prompt: str, result: Any) -> None:
     )
 
 
-# ── Merging the reading into the contract ───────────────────────────────────
+# Merging the reading into the contract
 
 
 def _verbatim(fragment: str | None, query: str) -> str | None:
@@ -896,7 +896,7 @@ def _outside_names(raw: list[str]) -> list[str]:
     return out
 
 
-# ── Public entry point ──────────────────────────────────────────────────────
+# Public entry point
 
 
 def available() -> bool:

@@ -3,8 +3,8 @@
 
 Why this exists next to `benchmarks/` instead of inside it. The benchmark there
 grades *routes* (recall@K, order, detour, budget) against reference walks, and
-`quality/cases/compliance/` grades *request compliance* end-to-end. Both answer «как
-получилось в целом». Neither can say **which part of the flow** produced a wrong
+`quality/cases/compliance/` grades *request compliance* end-to-end. Both answer "did
+it turn out well overall". Neither can say **which part of the flow** produced a wrong
 answer, and that is what tuning needs: a route can be mediocre while the reading
 was perfect, and it can be perfect while the verifier lied.
 
@@ -12,7 +12,7 @@ So each stage gets its own cases and its own checks, and every check is a claim
 that can be false:
 
   verdicts        does the deterministic verifier reach the right (status, reason)?
-  services        does «что по пути» measure the truth? (cross-checked against an
+  services        does "what lies along the way" measure the truth? (cross-checked against an
                   independent implementation — PostGIS spheroid vs plain haversine)
   interpretation  did the request get read as it was meant? (live model path,
                   falls back to the deterministic parse — the report says which
@@ -514,7 +514,7 @@ def run_interpretation() -> dict[str, Any]:
         ok = False
         for acceptable in raw["acceptable"]:
             if all(
-                # `code: null` in a case means «любой код» — for must_visit, which
+                # `code: null` in a case means "any code" — for must_visit, which
                 # is a place rather than a category.
                 any(k == a["kind"] and (a.get("code") is None or c == a["code"])
                     and s == a["strength"]

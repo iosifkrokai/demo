@@ -198,8 +198,6 @@ const saveProgress = (progress: StoredProgress) => {
   }
 };
 
-// ── Geometry ────────────────────────────────────────────────────────────────
-//
 // Everything below works on the line Valhalla returned for this route (the
 // same response the map draws), never on a second request. When there is no
 // line yet — a route without geometry — the guide falls back to straight-line
@@ -517,7 +515,6 @@ export const GuidePanel = ({
   /** Source URLs of nearby POIs already hinted — no repeat spam. */
   const [hintedServices, setHintedServices] = useState<Set<string>>(new Set());
 
-  // ── Ferrostar navigation engine ────────────────────────────────────────
   /** The live session for the current route; null until the WASM core is up. */
   const [ferroNav, setFerroNav] = useState<FerrostarNavigator | null>(null);
   /** The last TripState the session produced — Idle | Navigating | Complete. */
@@ -632,7 +629,6 @@ export const GuidePanel = ({
   const simulated = isSimulating();
   const setGuideFix = useCommonStore((s) => s.setGuideFix);
 
-  // ── Geolocation: keep watching as long as we are moving ──────────────────
   useEffect(() => {
     if (stopCount === 0) return;
     const geo = navigator.geolocation;
@@ -690,8 +686,6 @@ export const GuidePanel = ({
   /** Only a good fix earns an exact «через 30 м». */
   const precise = quality === 'good';
 
-  // ── Stops the tourist is standing at count as walked ─────────────────────
-  //
   // Derived, never stored: a fix worth trusting completes the stop it is
   // standing on. A weak fix never reaches this branch, so a bad signal cannot
   // silently tick stops off.
@@ -793,14 +787,11 @@ export const GuidePanel = ({
   useEffect(() => {
     onWalked?.({ visited: walked, total: stops.length });
   }, [onWalked, walked, stops.length]);
-  // ── Progress along the line, frozen against backward jumps ───────────────
   const located = useMemo(
     () => (fix && line ? locateOnLine(fix, line) : null),
     [fix, line]
   );
 
-  // ── Off route, but only after it persists across fixes ───────────────────
-  //
   // Both effects mirror an external stream (the device's GPS fixes) rather than
   // deriving from props, which is exactly what setState-in-effect is for.
   useEffect(() => {
@@ -829,7 +820,6 @@ export const GuidePanel = ({
     }
   }, [mode, precise, located, fix, nextStop, ferrostarActive]);
 
-  // ── Active maneuver + remaining line progress ───────────────────────────
   const remainingSteps = useMemo(
     () => (ferrostarActive ? extractRemainingSteps(ferroState) : []),
     [ferrostarActive, ferroState]
@@ -931,7 +921,6 @@ export const GuidePanel = ({
     prevManeuverRef.current = activeManeuver;
   }, [activeManeuver, ferrostarActive]);
 
-  // ── Voice: announce maneuvers on distance thresholds ────────────────────────────
   useEffect(() => {
     if (ferrostarActive) return;
     if (mode !== 'moving') return;
@@ -978,8 +967,6 @@ export const GuidePanel = ({
     ferrostarActive,
   ]);
 
-  // ── Ferrostar navigation engine ─────────────────────────────────────────
-  //
   // The mirror of the five effects above, computed by Ferrostar instead of by
   // this file's geometry helpers. Same four publications, same honesty rules —
   // only the arithmetic moves from `locateOnLine` to a NavigationSession:
@@ -1249,7 +1236,6 @@ export const GuidePanel = ({
     return Math.round(walk + totalVisitLeft);
   }, [walkSeconds, totalVisitLeft]);
 
-  // ── The announcement, throttled: a new turn, or the distance in 50 m steps.
   // Derived, so re-renders that change nothing announce nothing.
   const announcement = !activeManeuver
     ? ''
@@ -1260,8 +1246,6 @@ export const GuidePanel = ({
         })
       : activeManeuver.instruction;
 
-  // ── Re-plan from where the tourist stands, keeping every stop ────────────
-  //
   // The panel does not fetch routes: it moves the «моё местоположение» start to
   // the current fix (so the next plan begins here) and asks the integration
   // layer to re-plan — either through the `onReroute` prop or, when nothing is
@@ -1531,8 +1515,6 @@ export const GuidePanel = ({
   );
 };
 
-// ── Parts local to the panel ────────────────────────────────────────────────
-
 interface ManeuverBannerProps {
   instruction: string;
   Icon: ReturnType<typeof getManeuverIcon>;
@@ -1575,7 +1557,6 @@ const ManeuverBanner = ({
                   distance: fmtDist(distance),
                 })}
               </div>
-              {/* Instruction — what to do. */}
               <div
                 data-testid="guide-maneuver-instruction"
                 className="mt-0.5 text-base font-semibold leading-tight text-foreground md:text-body"

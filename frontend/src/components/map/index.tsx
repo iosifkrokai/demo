@@ -326,7 +326,6 @@ export const MapComponent = () => {
     updateIsoPosition(popupLngLat.lng, popupLngLat.lat);
   }, [popupLngLat, updateIsoPosition]);
 
-  // Update markers when waypoints or isochrone centers change
   const geocodeResults = useIsochronesStore((state) => state.geocodeResults);
   const markers: MarkerData[] = [];
 
@@ -380,7 +379,6 @@ export const MapComponent = () => {
     });
   });
 
-  // Add isochrone center marker
   geocodeResults.forEach((address) => {
     if (address.selected) {
       markers.push({
@@ -430,24 +428,21 @@ export const MapComponent = () => {
    * end landed under the panel and at 340 the map kept 110px of nothing. The
    * property is 0 whenever there is no column to make room for.
    */
-  //Stores the route content
   const lastZoomedCoordKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
-    //When a route is cleared resets the key to null
+    // A cleared route resets the key to null.
     if (!coordinates || coordinates.length === 0) {
       lastZoomedCoordKeyRef.current = null;
       return;
     }
 
-    //If No Cordinates then return early
+    // No map yet — nothing to frame.
     if (!mapRef.current) return;
 
-    //First Point
     const firstCoord = coordinates[0];
     if (!firstCoord || !firstCoord[0] || !firstCoord[1]) return;
 
-    //Last Point
     const lastCoord = coordinates[coordinates.length - 1]!;
 
     const coordKey =
@@ -460,9 +455,8 @@ export const MapComponent = () => {
       lastCoord[0] +
       ',' +
       lastCoord[1];
-    //Compare with what was last zoomed
+    // Same line as last time — already framed.
     if (coordKey === lastZoomedCoordKeyRef.current) return;
-    //Store thr new Key
     lastZoomedCoordKeyRef.current = coordKey;
 
     const bounds = routeBounds;
@@ -477,11 +471,11 @@ export const MapComponent = () => {
       },
       maxZoom: coordinates.length === 1 ? 11 : 18,
     });
-    //only rerun when coordinates change
-    //panel change no longer rerun this
+    // Re-frame only when the coordinates change; a panel resize no longer
+    // re-runs this.
   }, [coordinates, routeBounds]);
 
-  // ── Panel → map: «покажи мне это место» ──────────────────────────────────
+  // Panel → map: «покажи мне это место»
   // Tapping a place in the panel used to do nothing here: the tourist picked a
   // row and then had to find it on the map by hand. The row asks, the map looks.
   useEffect(() => {
@@ -496,7 +490,7 @@ export const MapComponent = () => {
     });
   }, [focusRequest]);
 
-  // ── Guide → map: the navigator behaviour ─────────────────────────────────
+  // Guide → map: the navigator behaviour
   // While the guide runs the map follows the walk: centred on the tourist,
   // tilted, and turned to the heading when the device reports one. Without this
   // the tourist had to hunt for their own position on a still map.
@@ -799,7 +793,6 @@ export const MapComponent = () => {
     ]
   );
 
-  // handle double-click to cancel the pending single-click popup
   const handleMapDblClick = useCallback(() => {
     cancelPendingClick();
   }, [cancelPendingClick]);
@@ -836,7 +829,6 @@ export const MapComponent = () => {
     [activeTab]
   );
 
-  // Handle move end to save position
   const handleMoveEnd = useCallback(() => {
     if (!mapRef.current) return;
     const { lng, lat } = mapRef.current.getCenter();
@@ -918,7 +910,6 @@ export const MapComponent = () => {
     [handleMapContextMenu, activeTab]
   );
 
-  // Handle route line hover
   const onRouteLineHover = useCallback(
     (event: maplibregl.MapLayerMouseEvent) => {
       if (!mapRef.current) return;
@@ -928,7 +919,6 @@ export const MapComponent = () => {
 
       const feature = event.features?.[0];
       if (feature && feature.properties?.summary) {
-        // Parse the summary if it's a string
         const summary =
           typeof feature.properties.summary === 'string'
             ? JSON.parse(feature.properties.summary)
@@ -954,7 +944,6 @@ export const MapComponent = () => {
       if (!mapRef.current) return;
 
       const features = event.features;
-      // Check if we're hovering over the routes-line / hit-target layer
       const topLayerId = features?.[0]?.layer?.id;
       const isOverRoute =
         topLayerId === 'routes-line' || topLayerId === 'routes-hit-target';
@@ -982,7 +971,6 @@ export const MapComponent = () => {
         const map = mapRef.current.getMap();
         map.getCanvas().style.cursor = 'pointer';
       } else {
-        // Clear popup and cursor when not over route
         if (routeHoverPopup) {
           setRouteHoverPopup(null);
         }

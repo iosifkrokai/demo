@@ -24,7 +24,7 @@
 -- Deletion is a single cascade: DELETE FROM clients removes its preferences
 -- and its routes through the FKs below (spec 5, "удалить мои данные").
 
--- ── clients ──────────────────────────────────────────────────────────────────
+-- clients
 -- The id is minted by the browser (crypto.randomUUID) and sent as X-Client-Id;
 -- the server inserts the row on first sight. No column here can identify a
 -- person (§5).
@@ -34,7 +34,7 @@ CREATE TABLE IF NOT EXISTS clients (
     last_seen_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- ── client_preferences ───────────────────────────────────────────────────────
+-- client_preferences
 -- One row per client. All value columns are nullable on purpose: NULL = "the
 -- tourist did not state it". A missing row and an all-NULL row mean the same
 -- thing to the API (nothing saved yet).
@@ -60,7 +60,7 @@ CREATE TABLE IF NOT EXISTS client_preferences (
     updated_at               TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- ── saved_routes ─────────────────────────────────────────────────────────────
+-- saved_routes
 -- `plan` holds the checked TripPlan exactly as shown (points, geometry,
 -- manoeuvres, requirements, costing, summary). It is stored, not rebuilt: a
 -- rebuilt route is not allowed to silently differ from what the tourist saw.

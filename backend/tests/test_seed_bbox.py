@@ -55,7 +55,7 @@ def _fetch_parser():
     return sub.choices["fetch"]
 
 
-# ── the mapping itself ──────────────────────────────────────────────────────
+# the mapping itself
 
 def test_public_order_is_wsen():
     """The tuple this module accepts is (W, S, E, N) — pinned, not implied."""
@@ -113,7 +113,7 @@ def test_build_query_rejects_a_swapped_or_inverted_box():
         build_overpass_query(SIGHT_QUERY, (WEST, NORTH, EAST, SOUTH))  # S > N
 
 
-# ── fetch_overpass actually sends the mapped query ──────────────────────────
+# fetch_overpass actually sends the mapped query
 
 def test_fetch_overpass_posts_the_mapped_query(monkeypatch):
     """No network: httpx.post is stubbed, the outgoing query is captured."""
@@ -138,7 +138,7 @@ def test_fetch_overpass_posts_the_mapped_query(monkeypatch):
         assert c == tuple(str(v) for v in OVERPASS_COORDS)
 
 
-# ── the CLI agrees with the mapping ─────────────────────────────────────────
+# the CLI agrees with the mapping
 
 def test_cli_bbox_flag_is_documented_as_wsen():
     # The flag kept its metavar and arity; the help text moved with the flag to

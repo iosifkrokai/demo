@@ -63,7 +63,6 @@ async function fetchIsochrones() {
 
   const data: ValhallaIsochroneResponse = await response.json();
 
-  // Calculate area for each feature
   data.features.forEach((feature) => {
     if (feature.properties) {
       feature.properties.area = calcArea(feature);
@@ -139,7 +138,6 @@ export function useReverseGeocodeIsochrones() {
   const zoomTo = useCommonStore((state) => state.zoomTo);
 
   const reverseGeocode = async (lng: number, lat: number) => {
-    // Set placeholder immediately
     const placeholderAddresses: ActiveWaypoint[] = [
       {
         selected: true,

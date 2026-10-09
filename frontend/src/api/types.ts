@@ -264,9 +264,7 @@ export interface ServicesAlongAnswer {
   reason?: string;
 }
 
-// ============================================================================
 // Accounts, visits and the admin panel (spec 005)
-// ============================================================================
 //
 // Same honesty rule as everywhere else: `null` means «не указано» — a field the
 // server did not send — never a stand-in for a real value.

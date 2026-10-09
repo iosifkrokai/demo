@@ -129,7 +129,7 @@ export const VisitTimeEditor = ({
           )}
         </div>
 
-        {/* − [число] + : the number sits between the two keys that change it. */}
+        {/* − [number] + : the number sits between the two keys that change it. */}
         <div className="mt-2 flex items-center justify-between gap-2">
           <button
             type="button"

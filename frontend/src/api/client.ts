@@ -127,8 +127,6 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   }
 }
 
-// ── Preferences ─────────────────────────────────────────────────────────────
-//
 // The response is normalised field by field instead of trusted as-is: a missing
 // field becomes `null` («не указано»), and junk is dropped rather than turned
 // into a number the tourist never chose.
@@ -197,8 +195,6 @@ export const putClientPreferences = async (
       body: JSON.stringify(patch),
     })
   );
-
-// ── Saved routes ────────────────────────────────────────────────────────────
 
 const normalizeSummary = (value: unknown): SavedRouteSummary | null => {
   const record = asRecord(value);

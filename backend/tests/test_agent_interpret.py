@@ -43,7 +43,7 @@ KEY_ENV = "OPENROUTER_API_KEY"
 FAKE_KEY = "test-key-not-real"  # never a real credential
 
 
-# ── Fixtures: no key, no DB, no network ─────────────────────────────────────
+# Fixtures: no key, no DB, no network
 
 
 class _FakeConn:
@@ -108,7 +108,7 @@ def _fake_model(payload: dict | None, tool_calls: list[tuple[str, dict]] | None 
     return model, seen_tools
 
 
-# ── (a) no key → None, deterministic fallback keeps the UI filters ──────────
+# (a) no key → None, deterministic fallback keeps the UI filters
 
 
 def test_no_key_returns_none_and_ui_filters_survive(no_key):
@@ -197,7 +197,7 @@ def test_the_default_model_is_the_measured_one():
         del os.environ["AGENT_INTERPRET_MODEL"]
 
 
-# ── (b) a fake model answer fills the contract ─────────────────────────────
+# (b) a fake model answer fills the contract
 
 
 def _payload() -> dict:
@@ -280,12 +280,12 @@ def test_fake_model_fills_the_contract(fake_run):
     assert "кафе" in tr.soft_service_codes()
     assert [r.name for r in tr.of_kind("must_visit")] == ["Старый замок"]
 
-    # ── UI precedence: the model said туалет is soft/whatever, the control said hard ──
+    # UI precedence: the model said туалет is soft/whatever, the control said hard
     toilets = [r for r in tr.of_kind("service") if r.code == "туалет"]
     assert len(toilets) == 1
     assert toilets[0].source == "ui" and toilets[0].strength == "hard"
 
-    # ── Provenance: the verbatim fragment, and only a real one ──
+    # Provenance: the verbatim fragment, and only a real one
     cafe = next(r for r in tr.requirements if r.code == "кафе")
     assert cafe.source == "text" and cafe.text == "кафе если по пути"
     assert cafe.text in QUERY
@@ -293,20 +293,20 @@ def test_fake_model_fills_the_contract(fake_run):
     assert parks.code == "парк"
     assert parks.text is None, "an invented quote must be dropped, not stored"
 
-    # ── Party / budget / areas ──
+    # Party / budget / areas
     assert tr.party.children == 2
     assert tr.party.children_ages == [5, 9]
     assert tr.budget_minutes == 120
     assert tr.areas == ["grodno-old-town"]
 
-    # ── Unsupported asks are named, never dropped silently ──
+    # Unsupported asks are named, never dropped silently
     assert "без лестниц" in tr.unknowns
     assert "unknown_category:вертолёт" in tr.unknowns
     assert any(u.startswith("unknown_category:") and "эдакого" in u for u in tr.unknowns), (
         "a requirement with no canonical code becomes an unknown, never a guess"
     )
 
-    # ── The bounded tool surface the model was offered ──
+    # The bounded tool surface the model was offered
     assert fake_run, "the model was never asked anything"
     assert fake_run[0] == BOUNDED_TOOLS
 
@@ -379,7 +379,7 @@ def test_llm_only_reading_is_tagged_llm(fake_key, no_db, monkeypatch):
     assert tr.interest_codes() == ["замок"]
 
 
-# ── (b2) what the trace says about the call to the model ────────────────────
+# (b2) what the trace says about the call to the model
 # A reader of a trace can see the reading the pipeline got; only the prompt says
 # *why* it got it. These pin the prompt, the tokens and the failure case.
 
@@ -439,7 +439,7 @@ def test_an_answer_that_is_not_a_reading_is_recorded_as_an_error():
     assert call.usage is None and call.facts == {"cached": False}
 
 
-# ── (c) tool caps, and tools never raise at the agent ──────────────────────
+# (c) tool caps, and tools never raise at the agent
 
 
 def test_search_places_caps_results(monkeypatch, no_db):

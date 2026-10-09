@@ -34,9 +34,7 @@ import pytest
 
 from quality import runner as b
 
-# --------------------------------------------------------------------------
 # fixtures / builders
-# --------------------------------------------------------------------------
 
 # Degrees of longitude per km at the equator, from the same spherical radius
 # haversine_km() uses, so pt(x) is exactly x km from pt(y).
@@ -211,9 +209,7 @@ def run_cli(argv: list[str], monkeypatch, capsys) -> str:
     return capsys.readouterr().out
 
 
-# --------------------------------------------------------------------------
 # stage-1 pool probe: the API does not expose the pool, and we say so
-# --------------------------------------------------------------------------
 
 
 def test_response_does_not_expose_the_stage1_pool():
@@ -273,9 +269,7 @@ def test_pool_probe_rejects_ids_without_coordinates_as_unscoreable():
     assert found["points"] is None  # ids alone cannot be scored offline
 
 
-# --------------------------------------------------------------------------
 # stage-1 vs stage-2
-# --------------------------------------------------------------------------
 
 
 def test_stage1_proxy_uses_a_tighter_radius_than_recall_at_k():
@@ -372,9 +366,7 @@ def test_loader_reads_grade_from_the_reference_file(routes_dir):
     assert by_case["beta"].total_weight == pytest.approx(6.0)
 
 
-# --------------------------------------------------------------------------
 # leg sanity + hard failures
-# --------------------------------------------------------------------------
 
 # The pair the 2026-09-24 report found inside one Grodno route: the same
 # building, two database rows, 745 m apart, names that are each other's
@@ -534,9 +526,7 @@ def test_failure_counts_are_reported_separate_from_the_scores(tmp_path, routes_d
     assert summary["gated"][0]["case"] == golden.case
 
 
-# --------------------------------------------------------------------------
 # snapshot → replay
-# --------------------------------------------------------------------------
 
 
 def test_snapshot_row_carries_request_ids_response_and_metrics(tmp_path):
@@ -737,9 +727,7 @@ def test_a_replay_written_into_its_own_snapshot_dir_does_not_poison_the_next_one
     assert "4 row(s), 2 case(s)" in stdout2
 
 
-# --------------------------------------------------------------------------
 # bootstrap statistics
-# --------------------------------------------------------------------------
 
 
 def test_percentile_is_nearest_rank_and_clamped():
@@ -820,9 +808,7 @@ def test_noise_floor_matches_the_reference_measurement_it_is_compared_to():
     assert "0.150" in b.REFERENCE_NOISE_FLOOR
 
 
-# --------------------------------------------------------------------------
 # paired bootstrap / --compare
-# --------------------------------------------------------------------------
 
 
 def test_paired_bootstrap_on_identical_snapshots_is_exactly_zero():
@@ -963,9 +949,7 @@ def test_compare_cli_writes_a_report(tmp_path, routes_dir, monkeypatch, capsys):
     assert len(saved["metrics"]) == len(b.COMPARE_METRICS)
 
 
-# --------------------------------------------------------------------------
 # report content: the honesty claims, pinned
-# --------------------------------------------------------------------------
 
 
 def test_report_states_that_the_pool_is_a_proxy_and_keeps_failures_outside(
@@ -1060,9 +1044,7 @@ def test_case_filter_rejects_an_unknown_case(routes_dir, monkeypatch, capsys):
     capsys.readouterr()
 
 
-# --------------------------------------------------------------------------
 # the harness stays honest about the reference walk (regression guard)
-# --------------------------------------------------------------------------
 
 
 def test_reference_walk_is_unchanged_by_the_harness_rewrite():

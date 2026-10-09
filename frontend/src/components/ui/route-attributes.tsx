@@ -22,7 +22,6 @@ export const RouteAttributes = React.forwardRef<
   HTMLDivElement,
   RouteAttributesProps
 >(({ attributes, variant, size, className, ...props }, ref) => {
-  // Filter out attributes where flag is not truthy
   const visibleAttributes = attributes.filter((attr) => Boolean(attr.flag));
 
   if (visibleAttributes.length === 0) {

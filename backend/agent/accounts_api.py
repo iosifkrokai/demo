@@ -127,9 +127,7 @@ def _storage_guarded(fn):
     return wrapper
 
 
-# ============================================================================
 # Identity helpers
-# ============================================================================
 
 def _session_token(request: Request) -> str | None:
     """The session token from the cookie, or a ``Bearer`` header (scripts/curl)."""
@@ -216,9 +214,7 @@ def _start_session(
     )
 
 
-# ============================================================================
 # Auth
-# ============================================================================
 
 @router.post("/auth/register", response_model=PublicUser, status_code=201)
 @_storage_guarded
@@ -309,9 +305,7 @@ def me(
     return AuthMeOut(authenticated=True, user=public_user(user))
 
 
-# ============================================================================
 # Visits
-# ============================================================================
 
 @router.get("/me/visited", response_model=VisitedListOut)
 @_storage_guarded
@@ -381,9 +375,7 @@ def unmark_visited(
     return Response(status_code=204)
 
 
-# ============================================================================
 # Admin — users
-# ============================================================================
 
 @router.get("/admin/users", response_model=AdminUserListOut)
 @_storage_guarded
@@ -470,9 +462,7 @@ def admin_delete_user(
     return Response(status_code=204)
 
 
-# ============================================================================
 # Admin — places
-# ============================================================================
 
 @router.get("/admin/places", response_model=AdminPlaceListOut)
 @_storage_guarded

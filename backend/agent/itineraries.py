@@ -109,7 +109,7 @@ def resolve_itineraries(
     """Attach dataset facts to every stop, in the authored order.
 
     Returns the payloads and the list of keys that did not resolve. Two
-    itineraries may share a stop (the аптека-музей is in two of them), which is
+    itineraries may share a stop (the pharmacy-museum is in two of them), which is
     why every row is fetched once for the whole file.
 
     **A service is served beside the route, never as a stop.** The curated file

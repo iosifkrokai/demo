@@ -7,8 +7,6 @@ import { MobileSection } from './mobile-section';
 describe('MobileSection', () => {
   beforeEach(cleanup);
 
-  // ── Desktop (jsdom 1024px, max-md DOES NOT apply) ────────────────────────────
-
   // At 1024px jsdom: max-md (max-width: 1023px) does not match.
   // Toggle: class "hidden max-md:flex" — `hidden` hides it; `max-md:flex` never
   // activates (the prefix does not match). Body open: no max-md:hidden class.
@@ -48,8 +46,6 @@ describe('MobileSection', () => {
     // ...but it does not apply on desktop, so content is visible
     expect(screen.getByTestId('inner2')).toBeInTheDocument();
   });
-
-  // ── Mobile (≤767px): toggle visible, body hidden by default ─────────────────
 
   // At 1024px max-md applies, so the toggle IS visible and the body IS hidden.
   // We test the class logic rather than a real viewport — those are the mechanism.
@@ -108,8 +104,6 @@ describe('MobileSection', () => {
     );
   });
 
-  // ── aria-controls / aria-expanded ────────────────────────────────────────
-
   it('aria-controls points to the body id', () => {
     render(
       <MobileSection id="party" title="Участники" defaultOpen={false}>
@@ -140,8 +134,6 @@ describe('MobileSection', () => {
     await user.click(toggle);
     expect(toggle).toHaveAttribute('aria-expanded', 'true');
   });
-
-  // ── Summary / counter ─────────────────────────────────────────────────────
 
   it('shows the summary text when provided', () => {
     render(
@@ -188,8 +180,6 @@ describe('MobileSection', () => {
     const count = screen.getByTestId('section-count-avoid2');
     expect(count).toBeVisible();
   });
-
-  // ── defaultOpen ───────────────────────────────────────────────────────────
 
   it('defaultOpen=true shows the body immediately on mobile', () => {
     render(

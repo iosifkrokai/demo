@@ -94,7 +94,6 @@ export const MapStyleControl = ({
   const mapCenter = map?.getCenter();
   const zoom = map?.getZoom();
 
-  // Save to localStorage whenever selectedStyle changes
   useEffect(() => {
     localStorage.setItem(MAP_STYLE_STORAGE_KEY, selectedStyle);
     onStyleChange?.(selectedStyle);

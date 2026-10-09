@@ -190,9 +190,9 @@ export const sidebarArea = {
         simulatedFix:
           'СИМУЛЯЦИЯ GPS: положение проигрывается, телефон ни при чём',
         restoredPrevious: 'вернул предыдущий маршрут',
-        // Почему плана нет или он неполный — собственный ответ агента, словами,
-        // на которые турист может реагировать. Имена мест не переводятся: они
-        // приходят из данных и остаются как есть.
+        // Why there is no plan, or why it is incomplete — the agent's own
+        // account, in words the tourist can act on. Place names are never
+        // translated: they come from the data and stay as they are.
         outsideCoverageTitle:
           'Сюда маршрут не построить: {{names}} — вне зоны покрытия (Гродненская область)',
         outsideCoverageHint: 'Попробуйте точку внутри области',
@@ -200,8 +200,8 @@ export const sidebarArea = {
           'Маршрут не построен: не удалось выполнить обязательное требование',
         degradedTitle: 'Часть запроса выполнить не удалось',
         reasonFallback: 'требование не выполнено',
-        // Причины — по кодам бэкенда; ключ — это путь i18n, поэтому коды лежат
-        // вложенным объектом, а не плоскими ключами с точкой.
+        // Reasons, keyed by the backend's codes; the key is the i18n path, so
+        // the codes live in a nested object rather than flat dotted keys.
         reason: {
           must_visit_on_route: 'обязательная точка не попала на маршрут',
           must_visit_absent: 'обязательная точка не найдена в данных',

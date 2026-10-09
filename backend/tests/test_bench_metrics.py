@@ -29,9 +29,7 @@ import pytest
 
 from quality import runner as b
 
-# --------------------------------------------------------------------------
 # geometry helpers
-# --------------------------------------------------------------------------
 
 # Degrees of longitude per km at the equator, derived from the same spherical
 # radius haversine_km() uses, so pt(x) is exactly x km from pt(y) and the
@@ -62,9 +60,7 @@ def api_points(names: list[str], *east_km: float) -> list[dict]:
     ]
 
 
-# --------------------------------------------------------------------------
 # the reference walk: shortest order, not the .json order
-# --------------------------------------------------------------------------
 
 
 def test_reference_walk_is_the_shortest_order_not_the_file_order():
@@ -131,9 +127,7 @@ def test_shortest_walk_order_falls_back_above_the_exact_dp_limit():
     assert sorted(order) == list(range(n))
 
 
-# --------------------------------------------------------------------------
 # tau-b over the shared subset
-# --------------------------------------------------------------------------
 
 
 def test_tau_identical_order_is_plus_one():
@@ -210,9 +204,7 @@ def test_tau_is_defined_exactly_at_the_minimum():
     assert b.kendall_tau(ids, [3, 2, 1]) == pytest.approx(-1.0)
 
 
-# --------------------------------------------------------------------------
 # detour_km
-# --------------------------------------------------------------------------
 
 
 def test_detour_is_our_length_minus_the_reference_length():
@@ -262,9 +254,7 @@ def test_detour_uses_the_same_measure_on_both_sides():
     assert b.detour_km(11.0 * 1.4, ref.distance_km) == pytest.approx(4.4, abs=1e-6)
 
 
-# --------------------------------------------------------------------------
 # --repeat aggregation
-# --------------------------------------------------------------------------
 
 
 def test_spread_is_the_half_range():
@@ -299,9 +289,7 @@ def test_fit_cell_counts_runs_that_fit():
     assert b._fit_cell([_run(budget_fit=True)]) == "1/1"
 
 
-# --------------------------------------------------------------------------
 # end-to-end evaluate() with a stubbed API (still no network, no agent)
-# --------------------------------------------------------------------------
 
 
 def _fake_generate(points, walk_s=1800.0, length_km=None, fits=True):

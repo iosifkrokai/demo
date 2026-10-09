@@ -39,7 +39,7 @@ def _c(pid: int, name: str, lat: float, lon: float, rrf_score: float = 0.0) -> C
     )
 
 
-# ── geo: the radius, the anchor, and how far each dropped place was ──────────
+# geo: the radius, the anchor, and how far each dropped place was
 
 
 def test_the_report_returns_exactly_what_the_focus_returned():
@@ -125,7 +125,7 @@ def test_a_gps_anchor_is_named_as_such():
     assert report["anchor"] == "GPS"
 
 
-# ── duplicates: which stored row was folded into which ──────────────────────
+# duplicates: which stored row was folded into which
 
 
 def test_a_duplicate_names_the_place_it_was_folded_into():

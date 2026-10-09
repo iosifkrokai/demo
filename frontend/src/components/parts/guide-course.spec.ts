@@ -42,8 +42,8 @@ describe('курс вдоль маршрута', () => {
   });
 
   it('на повороте курс берётся с участка, до которого дошёл турист', () => {
-    // L-образный маршрут: сначала на восток, потом на север. Считает тот
-    // участок, где турист стоит, а не начало линии.
+    // L-shaped route: east first, then north. It reads the segment the
+    // tourist is on, not the start of the line.
     const line: CourseLine = {
       points: [
         { lat: 53.7, lon: 23.8 },
@@ -53,8 +53,8 @@ describe('курс вдоль маршрута', () => {
       cum: [0, 669, 1781],
     };
 
-    close(courseAlongLine(line, 100), 90); // ещё на восточном участке
-    close(courseAlongLine(line, 1000), 0); // уже на северном
+    close(courseAlongLine(line, 100), 90); // still on the east segment
+    close(courseAlongLine(line, 1000), 0); // now on the north one
   });
 
   it('без линии курса нет — и карта не выдумывает поворот', () => {
@@ -65,8 +65,8 @@ describe('курс вдоль маршрута', () => {
   });
 
   it('курс можно найти по точке: «по курсу» работает ещё до первого хода', () => {
-    // Прямая с востока на север: точка туриста — где-то на ней, прогресса ещё
-    // нет (traveled = 0), но курс обязан быть.
+    // A line from east to north: the tourist's point is somewhere on it, there
+    // is no progress yet (traveled = 0), but the course must still exist.
     const line: CourseLine = {
       points: [
         { lat: 53.7, lon: 23.8 },
@@ -76,11 +76,11 @@ describe('курс вдоль маршрута', () => {
       cum: [0, 669, 1781],
     };
 
-    // Турист стоит на восточном участке → курс на восток.
+    // Tourist on the east segment → course east.
     close(courseAtPoint(line, 53.7, 23.805), 90);
-    // Турист уже на северном участке → курс на север.
+    // Tourist already on the north segment → course north.
     close(courseAtPoint(line, 53.705, 23.81), 0);
-    // Мимо линии (в стороне) — берётся ближайший участок, а не что попало.
+    // Off to the side of the line — the nearest segment is taken, not a random one.
     close(courseAtPoint(line, 53.7005, 23.804), 90);
   });
 

@@ -179,13 +179,13 @@ describe('ItinerariesTab', () => {
     render(<ItinerariesTab itineraries={[withPhoto]} onOpen={vi.fn()} />);
     await user.click(screen.getByTestId('itinerary-stops-old-town-castles'));
 
-    // Печать на строке — тоже печать: подпись обязана быть рядом с картинкой.
+    // A credit on the row is still a credit: it has to sit next to the image.
     expect(screen.getByAltText('Старый замок (Гродно)')).toHaveAttribute(
       'src',
       'https://upload.wikimedia.org/wikipedia/commons/6/6a/castle.jpg'
     );
     expect(screen.getByText(/Александр Липилин/)).toBeInTheDocument();
-    // У второй остановки фото нет — значит и картинки быть не должно.
+    // The second stop has no photo — so there must be no image for it either.
     expect(screen.queryByAltText('Коложская церковь')).toBeNull();
   });
 });

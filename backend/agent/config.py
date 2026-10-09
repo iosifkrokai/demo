@@ -19,10 +19,10 @@ import os
 
 
 class Settings:
-    # ── Secrets ──
+    # Secrets
     OPENROUTER_API_KEY: str | None = os.environ.get("OPENROUTER_API_KEY") or None
 
-    # ── Observability (self-hosted Langfuse) ──
+    # Observability (self-hosted Langfuse)
     # Optional: with no public/secret key the trace exporter is a no-op and the
     # agent answers as before. HOST defaults to the local compose mapping; the
     # agent container overrides it to the compose service name (langfuse-web).
@@ -30,7 +30,7 @@ class Settings:
     LANGFUSE_PUBLIC_KEY: str | None = os.environ.get("LANGFUSE_PUBLIC_KEY")
     LANGFUSE_SECRET_KEY: str | None = os.environ.get("LANGFUSE_SECRET_KEY")
 
-    # ── Addresses ──
+    # Addresses
     HOST: str = os.environ.get("AGENT_HOST", "0.0.0.0")
     PORT: int = int(os.environ.get("AGENT_PORT", "8080"))
     DSN: str = os.environ.get(

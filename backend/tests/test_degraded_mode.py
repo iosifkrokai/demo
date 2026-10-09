@@ -56,7 +56,7 @@ QUERY = "Хочу погулять по замкам Гродно"
 DSN = "postgresql://grodno:grodno@localhost:5432/grodno"
 
 
-# ── Fixtures: the key is the switch between degraded and full mode ───────────
+# Fixtures: the key is the switch between degraded and full mode
 
 @pytest.fixture
 def no_key(monkeypatch):
@@ -146,9 +146,7 @@ def fake_model(monkeypatch):
     interpret_cache.EMBED_CACHE.clear()
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # The interpretation agent — no key means no model, and that is not an error
-# ─────────────────────────────────────────────────────────────────────────────
 
 class TestAgentAvailability:
 
@@ -163,9 +161,7 @@ class TestAgentAvailability:
         assert ai.interpret_with_agent(QUERY, GenerateReq(query=QUERY)) is None
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Step 1 — intent degrades to a deterministic parse of the same text
-# ─────────────────────────────────────────────────────────────────────────────
 
 class TestIntentFallback:
     """Step 1 with no model: the deterministic reader, and the agent hand-off."""
@@ -272,10 +268,7 @@ class TestIntentFallback:
         assert intent_mod._fallback_time_budget("2 часа") == 120
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# ─────────────────────────────────────────────────────────────────────────────
 # Embeddings — local and key-free; keyword-only only if the model cannot load
-# ─────────────────────────────────────────────────────────────────────────────
 
 class TestEmbedLocal:
 
@@ -303,9 +296,7 @@ class TestEmbedLocal:
         assert "local model" in warnings[0]
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # HTTP — the last-resort net, and the health flags
-# ─────────────────────────────────────────────────────────────────────────────
 
 class _StubPlanner:
     """A planner whose every entry point raises a preset error."""
@@ -415,9 +406,7 @@ class TestHttpDegraded:
         assert body["status"] == "degraded"
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # The real thing: a route request with no key, against the live DB + Valhalla
-# ─────────────────────────────────────────────────────────────────────────────
 
 def _db_up() -> bool:
     try:

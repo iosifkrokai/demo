@@ -67,7 +67,6 @@ export const WaypointSearch = ({
         return { type: 'forward' as const, data: response.data };
       }
 
-      // coordinate parsing
       const coords = trimmedValue.split(/[\s,;]+/);
       if (coords.length === 2) {
         const lat = coords[1];

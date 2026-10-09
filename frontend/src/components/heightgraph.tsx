@@ -43,7 +43,6 @@ const HeightGraph: React.FC<HeightGraphProps> = ({
       .append('g')
       .attr('transform', `translate(${margin.left},${margin.top})`);
 
-    // Process data
     // Coordinates are [lng, lat, elevation, distance]
     interface CoordinateData {
       lng: number;
@@ -66,7 +65,6 @@ const HeightGraph: React.FC<HeightGraphProps> = ({
 
     if (!allCoordinates || allCoordinates.length === 0) return;
 
-    // Create scales
     const xExtent = d3.extent(allCoordinates, (d) => d.distance) as [
       number,
       number,
@@ -84,7 +82,6 @@ const HeightGraph: React.FC<HeightGraphProps> = ({
       .range([chartHeight, 0])
       .nice();
 
-    // Draw features with colors
     // Coordinates are [lng, lat, elevation, distance]
     data[0]?.features.forEach((feature) => {
       const coords = (feature.geometry as { coordinates: number[][] })
@@ -110,7 +107,6 @@ const HeightGraph: React.FC<HeightGraphProps> = ({
         .attr('d', area);
     });
 
-    // Add axes
     const xAxis = d3
       .axisBottom(xScale)
       .tickFormat((d) => `${(+d / 1000).toFixed(1)} km`);
@@ -124,7 +120,6 @@ const HeightGraph: React.FC<HeightGraphProps> = ({
 
     g.append('g').call(yAxis).attr('class', 'y-axis').style('color', '#666');
 
-    // Add grid lines
     g.append('g')
       .attr('class', 'grid')
       .attr('transform', `translate(0,${chartHeight})`)
@@ -146,7 +141,6 @@ const HeightGraph: React.FC<HeightGraphProps> = ({
       )
       .style('stroke-opacity', 0.1);
 
-    // Add labels
     g.append('text')
       .attr('x', chartWidth / 2)
       .attr('y', chartHeight + 40)
@@ -164,7 +158,6 @@ const HeightGraph: React.FC<HeightGraphProps> = ({
       .style('fill', '#666')
       .text('Elevation (m)');
 
-    // Add hover interaction
     const focus = g.append('g').attr('class', 'focus').style('display', 'none');
 
     focus
@@ -210,7 +203,6 @@ const HeightGraph: React.FC<HeightGraphProps> = ({
         const adjustedX = mouseX - margin.left;
         const x0 = xScale.invert(adjustedX);
 
-        // Find closest point
         const bisect = d3.bisector((d: CoordinateData) => d.distance).left;
         const i = bisect(allCoordinates, x0);
         const d0 = allCoordinates[i - 1];
@@ -262,7 +254,6 @@ const HeightGraph: React.FC<HeightGraphProps> = ({
           setDimensions({ width, height });
         },
         onStop: () => {
-          // Clear inline styles
           if (containerRef.current) {
             containerRef.current.style.width = '';
             containerRef.current.style.height = '';
@@ -343,7 +334,6 @@ const HeightGraph: React.FC<HeightGraphProps> = ({
               height={dimensions.height}
               style={{ display: 'block' }}
             />
-            {/* Legend */}
             <div
               style={{
                 marginTop: '10px',

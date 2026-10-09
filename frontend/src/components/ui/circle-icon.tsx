@@ -75,7 +75,6 @@ const CircleIcon = React.forwardRef<HTMLDivElement, CircleIconProps>(
 
 CircleIcon.displayName = 'CircleIcon';
 
-// Reusable circle icon with tooltip (for route attributes)
 interface CircleIconWithTooltipProps extends CircleIconProps {
   tooltipContent?: React.ReactNode;
 }

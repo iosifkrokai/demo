@@ -56,7 +56,7 @@ def test_the_offline_stages_pass_here():
     results = [evals.run_verdicts(), evals.run_services()]
     for res in results:
         if res.get("skipped"):
-            continue  # без базы участок пропускается, а не «проходит»
+            continue  # without a DB the stage is skipped, not "passed"
         failed = [
             c for c in res["checks"] if not c["ok"] and not c.get("known_gap")
         ]

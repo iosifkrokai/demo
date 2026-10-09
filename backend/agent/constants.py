@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from . import taxonomy
 
-# ── Per-request deadlines ───────────────────────────────────────────────────
+# Per-request deadlines
 # One route request has a hard end-to-end budget.  Exceeding it is never a
 # hang: the planner drops the optional work (Valhalla re-ordering, geometry)
 # and returns a smaller plan with an honest status instead.
@@ -40,7 +40,7 @@ VALHALLA_ORDER_MIN_LEFT_S = 18.0
 # `geometry_missing`, which the verifier reports as `degraded`.
 RENDER_MIN_LEFT_S = 6.0
 
-# ── ML models (OpenRouter) ──────────────────────────────────────────────────
+# ML models (OpenRouter)
 # The interpretation model is a deployment fact chosen by measurement, not a
 # tuning knob: it lives in planner/agent_interpret.py (DEFAULT_MODEL) next to
 # the agent that uses it, and is overridable per-process with
@@ -49,7 +49,7 @@ RENDER_MIN_LEFT_S = 6.0
 # The embedding model is no longer a constant here: it lives with the local
 # embedder in agent/embeddings.py (MODEL_NAME / EMBED_DIM).
 
-# ── Intent taxonomy ─────────────────────────────────────────────────────────
+# Intent taxonomy
 INTENT_TYPES = ("discovery", "specific", "themed", "vague")
 
 # Category taxonomy — the canonical codes live in data/taxonomy.csv and are
@@ -57,7 +57,7 @@ INTENT_TYPES = ("discovery", "specific", "themed", "vague")
 # from taxonomy instead of adding one to this tuple.
 CATEGORIES = taxonomy.all_codes()
 
-# ── Retrieval / ranking ─────────────────────────────────────────────────────
+# Retrieval / ranking
 # Reciprocal Rank Fusion constant (standard 60 — Cormack et al.).
 RRF_K = 60
 # MMR relevance/diversity trade-off (0=pure diversity, 1=pure relevance).
@@ -103,7 +103,7 @@ GEO_FOCUS_KM = 12.0
 # then answered 422 "optimizer could not produce a route with ≥ 2 stops".
 GEO_FOCUS_DISCOVERY_MAX_KM = 36.0
 
-# ── Walkability of the answer ───────────────────────────────────────────────
+# Walkability of the answer
 # The profile the tourist chose has to stay believable. «Все костёлы Гродненской
 # области» under `pedestrian` measured a 17-hour, 211-km tour: an honest answer
 # that nobody can walk. Past these bounds the plan is still returned — the request
@@ -112,7 +112,7 @@ GEO_FOCUS_DISCOVERY_MAX_KM = 36.0
 WALK_TOO_FAR_KM = 15.0
 WALK_TOO_LONG_MINUTES = 240
 
-# ── Unreachable pairs ───────────────────────────────────────────────────────
+# Unreachable pairs
 # A pair Valhalla cannot connect (500 "Could not find candidate edge used for
 # label" at every snap radius — e.g. the Grodno-fortress POI at
 # 53.597305,23.800828, which has no pedestrian edges anywhere near it) is marked
@@ -120,22 +120,22 @@ WALK_TOO_LONG_MINUTES = 240
 # it as unreachable, while int(inf) would raise OverflowError in the optimizer.
 UNREACHABLE_S = 10**9
 
-# ── Route optimizer ─────────────────────────────────────────────────────────
+# Route optimizer
 # (No stop cap here: the only limits are the user's time budget and transport.
 #  The old ROUTE_MAX_STOPS=8 silently cut routes short.)
 
-# ── Time budget bounds (minutes) ────────────────────────────────────────────
+# Time budget bounds (minutes)
 MIN_BUDGET_MIN = 15
 MAX_BUDGET_MIN = 480
 
-# ── Valhalla ────────────────────────────────────────────────────────────────
+# Valhalla
 VALHALLA_TIMEOUT_S = 20.0
 VALHALLA_MAX_RETRIES = 2
 
 # Grodno voblast bbox (OSM relation 59173, generous) — osmium order W,S,E,N.
 GRODNO_BBOX = {"south": 52.75, "west": 23.35, "north": 54.80, "east": 27.00}
 
-# ── Visit-time defaults by category (minutes) ───────────────────────────────
+# Visit-time defaults by category (minutes)
 # Derived from the taxonomy so a category's visit time is defined in exactly
 # one place (data/taxonomy.csv); taxonomy.visit_minutes() answers for unknown or
 # legacy free-text categories, so there is no second default to drift.
@@ -143,7 +143,7 @@ VISIT_TIME_BY_CATEGORY: dict[str, int] = {
     cat.code: cat.visit_minutes for cat in taxonomy.all_categories()
 }
 
-# ── Walkability ──────────────────────────────────────────────────────────────
+# Walkability
 # A pedestrian route is only useful if every leg is walkable.
 # MAX_WALK_LEG_KM — hard cap: a single leg longer than this is not acceptable.
 #   At 4 km/h, 2 km ≈ 30 min (WALK_LEG_BUDGET_SHARE of a 2-hour budget).

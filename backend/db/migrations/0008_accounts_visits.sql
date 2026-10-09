@@ -23,7 +23,7 @@
 -- ships it in the contrib extensions the image's superuser can enable.
 CREATE EXTENSION IF NOT EXISTS citext;
 
--- ── users ────────────────────────────────────────────────────────────────────
+-- users
 -- role is the only authority the API reads; a missing role means 'user' (the
 -- column default), never an implied admin.
 CREATE TABLE IF NOT EXISTS users (
@@ -44,7 +44,7 @@ CREATE TABLE IF NOT EXISTS users (
 
 CREATE INDEX IF NOT EXISTS users_role_ix ON users (role);
 
--- ── user_sessions ────────────────────────────────────────────────────────────
+-- user_sessions
 -- The token is minted by the server (secrets.token_urlsafe) and sent to the
 -- browser in an HttpOnly cookie; only its sha256 lives here. expires_at is
 -- absolute, so a session is looked up by (hash, now) < expires_at and a stale row
@@ -60,7 +60,7 @@ CREATE TABLE IF NOT EXISTS user_sessions (
 CREATE INDEX IF NOT EXISTS user_sessions_user_ix ON user_sessions (user_id);
 CREATE INDEX IF NOT EXISTS user_sessions_expires_ix ON user_sessions (expires_at);
 
--- ── visited_places ───────────────────────────────────────────────────────────
+-- visited_places
 -- Composite PK makes marking idempotent: a repeat PUT is a no-op upsert, never a
 -- duplicate. Deleting a place or an account cascades the mark away.
 CREATE TABLE IF NOT EXISTS visited_places (

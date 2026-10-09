@@ -60,7 +60,6 @@ def test_empty_geometry_returns_honest_status(monkeypatch):
 
 def test_unreachable_pair_treated_by_helper(monkeypatch):
     """Unreachable pair should be handled by is_unreachable_time helper."""
-    # Test the helper function directly
     from agent import constants
 
     assert vc.is_unreachable_time(float(constants.UNREACHABLE_S))

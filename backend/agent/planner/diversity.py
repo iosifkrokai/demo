@@ -48,7 +48,7 @@ def mmr_select(
     if not candidates or len(candidates) <= n:
         return list(candidates)
 
-    # ── Step 1: build the embedding matrix ──
+    # Step 1: build the embedding matrix
     embs = fetch_embeddings(db, [c.id for c in candidates]) if db else {}
     has_embs = len(embs) == len(candidates)
     if not has_embs:
@@ -61,7 +61,7 @@ def mmr_select(
     E_norm = E / norms
     sim_matrix = E_norm @ E_norm.T  # NxN, diagonal = 1
 
-    # ── Step 2: normalize relevance scores to [0, 1] ──
+    # Step 2: normalize relevance scores to [0, 1]
     rel = np.array([c.relevance for c in candidates], dtype=np.float32)
     r_min, r_max = float(rel.min()), float(rel.max())
     if r_max - r_min > 1e-9:
@@ -69,7 +69,7 @@ def mmr_select(
     else:
         rel_norm = np.ones_like(rel) * 0.5
 
-    # ── Step 3: must-visit pre-selection ──
+    # Step 3: must-visit pre-selection
     must_ids = set(constraints.must_visit_ids) if constraints else set()
     must_indices: list[int] = []
     rest_indices: list[int] = []
@@ -83,7 +83,7 @@ def mmr_select(
     selected = must_indices[:n]
     available = [i for i in rest_indices if i not in selected]
 
-    # ── Step 4: MMR greedy loop ──
+    # Step 4: MMR greedy loop
     while len(selected) < n and available:
         best_idx: int | None = None
         best_score = -float("inf")

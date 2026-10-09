@@ -49,7 +49,7 @@ from agent.planner.refine import (
     visit_minutes_of,
 )
 
-# ── Fakes: no key, no DB, no Valhalla ───────────────────────────────────────
+# Fakes: no key, no DB, no Valhalla
 
 @pytest.fixture
 def no_key(monkeypatch):
@@ -158,9 +158,7 @@ def _refine(monkeypatch, instruction, base_ids=(1, 12, 7),
     return Pipeline(db=_FakeDB()).generate(req)  # type: ignore[arg-type]
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # 1. Interpret the instruction into one typed operation
-# ─────────────────────────────────────────────────────────────────────────────
 
 class TestInterpretRefinement:
 
@@ -249,9 +247,7 @@ class TestInterpretRefinement:
         assert plan.reason_code == REFINEMENT_UNRECOGNIZED
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # 2. Reorder the existing stops by an attribute
-# ─────────────────────────────────────────────────────────────────────────────
 
 class TestReorder:
 
@@ -310,9 +306,7 @@ class TestExcludedCategory:
         )
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # 3. The pipeline honours or honestly refuses — never a fresh route, never 422
-# ─────────────────────────────────────────────────────────────────────────────
 
 class TestRefinementKeepsTheBaseRoute:
 
@@ -442,9 +436,7 @@ class TestRefinementOverHttp:
         assert data["debug"]["refinement"]["reason_code"] == REFINEMENT_UNSUPPORTED
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Cost fallback: the base points survive even when Valhalla cannot answer
-# ─────────────────────────────────────────────────────────────────────────────
 
 class TestCostFallback:
 

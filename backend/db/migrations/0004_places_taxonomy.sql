@@ -13,14 +13,14 @@
 
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
--- ── places.category_source ───────────────────────────────────────────────────
+-- places.category_source
 -- 'curated'  : category comes from data/places_curated.csv (hand-labelled)
 -- 'dataset'  : category comes from the hand-authored city/region CSVs
 -- 'auto'     : category comes from OSM tag mapping or automatic classification
 -- Only 'auto' rows may be reclassified; see the guard trigger below.
 ALTER TABLE places ADD COLUMN IF NOT EXISTS category_source TEXT NOT NULL DEFAULT 'auto';
 
--- ── curated-category guard ───────────────────────────────────────────────────
+-- curated-category guard
 -- Defence in depth for the "curated wins" rule (spec 6.3). Any UPDATE that
 -- changes `category` on a curated/dataset row is reverted unless the writer
 -- opted in for the current transaction:
@@ -47,7 +47,7 @@ CREATE TRIGGER places_guard_curated_category
     BEFORE UPDATE OF category ON places
     FOR EACH ROW EXECUTE FUNCTION places_guard_curated_category();
 
--- ── place_aliases ────────────────────────────────────────────────────────────
+-- place_aliases
 CREATE TABLE IF NOT EXISTS place_aliases (
     id         SERIAL PRIMARY KEY,
     place_id   INTEGER NOT NULL REFERENCES places (id) ON DELETE CASCADE,
@@ -65,7 +65,7 @@ CREATE INDEX IF NOT EXISTS place_aliases_place_ix ON place_aliases (place_id);
 CREATE INDEX IF NOT EXISTS place_aliases_alias_trgm
     ON place_aliases USING GIN (alias gin_trgm_ops);
 
--- ── place_sources ────────────────────────────────────────────────────────────
+-- place_sources
 CREATE TABLE IF NOT EXISTS place_sources (
     id          SERIAL PRIMARY KEY,
     place_id    INTEGER NOT NULL REFERENCES places (id) ON DELETE CASCADE,
@@ -83,7 +83,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS place_sources_uniq
     ON place_sources (provider, external_id);
 CREATE INDEX IF NOT EXISTS place_sources_place_ix ON place_sources (place_id);
 
--- ── areas ────────────────────────────────────────────────────────────────────
+-- areas
 CREATE TABLE IF NOT EXISTS areas (
     id         SERIAL PRIMARY KEY,
     code       TEXT NOT NULL UNIQUE,

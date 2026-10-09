@@ -48,7 +48,7 @@ FULL_ROW = {
 }
 
 
-# ── Where a file title comes from ───────────────────────────────────────────
+# Where a file title comes from
 
 
 def test_commons_hint_becomes_a_file_title():
@@ -251,7 +251,7 @@ def test_a_dead_wiki_does_not_break_the_reseed(monkeypatch):
     assert seed.wikipedia_pageimage([("not-a-wiki", "Title")]) == {}
 
 
-# ── What is never shown ─────────────────────────────────────────────────────
+# What is never shown
 
 
 def test_a_point_without_a_url_has_no_photo():
@@ -319,7 +319,7 @@ def test_an_itinerary_stop_carries_the_same_photo():
     assert _stop_payload({**row, "photo_url": None})["photo"] is None
 
 
-# ── The shipped file ────────────────────────────────────────────────────────
+# The shipped file
 
 
 def _photos() -> dict:
@@ -368,7 +368,7 @@ def test_the_file_is_sorted_so_a_reseed_is_diffable():
     assert keys == sorted(keys)
 
 
-# ── Live ────────────────────────────────────────────────────────────────────
+# Live
 
 
 def _get(path: str):

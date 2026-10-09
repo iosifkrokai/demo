@@ -59,7 +59,7 @@ from agent.planner.verify import (
 )
 from agent.requirements import Requirement, TripRequirements
 
-# ── Fixtures / helpers ───────────────────────────────────────────────────────
+# Fixtures / helpers
 
 def _cand(pid: int, name: str, category: str | None, lat: float = 53.68, lon: float = 23.83) -> Candidate:
     return Candidate(id=pid, name=name, category=category, lat=lat, lon=lon)
@@ -76,7 +76,7 @@ def _reqs(*requirements: Requirement, budget: int | None = None) -> TripRequirem
     return TripRequirements(requirements=list(requirements), budget_minutes=budget)
 
 
-# ── satisfied ────────────────────────────────────────────────────────────────
+# satisfied
 
 def test_must_visit_on_route_is_satisfied():
     route = [_cand(7, "Старый замок", "замок"), _cand(8, "Костёл", "костёл")]
@@ -206,7 +206,7 @@ def test_verify_accepts_a_validated_plan_object():
     assert result[0].place_ids == [7]
 
 
-# ── unmet ────────────────────────────────────────────────────────────────────
+# unmet
 
 def test_must_visit_absent_is_unmet_and_infeasible():
     route = [_cand(1, "Музей", "музей")]
@@ -276,7 +276,7 @@ def test_avoid_honoured_is_satisfied():
     assert result[0].reason == REASON_AVOID_OK
 
 
-# ── uncertain ────────────────────────────────────────────────────────────────
+# uncertain
 
 @pytest.mark.parametrize(
     "geometry",
@@ -319,7 +319,7 @@ def test_unknown_category_code_is_uncertain():
     assert overall_status(reqs) == "degraded"
 
 
-# ── infeasible: the mandatory stop Valhalla cannot route ─────────────────────
+# infeasible: the mandatory stop Valhalla cannot route
 
 def test_unroutable_must_visit_reports_infeasible_not_silence():
     route = [_cand(1, "Музей", "музей")]
@@ -340,7 +340,7 @@ def test_unroutable_must_visit_reports_infeasible_not_silence():
     assert overall_status(reqs) == "infeasible"
 
 
-# ── structural change: prune never silently drops a must-visit stop ──────────
+# structural change: prune never silently drops a must-visit stop
 
 def _island_cost() -> CostMatrix:
     """a→b is unroutable, everything else routes (the road-island case)."""
@@ -400,7 +400,7 @@ def test_prune_leaves_a_healthy_tour_untouched():
     assert report == []
 
 
-# ── validate: budget vs actual time, and the recorded breakdown ──────────────
+# validate: budget vs actual time, and the recorded breakdown
 
 def test_validate_checks_budget_against_actual_time():
     route = [_cand(1, "Музей", "музей"), _cand(2, "Туалет", "туалет")]
@@ -466,7 +466,7 @@ def test_validate_without_requirements_is_unchanged():
     assert "requirement_summary" not in plan.trace
 
 
-# ── explain: the satisfied / unmet / uncertain breakdown ─────────────────────
+# explain: the satisfied / unmet / uncertain breakdown
 
 def test_explain_includes_the_full_breakdown():
     route = [_cand(1, "Музей", "музей"), _cand(2, "Туалет у ратуши", "туалет")]

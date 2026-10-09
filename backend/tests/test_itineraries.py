@@ -35,7 +35,7 @@ BASE_URL = os.environ.get("SMOKE_BASE_URL", "http://localhost:8080")
 VALID_KEY_PREFIXES = ("city:", "region:", "osm:", "osm_poi:")
 
 
-# ── The curated file ────────────────────────────────────────────────────────
+# The curated file
 
 
 def test_file_carries_what_a_card_needs():
@@ -70,7 +70,7 @@ def test_a_broken_file_raises_instead_of_looking_empty(tmp_path):
         load_itineraries(empty)
 
 
-# ── Resolution against the dataset ──────────────────────────────────────────
+# Resolution against the dataset
 
 
 class _FakeCursor:
@@ -236,7 +236,7 @@ def test_visit_minutes_of_unknown_length_stays_zero_not_none():
     assert items[0]["stops"][0]["visit_minutes"] is None
 
 
-# ── Live: every shipped key resolves against the real dataset ───────────────
+# Live: every shipped key resolves against the real dataset
 
 
 def _live_available() -> bool:

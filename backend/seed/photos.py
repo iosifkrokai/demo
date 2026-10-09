@@ -93,9 +93,7 @@ WIKIMEDIA_HOSTS = ("upload.wikimedia.org", "commons.wikimedia.org")
 WANTED = ("wikidata", "wikipedia", "webpage", "wikimedia_commons", "image")
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Stage 1 — the PBF read (the only one), writing osm_photo_hints.json
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 def _osmium() -> Any:
@@ -192,9 +190,7 @@ def collect_hints(
     return found
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Stage 2 — hints → Wikimedia/Wikidata → place_photos.json (the only network)
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 def api(endpoint: str, params: dict[str, Any]) -> dict[str, Any]:
@@ -797,9 +793,7 @@ def resolve_photos(
     return photos
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Apply — write the file onto the DB, withdrawal included
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 def apply_to_db(conn: psycopg.Connection, photos: dict[str, dict[str, Any]]) -> int:
@@ -842,9 +836,7 @@ def apply_to_db(conn: psycopg.Connection, photos: dict[str, dict[str, Any]]) -> 
         return total
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # One entry for a caller that runs the stages in sequence
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 def run_stage(
@@ -901,9 +893,7 @@ def run_stage(
     return len(photos)
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # CLI
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 def _shown(path: Path) -> Path | str:

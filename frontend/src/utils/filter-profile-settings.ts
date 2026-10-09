@@ -5,7 +5,6 @@ import {
 import type { Profile } from '@/stores/common-store';
 import type { PossibleSettings } from '@/components/types';
 
-// Type guard to check if profile exists in settings objects
 type SettingsProfile = Exclude<Profile, 'auto'>;
 
 function isValidSettingsProfile(profile: Profile): profile is SettingsProfile {
@@ -39,7 +38,6 @@ export const filterProfileSettings = (
   }
 
   for (const setting in settings) {
-    // Check if the profile exists in settings_general
     if (profile in generalSettings) {
       for (const item of generalSettings[profile].numeric) {
         if (setting === item.param) {
@@ -61,7 +59,6 @@ export const filterProfileSettings = (
       }
     }
 
-    // Check if the profile exists in profile_settings
     if (profile in profileSettings) {
       for (const item of profileSettings[profile].numeric) {
         if (setting === item.param) {

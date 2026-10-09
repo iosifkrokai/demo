@@ -50,7 +50,7 @@ const createMockState = (overrides = {}) => ({
 describe('RouteLines', () => {
   beforeEach(() => {
     mockSource.mockClear();
-    // По умолчанию проводник не ведёт: линия рисуется целиком.
+    // By default the guide is not running: the line is drawn in full.
     mockUseCommonStore.mockReset();
     mockUseCommonStore.mockImplementation((selector) => selector({}));
     mockLayer.mockClear();
@@ -136,7 +136,7 @@ describe('RouteLines', () => {
         id: 'routes-line',
         type: 'line',
         paint: {
-          // Пройденная половина линии гаснет: цвет выбирается по флагу walked.
+          // The walked half of the line fades: the colour is picked by the walked flag.
           'line-color': [
             'case',
             ['==', ['get', 'walked'], true],
@@ -151,9 +151,9 @@ describe('RouteLines', () => {
   });
 
   it('гасит пройденную половину линии, пока ведёт проводник', () => {
-    // Навигатор не рисует весь маршрут за спиной: пройденное тускнеет, впереди
-    // остаётся акцентный цвет.
-    // Основной маршрут активен (индекс 0), а положение — его начало.
+    // The navigator does not draw the whole route behind you: the walked part
+    // fades and the part ahead keeps the accent colour.
+    // The main route is active (index 0), and the position is its start.
     mockUseDirectionsStore.mockImplementation((selector) => {
       const state = createMockState({ activeRouteIndex: 0, show: { 0: true } });
       return selector(state);

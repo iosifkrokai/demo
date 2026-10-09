@@ -56,7 +56,7 @@ def clean_cache(monkeypatch):
     cache.INTERPRET_CACHE.clear()
 
 
-# ── the key ──────────────────────────────────────────────────────────────────
+# the key
 
 def test_the_same_question_gets_the_same_key():
     instructions = "ты читаешь запрос"
@@ -118,7 +118,7 @@ def test_switching_the_model_invalidates_every_entry():
     assert cache.interpret_key("замки", _req(), instructions, None) != baseline
 
 
-# ── the store ────────────────────────────────────────────────────────────────
+# the store
 
 def test_an_expired_reading_is_not_returned():
     store = cache.TtlLru(maxsize=4, ttl_s=1)
@@ -161,7 +161,7 @@ def test_stats_are_countable_not_claimed():
     assert (stats["hits"], stats["misses"], stats["hit_rate"]) == (2, 1, 0.667)
 
 
-# ── the part that would bite: shared state ───────────────────────────────────
+# the part that would bite: shared state
 
 def test_the_second_reading_does_not_inherit_the_first_ones_verdicts(monkeypatch):
     """A cached contract must be handed out as a copy.

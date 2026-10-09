@@ -56,7 +56,7 @@ from .taxonomy import db_values
 
 log = logging.getLogger(__name__)
 
-# ── Hard caps ───────────────────────────────────────────────────────────────
+# Hard caps
 # These are the contract: a limit the model sends is clamped to them, and the
 # clamp is reported back. They exist so one misread query cannot pull the whole
 # region into the model's context.
@@ -100,7 +100,7 @@ _FACT_FIELDS = (
 _AREA_FIELDS = ("code", "name_ru", "name_en", "kind")
 
 
-# ── Result envelopes ────────────────────────────────────────────────────────
+# Result envelopes
 
 
 def _envelope(
@@ -148,7 +148,7 @@ def _positive_int(value: Any) -> bool:
     return isinstance(value, int) and not isinstance(value, bool) and value > 0
 
 
-# ── Connection / query seams (monkeypatched in tests) ───────────────────────
+# Connection / query seams (monkeypatched in tests)
 
 
 def _connect() -> Any:
@@ -290,7 +290,7 @@ def _fetch(db: Any, fn: Callable[[Any], Any]) -> tuple[Any, str | None, str | No
                 conn.close()
 
 
-# ── Tools ───────────────────────────────────────────────────────────────────
+# Tools
 
 
 def find_areas(term: str, locale: str = "ru") -> dict:

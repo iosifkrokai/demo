@@ -8,11 +8,9 @@ interface CopyButtonProps
   extends
     Omit<React.ComponentProps<'button'>, 'children'>,
     VariantProps<typeof buttonVariants> {
-  /** The text to copy to clipboard */
   value: string;
   /** Duration in ms to show the "copied" state. Default: 1500 */
   copiedDuration?: number;
-  /** Callback fired after text is copied */
   onCopied?: () => void;
   /** Custom icon size class. Default: "size-3.5" */
   iconClassName?: string;

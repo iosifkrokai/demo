@@ -552,8 +552,6 @@ describe('Sidebar', () => {
     }
   });
 
-  // ── The redesign (DESIGN.md phases 1–2) ────────────────────────────────────
-
   it('держит шапку без крестика: панель закрывает её же ручка', () => {
     render(<Sidebar />);
 
@@ -1049,8 +1047,6 @@ describe('Sidebar', () => {
     expect(screen.queryByText(/В базе не нашлось туалетов/i)).toBeNull();
   });
 
-  // ── Advanced filters (spec 002, W5) ────────────────────────────────────────
-
   /** The advanced block is behind «ещё фильтры» — open it the way a user does. */
   const openAdvanced = async (user: ReturnType<typeof userEvent.setup>) => {
     const toggle = screen.getByTestId('more-filters');
@@ -1124,7 +1120,7 @@ describe('Sidebar', () => {
     await user.click(screen.getByTestId('party-adults-inc'));
     await user.click(screen.getByTestId('party-children-inc'));
     await user.type(screen.getByTestId('children-ages'), '4, 7');
-    // туалет обязателен, кафе желательно, интерес — замки
+    // toilet mandatory, cafe desirable, castles as an interest
     await user.click(screen.getByTestId('amenity-туалет-hard'));
     await user.click(screen.getByTestId('amenity-кафе-soft'));
     await user.click(screen.getByTestId('interest-замок'));
@@ -1161,7 +1157,7 @@ describe('Sidebar', () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
 
     const body = sentBodies[0]!;
-    // код из двух слов должен дойти одним элементом, не разбитым по пробелу
+    // a two-word code must arrive as one element, not split on the space
     expect(body.hard_services).toContain('остановка транспорта');
     expect(body.hard_services).not.toContain('остановка');
     expect(body.hard_services).not.toContain('транспорта');
@@ -1340,8 +1336,6 @@ describe('Sidebar', () => {
   });
 });
 
-// ── Felt-quality pass: reachability, touch, focus order, honest counts ──────
-
 /** Focusable elements in DOM order — that is exactly the tab order. */
 const tabOrder = (root: HTMLElement): HTMLElement[] =>
   Array.from(
@@ -1371,8 +1365,8 @@ describe('Sidebar — felt quality', () => {
     render(<Sidebar />);
 
     const handle = screen.getByTestId('panel-resize-handle');
-    // Ширина живёт в CSS-переменной, а её читает класс панели только с md —
-    // мобильная шторка остаётся во всю ширину экрана.
+    // The width lives in a CSS variable, and the panel class reads it only from
+    // md up — the mobile sheet stays full width.
     const panelAt = () => document.querySelector('[style*="--panel-width"]');
     expect(handle).toHaveAttribute('aria-valuenow', '420');
     expect(panelAt()?.getAttribute('style')).toContain('--panel-width: 420px');
@@ -1393,18 +1387,18 @@ describe('Sidebar — felt quality', () => {
   });
 
   it('держит плотность телефона: ничто тоньше 40px, вкладки и чипы — 40', () => {
-    // Порог изменён по замеру (спека 004, §3): на телефоне табло и чипы — 40px,
-    // а не 44: 44-е чипы переносились по одному в строку и съедали половину
-    // листа, выдавливая главное действие из панели. Минимум для пальца 40,
-    // ниже — нельзя; тач-указатели вне телефона (планшеты) остаются 44.
+    // The threshold changed by measurement (spec 004, §3): on a phone the tab
+    // strip and chips are 40px, not 44 — 44px chips wrapped one per line and ate
+    // half the sheet, squeezing the main action out of the panel. 40 is the
+    // minimum for a finger; touch pointers outside a phone (tablets) stay 44.
     render(<Sidebar />);
 
     for (const id of ['mode-plan', 'mode-itineraries']) {
       const tabs = screen.getByTestId(id);
       expect(tabs.className).toMatch(/max-md:h-10/);
       expect(tabs.className).toMatch(/pointer-coarse:h-11/);
-      // Телефон перекрывает pointer-coarse явно: иначе на телефоне совпадают
-      // оба условия и решает порядок CSS, а не замысел.
+      // The phone overrides pointer-coarse explicitly: otherwise on a phone both
+      // conditions hold and CSS order, not intent, decides.
       expect(tabs.className).toMatch(/pointer-coarse:max-md:h-10/);
     }
     for (const id of [
@@ -1429,8 +1423,8 @@ describe('Sidebar — felt quality', () => {
   });
 
   it('даёт переключателю языка полноценную мишень на телефоне', () => {
-    // Замер до правки: RU/EN были 33x36 — ниже порога пальца, при том что это
-    // единственный контрол языка в шапке.
+    // Measured before the fix: RU/EN were 33x36 — below the finger threshold,
+    // even though this is the only language control in the header.
     render(<Sidebar />);
 
     const ru = screen.getByTestId('language-ru');
@@ -1439,10 +1433,10 @@ describe('Sidebar — felt quality', () => {
   });
 
   it('называет группы фильтров и на десктопе, и на телефоне', async () => {
-    // Найденный дефект: мобильные строки-секции заменили заголовки групп, и на
-    // десктопе «Участники / Удобства / Интересы / Избегать / Тип результата»
-    // исчезли — панель стала безымянной стеной полей. Группа обязана быть
-    // названа в обоих режимах: заголовок для десктопа, строка для телефона.
+    // Found defect: the mobile section rows replaced the group headings, and on
+    // desktop «Участники / Удобства / Интересы / Избегать / Тип результата»
+    // disappeared — the panel became a nameless wall of fields. A group must be
+    // named in both modes: a heading for desktop, a row for the phone.
     const user = userEvent.setup({ delay: null });
     render(<Sidebar />);
 
@@ -1467,7 +1461,7 @@ describe('Sidebar — felt quality', () => {
     render(<Sidebar />);
 
     await user.click(screen.getByTestId('more-filters'));
-    // Ничего не выбрано — счётчика нет: «0» не сообщает ничего.
+    // Nothing chosen — no counter: «0» says nothing.
     expect(screen.queryByTestId('section-count-interests')).toBeNull();
 
     await user.click(screen.getByTestId('section-toggle-interests'));
@@ -1476,7 +1470,7 @@ describe('Sidebar — felt quality', () => {
       '1'
     );
 
-    // Свёрнутая строка по-прежнему говорит, что внутри что-то есть.
+    // The collapsed row still says something is inside.
     await user.click(screen.getByTestId('section-toggle-interests'));
     expect(screen.getByTestId('section-count-interests')).toHaveTextContent(
       '1'

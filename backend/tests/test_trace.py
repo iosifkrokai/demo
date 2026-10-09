@@ -103,7 +103,7 @@ def test_elapsed_ms_is_monotonic_and_non_negative():
     assert data["spans"][0]["duration_ms"] >= 0
 
 
-# ── the guide run («полный прогон») ─────────────────────────────────────────
+# the guide run («полный прогон»)
 
 
 def test_the_run_id_is_carried_and_reported():
@@ -169,7 +169,7 @@ def test_export_without_a_run_id_opens_no_session(monkeypatch):
     assert seen == [None]
 
 
-# ── what Langfuse is actually handed ────────────────────────────────────────
+# what Langfuse is actually handed
 
 
 class _RecordingObs:

@@ -44,9 +44,7 @@ def _now() -> datetime:
     return datetime.now(UTC)
 
 
-# ============================================================================
 # Fakes
-# ============================================================================
 
 def _place_row(
     pid: int,
@@ -97,7 +95,7 @@ class FakeRepo:
             3: _place_row(3, "Фарный костёл", category="костёл"),
         }
 
-    # ── helpers ──
+    # helpers
     @staticmethod
     def _public(row: dict) -> dict:
         return {k: v for k, v in row.items() if k != "password_hash"}
@@ -109,7 +107,7 @@ class FakeRepo:
                 return row
         return None
 
-    # ── users ──
+    # users
     def create_user(self, user_id, *, email, password_hash, display_name=None,
                     role="user", client_id=None):
         if self._by_email(email) is not None:
@@ -148,7 +146,7 @@ class FakeRepo:
         if user_id in self.users:
             self.users[user_id]["last_login_at"] = _now()
 
-    # ── sessions ──
+    # sessions
     def create_session(self, token_hash, user_id, expires_at):
         self.sessions[token_hash] = {"user_id": user_id, "expires_at": expires_at}
 
@@ -161,7 +159,7 @@ class FakeRepo:
     def delete_session(self, token_hash):
         self.sessions.pop(token_hash, None)
 
-    # ── admin: users ──
+    # admin: users
     def list_users(self, *, q="", limit=50, offset=0):
         rows = [self._public(r) for r in self.users.values()]
         if q:
@@ -205,7 +203,7 @@ class FakeRepo:
                          if v["user_id"] != user_id}
         return True
 
-    # ── visits ──
+    # visits
     def list_visited(self, user_id):
         marks = self.visited.get(user_id, {})
         rows = []
@@ -236,7 +234,7 @@ class FakeRepo:
     def unmark_visited(self, user_id, place_id):
         return self.visited.get(user_id, {}).pop(place_id, None) is not None
 
-    # ── admin: places ──
+    # admin: places
     def list_places(self, *, q="", category="", limit=50, offset=0):
         rows = list(self.places.values())
         if q:
@@ -297,9 +295,7 @@ class DownRepo:
         return _boom
 
 
-# ============================================================================
 # Fixtures + helpers
-# ============================================================================
 
 @pytest.fixture
 def repo():
@@ -341,9 +337,7 @@ def _admin_client(repo, email=ADMIN_EMAIL, password=GOOD_PW):
     return tc
 
 
-# ============================================================================
 # Registration
-# ============================================================================
 
 class TestRegister:
 
@@ -405,9 +399,7 @@ class TestRegister:
         assert next(iter(repo.users.values()))["client_id"] is None
 
 
-# ============================================================================
 # Login / logout / me
-# ============================================================================
 
 class TestSession:
 
@@ -446,9 +438,7 @@ class TestSession:
         assert client.get("/auth/me").json()["authenticated"] is False
 
 
-# ============================================================================
 # Visits
-# ============================================================================
 
 class TestVisits:
 
@@ -504,9 +494,7 @@ class TestVisits:
         assert client.get("/me/visited").json()["count"] == 0
 
 
-# ============================================================================
 # Admin — access control
-# ============================================================================
 
 class TestAdminAccess:
 
@@ -526,9 +514,7 @@ class TestAdminAccess:
         assert admin.get("/admin/stats").status_code == 200
 
 
-# ============================================================================
 # Admin — users
-# ============================================================================
 
 class TestAdminUsers:
 
@@ -592,9 +578,7 @@ class TestAdminUsers:
         assert admin.delete(f"/admin/users/{uuid.uuid4()}").status_code == 404
 
 
-# ============================================================================
 # Admin — places
-# ============================================================================
 
 class TestAdminPlaces:
 
@@ -642,9 +626,7 @@ class TestAdminPlaces:
         assert r.json() == {"reason": "invalid_request"}
 
 
-# ============================================================================
 # Storage down — 503 storage_unavailable everywhere, never a 500
-# ============================================================================
 
 class TestStorageDown:
 
@@ -682,9 +664,7 @@ def json_body(body):
     return {"json": body} if body is not None else {}
 
 
-# ============================================================================
 # Password hashing
-# ============================================================================
 
 class TestPasswords:
 
@@ -730,9 +710,7 @@ def test_place_patch_forbids_null_coordinates():
             AdminPlacePatch(**bad)
 
 
-# ============================================================================
 # The real thing: live Postgres, skipped when unreachable
-# ============================================================================
 
 BACKEND = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 MIGRATION = os.path.join(BACKEND, "db", "migrations", "0008_accounts_visits.sql")

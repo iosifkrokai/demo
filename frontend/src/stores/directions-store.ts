@@ -51,7 +51,6 @@ interface LatLng {
   lat: number;
 }
 
-// Route history entry
 export interface RouteHistoryEntry {
   id: string;
   query: string;
@@ -203,7 +202,6 @@ export interface DirectionsState {
   inclineDeclineTotal?: InclineDeclineTotal;
   isOptimized: boolean;
   activeRouteIndex: number;
-  // Route history
   routeHistory: RouteHistoryEntry[];
   // Curated info (blurb / fun fact) about agent-generated stops, by places.id.
   placeDetails: Record<number, PlaceDetails>;
@@ -246,7 +244,6 @@ interface DirectionsActions {
   ) => void;
   setIsOptimized: (isOptimized: boolean) => void;
   setActiveRouteIndex: (index: number) => void;
-  // Route history actions
   addToHistory: (entry: Omit<RouteHistoryEntry, 'id' | 'createdAt'>) => void;
   /**
    * Record how far the walk of a route has got. Matched on the route's stop
@@ -261,7 +258,6 @@ interface DirectionsActions {
   clearHistory: () => void;
   loadHistory: () => void;
   setPlaceDetails: (details: Record<number, PlaceDetails>) => void;
-  // ── Iterative refinement ──
   /** Remove stops by DB id and remember them as excluded from future turns. */
   excludeStops: (params: { placeIds: number[] }) => void;
   /** Un-exclude a stop (the user brought it back / asked for it explicitly). */
@@ -533,7 +529,6 @@ export const useDirectionsStore = create<DirectionsStore>()(
           'setActiveRouteIndex'
         ),
 
-      // Route history actions
       addToHistory: (entry) =>
         set(
           (state) => {
@@ -551,7 +546,6 @@ export const useDirectionsStore = create<DirectionsStore>()(
             if (previous?.routeKey && previous.routeKey === entry.routeKey) {
               newEntry.walk = previous.walk;
             }
-            // Remove duplicate queries
             state.routeHistory = [
               newEntry,
               ...state.routeHistory.filter((e) => e.query !== entry.query),

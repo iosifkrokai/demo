@@ -119,9 +119,7 @@ def _parse_uuid(value: str) -> uuid.UUID | None:
         return None
 
 
-# ============================================================================
 # Preferences
-# ============================================================================
 
 @router.get("/preferences", response_model=PreferencesOut)
 @_storage_guarded
@@ -162,9 +160,7 @@ def put_preferences(
     return PreferencesOut(**stored)
 
 
-# ============================================================================
 # Saved routes
-# ============================================================================
 
 @router.post("/routes", response_model=RouteCreated, status_code=201)
 @_storage_guarded
@@ -271,9 +267,7 @@ def delete_route(
     return Response(status_code=204)
 
 
-# ============================================================================
 # The client itself (spec §5 — "удалить мои данные")
-# ============================================================================
 
 @router.delete("", status_code=204, response_model=None)
 @_storage_guarded

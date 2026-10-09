@@ -10,8 +10,6 @@ import {
 } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
-// ── Mocks must be declared before their corresponding imports ──────────────
-
 // Module-level mutable array: vi.mock is hoisted so this must be declared before it.
 // Only used by the "re-acquires" test; cleared at the start of that test.
 const toastCalls: unknown[][] = [];
@@ -231,8 +229,8 @@ describe('GuidePanel', () => {
   });
 
   it('помнит пройденную остановку и после того, как турист пошёл дальше', () => {
-    // Навигатор обязан помнить «я здесь был»: иначе весь пройденный маршрут
-    // остаётся «пройдено 0 из N», что и было видно на записи прохода.
+    // The navigator must remember «я здесь был»: otherwise the whole walked
+    // route stays «пройдено 0 из N», which is what a recording of the walk showed.
     let push: ((p: unknown) => void) | null = null;
     Object.defineProperty(navigator, 'geolocation', {
       configurable: true,
@@ -256,7 +254,7 @@ describe('GuidePanel', () => {
         },
       });
     });
-    // Дальше турист уходит из радиуса остановки.
+    // The tourist then walks out of the stop's radius.
     act(() => {
       push?.({ coords: { latitude: 53.7, longitude: 23.9, accuracy: 8 } });
     });
@@ -265,9 +263,9 @@ describe('GuidePanel', () => {
   });
 
   it('отмечает остановку, на которой стоит турист, даже если предыдущую он пропустил', () => {
-    // Срезанный угол не должен замолчать весь маршрут: раньше цикл выходил на
-    // первой же непройденной остановке дальше радиуса, и все следующие
-    // оставались неотмеченными, хотя турист шёл прямо по ним.
+    // A cut corner must not silence the whole route: the loop used to break at
+    // the first unvisited stop beyond the radius, and every stop after it stayed
+    // unmarked even though the tourist walked right through them.
     stubGeolocation({ latitude: STOPS[1]!.lat, longitude: STOPS[1]!.lon });
     render(<GuidePanel stops={STOPS} onExit={noop} />);
 
@@ -669,7 +667,7 @@ describe('GuidePanel · режим движения', () => {
     const user = userEvent.setup();
     render(<GuidePanel stops={STOPS} onWalked={onWalked} onExit={noop} />);
 
-    // До начала прогулки прогресса нет, но он уже честно равен нулю.
+    // Before the walk there is no progress, but it is already honestly zero.
     await waitFor(() =>
       expect(onWalked).toHaveBeenLastCalledWith({ visited: 0, total: 2 })
     );
@@ -913,7 +911,7 @@ describe('GuidePanel · режим движения', () => {
 
     geo.push(STOPS[0]!.lat, STOPS[0]!.lon, 8);
 
-    // Дистанция — крупное число над инструкцией.
+    // The distance is the large number above the instruction.
     const distance = screen.getByTestId('guide-maneuver-distance');
     expect(distance).toHaveTextContent(/\d+ м|\d+[.,]\d км/i);
     expect(distance.className).toContain('text-2xl');
@@ -925,7 +923,7 @@ describe('GuidePanel · режим движения', () => {
 
     geo.push(STOPS[0]!.lat, STOPS[0]!.lon, 120);
 
-    // Крупной цифры нет; инструкция видна с пометкой о слабом сигнале.
+    // There is no large number; the instruction shows with a weak-signal note.
     expect(screen.queryByTestId('guide-maneuver-distance')).toBeNull();
     expect(screen.getByTestId('guide-maneuver-unprecise')).toBeInTheDocument();
   });
@@ -954,7 +952,7 @@ describe('GuidePanel · NearbyHint', () => {
     opening_hours: null,
     hours_known: false,
     off_line_m: 5,
-    // 50 м от начала — within NEARBY_HINT_AHEAD_M (120 м) от старта.
+    // 50 m from the start — within NEARBY_HINT_AHEAD_M (120 m) of the start.
     along_m: 50,
     along_fraction: 0.07,
     detour_confirmed: false,
@@ -979,7 +977,7 @@ describe('GuidePanel · NearbyHint', () => {
 
     await start();
 
-    // Показываем подсказку рядом.
+    // The nearby hint is shown.
     expect(screen.getByTestId('guide-nearby-hint')).toBeInTheDocument();
     expect(screen.getByTestId('guide-nearby-hint')).toHaveTextContent(
       /туалет/i
@@ -1017,7 +1015,7 @@ describe('GuidePanel · NearbyHint', () => {
     render(<GuidePanel stops={STOPS} onExit={noop} />);
     geo.push(STOPS[0]!.lat, STOPS[0]!.lon, 8);
 
-    // Первое появление.
+    // First appearance.
     expect(screen.getByTestId('guide-nearby-hint')).toBeInTheDocument();
 
     // Dismiss.
@@ -1026,7 +1024,7 @@ describe('GuidePanel · NearbyHint', () => {
       .click(screen.getByTestId('guide-nearby-hint-dismiss'));
     expect(screen.queryByTestId('guide-nearby-hint')).toBeNull();
 
-    // Повторный рендер (новый фикс) — подсказка не возвращается.
+    // A re-render (new fix) — the hint does not come back.
     geo.push(STOPS[0]!.lat, STOPS[0]!.lon, 8);
     expect(screen.queryByTestId('guide-nearby-hint')).toBeNull();
   });
@@ -1231,34 +1229,35 @@ describe('GuidePanel · фиксы в фоне', () => {
   });
 
   it('не скачет прогрессом вперёд по возвращении из фона — слабый фикс не тикает остановки', async () => {
-    // Слабый фикс сам по себе (без хорошего) не тикает остановку — это ключевое
-    // поведение: в фоне фиксы приходят реже/хуже, и они не должны тикать.
-    // Сценарий: турист стоит в 200 м от первой остановки. Слабый фикс
-    // (poor accuracy) — остановка не тикается. Хороший фикс из той же точки —
-    // остановка тикается. Фикс из радиуса остановки + слабый фикс — уже тикнуто.
+    // A weak fix on its own (without a good one) does not tick a stop — this is
+    // the key behaviour: in the background fixes arrive less often and worse, and
+    // they must not tick. Scenario: the tourist stands 200 m from the first stop.
+    // A weak fix (poor accuracy) — the stop is not ticked. A good fix from the
+    // same point — the stop is ticked. A fix inside the stop radius plus a weak
+    // fix — already ticked.
     const geo = stubWatchingGeolocation();
     const user = userEvent.setup();
     render(<GuidePanel stops={STOPS} onExit={noop} />);
     await user.click(screen.getByTestId('guide-start'));
 
-    // 200 м к северу от первой остановки: достаточно близко чтобы дойти, но
-    // за пределами ARRIVAL_RADIUS_M (40 м) — ни один фикс отсюда не тикнет.
+    // 200 m north of the first stop: close enough to reach, but outside
+    // ARRIVAL_RADIUS_M (40 m) — no fix from here ticks anything.
     geo.standNorthOf(STOPS[0]!, 200);
 
     await waitFor(() =>
       expect(screen.getByTestId('guide-line-progress')).toBeInTheDocument()
     );
 
-    // Слабый фикс из той же точки: quality = 'poor' → precise = false → остановка не тикается.
+    // A weak fix from the same point: quality = 'poor' → precise = false → the stop is not ticked.
     geo.push(STOPS[0]!.lat + 200 / 111_320, STOPS[0]!.lon, 120);
 
     expect(screen.getByText(/пройдено 0 из 2/i)).toBeInTheDocument();
   });
 
   it('не теряет текущую остановку по возвращении из фона — она уже в effectiveVisited', async () => {
-    // Остановка тикается в effectiveVisited через useEffect по fix + precise.
-    // Она уже в effectiveVisited, значит nextStop вычисляется по ней и при
-    // возвращении вкладки следующей остановкой остаётся та же, что и была.
+    // The stop is ticked into effectiveVisited by the useEffect on fix + precise.
+    // It is already in effectiveVisited, so nextStop is computed from it and on
+    // returning to the tab the next stop stays the same one it was.
     const geo = stubWatchingGeolocation();
     const user = userEvent.setup();
     render(<GuidePanel stops={STOPS} onExit={noop} />);
@@ -1295,7 +1294,7 @@ describe('GuidePanel · английский интерфейс', () => {
     stubGeolocation(null);
     render(<GuidePanel stops={STOPS} onExit={noop} />);
 
-    // Шапка.
+    // Header.
     expect(screen.getByText('Guide')).toBeInTheDocument();
     expect(screen.queryByText('Проводник')).toBeNull();
     expect(
@@ -1309,7 +1308,7 @@ describe('GuidePanel · английский интерфейс', () => {
       'Монастырь бригиток'
     );
 
-    // Прогресс и главное действие.
+    // Progress and the primary action.
     expect(screen.getByText(/walked 0 of 2/i)).toBeInTheDocument();
     expect(screen.queryByTestId('guide-geo-status')).toBeNull();
     expect(screen.getByTestId('guide-start')).toHaveTextContent(
@@ -1330,15 +1329,15 @@ describe('GuidePanel · английский интерфейс', () => {
     render(<GuidePanel stops={STOPS} onExit={noop} />);
 
     const header = screen.getByTestId('guide-header');
-    // Ряд переносится, блок заголовка может сжиматься (min-w-0), группа кнопок
-    // не сжимается (shrink-0) — при 390px ни одна кнопка не выходит за экран и
-    // не накладывается на соседнюю.
+    // The row wraps, the title block can shrink (min-w-0), the button group does
+    // not shrink (shrink-0) — at 390px no button leaves the screen or overlaps its
+    // neighbour.
     expect(header.className).toContain('flex-wrap');
     // The title block can shrink so it never pushes the controls out.
     expect(header.querySelector('.min-w-0')).not.toBeNull();
     const resetButton = screen.getByRole('button', { name: 'сбросить' });
     expect(resetButton.className).toContain('shrink-0');
-    // Компактная подпись вместо прежней «сбросить прогресс».
+    // A compact label instead of the former «сбросить прогресс».
     expect(screen.queryByText('сбросить прогресс')).toBeNull();
   });
 });

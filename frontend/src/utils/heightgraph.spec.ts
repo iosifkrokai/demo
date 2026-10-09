@@ -137,13 +137,11 @@ describe('buildHeightgraphData', () => {
 
     expect(result[0]!.features.length).toBeGreaterThan(1);
 
-    // Check that we get different height classes
     const heightClasses = result[0]!.features.map(
       (f) => f.properties.attributeType
     );
     expect(new Set(heightClasses).size).toBeGreaterThan(1);
 
-    // Verify incline and decline totals
     expect(result[0]!.properties.inclineTotal).toBe(15); // 10 + 5
     expect(result[0]!.properties.declineTotal).toBe(7); // 3 + 4
   });
@@ -226,7 +224,6 @@ describe('buildHeightgraphData', () => {
 
     const result = buildHeightgraphData(coordinates, rangeHeightData);
 
-    // Should have multiple features with different height classes
     expect(result[0]!.features.length).toBeGreaterThan(0);
 
     const heightClasses = result[0]!.features.map(
@@ -247,7 +244,6 @@ describe('colorMappings', () => {
   it('should have color mappings for all height classes', () => {
     expect(colorMappings.steepness).toBeDefined();
 
-    // Check that all height classes from -5 to 5 have color mappings
     for (let i = -5; i <= 5; i++) {
       const key = i.toString() as keyof typeof colorMappings.steepness;
       expect(colorMappings.steepness[key]).toBeDefined();

@@ -29,7 +29,6 @@ describe('CollapsibleSection', () => {
         <div>Content</div>
       </CollapsibleSection>
     );
-    // Lucide icons render as SVGs, we can check for the class or presence
     const icon = document.querySelector('.lucide-settings');
     expect(icon).toBeInTheDocument();
   });
@@ -58,11 +57,7 @@ describe('CollapsibleSection', () => {
         <div>Hidden Content</div>
       </CollapsibleSection>
     );
-    // Collapsible content is usually hidden with attributes or CSS
-    // Radix Collapsible adds 'hidden' attribute when closed
     const content = screen.queryByText('Hidden Content');
-    // Note: implementation detail of Radix UI Collapsible might keep it in DOM but hidden
-    // or unmounted. Let's check visibility if it's in the document.
     if (content) {
       expect(content).not.toBeVisible();
     } else {
@@ -112,8 +107,6 @@ describe('CollapsibleSection', () => {
         <div>Content</div>
       </CollapsibleSection>
     );
-    // The className is applied to the root element (Collapsible)
-    // We need to find the element with that class
     const element = container.querySelector('.custom-class');
     expect(element).toBeInTheDocument();
   });
@@ -129,7 +122,6 @@ describe('CollapsibleSection', () => {
       </CollapsibleSection>
     );
 
-    // We look for the chevron icon which should have rotate-180 class
     const chevron = container.querySelector('.lucide-chevron-down');
     expect(chevron).toHaveClass('rotate-180');
   });

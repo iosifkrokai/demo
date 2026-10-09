@@ -912,9 +912,7 @@ class Pipeline:
         """Seconds left of this request's end-to-end deadline (may be < 0)."""
         return constants.REQUEST_DEADLINE_S - (_time.perf_counter() - t0)
 
-    # ------------------------------------------------------------------
     # Public API
-    # ------------------------------------------------------------------
 
     def generate(self, req: GenerateReq) -> RouteResponse:
         t0 = _time.perf_counter()
@@ -1035,7 +1033,7 @@ class Pipeline:
         # 2b. Coverage gate. The reading can say that a name in the request lies
         # outside the region this system serves; what follows from that is
         # decided here, before anything is retrieved. Without this gate a request
-        # about Vilnius Cathedral was answered `ready` with four stops in Лида:
+        # about Vilnius Cathedral was answered `ready` with four stops in Lida:
         # the name matcher had accepted a different cathedral in a different town
         # as the named place, and the route was planned around it. A refusal is
         # the honest answer; a route to somewhere else is not.
@@ -1148,7 +1146,7 @@ class Pipeline:
             user_removed=user_removed,
         )
 
-        # ── Catalogue: a list to choose from, not a walk to follow ──────────
+        # Catalogue: a list to choose from, not a walk to follow
         # «что показать: каталог» — the tourist wants to browse the matching
         # places (grouped by town) and pick some. There is no order to optimise
         # and no line to draw, so the walk-specific steps below (geo focus,
@@ -1881,9 +1879,7 @@ class Pipeline:
             "valhalla": valhalla_ok,
         }
 
-    # ------------------------------------------------------------------
     # Internals
-    # ------------------------------------------------------------------
 
     def _refinement_base(self, ctx) -> list[Candidate]:
         """The previous route's stops, as Candidate objects.

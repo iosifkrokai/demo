@@ -42,7 +42,7 @@ from ..models import Candidate, LatLon
 from .cost import visit_time_minutes
 from .resolve import CATEGORY_SYNONYMS, CATEGORY_SYNONYMS_EN
 
-# ── Machine reason codes (localized by the API layer, never here) ────────────
+# Machine reason codes (localized by the API layer, never here)
 
 # An operation we recognise but cannot perform ("сделай маршрут короче").
 REFINEMENT_UNSUPPORTED = "refinement_unsupported"
@@ -68,7 +68,7 @@ REASON_TEXT: dict[str, str] = {
     ),
 }
 
-# ── Instruction verbs ───────────────────────────────────────────────────────
+# Instruction verbs
 # Word-boundary regexes; Russian \b works on Cyrillic in Python 3 (\w is
 # unicode-aware).  Only the *verb* is matched here — the attribute (what to
 # sort by, what to add) is matched separately so "сделай короче" is not
@@ -148,7 +148,7 @@ def _has(pattern: re.Pattern[str], text: str) -> bool:
     return bool(pattern.search(text or ""))
 
 
-# ── The typed operation ─────────────────────────────────────────────────────
+# The typed operation
 
 
 @dataclass(frozen=True)
@@ -404,7 +404,7 @@ def _add_names(text: str, categories: tuple[str, ...]) -> tuple[str, ...]:
     return tuple(dict.fromkeys(out))
 
 
-# ── Reordering ──────────────────────────────────────────────────────────────
+# Reordering
 
 
 def visit_minutes_of(candidate: Candidate) -> int:

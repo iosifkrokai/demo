@@ -29,7 +29,7 @@ import { router } from '@/routes';
 const getActiveWaypoints = (waypoints: Waypoint[]): ActiveWaypoint[] =>
   waypoints.flatMap((wp) => wp.geocodeResults.filter((r) => r.selected));
 
-// ── Agent route hand-over (spec 002 §7: one route, one source) ──────────────
+// Agent route hand-over (spec 002 §7: one route, one source).
 //
 // The backend answers POST /routes/generate with the plan it verified: ordered
 // `points`, a GeoJSON `shape` and the `summary` of exactly that line. Before
@@ -209,7 +209,6 @@ async function requestRoute(
       let errorMsg =
         retried.error || errorData.error || 'Could not fetch resource';
 
-      // Append context for route-specific error
       if (retried.error_code === 154) {
         errorMsg += ` for route.`;
       }
@@ -220,11 +219,9 @@ async function requestRoute(
 
   const data: ValhallaRouteResponse = await response.json();
 
-  // Parse geometry for main route
   (data as ParsedDirectionsGeometry).decodedGeometry =
     parseDirectionsGeometry(data);
 
-  // Parse geometry for alternates
   data.alternates?.forEach((alternate, i) => {
     if (alternate) {
       (data.alternates![i] as ParsedDirectionsGeometry).decodedGeometry =
@@ -426,7 +423,6 @@ export function useSetWaypointFromCoords() {
       }
     }
 
-    // Set placeholder immediately
     updatePlaceholderAddressAtIndex(index, lng, lat);
 
     const lngLat: [number, number] = [lng, lat];

@@ -1,5 +1,5 @@
 /**
- * Small shared helpers for the guide (проводник) and its parts: the walk
+ * Small shared helpers for the guide and its parts: the walk
  * repeats them in the panel, in the next-stop card and in the stop list, so
  * one wording means one thing everywhere.
  *

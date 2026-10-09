@@ -158,13 +158,13 @@ describe('ServicesLayer', () => {
     });
 
     it('разносит метки по экрану, а не по метрам', () => {
-      // Три подряд в пределах 40 м друг от друга: в кучу им нельзя ни там,
-      // ни там. Без экранных координат падает на географический запас.
+      // Three in a row within 40 m of each other: they must not clump in either
+      // case. Without screen coordinates it falls back to the geographic gap.
       const items = [near(1, 0), near(2, 0.0002), near(3, 0.0004)];
       expect(visibleServices(items, centre, thin)).toHaveLength(1);
 
-      // Две метки, далеко друг от друга по карте, но рядом на экране —
-      // всё равно вторая лишняя.
+      // Two marks far apart on the map but close together on screen — the second
+      // is still dropped.
       const two = [near(1, 0), near(2, 0.0003)];
       const screen = [
         { x: 200, y: 300 },
@@ -182,13 +182,13 @@ describe('ServicesLayer', () => {
     });
 
     it('берёт ближайшие к центру карты, а не первые попавшиеся', () => {
-      // Дальняя метка (55 км) не проходит порог близости к уже взятым, но
-      // расстояние между взятыми всё равно должно быть убывающим.
+      // The distant mark (55 km) does not pass the proximity threshold to the
+      // marks already kept, but the distance between the kept ones must still decrease.
       const items = [near(1, 0.5), near(2, 0.001), near(3, 0.002)];
       const shown = visibleServices(items, centre, thin).map((s) => s.id);
       expect(shown).toEqual([2, 3, 1]);
 
-      // А когда мест больше предела, дальние отбрасываются первыми.
+      // And when there are more marks than the limit, the furthest are dropped first.
       const many = Array.from({ length: 8 }, (_, i) =>
         near(i, 0.001 * (i + 1))
       );

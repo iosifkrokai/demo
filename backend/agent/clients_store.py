@@ -165,7 +165,7 @@ class PostgresClientRepository:
         self._lock = threading.Lock()
         self.max_routes = max_routes
 
-    # ── connection plumbing ────────────────────────────────────────────────
+    # connection plumbing
 
     def _connection(self) -> psycopg.Connection:
         conn = self._conn
@@ -198,7 +198,7 @@ class PostgresClientRepository:
         with self._lock:
             self._drop()
 
-    # ── clients ────────────────────────────────────────────────────────────
+    # clients
 
     def ensure_client(self, client_id: uuid.UUID) -> None:
         """Insert the client if unseen, otherwise refresh ``last_seen_at``."""
@@ -218,7 +218,7 @@ class PostgresClientRepository:
             cur.execute("DELETE FROM clients WHERE id = %s", (client_id,))
             return cur.rowcount > 0
 
-    # ── preferences ────────────────────────────────────────────────────────
+    # preferences
 
     def get_preferences(self, client_id: uuid.UUID) -> dict[str, Any] | None:
         """The stored row, or ``None`` when nothing has been saved yet."""
@@ -258,7 +258,7 @@ class PostgresClientRepository:
             row = cur.fetchone()
         return dict(row)  # RETURNING on an upsert always yields exactly one row
 
-    # ── saved routes ───────────────────────────────────────────────────────
+    # saved routes
 
     def add_route(
         self,

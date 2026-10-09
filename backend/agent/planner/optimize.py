@@ -39,9 +39,7 @@ WALK_KMH = 4.0
 _DRIVE_LEG_FALLBACK_S = 4 * 3600
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Top-level dispatcher
-# ─────────────────────────────────────────────────────────────────────────────
 
 def optimize(
     candidates: list[Candidate],
@@ -86,7 +84,7 @@ def optimize(
             candidates, matrix, visits, budget_s, info, costing=costing
         )
 
-    # ── Defect 3 fix: budget-constrained greedy selection ─────────────────
+    # Defect 3 fix: budget-constrained greedy selection
     # After optimization, greedily trim the route to fit inside the budget
     # and respect the max-leg walkability constraint.  Must-visit places are
     # protected; all other stops are dropped in reverse-relevance order when
@@ -219,9 +217,7 @@ def _max_leg(route: list[int], matrix: list[list[float]]) -> float:
     return max(matrix[a][b] for a, b in zip(route, route[1:]))
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Mode A: brute force with open endpoints (n ≤ 6)
-# ─────────────────────────────────────────────────────────────────────────────
 
 def _brute_open(
     cands: list[Candidate],
@@ -283,9 +279,7 @@ def _brute_open(
     return best_route, info
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Mode B: regret-2 insertion (7 ≤ n ≤ 12)
-# ─────────────────────────────────────────────────────────────────────────────
 
 def _regret_insertion(
     cands: list[Candidate],
@@ -377,9 +371,7 @@ def _regret_insertion(
     return route, info
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Mode C: NN + multi-restart 2-opt (n > 12)
-# ─────────────────────────────────────────────────────────────────────────────
 
 def _nn_2opt_multi(
     cands: list[Candidate],

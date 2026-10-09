@@ -27,9 +27,7 @@ from agent.planner.retrieve import (
     rrf_fuse,
 )
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Fake helpers
-# ─────────────────────────────────────────────────────────────────────────────
 
 def _c(
     id: int,
@@ -56,9 +54,7 @@ def _c(
     )
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Defect 1: town-only match → NOT must_visit; name match → may be must_visit
-# ─────────────────────────────────────────────────────────────────────────────
 
 class TestIsTownOrDistrictMatch:
     """_is_town_or_district_match correctly identifies town/district-only rows."""
@@ -171,9 +167,7 @@ class TestResolveNamedPlacesLogic:
             "an area anchor is not a resolved must-visit name"
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Defect 2: category intent steers selection
-# ─────────────────────────────────────────────────────────────────────────────
 
 class TestCategoryKeywordDetection:
     """_detect_category_keywords extracts LLM categories from raw query text."""
@@ -234,9 +228,7 @@ class TestCategorySteering:
             "Castle in both keyword+category signals must outrank church (keyword only)"
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Defect 3: regional routes with 13-25 km legs are not in-budget walks
-# ─────────────────────────────────────────────────────────────────────────────
 
 class TestBudgetConstrain:
     """_budget_constrain removes stops that violate the budget or max-leg constraint."""
@@ -325,9 +317,7 @@ class TestMaxLeg:
         assert _max_leg([0, 2], matrix) == 50.0
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Defect 4: explanation derives area from stops
-# ─────────────────────────────────────────────────────────────────────────────
 
 class TestAreaName:
     """_area_name picks the right geographic descriptor for the route."""
@@ -397,9 +387,7 @@ class TestExplainArea:
             f"Explanation must NOT hardcode 'Гродно' for a Мир route; got: {text}"
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Integration: full resolve() for a town-only query
-# ─────────────────────────────────────────────────────────────────────────────
 
 class TestResolveIntegration:
     """resolve() returns area_anchor but empty must_visit_ids for town-only queries."""

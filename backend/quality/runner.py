@@ -1,10 +1,4 @@
 #!/usr/bin/env python3
-#
-# RUF001/RUF002/RUF003 want "ambiguous" Cyrillic letters (В~B, С~C, Р~P, О~O ...)
-# spelled in Latin, and the U+2212 minus next to the U+002D hyphen. This file's
-# prose is Russian, where those homoglyphs are the correct spelling of ordinary
-# words, so the warnings are false positives. Kept rather than transliterating
-# the comments.
 """
 bench_routes.py — Golden-set evaluation for the Grodno route planner.
 
@@ -595,7 +589,6 @@ def name_similarity(a: str, b: str) -> float:
 
 # ── matching ────────────────────────────────────────────────────────────────
 
-# Two stops are considered the same if they are within this radius (km)
 MATCH_RADIUS_KM = 0.75  # ~750 m — generous for a pedestrian context
 
 # recall@K is taken over the whole reference route (K = len(golden.stops)). The
@@ -617,13 +610,11 @@ def match_golden_to_ours(
     if n == 0 or m == 0:
         return [(None, None)] * n
 
-    # Precompute distance matrix
     dists: list[list[float]] = [
         [haversine_km(gs.lat, gs.lon, os.lat, os.lon) for os in our_stops]
         for gs in golden_stops
     ]
 
-    # Greedy: for each golden stop, pick the closest our stop within radius
     used_our: set[int] = set()
     result: list[tuple[int | None, int | None]] = []
     for gi in range(n):
@@ -647,7 +638,6 @@ def match_golden_to_ours(
 # ── the reference walk ───────────────────────────────────────────────────────
 #
 # WHY THE ORDER OF STOPS IN THE .json FILE IS NOT A REFERENCE ORDER
-# =============================================================================
 # Each quality/cases/routes/*.json lists its stops in the order the Wikivoyage
 # article happens to present its sections. That is an editorial layout, not a
 # walking route, and it is measurably a *worse* walk than the same stops visited
@@ -936,7 +926,6 @@ def stage_split(
 ) -> StageSplit:
     """Split one run's outcome into a retrieval proxy and an assembly number."""
     if pool and pool.get("points"):
-        # A real pool with coordinates: score it directly.
         points = pool["points"]
         source = "stage1_pool"
         exposed = True

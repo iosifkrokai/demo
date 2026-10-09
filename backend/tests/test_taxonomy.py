@@ -22,9 +22,7 @@ from agent.taxonomy import (
     visit_minutes,
 )
 
-# ─────────────────────────────────────────────────────────────────────────────
 # The data file itself
-# ─────────────────────────────────────────────────────────────────────────────
 
 class TestTaxonomyData:
 
@@ -60,9 +58,7 @@ class TestTaxonomyData:
             assert role(code) == "service"
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Round trip: taxonomy code → db_values → SQL filter value
-# ─────────────────────────────────────────────────────────────────────────────
 
 class TestRoundTrip:
 
@@ -111,9 +107,7 @@ class TestServicesNoLongerEmpty:
             assert db_categories([code]) == [code]
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # resolve_code — free text → canonical code
-# ─────────────────────────────────────────────────────────────────────────────
 
 class TestResolveCode:
 
@@ -177,9 +171,7 @@ class TestResolveCode:
             assert code in all_codes()
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # db_values semantics
-# ─────────────────────────────────────────────────────────────────────────────
 
 class TestDbValues:
 
@@ -198,9 +190,7 @@ class TestDbValues:
         assert db_values([]) == []
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Accessors + constants derived from the taxonomy (no second list)
-# ─────────────────────────────────────────────────────────────────────────────
 
 class TestAccessorsAndConstants:
 

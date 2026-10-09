@@ -72,8 +72,7 @@ export const VALHALLA_EDGES_LAYER: LayerSpecification = {
   },
 };
 
-// Shortcuts is now a separate tile layer.
-// and It uses the same line style as edges.
+// Shortcuts is a separate tile layer, sharing the edges line style.
 export const VALHALLA_SHORTCUTS_LAYER: LayerSpecification = {
   id: VALHALLA_SHORTCUTS_LAYER_ID,
   type: 'line',

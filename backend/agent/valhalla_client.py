@@ -54,14 +54,14 @@ SNAP_ERROR_MARKERS = ("candidate edge", "for destination label", "for origin lab
 #   400 {"error_code":442,"error":"No path could be found for input"}
 # for any request that has to reach it. Measured with the auto costing on
 # «Костел Святого Антония Падуанского» (53.007611,23.917041): /route from
-# Волковыск → 400/442, while the 2.3 km hop to its neighbour works. One such
+# Volkovysk → 400/442, while the 2.3 km hop to its neighbour works. One such
 # stop used to fail the whole tour and the UI drew points with no line, so it
 # gets the same treatment as a snap failure: widen the radius, then drop it.
 NO_PATH_MARKERS = ("no path could be found", "error_code\":442")
 ROUTE_FAILURE_MARKERS = SNAP_ERROR_MARKERS + NO_PATH_MARKERS
 
 
-# ── Typed result system ────────────────────────────────────────────────────────
+# Typed result system
 class RouteStatus(Enum):
     """Machine-readable status codes for route results."""
     USABLE = "usable"
@@ -89,7 +89,7 @@ def is_unreachable_time(seconds: float) -> bool:
     return seconds == float(constants.UNREACHABLE_S)
 
 
-# ── Matrix chunking limits ──────────────────────────────────────────────────
+# Matrix chunking limits
 # Valhalla 3.5.1 (container grodno-valhalla) returns HTTP 500 with the error
 # "Could not find candidate edge used for label" when the matrix shape is
 # len(sources) >= 6 AND len(targets) >= 7.  The following table was measured
@@ -182,7 +182,7 @@ def ping(timeout: float = 2.0) -> bool:
         return False
 
 
-# ── Snapping ────────────────────────────────────────────────────────────────
+# Snapping
 # /route and /sources_to_targets answer
 #   500 {"error_code":499,"error":"Could not find candidate edge used for label"}
 # when a POI sits off the walking graph: "Опорный пункт №16 Гродненской крепости"
@@ -302,7 +302,7 @@ def _matrix_chunk(
             # Valhalla returns "time": null for a pair it cannot connect — e.g.
             # «Костел Святого Антония Падуанского» (53.007611,23.917041) with the
             # auto costing: 200 for the 2.3 km hop to its neighbour, null for
-            # Волковыск → it, because its little road island is not connected to
+            # Volkovysk → it, because its little road island is not connected to
             # the rest of the graph. 0.0 (the diagonal's value) made such a hop
             # look FREE, so the optimizer happily ordered it and /route then
             # answered 400 "No path could be found for input" — every point drawn,

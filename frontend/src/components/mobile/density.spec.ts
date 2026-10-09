@@ -26,9 +26,9 @@ describe('плотность телефона', () => {
   });
 
   it('на телефоне каждое условие указателя названо явно', () => {
-    // Если токен переопределяет то, что уже задано через `pointer-coarse:`,
-    // он обязан назвать комбинацию: иначе на телефоне совпадают оба условия и
-    // побеждает порядок в CSS — то есть случайность.
+    // If a token overrides something already set through `pointer-coarse:`, it
+    // must name the combination: otherwise both conditions match on a phone and
+    // CSS order wins — that is, chance.
     for (const name of ['segmentedItem', 'chip', 'languageItem'] as const) {
       expect(DENSITY[name]).toMatch(/pointer-coarse:max-md:/);
     }

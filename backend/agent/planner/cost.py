@@ -60,9 +60,7 @@ VISIT_CAP_BUDGET_SHARE = 0.4
 MIN_VISIT_MINUTES = 10
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Visit-time estimation (moved from agent/routing.py)
-# ─────────────────────────────────────────────────────────────────────────────
 
 #: Visit time for a category the taxonomy does not know — a free-text or legacy
 #: DB value. Canonical codes all resolve through data/taxonomy.csv; this is the
@@ -94,9 +92,7 @@ def visit_time_minutes(category: str | None) -> int:
         return DEFAULT_VISIT_MINUTES
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Cost matrix computation
-# ─────────────────────────────────────────────────────────────────────────────
 
 def compute_cost_matrix(
     candidates: list[Candidate],
@@ -107,7 +103,7 @@ def compute_cost_matrix(
     if not candidates:
         return CostMatrix(walk_seconds=[], visit_minutes=[], indices=[])
 
-    # ── Valhalla matrix ──
+    # Valhalla matrix
     coords = [{"lat": c.lat, "lon": c.lon} for c in candidates]
     # Snap every POI onto the routing graph first (one cached /locate per point):
     # the walk times and the drawn route then both come from real network
@@ -124,11 +120,11 @@ def compute_cost_matrix(
             f"expected {len(candidates)}x{len(candidates)}, got {len(matrix)} rows"
         )
 
-    # ── Visit times (curated per-place time from the region dataset, category default) ──
+    # Visit times (curated per-place time from the region dataset, category default)
     raw_visits = [c.visit_minutes_db or visit_time_minutes(c.category) for c in candidates]
 
     # Cap a single stop's visit time at VISIT_CAP_BUDGET_SHARE of the budget.
-    # The curated dataset carries generous per-place times (Мирский замок = 120
+    # The curated dataset carries generous per-place times (Mir Castle = 120
     # min), which ate a whole 150-min budget and left the optimizer a 1-stop
     # route.  Capping is honest — the user spent 150 min, the castle gets its
     # share — whereas dropping the place (the old pre-filter) removed the very
@@ -142,7 +138,7 @@ def compute_cost_matrix(
     else:
         visits = raw_visits
 
-    # ── Pre-filter: disabled — Defect-3 fix ───────────────────────────────────
+    # Pre-filter: disabled — Defect-3 fix
     # The pre-filter (original MAX_VISIT_BUDGET_SHARE=0.4) was dropping castle-category
     # places when their estimated visit time (40-60 min) exceeded 40% of the budget.
     # E.g. 40-min castle > 48 min (40% of 120 min) → dropped, even though castles

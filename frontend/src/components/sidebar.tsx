@@ -111,7 +111,7 @@ const buildTimeBudgetOptions = (t: TFunction) => [
 /**
  * Transport the tourist has. Empty value = "как удобно": nothing is sent and the
  * agent picks the costing that fits the query (a walk inside a town, a drive
- * across the область). Picking one sends it — transport is a real constraint.
+ * across the region). Picking one sends it — transport is a real constraint.
  */
 const buildTransportOptions = (
   t: TFunction
@@ -481,14 +481,13 @@ export const Sidebar = ({
   const setGuidingStore = useCommonStore((s) => s.setGuiding);
   const setPlacesVisible = useCommonStore((s) => s.setPlacesVisible);
   const placeDetails = useDirectionsStore((s) => s.placeDetails);
-  const [timeBudget, setTimeBudget] = useState(0); // 0 = без ограничения
+  const [timeBudget, setTimeBudget] = useState(0); // 0 = no limit
   // '' = «как удобно»: no transport constraint, the agent picks the costing
   // (walking inside a town, driving across a region). Only an explicit pick —
   // or the costing the agent answers with — is a real constraint.
   const [transport, setTransport] = useState<'' | Profile>('');
   const [mirroredCosting, setMirroredCosting] = useState<Profile | null>(null);
 
-  // ── Advanced filters (spec 002) ──────────────────────────────────────────
   // Progressive disclosure: the panel stays closed until asked for, and every
   // value starts "not chosen" so nothing is invented for the tourist.
   const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -511,7 +510,6 @@ export const Sidebar = ({
   >('idle');
   const [geoReason, setGeoReason] = useState<GeoReason | null>(null);
   const [busy, setBusy] = useState(false);
-  // ── Honest waiting ──────────────────────────────────────────────────────
   // `stage` is one of the stages the client can actually observe, `elapsed` is
   // the seconds that have passed, `abortRef` is what makes «отменить» real.
   const [stage, setStage] = useState<RouteStage>('requesting');
@@ -967,7 +965,7 @@ export const Sidebar = ({
         time_budget_minutes?: number;
         profile?: string;
         origin?: { lat: number; lon: number };
-        // ── Explicit filters (spec 002) — each one is present only when the
+        // Explicit filters (spec 002) — each one is present only when the
         // tourist actually chose it; an absent field means "no constraint".
         party_adults?: number;
         party_children?: number;
@@ -1461,8 +1459,7 @@ export const Sidebar = ({
 
   const content = (
     <div className="flex h-full min-h-0 flex-col">
-      {/* === Ask ===
-              First in the DOM, so the query field is the panel's first tab
+      {/* First in the DOM, so the query field is the panel's first tab
               stop — the tourist lands on the thing the panel is for, not on the
               close button. `order-2` keeps it visually under the header. */}
       {!guiding && mode === 'plan' && (
@@ -1522,9 +1519,9 @@ export const Sidebar = ({
         </section>
       )}
 
-      {/* ── Header. Planning and browsing keep the tab strip and title.
+      {/* Planning and browsing keep the tab strip and title.
               While guiding, the sheet only keeps its grab handle; navigation
-              actions live with the HUD instead of in a second red footer bar. ── */}
+              actions live with the HUD instead of in a second red footer bar. */}
       <header
         className={cn(
           'order-1 shrink-0 border-b border-border px-4 pb-2.5 max-md:px-3 max-md:pb-1.5',
@@ -1578,7 +1575,7 @@ export const Sidebar = ({
         )}
       </header>
 
-      {/* ── Body: the only part that scrolls. ── */}
+      {/* The only part that scrolls. */}
       <div className="slim-scroll order-3 flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 pb-6 pt-3 max-md:px-3 max-md:pb-4">
         {/* When guiding, the HUD (FerrostarNavigationHud inside GuidePanel)
             owns the whole navigation screen. The sidebar body still renders
@@ -1621,8 +1618,8 @@ export const Sidebar = ({
           />
         ) : (
           <>
-            {/* === Constraints: time + transport. Both are the user's call —
-                    nothing is invented for them. === */}
+            {/* Constraints: time + transport. Both are the user's call —
+                    nothing is invented for them. */}
             <section className="flex flex-col gap-2.5">
               <div className="flex flex-col gap-1.5">
                 <span
@@ -1860,7 +1857,6 @@ export const Sidebar = ({
                     </div>
                   </MobileSection>
 
-                  {/* Keep out. */}
                   <MobileSection
                     id="avoid"
                     title={t('sidebar.plan.avoid')}
@@ -1923,7 +1919,6 @@ export const Sidebar = ({
               )}
             </section>
 
-            {/* === Route === */}
             <section className="flex flex-col gap-2.5">
               {/* The plan's own verdict, above the stops: for a degraded plan
                       it heads the summary it qualifies, and for an infeasible
@@ -2142,7 +2137,6 @@ export const Sidebar = ({
               )}
             </section>
 
-            {/* === Manual add === */}
             <section className="flex flex-col gap-2 rounded-2xl border border-border bg-card p-3 shadow-card">
               <h2 className="text-label font-semibold">
                 {t('sidebar.ui.addPoint')}
@@ -2193,9 +2187,9 @@ export const Sidebar = ({
         )}
       </div>
 
-      {/* ── Sticky footer: the one action the panel exists for. Outside the
-              scroll area, so it is reachable at either snap point. The guide
-              brings its own actions, so the footer steps out of its way. ── */}
+      {/* The one action the panel exists for. Outside the scroll area, so it is
+              reachable at either snap point. The guide brings its own actions, so
+              the footer steps out of its way. */}
       {!guiding && mode === 'plan' && (
         <footer className="order-4 shrink-0 border-t border-border bg-background px-4 py-3 max-md:px-3 max-md:pt-1.5 max-md:pb-[calc(env(safe-area-inset-bottom)+0.375rem)]">
           {/* Honest waiting: only what the client can observe — the request
@@ -2321,7 +2315,6 @@ export const Sidebar = ({
   );
 };
 
-// Party size stepper
 interface StepperProps {
   label: string;
   testId: string;

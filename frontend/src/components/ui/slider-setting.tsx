@@ -80,7 +80,6 @@ export const SliderSetting = ({
 
   return (
     <div className="flex flex-col gap-1 py-1">
-      {/* Header row: Label + help icon ... value + unit */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-1.5">
           <Label htmlFor={id} className="text-sm font-medium">

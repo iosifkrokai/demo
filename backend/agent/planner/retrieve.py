@@ -118,24 +118,24 @@ def retrieve(
         *explicit_cat_kw,
     })
 
-    # ── Signal 1: vector (skipped when no embedding service is configured) ──
+    # Signal 1: vector (skipped when no embedding service is configured)
     vector_signal: list[tuple[int, float]] = []
     if query_embedding:
         vector_signal = _vector_signal(query_embedding, db, constraints, limit=pool_limit)
 
-    # ── Signal 2: keyword (uses must_visit_keywords + raw query) ──
+    # Signal 2: keyword (uses must_visit_keywords + raw query)
     kw_query = " ".join(constraints.must_visit_keywords + [query_text]).strip()
     keyword_signal = _keyword_signal(db, kw_query, limit=pool_limit // 2) if kw_query else []
 
-    # ── Signal 3: must-visit (force-include at rank 0) ──
+    # Signal 3: must-visit (force-include at rank 0)
     must_signal = [(pid, 0.0) for pid in constraints.must_visit_ids]
 
-    # ── Signal 4: category (boost by explicit category match) ──
+    # Signal 4: category (boost by explicit category match)
     cat_signal: list[tuple[int, float]] = []
     if all_cats:
         cat_signal = _category_signal(db, constraints, all_cats, limit=pool_limit // 2)
 
-    # ── Signal 4b: category-first retrieval (Defect 2 fix) ─────────────
+    # Signal 4b: category-first retrieval (Defect 2 fix)
     # When the query contains explicit category keywords (e.g. "замки"),
     # keyword search for those keywords returns places with the word in their
     # name — not places of that category.  E.g. "замки" matches "Замковая гора"
@@ -151,7 +151,7 @@ def retrieve(
             db, constraints, primary_cat, limit=pool_limit
         )
 
-    # ── Signal 5: locality (only when we know the tourist's point / town) ──
+    # Signal 5: locality (only when we know the tourist's point / town)
     # A query naming a town often surfaces one place from that town and a
     # dozen from elsewhere; without this the walkable candidate set can
     # collapse to a single stop.
@@ -159,24 +159,24 @@ def retrieve(
     if near is not None:
         near_signal = _nearby_signal(db, near[0], near[1], limit=pool_limit)
 
-    # ── RRF fusion ──
+    # RRF fusion
     fused = rrf_fuse(
         [vector_signal, keyword_signal, must_signal, cat_signal, cat_first_signal,
          near_signal],
         k=constants.RRF_K,
     )
 
-    # ── Top-N by fused score ──
+    # Top-N by fused score
     top_ids = sorted(fused, key=lambda pid: -fused[pid])[:pool_limit]
 
-    # ── Hydrate ──
+    # Hydrate
     candidates = _hydrate(db, top_ids, fused)
 
-    # ── Negative filter ──
+    # Negative filter
     if constants.NEGATIVE_FILTER_ENABLED:
         candidates = apply_negative_filter(candidates, constraints)
 
-    # ── Must-visit guarantee: ensure they survived negative filter / pool truncation ──
+    # Must-visit guarantee: ensure they survived negative filter / pool truncation
     if constraints.must_visit_ids:
         present_ids = {c.id for c in candidates}
         missing = [mid for mid in constraints.must_visit_ids if mid not in present_ids]
@@ -190,9 +190,7 @@ def retrieve(
     return candidates[:pool_limit]
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # RRF — Reciprocal Rank Fusion
-# ─────────────────────────────────────────────────────────────────────────────
 
 def rrf_fuse(
     rankings: Iterable[list[tuple[int, float]]],
@@ -211,9 +209,7 @@ def rrf_fuse(
     return dict(scores)
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Individual signals
-# ─────────────────────────────────────────────────────────────────────────────
 
 def _vector_signal(
     qvec: list[float],
@@ -270,9 +266,7 @@ def _category_signal(
     return [(r[0], 0.0) for r in rows]
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Hydration + negative filter
-# ─────────────────────────────────────────────────────────────────────────────
 
 def _hydrate(
     db: psycopg.Connection,

@@ -39,7 +39,7 @@ _LON_M_PER_DEG = 111_320 * 0.6  # ~cos(53.7°)
 _DEFAULT_EXCEPTION_RADIUS_M = 300.0
 
 
-# ── area registry ─────────────────────────────────────────────────────────
+# area registry
 
 
 @lru_cache(maxsize=1)
@@ -164,7 +164,7 @@ def in_project_area(lat: float | None, lon: float | None) -> bool:
     )
 
 
-# ── geometry ──────────────────────────────────────────────────────────────
+# geometry
 
 
 @lru_cache(maxsize=1)

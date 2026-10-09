@@ -32,7 +32,6 @@ export interface LocaleArea<T = Record<string, unknown>> {
 export const guideArea = {
   ru: {
     guide: {
-      // ── Panel head ───────────────────────────────────────────────────────
       title: 'Проводник',
       subtitle: 'идём по маршруту остановка за остановкой',
       reset: 'сбросить',
@@ -42,12 +41,10 @@ export const guideArea = {
       enableSound: 'включить звук',
       disableSound: 'выключить звук',
 
-      // ── Entering and leaving the guide (sidebar) ─────────────────────────
       enter: 'Пойти по маршруту',
       enterHint: 'Проводник отметит пройденное и подскажет повороты',
       exit: 'выйти',
 
-      // ── Route actions ────────────────────────────────────────────────────
       start: 'начать маршрут',
       overview: 'обзор',
       advance: 'я на месте',
@@ -65,13 +62,11 @@ export const guideArea = {
       goToStop: '{{imperative}} к остановке «{{name}}»',
       followRoute: '{{imperative}} по маршруту',
 
-      // ── The big turn banner ──────────────────────────────────────────────
       maneuverIn: 'через {{distance}}',
       noSignal: 'сигнала нет — идите по линии маршрута',
       distanceHidden: 'расстояние скрыто: сигнал GPS неточный',
       announceIn: 'Через {{distance}}: {{instruction}}',
 
-      // ── Off route ────────────────────────────────────────────────────────
       offRouteTitle: 'вы сошли с маршрута',
       offRouteAt: 'вы в ~{{distance}} от линии.',
       offRouteBody:
@@ -79,15 +74,12 @@ export const guideArea = {
       reroute: 'перестроить от меня',
       onRoute: 'я на маршруте',
 
-      // ── Navigator HUD ─────────────────────────────────────────────────
       detailsToggle: 'маршрут · {{visited}} из {{total}}',
       activityTitle: 'детали маршрута',
       activityHide: 'свернуть детали',
 
-      // ── Turn-by-turn banner (prominent display in moving mode) ───────────────
       turnInAhead: '{{distance}} — {{instruction}}',
       turnInAheadStandalone: 'через {{distance}}',
-      // ── Nearby POI hints (navigator-style inline prompts) ──────────────────
       nearbyService: '{{name}} в {{distance}}',
       nearbyServiceOnRoute: '{{name}} по пути',
       nearbyServiceIfAlong: '{{name}} в {{distance}}, если по пути',
@@ -98,21 +90,17 @@ export const guideArea = {
       nearbyBusStop: 'остановка',
       nearbyGeneric: 'место',
 
-      // ── Suggestions along the way ────────────────────────────────────────
       suggestionsTitle: 'по пути — предложения, маршрут не меняют',
       suggestionAdd: 'добавить',
       suggestionSkip: 'не надо',
 
-      // ── Voice ────────────────────────────────────────────────────────────
       voiceDistance: 'Через {{distance}} метров {{instruction}}',
       voiceArrived: 'Вы прибыли',
       continuingNavigation: 'Продолжаем навигацию…',
 
-      // ── The «моё местоположение» start waypoint ──────────────────────────
       myLocation: 'Моё местоположение',
       routeStart: 'старт маршрута',
 
-      // ── Progress ─────────────────────────────────────────────────────────
       alongLine: 'по линии',
       alongRoute: 'по маршруту',
       passed: 'пройдено',
@@ -123,24 +111,20 @@ export const guideArea = {
       progressLabel: 'прогресс маршрута',
       progressLine: '{{doneWord}} {{percent}}% линии',
 
-      // ── Next-stop card ───────────────────────────────────────────────────
       distanceToStop: 'до неё {{distance}}',
       visitApprox: 'осмотр ≈ {{time}}',
       travelFor: '{{verb}} ~{{time}}',
       arrival: 'прибытие {{eta}}',
       openInMaps: 'открыть в картах',
 
-      // ── Stop list ────────────────────────────────────────────────────────
       stopListTitle: 'остановки · {{visited}} из {{total}}',
 
-      // ── Route done / nothing to walk ─────────────────────────────────────
       routeDoneTitle: 'маршрут пройден',
       routeDoneBody: 'все {{total}} остановок отмечены — можно начать заново',
       emptyTitle: 'маршрута пока нет',
       emptyBody:
         'Соберите маршрут в режиме планирования — и возвращайтесь сюда, чтобы идти по нему остановка за остановкой.',
 
-      // ── How the guide talks about movement, per transport ────────────────
       modeFootVerb: 'идти',
       modeFootDone: 'пройдено',
       modeFootLabel: 'пешком',
@@ -155,7 +139,6 @@ export const guideArea = {
       modeCarImperative: 'Поезжайте',
       modeCarHint: 'припаркуйтесь у остановки',
 
-      // ── Units ────────────────────────────────────────────────────────────
       metres: '{{value}} м',
       km: '{{value}} км',
       minutes_one: '{{count}} мин',
@@ -168,7 +151,6 @@ export const guideArea = {
       stops_few: '{{count}} остановки',
       stops_many: '{{count}} остановок',
 
-      // ── Honest wording for a failed /routes/generate request ─────────────
       agentNotFound:
         'агент не отвечает по этому адресу (404) — похоже, приложение обращается не к тому серверу. Это ошибка настройки, а не «ничего не найдено».',
       agentServerError: 'агент ответил ошибкой {{status}} — попробуйте ещё раз',
@@ -180,7 +162,6 @@ export const guideArea = {
   },
   en: {
     guide: {
-      // ── Panel head ───────────────────────────────────────────────────────
       title: 'Guide',
       subtitle: 'walking the route stop by stop',
       reset: 'reset',
@@ -190,12 +171,10 @@ export const guideArea = {
       enableSound: 'turn the sound on',
       disableSound: 'turn the sound off',
 
-      // ── Entering and leaving the guide (sidebar) ─────────────────────────
       enter: 'Walk the route',
       enterHint: 'The guide marks what you have walked and calls the turns',
       exit: 'exit',
 
-      // ── Route actions ────────────────────────────────────────────────────
       start: 'start the route',
       overview: 'overview',
       advance: 'I am here',
@@ -213,13 +192,11 @@ export const guideArea = {
       goToStop: '{{imperative}} to the stop “{{name}}”',
       followRoute: '{{imperative}} along the route',
 
-      // ── The big turn banner ──────────────────────────────────────────────
       maneuverIn: 'in {{distance}}',
       noSignal: 'no signal — follow the route line',
       distanceHidden: 'distance hidden: the GPS fix is inaccurate',
       announceIn: 'In {{distance}}: {{instruction}}',
 
-      // ── Off route ────────────────────────────────────────────────────────
       offRouteTitle: 'you have left the route',
       offRouteAt: 'you are ~{{distance}} off the line.',
       offRouteBody:
@@ -227,15 +204,12 @@ export const guideArea = {
       reroute: 're-plan from here',
       onRoute: 'I am on the route',
 
-      // ── Navigator HUD ─────────────────────────────────────────────────
       detailsToggle: 'route · {{visited}} of {{total}}',
       activityTitle: 'route details',
       activityHide: 'collapse details',
 
-      // ── Turn-by-turn banner (prominent display in moving mode) ───────────────
       turnInAhead: '{{distance}} — {{instruction}}',
       turnInAheadStandalone: 'in {{distance}}',
-      // ── Nearby POI hints (navigator-style inline prompts) ──────────────────
       nearbyService: '{{name}} {{distance}} away',
       nearbyServiceOnRoute: '{{name}} on the way',
       nearbyServiceIfAlong: '{{name}} {{distance}} away, if along the way',
@@ -246,22 +220,18 @@ export const guideArea = {
       nearbyBusStop: 'bus stop',
       nearbyGeneric: 'place',
 
-      // ── Suggestions along the way ────────────────────────────────────────
       suggestionsTitle:
         'on the way — suggestions, they do not change the route',
       suggestionAdd: 'add',
       suggestionSkip: 'no thanks',
 
-      // ── Voice ────────────────────────────────────────────────────────────
       voiceDistance: 'In {{distance}} meters {{instruction}}',
       voiceArrived: 'You have arrived',
       continuingNavigation: 'Continuing navigation…',
 
-      // ── The «моё местоположение» start waypoint ──────────────────────────
       myLocation: 'My location',
       routeStart: 'route start',
 
-      // ── Progress ─────────────────────────────────────────────────────────
       alongLine: 'along the line',
       alongRoute: 'along the route',
       passed: 'walked',
@@ -272,24 +242,20 @@ export const guideArea = {
       progressLabel: 'route progress',
       progressLine: '{{doneWord}} {{percent}}% of the line',
 
-      // ── Next-stop card ───────────────────────────────────────────────────
       distanceToStop: '{{distance}} away',
       visitApprox: 'visit ≈ {{time}}',
       travelFor: '{{verb}} ~{{time}}',
       arrival: 'arrival {{eta}}',
       openInMaps: 'open in maps',
 
-      // ── Stop list ────────────────────────────────────────────────────────
       stopListTitle: 'stops · {{visited}} of {{total}}',
 
-      // ── Route done / nothing to walk ─────────────────────────────────────
       routeDoneTitle: 'route complete',
       routeDoneBody: 'all {{total}} stops are marked — you can start again',
       emptyTitle: 'no route yet',
       emptyBody:
         'Build a route in the planning mode — then come back here to walk it stop by stop.',
 
-      // ── How the guide talks about movement, per transport ────────────────
       modeFootVerb: 'walk',
       modeFootDone: 'walked',
       modeFootLabel: 'on foot',
@@ -304,7 +270,6 @@ export const guideArea = {
       modeCarImperative: 'Drive',
       modeCarHint: 'park by the stop',
 
-      // ── Units ────────────────────────────────────────────────────────────
       metres: '{{value}} m',
       km: '{{value}} km',
       minutes_one: '{{count}} min',
@@ -314,7 +279,6 @@ export const guideArea = {
       stops_one: '{{count}} stop',
       stops_other: '{{count}} stops',
 
-      // ── Honest wording for a failed /routes/generate request ─────────────
       agentNotFound:
         'the agent does not answer at this address (404) — the app seems to be pointed at the wrong server. That is a configuration error, not “nothing found”.',
       agentServerError: 'the agent answered with error {{status}} — try again',

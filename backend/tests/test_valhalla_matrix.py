@@ -17,7 +17,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from agent import valhalla_client as vc
 from agent.errors import UpstreamUnavailable
 
-# ── Fake response builder ──────────────────────────────────────────────────
+# Fake response builder
 
 def fake_matrix_response(sources: list[dict], targets: list[dict]) -> dict:
     """Deterministic matrix: cell[global_src][global_tgt] = global_src*100 + global_tgt.
@@ -43,7 +43,7 @@ def fake_matrix_response(sources: list[dict], targets: list[dict]) -> dict:
     return {"sources_to_targets": rows}
 
 
-# ── Test helpers ────────────────────────────────────────────────────────────
+# Test helpers
 
 def get_shape_from_call(call: dict) -> tuple[int, int]:
     """Extract (n_sources, n_targets) from a recorded call dict."""
@@ -78,7 +78,7 @@ def assert_matrix_correct(
             )
 
 
-# ── Test cases ───────────────────────────────────────────────────────────────
+# Test cases
 
 def _make_pts(n: int) -> list[dict]:
     """Make n dummy {lat, lon} points."""

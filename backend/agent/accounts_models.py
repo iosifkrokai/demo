@@ -16,7 +16,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, model_validator
 
-# ── Reason codes — the machine vocabulary the API answers with ────────────────
+# Reason codes — the machine vocabulary the API answers with
 REASON_STORAGE_UNAVAILABLE = "storage_unavailable"
 REASON_NOT_AUTHENTICATED = "not_authenticated"
 REASON_NOT_ADMIN = "not_admin"
@@ -69,9 +69,7 @@ def password_problem(raw: str | None) -> str | None:
     return None
 
 
-# ============================================================================
 # Users
-# ============================================================================
 
 class RegisterIn(BaseModel):
     """POST /auth/register body."""
@@ -126,9 +124,7 @@ class AdminUserPatch(BaseModel):
     display_name: str | None = Field(default=None, max_length=DISPLAY_NAME_MAX)
 
 
-# ============================================================================
 # Places (shared shape with the catalogue — see agent/places.place_payload)
-# ============================================================================
 
 class PhotoOut(BaseModel):
     url: str
@@ -216,9 +212,7 @@ class AdminPlacePatch(BaseModel):
         return self
 
 
-# ============================================================================
 # Visits
-# ============================================================================
 
 class VisitedItem(PlaceItem):
     """A visited place: the whole place payload plus *when* it was marked."""
@@ -242,9 +236,7 @@ class VisitedBulkOut(BaseModel):
     count: int
 
 
-# ============================================================================
 # Dashboard
-# ============================================================================
 
 class StatsOut(BaseModel):
     """GET /admin/stats — the four numbers the admin header shows."""

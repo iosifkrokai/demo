@@ -46,7 +46,7 @@ def _sight_codes() -> frozenset[str]:
     return frozenset(cat.code for cat in taxonomy.all_categories() if cat.role == "sight")
 
 
-# ── the validation allow-lists ──────────────────────────────────────────────
+# the validation allow-lists
 
 def test_seed_region_allow_list_is_the_taxonomy_sight_role():
     # The two hand-authored copies (seed_region / load_osm) collapsed into one
@@ -65,7 +65,7 @@ def test_the_region_csvs_only_use_categories_the_taxonomy_knows():
     assert seen <= _sight_codes(), f"unknown categories in the CSVs: {seen - _sight_codes()}"
 
 
-# ── visit times ─────────────────────────────────────────────────────────────
+# visit times
 
 def test_ingest_osm_visit_times_come_from_the_taxonomy():
     for cat in taxonomy.all_categories():
@@ -76,7 +76,7 @@ def test_ingest_osm_visit_time_falls_back_for_unknown_category():
     assert visit_minutes_for("нет такой категории") == 20
 
 
-# ── the OSM tag maps ────────────────────────────────────────────────────────
+# the OSM tag maps
 
 def test_ingest_poi_tag_map_codes_exist_in_the_taxonomy():
     for code in (*AMENITY_CATEGORY.values(), *TOURISM_CATEGORY.values()):
@@ -93,7 +93,7 @@ def test_ingest_poi_tag_map_agrees_with_the_taxonomy_osm_tags():
             )
 
 
-# ── public-transport stops are services, and the ingest knows all three spellings ──
+# public-transport stops are services, and the ingest knows all three spellings
 
 
 def test_transit_tag_maps_agree_with_the_taxonomy_osm_tags():
@@ -144,7 +144,7 @@ def test_an_unnamed_transit_stop_survives_with_a_placeholder_name():
     assert service_name({"highway": "bus_stop", "name": "Вокзал"}, "остановка транспорта") == "Вокзал"
 
 
-# ── districts ───────────────────────────────────────────────────────────────
+# districts
 
 def test_every_district_has_a_centre_and_slonim_is_not_missing():
     areas = json.loads((DATA / "areas.json").read_text(encoding="utf-8"))["areas"]

@@ -35,7 +35,7 @@
 -- Run after 0004 and 0006 on an existing volume:
 --   psql "$DATABASE_URL" -f db/migrations/0007_rename_transit_stop_category.sql
 
--- ── Rename transit-stop category for auto rows only ───────────────────────────
+-- Rename transit-stop category for auto rows only
 UPDATE places
 SET    category = 'остановка транспорта'
 WHERE  category       = 'остановка'

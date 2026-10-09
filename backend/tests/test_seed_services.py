@@ -98,7 +98,7 @@ def test_is_name_dup_within_150m():
     assert is_name_dup(row, same_name_far) is False
 
 
-# ── Overpass retry/failover ──────────────────────────────────────────────────
+# Overpass retry/failover
 
 def _http_status_error(endpoint: str, status: int) -> httpx.HTTPStatusError:
     """A real status error — what httpx's raise_for_status() raises for a 5xx."""

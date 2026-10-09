@@ -75,12 +75,10 @@ def render(
         result = None
 
     if result and result.status == RouteStatus.USABLE:
-        # Verify locale matches
         if result.language != locale:
             log.warning("route: locale mismatch (requested %s, got %s)", locale, result.language)
             return result.shape, result.summary or {}, "locale_mismatch"
 
-        # Verify maneuver data
         if result.maneuvers:
             missing = _verify_maneuver_fields(result.maneuvers)
             if missing:
@@ -99,7 +97,6 @@ def render(
     if result and result.status == RouteStatus.NO_ROUTE_EXISTS and len(pts) < 3:
         return {}, {}, "no_route_exists"
 
-    # Try leg-by-leg fallback
     shape, summary, leg_status = _render_legs(pts, costing, locale)
     if leg_status == "usable" and shape.get("coordinates"):
         return shape, summary, "usable"

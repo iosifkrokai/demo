@@ -95,9 +95,7 @@ def fixture_dir(tmp_path: Path) -> Path:
     return tmp_path
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # --dry-run must never touch the DB or the network
-# ─────────────────────────────────────────────────────────────────────────────
 
 def test_dry_run_needs_no_db_and_no_network(fixture_dir, tmp_path, monkeypatch):
     def _explode(*_args, **_kwargs):  # pragma: no cover - must not be reached
@@ -126,9 +124,7 @@ def test_dry_run_report_is_stable_across_runs(fixture_dir):
     assert first == second  # no counters drift between runs
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Validation + quarantine
-# ─────────────────────────────────────────────────────────────────────────────
 
 def test_collect_records_tags_category_source(fixture_dir):
     datasets_ = [d.with_data_dir(fixture_dir) for d in datasets.default_datasets()]
@@ -176,9 +172,7 @@ def test_non_finite_coordinates_are_invalid_not_geofence(tmp_path):
     assert kinds == {"invalid"}
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Coverage report — the numbers must be honest and exact
-# ─────────────────────────────────────────────────────────────────────────────
 
 def test_coverage_counts_and_shares(fixture_dir):
     datasets_ = [d.with_data_dir(fixture_dir) for d in datasets.default_datasets()]
@@ -237,9 +231,7 @@ def test_report_json_roundtrip(fixture_dir, tmp_path):
         assert key in report, key
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Curated-category protection
-# ─────────────────────────────────────────────────────────────────────────────
 
 @pytest.mark.parametrize("source,expected", [
     ("curated", True), ("dataset", True), ("auto", False), (None, False),
@@ -265,9 +257,7 @@ def test_source_fields_maps_providers():
     assert pipeline.source_fields("city:old-castle")["url"] is None
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Migration 0004
-# ─────────────────────────────────────────────────────────────────────────────
 
 def test_migration_adds_all_three_tables_and_is_idempotent():
     sql = MIGRATION.read_text(encoding="utf-8")
@@ -292,9 +282,7 @@ def test_migration_guard_reverts_protected_category_changes():
     assert "NEW.category := OLD.category" in sql
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Real repo data stays consistent with the seed contract
-# ─────────────────────────────────────────────────────────────────────────────
 
 def test_real_curated_csv_is_parseable_and_in_taxonomy():
     curated = datasets.read_curated(BACKEND / "data" / "places_curated.csv")

@@ -21,7 +21,6 @@ import {
   WAYPOINT_SNAP_RADIUS_M,
 } from './valhalla';
 
-// Mock the polyline decode function
 vi.mock('./polyline', () => ({
   decode: vi.fn(),
 }));

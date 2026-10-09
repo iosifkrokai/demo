@@ -1,26 +1,26 @@
-"""Один отчёт о качестве: что мы знаем, чего не знаем и где растём.
+"""One quality report: what we know, what we don't, and where to grow.
 
-Три слоя мерят разное, и ни один не заменяет другой:
+Three layers measure different things, and none replaces another:
 
-  * ``quality/cases/routes``  — геометрия: близко ли маршрут к эталонной прогулке
-                             (recall@K, порядок τ, крюк, длина ног, бюджет);
-  * ``quality/cases/compliance``  — выдержал ли запрос конвейер (условия: категории,
-                             запреты, регион, бюджет, паритет RU/EN);
-  * ``evals``              — какой участок флоу виноват, когда ответ плох.
+  * ``quality/cases/routes``  — geometry: is the walk close to the reference walk
+                             (recall@K, order τ, detour, leg lengths, budget);
+  * ``quality/cases/compliance``  — did the request survive the pipeline (conditions:
+                             categories, prohibitions, region, budget, RU/EN parity);
+  * ``evals``              — which part of the flow is to blame when the answer is bad.
 
-Этот отчёт **ничего не измеряет сам**. Он читает то, что слои уже записали, и
-показывает одним экраном числа, свежесть каждого и точки роста. Числа слоёв не
-складываются ни в какой «общий балл»: у них нет общей шкалы, и сумма была бы
-выдумкой — а выдумка здесь дороже отсутствия числа.
+This report **measures nothing itself**. It reads what the layers already wrote and
+shows on one screen the numbers, how fresh each is, and the growth points. The
+layers' numbers do not add up to any "overall score": they have no common scale,
+and a sum would be invention — and invention here costs more than a missing number.
 
-Запуск:
+Run:
 
-    ./.venv/bin/python -m quality.report                 # прочитать готовое
-    ./.venv/bin/python -m quality.report --run            # снять офлайн-слои заново
-    ./.venv/bin/python -m quality.report --run --golden   # плюс живой golden (нужен стек)
+    ./.venv/bin/python -m quality.report                 # read what exists
+    ./.venv/bin/python -m quality.report --run            # re-run the offline layers
+    ./.venv/bin/python -m quality.report --run --golden   # plus live golden (needs the stack)
 
-Пустой слой печатается как «не измерялось» вместе с командой, которая его снимет,
-и никогда — как зелёный.
+An empty layer prints as «НЕ ИЗМЕРЯЛОСЬ» together with the command that would
+produce it, and never as green.
 """
 
 from __future__ import annotations
@@ -44,8 +44,8 @@ COMPLIANCE = REPORTS / "compliance.json"
 EVALS_LAST = REPORTS / "evals_last.json"
 VENV = BACKEND / ".venv" / "bin" / "python"
 
-#: Свежее какого срока считается несвежим. Не «плохо» — просто повод посмотреть
-#: на дату, прежде чем верить числу.
+#: Older than this counts as stale. Not "bad" — just a reason to look at the date
+#: before trusting the number.
 STALE_DAYS = 14
 
 
@@ -64,7 +64,7 @@ def _age_days(path: Path) -> float | None:
 
 
 def _latest_under(root: Path, name: str) -> Path | None:
-    """Самый свежий файл `name` в подпапках (снимки складываются по датам)."""
+    """The newest `name` file among the subdirectories (snapshots are filed by date)."""
     if not root.exists():
         return None
     found = [p / name for p in root.iterdir() if (p / name).exists()]
@@ -72,7 +72,7 @@ def _latest_under(root: Path, name: str) -> Path | None:
 
 
 def _relative_to_backend(path: Path) -> str:
-    """Путь как его видно из backend/, либо абсолютный — если он снаружи.
+    """The path as seen from backend/, or absolute when it lies outside it.
 
     A report directory may be anywhere (a snapshot on another disk, a temp dir in
     a test); reading it must not raise just because it is not under backend/.
@@ -83,7 +83,7 @@ def _relative_to_backend(path: Path) -> str:
         return str(path)
 
 
-# ── слой: геометрия маршрутов (quality/cases/routes) ────────────────────────────
+# ── layer: route geometry (quality/cases/routes) ────────────────────────────────
 
 def read_routes(path: Path | None = None) -> dict[str, Any]:
     path = path or _latest_under(SNAPSHOTS, "report.json")
@@ -123,10 +123,10 @@ def read_routes(path: Path | None = None) -> dict[str, Any]:
     }
 
 
-# ── слой: соответствие запросу (quality/cases/compliance) ───────────────────────────
+# ── layer: request compliance (quality/cases/compliance) ────────────────────────
 
 def _compliance_report() -> Path | None:
-    """Свежий отчёт compliance: прогон в quality/reports либо датированный снимок."""
+    """The newest compliance report: a run in quality/reports or a dated snapshot."""
     candidates = [COMPLIANCE] if COMPLIANCE.exists() else []
     snapshot = _latest_under(SNAPSHOTS, "compliance.json")
     if snapshot is not None:
@@ -194,7 +194,7 @@ def read_golden(path: Path | None = None) -> dict[str, Any]:
     }
 
 
-# ── слой: участки флоу (evals) ───────────────────────────────────────────────
+# ── layer: flow stages (evals) ───────────────────────────────────────────────
 
 def read_evals(path: Path | None = None) -> dict[str, Any]:
     path = path or EVALS_LAST
@@ -236,15 +236,15 @@ def read_evals(path: Path | None = None) -> dict[str, Any]:
     }
 
 
-# ── точки роста ─────────────────────────────────────────────────────────────
+# ── growth points ───────────────────────────────────────────────────────────
 
 def growth_points(routes: dict, golden: dict, evals: dict) -> list[dict[str, Any]]:
-    """Всё известное плохое, отсортированное по числу затронутых кейсов.
+    """Everything known-bad, sorted by the number of cases affected.
 
-    Сортировка именно такая и по этой причине: важность здесь судить нечем —
-    нет ни одного числа о том, сколько людей спотыкается о каждую точку. Число
-    затронутых кейсов честно измеримо, поэтому оно и стоит первым. Там, где
-    затронутость неизвестна, стоит «?» — и точка всё равно видна.
+    That sort order, and for this reason: importance cannot be judged here —
+    there is no number for how many people stumble on each point. The number of
+    cases affected is honestly measurable, so it comes first. Where the reach is
+    unknown a "?" stands in — and the point is still visible.
     """
     points: list[dict[str, Any]] = []
 
@@ -308,7 +308,7 @@ def growth_points(routes: dict, golden: dict, evals: dict) -> list[dict[str, Any
 
 
 def known_gaps(routes: dict, golden: dict, evals: dict) -> list[dict[str, Any]]:
-    """Документированные пробелы: видны, но провалом не считаются."""
+    """Documented gaps: visible, but not counted as a failure."""
     gaps: list[dict[str, Any]] = []
     for stage in evals.get("stages") or []:
         for gap in stage.get("gaps") or []:
@@ -319,7 +319,7 @@ def known_gaps(routes: dict, golden: dict, evals: dict) -> list[dict[str, Any]]:
     return gaps
 
 
-# ── вывод ────────────────────────────────────────────────────────────────────
+# ── output ──────────────────────────────────────────────────────────────────
 
 NOT_MEASURED = [
     "вкус маршрута глазами человека — ни один слой не смотрит на прогулку как турист",
@@ -337,7 +337,7 @@ def render(routes: dict, golden: dict, evals: dict) -> str:
     out.append("=" * 66)
     out.append("")
 
-    # ── числа по слоям ──
+    # ── numbers by layer ──
     out.append("СЛОЙ                  ЧИСЛО                                  СНЯТО")
     out.append("-" * 66)
 
@@ -381,7 +381,7 @@ def render(routes: dict, golden: dict, evals: dict) -> str:
     else:
         out.append(f"{'evals':<21} {'НЕ ИЗМЕРЯЛОСЬ':<38} —")
 
-    # ── точки роста ──
+    # ── growth points ──
     points = growth_points(routes, golden, evals)
     out.append("")
     if points:
@@ -403,7 +403,7 @@ def render(routes: dict, golden: dict, evals: dict) -> str:
         out.append("с записанным контрактом», а не «продукт хорош»: кейсы написаны нами")
         out.append("и узкие, а вкус прогулки не меряет ни один слой.")
 
-    # ── пробелы ──
+    # ── gaps ──
     gaps = known_gaps(routes, golden, evals)
     if gaps:
         out.append("")
@@ -412,7 +412,7 @@ def render(routes: dict, golden: dict, evals: dict) -> str:
         for gap in gaps:
             out.append(f"  {gap.get('where')}: {gap['case']}")
 
-    # ── предупреждения о числах ──
+    # ── caveats about the numbers ──
     caveats: list[str] = []
     notes = routes.get("notes") or {}
     if isinstance(notes, dict):
@@ -443,14 +443,14 @@ def render(routes: dict, golden: dict, evals: dict) -> str:
         for caveat in dict.fromkeys(caveats):
             out.append(f"  • {caveat}")
 
-    # ── чего нет ──
+    # ── what is absent entirely ──
     out.append("")
     out.append("ЧЕГО ЗДЕСЬ НЕТ ВООБЩЕ")
     out.append("-" * 66)
     for item in NOT_MEASURED:
         out.append(f"  • {item}")
 
-    # ── как снять заново ──
+    # ── how to re-run ──
     out.append("")
     out.append("КАК СНЯТЬ ЗАНОВО")
     out.append("-" * 66)
@@ -463,7 +463,7 @@ def render(routes: dict, golden: dict, evals: dict) -> str:
 
 
 def _run_offline(days: int = 3) -> None:
-    """Снять офлайн-слои заново: геометрия (replay) и участки флоу."""
+    """Re-run the offline layers: geometry (replay) and the flow stages."""
     snapshot = _latest_under(SNAPSHOTS, "rows.jsonl")
     if snapshot is not None:
         out = SNAPSHOTS / datetime.now(UTC).strftime("%Y-%m-%d")
@@ -519,9 +519,9 @@ def main(argv: list[str] | None = None) -> int:
         )
         print(f"машинный отчёт: {args.json}")
 
-    # Отчёт — чтение, а не гейт: он не падает от чужих провалов. Он падает от
-    # собственной неспособности показать числа — иначе «пусто» выглядело бы как
-    # «хорошо».
+    # The report is a read, not a gate: it does not fail on someone else's
+    # failures. It fails on its own inability to show numbers — otherwise "empty"
+    # would look like "good".
     if not any(layer.get("measured") for layer in (routes, golden, evals)):
         print(
             "ни один слой не измерялся — отчёт не о чем; см. колонку «НЕ ИЗМЕРЯЛОСЬ»",

@@ -38,7 +38,7 @@ FOREIGN = [
 ]
 
 
-# ── registry integrity ─────────────────────────────────────────────────────
+# registry integrity
 
 
 def _document() -> dict:
@@ -90,7 +90,7 @@ def test_duplicate_alias_across_areas_is_rejected(monkeypatch):
         areas.load_areas()
 
 
-# ── honesty of the geometry data ───────────────────────────────────────────
+# honesty of the geometry data
 
 
 def test_every_geometry_is_derivable_from_backend_data():
@@ -128,7 +128,7 @@ def test_district_areas_match_places_region_csv():
         assert resolve_area(name, "ru") in district_slugs, name
 
 
-# ── resolve_area ───────────────────────────────────────────────────────────
+# resolve_area
 
 
 def test_resolve_ru_and_en_aliases():
@@ -178,7 +178,7 @@ def test_resolve_unknown_term_returns_none():
         assert resolve_area(term, locale) is None, (term, locale)
 
 
-# ── area_contains ──────────────────────────────────────────────────────────
+# area_contains
 
 
 def test_area_contains_grodno_oblast():
@@ -189,7 +189,7 @@ def test_area_contains_grodno_oblast():
 
 
 def test_area_contains_without_geometry_is_none_not_false():
-    """groдno-city / grodno-old-town / districts have no boundary polygon in
+    """grodno-city / grodno-old-town / districts have no boundary polygon in
     backend/data/: containment is unknown (None), never a silent False that
     would quietly filter out real places."""
     assert area_contains("grodno-city", CITY[1], CITY[2]) is None
@@ -204,7 +204,7 @@ def test_area_contains_unknown_slug_or_missing_coordinates():
     assert area_contains("grodno-oblast", CITY[1], None) is None
 
 
-# ── in_project_area: the one shared predicate ──────────────────────────────
+# in_project_area: the one shared predicate
 
 
 def test_point_inside_grodno_city_is_inside_project_area():
@@ -247,7 +247,7 @@ def test_documented_boundary_exception_behaves_exactly_as_data_says():
         assert in_project_area(exc["lat"], exc["lon"]) is True, exc["name"]
 
 
-# ── area_lookup_by_slug ────────────────────────────────────────────────────
+# area_lookup_by_slug
 
 
 def test_area_lookup_by_slug_resolves_geometry_and_exceptions():
@@ -268,7 +268,7 @@ def test_area_lookup_by_slug_for_geometry_less_area():
     assert area_lookup_by_slug(None) is None
 
 
-# ── geofence delegation: one predicate, not a copy ─────────────────────────
+# geofence delegation: one predicate, not a copy
 
 
 def test_geofence_delegates_to_the_single_areas_predicate():

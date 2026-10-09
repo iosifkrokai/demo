@@ -133,10 +133,10 @@ describe('MobileShell', () => {
   });
 
   it('сложится в полоску, если в проводник войти с развёрнутого листа', () => {
-    // «Начать маршрут» стоит в подвале панели, то есть его нажимают с любой
-    // высоты. Полоска получается только из `peek`, поэтому без сброса вход в
-    // проводник с полной высоты оставлял карту позади листа на 90dvh — а карта
-    // во время ведения и есть навигатор.
+    // «Начать маршрут» sits in the panel's footer, so it is pressed from any
+    // height. The strip only comes from `peek`, so without the reset, entering
+    // the guide from the full height left the map behind a 90dvh sheet — and
+    // the map is the navigator while walking.
     const { rerender } = render(<MobileShell panel={stubPanel} />);
 
     fireEvent.click(screen.getByTestId('sheet-handle'));
@@ -156,8 +156,8 @@ describe('MobileShell', () => {
   });
 
   it('разворот в обзор маршрута во время ведения не сбрасывается', () => {
-    // Сброс только на переходе: раскрытая во время ходьбы карта маршрута должна
-    // остаться открытой, а не складываться обратно каждое перерисовывание.
+    // The reset happens only on the transition: the route overview opened while
+    // walking must stay open, not fold back on every re-render.
     mockCommon.guiding = true;
     render(<MobileShell panel={stubPanel} />);
 
@@ -191,8 +191,6 @@ describe('MobileShell', () => {
       '0px'
     );
   });
-
-  // ── The way in and out on a phone ─────────────────────────────────────────
 
   it('открывается кнопкой на карте, а не шевроном у края панели', () => {
     // The desktop chevron stands on the panel's own vertical edge. On a phone

@@ -50,7 +50,7 @@ EN_ACCEPT = (
 )
 
 
-# ── Fixtures: the OpenRouter key is the switch between modes ─────────────────
+# Fixtures: the OpenRouter key is the switch between modes
 
 @pytest.fixture
 def no_key(monkeypatch):
@@ -86,9 +86,7 @@ def _agent_contract(*, source: str = "llm", codes: tuple[str, ...] = ()) -> Trip
     )
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # The acceptance scenario and the measured bug
-# ─────────────────────────────────────────────────────────────────────────────
 
 class TestAcceptanceScenarioRu:
 
@@ -158,9 +156,7 @@ class TestMeasuredBugFixed:
         assert tr.source == "fallback"
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Areas: a known slug, never the bare adjective
-# ─────────────────────────────────────────────────────────────────────────────
 
 class TestAreas:
 
@@ -185,9 +181,7 @@ class TestAreas:
         assert "grodno-old-town" in build_requirements(q, _req(q, EN)).areas
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Party: count known, age never invented
-# ─────────────────────────────────────────────────────────────────────────────
 
 class TestPartyComposition:
 
@@ -250,9 +244,7 @@ class TestPartyComposition:
         assert plain.party.mobility == []
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Budget: only what the text states
-# ─────────────────────────────────────────────────────────────────────────────
 
 class TestBudget:
 
@@ -288,9 +280,7 @@ class TestBudget:
         assert tr.budget_minutes == constants.MAX_BUDGET_MIN
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Hard vs soft, provenance, must-visit, avoid, interests
-# ─────────────────────────────────────────────────────────────────────────────
 
 class TestHardSoftAndProvenance:
 
@@ -351,9 +341,7 @@ class TestHardSoftAndProvenance:
         assert "музей" in tr.avoid_codes()
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Unknowns: what cannot be proven is never satisfied
-# ─────────────────────────────────────────────────────────────────────────────
 
 class TestUnknowns:
 
@@ -377,9 +365,7 @@ class TestUnknowns:
         assert tr.unknowns == []
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Explicit UI filters win over a text guess
-# ─────────────────────────────────────────────────────────────────────────────
 
 class TestExplicitUiWins:
 
@@ -430,9 +416,7 @@ class TestExplicitUiWins:
         assert tr.round_trip is True
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # The agent path produces the contract, and degrades cleanly
-# ─────────────────────────────────────────────────────────────────────────────
 
 class TestAgentPath:
 
@@ -486,9 +470,7 @@ class TestAgentPath:
         ).model_dump().keys()
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Robustness
-# ─────────────────────────────────────────────────────────────────────────────
 
 class TestRobustness:
 

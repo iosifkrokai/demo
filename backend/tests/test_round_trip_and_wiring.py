@@ -51,7 +51,7 @@ def _reqs(*requirements: Requirement) -> TripRequirements:
     return TripRequirements(requirements=list(requirements))
 
 
-# ── 1. the import that /routes/reroute needs ────────────────────────────────
+# 1. the import that /routes/reroute needs
 
 def test_pipeline_exposes_extract_intent():
     """The module the reroute handler runs in must actually define the name.
@@ -65,7 +65,7 @@ def test_pipeline_exposes_extract_intent():
     assert callable(pipeline_mod.extract_intent)
 
 
-# ── 2. round trip is applied, not just echoed ───────────────────────────────
+# 2. round trip is applied, not just echoed
 
 def test_resolve_carries_the_round_trip_choice():
     db = object()  # never touched: no named places, no prohibitions
@@ -123,7 +123,7 @@ def test_render_closes_the_tour_when_asked(monkeypatch):
     assert len(captured[0]) == 2, "an open tour asks for no return leg"
 
 
-# ── 3. the pruner's report reaches the verifier ─────────────────────────────
+# 3. the pruner's report reaches the verifier
 
 def _island_cost() -> CostMatrix:
     """a→b is unroutable, everything else routes (the road-island case)."""
@@ -183,7 +183,7 @@ def test_validate_records_the_pruner_report_in_the_trace():
     ]
 
 
-# ── 4. the reroute endpoint runs end to end ────────────────────────────────
+# 4. the reroute endpoint runs end to end
 
 class _FakeCursor:
     def __init__(self, rows: list[dict]) -> None:

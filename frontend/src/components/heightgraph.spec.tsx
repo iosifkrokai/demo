@@ -257,9 +257,7 @@ describe('HeightGraph', () => {
       />
     );
 
-    // First expand it manually by simulating the expanded state via rerender
-    // We need to click to expand first
-    // Since clicking is async, let's test the prop-change collapse path directly
+    // Clicking is async, so drive the prop-change collapse path directly.
     rerender(
       <HeightGraph
         data={createMockData()}
@@ -269,7 +267,6 @@ describe('HeightGraph', () => {
       />
     );
 
-    // Should remain collapsed (was never expanded)
     expect(screen.getByAltText('Height Graph')).toBeInTheDocument();
   });
 });

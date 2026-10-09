@@ -56,9 +56,7 @@ CREATE INDEX IF NOT EXISTS places_name_trgm   ON places USING GIN (name gin_trgm
 CREATE INDEX IF NOT EXISTS places_town_trgm   ON places USING GIN (town gin_trgm_ops);
 CREATE INDEX IF NOT EXISTS places_district_trgm ON places USING GIN (district gin_trgm_ops);
 
--- ═══════════════════════════════════════════════════════════════════════════
 -- Mirrors db/migrations/0004_places_taxonomy.sql — taxonomy support.
--- ═══════════════════════════════════════════════════════════════════════════
 
 -- Which writer owns a row's category: 'curated' | 'dataset' | 'auto'.
 ALTER TABLE places ADD COLUMN IF NOT EXISTS category_source TEXT NOT NULL DEFAULT 'auto';
@@ -133,9 +131,7 @@ CREATE INDEX IF NOT EXISTS areas_geom_gix ON areas USING GIST (geom);
 CREATE INDEX IF NOT EXISTS areas_name_ru_trgm ON areas USING GIN (name_ru gin_trgm_ops);
 CREATE INDEX IF NOT EXISTS areas_kind_ix ON areas (kind);
 
--- ═══════════════════════════════════════════════════════════════════════════
 -- Mirrors db/migrations/0005_clients.sql — the anonymous client entity (spec 003).
--- ═══════════════════════════════════════════════════════════════════════════
 
 CREATE TABLE IF NOT EXISTS clients (
     id           UUID PRIMARY KEY,
@@ -174,12 +170,10 @@ CREATE TABLE IF NOT EXISTS saved_routes (
 CREATE INDEX IF NOT EXISTS saved_routes_client_created_ix
     ON saved_routes (client_id, created_at DESC);
 
--- ═══════════════════════════════════════════════════════════════════════════
 -- Mirrors db/migrations/0008_accounts_visits.sql — accounts, roles, server-side
 -- visits (spec 005). Kept in step with the migration the same way the 0004/0005
 -- blocks above are: a fresh pgdata volume must come up with every table the app
 -- uses, not just the ones from earlier specs.
--- ═══════════════════════════════════════════════════════════════════════════
 
 CREATE TABLE IF NOT EXISTS users (
     id            UUID PRIMARY KEY,

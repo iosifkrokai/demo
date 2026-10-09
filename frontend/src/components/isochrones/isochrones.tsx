@@ -59,7 +59,6 @@ export const IsochronesControl = () => {
     urlParamsProcessed.current = true;
   }, [mainMap, reverseGeocode, refetchIsochrones]);
 
-  // Sync isochrone center to URL
   useEffect(() => {
     let center: string | undefined;
 

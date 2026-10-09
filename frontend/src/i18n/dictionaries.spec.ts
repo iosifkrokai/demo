@@ -45,8 +45,8 @@ describe('словари локализации', () => {
       const suffixes = (list: Record<string, unknown>) =>
         paths(list)
           .filter((path) => baseKey(path) === base)
-          // От последнего подчёркивания: `_other` длиннее `_one`, фиксированная
-          // ширина среза сравнивала бы половину слова.
+          // From the last underscore: `_other` is longer than `_one`, so a
+          // fixed-width slice would compare half a word.
           .map((path) => path.slice(path.lastIndexOf('_')));
       return (
         !['_one', '_few', '_many'].every((f) => suffixes(ru).includes(f)) ||
@@ -58,8 +58,8 @@ describe('словари локализации', () => {
   });
 
   it('в английском не осталось русских строк', () => {
-    // `language.ru` — исключение: «Русский» это имя языка, и в английском
-    // интерфейсе кнопка обязана остаться на нём же.
+    // `language.ru` is an exception: «Русский» is the language's own name, so
+    // the button must keep it in the English interface too.
     const untranslated = paths(en)
       .filter((path) => path !== 'language.ru')
       .filter((path) =>
@@ -68,8 +68,8 @@ describe('словари локализации', () => {
         )
       );
 
-    // Русский текст в английском словаре — это непереведённая строка, а не
-    // мелочь: именно так и выглядит «вроде сделали локализацию».
+    // Russian text in the English dictionary is an untranslated string, not a
+    // trifle: it is exactly what a half-done localisation looks like.
     expect(untranslated).toEqual([]);
   });
 

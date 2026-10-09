@@ -99,10 +99,9 @@ describe('the walk', () => {
   });
 
   it('стоит в центре Гродно, пока маршрута ещё нет', () => {
-    // Панель спрашивает позицию до того, как появится маршрут, и берёт из неё
-    // точку старта запроса. Молчание тут однажды стоило целого прогона:
-    // бэкенд отвечал «нет маршрута с ≥ 2 остановками», и проводник был
-    // недостижим.
+    // The panel asks for a position before a route exists and takes the request's
+    // origin from it. Silence here once cost a whole run: the backend answered
+    // «нет маршрута с ≥ 2 остановками», and the guide was unreachable.
     installGeoSim('?sim=walk');
 
     const fix = currentFix();
@@ -113,8 +112,9 @@ describe('the walk', () => {
   });
 
   it('стоит на месте, пока маршрута нет', () => {
-    // Положение уже отдаётся (панель берёт из него точку старта запроса), но
-    // турист по нему не идёт: пока нет маршрута, двигаться некуда.
+    // The position is already handed out (the panel takes the request's origin
+    // from it), but the tourist does not walk it: with no route there is nowhere
+    // to go.
     installGeoSim('?sim=walk');
     const onFix = vi.fn();
     window.navigator.geolocation.watchPosition(onFix);

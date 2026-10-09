@@ -57,9 +57,7 @@ _PLACE_STOP_LIST: frozenset[str] = frozenset({
 })
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Degraded mode — the same query, parsed without a model
-# ─────────────────────────────────────────────────────────────────────────────
 
 # An explicit duration in the query text.  The model-free path may only keep a
 # budget the user actually stated, so the patterns demand a number (or a
@@ -317,9 +315,7 @@ def intent_from_requirements(
     )
 
 
-# ═════════════════════════════════════════════════════════════════════════════
 # W2 — TripRequirements: the single interpretation entry point
-# ═════════════════════════════════════════════════════════════════════════════
 #
 # `build_requirements(query, req)` is the ONE place that turns a tourist's free
 # text plus the explicit UI filters into the frozen `TripRequirements` contract.
@@ -762,7 +758,7 @@ def mark_out_of_coverage(contract: TripRequirements, names: list[str]) -> None:
     The contract keeps what the tourist asked for and the verifier reports it; a
     refusal is never invented here. Marking it `hard` is the one judgement this
     function makes, and it is about the world, not about the request: no plan in
-    Гродненская область can ever contain Vilnius Cathedral, so the request cannot
+    the Grodno region can ever contain Vilnius Cathedral, so the request cannot
     be served — unlike a soft wish the plan may reasonably drop.
 
     Satisfying it is impossible, which the verifier knows: the reason set here
@@ -1016,7 +1012,7 @@ def _deterministic_requirements(query: str, req: GenerateReq) -> TripRequirement
     locale = req.locale
     reading = _read_text(query, locale)
 
-    # ── Requirements: UI first (it wins), then the text reading ──
+    # Requirements: UI first (it wins), then the text reading
     ui_reqs = _ui_requirements(req)
     requirements, claimed = _merge_requirements(ui_reqs, reading.requirements)
 
@@ -1038,7 +1034,7 @@ def _deterministic_requirements(query: str, req: GenerateReq) -> TripRequirement
             Requirement(kind="must_visit", name=name, label=name, text=name, source="text")
         )
 
-    # ── Party: explicit values win; ages are never invented ──
+    # Party: explicit values win; ages are never invented
     children = req.party_children if req.party_children is not None else reading.children
     adults = req.party_adults if req.party_adults is not None else reading.adults
     ages = (
@@ -1051,7 +1047,7 @@ def _deterministic_requirements(query: str, req: GenerateReq) -> TripRequirement
         if code and code not in mobility:
             mobility.append(code)
 
-    # ── Budget: the UI selector wins, including "0 = без ограничения" ──
+    # Budget: the UI selector wins, including "0 = без ограничения"
     if req.time_budget_minutes is not None:
         budget = req.time_budget_minutes or None
     else:
@@ -1059,12 +1055,12 @@ def _deterministic_requirements(query: str, req: GenerateReq) -> TripRequirement
     if budget is not None:
         budget = max(constants.MIN_BUDGET_MIN, min(budget, constants.MAX_BUDGET_MIN))
 
-    # ── Unknowns: what cannot be proven is named, never promised ──
+    # Unknowns: what cannot be proven is named, never promised
     unknowns = list(reading.unknowns)
     if "wheelchair" in mobility and "wheelchair_accessible" not in unknowns:
         unknowns.append("wheelchair_accessible")
 
-    # ── How the requirements were obtained ──
+    # How the requirements were obtained
     ui_used = _ui_used(req, ui_reqs)
     if reading.source == "llm" and ui_used:
         source: str = "mixed"

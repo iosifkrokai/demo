@@ -179,8 +179,6 @@ export const isNewManeuver = (
   return prev.key !== next.key;
 };
 
-// ── SpeechSynthesis wrapper ────────────────────────────────────────────────────
-
 /** The real browser type, used only as a return type. */
 type SpeechSynthesisInstance = typeof window extends {
   speechSynthesis: infer S;

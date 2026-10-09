@@ -188,7 +188,7 @@ class PostgresAccountRepository:
         self._conn: psycopg.Connection | None = None
         self._lock = threading.Lock()
 
-    # ── connection plumbing ────────────────────────────────────────────────
+    # connection plumbing
 
     def _connection(self) -> psycopg.Connection:
         conn = self._conn
@@ -239,7 +239,7 @@ class PostgresAccountRepository:
         with self._lock:
             self._drop()
 
-    # ── users ──────────────────────────────────────────────────────────────
+    # users
 
     def create_user(
         self,
@@ -346,7 +346,7 @@ class PostgresAccountRepository:
                 "UPDATE users SET last_login_at = now() WHERE id = %s", (user_id,)
             )
 
-    # ── sessions ───────────────────────────────────────────────────────────
+    # sessions
 
     def create_session(
         self, token_hash: str, user_id: uuid.UUID, expires_at: Any
@@ -381,7 +381,7 @@ class PostgresAccountRepository:
                 "DELETE FROM user_sessions WHERE token_hash = %s", (token_hash,)
             )
 
-    # ── admin: users ───────────────────────────────────────────────────────
+    # admin: users
 
     def list_users(
         self, *, q: str = "", limit: int = 50, offset: int = 0
@@ -449,7 +449,7 @@ class PostgresAccountRepository:
             cur.execute("DELETE FROM users WHERE id = %s", (user_id,))
             return cur.rowcount > 0
 
-    # ── visits ─────────────────────────────────────────────────────────────
+    # visits
 
     def list_visited(self, user_id: uuid.UUID) -> list[dict[str, Any]]:
         place_cols = ", ".join(
@@ -517,7 +517,7 @@ class PostgresAccountRepository:
             )
             return cur.rowcount > 0
 
-    # ── admin: places ──────────────────────────────────────────────────────
+    # admin: places
 
     def list_places(
         self, *, q: str = "", category: str = "", limit: int = 50, offset: int = 0
@@ -603,7 +603,7 @@ class PostgresAccountRepository:
             cur.execute("DELETE FROM places WHERE id = %s", (place_id,))
             return cur.rowcount > 0
 
-    # ── dashboard ──────────────────────────────────────────────────────────
+    # dashboard
 
     def stats(self) -> dict[str, int]:
         with self._cursor() as cur:

@@ -18,9 +18,7 @@ from pydantic import BaseModel, Field, field_validator
 from . import constants
 from .taxonomy import all_codes
 
-# ============================================================================
 # HTTP — Requests
-# ============================================================================
 
 # The category vocabulary is read from data/taxonomy.csv (via agent/taxonomy.py),
 # not re-listed here. A second list drifted the moment a category was added to
@@ -45,7 +43,7 @@ class LatLon(BaseModel):
     lon: float = Field(ge=19.0, le=42.0)
 
 
-# ── Iterative refinement ("добавь кофейню и туалет") ─────────────────────────
+# Iterative refinement ("добавь кофейню и туалет")
 
 
 class ContextPoint(BaseModel):
@@ -133,7 +131,7 @@ class GenerateReq(BaseModel):
     # existed.
     context: RouteContext | None = None
 
-    # ── Explicit filters (spec 002) ─────────────────────────────────────────
+    # Explicit filters (spec 002)
     # Anything the tourist set with a visible control. Explicit values win over
     # a guess made from `query`; a genuine conflict is a clarification, not a
     # silent override.
@@ -199,9 +197,7 @@ class ServicesAlongReq(BaseModel):
     session_id: str | None = Field(default=None, max_length=128)
 
 
-# ============================================================================
 # HTTP — Responses
-# ============================================================================
 
 class Photo(BaseModel):
     """A picture of a point, always with the credit the licence demands.
@@ -395,9 +391,7 @@ class HealthResponse(BaseModel):
     valhalla: bool
 
 
-# ============================================================================
 # Internal planner — Step 0 (preprocess)
-# ============================================================================
 
 class PreprocessedQuery(BaseModel):
     raw: str
@@ -409,9 +403,7 @@ class PreprocessedQuery(BaseModel):
     n_significant_words: int = 0
 
 
-# ============================================================================
 # Internal planner — Step 1 (intent extraction)
-# ============================================================================
 
 class IntentDecision(BaseModel):
     intent_type: IntentTypeLiteral = "discovery"
@@ -438,9 +430,7 @@ class IntentResult(BaseModel):
     raw_response: dict | None = None
 
 
-# ============================================================================
 # Internal planner — Step 2 (constraint resolution)
-# ============================================================================
 
 class ResolvedConstraints(BaseModel):
     must_visit_ids: list[int] = []
@@ -465,9 +455,7 @@ class ResolvedConstraints(BaseModel):
     round_trip: bool = False
 
 
-# ============================================================================
 # Internal planner — Steps 3-4 (retrieval / MMR)
-# ============================================================================
 
 class Candidate(BaseModel):
     """One candidate place with the bits the planner needs."""
@@ -490,9 +478,7 @@ class Candidate(BaseModel):
     rrf_score: float = 0.0          # RRF signal strength
 
 
-# ============================================================================
 # Internal planner — Step 5 (cost matrix)
-# ============================================================================
 
 class CostMatrix(BaseModel):
     """Walk cost matrix + per-place visit times."""
@@ -501,9 +487,7 @@ class CostMatrix(BaseModel):
     indices: list[int] = []  # indexes into the source candidate list
 
 
-# ============================================================================
 # Internal planner — Step 7 (validated plan)
-# ============================================================================
 
 class ValidatedPlan(BaseModel):
     route: list[Candidate]

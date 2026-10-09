@@ -39,8 +39,6 @@ import type {
 } from '@/components/types';
 import { metresBetween } from '@/components/parts/guide-format';
 
-// ── WASM initialization ──────────────────────────────────────────────────────
-
 /** The WASM module's namespace, loaded once and shared by every session. */
 type FerrostarModule = typeof import('@stadiamaps/ferrostar');
 
@@ -75,8 +73,6 @@ export const ferrostarReady: Promise<FerrostarModule | null> = loadFerrostar();
 /** Is the WASM core already loaded? True after `ferrostarReady` resolved to it. */
 export const isFerrostarAvailable = (): boolean => loadedModule != null;
 
-// ── Geometry helpers ───────────────────────────────────────────────────────────
-
 interface LatLon {
   lat: number;
   lon: number;
@@ -89,7 +85,6 @@ interface LineGeometry {
   total: number;
 }
 
-/** Build cumulative-distance geometry from decoded Valhalla shape. */
 const buildLineGeometry = (decoded: number[][]): LineGeometry | null => {
   const points: LatLon[] = [];
   for (const c of decoded) {
@@ -114,8 +109,6 @@ const buildLineGeometry = (decoded: number[][]): LineGeometry | null => {
   return total > 0 ? { points, cum, total } : null;
 };
 
-// ── RouteStep geometry ─────────────────────────────────────────────────────────
-
 /**
  * Geometry slice from `fromCum` to `toCum` metres along the line, read off the
  * cumulative distances of the same vertices (not straight-line distance from the
@@ -136,7 +129,6 @@ const stepGeometry = (
     const point = line.points[i];
     if (point) coords.push({ lat: point.lat, lng: point.lon });
   }
-  // Ensure at least start + end
   if (coords.length < 2) {
     coords.length = 0;
     coords.push(pointAtCum(line, fromCum), pointAtCum(line, toCum));
@@ -162,8 +154,6 @@ const pointAtCum = (line: LineGeometry, dist: number): GeographicCoordinate => {
   return { lat: last.lat, lng: last.lon };
 };
 
-// ── Spoken instruction generation ─────────────────────────────────────────────
-
 /**
  * Generate spoken instructions for a step at fixed trigger distances.
  *
@@ -186,8 +176,6 @@ const generateSpokenInstructions = (
       .padStart(8, '0')}${trigger.toString(16).padStart(4, '0')}`,
   }));
 };
-
-// ── buildFerrostarRoute ───────────────────────────────────────────────────────
 
 export interface FerrostarRouteResult {
   /** Ferrostar Route ready to pass to FerrostarNavigator. */
@@ -311,7 +299,6 @@ export const buildFerrostarRoute = (
     properties: undefined,
   }));
 
-  // If no locations from Valhalla, use start/end of geometry
   if (waypoints.length < 2) {
     const first = line.points[0]!;
     const last = line.points[line.points.length - 1]!;
@@ -358,8 +345,6 @@ export const buildFerrostarRoute = (
   return { route, maneuvers, stepKeyToIndex };
 };
 
-// ── NavigationSession config ───────────────────────────────────────────────────
-
 /** Ferrostar navigation configuration matching the spec. */
 const DEFAULT_CONFIG: SerializableNavigationControllerConfig = {
   stepAdvanceCondition: {
@@ -385,8 +370,6 @@ const DEFAULT_CONFIG: SerializableNavigationControllerConfig = {
 
 /** Fallback accuracy when the browser reported none: 25 m, the config's own bar. */
 const DEFAULT_ACCURACY_M = 25;
-
-// ── FerrostarNavigator ─────────────────────────────────────────────────────────
 
 /**
  * Our wrapper around Ferrostar NavigationSession.
@@ -501,8 +484,6 @@ export const createFerrostarNavigator = async (
     return null;
   }
 };
-
-// ── Derivation helpers ─────────────────────────────────────────────────────────
 
 /** The payload of the `Navigating` variant, or null for Idle/Complete. */
 type NavigatingTripState = Extract<

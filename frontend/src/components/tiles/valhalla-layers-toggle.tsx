@@ -66,9 +66,7 @@ export const ValhallaLayersToggle = ({
             if (!entry.visible) {
               map.setLayoutProperty(entry.layer.id, 'visibility', 'none');
             }
-          } catch {
-            // skip
-          }
+          } catch {}
         }
       }
     } else {

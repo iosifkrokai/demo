@@ -46,7 +46,7 @@ __all__ = [
     "verify_summary",
 ]
 
-# ── Machine-readable reason codes ─────────────────────────────────────────────
+# Machine-readable reason codes
 # Localization happens in the API layer; these strings are the contract.
 
 REASON_MUST_VISIT_OK = "must_visit_on_route"
@@ -71,7 +71,7 @@ REASON_SOFT_SERVICE_ABSENT = "soft_service_absent"
 REASON_INTEREST_OK = "interest_on_route"
 REASON_INTEREST_ABSENT = "interest_absent"
 
-# ── Catalogue (a list to choose from, not a route to walk) ───────────────────
+# Catalogue (a list to choose from, not a route to walk)
 # The requirement is honoured when the LIST contains a matching place. Nothing
 # here claims reachability — a catalogue has no route and no geometry, so a
 # reason that said «on the route» would be a claim nobody checked.
@@ -147,9 +147,7 @@ INFEASIBLE_REASONS: frozenset[str] = frozenset(
 Status = Literal["pending", "satisfied", "unmet", "uncertain"]
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Input normalisation (plan / geometry may be any of several shapes)
-# ─────────────────────────────────────────────────────────────────────────────
 
 def _route_stops(plan: Any) -> list[Any]:
     """The ordered stops of the plan, from whatever shape the caller passed.
@@ -236,9 +234,7 @@ def _coord_count(coords: Any) -> int:
     return len(coords)
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Category / name normalisation
-# ─────────────────────────────────────────────────────────────────────────────
 
 _PUNCT_RE = re.compile(r"[^\w\s]", re.UNICODE)
 
@@ -292,9 +288,7 @@ def _stop_matches_code(stop: Any, code: str) -> bool:
     return resolved is not None and _norm_cat(resolved) == norm_code
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Per-kind verification
-# ─────────────────────────────────────────────────────────────────────────────
 
 def _set(requirement: Requirement, status: Status, place_ids: list[int], reason: str) -> None:
     requirement.status = status
@@ -486,9 +480,7 @@ def _verify_avoid(r: Requirement, stops: list[Any], route_present: bool) -> None
     _set(r, "satisfied", [], REASON_AVOID_OK)
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Public API
-# ─────────────────────────────────────────────────────────────────────────────
 
 def verify(
     requirements: TripRequirements,

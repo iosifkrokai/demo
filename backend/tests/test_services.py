@@ -48,7 +48,7 @@ def _row(**over: object) -> dict:
     return base
 
 
-# ── The taxonomy is the authority ───────────────────────────────────────────
+# The taxonomy is the authority
 
 
 def test_service_codes_come_from_the_taxonomy():
@@ -73,7 +73,7 @@ def test_asking_for_nothing_means_every_service():
     assert services.service_codes(None) == services.service_codes()
 
 
-# ── A broken shape must raise, not answer «ничего нет» ──────────────────────
+# A broken shape must raise, not answer «ничего нет»
 
 
 @pytest.mark.parametrize(
@@ -102,7 +102,7 @@ def test_a_real_line_passes_through_unchanged():
     assert services.route_line(CENTRE_LINE) is CENTRE_LINE
 
 
-# ── The measurement names what it measured ──────────────────────────────────
+# The measurement names what it measured
 
 
 def test_the_answer_never_calls_distance_a_detour():
@@ -129,7 +129,7 @@ def test_known_hours_are_passed_through_untouched():
     assert item["hours_known"] is True
 
 
-# ── Thresholds ──────────────────────────────────────────────────────────────
+# Thresholds
 
 
 def test_a_driver_passes_more_services_than_a_walker():
@@ -149,7 +149,7 @@ def test_valhalla_profiles_map_onto_walking_thresholds():
     assert services.threshold_for("самокат") == services.MAX_OFF_LINE_M["pedestrian"]
 
 
-# ── Live: the database really answers ───────────────────────────────────────
+# Live: the database really answers
 
 
 @pytest.mark.skipif(

@@ -166,8 +166,6 @@ const VALHALLA = {
   },
 } as unknown as ParsedDirectionsGeometry;
 
-// ── buildFerrostarRoute ───────────────────────────────────────────────────────
-
 describe('buildFerrostarRoute', () => {
   const built = buildFerrostarRoute(VALHALLA);
 
@@ -314,8 +312,6 @@ describe('buildFerrostarRoute', () => {
     ).toBeNull();
   });
 });
-
-// ── extractors ────────────────────────────────────────────────────────────────
 
 const LOCATION: UserLocation = {
   coordinates: { lat: 53.0, lng: 23.0 },

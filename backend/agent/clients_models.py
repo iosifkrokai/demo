@@ -34,9 +34,7 @@ TransportLiteral = Literal["pedestrian", "bicycle", "auto"]
 LanguageLiteral = Literal["ru", "en"]
 
 
-# ============================================================================
 # Preferences
-# ============================================================================
 
 class PreferencesIn(BaseModel):
     """PUT /clients/me/preferences body — partial, ``null`` clears a field."""
@@ -75,9 +73,7 @@ class PreferencesOut(BaseModel):
     updated_at: datetime | None = None
 
 
-# ============================================================================
 # Saved routes
-# ============================================================================
 
 class RouteCreateIn(BaseModel):
     """POST /clients/me/routes body.
@@ -146,9 +142,7 @@ class RoutePatchIn(BaseModel):
     name: str = Field(max_length=200)
 
 
-# ============================================================================
 # Derived list metrics
-# ============================================================================
 
 def route_metrics(
     stop_count: int,

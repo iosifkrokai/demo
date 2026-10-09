@@ -9,7 +9,7 @@ import {
 
 /**
  * The waiting copy may only describe what the client can observe. There is no
- * «проверяю требования» here: the client cannot see inside the agent's request,
+ * "checking requirements" here: the client cannot see inside the agent's request,
  * and claiming it would be a lie to the user.
  */
 describe('routeStageText', () => {

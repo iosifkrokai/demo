@@ -45,9 +45,7 @@ FARNYI = (53.6789, 23.8306)
 VILNIUS = (54.6858, 25.2877)
 
 
-# --------------------------------------------------------------------------
 # builders
-# --------------------------------------------------------------------------
 
 
 def make_case(
@@ -187,9 +185,7 @@ def write_case(directory: Path, data: dict) -> Path:
     return path
 
 
-# --------------------------------------------------------------------------
 # the committed set: it parses, it validates, it covers the brief
-# --------------------------------------------------------------------------
 
 
 def test_the_committed_golden_set_parses_and_satisfies_the_schema():
@@ -260,9 +256,7 @@ def test_only_the_cases_that_mean_it_allow_an_empty_plan():
     assert allowed == {"out_of_region_vilnius", "vague_no_anchor"}
 
 
-# --------------------------------------------------------------------------
 # RU/EN parity: the files
-# --------------------------------------------------------------------------
 
 
 def test_the_ru_en_parity_pairs_really_express_the_same_request():
@@ -311,9 +305,7 @@ def test_parity_validation_rejects_a_pair_missing_a_locale(golden_dir):
     assert "one case per locale" in str(exc.value)
 
 
-# --------------------------------------------------------------------------
 # the schema validator itself
-# --------------------------------------------------------------------------
 
 
 def test_the_validator_accepts_a_minimal_valid_case():
@@ -383,9 +375,7 @@ def test_unknown_expectation_keys_are_refused_so_nothing_is_graded_silently(gold
     assert "unknown expectations key 'must_contain_categorie'" in str(exc.value)
 
 
-# --------------------------------------------------------------------------
 # the scorer: a good plan is accepted
-# --------------------------------------------------------------------------
 
 
 def test_the_scorer_accepts_a_good_plan():
@@ -423,9 +413,7 @@ def test_a_check_the_response_cannot_answer_is_reported_as_unverified_not_passed
     assert verdict.checks[b.CHECK_RESULT_MODE]["unverified"] is True
 
 
-# --------------------------------------------------------------------------
 # the scorer: each failure mode is rejected, with the machine-readable reason
-# --------------------------------------------------------------------------
 
 
 def test_the_scorer_rejects_a_missing_mandatory_category():
@@ -642,9 +630,7 @@ def test_a_5xx_is_an_error_status_and_a_failure_even_for_a_permitting_case():
     assert verdict.reason == b.CHECK_API_ERROR
 
 
-# --------------------------------------------------------------------------
 # status derivation + category reading
-# --------------------------------------------------------------------------
 
 
 def test_status_is_derived_from_the_best_evidence_and_the_source_is_recorded():
@@ -717,9 +703,7 @@ def test_build_golden_request_carries_the_explicit_filters_not_prose():
     assert "origin" not in b.build_golden_request(cases["vague_no_anchor"])
 
 
-# --------------------------------------------------------------------------
 # parity measured on the responses
-# --------------------------------------------------------------------------
 
 
 def make_parity_pair(filters: dict, expectations: dict) -> list[b.GoldenCase]:
@@ -825,9 +809,7 @@ def test_the_committed_parity_group_is_checked_on_real_verdicts():
     assert verdict.reason == b.CHECK_PARITY
 
 
-# --------------------------------------------------------------------------
 # repeats and the aggregate
-# --------------------------------------------------------------------------
 
 
 def test_a_case_passes_only_when_every_repeat_passed():
@@ -894,9 +876,7 @@ def test_the_summary_reports_a_case_that_was_never_run():
     assert summary["n_cases"] == 1 and summary["compliance_rate"] == pytest.approx(1.0)
 
 
-# --------------------------------------------------------------------------
 # snapshot → replay (offline)
-# --------------------------------------------------------------------------
 
 
 def golden_runs(cases: list[b.GoldenCase], responses: dict[str, dict]) -> list[b.GoldenRun]:
@@ -955,9 +935,7 @@ def test_golden_replay_reports_drift_when_a_case_disappeared(tmp_path, golden_di
     assert "gone" in str(exc.value)
 
 
-# --------------------------------------------------------------------------
 # honesty: no backend, no report
-# --------------------------------------------------------------------------
 
 
 def test_preflight_refuses_when_the_backend_is_unreachable(monkeypatch, capsys):
@@ -1034,9 +1012,7 @@ def test_the_route_harness_also_refuses_to_run_without_a_backend(
     capsys.readouterr()
 
 
-# --------------------------------------------------------------------------
 # the golden CLI, end to end, with a stubbed stack
-# --------------------------------------------------------------------------
 
 HEALTHY = {"status": "ok", "db": True, "valhalla": True, "llm": True, "embedder": True}
 
@@ -1143,9 +1119,7 @@ def test_the_golden_cli_rejects_an_unknown_case(golden_dir, stubbed_stack, monke
     capsys.readouterr()
 
 
-# --------------------------------------------------------------------------
 # the route harness is untouched by all of the above (regression guard)
-# --------------------------------------------------------------------------
 
 
 def test_the_two_benchmark_sets_stay_separate():
@@ -1180,9 +1154,7 @@ def test_the_route_scorer_still_scores_a_route(routes_dir):
     assert "verdict" not in b.EvaluationResult.__dataclass_fields__
 
 
-# --------------------------------------------------------------------------
 # the forbidden check must judge the PLAN, not the verdicts about it
-# --------------------------------------------------------------------------
 
 
 def test_honoured_avoid_is_not_reported_as_a_violation():

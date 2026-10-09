@@ -57,9 +57,7 @@ SIGHT_TAXONOMY = frozenset(c.code for c in taxonomy.all_categories() if c.role =
 SERVICE_TAXONOMY = frozenset(c.code for c in taxonomy.all_categories() if c.role == "service")
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Readers / validators / normalisers (pure)
-# ─────────────────────────────────────────────────────────────────────────────
 
 def read_pipe_csv(path: Path) -> list[dict]:
     """Parse a pipe-delimited CSV whose header may be commented out."""
@@ -230,9 +228,7 @@ def default_datasets() -> list[Dataset]:
     ]
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Curated ground truth (folded from scripts/apply_curated.py)
-# ─────────────────────────────────────────────────────────────────────────────
 
 EXPECTED_CURATED_HEADER = [
     "id", "normalized_name", "category", "blurb", "fun_fact", "fun_facts", "links",
@@ -294,9 +290,7 @@ def match_place(name: str, db_rows: list[dict]) -> dict | None:
     return None
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Collection + validation
-# ─────────────────────────────────────────────────────────────────────────────
 
 def load_dataset(ds: Dataset) -> list[dict]:
     """Read one dataset's raw pipe rows (empty for a missing optional dataset)."""
@@ -367,9 +361,7 @@ def collect_records(datasets: list[Dataset]) -> dict[str, Any]:
             "datasets": datasets_meta, "fatal": fatal}
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Coverage report (pure, offline)
-# ─────────────────────────────────────────────────────────────────────────────
 
 _CYRILLIC_RE = re.compile(r"[А-Яа-яЁёІіЎў]")
 _LATIN_RE = re.compile(r"[A-Za-z]")

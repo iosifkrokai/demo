@@ -47,7 +47,7 @@ def _reqs(*requirements: Requirement) -> TripRequirements:
     return TripRequirements(requirements=list(requirements))
 
 
-# ── the verifier ────────────────────────────────────────────────────────────
+# the verifier
 
 def test_catalogue_satisfies_a_must_visit_by_membership():
     places = [_cand(7, "Старый замок", "замок", "Гродно")]
@@ -97,7 +97,7 @@ def test_catalogue_of_nothing_is_uncertain_not_unmet():
     assert result[0].reason == REASON_ROUTE_MISSING
 
 
-# ── the response ────────────────────────────────────────────────────────────
+# the response
 
 def _catalogue(candidates: list[Candidate], requirements: TripRequirements):
     pipeline = pipeline_mod.Pipeline(db=object())

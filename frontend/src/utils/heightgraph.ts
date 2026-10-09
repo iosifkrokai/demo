@@ -103,17 +103,15 @@ export const buildHeightgraphData = (
       // new heightClass new LineString
       // height graph works by taking a geojson with collection of LineStrings and coloring them based on heightClass property
 
-      // this checks if heightClass has changed and we need to add current LineString as one feature in GeoJSON
       if (previousHeightClass !== heightClass) {
         // since at this point we have a change in height class this will be the last point in current LineString
         LineStringCoordinates.push([
-          coordinates[index]![0], // lng
-          coordinates[index]![1], // lat
-          rangeHeightData[index]![1], // elevation
-          rangeHeightData[index]![0], // distance from start
+          coordinates[index]![0],
+          coordinates[index]![1],
+          rangeHeightData[index]![1],
+          rangeHeightData[index]![0],
         ]);
 
-        // add current LineString as one feature in GeoJSON
         features.push({
           type: 'Feature',
           geometry: {
@@ -126,17 +124,15 @@ export const buildHeightgraphData = (
             attributeType: previousHeightClass || 0,
           },
         });
-        // reset LineStringCoordinates and prepare it for new GeoJSON feature
         LineStringCoordinates = [];
       }
-      // current point is also the stratting point for new LineString
+      // the current point is also the starting point of the new LineString
       LineStringCoordinates.push([
-        coordinates[index]![0], // lng
-        coordinates[index]![1], // lat
-        rangeHeightData[index]![1], // elevation
-        rangeHeightData[index]![0], // distance from start
+        coordinates[index]![0],
+        coordinates[index]![1],
+        rangeHeightData[index]![1],
+        rangeHeightData[index]![0],
       ]);
-      // replace previousHeightClass with current heightClass
       previousHeightClass = heightClass;
     }
   });

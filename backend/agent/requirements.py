@@ -27,7 +27,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-# ── Vocabulary ──────────────────────────────────────────────────────────────
+# Vocabulary
 
 # must_visit — a specific named place that must be in the route.
 # service    — a facility the route must (hard) or may (soft) pass by, by
@@ -147,7 +147,7 @@ class TripRequirements(BaseModel):
     # How the requirements were obtained. "mixed" = LLM plus explicit UI fields.
     source: Literal["llm", "explicit", "fallback", "mixed"] = "fallback"
 
-    # ── Queries the planner/verifier actually use ───────────────────────────
+    # Queries the planner/verifier actually use
 
     def hard(self) -> list[Requirement]:
         return [r for r in self.requirements if r.strength == "hard"]
@@ -195,7 +195,7 @@ class TripRequirements(BaseModel):
         """True only when every hard requirement is proven satisfied."""
         return not self.failed_hard() and not self.unresolved_hard()
 
-    # ── Public projection ───────────────────────────────────────────────────
+    # Public projection
 
     def public_requirements(self) -> list[dict]:
         """Localizable view of the requirement list for the HTTP response.

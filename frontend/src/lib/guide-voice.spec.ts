@@ -27,8 +27,6 @@ const stale = () => ({ quality: 'stale' as const });
 const spokenNone: SpokenThresholds = new Map();
 const muted = () => ({ muted: true });
 
-// ── Mock SpeechSynthesis ───────────────────────────────────────────────────────
-
 const mockSpeechSynthesis = {
   speak: vi.fn(),
   cancel: vi.fn(),
@@ -54,8 +52,6 @@ class MockSpeechSynthesisUtterance {
 
 vi.stubGlobal('speechSynthesis', mockSpeechSynthesis);
 vi.stubGlobal('SpeechSynthesisUtterance', MockSpeechSynthesisUtterance);
-
-// ── decideVoice ───────────────────────────────────────────────────────────────
 
 describe('decideVoice', () => {
   it('silences when muted', () => {
@@ -324,8 +320,6 @@ describe('decideTriggeredVoice', () => {
   });
 });
 
-// ── isNewManeuver ─────────────────────────────────────────────────────────────
-
 describe('isNewManeuver', () => {
   it('returns true when previous is null', () => {
     expect(isNewManeuver(null, maneuver('1'))).toBe(true);
@@ -343,8 +337,6 @@ describe('isNewManeuver', () => {
     expect(isNewManeuver(maneuver('1'), maneuver('1'))).toBe(false);
   });
 });
-
-// ── markSpoken ───────────────────────────────────────────────────────────────
 
 describe('markSpoken', () => {
   it('adds the first threshold for a new maneuver', () => {
@@ -372,8 +364,6 @@ describe('markSpoken', () => {
     expect(with2.get('2')?.has(30)).toBe(true);
   });
 });
-
-// ── SpeechSynthesis wrapper ────────────────────────────────────────────────────
 
 beforeEach(() => {
   mockSpeechSynthesis.speak.mockClear();
@@ -461,8 +451,6 @@ describe('isSpeechAvailable', () => {
     window.speechSynthesis = prev;
   });
 });
-
-// ── VOICE_THRESHOLDS_M ────────────────────────────────────────────────────────
 
 describe('VOICE_THRESHOLDS_M', () => {
   it('is sorted ascending', () => {

@@ -46,7 +46,7 @@ def _no_path_error() -> UpstreamUnavailable:
     )
 
 
-# ── 1. the matrix must say "unreachable", not "free" ────────────────────────
+# 1. the matrix must say "unreachable", not "free"
 
 def test_null_matrix_cell_is_the_unreachable_sentinel(monkeypatch):
     def fake_request(method, url, *, params, timeout):
@@ -76,7 +76,7 @@ def test_null_matrix_cell_is_the_unreachable_sentinel(monkeypatch):
     assert matrix[0][0] == 0.0 and matrix[1][1] == 0.0
 
 
-# ── 2. the stop behind an unroutable leg gets pruned ────────────────────────
+# 2. the stop behind an unroutable leg gets pruned
 
 def test_prune_drops_the_stop_after_an_unroutable_leg():
     a = _candidate(1, *MAINLAND, name="Волковыск")
@@ -113,7 +113,7 @@ def test_prune_leaves_a_healthy_tour_alone():
     assert dropped == []
 
 
-# ── 3. render falls back to legs ────────────────────────────────────────────
+# 3. render falls back to legs
 
 def test_render_falls_back_to_legs_when_the_tour_is_refused(monkeypatch):
     calls: list[list[dict]] = []
@@ -153,7 +153,7 @@ def test_render_falls_back_to_legs_when_the_tour_is_refused(monkeypatch):
     assert summary["time"] == 600.0
 
 
-# ── 4. a 400/442 is a route failure, not an outage ──────────────────────────
+# 4. a 400/442 is a route failure, not an outage
 
 def test_no_path_400_is_classified_as_a_route_failure():
     assert vc._is_route_failure(_no_path_error())

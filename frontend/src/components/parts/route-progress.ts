@@ -10,7 +10,7 @@
  *   drawing    — the plan has arrived and the app is asking for the line
  *                (Valhalla /route) that will be drawn on the map.
  *
- * There is deliberately no "проверяю требования" stage: the client cannot see
+ * There is deliberately no "checking requirements" stage: the client cannot see
  * the agent's internal steps, and inventing them would be a lie.
  */
 export type RouteStage = 'requesting' | 'drawing';

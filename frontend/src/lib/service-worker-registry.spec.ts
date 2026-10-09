@@ -17,8 +17,6 @@
 
 import { describe, expect, it } from 'vitest';
 
-// ── Test helpers ──────────────────────────────────────────────────────────────
-
 /**
  * Re-exports of the pure functions from sw.js so they can be tested here.
  * The SW itself lives in public/sw.js and is not part of the Vite bundle,
@@ -27,8 +25,6 @@ import { describe, expect, it } from 'vitest';
  * If the SW ever moves to src/ (via vite-plugin-pwa), this re-export
  * disappears and the test imports directly.
  */
-
-// ── matchNoCache ─────────────────────────────────────────────────────────────
 
 /**
  * Whether a request URL matches any no-cache prefix.
@@ -119,8 +115,6 @@ describe('matchNoCache', () => {
   });
 });
 
-// ── Cache strategy ───────────────────────────────────────────────────────────
-
 type Strategy = 'skip' | 'shell' | 'static';
 
 /**
@@ -198,8 +192,6 @@ describe('getStrategy', () => {
     );
   });
 });
-
-// ── register() in DEV mode ───────────────────────────────────────────────────
 
 describe('register (DEV mode guard)', () => {
   it('skips registration in dev mode without touching navigator', () => {

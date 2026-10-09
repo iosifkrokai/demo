@@ -26,7 +26,6 @@ export const MOBILE_GUIDE_HEIGHT = '3.5rem';
 
 const ORDER: MobileSnap[] = ['bar', 'peek', 'full'];
 
-// ── Gesture tuning ─────────────────────────────────────────────────────────
 // Four numbers, each with a reason. They are the difference between a sheet
 // that feels bolted to the finger and one that jumps between fixed heights a
 // quarter-second after the finger has already stopped.

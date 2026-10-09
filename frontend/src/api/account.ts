@@ -146,8 +146,6 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   }
 }
 
-// ── Normalisers (trust the wire only after checking it) ──────────────────────
-
 const asRecord = (value: unknown): Record<string, unknown> | null =>
   value && typeof value === 'object' && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -213,8 +211,6 @@ const asTotal = (body: unknown, fallback: number): number => {
   return typeof record?.total === 'number' ? record.total : fallback;
 };
 
-// ── Auth ────────────────────────────────────────────────────────────────────
-
 export const getAuthState = async (): Promise<AuthState> =>
   normalizeAuthState(await request<unknown>('/auth/me'));
 
@@ -251,8 +247,6 @@ export async function loginAccount(input: {
 
 export const logoutAccount = (): Promise<void> =>
   request<void>('/auth/logout', { method: 'POST' });
-
-// ── Visits ──────────────────────────────────────────────────────────────────
 
 const normalizeVisited = (value: unknown): VisitedPlace | null => {
   const place = normalizePlace(value);
@@ -293,8 +287,6 @@ export const markVisitedBulk = (
     body: JSON.stringify({ place_ids: placeIds }),
   });
 
-// ── Admin — users ───────────────────────────────────────────────────────────
-
 export const adminListUsers = async (
   params: { q?: string; limit?: number; offset?: number } = {}
 ): Promise<AdminUserList> => {
@@ -326,8 +318,6 @@ export const adminPatchUser = async (
 
 export const adminDeleteUser = (userId: string): Promise<void> =>
   request<void>(`/admin/users/${userId}`, { method: 'DELETE' });
-
-// ── Admin — places ──────────────────────────────────────────────────────────
 
 export const adminListPlaces = async (
   params: {
