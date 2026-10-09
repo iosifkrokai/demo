@@ -16,6 +16,8 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from store.place_fields import parse_fun_facts, parse_links, parse_photo
+
 log = logging.getLogger(__name__)
 
 #: One browse loads the whole region; the cap is a backstop against a runaway
@@ -36,11 +38,9 @@ def place_payload(row: dict[str, Any]) -> dict[str, Any]:
     """One place, in the shape the panel prints. Numbers stay numbers.
 
     `fun_facts` and `links` are text columns holding JSON; they are read with the
-    planner's own parsers so a card and a planned route cannot disagree about the
-    same place. The keys match `ItineraryStop` on the client.
+    shared `store.place_fields` parsers so a card and a planned route cannot
+    disagree about the same place. The keys match `ItineraryStop` on the client.
     """
-    from agent.planner.retrieve import parse_fun_facts, parse_links, parse_photo
-
     return {
         "place_id": row["id"],
         "source_url": row["source_url"],

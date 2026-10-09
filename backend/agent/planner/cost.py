@@ -19,11 +19,14 @@ from __future__ import annotations
 import math
 from collections.abc import Collection
 from dataclasses import dataclass
+from typing import Any
 
 from contracts.planner import Candidate, CostMatrix, ResolvedConstraints
-from core.errors import UpstreamUnavailable
+from core.errors import NoRoutePossible, UpstreamUnavailable
 from domain import constants, taxonomy
 from infra.valhalla_client import snap_locations, time_matrix
+
+from .geo import _distance_m
 
 # Machine reason codes for prune_unroutable_stops (localized by the API layer).
 REASON_UNROUTABLE_LEG = "unroutable_leg"
@@ -304,3 +307,98 @@ def total_seconds(
     order: list[int], matrix: list[list[float]], visit_minutes: list[int]
 ) -> int:
     return int(walk_cost(order, matrix)) + visit_cost(order, visit_minutes)
+
+
+def _synthetic_cost(
+    candidates: list[Candidate], costing: str = "pedestrian"
+) -> CostMatrix:
+    """A straight-line cost matrix for when Valhalla cannot answer.
+
+    A refinement must still return the route the user has: if the road matrix
+    is unavailable we fall back to great-circle legs and the taxonomy's visit
+    estimates, instead of turning the request into a 422/503.
+    """
+    from .refine import visit_minutes_of
+
+    speed_ms = 1.3 if costing == "pedestrian" else 8.0
+    n = len(candidates)
+    matrix = [[0.0] * n for _ in range(n)]
+    for i in range(n):
+        for j in range(n):
+            if i != j:
+                matrix[i][j] = _distance_m(candidates[i], candidates[j]) / speed_ms
+    return CostMatrix(
+        walk_seconds=matrix,
+        visit_minutes=[visit_minutes_of(c) for c in candidates],
+        indices=list(range(n)),
+    )
+
+
+def _refinement_cost(
+    route: list[Candidate], constraints: ResolvedConstraints, costing: str
+) -> tuple[list[Candidate], CostMatrix]:
+    """Best-effort cost matrix for a refinement route.
+
+    Never raises and never drops a stop the user kept: if the road matrix
+    pre-filter would remove one of them, fall back to straight-line legs so the
+    base points survive into the refinement (the 422 this contract fixes).
+    """
+    base_ids = {c.id for c in route}
+    try:
+        cost = compute_cost_matrix(route, constraints, costing=costing)
+    except (UpstreamUnavailable, NoRoutePossible):
+        return route, _synthetic_cost(route, costing)
+
+    if cost.indices != list(range(len(route))):
+        aligned = [route[i] for i in cost.indices]
+        if not base_ids <= {c.id for c in aligned}:
+            return route, _synthetic_cost(route, costing)
+        route = aligned
+        cost = CostMatrix(
+            walk_seconds=cost.walk_seconds,
+            visit_minutes=cost.visit_minutes,
+            indices=list(range(len(route))),
+        )
+    return route, cost
+
+
+def _build_cost(
+    candidates: list[Candidate], constraints: ResolvedConstraints, costing: str
+) -> tuple[list[Candidate], CostMatrix]:
+    """Cost matrix, aligned to the candidates, minus what Valhalla cannot reach.
+
+    The matrix pre-filter may drop rows, so the candidate list is re-aligned to
+    it; then candidates with no reachable partner at all (a fortress POI with no
+    pedestrian edges nearby makes every order look impossible) are dropped.
+    """
+    cost = compute_cost_matrix(candidates, constraints, costing=costing)
+    if cost.indices != list(range(len(candidates))):
+        candidates = [candidates[i] for i in cost.indices]
+    candidates, cost = drop_unreachable(candidates, cost)
+    if len(candidates) < 2:
+        raise NoRoutePossible(
+            "Valhalla не нашла дороги между нашими точками — "
+            "уточните город или район"
+        )
+    return candidates, cost
+
+
+def _is_service_code(code: str) -> bool:
+    """True when a taxonomy code is a service (a café, a toilet, a hotel)."""
+    try:
+        return taxonomy.role(code) == "service"
+    except Exception:  # unknown/unmapped code → treat it as a destination
+        return False
+
+
+def _is_sight_stop(candidate: Any) -> bool:
+    """True when a candidate is a destination, not a service the user asked for.
+
+    A service POI (toilet/café/hotel) can be *on* the walk; it must never be the
+    thing the walk is built around.  Unknown category codes count as sights —
+    the taxonomy is the only authority, and it only ever gains codes.
+    """
+    try:
+        return taxonomy.role(candidate.category) != "service"
+    except Exception:  # unknown/unmapped code → treat it as a destination
+        return True

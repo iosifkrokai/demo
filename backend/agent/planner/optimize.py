@@ -25,13 +25,19 @@ Budget-constrained greedy selection (Defect 3 fix):
 
 from __future__ import annotations
 
+import logging
 import random
 from itertools import permutations
+from typing import Any
 
 from contracts.planner import Candidate, CostMatrix, ResolvedConstraints
+from core.errors import NoRoutePossible, UpstreamUnavailable
 from domain import constants
+from infra.valhalla_client import optimized_route as valhalla_optimized_route
 
-from .cost import total_seconds, walk_cost
+from .cost import prune_unroutable_stops, total_seconds, walk_cost
+
+log = logging.getLogger(__name__)
 
 # km/h pedestrian speed — used to convert walk time to distance for the
 # max-leg check (avoids calling Valhalla just for a distance estimate).
@@ -491,3 +497,69 @@ def _two_opt(order: list[int], matrix: list[list[float]]) -> list[int]:
                     current = candidate_cost
                     improved = True
     return order
+
+
+def _valhalla_order(
+    route: list[Candidate], info: dict, *, costing: str
+) -> tuple[list[Candidate], dict]:
+    """Let Valhalla order the walk when nothing pins the sequence.
+
+    With no GPS start and no must-visit stops, /optimized_route is the router's
+    own solver, so the order the tourist sees is the one Valhalla built. With a
+    fixed start or must-visit stops the planned order wins and Valhalla only
+    draws it.
+    """
+    if len(route) < 3:
+        return route, info
+    coords = [{"lat": c.lat, "lon": c.lon} for c in route]
+    try:
+        v_order, _, _ = valhalla_optimized_route(coords, costing=costing)
+    except UpstreamUnavailable:
+        return route, info
+    if len(v_order) != len(route) or sorted(v_order) != list(range(len(route))):
+        return route, info
+    planned = list(info.get("order") or range(len(route)))
+    return (
+        [route[i] for i in v_order],
+        {
+            **info,
+            "order": [planned[i] for i in v_order],
+            "algorithm": f"{info.get('algorithm')}+valhalla",
+        },
+    )
+
+
+def _prune_unroutable(
+    route: list[Candidate],
+    candidates: list[Candidate],
+    cost: CostMatrix,
+    must_visit_ids: list[int] | None = None,
+) -> tuple[list[Candidate], list[Any]]:
+    """Drop stops the matrix cannot connect to their predecessor in this order.
+
+    Valhalla's own verdict (UNREACHABLE_S = 400 "No path could be found for
+    input"): a chapel on a road island, reachable from its neighbour but from
+    nothing else, made /route fail for the WHOLE tour — the UI showed every
+    point drawn with no line between them.
+
+    Returns ``(route, report)`` where ``report`` carries a machine reason per
+    flagged stop.  A MANDATORY stop is never removed: it stays on the route and
+    is reported as ``must_visit_unroutable``, which the caller records in the
+    plan trace so the verifier can return ``unmet``/``infeasible`` instead of a
+    route that quietly lost the place the tourist demanded.
+    """
+    route, pruned = prune_unroutable_stops(
+        route, candidates, cost, must_visit_ids=must_visit_ids
+    )
+    if pruned:
+        log.warning(
+            "pruned %d stop(s) Valhalla cannot reach in this order: %s",
+            len(pruned),
+            ", ".join(c.name for c in pruned),
+        )
+    if len(route) < 2:
+        raise NoRoutePossible(
+            "Valhalla не нашла дороги между нашими точками — "
+            "уточните город или район"
+        )
+    return route, pruned

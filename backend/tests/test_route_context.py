@@ -157,7 +157,7 @@ def test_convenience_stops_come_from_the_neighbourhood(monkeypatch):
              "lat": lat, "lon": lon},
         ]
 
-    monkeypatch.setattr("agent.planner.pipeline.nearby_places", fake_nearby)
+    monkeypatch.setattr("agent.planner.refine.nearby_places", fake_nearby)
 
     found = _nearby_convenience(None, base, {"кафе"})
 
@@ -178,7 +178,7 @@ def test_convenience_search_ignores_categories_nobody_asked_for(monkeypatch):
             {"id": 61, "name": "Туалет", "category": "туалет", "lat": lat, "lon": lon},
         ]
 
-    monkeypatch.setattr("agent.planner.pipeline.nearby_places", fake_nearby)
+    monkeypatch.setattr("agent.planner.refine.nearby_places", fake_nearby)
 
     found = _nearby_convenience(None, base, {"туалет"})
 

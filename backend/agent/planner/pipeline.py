@@ -38,7 +38,6 @@ Returns: RouteResponse (Pydantic) — what main.py serves over HTTP.  Its
 from __future__ import annotations
 
 import logging
-import re as _re
 import time as _time
 from typing import Any
 
@@ -47,17 +46,10 @@ import psycopg
 from contracts.planner import (
     BudgetInfo,
     Candidate,
-    CostMatrix,
     GenerateReq,
-    Interpretation,
-    LatLon,
     OverallStatus,
     ParsedQuery,
-    Place,
-    PlannedAlternative,
-    RequirementSignal,
     ResolvedConstraints,
-    RouteChange,
     RouteChanges,
     RouteResponse,
     RouteSummary,
@@ -68,40 +60,109 @@ from core.errors import (
     NoRoutePossible,
     UpstreamUnavailable,
 )
-from domain import constants, taxonomy
+from domain import constants
 from infra import progress, trace
-from infra.valhalla_client import optimized_route as valhalla_optimized_route, ping as valhalla_ping
+from infra.valhalla_client import ping as valhalla_ping
 from store.search import _name_match_search, fetch_points_by_ids, nearby_places
 
 from . import interpret_cache
+from .catalogue import catalogue_response
 from .cost import (
+    _build_cost,
+    _is_service_code,
+    _is_sight_stop,
+    _refinement_cost,
+    _synthetic_cost,
     compute_cost_matrix,
-    drop_unreachable,
-    prune_unroutable_stops,
-    visit_time_minutes,
 )
+from .coverage import _outside_left_unresolved, refuse_out_of_coverage
+from .dedupe import _drop_duplicates, _dupe_pairs, _norm_name
 from .diversity import mmr_select
 from .explain import explain as explain_route
-from .intent import (
-    build_requirements,
-    extract_intent,
-    intent_from_requirements,
-    mark_out_of_coverage,
+from .geo import (
+    _TRACE_NAMES_MAX,
+    _distance_from_origin_m,
+    _distance_m,
+    _distance_pt_m,
+    _geo_focus,
+    _geo_focus_report,
+    _geo_report,
+    should_skip_geo_focus,
 )
-from .optimize import optimize
+from .intent import build_requirements, extract_intent, intent_from_requirements
+from .optimize import _prune_unroutable, _valhalla_order, optimize
 from .preprocess import preprocess
 from .refine import (
+    _cap_for_valhalla,
+    _context_changes,
+    _drop_excluded,
+    _nearby_convenience,
+    _with_base_points,
     interpret_refinement,
     is_excluded_category,
     reason_text,
     reorder_stops,
-    visit_minutes_of,
 )
 from .render import render
 from .resolve import resolve
+from .response import (
+    _MODE_WORDS,
+    _gone,
+    _interpretation,
+    _names,
+    _render_tour,
+    _services_along_evidence,
+    _to_places,
+    _verdicts,
+    alternatives_for,
+    alternatives_sentence,
+)
 from .retrieve import _row_to_candidate, apply_negative_filter, retrieve
 from .validate import validate
-from .verify import overall_status, verify, verify_catalogue
+from .verify import overall_status, verify
+
+# The stage helpers live in their own modules; they are re-imported here so the
+# names stay importable from — and patchable on — agent.planner.pipeline.  Some
+# of them are only used by the tests, hence the explicit re-export list.
+__all__ = [
+    "_MODE_WORDS",
+    "_TRACE_NAMES_MAX",
+    "_build_cost",
+    "_build_response",
+    "_cap_for_valhalla",
+    "_context_changes",
+    "_distance_from_origin_m",
+    "_distance_m",
+    "_distance_pt_m",
+    "_drop_duplicates",
+    "_drop_excluded",
+    "_dupe_pairs",
+    "_geo_focus",
+    "_geo_focus_report",
+    "_geo_report",
+    "_gone",
+    "_interpretation",
+    "_is_service_code",
+    "_is_sight_stop",
+    "_names",
+    "_nearby_convenience",
+    "_norm_name",
+    "_outside_left_unresolved",
+    "_prune_unroutable",
+    "_refinement_cost",
+    "_render_tour",
+    "_services_along_evidence",
+    "_synthetic_cost",
+    "_to_places",
+    "_valhalla_order",
+    "_verdicts",
+    "_with_base_points",
+    "alternatives_for",
+    "alternatives_sentence",
+    "catalogue_response",
+    "refuse_out_of_coverage",
+    "should_skip_geo_focus",
+]
 
 log = logging.getLogger(__name__)
 
@@ -134,774 +195,6 @@ def _embed_query(text: str) -> list[float]:
         return []
     interpret_cache.EMBED_CACHE.put(cache_key, [vec])
     return vec
-
-
-def should_skip_geo_focus(*, region_scope: bool, origin: LatLon | None) -> bool:
-    """May the region-scope rule keep its spread, or must the focus still run?
-
-    A region-wide request («все костёлы Гродненской области») legitimately keeps its
-    spread: confining it to one walkable cluster is what made that question
-    unanswerable. The tourist's own position is not a cluster preference, though —
-    it is the start of the walk. Measured before this rule: the same query with an
-    `origin` AND a 120-minute budget came back as two stops 177 km apart with 38
-    hours of walking, because the focus was skipped wholesale, GPS included. So GPS
-    is always honoured, and region scope is allowed to skip only the anchor-town
-    focus. A catalogue request never reaches here (it returns before this step).
-    """
-    return region_scope and origin is None
-
-
-def _geo_focus(
-    candidates: list,
-    origin: LatLon | None = None,
-    anchor_id: int | None = None,
-) -> list:
-    """Drop candidates too far from the anchor.
-
-    Anchor priority: tourist GPS > must-visit/named place > densest cluster.
-    Keyword-mode retrieval (no embeddings) can surface matching places from
-    across the whole voblast; a walking route must stay local.
-    """
-    keep, _ = _geo_focus_report(candidates, origin=origin, anchor_id=anchor_id)
-    return keep
-
-
-def _geo_focus_report(
-    candidates: list,
-    origin: LatLon | None = None,
-    anchor_id: int | None = None,
-) -> tuple[list, dict]:
-    """``_geo_focus`` plus the reasoning, for the trace.
-
-    «8 остановок убрано» does not answer the question a reader actually has —
-    «почему этот костёл не в маршруте». The radius and each dropped place's own
-    distance do: a stop 12 km away under a 4 km radius is a different story from
-    one 4.2 km away under a 4 km radius, and only the numbers tell them apart.
-    """
-    if not candidates:
-        return [], {"anchor": None, "radius_km": None, "dropped": []}
-    if origin is not None:
-        anchor = origin
-        anchor_name = "GPS"
-        dist = lambda c: _distance_from_origin_m(c, origin)
-    elif anchor_id is not None and any(c.id == anchor_id for c in candidates):
-        anchor = next(c for c in candidates if c.id == anchor_id)
-        anchor_name = anchor.name
-        dist = lambda c: _distance_m(c, anchor)
-    else:
-        # Vague discovery query with no anchor: taking the single top-ranked hit
-        # as the anchor can land on an outlier — "достопримечательности
-        # Гродненской области" anchored on a fortress ring spread over 20 km,
-        # where no walking leg is possible and the optimizer answered 422.
-        # Pick the densest cluster instead: the candidate with the most
-        # neighbours inside one GEO_FOCUS_KM radius.
-        focus_m = constants.GEO_FOCUS_KM * 1000
-        anchor = max(
-            candidates,
-            key=lambda c: (
-                sum(1 for o in candidates if _distance_m(o, c) <= focus_m),
-                c.rrf_score,
-            ),
-        )
-        anchor_name = anchor.name
-        dist = lambda c: _distance_m(c, anchor)
-    max_m = constants.GEO_FOCUS_KM * 1000
-
-    if origin is not None or anchor_id is not None:
-        # A known position (tourist GPS) or a named place anchors the walk:
-        # never inflate the radius here.  Doubling used to pull 50 km-away
-        # castles into "Мирский замок", and the optimizer then dropped
-        # everything but one stop because no leg was walkable.
-        keep = [c for c in candidates if c is anchor or dist(c) <= max_m]
-        return keep, _geo_report(anchor_name, max_m, candidates, keep, dist)
-
-    # No anchor at all (vague discovery query): stay local around the best
-    # candidate. Widening the radius here used to pull stops hundreds of km
-    # apart into one walking tour, and the optimizer then gave up with
-    # 422 "optimizer could not produce a route with ≥ 2 stops".
-    discovery_max_m = constants.GEO_FOCUS_DISCOVERY_MAX_KM * 1000
-    while True:
-        keep = [
-            c for c in candidates
-            if c is anchor or dist(c) <= max_m
-        ]
-        if len(keep) >= 3 or max_m >= discovery_max_m:
-            return keep, _geo_report(anchor_name, max_m, candidates, keep, dist)
-        max_m = min(max_m * 2, discovery_max_m)
-
-
-def _geo_report(
-    anchor_name: str,
-    max_m: float,
-    candidates: list,
-    keep: list,
-    dist,
-) -> dict:
-    """Which anchor was chosen, how wide the radius ended up, who fell outside.
-
-    The radius is reported as it was finally used, not as the constant it
-    started from: the discovery branch doubles it until it has three stops, and
-    a reader comparing «убрано 40» against a 4 km constant would conclude the
-    code is broken rather than that the walk was widened.
-    """
-    kept_ids = {id(c) for c in keep}
-    dropped = [c for c in candidates if id(c) not in kept_ids]
-    return {
-        "anchor": anchor_name,
-        "radius_km": round(max_m / 1000, 1),
-        # Distance to the anchor, so «убрано 40» becomes «этот — в 12 км, тот — в 4.2».
-        "dropped": [
-            {"name": c.name, "km": round(dist(c) / 1000, 1)}
-            for c in dropped[:_TRACE_NAMES_MAX]
-        ],
-    }
-
-
-def _distance_m(a, b) -> float:
-    """Equirectangular distance in metres (fine at city scale)."""
-    return _distance_pt_m(a.lat, a.lon, b.lat, b.lon)
-
-
-def _distance_pt_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    """Equirectangular distance in metres (fine at city scale)."""
-    import math
-
-    lat_mid = math.radians((lat1 + lat2) / 2)
-    dx = math.radians(lon1 - lon2) * 6_371_000 * math.cos(lat_mid)
-    dy = math.radians(lat1 - lat2) * 6_371_000
-    return math.hypot(dx, dy)
-
-
-def _distance_from_origin_m(c, origin: LatLon) -> float:
-    return _distance_pt_m(c.lat, c.lon, origin.lat, origin.lon)
-
-
-def _norm_name(name: str) -> str:
-    """Lowercase, drop parentheticals and punctuation — for POI-name matching."""
-    n = _re.sub(r"\([^)]*\)", " ", (name or "").lower())
-    n = _re.sub(r"[^0-9a-zа-яё]+", " ", n)
-    return " ".join(n.split())
-
-
-def _with_base_points(
-    candidates: list[Candidate],
-    rows: list[dict],
-    excluded: set[int],
-) -> tuple[list[Candidate], list[Candidate]]:
-    """Keep the stops the user already has through a refinement.
-
-    A refinement ("добавь кофейню и туалет") must ADD to the route: stops that
-    were fetched from the previous turn are re-added after every trim, so the
-    only way a stop disappears is an explicit request (excluded_ids) or
-    Valhalla's own verdict (no road connects it).
-
-    Returns the merged pool and the base candidates themselves.
-    """
-    base = [_row_to_candidate(r, 0.0) for r in rows if r["id"] not in excluded]
-    have = {c.id for c in candidates}
-    merged = list(candidates) + [b for b in base if b.id not in have]
-    return merged, base
-
-
-def _nearby_convenience(
-    db: psycopg.Connection,
-    base: list[Candidate],
-    wanted: set[str],
-    *,
-    radius_m: int = constants.CONVENIENCE_RADIUS_M,
-    max_added: int = constants.CONVENIENCE_MAX_ADDED,
-) -> list[Candidate]:
-    """Convenience stops (coffee, toilet, ...) that sit ON the route.
-
-    A refinement like «добавь кофейню и туалет» is not a new sightseeing quest:
-    the tourist wants a coffee within a short detour of the walk they already
-    have. So these are picked from the neighbourhood of the existing stops, not
-    from a relevance ranking that happily returns a café 12 km away.
-    """
-    found: dict[int, Candidate] = {}
-    per_stop: dict[int, int] = {}
-    for stop in base:
-        if per_stop.get(stop.id, 0) >= 2:
-            continue
-        rows = nearby_places(
-            db, stop.lat, stop.lon, radius_km=radius_m / 1000.0, limit=8
-        )
-        for row in rows:
-            cat = (row.get("category") or "").strip().lower()
-            if cat not in wanted or row["id"] in found:
-                continue
-            if row["id"] in {c.id for c in base}:
-                continue
-            found[row["id"]] = _row_to_candidate(row, 0.0)
-            per_stop[stop.id] = per_stop.get(stop.id, 0) + 1
-            if len(found) >= max_added:
-                return list(found.values())
-    return list(found.values())
-
-
-def _cap_for_valhalla(
-    candidates: list[Candidate],
-    base: list[Candidate],
-    limit: int = constants.VALHALLA_MAX_LOCATIONS,
-) -> list[Candidate]:
-    """Keep the ordering request inside Valhalla's location limit.
-
-    Valhalla answers /optimized_route with error 150 above 20 locations, which
-    the pipeline used to surface as «could not produce a route». Base stops come
-    first (they are what the user asked to keep), the rest in relevance order.
-    """
-    if len(candidates) <= limit:
-        return candidates
-    base_ids = {c.id for c in base}
-    ordered = [c for c in candidates if c.id in base_ids]
-    rest = [c for c in candidates if c.id not in base_ids]
-    rest.sort(key=lambda c: c.relevance, reverse=True)
-    return (ordered + rest)[:limit]
-
-
-def _context_changes(base: list[Candidate], route: list[Candidate]) -> RouteChanges:
-    """What a refinement did to the previous route — added / dropped / kept."""
-    base_ids = {c.id for c in base}
-    route_ids = {c.id for c in route}
-    return RouteChanges(
-        added=[
-            RouteChange(id=c.id, name=c.name)
-            for c in route
-            if c.id not in base_ids
-        ],
-        removed=[
-            RouteChange(
-                id=c.id,
-                name=c.name,
-                reason="не связано дорогами или не уложилось в лимит",
-            )
-            for c in base
-            if c.id not in route_ids
-        ],
-        kept=len(base_ids & route_ids),
-    )
-
-
-def _drop_excluded(candidates: list[Candidate], excluded_ids: set[int]) -> list[Candidate]:
-    """Drop candidates the user removed by hand.
-
-    A refinement turn carries the stops the user deleted; without this the same
-    POI returns on every rebuild and the deletion looks ignored.
-    """
-    return [c for c in candidates if c.id not in excluded_ids]
-
-
-def _drop_duplicates(candidates: list[Candidate], radius_m: float) -> list[Candidate]:
-    """Drop places that sit on top of an already-kept, better-ranked place.
-
-    The base stores the same POI more than once whenever a curated row and an
-    OSM row disagree on the name or the precise coordinates ("Новый замок
-    (дворец Стефана Батория)" vs "Новый замок"; "Дом-музей Адама Мицкевича"
-    twice, 340 m apart), which put the same sight into a route twice.
-    Candidates arrive relevance-ordered, so the highest-ranked member of each
-    cluster wins.  A candidate is dropped when it is within `radius_m` of a
-    kept place, or when it carries the same normalised name and lies within
-    `constants.DUPLICATE_NAME_RADIUS_M`.
-    """
-    kept: list[Candidate] = []
-    for cand in candidates:
-        cand_name = _norm_name(cand.name)
-        duplicate = False
-        for k in kept:
-            dist = _distance_pt_m(cand.lat, cand.lon, k.lat, k.lon)
-            if dist < radius_m:
-                duplicate = True
-                break
-            if (
-                cand_name
-                and cand_name == _norm_name(k.name)
-                and dist < constants.DUPLICATE_NAME_RADIUS_M
-            ):
-                duplicate = True
-                break
-        if not duplicate:
-            kept.append(cand)
-    return kept
-
-
-def _synthetic_cost(
-    candidates: list[Candidate], costing: str = "pedestrian"
-) -> CostMatrix:
-    """A straight-line cost matrix for when Valhalla cannot answer.
-
-    A refinement must still return the route the user has: if the road matrix
-    is unavailable we fall back to great-circle legs and the taxonomy's visit
-    estimates, instead of turning the request into a 422/503.
-    """
-    speed_ms = 1.3 if costing == "pedestrian" else 8.0
-    n = len(candidates)
-    matrix = [[0.0] * n for _ in range(n)]
-    for i in range(n):
-        for j in range(n):
-            if i != j:
-                matrix[i][j] = _distance_m(candidates[i], candidates[j]) / speed_ms
-    return CostMatrix(
-        walk_seconds=matrix,
-        visit_minutes=[visit_minutes_of(c) for c in candidates],
-        indices=list(range(n)),
-    )
-
-
-def _refinement_cost(
-    route: list[Candidate], constraints: ResolvedConstraints, costing: str
-) -> tuple[list[Candidate], CostMatrix]:
-    """Best-effort cost matrix for a refinement route.
-
-    Never raises and never drops a stop the user kept: if the road matrix
-    pre-filter would remove one of them, fall back to straight-line legs so the
-    base points survive into the refinement (the 422 this contract fixes).
-    """
-    base_ids = {c.id for c in route}
-    try:
-        cost = compute_cost_matrix(route, constraints, costing=costing)
-    except (UpstreamUnavailable, NoRoutePossible):
-        return route, _synthetic_cost(route, costing)
-
-    if cost.indices != list(range(len(route))):
-        aligned = [route[i] for i in cost.indices]
-        if not base_ids <= {c.id for c in aligned}:
-            return route, _synthetic_cost(route, costing)
-        route = aligned
-        cost = CostMatrix(
-            walk_seconds=cost.walk_seconds,
-            visit_minutes=cost.visit_minutes,
-            indices=list(range(len(route))),
-        )
-    return route, cost
-
-
-def _build_cost(
-    candidates: list[Candidate], constraints: ResolvedConstraints, costing: str
-) -> tuple[list[Candidate], CostMatrix]:
-    """Cost matrix, aligned to the candidates, minus what Valhalla cannot reach.
-
-    The matrix pre-filter may drop rows, so the candidate list is re-aligned to
-    it; then candidates with no reachable partner at all (a fortress POI with no
-    pedestrian edges nearby makes every order look impossible) are dropped.
-    """
-    cost = compute_cost_matrix(candidates, constraints, costing=costing)
-    if cost.indices != list(range(len(candidates))):
-        candidates = [candidates[i] for i in cost.indices]
-    candidates, cost = drop_unreachable(candidates, cost)
-    if len(candidates) < 2:
-        raise NoRoutePossible(
-            "Valhalla не нашла дороги между нашими точками — "
-            "уточните город или район"
-        )
-    return candidates, cost
-
-
-def _valhalla_order(
-    route: list[Candidate], info: dict, *, costing: str
-) -> tuple[list[Candidate], dict]:
-    """Let Valhalla order the walk when nothing pins the sequence.
-
-    With no GPS start and no must-visit stops, /optimized_route is the router's
-    own solver, so the order the tourist sees is the one Valhalla built. With a
-    fixed start or must-visit stops the planned order wins and Valhalla only
-    draws it.
-    """
-    if len(route) < 3:
-        return route, info
-    coords = [{"lat": c.lat, "lon": c.lon} for c in route]
-    try:
-        v_order, _, _ = valhalla_optimized_route(coords, costing=costing)
-    except UpstreamUnavailable:
-        return route, info
-    if len(v_order) != len(route) or sorted(v_order) != list(range(len(route))):
-        return route, info
-    planned = list(info.get("order") or range(len(route)))
-    return (
-        [route[i] for i in v_order],
-        {
-            **info,
-            "order": [planned[i] for i in v_order],
-            "algorithm": f"{info.get('algorithm')}+valhalla",
-        },
-    )
-
-
-def _prune_unroutable(
-    route: list[Candidate],
-    candidates: list[Candidate],
-    cost: CostMatrix,
-    must_visit_ids: list[int] | None = None,
-) -> tuple[list[Candidate], list[Any]]:
-    """Drop stops the matrix cannot connect to their predecessor in this order.
-
-    Valhalla's own verdict (UNREACHABLE_S = 400 "No path could be found for
-    input"): a chapel on a road island, reachable from its neighbour but from
-    nothing else, made /route fail for the WHOLE tour — the UI showed every
-    point drawn with no line between them.
-
-    Returns ``(route, report)`` where ``report`` carries a machine reason per
-    flagged stop.  A MANDATORY stop is never removed: it stays on the route and
-    is reported as ``must_visit_unroutable``, which the caller records in the
-    plan trace so the verifier can return ``unmet``/``infeasible`` instead of a
-    route that quietly lost the place the tourist demanded.
-    """
-    route, pruned = prune_unroutable_stops(
-        route, candidates, cost, must_visit_ids=must_visit_ids
-    )
-    if pruned:
-        log.warning(
-            "pruned %d stop(s) Valhalla cannot reach in this order: %s",
-            len(pruned),
-            ", ".join(c.name for c in pruned),
-        )
-    if len(route) < 2:
-        raise NoRoutePossible(
-            "Valhalla не нашла дороги между нашими точками — "
-            "уточните город или район"
-        )
-    return route, pruned
-
-
-def _is_service_code(code: str) -> bool:
-    """True when a taxonomy code is a service (a café, a toilet, a hotel)."""
-    try:
-        return taxonomy.role(code) == "service"
-    except Exception:  # unknown/unmapped code → treat it as a destination
-        return False
-
-
-def _is_sight_stop(candidate: Any) -> bool:
-    """True when a candidate is a destination, not a service the user asked for.
-
-    A service POI (toilet/café/hotel) can be *on* the walk; it must never be the
-    thing the walk is built around.  Unknown category codes count as sights —
-    the taxonomy is the only authority, and it only ever gains codes.
-    """
-    try:
-        return taxonomy.role(candidate.category) != "service"
-    except Exception:  # unknown/unmapped code → treat it as a destination
-        return True
-
-
-def _interpretation(
-    requirements: Any | None, status: OverallStatus | None
-) -> Interpretation | None:
-    """What the system understood, in one compact block for the client.
-
-    Codes and numbers only — the client localises ``code``/``reason`` itself.
-    ``unmet`` lists EVERY requirement that the verifier did not prove satisfied
-    (unmet, uncertain or still pending), so a request whose mandatory stop could
-    not be placed is reported explicitly instead of quietly returning a plan
-    that ignores it.
-    """
-    if requirements is None:
-        return None
-    # Per-requirement provenance defaults to wherever the reading came from;
-    # a requirement the user set with a visible control keeps "ui".
-    origin = "agent" if requirements.source in ("llm", "mixed") else "fallback"
-
-    def signal(r: Any) -> RequirementSignal:
-        return RequirementSignal(
-            kind=r.kind,
-            strength=r.strength,
-            code=r.code,
-            name=r.name,
-            origin="ui" if r.source == "ui" else origin,
-            status=r.status,
-            reason=r.reason,
-            place_ids=list(r.place_ids),
-        )
-
-    signals = [signal(r) for r in requirements.requirements]
-    return Interpretation(
-        source=requirements.source,
-        locale=requirements.locale,
-        status=status or "pending",
-        adults=requirements.party.adults,
-        children=requirements.party.children,
-        children_ages=list(requirements.party.children_ages),
-        mobility=list(requirements.party.mobility),
-        budget_minutes=requirements.budget_minutes,
-        areas=list(requirements.areas),
-        transport=requirements.costing,
-        result_mode=requirements.result_mode,
-        round_trip=requirements.round_trip,
-        requirements=signals,
-        unmet=[s for s in signals if s.status != "satisfied"],
-        unknowns=list(requirements.unknowns),
-    )
-
-
-def _outside_left_unresolved(
-    requirements: Any, constraints: ResolvedConstraints
-) -> list[str]:
-    """Names the reading placed outside the region that stayed unresolvable.
-
-    The cross-check that keeps a wrong reading harmless: if the name DID resolve
-    to a place inside the region — the model flagged «Старый замок» although it
-    is in Grodno — it is not a refusal, whatever the reading said. Only a name
-    that has no place here at all (Vilnius Cathedral) is left in the list.
-    """
-    flagged = getattr(requirements, "outside_coverage", None) or []
-    if not flagged:
-        return []
-    resolved = {
-        (n or "").strip().lower()
-        for n in (getattr(constraints, "resolved_names", None) or [])
-    }
-    return [n for n in flagged if (n or "").strip().lower() not in resolved]
-
-
-#: How many names a step's "what went" list carries into the trace. The count is
-#: always exact; only the examples are capped, because a span is read by a person
-#: and two hundred names are a wall rather than an answer.
-_TRACE_NAMES_MAX = 15
-
-
-def _gone(before: list[Any], after: list[Any]) -> list[str]:
-    """The names a step removed, in the order they arrived.
-
-    A count on its own cannot answer «почему этой остановки нет в маршруте»: the
-    trace used to say ``before=50 candidates=46`` and leave the reader to guess
-    which four went. The names are the answer. They are capped by
-    ``_TRACE_NAMES_MAX`` so that a wide regional pool does not turn one span into
-    a page nobody reads — the count next to it stays exact.
-    """
-    kept = {c.id for c in after}
-    return [c.name for c in before if c.id not in kept][:_TRACE_NAMES_MAX]
-
-
-def _names(candidates: list[Any]) -> list[str]:
-    """The first few names of a pool, for a step's Input panel.
-
-    What a step *received*, next to the facts that say what it did with it. The
-    trace used to show an input panel that was empty for every deterministic
-    step, so a reader could see «50 → 45» without ever seeing the fifty.
-    """
-    return [c.name for c in candidates[:_TRACE_NAMES_MAX]]
-
-
-def _dupe_pairs(before: list[Any], after: list[Any], radius_m: float) -> list[dict[str, Any]]:
-    """Which stored duplicate was folded into which surviving place.
-
-    ``_drop_duplicates`` keeps the best-ranked row of a cluster; the fact that
-    «убрано 3» came from one castle stored under two names, or from a museum
-    whose two rows sit 340 m apart, is what tells a reader the step worked as
-    intended rather than ate three sights. The pairing rule is the one that
-    function uses — within ``radius_m`` of a kept place, or the same normalised
-    name within ``DUPLICATE_NAME_RADIUS_M`` — reproduced here rather than
-    returned from it, so the pipeline's own signature stays as it was.
-    """
-    kept = list(after)
-    kept_ids = {c.id for c in kept}
-    pairs: list[dict[str, Any]] = []
-    for cand in before:
-        if cand.id in kept_ids:
-            continue
-        cand_name = _norm_name(cand.name)
-        for k in kept:
-            dist = _distance_pt_m(cand.lat, cand.lon, k.lat, k.lon)
-            if dist < radius_m or (
-                cand_name
-                and cand_name == _norm_name(k.name)
-                and dist < constants.DUPLICATE_NAME_RADIUS_M
-            ):
-                pairs.append(
-                    {
-                        "dropped": cand.name,
-                        "into": k.name,
-                        "m": round(dist),
-                    }
-                )
-                break
-    return pairs[:_TRACE_NAMES_MAX]
-
-
-def _verdicts(requirements: Any) -> list[dict[str, Any]]:
-    """One line per requirement: what was asked, what the verifier decided, why.
-
-    The verifier writes its verdict onto the requirement objects themselves
-    (``status``/``reason``/``place_ids``); this reads that back in the shape a
-    trace reader wants. Without it the `verify` step reports only the overall
-    status, which is the one thing a reader cannot ask a question about — «почему
-    туалет не выполнен» needs the per-requirement line.
-    """
-    return [
-        {
-            "asked": r.code or r.name or r.label or r.text,
-            "kind": r.kind,
-            "strength": r.strength,
-            "status": r.status,
-            "reason": r.reason,
-            "place_ids": list(r.place_ids),
-        }
-        for r in requirements.requirements
-    ]
-
-
-def _render_tour(
-    route: list[Candidate],
-    *,
-    costing: str,
-    origin: LatLon | None,
-    round_trip: bool = False,
-) -> tuple[dict, dict]:
-    """Draw the tour, never failing the request over geometry.
-
-    render() already falls back to per-leg geometry; if even that yields
-    nothing we answer with the stops and no line, which the UI can explain,
-    instead of a 500 for a tour that was planned fine.
-    """
-    try:
-        shape, summary, status = render(
-            route, costing=costing, origin=origin, round_trip=round_trip
-        )
-        # Log status for monitoring, but don't fail the request
-        if status != "usable":
-            log.info("render returned status: %s", status)
-        return shape, summary
-    except UpstreamUnavailable as exc:
-        log.warning("render failed (%s) — answering without geometry", exc)
-        return {}, {}
-
-
-
-def _services_along_evidence(
-    db: Any, requirements: Any, shape: Any
-) -> Any:
-    """Measure the services beside the line for the codes the requirements name.
-
-    The verifier decides what a requirement means; it owns no database, so this
-    is where the geometry is actually measured (``agent.services``). Returns
-
-    * ``None`` — nothing to measure (no service/interest codes, or no usable
-      line): the older semantics stay, so an absent café is still honestly
-      ``unmet``;
-    * ``ServiceAlongEvidence(measured=True, by_code=...)`` — measured. A code
-      missing from the mapping means «рядом нет», which is evidence;
-    * ``ServiceAlongEvidence(measured=False, ...)`` — the measurement itself
-      failed. A broken query is not evidence that the café is absent, so the
-      verifier reports ``uncertain`` rather than ``unmet``.
-    """
-    codes = sorted(
-        {
-            r.code
-            for r in getattr(requirements, "requirements", [])
-            if r.kind in ("service", "interest") and r.code
-        }
-    )
-    if not codes or not shape:
-        return None
-    from store import services as services_mod
-
-    from .verify import ServiceAlongEvidence
-
-    try:
-        answer = services_mod.services_along(db, shape, categories=codes, limit=services_mod.MAX_SERVICES * 2)
-    except Exception:  # measurement is best-effort; its failure is reported, not hidden
-        log.warning("services_along: measurement failed", exc_info=True)
-        return ServiceAlongEvidence(measured=False, by_code={})
-    out: dict[str, list[dict]] = {}
-    for item in answer.get("items", []):
-        out.setdefault(str(item.get("category")), []).append(item)
-    return ServiceAlongEvidence(measured=True, by_code=out)
-
-
-
-def alternatives_for(
-    *, costing: str, walk_s: float, length_km: float | None
-) -> list[PlannedAlternative]:
-    """What to offer when the plan outgrows the profile the tourist chose.
-
-    Pedestrian is the default, and the honest answer to «все костёлы Гродненской
-    области» measured 17 hours and 211 km of walking — a plan nobody can walk. The
-    far stops are NOT dropped: the request really did ask for the whole region, and
-    a silently trimmed dozen would lie about it. Instead the answer says the plan
-    cannot be walked and names the ways to actually do it.
-
-    Only costings we can genuinely route are offered, because the client submits
-    them back as `profile` — a suggestion we cannot serve is its own broken
-    promise. A taxi is an `auto` route; public transport is mentioned in the
-    sentence rather than offered as a costing, because transit tiles are not
-    loaded in this deployment and Valhalla would refuse the request.
-    """
-    if costing not in ("pedestrian", "bicycle"):
-        # Already motorised: nothing in the answer is out of the profile's reach.
-        return []
-    far = (length_km or 0.0) >= constants.WALK_TOO_FAR_KM
-    long = walk_s >= constants.WALK_TOO_LONG_MINUTES * 60
-    if not (far or long):
-        return []
-    reason = "too_far_to_walk" if far else "too_long_to_walk"
-    offers: list[PlannedAlternative] = []
-    if costing == "pedestrian":
-        offers.append(
-            PlannedAlternative(
-                costing="bicycle",
-                reason=reason,
-                note=(
-                    "Пешком это далеко: на велосипеде маршрут проезжается целиком "
-                    "и занимает куда меньше времени."
-                ),
-            )
-        )
-    offers.append(
-        PlannedAlternative(
-            costing="auto",
-            reason=reason,
-            note=(
-                "На машине или такси: точки разбросаны далеко друг от друга, а "
-                "часть пути можно проехать на автобусе или троллейбусе."
-            ),
-        )
-    )
-    return offers
-
-
-#: The tourist-facing name of each costing we offer. Machine identifiers have no
-#: business in a sentence a person reads — the same rule the reason codes follow.
-_MODE_WORDS = {
-    "bicycle": "на велосипеде",
-    "auto": "на машине или такси",
-}
-
-
-def alternatives_sentence(offers: list[PlannedAlternative], walk_s: float) -> str:
-    """The tourist's version of the same news, in the request's language."""
-    if not offers:
-        return ""
-    hours = walk_s / 3600.0
-    span = f"{hours:.1f} ч" if hours >= 1 else f"{int(walk_s / 60)} мин"
-    modes = ", ".join(_MODE_WORDS.get(o.costing, o.costing) for o in offers)
-    return (
-        f"Пешком это не прогулка: {span} в пути. "
-        f"Варианты: {modes}; часть пути можно проехать на автобусе, маршрутке "
-        f"или троллейбусе."
-    )
-
-
-def _to_places(candidates: list[Candidate]) -> list[Place]:
-    """Candidates → the response points (one mapping, used by every branch)."""
-    return [
-        Place(
-            id=p.id,
-            name=p.name,
-            category=p.category,
-            lat=p.lat,
-            lon=p.lon,
-            blurb=p.blurb,
-            fun_fact=p.fun_fact,
-            fun_facts=p.fun_facts,
-            links=p.links,
-            opening_hours=p.opening_hours,
-            ticket_price=p.ticket_price,
-            town=p.town,
-            district=p.district,
-            photo=p.photo,
-            visit_minutes=p.visit_minutes_db or visit_time_minutes(p.category),
-        )
-        for p in candidates
-    ]
 
 
 class Pipeline:
@@ -1645,67 +938,9 @@ class Pipeline:
         names: list[str],
         t0: float,
     ) -> RouteResponse:
-        """Answer "not here" instead of planning a route somewhere else.
-
-        No stop is returned, and the reason is not prose invented for the client:
-        the contract carries a hard requirement that nothing in this region can
-        satisfy, so the verifier's own rule makes the status `infeasible` and the
-        client localises the reason code. Building a plan out of look-alikes would
-        look more complete and be worse — it would walk a tourist to another
-        town's landmarks under the name they asked for.
-        """
-        mark_out_of_coverage(requirements, names)
-        # No stops at all: an empty matrix is what validate() expects here (it
-        # returns before touching it), and the costing is reported even though
-        # nothing was planned.
-        plan = validate(
-            [],
-            CostMatrix(),
-            constraints,
-            {},
-            requirements=requirements,
-        )
-        # A refusal is a step like any other: the trace says which requirements
-        # were judged unmet and why, so «почему отказ» is answered by evidence
-        # rather than by the sentence the client is shown.
-        status = overall_status(requirements)
-        trace.record(
-            "verify",
-            input=[r.code or r.text for r in requirements.requirements][:10],
-            plan_status=status,
-            output=_verdicts(requirements),
-        )
-        trace.record(
-            "response",
-            input={"plan_status": status, "refused": names},
-            plan_status=status,
-            stops=0,
-            refused=names,
-            ms=int((_time.perf_counter() - t0) * 1000),
-        )
-        return self._build_response(
-            intent=intent,
-            changes=None,
-            constraints=constraints,
-            plan=plan,
-            shape={},
-            walk_s=0.0,
-            length_km=0.0,
-            explanation=(
-                "Маршрут не построен: "
-                + ", ".join(names)
-                + " — вне зоны покрытия (Гродненская область)."
-            ),
-            costing=req.profile or "pedestrian",
-            requirements=requirements,
-            status=status,
-            deadline={
-                "budget_s": constants.REQUEST_DEADLINE_S,
-                "used_s": round(_time.perf_counter() - t0, 3),
-                "pool_trimmed_to": None,
-                "valhalla_order_skipped": False,
-                "geometry_skipped": False,
-            },
+        """Answer "not here" instead of planning a route somewhere else."""
+        return refuse_out_of_coverage(
+            self, req, requirements, intent, constraints, names, t0
         )
 
     def _catalogue_response(
@@ -1717,81 +952,9 @@ class Pipeline:
         candidates: list[Candidate],
         t0: float,
     ) -> RouteResponse:
-        """Answer with the matching places, grouped by town, and no route.
-
-        The list *is* the answer: the tourist picks stops from it. Grouping is by
-        `town` (already on every point), ordered by town then by relevance so the
-        order is stable between runs. Verification uses ``verify_catalogue`` —
-        membership only — so nothing here claims a walkable route or a geometry
-        this response does not have.
-        """
-        ordered = sorted(candidates, key=lambda c: ((c.town or "").strip().lower(), -c.relevance))
-        verify_catalogue(requirements, ordered)
-        status = overall_status(requirements)
-        progress.note(progress.STAGE_DONE)
-
-        towns = sorted({(c.town or "").strip() for c in ordered if (c.town or "").strip()})
-        log.info(
-            "pipeline.catalogue query_len=%d n=%d towns=%d ms=%d status=%s",
-            len(req.query), len(ordered), len(towns),
-            int((_time.perf_counter() - t0) * 1000), status,
-        )
-        # This branch returns before the walk steps, so the trace has to say what
-        # stood in for them: membership verification, and the list itself.
-        trace.record(
-            "verify",
-            input=[r.code or r.text for r in requirements.requirements][:10],
-            plan_status=status,
-            output=_verdicts(requirements),
-        )
-        trace.record(
-            "response",
-            input={"plan_status": status, "places": len(ordered)},
-            plan_status=status,
-            places=len(ordered),
-            towns=len(towns),
-            ms=int((_time.perf_counter() - t0) * 1000),
-            names=[c.name for c in ordered],
-        )
-
-        d = intent.decision
-        return RouteResponse(
-            parsed=ParsedQuery(
-                keywords=d.keywords_pos,
-                categories=d.categories_pos,
-                time_budget_minutes=d.time_budget_minutes,
-                source=intent.source,
-            ),
-            points=_to_places(ordered),
-            # A catalogue has no line to draw: an empty shape is the honest
-            # answer, and the client draws the places without connecting them.
-            shape={},
-            summary=RouteSummary(length_km=None, time_seconds=None),
-            result_mode="catalogue",
-            budget=None,
-            explanation=(
-                f"Каталог: {len(ordered)} мест"
-                + (f" в {len(towns)} городах" if len(towns) > 1 else "")
-                + " — выберите точки, и я построю по ним маршрут."
-            ),
-            status=status,
-            requirements=requirements.public_requirements(),
-            interpretation=_interpretation(requirements, status),
-            costing=req.profile,
-            changes=None,
-            debug={
-                "result_mode": "catalogue",
-                "n_places": len(ordered),
-                "towns": towns,
-                "requirements_source": getattr(requirements, "source", None),
-                "deadline": {
-                    "budget_s": constants.REQUEST_DEADLINE_S,
-                    "used_s": round(_time.perf_counter() - t0, 3),
-                    "pool_trimmed_to": None,
-                    "valhalla_order_skipped": True,
-                    "geometry_skipped": True,
-                },
-            },
+        """Answer with the matching places, grouped by town, and no route."""
+        return catalogue_response(
+            req, requirements, intent, constraints, candidates, t0
         )
 
     def reroute(self, point_ids: list[int], profile: str | None = None) -> RouteResponse:
@@ -2273,3 +1436,8 @@ class Pipeline:
                 "trace": plan.trace,
             },
         )
+
+
+# `_build_response` is a method on Pipeline; its unbound function is also
+# exposed at module level so `agent.planner.pipeline._build_response` resolves.
+_build_response = Pipeline._build_response

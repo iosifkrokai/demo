@@ -29,7 +29,12 @@ from fastapi.testclient import TestClient
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agent.planner import pipeline as pipeline_mod, resolve as resolve_mod
+from agent.planner import (
+    cost as cost_mod,
+    pipeline as pipeline_mod,
+    refine as refine_mod,
+    resolve as resolve_mod,
+)
 from agent.planner.pipeline import (
     Pipeline,
     _refinement_cost,
@@ -104,8 +109,14 @@ def _patch_offline(monkeypatch, rows=None, nearby=None):
         pipeline_mod, "nearby_places",
         lambda db, lat, lon, radius_km=12.0, limit=50: list(nearby or []),
     )
+    # `_nearby_convenience` lives in refine.py, so its `nearby_places` lookup is
+    # patched there (the pipeline binding only serves `_refinement_base` now).
     monkeypatch.setattr(
-        pipeline_mod, "compute_cost_matrix",
+        refine_mod, "nearby_places",
+        lambda db, lat, lon, radius_km=12.0, limit=50: list(nearby or []),
+    )
+    monkeypatch.setattr(
+        cost_mod, "compute_cost_matrix",
         lambda *_a, **_kw: (_ for _ in ()).throw(UpstreamUnavailable("no valhalla")),
     )
     monkeypatch.setattr(
@@ -451,7 +462,7 @@ class TestCostFallback:
     def test_refinement_cost_never_drops_a_base_stop(self, monkeypatch):
         cands = [_cand(1, "A"), _cand(2, "B", lat=53.70, lon=23.85)]
         monkeypatch.setattr(
-            pipeline_mod, "compute_cost_matrix",
+            cost_mod, "compute_cost_matrix",
             lambda *_a, **_kw: (_ for _ in ()).throw(UpstreamUnavailable("down")),
         )
         route, cost = _refinement_cost(cands, constraints=None, costing="pedestrian")  # type: ignore[arg-type]

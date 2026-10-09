@@ -37,11 +37,15 @@ import re
 from dataclasses import dataclass
 from typing import Literal
 
-from contracts.planner import Candidate, LatLon
-from domain import taxonomy
+import psycopg
+
+from contracts.planner import Candidate, LatLon, RouteChange, RouteChanges
+from domain import constants, taxonomy
+from store.search import nearby_places
 
 from .cost import visit_time_minutes
 from .resolve import CATEGORY_SYNONYMS, CATEGORY_SYNONYMS_EN
+from .retrieve import _row_to_candidate
 
 # Machine reason codes (localized by the API layer, never here)
 
@@ -514,3 +518,111 @@ def reason_text(reason_code: str) -> str:
         reason_code,
         "Это изменение маршрута пока не поддерживается — оставили маршрут как есть.",
     )
+
+
+def _with_base_points(
+    candidates: list[Candidate],
+    rows: list[dict],
+    excluded: set[int],
+) -> tuple[list[Candidate], list[Candidate]]:
+    """Keep the stops the user already has through a refinement.
+
+    A refinement ("добавь кофейню и туалет") must ADD to the route: stops that
+    were fetched from the previous turn are re-added after every trim, so the
+    only way a stop disappears is an explicit request (excluded_ids) or
+    Valhalla's own verdict (no road connects it).
+
+    Returns the merged pool and the base candidates themselves.
+    """
+    base = [_row_to_candidate(r, 0.0) for r in rows if r["id"] not in excluded]
+    have = {c.id for c in candidates}
+    merged = list(candidates) + [b for b in base if b.id not in have]
+    return merged, base
+
+
+def _nearby_convenience(
+    db: psycopg.Connection,
+    base: list[Candidate],
+    wanted: set[str],
+    *,
+    radius_m: int = constants.CONVENIENCE_RADIUS_M,
+    max_added: int = constants.CONVENIENCE_MAX_ADDED,
+) -> list[Candidate]:
+    """Convenience stops (coffee, toilet, ...) that sit ON the route.
+
+    A refinement like «добавь кофейню и туалет» is not a new sightseeing quest:
+    the tourist wants a coffee within a short detour of the walk they already
+    have. So these are picked from the neighbourhood of the existing stops, not
+    from a relevance ranking that happily returns a café 12 km away.
+    """
+    found: dict[int, Candidate] = {}
+    per_stop: dict[int, int] = {}
+    for stop in base:
+        if per_stop.get(stop.id, 0) >= 2:
+            continue
+        rows = nearby_places(
+            db, stop.lat, stop.lon, radius_km=radius_m / 1000.0, limit=8
+        )
+        for row in rows:
+            cat = (row.get("category") or "").strip().lower()
+            if cat not in wanted or row["id"] in found:
+                continue
+            if row["id"] in {c.id for c in base}:
+                continue
+            found[row["id"]] = _row_to_candidate(row, 0.0)
+            per_stop[stop.id] = per_stop.get(stop.id, 0) + 1
+            if len(found) >= max_added:
+                return list(found.values())
+    return list(found.values())
+
+
+def _cap_for_valhalla(
+    candidates: list[Candidate],
+    base: list[Candidate],
+    limit: int = constants.VALHALLA_MAX_LOCATIONS,
+) -> list[Candidate]:
+    """Keep the ordering request inside Valhalla's location limit.
+
+    Valhalla answers /optimized_route with error 150 above 20 locations, which
+    the pipeline used to surface as «could not produce a route». Base stops come
+    first (they are what the user asked to keep), the rest in relevance order.
+    """
+    if len(candidates) <= limit:
+        return candidates
+    base_ids = {c.id for c in base}
+    ordered = [c for c in candidates if c.id in base_ids]
+    rest = [c for c in candidates if c.id not in base_ids]
+    rest.sort(key=lambda c: c.relevance, reverse=True)
+    return (ordered + rest)[:limit]
+
+
+def _context_changes(base: list[Candidate], route: list[Candidate]) -> RouteChanges:
+    """What a refinement did to the previous route — added / dropped / kept."""
+    base_ids = {c.id for c in base}
+    route_ids = {c.id for c in route}
+    return RouteChanges(
+        added=[
+            RouteChange(id=c.id, name=c.name)
+            for c in route
+            if c.id not in base_ids
+        ],
+        removed=[
+            RouteChange(
+                id=c.id,
+                name=c.name,
+                reason="не связано дорогами или не уложилось в лимит",
+            )
+            for c in base
+            if c.id not in route_ids
+        ],
+        kept=len(base_ids & route_ids),
+    )
+
+
+def _drop_excluded(candidates: list[Candidate], excluded_ids: set[int]) -> list[Candidate]:
+    """Drop candidates the user removed by hand.
+
+    A refinement turn carries the stops the user deleted; without this the same
+    POI returns on every rebuild and the deletion looks ignored.
+    """
+    return [c for c in candidates if c.id not in excluded_ids]
