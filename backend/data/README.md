@@ -59,7 +59,7 @@ Order of a full apply:
    'curated'`; each curated name also becomes a `place_aliases(locale='ru')` row.
 5. `areas` (project polygon + one row per district) and `place_sources` (one row per
    `(provider, external_id)`).
-6. Embeddings — local CPU model (`agent/embeddings.py`), always available.
+6. Embeddings — local CPU model (`infra/embeddings.py`), always available.
 
 Idempotency: `places` upserts on `source_url`; `place_sources` on
 `(provider, external_id)`; `place_aliases` on `(place_id, lower(alias), locale)`;

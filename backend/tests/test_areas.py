@@ -1,6 +1,6 @@
 """Areas: one registry, one predicate, honest about missing geometry.
 
-Covers data/areas.json and agent/areas.py (with agent.geofence delegation).
+Covers data/areas.json and domain/areas.py (with domain.geofence delegation).
 No network — polygons are the committed border files in backend/data/.
 """
 
@@ -278,7 +278,7 @@ def test_geofence_delegates_to_the_single_areas_predicate():
 
 
 def test_delegation_is_live(monkeypatch):
-    """agent.geofence.inside_project_area must track agent.areas.in_project_area
+    """domain.geofence.inside_project_area must track domain.areas.in_project_area
     at call time — proving a single shared predicate, not a second copy."""
     monkeypatch.setattr(areas, "in_project_area", lambda lat, lon: True)
     assert inside_project_area(0.0, 0.0) is True

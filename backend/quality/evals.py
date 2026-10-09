@@ -185,7 +185,7 @@ def _off_line_and_along(
 def run_services() -> dict[str, Any]:
     """Does the measurement tell the truth about what lies beside the line?
 
-    Two independent answers are compared: `agent.services` on PostGIS and a plain
+    Two independent answers are compared: `store.services` on PostGIS and a plain
     haversine/projection reference built here from the same rows. Points sitting
     within a few metres of the gate are reported separately rather than counted
     as disagreement — a spheroid and a sphere legitimately differ there, and

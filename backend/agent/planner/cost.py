@@ -101,8 +101,13 @@ def compute_cost_matrix(
     candidates: list[Candidate],
     constraints: ResolvedConstraints,
     costing: str = "pedestrian",
+    deadline: float | None = None,
 ) -> CostMatrix:
-    """Valhalla sources_to_targets + visit times, with sanity pre-filter."""
+    """Valhalla sources_to_targets + visit times, with sanity pre-filter.
+
+    ``deadline`` (a ``time.monotonic()`` timestamp) bounds the per-pair /route
+    fallback inside ``time_matrix`` so a region query cannot run for minutes.
+    """
     if not candidates:
         return CostMatrix(walk_seconds=[], visit_minutes=[], indices=[])
 
@@ -113,7 +118,7 @@ def compute_cost_matrix(
     # geometry instead of from a point Valhalla cannot place.
     coords = snap_locations(coords, costing=costing)
     try:
-        matrix = time_matrix(coords, coords, costing=costing)
+        matrix = time_matrix(coords, coords, costing=costing, deadline=deadline)
     except UpstreamUnavailable:
         raise
 
@@ -172,6 +177,48 @@ def compute_cost_matrix(
     )
 
 
+def _usable_link(value: float) -> bool:
+    """True when a matrix cell does not by itself rule the pair out.
+
+    UNKNOWN_S (NaN) counts as usable — we never got a verdict, so the stop is
+    kept and the plan degrades rather than losing a place to a Valhalla hiccup.
+    Only UNREACHABLE_S (or an infinite cell) marks a pair as impossible.
+    """
+    return math.isnan(value) or (math.isfinite(value) and value < constants.UNREACHABLE_S)
+
+
+def _sub_matrix(cost: CostMatrix, idx: list[int]) -> CostMatrix:
+    return CostMatrix(
+        walk_seconds=[[cost.walk_seconds[i][j] for j in idx] for i in idx],
+        visit_minutes=[cost.visit_minutes[i] for i in idx],
+        indices=[cost.indices[i] for i in idx],
+    )
+
+
+def _best_pair(
+    candidates: list[Candidate], cost: CostMatrix
+) -> tuple[list[Candidate], CostMatrix]:
+    """The best two surviving candidates when nothing else is reachable.
+
+    Returning the untouched pool (the old behaviour) left every order looking
+    impossible and pushed the optimizer into 422. Returning the two best-ranked
+    candidates with any usable link keeps the request answerable.
+    """
+    n = len(candidates)
+    best: tuple[tuple[int, float], int, int] | None = None
+    for i in range(n):
+        for j in range(i + 1, n):
+            linked = _usable_link(cost.walk_seconds[i][j]) or _usable_link(
+                cost.walk_seconds[j][i]
+            )
+            key = (1 if linked else 0, candidates[i].relevance + candidates[j].relevance)
+            if best is None or key > best[0]:
+                best = (key, i, j)
+    assert best is not None  # callers guarantee n >= 2 here
+    _, i, j = best
+    return [candidates[i], candidates[j]], _sub_matrix(cost, [i, j])
+
+
 def drop_unreachable(
     candidates: list[Candidate], cost: CostMatrix
 ) -> tuple[list[Candidate], CostMatrix]:
@@ -182,35 +229,39 @@ def drop_unreachable(
     involving it comes back as UNREACHABLE_S) would otherwise make every order
     look impossible and push the optimizer into 422. Dropping it here costs no
     extra Valhalla calls: the matrix rows/columns are already known.
+
+    A stop survives only when it can REACH a surviving stop AND be REACHED FROM
+    one — both directions. Checking the row alone (the old rule) kept a point
+    nothing leads to, and it poisoned the route later. The filter repeats, since
+    removing one stop can strand another. When fewer than two survive, the best
+    pair is returned rather than the whole untouched pool.
     """
     n = len(candidates)
     if n < 3:
         return candidates, cost
 
-    reachable = []
-    for i in range(n):
-        ok = any(
-            j != i
-            and math.isfinite(cost.walk_seconds[i][j])
-            and cost.walk_seconds[i][j] < constants.UNREACHABLE_S
-            for j in range(n)
-        )
-        if ok:
-            reachable.append(i)
+    alive = set(range(n))
+    changed = True
+    while changed:
+        changed = False
+        for i in sorted(alive):
+            can_reach = any(
+                j != i and _usable_link(cost.walk_seconds[i][j]) for j in alive
+            )
+            reachable_from = any(
+                j != i and _usable_link(cost.walk_seconds[j][i]) for j in alive
+            )
+            if not (can_reach and reachable_from):
+                alive.discard(i)
+                changed = True
 
-    if len(reachable) == n:
+    if len(alive) == n:
         return candidates, cost
-    if len(reachable) < 2:
-        return candidates, cost  # nothing to gain, let the caller report it
+    if len(alive) < 2:
+        return _best_pair(candidates, cost)
 
-    return (
-        [candidates[i] for i in reachable],
-        CostMatrix(
-            walk_seconds=[[cost.walk_seconds[i][j] for j in reachable] for i in reachable],
-            visit_minutes=[cost.visit_minutes[i] for i in reachable],
-            indices=[cost.indices[i] for i in reachable],
-        ),
-    )
+    idx = sorted(alive)
+    return [candidates[i] for i in idx], _sub_matrix(cost, idx)
 
 
 def prune_unroutable_stops(
@@ -254,6 +305,8 @@ def prune_unroutable_stops(
         if i is None or j is None:
             return False
         cell = cost.walk_seconds[i][j]
+        if math.isnan(cell):
+            return False  # "we could not ask" is not "no path" — keep the stop
         return not math.isfinite(cell) or cell >= constants.UNREACHABLE_S
 
     changed = True
@@ -280,16 +333,22 @@ def prune_unroutable_stops(
 def walk_cost(order: list[int], matrix: list[list[float]]) -> float:
     """Sum walk_seconds along an ordered list of candidate indices.
 
-    A non-finite cell (a pair Valhalla cannot connect) makes the whole order
+    An infinite cell (a pair Valhalla cannot connect) makes the whole order
     unusable, so it saturates at UNREACHABLE_S instead of propagating inf:
     every caller compares this against a budget or a max leg, where the sentinel
     behaves exactly like "unreachable", but int(inf) would raise OverflowError.
+
+    A NaN cell (UNKNOWN_S — "we could not ask") is skipped, not saturated: it
+    must neither make the route look walkable nor cost it a stop. The plan is
+    reported degraded elsewhere (validate records the unknown legs).
     """
     if len(order) < 2:
         return 0.0
     total = 0.0
     for a, b in zip(order, order[1:]):
         cell = matrix[a][b]
+        if math.isnan(cell):
+            continue
         if not math.isfinite(cell):
             return float(constants.UNREACHABLE_S)
         total += cell

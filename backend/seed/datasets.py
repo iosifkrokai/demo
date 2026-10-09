@@ -50,7 +50,7 @@ COLUMNS = [
 # Fast bounding pre-check; the ADM1 polygon (inside_project_area) decides.
 BBOX = {"south": 52.75, "west": 23.35, "north": 54.80, "east": 27.00}
 
-# The canonical taxonomy (data/taxonomy.csv, read through agent/taxonomy.py) is
+# The canonical taxonomy (data/taxonomy.csv, read through domain/taxonomy.py) is
 # the ONE source of category codes. The sight/service split is the taxonomy's
 # ``role`` column, so the readers cannot drift from the agent's own sets.
 SIGHT_TAXONOMY = frozenset(c.code for c in taxonomy.all_categories() if c.role == "sight")

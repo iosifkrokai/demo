@@ -27,7 +27,7 @@ Degraded mode (no OPENROUTER_API_KEY, or the agent/OpenRouter unreachable)
     parse in planner/intent.py (`build_requirements` →
     `_deterministic_requirements`) while keeping every explicit UI filter.
     Retrieval stays full-strength because embeddings are local
-    (agent/embeddings.py) and need no key.  A route request still returns
+    (infra/embeddings.py) and need no key.  A route request still returns
     points; /health reports `llm: false` and `interpretation: "deterministic"`,
     while `embedder` stays true.
 
@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import logging
 import time as _time
+from dataclasses import dataclass, field
 from typing import Any
 
 import psycopg
@@ -90,7 +91,7 @@ from .geo import (
     should_skip_geo_focus,
 )
 from .intent import build_requirements, extract_intent, intent_from_requirements
-from .optimize import _prune_unroutable, _valhalla_order, optimize
+from .optimize import _order_after_prune, _prune_unroutable, _valhalla_order, optimize
 from .preprocess import preprocess
 from .refine import (
     _cap_for_valhalla,
@@ -168,7 +169,7 @@ log = logging.getLogger(__name__)
 
 
 def _embed_query(text: str) -> list[float]:
-    """Embed a search query with the LOCAL model (agent.embeddings).
+    """Embed a search query with the LOCAL model (infra.embeddings).
 
     Embeddings are computed in-process on the CPU, so they need no API key and
     normally never fail. Returns [] only when the local model cannot be loaded
@@ -197,6 +198,40 @@ def _embed_query(text: str) -> list[float]:
     return vec
 
 
+@dataclass
+class _Turn:
+    """The per-request state generate() threads through its steps.
+
+    The request and its start time, the decisions the reading and the deadline
+    produced, and the pool state more than one step needs.  It never holds the
+    pipeline itself — `self` is passed to the step that needs it.
+    """
+
+    req: GenerateReq
+    t0: float
+    region_scope: bool = False
+    catalogue: bool = False
+    refuse: list[str] | None = None
+    qvec: list[float] = field(default_factory=list)
+    near: tuple[float, float] | None = None
+    excluded: set[int] = field(default_factory=set)
+    costing: str = "pedestrian"
+    round_trip: bool = False
+    all_candidates: list[Candidate] = field(default_factory=list)
+    plan_info: dict[str, Any] | None = None
+    shape: dict = field(default_factory=dict)
+    walk_s: float = 0.0
+    length_km: float | None = None
+    base_candidates: list[Candidate] = field(default_factory=list)
+    # Deadline decisions: the cost-matrix pool trim, the skipped Valhalla
+    # re-order and the skipped geometry are each reported in `debug.deadline`.
+    deadline_trim: int | None = None
+    deadline_order_skipped: bool = False
+    deadline_geometry_skipped: bool = False
+    # Which costing/ordering _plan_tail runs: "generate" | "reroute" | "refine".
+    tail_mode: str = "generate"
+
+
 class Pipeline:
     """Stateless planner. One instance, reused across requests."""
 
@@ -211,10 +246,7 @@ class Pipeline:
     # Public API
 
     def generate(self, req: GenerateReq) -> RouteResponse:
-        t0 = _time.perf_counter()
-        deadline_trim: int | None = None
-        deadline_order_skipped = False
-        deadline_geometry_skipped = False
+        turn = _Turn(req=req, t0=_time.perf_counter())
         trace.record(
             "query",
             input=req.query,
@@ -236,12 +268,98 @@ class Pipeline:
                     input=[p.name for p in req.context.base_points][:_TRACE_NAMES_MAX],
                     base_points=len(req.context.base_points),
                 )
-                return self._generate_refinement(req, base, t0)
+                return self._generate_refinement(req, base, turn.t0)
 
+        pre = self._step_preprocess(turn)
+        requirements, intent = self._step_interpret(turn, pre)
+        constraints = self._step_resolve(turn, requirements, intent)
+        if turn.refuse:
+            return self._refuse_out_of_coverage(
+                req, requirements, intent, constraints, turn.refuse, turn.t0
+            )
+
+        candidates = self._step_retrieve(turn, constraints)
+        candidates = self._step_dedupe(turn, candidates)
+
+        # Catalogue: a list to choose from, not a walk to follow
+        # «что показать: каталог» — the tourist wants to browse the matching
+        # places (grouped by town) and pick some. There is no order to optimise
+        # and no line to draw, so the walk-specific steps below (geo focus,
+        # diversity trim, cost matrix, optimize, render) are skipped on purpose:
+        # confining a catalogue to one walkable cluster is exactly what makes
+        # «все костёлы области» unanswerable.
+        if turn.catalogue:
+            trace.record(
+                "catalogue",
+                input=_names(candidates),
+                candidates=len(candidates),
+                names=_names(candidates),
+            )
+            return self._catalogue_response(
+                req, requirements, intent, constraints, candidates, turn.t0
+            )
+
+        candidates = self._step_geo_focus(turn, candidates, constraints)
+        candidates = self._step_diversify(turn, candidates, constraints)
+        plan = self._step_plan(turn, candidates, constraints)
+
+        shape = self._step_render(turn, plan)
+        explanation = self._step_explain(turn, plan, shape)
+        status = self._step_verify(turn, plan, requirements)
+
+        ms = int((_time.perf_counter() - turn.t0) * 1000)
+        log.info(
+            "pipeline.ok query_len=%d ms=%d n_stops=%d walk_s=%.0f budget_min=%s "
+            "source=%s status=%s",
+            len(req.query), ms, len(plan.route), turn.walk_s,
+            constraints.time_budget_minutes, intent.source, status,
+        )
+
+        changes = (
+            _context_changes(turn.base_candidates, plan.route)
+            if turn.base_candidates
+            else None
+        )
+
+        trace.record(
+            "response",
+            input={"plan_status": status, "stops": len(plan.route)},
+            plan_status=status,
+            stops=len(plan.route),
+            ms=int((_time.perf_counter() - turn.t0) * 1000),
+            route=[p.name for p in plan.route],
+        )
+
+        return self._build_response(
+            intent=intent,
+            changes=changes,
+            constraints=constraints,
+            plan=plan,
+            shape=turn.shape,
+            walk_s=turn.walk_s,
+            length_km=turn.length_km,
+            explanation=explanation,
+            costing=turn.costing,
+            requirements=requirements,
+            status=status,
+            deadline={
+                "budget_s": constants.REQUEST_DEADLINE_S,
+                "used_s": round(_time.perf_counter() - turn.t0, 3),
+                "pool_trimmed_to": turn.deadline_trim,
+                "valhalla_order_skipped": turn.deadline_order_skipped,
+                "geometry_skipped": turn.deadline_geometry_skipped,
+            },
+        )
+
+    # The generate() steps, in pipeline order.  Each reads and writes `turn`
+    # (the per-request state) and returns its own result; generate() is then the
+    # sequence itself.
+
+    def _step_preprocess(self, turn: _Turn):
         # 0. Preprocess — the normalized text and its fingerprint. The planner
         # keys its work off the raw query, so the reading is recorded for the
         # log rather than silently computed and thrown away.
-        pre = preprocess(req.query)
+        pre = preprocess(turn.req.query)
         log.info(
             "preprocess: language=%s fingerprint=%s significant_words=%d",
             pre.language,
@@ -250,7 +368,7 @@ class Pipeline:
         )
         trace.record(
             "preprocess",
-            input=req.query,
+            input=turn.req.query,
             language=pre.language,
             n_significant_words=pre.n_significant_words,
             # The rest of the reading. Nothing downstream branches on these yet,
@@ -260,7 +378,9 @@ class Pipeline:
             is_specific=pre.is_specific,
             fingerprint=pre.fingerprint,
         )
+        return pre
 
+    def _step_interpret(self, turn: _Turn, pre):
         # 1. Interpretation — the plan is built from `TripRequirements`.  The
         # tool-using agent (planner/agent_interpret.py) fills the contract when
         # it can; the deterministic parse answers otherwise (no key, no SDK, a
@@ -271,28 +391,31 @@ class Pipeline:
         # it got to. Codes only; the client localises them.
         progress.note(progress.STAGE_INTERPRETING)
         requirements = build_requirements(
-            req.query, req, db=self.db, wall_clock_s=self._left(t0)
+            turn.req.query, turn.req, db=self.db, wall_clock_s=self._left(turn.t0)
         )
-        intent = intent_from_requirements(requirements, req.query)
+        intent = intent_from_requirements(requirements, turn.req.query)
 
         # The scope comes from the intent model (typed), not from keyword
         # matching: a region-wide request ("все костёлы Гродненской области") is a
         # drivable list across the voblast, not a walk in one town.
-        region_scope = intent.decision.search_scope == "region"
+        turn.region_scope = intent.decision.search_scope == "region"
+        turn.catalogue = requirements.result_mode == "catalogue"
         trace.record(
             "interpret",
-            input=req.query,
+            input=turn.req.query,
             source=intent.source,
             result_mode=requirements.result_mode,
-            region_scope=region_scope,
+            region_scope=turn.region_scope,
         )
+        return requirements, intent
 
+    def _step_resolve(self, turn: _Turn, requirements, intent):
         # 2. Resolve
         constraints = resolve(
             intent,
-            explicit_time_budget=req.time_budget_minutes,
-            explicit_bbox=req.region_bbox,
-            explicit_round_trip=req.round_trip,
+            explicit_time_budget=turn.req.time_budget_minutes,
+            explicit_bbox=turn.req.region_bbox,
+            explicit_round_trip=turn.req.round_trip,
             outside=requirements.outside_coverage,
             db=self.db,
         )
@@ -301,8 +424,8 @@ class Pipeline:
             input={
                 "budget_minutes": requirements.budget_minutes,
                 "outside_coverage": list(requirements.outside_coverage),
-                "explicit_budget_minutes": req.time_budget_minutes,
-                "explicit_bbox": bool(req.region_bbox),
+                "explicit_budget_minutes": turn.req.time_budget_minutes,
+                "explicit_bbox": bool(turn.req.region_bbox),
             },
             time_budget_minutes=constraints.time_budget_minutes,
             must_visit_ids=len(constraints.must_visit_ids),
@@ -325,6 +448,7 @@ class Pipeline:
             party_type=constraints.party_type,
             intent_type=constraints.intent_type,
         )
+        turn.round_trip = constraints.round_trip
 
         # 2b. Coverage gate. The reading can say that a name in the request lies
         # outside the region this system serves; what follows from that is
@@ -340,16 +464,19 @@ class Pipeline:
             outside=len(outside_left),
         )
         if outside_left:
-            trace.record("refuse", input=req.query, names=outside_left)
-            return self._refuse_out_of_coverage(
-                req, requirements, intent, constraints, outside_left, t0
-            )
+            trace.record("refuse", input=turn.req.query, names=outside_left)
+            turn.refuse = outside_left
+        return constraints
 
+    def _step_retrieve(
+        self, turn: _Turn, constraints: ResolvedConstraints
+    ) -> list[Candidate]:
         # Embed query (local CPU model). The vector signal is full-strength
         # without any API key; it drops to keyword-only only if the local model
         # itself cannot be loaded, and the route is still built.
-        qvec = _embed_query(req.query)
-        trace.record("embed", input=req.query, embedded=bool(qvec))
+        qvec = _embed_query(turn.req.query)
+        turn.qvec = qvec
+        trace.record("embed", input=turn.req.query, embedded=bool(qvec))
 
         # Anchor point for locality: the tourist's GPS start, else the row behind
         # the named town (area_anchor), else the must-visit POI.  Retrieval uses
@@ -358,12 +485,13 @@ class Pipeline:
             constraints.must_visit_ids[0] if constraints.must_visit_ids else None
         )
         near: tuple[float, float] | None = None
-        if req.origin is not None:
-            near = (req.origin.lat, req.origin.lon)
-        elif geo_anchor is not None and not region_scope:
+        if turn.req.origin is not None:
+            near = (turn.req.origin.lat, turn.req.origin.lon)
+        elif geo_anchor is not None and not turn.region_scope:
             anchor_rows = fetch_points_by_ids(self.db, [geo_anchor])
             if anchor_rows:
                 near = (float(anchor_rows[0]["lat"]), float(anchor_rows[0]["lon"]))
+        turn.near = near
 
         # 3. Retrieve
         progress.note(progress.STAGE_SEARCHING)
@@ -371,7 +499,7 @@ class Pipeline:
             constraints,
             qvec,
             self.db,
-            query_text=req.query,
+            query_text=turn.req.query,
             near=near,
         )
         # What came in travels with its size: `candidates=46` says how many, the
@@ -379,7 +507,7 @@ class Pipeline:
         # list is what the rest of the pipeline argues about.
         trace.record(
             "retrieve",
-            input={"query": req.query, "embedded": bool(qvec), "near": near},
+            input={"query": turn.req.query, "embedded": bool(qvec), "near": near},
             candidates=len(candidates),
             near=bool(near),
             # The pool is relevance-ordered and everything below argues about its
@@ -403,7 +531,11 @@ class Pipeline:
         # and keyword signals (RRF) into a relevance order, and the ordered
         # pool is what the pipeline uses; the Jev scoring call is gone with the
         # rest of Jev (spec §4.2 keeps Jev only if it measurably pays off).
+        return candidates
 
+    def _step_dedupe(
+        self, turn: _Turn, candidates: list[Candidate]
+    ) -> list[Candidate]:
         # 3.55 Physical duplicates: the same POI exists twice when the curated
         # row and the OSM row disagree on the name ("Новый замок (дворец
         # Стефана Батория)" vs "Новый замок").  Without this the route visits
@@ -417,7 +549,8 @@ class Pipeline:
         # by hand ("убери форт") may not come back just because it still matches
         # the query. Applied to the pool only — pinned base points are handled
         # separately, they are never dropped silently.
-        excluded = set(req.context.excluded_ids) if req.context else set()
+        excluded = set(turn.req.context.excluded_ids) if turn.req.context else set()
+        turn.excluded = excluded
         user_removed: list[str] = []
         if excluded:
             before = len(candidates)
@@ -441,25 +574,14 @@ class Pipeline:
             merged=_dupe_pairs(before_dupes, candidates, constants.DUPLICATE_RADIUS_M),
             user_removed=user_removed,
         )
+        return candidates
 
-        # Catalogue: a list to choose from, not a walk to follow
-        # «что показать: каталог» — the tourist wants to browse the matching
-        # places (grouped by town) and pick some. There is no order to optimise
-        # and no line to draw, so the walk-specific steps below (geo focus,
-        # diversity trim, cost matrix, optimize, render) are skipped on purpose:
-        # confining a catalogue to one walkable cluster is exactly what makes
-        # «все костёлы области» unanswerable.
-        if requirements.result_mode == "catalogue":
-            trace.record(
-                "catalogue",
-                input=_names(candidates),
-                candidates=len(candidates),
-                names=_names(candidates),
-            )
-            return self._catalogue_response(
-                req, requirements, intent, constraints, candidates, t0
-            )
-
+    def _step_geo_focus(
+        self,
+        turn: _Turn,
+        candidates: list[Candidate],
+        constraints: ResolvedConstraints,
+    ) -> list[Candidate]:
         # 3.6 Geographic focus: keep the route walkable — candidates beyond
         # GEO_FOCUS_KM from the tourist's position (or the top-scored hit when
         # position is unknown) are dropped (radius doubles if that leaves <3).
@@ -468,7 +590,9 @@ class Pipeline:
         # Fall back to must_visit_ids only when there is no separate area anchor.
         pool = len(candidates)
         before_geo = candidates
-        skip_geo = should_skip_geo_focus(region_scope=region_scope, origin=req.origin)
+        skip_geo = should_skip_geo_focus(
+            region_scope=turn.region_scope, origin=turn.req.origin
+        )
         geo_report: dict[str, Any] = {"anchor": None, "radius_km": None, "dropped": []}
         if skip_geo:
             # "все костёлы Гродненской области" asks for the region, not for one
@@ -481,7 +605,7 @@ class Pipeline:
                 constraints.must_visit_ids[0] if constraints.must_visit_ids else None
             )
             candidates, geo_report = _geo_focus_report(
-                candidates, origin=req.origin, anchor_id=geo_anchor
+                candidates, origin=turn.req.origin, anchor_id=geo_anchor
             )
         if len(candidates) < 2:
             raise NoCandidatesFound(
@@ -502,9 +626,16 @@ class Pipeline:
             anchor=geo_report["anchor"],
             radius_km=geo_report["radius_km"],
             outside=geo_report["dropped"],
-            region_scope=region_scope,
+            region_scope=turn.region_scope,
         )
+        return candidates
 
+    def _step_diversify(
+        self,
+        turn: _Turn,
+        candidates: list[Candidate],
+        constraints: ResolvedConstraints,
+    ) -> list[Candidate]:
         # 4. MMR diversity — this is a *curation* step: it trims the candidate set
         # to something that fits a walk. It belongs in the plan only when the
         # user named a time budget. Without one they asked for everything ("все
@@ -543,18 +674,25 @@ class Pipeline:
             raise NoCandidatesFound(
                 f"only {len(candidates)} candidate(s) survived diversity filter"
             )
+        return candidates
 
+    def _step_plan(
+        self,
+        turn: _Turn,
+        candidates: list[Candidate],
+        constraints: ResolvedConstraints,
+    ):
         # 4b. Refinement turns are handled before retrieval (see the top of
         # generate()).  Reaching here means either a first turn (no context) or
         # a context whose base points could not be resolved — in both cases
         # there is no previous route to preserve.
-        base_candidates: list[Candidate] = []
+        turn.base_candidates = []
 
         # Transport mode from the request (webapp profile picker); the
         # cost matrix AND the rendered shape must use the same costing.
         # A region-wide request is a drive across the voblast — walking it is
         # impossible, which is exactly why it used to end in 422.
-        costing = req.profile or ("auto" if region_scope else "pedestrian")
+        turn.costing = turn.req.profile or ("auto" if turn.region_scope else "pedestrian")
 
         # 5. Cost matrix + drop candidates Valhalla cannot connect to anything.
         # A wide query (whole oblast, no time budget) puts up to 50 stops into a
@@ -562,7 +700,7 @@ class Pipeline:
         # already close, plan a smaller tour instead of running out of time: the
         # trim is reported in `debug.deadline` and the verifier still judges the
         # result honestly.
-        left = self._left(t0)
+        left = self._left(turn.t0)
         if left < constants.COST_MATRIX_MIN_LEFT_S and len(candidates) > constants.POOL_TRIM_SIZE:
             log.info(
                 "deadline: %.1fs left — trimming %d candidates to %d before the cost matrix",
@@ -570,7 +708,7 @@ class Pipeline:
             )
             candidates = sorted(candidates, key=lambda c: c.relevance, reverse=True)
             candidates = candidates[: constants.POOL_TRIM_SIZE]
-            deadline_trim = constants.POOL_TRIM_SIZE
+            turn.deadline_trim = constants.POOL_TRIM_SIZE
 
         # A service is *on* the walk, never what the walk is built around: the
         # stop pool is the sights, and cafés/toilets/hotels stay on the line
@@ -580,6 +718,7 @@ class Pipeline:
         # around a place the user never asked to visit.
         progress.note(progress.STAGE_SELECTING)
         all_candidates = list(candidates)
+        turn.all_candidates = all_candidates
         sights = [c for c in candidates if _is_sight_stop(c)]
         widened: list[Any] = []
 
@@ -591,7 +730,7 @@ class Pipeline:
         # refuses the request with a 422 about stops.  Ask again without the
         # words: the position, the prohibitions, the interests and the region
         # stay, which is what «a walk along this street» actually needs.
-        if len(sights) < 3 and not region_scope:
+        if len(sights) < 3 and not turn.region_scope:
             # The categories are relaxed too, and the *service* ones dropped:
             # «старый Гродно, туалет обязателен, кафе если по пути» steers
             # retrieval with two service signals, and the whole pool came back
@@ -609,12 +748,12 @@ class Pipeline:
                     "optional_categories": sight_categories,
                 }
             )
-            wider = retrieve(relaxed, qvec, self.db, query_text="", near=near)
+            wider = retrieve(relaxed, turn.qvec, self.db, query_text="", near=turn.near)
             if relaxed.forbidden_categories or relaxed.forbidden_keywords:
                 wider = apply_negative_filter(wider, relaxed)
             wider = _geo_focus(
                 wider,
-                origin=req.origin,
+                origin=turn.req.origin,
                 anchor_id=constraints.area_anchor
                 or (constraints.must_visit_ids[0] if constraints.must_visit_ids else None),
             )
@@ -625,7 +764,7 @@ class Pipeline:
                     "pool: %d sight(s) of %d — widening the search by the words "
                     "dropped %d more", len(sights), len(candidates), len(added),
                 )
-                candidates = _drop_excluded(candidates + added, excluded)
+                candidates = _drop_excluded(candidates + added, turn.excluded)
                 sights = [c for c in candidates if _is_sight_stop(c)]
                 widened = added
 
@@ -654,6 +793,41 @@ class Pipeline:
             widened=[c.name for c in widened[:_TRACE_NAMES_MAX]],
             services_off=_gone(before_narrowing, candidates),
         )
+
+        _candidates, _cost, _route, _info, plan = self._plan_tail(
+            turn, candidates, constraints
+        )
+        return plan
+
+    def _plan_tail(
+        self,
+        turn: _Turn,
+        candidates: list[Candidate],
+        constraints: ResolvedConstraints,
+    ):
+        """cost → optimize → validate, shared by the three planning entry points.
+
+        generate() reaches it from _step_plan with the walkable pool; reroute()
+        and _generate_refinement() call it on their own pools.  How the pool is
+        costed, and whether an order is searched at all, is selected by
+        ``turn.tail_mode``.
+        """
+        costing = turn.costing
+
+        if turn.tail_mode == "refine":
+            # The cost matrix is best-effort; the base points survive regardless.
+            route, cost = _refinement_cost(candidates, constraints, costing)
+            info = turn.plan_info or {}
+            plan = validate(route, cost, constraints, info)
+            return candidates, cost, route, info, plan
+
+        if turn.tail_mode == "reroute":
+            cost = compute_cost_matrix(candidates, constraints, costing=costing)
+            if cost.indices != list(range(len(candidates))):
+                candidates = [candidates[i] for i in cost.indices]
+            route, info = optimize(candidates, cost, constraints, costing=costing)
+            plan = validate(route, cost, constraints, info)
+            return candidates, cost, route, info, plan
 
         progress.note(progress.STAGE_MEASURING_LEGS)
         before_cost = candidates
@@ -722,13 +896,13 @@ class Pipeline:
                         retry_candidates, retry_cost, retry_route, retry_info,
                     )
                     retry = {"why": "walkable", "pool": _names(sights)}
-        if len(route) < 2 and len(all_candidates) > len(candidates):
+        if len(route) < 2 and len(turn.all_candidates) > len(candidates):
             # The sights-only pool could not be walked: nothing connects within
             # the walkable cap.  A thin answer beats a refusal (the request is
             # valid, the area is just sparse) — put the services back and let the
             # verifier report what the walk does and does not contain.
             log.info("optimize: sights alone give %d stop(s) — retrying with services", len(route))
-            retry_candidates, retry_cost = _build_cost(all_candidates, constraints, costing)
+            retry_candidates, retry_cost = _build_cost(turn.all_candidates, constraints, costing)
             retry_route, retry_info = optimize(
                 retry_candidates, retry_cost, constraints, costing=costing
             )
@@ -736,7 +910,7 @@ class Pipeline:
                 candidates, cost, route, info = (
                     retry_candidates, retry_cost, retry_route, retry_info,
                 )
-                retry = {"why": "services_back", "pool": _names(all_candidates)}
+                retry = {"why": "services_back", "pool": _names(turn.all_candidates)}
         # A second attempt is invisible in the result: the route that comes out
         # looks like any other, and «почему кафе не в маршруте» has no answer
         # without this. The pool the walk was actually built from is named, so
@@ -757,23 +931,23 @@ class Pipeline:
         # on «замки Гродненской области»): under deadline pressure the matrix
         # order stands, and the response says so.
         matrix_order = [c.name for c in route]
-        if self._left(t0) >= constants.VALHALLA_ORDER_MIN_LEFT_S:
+        if self._left(turn.t0) >= constants.VALHALLA_ORDER_MIN_LEFT_S:
             route, info = _valhalla_order(route, info, costing=costing)
         else:
             log.info(
                 "deadline: %.1fs left — skipping Valhalla re-ordering",
-                self._left(t0),
+                self._left(turn.t0),
             )
-            deadline_order_skipped = True
+            turn.deadline_order_skipped = True
         # The optimizer's order and Valhalla's are two claims about the same
         # stops; recording only the winner hides which of them the tourist is
         # actually walking, and the skip under deadline pressure becomes
         # indistinguishable from an order that happened to be identical.
         trace.record(
             "order",
-            "skipped" if deadline_order_skipped else "ok",
+            "skipped" if turn.deadline_order_skipped else "ok",
             input=matrix_order,
-            skipped=deadline_order_skipped,
+            skipped=turn.deadline_order_skipped,
             before=matrix_order,
             route=[c.name for c in route],
         )
@@ -786,6 +960,10 @@ class Pipeline:
         route, prune_report = _prune_unroutable(
             route, candidates, cost, constraints.must_visit_ids
         )
+        # The prune shortened the route but left info["order"] pointing at the
+        # stops it removed; validate prices the walk through that order, so it
+        # must follow the survivors.
+        info = _order_after_prune(info, route, candidates)
         trace.record(
             "prune",
             input=[c.name for c in route],
@@ -825,28 +1003,30 @@ class Pipeline:
             stop_categories=plan.trace.get("categories"),
             diversity=plan.trace.get("diversity"),
         )
+        return candidates, cost, route, info, plan
 
+    def _step_render(self, turn: _Turn, plan) -> dict:
         # 8. Render (Valhalla /route) — origin is the tourist's GPS start.
         # Skipped when the deadline is spent: the response then carries no
         # geometry, which the verifier reports as `geometry_missing`/`degraded`
         # rather than the client waiting for a hang.
         progress.note(progress.STAGE_DRAWING)
-        if self._left(t0) >= constants.RENDER_MIN_LEFT_S:
+        if self._left(turn.t0) >= constants.RENDER_MIN_LEFT_S:
             shape, summary = _render_tour(
                 plan.route,
-                costing=costing,
-                origin=req.origin,
-                round_trip=constraints.round_trip,
+                costing=turn.costing,
+                origin=turn.req.origin,
+                round_trip=turn.round_trip,
             )
         else:
-            log.info("deadline: %.1fs left — skipping geometry", self._left(t0))
+            log.info("deadline: %.1fs left — skipping geometry", self._left(turn.t0))
             shape, summary = {}, {}
-            deadline_geometry_skipped = True
+            turn.deadline_geometry_skipped = True
         trace.record(
             "render",
-            "skipped" if deadline_geometry_skipped else "ok",
+            "skipped" if turn.deadline_geometry_skipped else "ok",
             input=[c.name for c in plan.route],
-            skipped=deadline_geometry_skipped,
+            skipped=turn.deadline_geometry_skipped,
             length_km=summary.get("length") if summary else None,
         )
 
@@ -856,8 +1036,14 @@ class Pipeline:
         if walk_s == 0.0 and plan.walk_seconds > 0:
             walk_s = plan.walk_seconds
 
+        turn.shape = shape
+        turn.walk_s = walk_s
+        turn.length_km = length_km
+        return shape
+
+    def _step_explain(self, turn: _Turn, plan, shape: dict) -> str:
         # 9. Explain
-        explanation = explain_route(plan.route, plan.trace, walk_s, costing)
+        explanation = explain_route(plan.route, plan.trace, turn.walk_s, turn.costing)
         # The explanation *is* this step's result — the route told back as prose —
         # so it goes in as the step's output rather than a count of it.
         trace.record(
@@ -865,7 +1051,9 @@ class Pipeline:
             input=[c.name for c in plan.route],
             output=explanation,
         )
+        return explanation
 
+    def _step_verify(self, turn: _Turn, plan, requirements) -> OverallStatus:
         # 9b. Verify — the DETERMINISTIC verifier decides, per requirement,
         # whether the request was actually honoured against the final route and
         # the Valhalla geometry (spec §4.4).  The interpretation model proposed
@@ -875,8 +1063,8 @@ class Pipeline:
         verify(
             requirements,
             plan,
-            shape,
-            _services_along_evidence(self.db, requirements, shape),
+            turn.shape,
+            _services_along_evidence(self.db, requirements, turn.shape),
         )
         status = overall_status(requirements)
         progress.note(progress.STAGE_DONE)
@@ -886,48 +1074,7 @@ class Pipeline:
             plan_status=status,
             output=_verdicts(requirements),
         )
-
-        ms = int((_time.perf_counter() - t0) * 1000)
-        log.info(
-            "pipeline.ok query_len=%d ms=%d n_stops=%d walk_s=%.0f budget_min=%s "
-            "source=%s status=%s",
-            len(req.query), ms, len(plan.route), walk_s,
-            constraints.time_budget_minutes, intent.source, status,
-        )
-
-        changes = (
-            _context_changes(base_candidates, plan.route) if base_candidates else None
-        )
-
-        trace.record(
-            "response",
-            input={"plan_status": status, "stops": len(plan.route)},
-            plan_status=status,
-            stops=len(plan.route),
-            ms=int((_time.perf_counter() - t0) * 1000),
-            route=[p.name for p in plan.route],
-        )
-
-        return self._build_response(
-            intent=intent,
-            changes=changes,
-            constraints=constraints,
-            plan=plan,
-            shape=shape,
-            walk_s=walk_s,
-            length_km=length_km,
-            explanation=explanation,
-            costing=costing,
-            requirements=requirements,
-            status=status,
-            deadline={
-                "budget_s": constants.REQUEST_DEADLINE_S,
-                "used_s": round(_time.perf_counter() - t0, 3),
-                "pool_trimmed_to": deadline_trim,
-                "valhalla_order_skipped": deadline_order_skipped,
-                "geometry_skipped": deadline_geometry_skipped,
-            },
-        )
+        return status
 
     def _refuse_out_of_coverage(
         self,
@@ -975,11 +1122,15 @@ class Pipeline:
         constraints.time_budget_minutes = constants.MAX_BUDGET_MIN
         constraints.must_visit_ids = list(point_ids)
 
-        cost = compute_cost_matrix(candidates, constraints, costing=profile or "pedestrian")
-        if cost.indices != list(range(len(candidates))):
-            candidates = [candidates[i] for i in cost.indices]
-        route, info = optimize(candidates, cost, constraints, costing=profile or "pedestrian")
-        plan = validate(route, cost, constraints, info)
+        turn = _Turn(
+            req=GenerateReq(query="точки пользователя"),
+            t0=_time.perf_counter(),
+            costing=profile or "pedestrian",
+            tail_mode="reroute",
+        )
+        _candidates, _cost, _route, _info, plan = self._plan_tail(
+            turn, candidates, constraints
+        )
 
         try:
             # render() answers (shape, summary, status); the status is logged by
@@ -1262,10 +1413,9 @@ class Pipeline:
         )
         costing = req.profile or "pedestrian"
 
+        turn = _Turn(req=req, t0=t0, costing=costing, tail_mode="refine", plan_info=info)
         # The cost matrix is best-effort; the base points survive regardless.
-        route, cost = _refinement_cost(route, constraints, costing)
-
-        plan = validate(route, cost, constraints, info)
+        _candidates, _cost, route, _info, plan = self._plan_tail(turn, route, constraints)
         trace.record(
             "validate",
             input=[c.name for c in route],

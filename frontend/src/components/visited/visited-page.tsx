@@ -1,5 +1,5 @@
 import { Link } from '@tanstack/react-router';
-import { MapPinned, Plus, Trash2 } from 'lucide-react';
+import { Loader2, MapPinned, Plus, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 
 import { PlaceMap } from '@/components/place-map/place-map';
@@ -68,7 +68,19 @@ export function VisitedPage() {
       .slice(0, 30);
   }, [places.places, query, visitedIds]);
 
-  if (isLoading) return null;
+  if (isLoading) {
+    return (
+      <main className="flex min-h-dvh items-center justify-center bg-background p-4">
+        <div
+          data-testid="visited-loading"
+          className="flex items-center gap-2 text-meta text-muted-foreground"
+        >
+          <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+          загружаю…
+        </div>
+      </main>
+    );
+  }
 
   if (!authenticated) {
     return (

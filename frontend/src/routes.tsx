@@ -75,6 +75,41 @@ export const indexRoute = createRoute({
   },
 });
 
+/**
+ * The tab/profile half of the `/$activeTab` gate.
+ *
+ * Split out from `requireAuth` so the redirect rules can be exercised without a
+ * router context or a query client: an unknown tab and a missing profile both
+ * fall back to the directions tab, and any other search params are preserved.
+ */
+export const activeTabBeforeLoad = ({
+  params,
+  search,
+}: {
+  params: { activeTab: string };
+  search: { profile?: string };
+}): void => {
+  if (!isValidTab(params.activeTab)) {
+    throw redirect({
+      to: '/$activeTab',
+      params: { activeTab: 'directions' },
+      search: {
+        profile: defaultProfile,
+      },
+    });
+  }
+  if (!search.profile) {
+    throw redirect({
+      to: '/$activeTab',
+      params: { activeTab: params.activeTab },
+      search: {
+        ...search,
+        profile: defaultProfile,
+      },
+    });
+  }
+};
+
 const activeTabRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/$activeTab',
@@ -93,28 +128,10 @@ const activeTabRoute = createRoute({
       ]),
     ],
   },
-  beforeLoad: async ({ context, location, params, search }) => {
+  beforeLoad: async (args) => {
     // Login first: an anonymous visitor is not asked to pick a tab.
-    await requireAuth({ context, location });
-    if (!isValidTab(params.activeTab)) {
-      throw redirect({
-        to: '/$activeTab',
-        params: { activeTab: 'directions' },
-        search: {
-          profile: defaultProfile,
-        },
-      });
-    }
-    if (!search.profile) {
-      throw redirect({
-        to: '/$activeTab',
-        params: { activeTab: params.activeTab },
-        search: {
-          ...search,
-          profile: defaultProfile,
-        },
-      });
-    }
+    await requireAuth(args);
+    activeTabBeforeLoad(args);
   },
 });
 

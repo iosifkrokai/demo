@@ -130,6 +130,13 @@ export function PlaceMap({
         mapStyle={DEFAULT_MAP_STYLE}
         style={{ width: '100%', height: '100%' }}
         attributionControl={false}
+        // This map is embedded in a normally-scrolling page (the «посещённые»
+        // page and the admin «Места» tab). Without this a wheel/trackpad scroll
+        // or a one-finger swipe over it zoomed/panned the map instead of
+        // scrolling the page past it. Cooperative gestures reserve one-finger
+        // scroll for the page and require ctrl/⌘ (desktop) or two fingers
+        // (touch) to move the map.
+        cooperativeGestures
       >
         <NavigationControl position="top-right" showCompass={false} />
         {places.map((place) => {

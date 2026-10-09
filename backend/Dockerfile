@@ -14,6 +14,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=ghcr.io/astral-sh/uv:0.5.11 /uv /uvx /usr/local/bin/
+# onnxruntime is a large wheel; the 30s default in uv times out on a slow
+# connection and fails the whole build, so give the downloads room.
+ENV UV_HTTP_TIMEOUT=300
 
 WORKDIR /app
 
@@ -48,7 +51,7 @@ ENV FASTEMBED_CACHE_PATH=/opt/fastembed \
     VALHALLA_URL=http://valhalla:8002
 
 RUN /app/.venv/bin/python -c \
-    "import agent.embeddings as e; e.embed_query('warmup'); print('embedding model baked:', e.MODEL_NAME)"
+    "import infra.embeddings as e; e.embed_query('warmup'); print('embedding model baked:', e.MODEL_NAME)"
 
 EXPOSE 8080
 

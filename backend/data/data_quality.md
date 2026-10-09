@@ -40,7 +40,7 @@ Result: 0% `другое`, vs. 43% before.
 
 1. **`places.category`** — a precise label the LLM-extracted query
    categories (`замок`, `костёл`, ...) cleanly map to via
-   `agent/search.py::CATEGORY_TO_DB`. A user asking for "архитектура" no
+   `store/search.py::CATEGORY_TO_DB`. A user asking for "архитектура" no
    longer falls through to the empty `другое` bucket.
 2. **`places.name`** — cleaned of redundant "в Гродно" suffix and bare
    "бывш." prefix where the building is better known by its current function
@@ -50,7 +50,7 @@ Result: 0% `другое`, vs. 43% before.
 4. **`places.fun_fact`** — one trivia sentence per place, shown in the marker's info card
    (click/tap the marker). Surfaced verbatim: the agent copies it from the DB, the LLM never
    rewrites it, so whatever is in the CSV is exactly what the user reads.
-5. **Embeddings** — computed locally from `name + blurb` (`agent/embeddings.py`, run by
+5. **Embeddings** — computed locally from `name + blurb` (`infra/embeddings.py`, run by
    `python -m seed`). Editing `fun_fact` needs **no** re-embedding; editing `name` or
    `blurb` does (the next `python -m seed` re-embeds changed rows only if their vector is
    cleared — see the note below).

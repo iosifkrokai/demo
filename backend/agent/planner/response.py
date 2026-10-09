@@ -157,7 +157,7 @@ def _services_along_evidence(
     """Measure the services beside the line for the codes the requirements name.
 
     The verifier decides what a requirement means; it owns no database, so this
-    is where the geometry is actually measured (``agent.services``). Returns
+    is where the geometry is actually measured (``store.services``). Returns
 
     * ``None`` — nothing to measure (no service/interest codes, or no usable
       line): the older semantics stay, so an absent café is still honestly

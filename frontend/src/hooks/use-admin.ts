@@ -10,7 +10,12 @@
  * catalogue would print the old blurb.
  */
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
 
 import {
   adminCreatePlace,
@@ -51,12 +56,16 @@ export function useAdminUsers(enabled: boolean, q = '') {
     queryFn: () => adminListUsers({ q, limit: 100 }),
     enabled,
     retry: false,
+    // The search box changes the key on every debounced keystroke; keeping the
+    // previous rows means the list does not blank to «загружаю…» in between.
+    placeholderData: keepPreviousData,
   });
   return {
     items: query.data?.items ?? [],
     total: query.data?.total ?? 0,
     isLoading: query.isLoading,
     error: query.error,
+    refetch: query.refetch,
   };
 }
 
@@ -66,12 +75,15 @@ export function useAdminPlaces(enabled: boolean, q = '', category = '') {
     queryFn: () => adminListPlaces({ q, category, limit: 100 }),
     enabled,
     retry: false,
+    // Same as the users list: a new key per keystroke must not clear the list.
+    placeholderData: keepPreviousData,
   });
   return {
     items: query.data?.items ?? [],
     total: query.data?.total ?? 0,
     isLoading: query.isLoading,
     error: query.error,
+    refetch: query.refetch,
   };
 }
 

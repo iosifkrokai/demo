@@ -149,6 +149,27 @@ def test_pipeline_pruner_keeps_a_mandatory_stop_and_returns_the_report():
     assert report[0].reason == REASON_MUST_VISIT_UNROUTABLE
 
 
+def test_the_order_follows_the_stops_a_prune_removed():
+    """A prune shortens the route; ``info["order"]`` must follow it, not the dead.
+
+    ``info["order"]`` indexes the cost matrix and validate prices the walk
+    through it. The stale order made the lengths disagree, validate fell back to
+    ``range(n)`` and summed the first n candidates' legs — the walk of stops that
+    were pruned, reported as if it were the survivor's.
+    """
+    a = _cand(1, "А", "замок")
+    b = _cand(2, "Б", "музей")  # the stop the prune removes
+    c = _cand(3, "В", "парк", lon=23.86)
+    cost = _island_cost()  # a→b unroutable, a↔c and b↔c route
+
+    info = pipeline_mod._order_after_prune({"order": [0, 1, 2]}, [a, c], [a, b, c])
+    assert info["order"] == [0, 2], "index 1 (the pruned stop) is gone"
+
+    plan = validate([a, c], cost, ResolvedConstraints(), info)
+    assert plan.walk_seconds == 600.0, "priced a→c, not the unroutable a→b"
+    assert plan.trace["walk_times_unknown"] == 0
+
+
 def test_verify_marks_a_kept_but_unroutable_must_visit_as_unmet():
     """Presence in the stop list does not outrank Valhalla's own verdict."""
     stop = _cand(5, "Каплица на острове", "костёл")

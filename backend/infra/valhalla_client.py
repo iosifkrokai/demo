@@ -7,12 +7,30 @@ Two operations:
 The matrix is what the planner uses to pick a better ordering than the
 greedy nearest-neighbour heuristic in the original code. With n ≤ 8 a
 brute-force over n! permutations is fine and guarantees the optimal order.
+
+Known divergence: /sources_to_targets disagrees with /route for the same pair.
+Measured live, pedestrian, Стела (53.68084,23.81655) → Старый замок
+(53.6791,23.8216):
+  * matrix radius 100 → 338 s / 0.478 km; radius 500 → 158 s / 0.223 km
+    (shorter than the 0.37 km straight line — impossible);
+  * /route at either radius → 738 s / 1.043 km (the same implied speed,
+    ~5.1 km/h, so only the *path* differs);
+  * the matrix is asymmetric: 0→1 339 s, 1→0 705 s.
+Both requests use the same costing, the same /locate-snapped coordinates and
+the same radius ladder, so this is not a client-side mismatch: Valhalla 3.5.1's
+"timedistancematrix" algorithm finds a different (invalid, sub-straight-line)
+path than the router. Consequence for the caller: the matrix is a guide for
+ordering, but the *reported* length/time must come from /route (render's
+summary) — the two are not interchangeable. Once a response is assembled, its
+budget numbers must therefore be derived from ONE source (see planner/validate
+and pipeline._build_response).
 """
 
 from __future__ import annotations
 
 import json
 import logging
+import math
 import time as _time
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
@@ -60,6 +78,27 @@ SNAP_ERROR_MARKERS = ("candidate edge", "for destination label", "for origin lab
 NO_PATH_MARKERS = ("no path could be found", "error_code\":442")
 ROUTE_FAILURE_MARKERS = SNAP_ERROR_MARKERS + NO_PATH_MARKERS
 
+# Valhalla refuses a pair whose *path* distance exceeds the costing's limit — for
+# pedestrian that is 200 km — with HTTP 400:
+#   {"error_code":154,"error":"Path distance exceeds the max distance limit: 200000 meters"}
+# One such pair fails the WHOLE /sources_to_targets chunk and the error carries
+# no per-pair index, so the block cannot be patched cell by cell. Retrying the
+# snap radii is pointless (it is not a snapping problem) and the old per-pair
+# /route fallback turned a region query into hundreds of HTTP calls that outlived
+# REQUEST_DEADLINE_S. Pairwise straight-line distance is a lower bound on path
+# distance, so a chunk that hits this error is resolved by distance instead; see
+# _distance_aware_fill. Do not lower this below Valhalla's own 200 km limit.
+MATRIX_PATH_LIMIT_M = 200_000
+DISTANCE_LIMIT_MARKERS = ("error_code\":154", "max distance limit")
+
+# Bounding the per-pair /route fallback (the snapping/500 workaround, not the
+# 154 case): one request may issue at most this many single-pair /route calls,
+# and never for longer than this wall-clock budget. Beyond either bound the
+# remaining cells stay UNKNOWN_S so the request returns degraded instead of
+# running for minutes. The cap is the reason the fallback exists at all.
+MATRIX_FALLBACK_MAX_ROUTE_CALLS = 60
+MATRIX_FALLBACK_BUDGET_S = 30.0
+
 
 # Typed result system
 class RouteStatus(Enum):
@@ -87,6 +126,45 @@ def is_unreachable_time(seconds: float) -> bool:
     the magic constant.
     """
     return seconds == float(constants.UNREACHABLE_S)
+
+
+def is_unknown_time(seconds: float) -> bool:
+    """True when the walk time was never measured (a transport failure).
+
+    Distinct from ``is_unreachable_time``: UNKNOWN_S means "we could not ask",
+    UNREACHABLE_S means "Valhalla says no path exists". Only the latter may cost
+    a stop its place on the route.
+    """
+    return isinstance(seconds, float) and math.isnan(seconds)
+
+
+def _is_distance_limit_error(exc: Exception) -> bool:
+    """True when Valhalla refused a pair for exceeding its 200 km path limit."""
+    text = str(exc).lower()
+    return any(marker in text for marker in DISTANCE_LIMIT_MARKERS)
+
+
+def _pair_metres(a: dict, b: dict) -> float:
+    """Equirectangular straight-line distance in metres (fine at these scales)."""
+    lat_mid = math.radians((float(a["lat"]) + float(b["lat"])) / 2)
+    dx = math.radians(float(a["lon"]) - float(b["lon"])) * 6_371_000 * math.cos(lat_mid)
+    dy = math.radians(float(a["lat"]) - float(b["lat"])) * 6_371_000
+    return math.hypot(dx, dy)
+
+
+def _same_point(a: dict, b: dict) -> bool:
+    """True when two locations are the same point, even across chunk copies.
+
+    The old check was ``sources[i] is targets[j]``, which only holds in the
+    non-chunked path — the chunked path builds separate dicts for sources and
+    targets, so every diagonal cost a needless self ``/route``. Global indices
+    are compared when present; otherwise object identity is preserved (two
+    distinct lists that merely share coordinates are left alone, as before).
+    """
+    si, ti = a.get("_src_idx"), b.get("_tgt_idx")
+    if si is not None and ti is not None:
+        return si == ti
+    return a is b
 
 
 # Matrix chunking limits
@@ -150,18 +228,25 @@ def _request_with_retry(method: str, url: str, *, params: dict, timeout: float) 
         try:
             with httpx.Client(timeout=timeout) as client:
                 r = client.request(method, url, params=params)
-                if r.status_code >= 500:
-                    # Keep the upstream body: /route answers 500 with a reason
-                    # ("Could not find candidate edge used for destination
-                    # label") that route_through inspects to decide whether the
-                    # request is worth retrying with a wider snap radius.
+                if r.status_code >= 400:
+                    # Keep the upstream body for BOTH 4xx and 5xx: Valhalla
+                    # answers 400 with a machine error_code that callers inspect
+                    # — 154 (path over the 200 km limit, see
+                    # _is_distance_limit_error), 442 (no path, _is_route_failure)
+                    # and 150 (>20 locations) — and raise_for_status() alone
+                    # would hide it behind "Client error '400 Bad Request'".
                     raise httpx.HTTPStatusError(
                         f"server error: {r.text[:300]}", request=r.request, response=r
                     )
-                r.raise_for_status()
                 return r.json()
         except (httpx.ConnectError, httpx.ReadTimeout, httpx.WriteTimeout, httpx.HTTPStatusError) as e:
             last_exc = e
+            # A 4xx (except 429) is the request's own fault, not a transient
+            # one: report it after ONE probe so a pair beyond the distance
+            # limit does not cost three identical round-trips.
+            status = getattr(getattr(e, "response", None), "status_code", None)
+            if status is not None and 400 <= status < 500 and status != 429:
+                break
             if attempt > constants.VALHALLA_MAX_RETRIES:
                 break
             _time.sleep(0.5 * attempt)  # 0.5s, 1.0s between retries
@@ -268,7 +353,10 @@ def _matrix_via_route(source: dict, target: dict, costing: str, timeout: float,
         timeout=timeout,
     )
     if "trip" not in body:
-        return 0.0
+        # No trip = no route, not a free leg. 0.0 used to make a failed pair
+        # look instantaneous, so the optimizer ordered it and /route then
+        # refused the whole tour.
+        return float(constants.UNREACHABLE_S)
     summary = body["trip"].get("summary", {})
     return float(summary.get("time", 0.0))
 
@@ -320,6 +408,7 @@ def _matrix_chunk_resilient(
     targets: list[dict],
     costing: str,
     timeout: float,
+    deadline: float | None = None,
 ) -> list[list[float]]:
     """A chunk request, retried with a wider snap radius, then per-pair /route.
 
@@ -328,19 +417,103 @@ def _matrix_chunk_resilient(
          destination label"}
     for some point combinations (this reached the UI as a 503 "Unknown: …" toast),
     and the failure carries no partial data. Widening the radius fixes most of
-    them; if not, fall back to one /route call per pair.
+    them; if not, fall back to one /route call per pair (bounded — see
+    _fill_via_route).
+
+    A 400/154 (a pair over the costing's 200 km path limit) is NOT a snapping
+    problem: retrying radii cannot help and per-pair /route would fan out. Those
+    chunks are resolved by distance in _distance_aware_fill instead.
     """
     last_exc: Exception | None = None
     for radius in ROUTE_SNAP_RADII_M:
         try:
             return _matrix_chunk(sources, targets, costing, timeout, radius=radius)
         except UpstreamUnavailable as exc:
+            if _is_distance_limit_error(exc):
+                logger.warning(
+                    "matrix chunk hit the 200 km path limit — resolving by distance "
+                    "instead of per-pair /route"
+                )
+                return _distance_aware_fill(sources, targets, costing, timeout)
             last_exc = exc
     logger.warning(
         "matrix chunk failed at every snap radius (%s) — falling back to per-pair /route",
         last_exc,
     )
-    return _fill_via_route(sources, targets, costing, timeout)
+    return _fill_via_route(sources, targets, costing, timeout, deadline=deadline)
+
+
+def _distance_aware_fill(
+    sources: list[dict],
+    targets: list[dict],
+    costing: str,
+    timeout: float,
+) -> list[list[float]]:
+    """Resolve a chunk Valhalla refused for the 200 km path limit, per source.
+
+    The 154 error fails the whole block and names no culprit, but a pair further
+    apart than the limit (straight-line ≥ path) is definitely unreachable, and a
+    pair within it can be asked for on its own. So each source is requested
+    against only its within-limit targets, in chunks of MATRIX_MAX_TARGETS: the
+    offending far pair never enters the request, and the near pairs still get
+    real times instead of one /route per cell.
+    """
+    n_s, n_t = len(sources), len(targets)
+    unreachable = float(constants.UNREACHABLE_S)
+    unknown = float(constants.UNKNOWN_S)
+    out = [[unreachable] * n_t for _ in range(n_s)]
+
+    for i, source in enumerate(sources):
+        near = [
+            j for j in range(n_t)
+            if _pair_metres(source, targets[j]) <= MATRIX_PATH_LIMIT_M
+        ]
+        for start in range(0, len(near), MATRIX_MAX_TARGETS):
+            cols = near[start:start + MATRIX_MAX_TARGETS]
+            row_values: list[float] | None = None
+            try:
+                sub = _matrix_chunk([source], [targets[j] for j in cols], costing, timeout)
+                row_values = [float(v) for v in sub[0]]
+            except UpstreamUnavailable as exc:
+                if _is_distance_limit_error(exc) and len(cols) > 1:
+                    # A marginal pair (straight-line under the limit, path over)
+                    # is still in the block — isolate it cell by cell.
+                    row_values = _isolate_row(source, targets, cols, costing, timeout,
+                                              unreachable=unreachable, unknown=unknown)
+                else:
+                    logger.warning(
+                        "matrix row %d could not be asked (%.80s) — left unknown", i, exc
+                    )
+                    row_values = [unknown] * len(cols)
+            for k, j in enumerate(cols):
+                out[i][j] = row_values[k]
+    return out
+
+
+def _isolate_row(
+    source: dict,
+    targets: list[dict],
+    cols: list[int],
+    costing: str,
+    timeout: float,
+    *,
+    unreachable: float,
+    unknown: float,
+) -> list[float]:
+    """Probe one source's target block a single cell at a time.
+
+    Only reached when a block of ≥2 within-limit columns still 154s; the far
+    cell is marked unreachable, a transport failure stays unknown, and the
+    near cells keep their measured times.
+    """
+    row: list[float] = []
+    for j in cols:
+        try:
+            sub = _matrix_chunk([source], [targets[j]], costing, timeout)
+            row.append(float(sub[0][0]))
+        except UpstreamUnavailable as exc:
+            row.append(unreachable if _is_distance_limit_error(exc) else unknown)
+    return row
 
 
 def _chunks_safe(n_sources: int, n_targets: int) -> bool:
@@ -356,17 +529,34 @@ def _chunks_safe(n_sources: int, n_targets: int) -> bool:
 def _matrix_via_route_resilient(
     source: dict, target: dict, costing: str, timeout: float
 ) -> float:
-    """One pair: widen the snap radius, and if the pair stays unroutable return inf.
+    """One pair via /route, widening the snap radius only for a snap failure.
 
-    inf is how the rest of the pipeline spells "not reachable" (budget validation
-    and the max-leg walkability check both reject such a leg), so a single
-    pathological pair shortens the tour instead of failing the whole request.
+    Three outcomes are kept apart on purpose:
+      * a real time — the pair routes;
+      * UNREACHABLE_S — Valhalla gave a route-level "no" (snap 499, no-path 442,
+        or the 200 km limit 154). Widening the radius cannot fix 154, so it is
+        returned at once; the others are retried across the radii first;
+      * UNKNOWN_S — a transport failure (timeout, connect, 5xx). That is "we
+        could not ask", never "there is no path": the caller must not drop the
+        stop for it.
     """
     last_exc: Exception | None = None
     for radius in ROUTE_SNAP_RADII_M:
         try:
             return _matrix_via_route(source, target, costing, timeout, radius=radius)
         except UpstreamUnavailable as exc:
+            if _is_distance_limit_error(exc):
+                return float(constants.UNREACHABLE_S)
+            if not _is_route_failure(exc):
+                logger.warning(
+                    "pair (%s,%s) -> (%s,%s) could not be asked (%s) — left unknown",
+                    source.get("lat"),
+                    source.get("lon"),
+                    target.get("lat"),
+                    target.get("lon"),
+                    exc,
+                )
+                return float(constants.UNKNOWN_S)
             last_exc = exc
     logger.warning(
         "pair (%s,%s) -> (%s,%s) unroutable at every snap radius: %s",
@@ -384,27 +574,49 @@ def _fill_via_route(
     targets: list[dict],
     costing: str,
     timeout: float,
+    deadline: float | None = None,
 ) -> list[list[float]]:
-    """Fill every cell with per-pair /route calls. Used only when all else fails."""
+    """Fill every cell with per-pair /route calls. Used only when all else fails.
+
+    Bounded twice over: at most MATRIX_FALLBACK_MAX_ROUTE_CALLS calls and never
+    past ``deadline`` (a monotonic timestamp) or MATRIX_FALLBACK_BUDGET_S from
+    now. Cells left over stay UNKNOWN_S — the request degrades instead of running
+    for minutes, which is what a live region query did (168 /route calls, past
+    REQUEST_DEADLINE_S).
+    """
     n_src = len(sources)
     n_tgt = len(targets)
+    started = _time.monotonic()
+    limit = deadline if deadline is not None else started + MATRIX_FALLBACK_BUDGET_S
+    calls = 0
+    capped = False
     result: list[list[float]] = []
     for i in range(n_src):
         row: list[float] = []
         for j in range(n_tgt):
-            if sources[i] is targets[j]:
+            if _same_point(sources[i], targets[j]):
                 row.append(0.0)
+            elif capped or calls >= MATRIX_FALLBACK_MAX_ROUTE_CALLS or _time.monotonic() >= limit:
+                capped = True
+                row.append(float(constants.UNKNOWN_S))
             else:
+                calls += 1
                 row.append(_matrix_via_route_resilient(sources[i], targets[j], costing, timeout))
         result.append(row)
+    if capped:
+        logger.warning(
+            "matrix per-pair fallback capped after %d /route calls (%d cells left "
+            "unknown) — request degrades instead of hanging",
+            calls, n_src * n_tgt - calls,
+        )
     return result
 
 
 def _zero_diagonal(result: list[list[float]], sources: list[dict], targets: list[dict]) -> None:
-    """Set diagonal cells to 0.0 when sources[i] is targets[i] (same object = same location)."""
+    """Set diagonal cells to 0.0 when sources[i] and targets[i] are the same point."""
     n = min(len(sources), len(targets))
     for i in range(n):
-        if sources[i] is targets[i]:
+        if _same_point(sources[i], targets[i]):
             result[i][i] = 0.0
 
 
@@ -413,6 +625,7 @@ def time_matrix(
     targets: list[dict],
     costing: str = "pedestrian",
     timeout: float | None = None,
+    deadline: float | None = None,
 ) -> list[list[float]]:
     """GET /sources_to_targets → time matrix in seconds, chunked to avoid Valhalla 500.
 
@@ -424,6 +637,13 @@ def time_matrix(
     Shapes where len(sources) >= 6 AND len(targets) >= 7 trigger HTTP 500 in
     Valhalla 3.5.1.  This function splits large matrices into safe chunks and
     assembles the full result.  A 12x12 matrix costs ~3 HTTP calls, not 144.
+
+    ``deadline`` is an optional ``time.monotonic()`` timestamp; the per-pair
+    /route fallback stops at it (and at MATRIX_FALLBACK_MAX_ROUTE_CALLS) so the
+    request cannot run for minutes. Without one a short internal budget applies.
+
+    Cell semantics: a real duration, UNREACHABLE_S ("Valhalla says no path") or
+    UNKNOWN_S ("we could not ask"). See _matrix_via_route_resilient.
     """
     n_src = len(sources)
     n_tgt = len(targets)
@@ -433,7 +653,9 @@ def time_matrix(
     # resilient wrapper — a 3x3 "замки Гродно" matrix has hit the Valhalla
     # "Could not find candidate edge used for label" 500 in practice.
     if _chunks_safe(n_src, n_tgt):
-        fast_result = _matrix_chunk_resilient(sources, targets, costing, timeout)
+        fast_result = _matrix_chunk_resilient(
+            sources, targets, costing, timeout, deadline=deadline
+        )
         _zero_diagonal(fast_result, sources, targets)
         return fast_result
 
@@ -458,8 +680,10 @@ def time_matrix(
             tgt_chunk = idx_targets[tgt_start:tgt_end]
 
             # A chunk can fail (Valhalla label 500); the wrapper widens the snap
-            # radius and only then falls back to per-pair /route calls.
-            chunk_matrix = _matrix_chunk_resilient(src_chunk, tgt_chunk, costing, timeout)
+            # radius and only then falls back to per-pair /route calls (bounded).
+            chunk_matrix = _matrix_chunk_resilient(
+                src_chunk, tgt_chunk, costing, timeout, deadline=deadline
+            )
 
             # Copy chunk into the right offset in the result.
             for li, row in enumerate(chunk_matrix):

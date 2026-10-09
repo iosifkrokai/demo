@@ -1,7 +1,7 @@
 """W1 — canonical taxonomy + category→DB mapping.
 
 Guards the frozen interface other workstreams import
-(``agent.taxonomy``) and the defect it fixes: кафе/ресторан/туалет/гостиница
+(``domain.taxonomy``) and the defect it fixes: кафе/ресторан/туалет/гостиница
 were absent from the query→DB category map, so ``db_categories(['туалет'])``
 returned ``[]``.
 """

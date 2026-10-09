@@ -1,6 +1,6 @@
 """Embedding vectors must reach psycopg as floats, not as an int/float mix.
 
-``agent.embeddings._embed_prefixed`` is annotated ``list[list[float]]``, but the
+``infra.embeddings._embed_prefixed`` is annotated ``list[list[float]]``, but the
 model's ``.embed`` can yield vectors whose per-dimension values land on exactly
 ``0`` or ``1`` and come back as Python ints. A list mixing int and float is
 precisely what psycopg refuses to adapt (``DataError: cannot dump lists of mixed
@@ -11,7 +11,7 @@ died mid-run, leaving the seed half-done.
 Every seed path now writes vectors with ``%s::vector`` through
 ``_embed_prefixed``, so these tests pin the coercion at that one seam and the
 database cannot regress into a half-embedded state. The model is local now (no
-OpenRouter, no API key): tests replace ``agent.embeddings._state.model`` with a
+OpenRouter, no API key): tests replace ``infra.embeddings._state.model`` with a
 fake exposing ``.embed(list)``.
 """
 

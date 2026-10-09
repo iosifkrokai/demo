@@ -9,7 +9,7 @@ an explicit unknown, never a silent default.
 
 :func:`in_project_area` is the ONE predicate shared by import-time
 validation (the seed package: seed/datasets.py, seed/pipeline.py, all
-via ``agent.geofence.inside_project_area``, which delegates here) and by
+via ``domain.geofence.inside_project_area``, which delegates here) and by
 query-time filtering. It is Grodno Oblast (geoBoundaries ADM1 polygon,
 data/grodno_border.json) OR one of the documented border exceptions
 (data/belarus_border_keep.json).

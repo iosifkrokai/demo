@@ -27,7 +27,7 @@ result set — "no answer" is honest, a made-up detour is not.
 
 Integration
 -----------
-``find_areas`` resolves through ``agent.areas`` / ``data/areas.json`` — the
+``find_areas`` resolves through ``domain.areas`` / ``data/areas.json`` — the
 versioned single source of area definitions. If that module is absent the tool
 falls back to the ``areas`` table (db/migrations/0004_places_taxonomy.sql,
 loaded by ``python -m seed``); if the registry exists but is unusable, the
@@ -198,7 +198,7 @@ def _norm_term(text: str) -> str:
 
 
 def _areas_from_registry(term: str, locale: str, limit: int) -> list[dict]:
-    """Canonical area slugs from the versioned registry (``agent/areas.py``).
+    """Canonical area slugs from the versioned registry (``domain/areas.py``).
 
     ``data/areas.json`` is the single source of area definitions (spec §5), so
     this is the primary path and the DB table is only a fallback. May raise —

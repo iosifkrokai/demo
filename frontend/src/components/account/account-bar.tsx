@@ -1,5 +1,11 @@
 import { Link } from '@tanstack/react-router';
-import { LogOut, MapPinned, ShieldCheck, UserRound } from 'lucide-react';
+import {
+  Loader2,
+  LogOut,
+  MapPinned,
+  ShieldCheck,
+  UserRound,
+} from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -40,7 +46,19 @@ export function AccountBar() {
     };
   }, [open]);
 
-  if (isLoading) return null;
+  // While the session resolves, keep the spot occupied with a spinner instead
+  // of nothing: the bar used to pop in after the probe and shift the corner.
+  if (isLoading) {
+    return (
+      <div
+        data-testid="account-bar-loading"
+        aria-hidden="true"
+        className="pointer-events-none fixed right-2 top-[calc(env(safe-area-inset-top)+0.5rem)] z-40 flex items-center rounded-xl border border-border bg-card px-3 py-1.5 text-meta text-muted-foreground shadow-card"
+      >
+        <Loader2 className="size-4 animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div

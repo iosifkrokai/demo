@@ -1,7 +1,7 @@
 """W2 — `build_requirements`: the single interpretation entry point.
 
 Pins the contract that turns a tourist's request (RU or EN) plus the explicit
-UI filters into `agent.requirements.TripRequirements`:
+UI filters into `domain.requirements.TripRequirements`:
 
   * party composition carries a child COUNT and never an invented age;
   * the time budget is only the one the user stated (digit or word numeral);

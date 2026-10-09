@@ -9,7 +9,7 @@ each rerun pays the full model bill for answers it already has.
 
 Why in this process, and not in Redis
 -------------------------------------
-One worker serves this app (`uvicorn agent.main:app`, no `--workers`), so a
+One worker serves this app (`uvicorn api.main:app`, no `--workers`), so a
 dictionary in memory gives every bit of the speedup a server would, without a
 second service to run, monitor and keep in sync. Redis becomes worth its cost
 when one of these becomes true, and not before:

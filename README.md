@@ -111,7 +111,7 @@ cd backend && .venv/bin/python -m seed --dry-run       # offline: no DB, no netw
 `fetch` writes versioned files (`data/places_osm_raw.csv`, `data/places_poi.csv`)
 and is the **only** step that touches Overpass; `apply` never does. The Overpass
 bbox covers a slice of Lithuania and Poland, so every row is checked against
-`agent.geofence.inside_project_area` (Grodno ADM1 polygon) before it is written;
+`domain.geofence.inside_project_area` (Grodno ADM1 polygon) before it is written;
 `data/belarus_border_keep.json` lists the documented exceptions.
 
 Spot-check:
@@ -133,7 +133,7 @@ export OPENROUTER_API_KEY=sk-or-...    # optional; see below
 .venv/bin/python -m uvicorn api.main:app --host 0.0.0.0 --port 8080
 ```
 
-**Embeddings are local** (`agent/embeddings.py`): `intfloat/multilingual-e5-small`
+**Embeddings are local** (`infra/embeddings.py`): `intfloat/multilingual-e5-small`
 (384-d) through fastembed/ONNX on the CPU. The weights are baked into the image at
 build time, so there is no key to set and no first-call download for retrieval —
 the vector signal is always on.
@@ -272,7 +272,7 @@ Notes that make the gate reproducible:
 ## 8. Configuration
 
 Environment carries secrets, deployment addresses and two deliberate escape hatches —
-nothing that belongs in review (`agent/config.py`, `agent/planner/interpret_cache.py`):
+nothing that belongs in review (`core/config.py`, `agent/planner/interpret_cache.py`):
 
 | Variable | What it is |
 |---|---|
@@ -302,7 +302,7 @@ for the geo focus instead, so «замки Гродно» is not pinned to one a
 
 **`503 (valhalla ... sources_to_targets failed after retries)`.** Valhalla 3.5.1 answers
 500 `Could not find candidate edge used for label` for matrix shapes with
-`len(sources) >= 6 AND len(targets) >= 7`. `agent/valhalla_client.py` chunks around it
+`len(sources) >= 6 AND len(targets) >= 7`. `infra/valhalla_client.py` chunks around it
 (`MATRIX_MAX_SOURCES` / `MATRIX_MAX_TARGETS`) with a per-pair `/route` fallback.
 
 **Route has no polyline / `length_km: null`.** `/route` answers 500
@@ -358,7 +358,7 @@ Browser → nginx :80  (frontend container)
   │  ┌─ preprocess ─ interpret (PydanticAI over OpenRouter; deterministic fallback) ─┐
   │  │                                                                               │
   │  ├─ resolve ─ retrieve (vector + keyword + must-visit, RRF fusion) ─────────────┤
-  │  │              vector = LOCAL embeddings (agent/embeddings.py, CPU ONNX)      │
+  │  │              vector = LOCAL embeddings (infra/embeddings.py, CPU ONNX)      │
   │  │                                                                               │
   │  ├─ geo-focus ─ diversity (MMR) ─ cost (Valhalla matrix) ─ optimize ────────────┤
   │  │                                                                               │

@@ -16,7 +16,7 @@ Three rules shape the handlers:
   the empty state, but a write with no session is ``401 not_authenticated``, and a
   valid ``user`` account hitting ``/admin`` is ``403 not_admin`` — never a bare 500.
 * **Storage failures are typed.** Any
-  :class:`~agent.accounts_store.StorageUnavailable` becomes ``503
+  :class:`~store.accounts_store.StorageUnavailable` becomes ``503
   storage_unavailable`` (see :func:`_storage_guarded`).
 """
 

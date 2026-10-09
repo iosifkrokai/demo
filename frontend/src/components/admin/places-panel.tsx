@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { describeAccountError } from '@/hooks/use-auth';
+import { useDebouncedValue } from '@/hooks/use-debounced-value';
 import {
   useAdminPlaces,
   useCreatePlace,
@@ -47,7 +48,11 @@ const finiteOr = (raw: string, fallback: number): number => {
 export function PlacesPanel({ enabled }: { enabled: boolean }) {
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('');
-  const places = useAdminPlaces(enabled, query, category);
+  // The inputs stay instant; only the debounced value reaches the query key, so
+  // a burst of typing is one request rather than one per character.
+  const debouncedQuery = useDebouncedValue(query);
+  const debouncedCategory = useDebouncedValue(category);
+  const places = useAdminPlaces(enabled, debouncedQuery, debouncedCategory);
   const updatePlace = useUpdatePlace();
   const deletePlace = useDeletePlace();
   const createPlace = useCreatePlace();
@@ -156,8 +161,28 @@ export function PlacesPanel({ enabled }: { enabled: boolean }) {
           />
         )}
 
-        {places.isLoading && (
+        {places.isLoading && !places.error && (
           <p className="text-meta text-muted-foreground">загружаю…</p>
+        )}
+
+        {places.error && (
+          <div
+            data-testid="admin-places-error"
+            className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-destructive/40 bg-card px-3 py-2"
+          >
+            <span className="text-meta text-muted-foreground">
+              {describeAccountError(places.error)}
+            </span>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              data-testid="admin-places-retry"
+              onClick={() => void places.refetch()}
+            >
+              повторить
+            </Button>
+          </div>
         )}
 
         <ul className="flex flex-col gap-2">
@@ -342,7 +367,7 @@ export function PlacesPanel({ enabled }: { enabled: boolean }) {
           ))}
         </ul>
 
-        {!places.isLoading && places.items.length === 0 && (
+        {!places.isLoading && !places.error && places.items.length === 0 && (
           <p className="text-meta text-muted-foreground">ничего не найдено</p>
         )}
       </div>

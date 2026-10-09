@@ -36,12 +36,22 @@ const TanStackRouterDevtoolsPanel = DEVTOOLS_ENABLED
   : () => null;
 
 export const RootComponent = () => {
-  // The account bar belongs over the app, not over the sign-in forms: on `/login`
-  // and `/register` a «Войти» pill would be asking for the thing already on screen.
+  // The account bar belongs over the app, not over the pages that are already a
+  // full page with their own header: on `/login` and `/register` a «Войти» pill
+  // would be asking for the thing already on screen, and on `/admin` and
+  // `/visited` the page's own «к карте» button sits in the same top-right
+  // corner, so below ~1248px the two collide. The bar stays on the map and the
+  // auth-adjacent routes.
   const pathname = useRouterState({
     select: (state) => state.location.pathname,
   });
-  const showAccountBar = pathname !== '/login' && pathname !== '/register';
+  const ACCOUNT_BAR_HIDDEN_ROUTES = [
+    '/login',
+    '/register',
+    '/admin',
+    '/visited',
+  ];
+  const showAccountBar = !ACCOUNT_BAR_HIDDEN_ROUTES.includes(pathname);
 
   return (
     <>

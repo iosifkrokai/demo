@@ -8,12 +8,12 @@ that enters the DB now has to pass this check first.
 The country polygon lives in data/belarus_border.json: Natural Earth 10m
 admin-0 (public domain), RDP-simplified to ~1 km.
 
-The Grodno (project-area) predicate moved to agent/areas.py so that import-time
+The Grodno (project-area) predicate moved to domain/areas.py so that import-time
 validation and query-time filtering share ONE implementation (spec 002 §5:
 area boundaries and documented exceptions are a single source of truth). This
 module keeps its historical public names: inside_belarus stays here (it is the
 country check, not a project area), and inside_project_area delegates to
-agent.areas.in_project_area without changing behaviour.
+domain.areas.in_project_area without changing behaviour.
 """
 
 from __future__ import annotations
@@ -63,7 +63,7 @@ def inside_belarus(lat: float, lon: float) -> bool:
 def inside_project_area(lat: float, lon: float) -> bool:
     """Grodno ADM1, with the previously verified border-POI exceptions.
 
-    Delegates to agent.areas.in_project_area — the single predicate shared by
+    Delegates to domain.areas.in_project_area — the single predicate shared by
     every writer and the purge, and by query-time filtering. The country
     polygon alone includes Brest/Minsk POIs inside the ingest bbox.
     """

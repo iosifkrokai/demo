@@ -15,7 +15,7 @@ handler:
   ``400 invalid_client_id``.
 
 Storage failures are translated in one place (:func:`_storage_guarded`): any
-:class:`~agent.clients_store.StorageUnavailable` becomes ``503`` so a database
+:class:`~store.clients_store.StorageUnavailable` becomes ``503`` so a database
 outage can never reach the browser as an opaque 500 and the client keeps
 working from local storage.
 """

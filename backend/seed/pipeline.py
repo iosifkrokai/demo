@@ -238,7 +238,7 @@ def gather_db_stats(conn) -> dict:
 def prune_foreign(conn, *, apply: bool = False) -> int:
     """Drop places outside the project area; returns the number found (deleted if apply).
 
-    The ingest filters with ``agent.geofence`` now, so this only cleans DBs filled
+    The ingest filters with ``domain.geofence`` now, so this only cleans DBs filled
     before that filter existed.
     """
     with conn.cursor() as cur:

@@ -47,13 +47,13 @@ RENDER_MIN_LEFT_S = 6.0
 # AGENT_INTERPRET_MODEL so a benchmark can pick one.
 
 # The embedding model is no longer a constant here: it lives with the local
-# embedder in agent/embeddings.py (MODEL_NAME / EMBED_DIM).
+# embedder in infra/embeddings.py (MODEL_NAME / EMBED_DIM).
 
 # Intent taxonomy
 INTENT_TYPES = ("discovery", "specific", "themed", "vague")
 
 # Category taxonomy — the canonical codes live in data/taxonomy.csv and are
-# read through agent/taxonomy.py. Nothing here is a second list: import a code
+# read through domain/taxonomy.py. Nothing here is a second list: import a code
 # from taxonomy instead of adding one to this tuple.
 CATEGORIES = taxonomy.all_codes()
 
@@ -119,6 +119,15 @@ WALK_TOO_LONG_MINUTES = 240
 # with this many seconds. It is deliberately finite: budget/leg comparisons treat
 # it as unreachable, while int(inf) would raise OverflowError in the optimizer.
 UNREACHABLE_S = 10**9
+
+# "We could not ask" — a transport failure (timeout, connect error, 5xx) that
+# left a walk time unmeasured, as opposed to "no path exists". A NaN cell is
+# deliberately *not* UNREACHABLE_S: only a real Valhalla verdict may drop a
+# stop. The optimizer keeps the stop and the plan is reported as degraded;
+# deleting a stop because Valhalla hiccuped is the silent shortening this
+# guards against. NaN (not a second finite sentinel) so `math.isnan` separates
+# it from every real duration and from UNREACHABLE_S.
+UNKNOWN_S = float("nan")
 
 # Route optimizer
 # (No stop cap here: the only limits are the user's time budget and transport.

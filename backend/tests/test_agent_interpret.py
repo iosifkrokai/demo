@@ -483,7 +483,7 @@ def test_tools_never_raise_raw_errors(monkeypatch, no_db):
     monkeypatch.setattr(
         tools,
         "_areas_from_registry",
-        lambda term, locale, limit: (_ for _ in ()).throw(ImportError("no agent.areas")),
+        lambda term, locale, limit: (_ for _ in ()).throw(ImportError("no domain.areas")),
     )
 
     search = tools.search_places("замки")
@@ -584,7 +584,7 @@ def test_find_areas_resolves_through_the_registry(monkeypatch, no_db):
 
 def test_find_areas_falls_back_to_the_db_without_the_registry(monkeypatch, no_db):
     def no_registry(term, locale, limit):
-        raise ImportError("agent.areas missing")
+        raise ImportError("domain.areas missing")
 
     rows = [
         {"code": f"district:{i}", "name_ru": f"Район {i}", "name_en": None, "kind": "district"}

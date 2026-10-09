@@ -36,7 +36,13 @@ def _leg_s(value: float) -> float:
 
     int(inf) raises OverflowError, and these numbers end up in int() calls and
     in the JSON trace, so saturate instead of propagating a non-finite value.
+
+    UNKNOWN_S (NaN) is the exception: it means "we could not ask", so it counts
+    as 0 here (the leg is not a claimed cost) and is reported as degraded in the
+    trace — not silently turned into an unreachable leg.
     """
+    if math.isnan(value):
+        return 0.0
     return float(constants.UNREACHABLE_S) if not math.isfinite(value) else value
 
 
@@ -130,6 +136,10 @@ def validate(
     matrix = cost.walk_seconds
     visits = cost.visit_minutes
 
+    legs = list(zip(order, order[1:]))
+    if constraints.round_trip and len(order) >= 2:
+        legs.append((order[-1], order[0]))
+
     walk = _leg_sum(matrix, order)
     if constraints.round_trip and len(order) >= 2:
         # «круговой маршрут»: the walk home is real walking time and must count
@@ -146,10 +156,12 @@ def validate(
     cats = {c.category for c in route if c.category}
     diversity = len(cats) / n if n else 0.0
 
-    # Longest single walking leg.
-    max_leg = max(
-        (_leg_s(matrix[a][b]) for a, b in zip(order, order[1:])), default=0.0
-    )
+    # Longest single walking leg (NaN "could not ask" legs contribute 0).
+    max_leg = max((_leg_s(matrix[a][b]) for a, b in legs), default=0.0)
+
+    # "We could not ask" is not "no path": a NaN cell means Valhalla never gave
+    # a verdict, so the plan is degraded — reported here, never a deleted stop.
+    unknown_legs = sum(1 for a, b in legs if math.isnan(matrix[a][b]))
 
     trace = {
         "algorithm": info.get("algorithm"),
@@ -164,6 +176,7 @@ def validate(
         "budget_seconds": budget_s,
         "fits_budget": fits,
         "budget_exceeded": not fits,
+        "walk_times_unknown": unknown_legs,
     }
     _record_optimizer_report(trace, info, prune_report)
     _run_verification(requirements, route, trace, geometry)

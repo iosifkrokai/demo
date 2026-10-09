@@ -185,20 +185,30 @@ export const MapComponent = () => {
   } | null>(null);
   // The card shows whichever source knows this stop: the agent route's curated
   // `placeDetails`, or the raw catalogue when the tourist tapped a circle.
-  const placesDetails: Record<number, PlaceDetails> = {};
-  for (const place of places) {
-    placesDetails[place.place_id] = placeToDetails(place);
-  }
+  // Memoised: the catalogue is ~2.5k rows and the map used to rebuild this on
+  // every render, i.e. on every pan/zoom frame.
+  const placesDetails = useMemo<Record<number, PlaceDetails>>(() => {
+    const byId: Record<number, PlaceDetails> = {};
+    for (const place of places) {
+      byId[place.place_id] = placeToDetails(place);
+    }
+    return byId;
+  }, [places]);
 
   const activeDetails =
     activePlace != null
       ? (placesDetails[activePlace.id] ?? placeDetails[activePlace.id])
       : undefined;
-  const [viewState, setViewState] = useState({
+  // The camera is uncontrolled: the starting position is handed to the map once
+  // and every later move goes through `mapRef` (easeTo/flyTo/fitBounds). Keeping
+  // the position in top-level state made each pan/zoom frame re-render this
+  // 1350-line component; the imperative calls are unchanged by handing the map
+  // only the initial view.
+  const [initialViewState] = useState(() => ({
     longitude: center[0],
     latitude: center[1],
     zoom: zoom_initial,
-  });
+  }));
   const [currentMapStyle] = useState<MapStyleType>(getInitialMapStyle(style));
   // Selectable from the URL only: the map's own style switcher was one of the
   // controls in the top-right cluster the owner asked to remove, and a style is
@@ -327,72 +337,78 @@ export const MapComponent = () => {
   }, [popupLngLat, updateIsoPosition]);
 
   const geocodeResults = useIsochronesStore((state) => state.geocodeResults);
-  const markers: MarkerData[] = [];
+  // Rebuilt only when the stops (or the isochrone search) actually change, not
+  // on every camera frame.
+  const markers = useMemo<MarkerData[]>(() => {
+    const next: MarkerData[] = [];
 
-  // Add waypoint markers. The "my location" waypoint (the route start the
-  // sidebar pins) is drawn as its own blue pin and does not take a number, so
-  // the tourist's stops stay numbered from 1.
-  const poiWaypoints = waypoints.filter((w) => w.id !== ME_WAYPOINT_ID);
-  waypoints
-    .filter((w) => w.id === ME_WAYPOINT_ID)
-    .forEach((waypoint) => {
-      waypoint.geocodeResults.forEach((address) => {
-        if (!address.selected) return;
-        markers.push({
-          id: ME_WAYPOINT_ID,
-          lng: address.displaylnglat[0],
-          lat: address.displaylnglat[1],
-          type: 'waypoint',
-          index: 0,
-          title: t('sidebar.ui.myLocation'),
-          color: 'blue',
+    // Add waypoint markers. The "my location" waypoint (the route start the
+    // sidebar pins) is drawn as its own blue pin and does not take a number, so
+    // the tourist's stops stay numbered from 1.
+    const poiWaypoints = waypoints.filter((w) => w.id !== ME_WAYPOINT_ID);
+    waypoints
+      .filter((w) => w.id === ME_WAYPOINT_ID)
+      .forEach((waypoint) => {
+        waypoint.geocodeResults.forEach((address) => {
+          if (!address.selected) return;
+          next.push({
+            id: ME_WAYPOINT_ID,
+            lng: address.displaylnglat[0],
+            lat: address.displaylnglat[1],
+            type: 'waypoint',
+            index: 0,
+            title: t('sidebar.ui.myLocation'),
+            color: 'blue',
+          });
         });
+      });
+
+    poiWaypoints.forEach((waypoint, index) => {
+      // The store index (for dragging) differs from the displayed number once a
+      // "my location" waypoint sits at the front.
+      const sourceIndex = waypoints.indexOf(waypoint);
+      const isOrigin = index === 0;
+      const isDestination =
+        index === poiWaypoints.length - 1 && poiWaypoints.length > 1;
+      const color: MarkerColor = isOrigin
+        ? 'green'
+        : isDestination
+          ? 'red'
+          : 'grey';
+      waypoint.geocodeResults.forEach((address) => {
+        if (address.selected) {
+          next.push({
+            id: `waypoint-${sourceIndex}`,
+            lng: address.displaylnglat[0],
+            lat: address.displaylnglat[1],
+            type: 'waypoint',
+            index: sourceIndex,
+            title: address.title,
+            color,
+            number: (index + 1).toString(),
+            placeId: waypoint.placeId,
+          });
+        }
       });
     });
 
-  poiWaypoints.forEach((waypoint, index) => {
-    // The store index (for dragging) differs from the displayed number once a
-    // "my location" waypoint sits at the front.
-    const sourceIndex = waypoints.indexOf(waypoint);
-    const isOrigin = index === 0;
-    const isDestination =
-      index === poiWaypoints.length - 1 && poiWaypoints.length > 1;
-    const color: MarkerColor = isOrigin
-      ? 'green'
-      : isDestination
-        ? 'red'
-        : 'grey';
-    waypoint.geocodeResults.forEach((address) => {
+    geocodeResults.forEach((address) => {
       if (address.selected) {
-        markers.push({
-          id: `waypoint-${sourceIndex}`,
+        next.push({
+          id: 'iso-center',
           lng: address.displaylnglat[0],
           lat: address.displaylnglat[1],
-          type: 'waypoint',
-          index: sourceIndex,
+          type: 'isocenter',
           title: address.title,
-          color,
-          number: (index + 1).toString(),
-          placeId: waypoint.placeId,
+          color: 'purple',
+          shape: 'star',
+          number: '1',
         });
       }
     });
-  });
 
-  geocodeResults.forEach((address) => {
-    if (address.selected) {
-      markers.push({
-        id: 'iso-center',
-        lng: address.displaylnglat[0],
-        lat: address.displaylnglat[1],
-        type: 'isocenter',
-        title: address.title,
-        color: 'purple',
-        shape: 'star',
-        number: '1',
-      });
-    }
-  });
+    return next;
+  }, [waypoints, geocodeResults, t]);
 
   /**
    * The bounding box of the line the map draws, or null when there is none.
@@ -994,8 +1010,7 @@ export const MapComponent = () => {
     <>
       <Map
         ref={mapRef}
-        {...viewState}
-        onMove={(evt) => setViewState(evt.viewState)}
+        initialViewState={initialViewState}
         onMoveEnd={handleMoveEnd}
         onLoad={() => setMapReady(true)}
         onClick={handleMapClick}

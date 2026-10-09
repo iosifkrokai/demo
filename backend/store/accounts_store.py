@@ -1,6 +1,6 @@
 """Storage for accounts, sessions, visits and the admin surface (spec 005).
 
-Same shape as :mod:`agent.clients_store`: one repository, one job — persist and
+Same shape as :mod:`store.clients_store`: one repository, one job — persist and
 read, and answer nothing else. It keeps the promises the spec depends on:
 
 * **Degradation is typed, not silent.** A read that finds nothing returns ``None``
@@ -18,7 +18,7 @@ read, and answer nothing else. It keeps the promises the spec depends on:
   trigger from migration 0004 silently reverts the write.
 
 The place payload itself is not re-invented here: rows are read with the same
-column set the catalogue uses and handed to :func:`agent.places.place_payload`, so
+column set the catalogue uses and handed to :func:`store.places.place_payload`, so
 a card printed by the admin panel and one printed by the «все точки» tab cannot
 disagree about the same place.
 """

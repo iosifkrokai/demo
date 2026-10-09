@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { describeAccountError } from '@/hooks/use-auth';
+import { useDebouncedValue } from '@/hooks/use-debounced-value';
 import { useAdminUsers, useDeleteUser, usePatchUser } from '@/hooks/use-admin';
 import type { AdminUser, UserRole } from '@/api/types';
 
@@ -35,7 +36,10 @@ interface UsersPanelProps {
 
 export function UsersPanel({ enabled, currentUserId }: UsersPanelProps) {
   const [query, setQuery] = useState('');
-  const users = useAdminUsers(enabled, query);
+  // The input stays instant; only the debounced value reaches the query key, so
+  // a burst of typing is one request rather than one per character.
+  const debouncedQuery = useDebouncedValue(query);
+  const users = useAdminUsers(enabled, debouncedQuery);
   const patchUser = usePatchUser();
   const deleteUser = useDeleteUser();
 
@@ -68,8 +72,28 @@ export function UsersPanel({ enabled, currentUserId }: UsersPanelProps) {
         </span>
       </div>
 
-      {users.isLoading && (
+      {users.isLoading && !users.error && (
         <p className="text-meta text-muted-foreground">загружаю…</p>
+      )}
+
+      {users.error && (
+        <div
+          data-testid="admin-users-error"
+          className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-destructive/40 bg-card px-3 py-2"
+        >
+          <span className="text-meta text-muted-foreground">
+            {describeAccountError(users.error)}
+          </span>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            data-testid="admin-users-retry"
+            onClick={() => void users.refetch()}
+          >
+            повторить
+          </Button>
+        </div>
       )}
 
       <ul className="flex flex-col gap-2">
@@ -132,7 +156,7 @@ export function UsersPanel({ enabled, currentUserId }: UsersPanelProps) {
         })}
       </ul>
 
-      {!users.isLoading && users.items.length === 0 && (
+      {!users.isLoading && !users.error && users.items.length === 0 && (
         <p className="text-meta text-muted-foreground">ничего не найдено</p>
       )}
     </section>

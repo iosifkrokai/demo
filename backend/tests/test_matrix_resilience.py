@@ -94,8 +94,14 @@ def test_unroutable_pair_becomes_the_unreachable_sentinel(monkeypatch):
     assert math.isfinite(m[0][1])
 
 
-def test_non_snap_failure_does_not_fan_out(monkeypatch):
-    """A plain timeout must not be retried as if it were a snapping problem."""
+def test_transport_failure_is_unknown_not_unreachable(monkeypatch):
+    """A timeout must not be turned into "no path exists".
+
+    "We could not ask" (timeout/connect/5xx) is not "there is no path": the old
+    code returned UNREACHABLE_S for any persistent failure, and drop_unreachable
+    then deleted the stop for a Valhalla hiccup. It must surface as UNKNOWN_S
+    instead — the plan degrades, no stop is dropped.
+    """
 
     def fake(method, url, *, params, timeout):
         raise UpstreamUnavailable(
@@ -103,7 +109,6 @@ def test_non_snap_failure_does_not_fan_out(monkeypatch):
         )
 
     monkeypatch.setattr(vc, "_request_with_retry", fake)
-    # With 2 locations the pair fallback turns each failure into the sentinel, so
-    # the request still survives instead of becoming a 503.
     m = vc.time_matrix([A, B], [A, B])
-    assert m[0][1] == float(constants.UNREACHABLE_S)
+    assert math.isnan(m[0][1]), "a transport failure is unknown, not unreachable"
+    assert m[0][1] != float(constants.UNREACHABLE_S)

@@ -1,6 +1,6 @@
 """One taxonomy, checked at the seams the seed used to duplicate it.
 
-`data/taxonomy.csv` (read through `agent/taxonomy.py`) is the single source of
+`data/taxonomy.csv` (read through `domain/taxonomy.py`) is the single source of
 category codes and their visit times. The seed used to carry its own copies of
 that knowledge in separate scripts; the copies were already drifting (the
 validation allow-lists excluded the service codes, so a café row would have been

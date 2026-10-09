@@ -10,7 +10,7 @@ Rules of the contract
 * Nothing here is a dictionary of natural-language phrases. Free-text
   understanding belongs to the interpretation stage (LLM or the deterministic
   fallback) which *fills* these structures; this module only describes them.
-* Category codes are canonical domain codes (see agent/taxonomy.py). A code that
+* Category codes are canonical domain codes (see domain/taxonomy.py). A code that
   has no data behind it must be reported as ``uncertain``, never invented.
 * Every requirement carries its provenance: the raw fragment of the user's text
   or the explicit UI choice that produced it.

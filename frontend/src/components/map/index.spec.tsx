@@ -97,6 +97,12 @@ vi.mock('react-map-gl/maplibre', async () => {
           longitude?: number;
           latitude?: number;
           zoom?: number;
+          initialViewState?: {
+            longitude?: number;
+            latitude?: number;
+            zoom?: number;
+          };
+          onMove?: unknown;
           attributionControl?: boolean | { compact?: boolean };
         },
         ref: React.Ref<typeof mockMapRef>
@@ -106,9 +112,13 @@ vi.mock('react-map-gl/maplibre', async () => {
         return (
           <div
             data-testid="map"
-            data-longitude={props.longitude}
-            data-latitude={props.latitude}
-            data-zoom={props.zoom}
+            data-longitude={
+              props.initialViewState?.longitude ?? props.longitude
+            }
+            data-latitude={props.initialViewState?.latitude ?? props.latitude}
+            data-zoom={props.initialViewState?.zoom ?? props.zoom}
+            data-initial-view-state={props.initialViewState ? 'true' : 'false'}
+            data-on-move={props.onMove ? 'true' : 'false'}
             data-attribution-control={JSON.stringify(props.attributionControl)}
             onClick={() => {
               onClick?.({
@@ -431,7 +441,7 @@ describe('MapComponent', () => {
     expect(screen.getByTestId('map')).toBeInTheDocument();
     expect(screen.getByTestId('map')).toHaveAttribute(
       'data-attribution-control',
-      JSON.stringify({ compact: false })
+      'false'
     );
   });
 
@@ -815,6 +825,18 @@ describe('MapComponent', () => {
     expect(map).toHaveAttribute('data-longitude', '13.4');
     expect(map).toHaveAttribute('data-latitude', '52.5');
     expect(map).toHaveAttribute('data-zoom', '10');
+  });
+
+  // The camera is uncontrolled: the view is handed in once as `initialViewState`
+  // and moved through the ref, so panning/zooming does not set top-level state
+  // and re-render the whole map (and the ~2.5k-row catalogue map it builds)
+  // on every frame. An `onMove` that writes state is the regression to catch.
+  it('drives the camera uncontrolled, without a per-frame state update', () => {
+    render(<MapComponent />);
+    const map = screen.getByTestId('map');
+
+    expect(map).toHaveAttribute('data-initial-view-state', 'true');
+    expect(map).toHaveAttribute('data-on-move', 'false');
   });
 
   it('should close context popup when clicking on map again', async () => {

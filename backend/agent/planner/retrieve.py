@@ -12,7 +12,7 @@ forbidden_categories or forbidden_keywords are dropped before hydration.
 
 Degraded mode: the vector signal is skipped whenever the caller passes an
 empty `query_embedding` — the local model could not be loaded (see
-agent/embeddings.py).  The remaining five
+infra/embeddings.py).  The remaining five
 signals are enough to build a route: explicit category words in the query
 still drive category-first retrieval, and named places still resolve
 through must_visit_ids / the geo anchor.

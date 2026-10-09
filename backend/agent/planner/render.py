@@ -20,6 +20,7 @@ from itertools import pairwise
 
 from contracts.planner import Candidate, LatLon
 from core.errors import UpstreamUnavailable
+from domain import constants
 from infra.valhalla_client import RouteStatus, route_through
 
 log = logging.getLogger(__name__)
@@ -67,6 +68,21 @@ def render(
         }
         for i, (lat, lon) in enumerate(pts)
     ]
+
+    # Valhalla refuses more than 20 locations in ONE /route call with
+    # 400 error_code 150 ("Exceeded max locations: 20"). That is not a service
+    # failure — the tour is still routable leg by leg, which is exactly what the
+    # frontend already does on its own. Going straight to the per-leg renderer
+    # gives «все костёлы области» (46 stops) a real line instead of length_km:null.
+    if len(locations) > constants.VALHALLA_MAX_LOCATIONS:
+        log.info(
+            "route: %d locations exceed Valhalla's %d cap — rendering leg by leg",
+            len(locations), constants.VALHALLA_MAX_LOCATIONS,
+        )
+        shape, summary, leg_status = _render_legs(pts, costing, locale)
+        if leg_status == "usable" and shape.get("coordinates"):
+            return shape, summary, "usable"
+        return {}, {}, "empty_geometry"
 
     try:
         result = route_through(locations, costing=costing, language=locale)

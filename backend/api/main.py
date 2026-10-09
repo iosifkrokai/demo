@@ -31,15 +31,17 @@ from fastapi.middleware.cors import CORSMiddleware
 from agent.planner.agent_interpret import DEFAULT_MODEL
 from agent.planner.pipeline import Pipeline
 from api.routers import accounts as accounts_api, clients as clients_api
-from contracts.planner import (
+from api.schemas import (
     ExplainReq,
-    GenerateReq,
     HealthResponse,
-    ParsedQuery,
     RerouteReq,
+    ServicesAlongReq,
+)
+from contracts.planner import (
+    GenerateReq,
+    ParsedQuery,
     RouteResponse,
     RouteSummary,
-    ServicesAlongReq,
 )
 from core.config import openrouter_api_key, settings
 from core.errors import AgentError, NoRoutePossible
@@ -58,7 +60,7 @@ async def lifespan(_: FastAPI):
     db = psycopg.connect(settings.DSN, autocommit=True)
     with db.cursor() as cur:
         # trigram similarity threshold for the keyword search fallback
-        # (agent/search.py); mirrors db/migrations/0003_trgm_search.sql
+        # (store/search.py); mirrors db/migrations/0003_trgm_search.sql
         cur.execute("SET pg_trgm.word_similarity_threshold = 0.45")
     app.state.planner = Pipeline(db=db)
     # Warm the local embedding model so the first request does not pay the load.
@@ -327,4 +329,4 @@ def health() -> HealthResponse:
 
 
 if __name__ == "__main__":
-    uvicorn.run("agent.main:app", host=settings.HOST, port=settings.PORT)
+    uvicorn.run("api.main:app", host=settings.HOST, port=settings.PORT)
