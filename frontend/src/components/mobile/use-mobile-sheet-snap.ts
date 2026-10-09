@@ -336,7 +336,7 @@ export const useMobileSheetSnap = (
       setDragHeight(null);
       setSnap(next);
     },
-    [setSnap, onDismiss, releaseCapture]
+    [setSnap, releaseCapture]
   );
 
   const onPointerUp = useCallback(

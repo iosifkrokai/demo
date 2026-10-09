@@ -26,6 +26,8 @@ export const useRouteProgress = (
 
   useEffect(() => {
     if (!enabled || !progressId) {
+      runningRef.current = false;
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setStage(null);
       return;
     }

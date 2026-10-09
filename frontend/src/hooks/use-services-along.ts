@@ -64,12 +64,16 @@ export const useServicesAlong = (
   // (and must certainly not loop: setResult → render → new object → effect …).
   const key = useMemo(() => (shape ? JSON.stringify(shape) : null), [shape]);
   const shapeRef = useRef(shape);
-  shapeRef.current = shape;
   const [result, setResult] = useState<ServicesAlongResult>(EMPTY);
+
+  useEffect(() => {
+    shapeRef.current = shape;
+  }, [shape]);
 
   useEffect(() => {
     const shapeNow = shapeRef.current;
     if (!enabled || !key || !shapeNow) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setResult(EMPTY);
       return;
     }

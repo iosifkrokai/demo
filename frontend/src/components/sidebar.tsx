@@ -58,7 +58,6 @@ import { PlacesTab } from './parts/places-tab';
 import { useItineraries } from '@/hooks/use-itineraries';
 import { usePlaces } from '@/hooks/use-places';
 import type { Itinerary } from '@/api/types';
-import { guideModeFor } from './parts/guide-mode';
 import { decimalRu } from '@/utils/plural';
 import { newProgressId } from '@/api/progress';
 import { currentRunSession, startRunSession } from '@/utils/run-session';
@@ -1332,7 +1331,7 @@ export const Sidebar = ({
           };
         })
         .filter((stop): stop is GuideStop => stop !== null),
-    [waypoints, placeDetails]
+    [waypoints, placeDetails, t]
   );
 
   // Guide mode is worth offering only when there is something to walk: two
@@ -2292,7 +2291,6 @@ export const Sidebar = ({
         side="left"
         className={cn(
           PANEL_SHEET_CLASS,
-          console.log('[SheetContent] guiding=', guiding, 'class will be:', guiding ? GUIDE_SHEET_CLASS : SHEET_SNAP_CLASS[snap]) || true,
           // While walking, the sheet is a strip and the map is the navigator;
           // a drag to 'full' still opens everything.
           // While walking, the navigator IS the screen: the panel would be an

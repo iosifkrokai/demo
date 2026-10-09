@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import type { MapGeoJSONFeature } from 'maplibre-gl';
 import { useParams, useSearch, useNavigate } from '@tanstack/react-router';
 import { Map, Marker, Popup, type MapRef } from 'react-map-gl/maplibre';
@@ -185,11 +185,10 @@ export const MapComponent = () => {
   } | null>(null);
   // The card shows whichever source knows this stop: the agent route's curated
   // `placeDetails`, or the raw catalogue when the tourist tapped a circle.
-  const placesDetails = useMemo<Record<number, PlaceDetails>>(() => {
-    const map: Record<number, PlaceDetails> = {};
-    for (const place of places) map[place.place_id] = placeToDetails(place);
-    return map;
-  }, [places]);
+  const placesDetails: Record<number, PlaceDetails> = {};
+  for (const place of places) {
+    placesDetails[place.place_id] = placeToDetails(place);
+  }
 
   const activeDetails =
     activePlace != null
@@ -208,15 +207,10 @@ export const MapComponent = () => {
     getCustomStyle()
   );
 
-  const resolvedMapStyle = useMemo(() => {
-    if (currentMapStyle === 'custom') {
-      return customStyleData ?? getMapStyleUrl('shortbread');
-    }
-    return getMapStyleUrl(currentMapStyle);
-  }, [
-    currentMapStyle,
-    customStyleData,
-  ]) as unknown as maplibregl.StyleSpecification;
+  const resolvedMapStyle =
+    currentMapStyle === 'custom'
+      ? (customStyleData ?? getMapStyleUrl('shortbread'))
+      : getMapStyleUrl(currentMapStyle);
 
   const mapRef = useRef<MapRef>(null);
 
@@ -334,77 +328,73 @@ export const MapComponent = () => {
 
   // Update markers when waypoints or isochrone centers change
   const geocodeResults = useIsochronesStore((state) => state.geocodeResults);
-  const markers = useMemo(() => {
-    const newMarkers: MarkerData[] = [];
+  const markers: MarkerData[] = [];
 
-    // Add waypoint markers. The "my location" waypoint (the route start the
-    // sidebar pins) is drawn as its own blue pin and does not take a number, so
-    // the tourist's stops stay numbered from 1.
-    const poiWaypoints = waypoints.filter((w) => w.id !== ME_WAYPOINT_ID);
-    waypoints
-      .filter((w) => w.id === ME_WAYPOINT_ID)
-      .forEach((waypoint) => {
-        waypoint.geocodeResults.forEach((address) => {
-          if (!address.selected) return;
-          newMarkers.push({
-            id: ME_WAYPOINT_ID,
-            lng: address.displaylnglat[0],
-            lat: address.displaylnglat[1],
-            type: 'waypoint',
-            index: 0,
-            title: t('sidebar.ui.myLocation'),
-            color: 'blue',
-          });
-        });
-      });
-
-    poiWaypoints.forEach((waypoint, index) => {
-      // The store index (for dragging) differs from the displayed number once a
-      // "my location" waypoint sits at the front.
-      const sourceIndex = waypoints.indexOf(waypoint);
-      const isOrigin = index === 0;
-      const isDestination =
-        index === poiWaypoints.length - 1 && poiWaypoints.length > 1;
-      const color: MarkerColor = isOrigin
-        ? 'green'
-        : isDestination
-          ? 'red'
-          : 'grey';
+  // Add waypoint markers. The "my location" waypoint (the route start the
+  // sidebar pins) is drawn as its own blue pin and does not take a number, so
+  // the tourist's stops stay numbered from 1.
+  const poiWaypoints = waypoints.filter((w) => w.id !== ME_WAYPOINT_ID);
+  waypoints
+    .filter((w) => w.id === ME_WAYPOINT_ID)
+    .forEach((waypoint) => {
       waypoint.geocodeResults.forEach((address) => {
-        if (address.selected) {
-          newMarkers.push({
-            id: `waypoint-${sourceIndex}`,
-            lng: address.displaylnglat[0],
-            lat: address.displaylnglat[1],
-            type: 'waypoint',
-            index: sourceIndex,
-            title: address.title,
-            color,
-            number: (index + 1).toString(),
-            placeId: waypoint.placeId,
-          });
-        }
+        if (!address.selected) return;
+        markers.push({
+          id: ME_WAYPOINT_ID,
+          lng: address.displaylnglat[0],
+          lat: address.displaylnglat[1],
+          type: 'waypoint',
+          index: 0,
+          title: t('sidebar.ui.myLocation'),
+          color: 'blue',
+        });
       });
     });
 
-    // Add isochrone center marker
-    geocodeResults.forEach((address) => {
+  poiWaypoints.forEach((waypoint, index) => {
+    // The store index (for dragging) differs from the displayed number once a
+    // "my location" waypoint sits at the front.
+    const sourceIndex = waypoints.indexOf(waypoint);
+    const isOrigin = index === 0;
+    const isDestination =
+      index === poiWaypoints.length - 1 && poiWaypoints.length > 1;
+    const color: MarkerColor = isOrigin
+      ? 'green'
+      : isDestination
+        ? 'red'
+        : 'grey';
+    waypoint.geocodeResults.forEach((address) => {
       if (address.selected) {
-        newMarkers.push({
-          id: 'iso-center',
+        markers.push({
+          id: `waypoint-${sourceIndex}`,
           lng: address.displaylnglat[0],
           lat: address.displaylnglat[1],
-          type: 'isocenter',
+          type: 'waypoint',
+          index: sourceIndex,
           title: address.title,
-          color: 'purple',
-          shape: 'star',
-          number: '1',
+          color,
+          number: (index + 1).toString(),
+          placeId: waypoint.placeId,
         });
       }
     });
+  });
 
-    return newMarkers;
-  }, [waypoints, geocodeResults]);
+  // Add isochrone center marker
+  geocodeResults.forEach((address) => {
+    if (address.selected) {
+      markers.push({
+        id: 'iso-center',
+        lng: address.displaylnglat[0],
+        lat: address.displaylnglat[1],
+        type: 'isocenter',
+        title: address.title,
+        color: 'purple',
+        shape: 'star',
+        number: '1',
+      });
+    }
+  });
 
   /**
    * The bounding box of the line the map draws, or null when there is none.
@@ -412,7 +402,7 @@ export const MapComponent = () => {
    * Shared by the two things that frame a route: the effect that reacts to the
    * coordinates changing, and the one that reframes it when the guide is left.
    */
-  const routeBounds = (): [[number, number], [number, number]] | null => {
+  const routeBounds = useMemo(() => {
     if (!coordinates || coordinates.length === 0) return null;
     const first = coordinates[0];
     if (!first || !first[0] || !first[1]) return null;
@@ -429,7 +419,7 @@ export const MapComponent = () => {
         [first[1], first[0]],
       ]
     );
-  };
+  }, [coordinates]);
 
   /**
    * Fit the whole route into the room the panel actually leaves.
@@ -440,22 +430,6 @@ export const MapComponent = () => {
    * end landed under the panel and at 340 the map kept 110px of nothing. The
    * property is 0 whenever there is no column to make room for.
    */
-  const fitRoute = (maxZoom: number) => {
-    const bounds = routeBounds();
-    if (!bounds || !mapRef.current) return false;
-    const left = panelWidthPx();
-    mapRef.current.fitBounds(bounds, {
-      padding: {
-        top: 80,
-        bottom: 80,
-        left: left > 0 ? left + 40 : 80,
-        right: 80,
-      },
-      maxZoom,
-    });
-    return true;
-  };
-
   //Stores the route content
   const lastZoomedCoordKeyRef = useRef<string | null>(null);
 
@@ -491,10 +465,21 @@ export const MapComponent = () => {
     //Store thr new Key
     lastZoomedCoordKeyRef.current = coordKey;
 
-    fitRoute(coordinates.length === 1 ? 11 : 18);
+    const bounds = routeBounds;
+    if (!bounds || !mapRef.current) return;
+    const left = panelWidthPx();
+    mapRef.current.fitBounds(bounds, {
+      padding: {
+        top: 80,
+        bottom: 80,
+        left: left > 0 ? left + 40 : 80,
+        right: 80,
+      },
+      maxZoom: coordinates.length === 1 ? 11 : 18,
+    });
     //only rerun when coordinates change
     //panel change no longer rerun this
-  }, [coordinates]);
+  }, [coordinates, routeBounds]);
 
   // ── Panel → map: «покажи мне это место» ──────────────────────────────────
   // Tapping a place in the panel used to do nothing here: the tourist picked a
@@ -579,9 +564,20 @@ export const MapComponent = () => {
 
   // Following starts again every time the guide is entered: a navigator has to
   // re-centre the tourist the moment the walk starts.
+  const [autoFollowOnGuideStart, setAutoFollowOnGuideStart] = useState(false);
   useEffect(() => {
-    if (guiding) setFollow(true);
+    if (guiding) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setAutoFollowOnGuideStart(true);
+    }
   }, [guiding]);
+  useEffect(() => {
+    if (autoFollowOnGuideStart) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setFollow(true);
+      setAutoFollowOnGuideStart(false);
+    }
+  }, [autoFollowOnGuideStart]);
 
   // When the tourist switches back to 'heading' while the guide is running,
   // the map snaps to the current heading immediately instead of waiting for
@@ -655,9 +651,22 @@ export const MapComponent = () => {
     // Refit once the panel is back: it publishes its width from an effect of its
     // own, so on the same tick the property is still 0 and the route would be
     // framed for a screen the panel is about to take a third of.
-    const id = window.setTimeout(() => fitRoute(17), 550);
+    const bounds = routeBounds;
+    if (!bounds || !mapRef.current) return;
+    const left = panelWidthPx();
+    const id = window.setTimeout(() => {
+      mapRef.current?.fitBounds(bounds, {
+        padding: {
+          top: 80,
+          bottom: 80,
+          left: left > 0 ? left + 40 : 80,
+          right: 80,
+        },
+        maxZoom: 17,
+      });
+    }, 550);
     return () => window.clearTimeout(id);
-  }, [guiding]);
+  }, [guiding, routeBounds]);
 
   const handleMapTilesClick = useCallback(
     (event: maplibregl.MapLayerMouseEvent) => {
@@ -804,9 +813,17 @@ export const MapComponent = () => {
 
   // A new route means new places — drop a stale info card that would otherwise
   // stay pinned to coordinates the route no longer visits.
+  const [activePlaceResetToken, setActivePlaceResetToken] = useState(0);
   useEffect(() => {
-    setActivePlace(null);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setActivePlaceResetToken((value) => value + 1);
   }, [placeDetails]);
+  useEffect(() => {
+    if (activePlaceResetToken > 0) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setActivePlace(null);
+    }
+  }, [activePlaceResetToken]);
 
   const handleMapContextMenu = useCallback(
     (event: { lngLat: { lng: number; lat: number } }) => {
@@ -928,12 +945,9 @@ export const MapComponent = () => {
   );
 
   /** A real finger rather than a mouse: no hover, so no hover popup. */
-  const isTouch = useMemo(
-    () =>
-      typeof window !== 'undefined' &&
-      (window.matchMedia?.('(pointer: coarse)')?.matches ?? false),
-    []
-  );
+  const isTouch =
+    typeof window !== 'undefined' &&
+    (window.matchMedia?.('(pointer: coarse)')?.matches ?? false);
 
   const handleMouseMove = useCallback(
     (event: maplibregl.MapLayerMouseEvent) => {

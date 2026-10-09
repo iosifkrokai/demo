@@ -148,9 +148,6 @@ const BACKWARD_TOLERANCE_M = 15;
 /** Show a nearby POI hint when it is within this many metres ahead on the route. */
 const NEARBY_HINT_AHEAD_M = 120;
 
-const mapsUrl = (lat: number, lon: number) =>
-  `https://www.google.com/maps/search/?api=1&query=${lat},${lon}`;
-
 /**
  * Fingerprint of the route the walk belongs to.
  *
@@ -332,12 +329,6 @@ const buildManeuvers = (
   return out.sort((a, b) => a.along - b.along);
 };
 
-/** «14:35» in the device's local time — ETA is an estimate, so minutes only. */
-const fmtClock = (ms: number) => {
-  const d = new Date(ms);
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-};
-
 /** A waypoint that simply says «я здесь» — mirrors sidebar's meWaypoint. */
 const meWaypoint = (lat: number, lon: number, t: TFunction): Waypoint => {
   const lngLat: [number, number] = [lon, lat];
@@ -486,14 +477,12 @@ export const GuidePanel = ({
     startInMoving ? 'moving' : 'review'
   );
   useEffect(() => {
-    console.log('[GuidePanel] effect1: startInMoving=', startInMoving, 'overviewOpen=', overviewOpen, 'setting mode to', startInMoving ? 'moving' : (overviewOpen ? 'review' : '???'));
     if (startInMoving) setMode('moving');
     else if (overviewOpen) setMode('review');
   }, [startInMoving, overviewOpen]);
   /** Details stay open until the tourist deliberately collapses them. */
   const [detailsOpen, setDetailsOpen] = useState(true);
   useEffect(() => {
-    console.log('[GuidePanel] effect2: startInMoving=', startInMoving, 'hasTrustedFix=', hasTrustedFix, 'overviewOpen=', overviewOpen, 'condition=', !startInMoving && hasTrustedFix && !overviewOpen);
     if (!startInMoving && hasTrustedFix && !overviewOpen) setMode('moving');
   }, [hasTrustedFix, overviewOpen, startInMoving]);
   /**
@@ -1245,19 +1234,6 @@ export const GuidePanel = ({
 
   const walkSeconds =
     speed && remainingToNext != null ? remainingToNext / speed : null;
-  // Travel time, not walking time: `speed` is Valhalla's own for this route, so
-  // on a bike or in a car this is already the right number.
-  const travelMinutes =
-    walkSeconds != null && walkSeconds > 0
-      ? Math.max(1, Math.round(walkSeconds / 60))
-      : null;
-
-  // ETA is a pure function of the ticking clock (`now`) and the route's own
-  // speed — no clock read during render, no state of its own.
-  const etaLabel =
-    walkSeconds != null && precise
-      ? `≈ ${fmtClock(now + walkSeconds * 1000)}`
-      : null;
 
   const metresDone = line ? Math.min(traveled, line.total) : null;
   const metresTotal = line ? line.total : null;
@@ -1404,19 +1380,7 @@ export const GuidePanel = ({
     );
   }
 
-  console.log('[GuidePanel] render: mode=', mode, 'stops.length=', stops.length);
-
   if (mode === 'moving') {
-    console.log('[GuidePanel] returning FerrostarNavigationHud only');
-    // Check sheet position
-    const sheet = document.querySelector('[data-slot="sheet-content"]');
-    console.log('[GuidePanel] sheet element:', sheet);
-    if (sheet) {
-      const rect = sheet.getBoundingClientRect();
-      console.log('[GuidePanel] sheet rect:', rect);
-      const style = window.getComputedStyle(sheet);
-      console.log('[GuidePanel] sheet transform:', style.transform, 'position:', style.position, 'top:', style.top);
-    }
     const ManeuverIcon = activeManeuver
       ? getManeuverIcon(activeManeuver.type)
       : Footprints;

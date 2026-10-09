@@ -25,7 +25,8 @@ export const useMediaQuery = (query: string): boolean => {
       return;
     const list = window.matchMedia(query);
     const onChange = (event: MediaQueryListEvent) => setMatches(event.matches);
-    setMatches(list.matches);
+    const sync = () => setMatches(list.matches);
+    sync();
     list.addEventListener('change', onChange);
     return () => list.removeEventListener('change', onChange);
   }, [query]);

@@ -98,7 +98,7 @@ _traces: dict[str, _Trace] = {}
 #: The Langfuse client, built once on first use and never when unconfigured.
 #: ``None`` means "not configured"; ``_UNSET`` means "not decided yet".
 _UNSET = object()
-_langfuse = _UNSET
+_langfuse_state: dict[str, Any] = {"client": _UNSET}
 
 
 def begin(trace_id: str | None, session_id: str | None = None) -> str | None:
@@ -267,15 +267,14 @@ def _observation(span: Span) -> dict[str, Any]:
 
 
 def _client():
-    global _langfuse
-    if _langfuse is _UNSET:
+    if _langfuse_state["client"] is _UNSET:
         if langfuse_configured():
             from langfuse import Langfuse  # imported only when actually used
 
-            _langfuse = Langfuse()  # reads LANGFUSE_HOST/_PUBLIC_KEY/_SECRET_KEY
+            _langfuse_state["client"] = Langfuse()  # reads LANGFUSE_HOST/_PUBLIC_KEY/_SECRET_KEY
         else:
-            _langfuse = None
-    return _langfuse
+            _langfuse_state["client"] = None
+    return _langfuse_state["client"]
 
 
 def _export_to_langfuse(trace_id: str) -> None:
@@ -369,9 +368,10 @@ def _backdate(obs: Any, start_ns: int) -> None:
 
 def shutdown() -> None:
     """Flush any queued spans on process exit; a no-op when unconfigured."""
-    if _langfuse is _UNSET or _langfuse is None:
+    client = _langfuse_state["client"]
+    if client is _UNSET or client is None:
         return
     try:
-        _langfuse.flush()
+        client.flush()
     except Exception:
         log.warning("langfuse shutdown flush failed", exc_info=True)

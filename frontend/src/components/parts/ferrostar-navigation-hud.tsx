@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import {
@@ -132,7 +132,6 @@ export const FerrostarNavigationHud = ({
     if (onSkipSuggestion) onSkipSuggestion(id);
   };
 
-  console.log('[FerrostarNavigationHud] rendering');
   if (typeof document === 'undefined') return null;
 
   return createPortal(
