@@ -6,7 +6,7 @@ from pathlib import Path
 BACKEND = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BACKEND))
 
-from agent.geofence import inside_project_area  # noqa: E402
+from domain.geofence import inside_project_area  # noqa: E402
 from seed.datasets import (  # noqa: E402
     read_pipe_csv,
     validate_city_region,

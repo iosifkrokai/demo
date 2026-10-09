@@ -31,9 +31,9 @@ from collections.abc import Iterable
 
 import psycopg
 
-from .. import constants
-from ..models import Candidate, Photo, ResolvedConstraints
-from ..search import (
+from contracts.planner import Candidate, Photo, ResolvedConstraints
+from domain import constants
+from store.search import (
     _keyword_search,
     candidates_by_embedding,
     db_categories,

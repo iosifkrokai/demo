@@ -20,8 +20,8 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agent import services
-from agent.taxonomy import all_categories
+from domain.taxonomy import all_categories
+from store import services
 
 #: A line along Советская through the centre of Grodno, west → east, so the
 #: cafés really are spread *along* it and `along_m` has something to say.
@@ -158,7 +158,7 @@ def test_valhalla_profiles_map_onto_walking_thresholds():
 def test_live_services_along_a_real_street_in_grodno():
     """A walk down Советская must find real cafés and toilets beside the line."""
     try:
-        from agent.clients_store import default_connect
+        from store.clients_store import default_connect
 
         conn = default_connect()
     except Exception as exc:

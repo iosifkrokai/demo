@@ -51,8 +51,8 @@ from collections.abc import Callable
 from contextlib import suppress
 from typing import Any
 
-from .config import DSN
-from .taxonomy import db_values
+from core.config import DSN
+from domain.taxonomy import db_values
 
 log = logging.getLogger(__name__)
 
@@ -175,7 +175,7 @@ def _db_search_rows(
     trigram/keyword search; both are the same signals the deterministic
     pipeline uses, so the agent cannot see more of the DB than the pipeline.
     """
-    from . import search as search_mod
+    from store import search as search_mod
 
     if near is not None:
         lat, lon, radius_m = near
@@ -185,7 +185,7 @@ def _db_search_rows(
 
 def _db_place_row(db: Any, place_id: int) -> dict | None:
     """One place row by id, or None."""
-    from . import search as search_mod
+    from store import search as search_mod
 
     rows = search_mod.fetch_points_by_ids(db, [place_id])
     return rows[0] if rows else None
@@ -204,7 +204,7 @@ def _areas_from_registry(term: str, locale: str, limit: int) -> list[dict]:
     this is the primary path and the DB table is only a fallback. May raise —
     the caller decides what an unusable registry means.
     """
-    from .areas import load_areas, resolve_area
+    from domain.areas import load_areas, resolve_area
 
     registry = load_areas()
     found: list[str] = []

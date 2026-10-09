@@ -24,8 +24,6 @@ from types import SimpleNamespace
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agent import constants, search as search_mod
-from agent.models import Candidate, CostMatrix, ResolvedConstraints
 from agent.planner import intent as intent_mod, pipeline as pipeline_mod, render as render_mod
 from agent.planner.cost import (
     REASON_MUST_VISIT_UNROUTABLE,
@@ -39,8 +37,11 @@ from agent.planner.verify import (
     overall_status,
     verify,
 )
-from agent.requirements import Requirement, TripRequirements
-from agent.valhalla_client import RouteResult, RouteStatus
+from contracts.planner import Candidate, CostMatrix, ResolvedConstraints
+from domain import constants
+from domain.requirements import Requirement, TripRequirements
+from infra.valhalla_client import RouteResult, RouteStatus
+from store import search as search_mod
 
 
 def _cand(pid: int, name: str, category: str, lat: float = 53.68, lon: float = 23.83) -> Candidate:

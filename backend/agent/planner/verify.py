@@ -29,8 +29,8 @@ from __future__ import annotations
 import re
 from typing import Any, Literal, NamedTuple
 
-from .. import taxonomy
-from ..requirements import (
+from domain import taxonomy
+from domain.requirements import (
     REASON_MUST_VISIT_OUTSIDE as REASON_MUST_VISIT_OUTSIDE_CODE,
     Requirement,
     TripRequirements,

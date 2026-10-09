@@ -44,11 +44,13 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-from .. import constants, tools, trace
-from ..config import openrouter_api_key
-from ..models import GenerateReq
-from ..requirements import PartyComposition, Requirement, TripRequirements
-from ..taxonomy import all_categories, resolve_code
+from agent import tools
+from contracts.planner import GenerateReq
+from core.config import openrouter_api_key
+from domain import constants
+from domain.requirements import PartyComposition, Requirement, TripRequirements
+from domain.taxonomy import all_categories, resolve_code
+from infra import trace
 
 # The guarded names below are only used behind a `pydantic_ai is None` check,
 # which is a flow correlation the type checker does not make.
@@ -214,7 +216,7 @@ def _known_areas_note() -> str:
     handle — for a request that is perfectly normal. The canonical slugs listed
     here are what `find_areas` resolves to and what `areas` must carry.
     """
-    from .. import areas as areas_mod
+    from domain import areas as areas_mod
 
     lines = []
     for slug, entry in sorted(areas_mod.load_areas().items()):
@@ -746,7 +748,7 @@ def _reading_requirements(
     contract knows (see `intent._areas_from_text`), and the city scope already
     follows from the query text and the region geo-fence.
     """
-    from .. import areas as areas_mod
+    from domain import areas as areas_mod
 
     out: list[Requirement] = []
     unsupported: list[str] = []

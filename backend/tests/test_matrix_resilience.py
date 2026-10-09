@@ -15,8 +15,9 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agent import constants, valhalla_client as vc
-from agent.errors import UpstreamUnavailable
+from core.errors import UpstreamUnavailable
+from domain import constants
+from infra import valhalla_client as vc
 
 A = {"lat": 53.6791, "lon": 23.8216}
 B = {"lat": 53.6849, "lon": 23.8310}

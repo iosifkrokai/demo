@@ -36,8 +36,8 @@ import psycopg
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
-from .clients_models import route_metrics
-from .config import settings
+from contracts.clients import route_metrics
+from core.config import settings
 
 log = logging.getLogger(__name__)
 

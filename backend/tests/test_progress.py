@@ -23,9 +23,9 @@ from fastapi import HTTPException
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agent import progress
-from agent.main import route_progress
-from agent.models import GenerateReq
+from api.main import route_progress
+from contracts.planner import GenerateReq
+from infra import progress
 
 
 @pytest.fixture(autouse=True)

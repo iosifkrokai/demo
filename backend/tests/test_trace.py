@@ -28,8 +28,8 @@ from fastapi import HTTPException
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agent import trace
-from agent.main import route_trace
+from api.main import route_trace
+from infra import trace
 
 
 @pytest.fixture(autouse=True)

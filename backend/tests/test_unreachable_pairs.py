@@ -16,10 +16,10 @@ from collections.abc import Callable
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agent import constants
-from agent.models import Candidate, CostMatrix
 from agent.planner import cost as cost_mod
 from agent.planner.optimize import _budget_constrain, total_seconds
+from contracts.planner import Candidate, CostMatrix
+from domain import constants
 
 BIG = float(constants.UNREACHABLE_S)
 

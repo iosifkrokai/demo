@@ -29,10 +29,6 @@ from fastapi.testclient import TestClient
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agent import main as agent_main
-from agent.config import settings
-from agent.errors import UpstreamUnavailable
-from agent.models import Candidate, GenerateReq, LatLon
 from agent.planner import pipeline as pipeline_mod, resolve as resolve_mod
 from agent.planner.pipeline import (
     Pipeline,
@@ -48,6 +44,10 @@ from agent.planner.refine import (
     reorder_stops,
     visit_minutes_of,
 )
+from api import main as agent_main
+from contracts.planner import Candidate, GenerateReq, LatLon
+from core.config import settings
+from core.errors import UpstreamUnavailable
 
 # Fakes: no key, no DB, no Valhalla
 

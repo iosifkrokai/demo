@@ -22,7 +22,7 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agent import embeddings
+from infra import embeddings
 
 # A real embedding answers like this: 0 and 1 as ints, the rest as floats.
 MIXED = [0, 0.0123, 1, -1, 0.5, 2.0]

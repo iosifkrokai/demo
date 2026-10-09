@@ -25,10 +25,10 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agent import trace
-from agent.models import GenerateReq
 from agent.planner import intent, interpret_cache as cache
-from agent.requirements import Requirement, TripRequirements
+from contracts.planner import GenerateReq
+from domain.requirements import Requirement, TripRequirements
+from infra import trace
 
 
 def _req(**over: Any) -> GenerateReq:

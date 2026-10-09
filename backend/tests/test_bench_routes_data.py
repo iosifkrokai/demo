@@ -92,7 +92,7 @@ def test_place_ids_exist_in_the_database_when_it_is_reachable():
     try:
         import psycopg
 
-        from agent.config import settings
+        from core.config import settings
 
         with psycopg.connect(settings.DSN, connect_timeout=3) as conn:
             found = {
@@ -114,7 +114,7 @@ def test_coordinates_agree_with_the_database_rows():
     try:
         import psycopg
 
-        from agent.config import settings
+        from core.config import settings
 
         conn = psycopg.connect(settings.DSN, connect_timeout=3)
     except Exception as exc:

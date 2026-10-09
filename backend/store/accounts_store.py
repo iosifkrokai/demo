@@ -35,7 +35,7 @@ from typing import Any, Protocol
 import psycopg
 from psycopg.rows import dict_row
 
-from .config import settings
+from core.config import settings
 
 log = logging.getLogger(__name__)
 
@@ -623,6 +623,6 @@ class PostgresAccountRepository:
 
 def place_payloads(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Turn place rows into the shared card payload (one import site)."""
-    from .places import place_payload
+    from store.places import place_payload
 
     return [place_payload(row) for row in rows]

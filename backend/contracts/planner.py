@@ -15,8 +15,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
-from . import constants
-from .taxonomy import all_codes
+from domain import constants
+from domain.taxonomy import all_codes
 
 # HTTP — Requests
 

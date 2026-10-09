@@ -44,7 +44,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Any
 
-from .config import langfuse_configured
+from core.config import langfuse_configured
 
 log = logging.getLogger(__name__)
 

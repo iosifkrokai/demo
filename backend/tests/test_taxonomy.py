@@ -10,9 +10,8 @@ from __future__ import annotations
 
 import pytest
 
-from agent import constants
-from agent.search import db_categories
-from agent.taxonomy import (
+from domain import constants
+from domain.taxonomy import (
     all_categories,
     all_codes,
     db_values,
@@ -21,6 +20,7 @@ from agent.taxonomy import (
     role,
     visit_minutes,
 )
+from store.search import db_categories
 
 # The data file itself
 
@@ -234,7 +234,7 @@ class TestIntentCategoriesCantDriftFromTheTaxonomy:
     def test_intent_decision_accepts_every_taxonomy_code(self):
         from pydantic import ValidationError
 
-        from agent.models import IntentDecision
+        from contracts.planner import IntentDecision
 
         for code in all_codes():
             assert IntentDecision(categories_pos=[code]).categories_pos == [code], code

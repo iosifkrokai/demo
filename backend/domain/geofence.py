@@ -22,8 +22,8 @@ import json
 from functools import lru_cache
 from pathlib import Path
 
-from . import areas
-from .areas import point_in_ring
+from domain import areas
+from domain.areas import point_in_ring
 
 BORDER_PATH = Path(__file__).resolve().parent.parent / "data" / "belarus_border.json"
 

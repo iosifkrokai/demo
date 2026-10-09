@@ -79,7 +79,7 @@ def _stop_payload(row: dict) -> dict:
     (`places.place_payload`): a card and a planned route must not disagree about
     the same point.
     """
-    from .places import place_payload
+    from store.places import place_payload
 
     return place_payload(row)
 
@@ -90,7 +90,7 @@ def _split_by_role(payloads: list[dict[str, Any]]) -> tuple[list[dict], list[dic
     An unknown code counts as a stop: the taxonomy only ever gains codes, and a
     place we know nothing about is more honest as a destination than as a café.
     """
-    from . import taxonomy
+    from domain import taxonomy
 
     stops: list[dict[str, Any]] = []
     services: list[dict[str, Any]] = []

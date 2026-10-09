@@ -22,7 +22,7 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agent.places import list_places, place_payload
+from store.places import list_places, place_payload
 
 BASE_URL = os.environ.get("SMOKE_BASE_URL", "http://localhost:8080")
 

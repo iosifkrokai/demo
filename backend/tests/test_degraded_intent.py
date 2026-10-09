@@ -24,9 +24,6 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agent import constants
-from agent.config import openrouter_api_key, settings
-from agent.models import GenerateReq
 from agent.planner import intent as intent_mod
 from agent.planner.intent import (
     _KEYWORD_TO_CATEGORY,
@@ -37,7 +34,10 @@ from agent.planner.intent import (
     intent_from_requirements,
 )
 from agent.planner.resolve import CATEGORY_SYNONYMS
-from agent.requirements import PartyComposition, Requirement, TripRequirements
+from contracts.planner import GenerateReq
+from core.config import openrouter_api_key, settings
+from domain import constants
+from domain.requirements import PartyComposition, Requirement, TripRequirements
 
 QUERY = "Хочу погулять по замкам Гродно"
 

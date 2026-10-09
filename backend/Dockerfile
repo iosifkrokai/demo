@@ -21,8 +21,15 @@ COPY pyproject.toml uv.lock* ./
 RUN uv lock && uv sync --no-install-project --no-dev
 
 COPY agent/ /app/agent/
-# Данные таксономии нужны уже при импорте `agent.constants`: без них контейнер
-# падает на старте с FileNotFoundError, и сервис агента в compose не поднимается.
+COPY api/ /app/api/
+COPY contracts/ /app/contracts/
+COPY core/ /app/core/
+COPY domain/ /app/domain/
+COPY infra/ /app/infra/
+COPY store/ /app/store/
+# The taxonomy data is needed at `domain.constants` import time: without it the
+# container dies on start with FileNotFoundError and the compose service never
+# comes up.
 COPY data/ /app/data/
 # The seed CLI (`python -m seed`) lives in this image too.
 COPY seed/ /app/seed/
@@ -50,4 +57,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
 
 # Run the venv's python directly: `uv run` re-resolves deps at every start and
 # leaves the container in a restart loop when the network is down.
-CMD ["/app/.venv/bin/python", "-m", "agent.main"]
+CMD ["/app/.venv/bin/python", "-m", "api.main"]

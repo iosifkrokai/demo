@@ -15,7 +15,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from agent.geofence import inside_project_area
+from domain.geofence import inside_project_area
 
 from .datasets import (
     PROTECTED_CATEGORY_SOURCES,

@@ -18,9 +18,9 @@ import os
 import sys
 import uuid
 
-from agent.accounts_models import normalize_email, password_problem
-from agent.accounts_store import EmailTaken, PostgresAccountRepository
-from agent.passwords import hash_password
+from contracts.accounts import normalize_email, password_problem
+from domain.passwords import hash_password
+from store.accounts_store import EmailTaken, PostgresAccountRepository
 
 
 def create_admin(

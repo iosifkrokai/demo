@@ -18,7 +18,7 @@ import pytest
 BACKEND = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BACKEND))
 
-from agent import constants  # noqa: E402
+from domain import constants  # noqa: E402
 from seed import (  # noqa: E402
     cli as seed_cli,
     datasets,

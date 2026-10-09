@@ -15,8 +15,6 @@ from pydantic import ValidationError
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agent import constants
-from agent.models import Candidate, GenerateReq, LatLon, RouteContext
 from agent.planner.pipeline import (
     _cap_for_valhalla,
     _context_changes,
@@ -24,6 +22,8 @@ from agent.planner.pipeline import (
     _nearby_convenience,
     _with_base_points,
 )
+from contracts.planner import Candidate, GenerateReq, LatLon, RouteContext
+from domain import constants
 
 
 def _cand(pid: int, name: str) -> Candidate:

@@ -44,14 +44,7 @@ from typing import Any
 
 import psycopg
 
-from .. import constants, progress, taxonomy, trace
-from ..config import openrouter_api_key
-from ..errors import (
-    NoCandidatesFound,
-    NoRoutePossible,
-    UpstreamUnavailable,
-)
-from ..models import (
+from contracts.planner import (
     BudgetInfo,
     Candidate,
     CostMatrix,
@@ -69,8 +62,17 @@ from ..models import (
     RouteResponse,
     RouteSummary,
 )
-from ..search import _name_match_search, fetch_points_by_ids, nearby_places
-from ..valhalla_client import optimized_route as valhalla_optimized_route, ping as valhalla_ping
+from core.config import openrouter_api_key
+from core.errors import (
+    NoCandidatesFound,
+    NoRoutePossible,
+    UpstreamUnavailable,
+)
+from domain import constants, taxonomy
+from infra import progress, trace
+from infra.valhalla_client import optimized_route as valhalla_optimized_route, ping as valhalla_ping
+from store.search import _name_match_search, fetch_points_by_ids, nearby_places
+
 from . import interpret_cache
 from .cost import (
     compute_cost_matrix,
@@ -112,7 +114,7 @@ def _embed_query(text: str) -> list[float]:
     (not baked / broken install), which is the honest signal for keyword-only
     retrieval. One WARNING per call, naming the reason.
     """
-    from .. import embeddings
+    from infra import embeddings
 
     # An embedding is a pure function of the text and the model, so it is the
     # safest thing here to remember: no verdict, no measurement, nothing that
@@ -790,7 +792,8 @@ def _services_along_evidence(
     )
     if not codes or not shape:
         return None
-    from .. import services as services_mod
+    from store import services as services_mod
+
     from .verify import ServiceAlongEvidence
 
     try:
@@ -1793,7 +1796,7 @@ class Pipeline:
 
     def reroute(self, point_ids: list[int], profile: str | None = None) -> RouteResponse:
         """Re-route a chosen list of place IDs."""
-        from ..search import fetch_points_by_ids
+        from store.search import fetch_points_by_ids
         rows = fetch_points_by_ids(self.db, point_ids)
         if len(rows) != len(point_ids):
             missing = set(point_ids) - {r["id"] for r in rows}
@@ -1837,7 +1840,7 @@ class Pipeline:
 
     def explain_route(self, point_ids: list[int]) -> str:
         """Natural-language Russian description of a list of points."""
-        from ..search import fetch_points_by_ids
+        from store.search import fetch_points_by_ids
         rows = fetch_points_by_ids(self.db, point_ids)
         if len(rows) != len(point_ids):
             missing = set(point_ids) - {r["id"] for r in rows}
@@ -1862,7 +1865,7 @@ class Pipeline:
         except Exception:
             valhalla_ok = False
 
-        from .. import embeddings
+        from infra import embeddings
 
         embedder_ok = embeddings.is_available()
         llm_ok = bool(openrouter_api_key())

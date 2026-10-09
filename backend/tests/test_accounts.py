@@ -25,13 +25,13 @@ from fastapi.testclient import TestClient
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agent import main as agent_main
-from agent.accounts_store import (
+from api import main as agent_main
+from domain.passwords import hash_password, hash_token, verify_password
+from store.accounts_store import (
     DuplicateSource,
     EmailTaken,
     StorageUnavailable,
 )
-from agent.passwords import hash_password, hash_token, verify_password
 
 CLIENT = "33333333-3333-4333-8333-333333333333"
 
@@ -696,7 +696,7 @@ def test_place_patch_forbids_null_coordinates():
     """
     from pydantic import ValidationError
 
-    from agent.accounts_models import AdminPlacePatch
+    from contracts.accounts import AdminPlacePatch
 
     omitted = AdminPlacePatch(name="Старый замок")
     assert omitted.lat is None
@@ -719,7 +719,7 @@ MIGRATION = os.path.join(BACKEND, "db", "migrations", "0008_accounts_visits.sql"
 def _db_up() -> bool:
     import psycopg
 
-    from agent.config import settings
+    from core.config import settings
 
     try:
         psycopg.connect(settings.DSN, connect_timeout=3).close()
@@ -749,8 +749,8 @@ def test_live_account_visit_and_place_edit():
 
     import psycopg
 
-    from agent.accounts_store import PostgresAccountRepository
-    from agent.config import settings
+    from core.config import settings
+    from store.accounts_store import PostgresAccountRepository
 
     admin = psycopg.connect(settings.DSN, autocommit=True)
     _apply_migration(admin)  # idempotent: safe to re-apply

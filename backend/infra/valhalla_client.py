@@ -20,9 +20,9 @@ from enum import Enum
 
 import httpx
 
-from . import constants
-from .config import settings
-from .errors import UpstreamUnavailable
+from core.config import settings
+from core.errors import UpstreamUnavailable
+from domain import constants
 
 logger = logging.getLogger(__name__)
 

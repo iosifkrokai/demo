@@ -28,8 +28,9 @@ from __future__ import annotations
 import random
 from itertools import permutations
 
-from .. import constants
-from ..models import Candidate, CostMatrix, ResolvedConstraints
+from contracts.planner import Candidate, CostMatrix, ResolvedConstraints
+from domain import constants
+
 from .cost import total_seconds, walk_cost
 
 # km/h pedestrian speed — used to convert walk time to distance for the

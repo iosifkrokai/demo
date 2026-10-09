@@ -79,7 +79,7 @@ switches them to `host.docker.internal` (see §9).
 ```bash
 cd backend
 uv sync                    # runtime + dev (ruff/pyright/pytest) into backend/.venv
-.venv/bin/python -c "from agent.main import app; print('OK')"
+.venv/bin/python -c "from api.main import app; print('OK')"
 ```
 
 Pinned Python is `3.12`. `uv` resolves everything in `backend/pyproject.toml`;
@@ -130,7 +130,7 @@ cd backend
 export DATABASE_URL=postgresql://grodno:grodno@localhost:5432/grodno
 export VALHALLA_URL=http://localhost:8002
 export OPENROUTER_API_KEY=sk-or-...    # optional; see below
-.venv/bin/python -m uvicorn agent.main:app --host 0.0.0.0 --port 8080
+.venv/bin/python -m uvicorn api.main:app --host 0.0.0.0 --port 8080
 ```
 
 **Embeddings are local** (`agent/embeddings.py`): `intfloat/multilingual-e5-small`
@@ -353,7 +353,7 @@ Browser → nginx :80  (frontend container)
   │
   ├─ /routes/*  → proxy → agent :8080
   │                           │
-  │               agent.main → agent.planner.Pipeline
+  │               api.main → agent.planner.Pipeline
   │                           │
   │  ┌─ preprocess ─ interpret (PydanticAI over OpenRouter; deterministic fallback) ─┐
   │  │                                                                               │

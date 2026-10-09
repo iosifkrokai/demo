@@ -21,7 +21,6 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agent.models import Candidate, ResolvedConstraints
 from agent.planner import pipeline as pipeline_mod
 from agent.planner.intent import fallback_intent
 from agent.planner.verify import (
@@ -33,7 +32,8 @@ from agent.planner.verify import (
     overall_status,
     verify_catalogue,
 )
-from agent.requirements import Requirement, TripRequirements
+from contracts.planner import Candidate, ResolvedConstraints
+from domain.requirements import Requirement, TripRequirements
 
 
 def _cand(pid: int, name: str, category: str, town: str, relevance: float = 1.0) -> Candidate:
@@ -137,7 +137,7 @@ def test_catalogue_response_has_places_and_no_geometry():
 
 def test_a_plain_route_is_the_default_mode_so_old_clients_see_no_change():
     """Only a catalogue opts in; every other answer keeps saying "route"."""
-    from agent.models import RouteResponse
+    from contracts.planner import RouteResponse
 
     assert RouteResponse.model_fields["result_mode"].default == "route"
 

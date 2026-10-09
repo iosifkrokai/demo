@@ -24,9 +24,10 @@ from __future__ import annotations
 import math
 from typing import Any
 
-from .. import constants
-from ..models import Candidate, CostMatrix, ResolvedConstraints, ValidatedPlan
-from ..requirements import TripRequirements
+from contracts.planner import Candidate, CostMatrix, ResolvedConstraints, ValidatedPlan
+from domain import constants
+from domain.requirements import TripRequirements
+
 from .verify import verify, verify_summary
 
 

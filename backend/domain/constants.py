@@ -10,7 +10,7 @@ Tuning here is a code review decision: change → tests → commit.
 
 from __future__ import annotations
 
-from . import taxonomy
+from domain import taxonomy
 
 # Per-request deadlines
 # One route request has a hard end-to-end budget.  Exceeding it is never a

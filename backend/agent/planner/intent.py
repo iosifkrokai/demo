@@ -38,9 +38,11 @@ import re as _re
 import time
 from dataclasses import dataclass, field
 
-from .. import constants, trace
-from ..models import GenerateReq, IntentDecision, IntentResult
-from ..requirements import PartyComposition, Requirement, TripRequirements
+from contracts.planner import GenerateReq, IntentDecision, IntentResult
+from domain import constants
+from domain.requirements import PartyComposition, Requirement, TripRequirements
+from infra import trace
+
 from . import interpret_cache
 from .preprocess import WORD_RE
 from .resolve import CATEGORY_SYNONYMS, CATEGORY_SYNONYMS_EN
@@ -747,7 +749,7 @@ def _territory_slug(name: str) -> str | None:
     either, because those are the *sub-areas* the contract knows ("старый город"
     → `grodno-old-town`), and «замки Гродно» is expected to name no area.
     """
-    from .. import areas as areas_mod
+    from domain import areas as areas_mod
 
     return areas_mod.resolve_area((name or "").strip())
 
@@ -765,7 +767,7 @@ def mark_out_of_coverage(contract: TripRequirements, names: list[str]) -> None:
     survives planning, and a look-alike place inside the region cannot stand in
     for it (see verify._verify_must_visit).
     """
-    from ..requirements import REASON_MUST_VISIT_OUTSIDE
+    from domain.requirements import REASON_MUST_VISIT_OUTSIDE
 
     by_name = {
         (r.name or "").strip().lower(): r

@@ -37,10 +37,6 @@ from fastapi.testclient import TestClient
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agent import constants, embeddings, main as agent_main
-from agent.config import openrouter_api_key, settings
-from agent.errors import NoCandidatesFound, NoRoutePossible, UpstreamUnavailable
-from agent.models import Candidate, GenerateReq, ResolvedConstraints
 from agent.planner import (
     agent_interpret as ai,
     intent as intent_mod,
@@ -49,8 +45,14 @@ from agent.planner import (
 )
 from agent.planner.intent import build_requirements, extract_intent, fallback_intent
 from agent.planner.pipeline import Pipeline, _embed_query
-from agent.requirements import PartyComposition, Requirement, TripRequirements
-from agent.valhalla_client import ping as valhalla_ping
+from api import main as agent_main
+from contracts.planner import Candidate, GenerateReq, ResolvedConstraints
+from core.config import openrouter_api_key, settings
+from core.errors import NoCandidatesFound, NoRoutePossible, UpstreamUnavailable
+from domain import constants
+from domain.requirements import PartyComposition, Requirement, TripRequirements
+from infra import embeddings
+from infra.valhalla_client import ping as valhalla_ping
 
 QUERY = "Хочу погулять по замкам Гродно"
 DSN = "postgresql://grodno:grodno@localhost:5432/grodno"

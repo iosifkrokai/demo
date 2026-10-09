@@ -16,7 +16,7 @@ from typing import Any
 
 import psycopg
 
-from .taxonomy import db_values
+from domain.taxonomy import db_values
 
 
 def db_categories(categories: list[str]) -> list[str]:

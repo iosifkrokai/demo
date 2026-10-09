@@ -17,7 +17,6 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agent.models import Candidate
 from agent.planner.explain import _area_name, explain
 from agent.planner.optimize import _budget_constrain, _max_leg, _max_leg_seconds
 from agent.planner.resolve import _is_town_or_district_match
@@ -26,6 +25,7 @@ from agent.planner.retrieve import (
     _detect_category_keywords,
     rrf_fuse,
 )
+from contracts.planner import Candidate
 
 # Fake helpers
 
@@ -395,8 +395,8 @@ class TestResolveIntegration:
     def test_town_query_creates_area_anchor_not_must_visit(self):
         import psycopg
 
-        from agent.models import IntentDecision, IntentResult
         from agent.planner.resolve import resolve
+        from contracts.planner import IntentDecision, IntentResult
 
         mock_db = MagicMock(spec=psycopg.Connection)
 
@@ -445,8 +445,8 @@ class TestBudgetRule:
     def _resolve(explicit, llm_budget):
         import psycopg
 
-        from agent.models import IntentDecision, IntentResult
         from agent.planner.resolve import resolve
+        from contracts.planner import IntentDecision, IntentResult
 
         intent = IntentResult(
             decision=IntentDecision(
@@ -481,7 +481,7 @@ class TestBudgetRule:
         assert self._resolve(0, 120) is None
 
     def test_api_accepts_zero_as_no_limit(self):
-        from agent.models import GenerateReq
+        from contracts.planner import GenerateReq
 
         assert GenerateReq(query="костёлы Гродно", time_budget_minutes=0).time_budget_minutes == 0
         assert GenerateReq(query="костёлы Гродно").time_budget_minutes is None

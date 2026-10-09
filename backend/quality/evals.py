@@ -97,7 +97,7 @@ def run_verdicts() -> dict[str, Any]:
     the weather is not a contract.
     """
     from agent.planner.verify import ServiceAlongEvidence, verify
-    from agent.requirements import Requirement, TripRequirements
+    from domain.requirements import Requirement, TripRequirements
 
     checks: list[dict[str, Any]] = []
     for case in _load("verdicts"):
@@ -193,8 +193,9 @@ def run_services() -> dict[str, Any]:
     """
     from psycopg.rows import dict_row
 
-    from agent import services as services_mod, taxonomy
-    from agent.clients_store import default_connect
+    from domain import taxonomy
+    from store import services as services_mod
+    from store.clients_store import default_connect
 
     checks: list[dict[str, Any]] = []
     try:
@@ -382,7 +383,7 @@ def run_plan() -> dict[str, Any]:
     request rather than a green run (that happened: an orphaned process held the
     port and the numbers looked fine).
     """
-    from agent import taxonomy
+    from domain import taxonomy
 
     cases = _load("plan")
     checks: list[dict[str, Any]] = []
@@ -485,9 +486,9 @@ def run_interpretation() -> dict[str, Any]:
     says nothing about the model, and counting it as a pass would hide exactly
     the thing we want to tune.
     """
-    from agent import taxonomy
-    from agent.models import GenerateReq
     from agent.planner.intent import build_requirements
+    from contracts.planner import GenerateReq
+    from domain import taxonomy
 
     checks: list[dict[str, Any]] = []
     sources: dict[str, int] = {}

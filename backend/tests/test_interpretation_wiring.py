@@ -21,15 +21,15 @@ from fastapi import HTTPException
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agent import main as agent_main
-from agent.config import settings
-from agent.errors import UpstreamUnavailable
-from agent.models import Candidate, GenerateReq, ValidatedPlan
 from agent.planner import intent as intent_mod
 from agent.planner.intent import build_requirements
 from agent.planner.pipeline import _interpretation
 from agent.planner.verify import overall_status, verify
-from agent.requirements import PartyComposition, Requirement, TripRequirements
+from api import main as agent_main
+from contracts.planner import Candidate, GenerateReq, ValidatedPlan
+from core.config import settings
+from core.errors import UpstreamUnavailable
+from domain.requirements import PartyComposition, Requirement, TripRequirements
 
 RU = "Погулять по старому Гродно с двумя детьми, туалет обязательно, кафе если по пути"
 
@@ -356,7 +356,7 @@ class TestInterpretationBlock:
 
     def test_the_field_is_added_not_renamed(self):
         """Item-5 contract: the response grows, existing fields stay untouched."""
-        from agent.models import RouteResponse
+        from contracts.planner import RouteResponse
 
         fields = RouteResponse.model_fields
         for old in ("parsed", "points", "shape", "summary", "budget",

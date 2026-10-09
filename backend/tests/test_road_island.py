@@ -24,11 +24,12 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agent import constants, valhalla_client as vc
-from agent.errors import UpstreamUnavailable
-from agent.models import Candidate, CostMatrix
 from agent.planner import render as render_mod
 from agent.planner.cost import prune_unroutable_stops
+from contracts.planner import Candidate, CostMatrix
+from core.errors import UpstreamUnavailable
+from domain import constants
+from infra import valhalla_client as vc
 
 ISLAND = (53.007611, 23.917041)  # the chapel on the island
 MAINLAND = (53.290892, 23.932859)  # Волковыск

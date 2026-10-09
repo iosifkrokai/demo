@@ -14,8 +14,8 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agent import valhalla_client as vc
-from agent.errors import UpstreamUnavailable
+from core.errors import UpstreamUnavailable
+from infra import valhalla_client as vc
 
 # Fake response builder
 

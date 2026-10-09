@@ -13,8 +13,8 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agent import valhalla_client as vc
-from agent.errors import UpstreamUnavailable
+from core.errors import UpstreamUnavailable
+from infra import valhalla_client as vc
 
 GRODNO = {"lat": 53.6791, "lon": 23.8216, "type": "break"}
 NEW_CASTLE = {"lat": 53.6849, "lon": 23.8310, "type": "via"}

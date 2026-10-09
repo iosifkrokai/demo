@@ -24,7 +24,7 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agent.constants import GRODNO_BBOX
+from domain.constants import GRODNO_BBOX
 from seed.cli import build_arg_parser
 from seed.overpass import (
     DEFAULT_BBOX,

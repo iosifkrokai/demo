@@ -25,13 +25,13 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agent.itineraries import _stop_payload
-from agent.models import Photo, Place
 from agent.planner.retrieve import parse_photo
+from contracts.planner import Photo, Place
 from seed.photos import (
     commons_file_title,
     parse_wikipedia,
 )
+from store.itineraries import _stop_payload
 
 BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PHOTOS = os.path.join(BACKEND, "data", "place_photos.json")

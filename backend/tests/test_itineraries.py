@@ -23,8 +23,8 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agent import constants
-from agent.itineraries import (
+from domain import constants
+from store.itineraries import (
     ItinerariesUnavailable,
     load_itineraries,
     resolve_itineraries,

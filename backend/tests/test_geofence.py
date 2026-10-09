@@ -10,8 +10,8 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agent import areas
-from agent.geofence import inside_belarus, inside_project_area
+from domain import areas
+from domain.geofence import inside_belarus, inside_project_area
 
 INSIDE = [
     ("Гродно", 53.6772, 23.8232),

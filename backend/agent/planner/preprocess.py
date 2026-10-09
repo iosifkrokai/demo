@@ -17,7 +17,7 @@ from __future__ import annotations
 import hashlib
 import re
 
-from ..models import PreprocessedQuery
+from contracts.planner import PreprocessedQuery
 
 # Words of length ≥ 3, Russian or Latin letters.
 WORD_RE = re.compile(r"[а-яёa-z]{3,}")

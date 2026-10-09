@@ -28,7 +28,6 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agent.models import Candidate, ResolvedConstraints
 from agent.planner.intent import mark_out_of_coverage
 from agent.planner.pipeline import _outside_left_unresolved
 from agent.planner.resolve import _same_name
@@ -39,7 +38,8 @@ from agent.planner.verify import (
     overall_status,
     verify,
 )
-from agent.requirements import (
+from contracts.planner import Candidate, ResolvedConstraints
+from domain.requirements import (
     REASON_MUST_VISIT_OUTSIDE as CONTRACT_REASON,
     Requirement,
     TripRequirements,

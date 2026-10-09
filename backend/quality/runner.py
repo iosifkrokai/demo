@@ -207,8 +207,8 @@ CANONICAL_CODES_NORM: frozenset[str] = frozenset()
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 
-from agent import constants as agent_constants  # noqa: E402
-from agent.geofence import inside_project_area  # noqa: E402
+from domain import constants as agent_constants  # noqa: E402
+from domain.geofence import inside_project_area  # noqa: E402
 
 CANONICAL_CATEGORIES = {
     canonical.strip().lower().replace("ё", "е"): canonical

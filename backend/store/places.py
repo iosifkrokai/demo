@@ -39,7 +39,7 @@ def place_payload(row: dict[str, Any]) -> dict[str, Any]:
     planner's own parsers so a card and a planned route cannot disagree about the
     same place. The keys match `ItineraryStop` on the client.
     """
-    from .planner.retrieve import parse_fun_facts, parse_links, parse_photo
+    from agent.planner.retrieve import parse_fun_facts, parse_links, parse_photo
 
     return {
         "place_id": row["id"],

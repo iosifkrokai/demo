@@ -37,8 +37,9 @@ import re
 from dataclasses import dataclass
 from typing import Literal
 
-from .. import taxonomy
-from ..models import Candidate, LatLon
+from contracts.planner import Candidate, LatLon
+from domain import taxonomy
+
 from .cost import visit_time_minutes
 from .resolve import CATEGORY_SYNONYMS, CATEGORY_SYNONYMS_EN
 

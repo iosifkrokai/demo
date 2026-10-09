@@ -20,10 +20,10 @@ import math
 from collections.abc import Collection
 from dataclasses import dataclass
 
-from .. import constants, taxonomy
-from ..errors import UpstreamUnavailable
-from ..models import Candidate, CostMatrix, ResolvedConstraints
-from ..valhalla_client import snap_locations, time_matrix
+from contracts.planner import Candidate, CostMatrix, ResolvedConstraints
+from core.errors import UpstreamUnavailable
+from domain import constants, taxonomy
+from infra.valhalla_client import snap_locations, time_matrix
 
 # Machine reason codes for prune_unroutable_stops (localized by the API layer).
 REASON_UNROUTABLE_LEG = "unroutable_leg"

@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from agent import embeddings
+from infra import embeddings
 
 BACKEND = Path(__file__).resolve().parents[1]
 

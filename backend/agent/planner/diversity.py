@@ -24,9 +24,9 @@ from __future__ import annotations
 
 import numpy as np
 
-from .. import constants
-from ..models import Candidate, ResolvedConstraints
-from ..search import fetch_embeddings
+from contracts.planner import Candidate, ResolvedConstraints
+from domain import constants
+from store.search import fetch_embeddings
 
 
 def mmr_select(

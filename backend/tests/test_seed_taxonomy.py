@@ -25,7 +25,7 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agent import services, taxonomy
+from domain import taxonomy
 from seed.datasets import SIGHT_TAXONOMY
 from seed.osm_tags import (
     AMENITY_CATEGORY,
@@ -38,6 +38,7 @@ from seed.osm_tags import (
     visit_minutes_for,
 )
 from seed.overpass import RAION_CENTRES
+from store import services
 
 DATA = Path(__file__).resolve().parents[1] / "data"
 

@@ -31,15 +31,15 @@ from psycopg.types.json import Jsonb
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agent import main as agent_main
-from agent.clients_models import route_metrics
-from agent.clients_store import (
+from api import main as agent_main
+from contracts.clients import route_metrics
+from core.config import settings
+from store.clients_store import (
     PREFERENCE_COLUMNS,
     PostgresClientRepository,
     StorageUnavailable,
     TooManyRoutes,
 )
-from agent.config import settings
 
 CLIENT_A = "11111111-1111-4111-8111-111111111111"
 CLIENT_B = "22222222-2222-4222-8222-222222222222"

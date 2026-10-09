@@ -73,7 +73,7 @@ def service_codes(categories: Iterable[str] | None = None) -> list[str]:
     convenience stop. The dropped codes are reported by the caller, so a silent
     typo cannot look like «услуг рядом нет».
     """
-    from .taxonomy import all_categories
+    from domain.taxonomy import all_categories
 
     known = [
         cat.code

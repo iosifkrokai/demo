@@ -31,7 +31,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, Query, Request, Response
 from fastapi.responses import JSONResponse
 
-from .clients_models import (
+from contracts.clients import (
     CLIENT_ID_HEADER,
     REASON_INVALID_CLIENT_ID,
     REASON_ROUTE_NOT_FOUND,
@@ -45,7 +45,7 @@ from .clients_models import (
     RouteListItem,
     RoutePatchIn,
 )
-from .clients_store import (
+from store.clients_store import (
     MAX_SAVED_ROUTES,
     ClientRepository,
     PostgresClientRepository,

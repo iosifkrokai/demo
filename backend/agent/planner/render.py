@@ -18,9 +18,9 @@ from __future__ import annotations
 import logging
 from itertools import pairwise
 
-from ..errors import UpstreamUnavailable
-from ..models import Candidate, LatLon
-from ..valhalla_client import RouteStatus, route_through
+from contracts.planner import Candidate, LatLon
+from core.errors import UpstreamUnavailable
+from infra.valhalla_client import RouteStatus, route_through
 
 log = logging.getLogger(__name__)
 

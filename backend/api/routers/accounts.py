@@ -32,7 +32,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, Query, Request, Response
 from fastapi.responses import JSONResponse
 
-from .accounts_models import (
+from contracts.accounts import (
     REASON_EMAIL_TAKEN,
     REASON_INVALID_CREDENTIALS,
     REASON_INVALID_EMAIL,
@@ -68,7 +68,15 @@ from .accounts_models import (
     password_problem,
     public_user,
 )
-from .accounts_store import (
+from contracts.clients import CLIENT_ID_HEADER
+from domain.passwords import (
+    SESSION_TTL_S,
+    hash_password,
+    hash_token,
+    new_session_token,
+    verify_password,
+)
+from store.accounts_store import (
     MAX_LIST_LIMIT,
     AccountRepository,
     DuplicateSource,
@@ -76,14 +84,6 @@ from .accounts_store import (
     PostgresAccountRepository,
     StorageUnavailable,
     place_payloads,
-)
-from .clients_models import CLIENT_ID_HEADER
-from .passwords import (
-    SESSION_TTL_S,
-    hash_password,
-    hash_token,
-    new_session_token,
-    verify_password,
 )
 
 log = logging.getLogger(__name__)

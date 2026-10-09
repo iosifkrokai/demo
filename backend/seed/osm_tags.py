@@ -19,8 +19,8 @@ from __future__ import annotations
 import math
 from typing import Any
 
-from agent import taxonomy
-from agent.geofence import inside_project_area
+from domain import taxonomy
+from domain.geofence import inside_project_area
 
 # ── Visit time ───────────────────────────────────────────────────────────────
 

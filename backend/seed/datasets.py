@@ -22,8 +22,8 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from agent import constants as _constants, taxonomy
-from agent.geofence import inside_project_area
+from domain import constants as _constants, taxonomy
+from domain.geofence import inside_project_area
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 

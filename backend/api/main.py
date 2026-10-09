@@ -28,19 +28,10 @@ import uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from . import (
-    accounts_api,
-    clients_api,
-    embeddings,
-    itineraries as itineraries_mod,
-    places as places_mod,
-    progress,
-    services as services_mod,
-    trace,
-)
-from .config import openrouter_api_key, settings
-from .errors import AgentError, NoRoutePossible
-from .models import (
+from agent.planner.agent_interpret import DEFAULT_MODEL
+from agent.planner.pipeline import Pipeline
+from api.routers import accounts as accounts_api, clients as clients_api
+from contracts.planner import (
     ExplainReq,
     GenerateReq,
     HealthResponse,
@@ -50,8 +41,10 @@ from .models import (
     RouteSummary,
     ServicesAlongReq,
 )
-from .planner.agent_interpret import DEFAULT_MODEL
-from .planner.pipeline import Pipeline
+from core.config import openrouter_api_key, settings
+from core.errors import AgentError, NoRoutePossible
+from infra import embeddings, progress, trace
+from store import itineraries as itineraries_mod, places as places_mod, services as services_mod
 
 logging.basicConfig(
     level=logging.INFO,

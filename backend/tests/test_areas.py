@@ -14,15 +14,15 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agent import areas
-from agent.areas import (
+from domain import areas
+from domain.areas import (
     area_contains,
     area_lookup_by_slug,
     in_project_area,
     load_areas,
     resolve_area,
 )
-from agent.geofence import inside_belarus, inside_project_area
+from domain.geofence import inside_belarus, inside_project_area
 
 # Known landmarks from the committed data and previous geofence tests.
 CITY = ("Гродно (центр)", 53.6772, 23.8232)

@@ -22,9 +22,9 @@ from collections.abc import Sequence
 
 import psycopg
 
-from .. import constants
-from ..models import IntentResult, ResolvedConstraints
-from ..search import _keyword_search, _name_match_search
+from contracts.planner import IntentResult, ResolvedConstraints
+from domain import constants
+from store.search import _keyword_search, _name_match_search
 
 log = logging.getLogger(__name__)
 
