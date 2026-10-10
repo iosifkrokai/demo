@@ -9,7 +9,6 @@ import logging
 import time as _time
 from typing import Any
 
-from agent import interpret_cache
 from contracts.planner import (
     Candidate,
     GenerateReq,
@@ -39,6 +38,7 @@ from .cost import (
 from .coverage import _outside_left_unresolved, refuse_out_of_coverage
 from .dedupe import _drop_duplicates, _dupe_pairs
 from .diversity import mmr_select
+from .embedding import embed_query
 from .explain import explain as explain_route
 from .geo import (
     _TRACE_NAMES_MAX,
@@ -70,30 +70,6 @@ from .turn import Turn, seconds_left
 from .verify import overall_status, verify
 
 log = logging.getLogger(__name__)
-
-
-def _embed_query(text: str) -> list[float]:
-    """Embed a search query with the LOCAL model (ml.embeddings).
-
-    Returns [] only when the model cannot be loaded — keyword-only fallback.
-    """
-    from ml import embeddings
-
-    cache_key = interpret_cache.embed_key([text], embeddings.MODEL_NAME)
-    cached = interpret_cache.EMBED_CACHE.get(cache_key)
-    if cached:
-        return cached[0]
-
-    try:
-        vec = embeddings.embed_query(text)
-    except Exception as exc:
-        log.warning("embed: local model unavailable (%s) — keyword-only retrieval", exc)
-        return []
-    if not vec:
-        log.warning("embed: local model returned no vector — keyword-only retrieval")
-        return []
-    interpret_cache.EMBED_CACHE.put(cache_key, [vec])
-    return vec
 
 
 class Pipeline:
@@ -283,7 +259,7 @@ class Pipeline:
     def _step_retrieve(
         self, turn: Turn, constraints: ResolvedConstraints
     ) -> list[Candidate]:
-        qvec = _embed_query(turn.req.query)
+        qvec = embed_query(turn.req.query)
         turn.qvec = qvec
         trace.record("embed", input=turn.req.query, embedded=bool(qvec))
 

@@ -40,8 +40,9 @@ from planner import (
     pipeline as pipeline_mod,
     retrieve as retrieve_mod,
 )
+from planner.embedding import embed_query as _embed_query
 from planner.intent import build_requirements, reader_brief
-from planner.pipeline import Pipeline, _embed_query
+from planner.pipeline import Pipeline
 from planner.valhalla_client import ping as valhalla_ping
 
 QUERY = "Хочу погулять по замкам Гродно"
@@ -205,9 +206,9 @@ class TestEmbedLocal:
 
     def test_logs_one_warning_naming_the_reason(self, monkeypatch, caplog):
         monkeypatch.setattr(embeddings._state, "model", _FakeModel(fail=True), raising=False)
-        with caplog.at_level("WARNING", logger="planner.pipeline"):
+        with caplog.at_level("WARNING", logger="planner.embedding"):
             assert _embed_query(QUERY) == []
-        warnings = _warnings(caplog, "planner.pipeline")
+        warnings = _warnings(caplog, "planner.embedding")
         assert len(warnings) == 1
         assert "local model" in warnings[0]
 
