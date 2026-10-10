@@ -19,11 +19,9 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from api import main as agent_main
 from core.passwords import hash_password, hash_token, verify_password
-from db.store.accounts_store import (
-    DuplicateSource,
-    EmailTaken,
-    StorageUnavailable,
-)
+from db.models.user import AdminUser, User, VisitedPlace
+from db.store.errors import DuplicateSource, EmailTaken, StorageUnavailable
+from db.store.mappers import place_from_row
 
 CLIENT = "33333333-3333-4333-8333-333333333333"
 
@@ -72,7 +70,7 @@ def _place_row(
 
 
 class FakeRepo:
-    """In-memory AccountRepository with the same contract as the Postgres one."""
+    """In-memory account and place repository with the Postgres contract."""
 
     def __init__(self) -> None:
         self.users: dict[uuid.UUID, dict] = {}
@@ -111,15 +109,15 @@ class FakeRepo:
             "created_at": now, "updated_at": now, "last_login_at": None,
         }
         self.users[user_id] = row
-        return self._public(row)
+        return User(**self._public(row))
 
     def get_user_by_email(self, email):
         row = self._by_email(email)
-        return dict(row) if row is not None else None
+        return User(**row) if row is not None else None
 
     def get_user(self, user_id):
         row = self.users.get(user_id)
-        return self._public(row) if row is not None else None
+        return User(**self._public(row)) if row is not None else None
 
     def link_client(self, user_id, client_id):
         row = self.users.get(user_id)
@@ -157,10 +155,12 @@ class FakeRepo:
         total = len(rows)
         page = rows[offset:offset + limit]
         out = [
-            {**r,
-             "saved_routes": self.saved_routes_count.get(r["client_id"], 0)
-             if r["client_id"] else 0,
-             "visited": len(self.visited.get(r["id"], {}))}
+            AdminUser(
+                **r,
+                saved_routes=self.saved_routes_count.get(r["client_id"], 0)
+                if r["client_id"] else 0,
+                visited=len(self.visited.get(r["id"], {})),
+            )
             for r in page
         ]
         return out, total
@@ -178,7 +178,7 @@ class FakeRepo:
         if display_name_set:
             row["display_name"] = display_name
         row["updated_at"] = _now()
-        return self._public(row)
+        return User(**self._public(row))
 
     def delete_user(self, user_id):
         if user_id not in self.users:
@@ -191,13 +191,11 @@ class FakeRepo:
 
     def list_visited(self, user_id):
         marks = self.visited.get(user_id, {})
-        rows = []
-        for pid, at in sorted(marks.items(),
-                              key=lambda kv: kv[1], reverse=True):
-            row = dict(self.places[pid])
-            row["visited_at"] = at
-            rows.append(row)
-        return rows
+        return [
+            VisitedPlace(user_id=user_id, place_id=pid, visited_at=at)
+            for pid, at in sorted(marks.items(),
+                                  key=lambda kv: kv[1], reverse=True)
+        ]
 
     def mark_visited(self, user_id, place_id):
         if place_id not in self.places:
@@ -205,7 +203,7 @@ class FakeRepo:
         marks = self.visited.setdefault(user_id, {})
         at = marks.get(place_id, _now())
         marks[place_id] = at
-        return {"place_id": place_id, "visited_at": at}
+        return VisitedPlace(user_id=user_id, place_id=place_id, visited_at=at)
 
     def mark_visited_many(self, user_id, place_ids):
         marks = self.visited.setdefault(user_id, {})
@@ -219,7 +217,16 @@ class FakeRepo:
     def unmark_visited(self, user_id, place_id):
         return self.visited.get(user_id, {}).pop(place_id, None) is not None
 
-    def list_places(self, *, q="", category="", limit=50, offset=0):
+    # --- places: the admin CRUD and the visited payloads --------------------
+
+    def get_by_id(self, place_id):
+        row = self.places.get(place_id)
+        return place_from_row(row) if row is not None else None
+
+    def get_by_ids(self, ids):
+        return [place_from_row(self.places[pid]) for pid in ids if pid in self.places]
+
+    def list_places_paged(self, *, q="", category="", limit=50, offset=0):
         rows = list(self.places.values())
         if q:
             needle = q.lower()
@@ -229,11 +236,8 @@ class FakeRepo:
             rows = [r for r in rows if r["category"] == category]
         rows.sort(key=lambda r: r["name"])
         total = len(rows)
-        return [dict(r) for r in rows[offset:offset + limit]], total
-
-    def get_place(self, place_id):
-        row = self.places.get(place_id)
-        return dict(row) if row is not None else None
+        page = rows[offset:offset + limit]
+        return [place_from_row(r) for r in page], total
 
     def create_place(self, fields):
         if any(p["source_url"] == fields.get("source_url")
@@ -243,7 +247,7 @@ class FakeRepo:
         row = _place_row(pid, fields["name"])
         row.update({k: v for k, v in fields.items() if k in row})
         self.places[pid] = row
-        return dict(row)
+        return place_from_row(row)
 
     def update_place(self, place_id, fields):
         row = self.places.get(place_id)
@@ -255,7 +259,7 @@ class FakeRepo:
         ):
             raise DuplicateSource(str(fields["source_url"]))
         row.update({k: v for k, v in fields.items() if k in row})
-        return dict(row)
+        return place_from_row(row)
 
     def delete_place(self, place_id):
         return self.places.pop(place_id, None) is not None
@@ -279,13 +283,27 @@ class DownRepo:
         return _boom
 
 
+_REPO_ATTRS = ("users_repository", "stats_repository", "places_repository")
+
+
+def _install(repo) -> None:
+    """Point every accessor the account and admin routers use at one repository."""
+    for attr in _REPO_ATTRS:
+        setattr(agent_main.app.state, attr, repo)
+
+
+def _uninstall() -> None:
+    for attr in _REPO_ATTRS:
+        if hasattr(agent_main.app.state, attr):
+            delattr(agent_main.app.state, attr)
+
+
 @pytest.fixture
 def repo():
     fake = FakeRepo()
-    agent_main.app.state.accounts_repository = fake
+    _install(fake)
     yield fake
-    if hasattr(agent_main.app.state, "accounts_repository"):
-        delattr(agent_main.app.state, "accounts_repository")
+    _uninstall()
 
 
 @pytest.fixture
@@ -596,9 +614,9 @@ class TestStorageDown:
 
     @pytest.fixture
     def down(self):
-        agent_main.app.state.accounts_repository = DownRepo()
+        _install(DownRepo())
         yield TestClient(agent_main.app, raise_server_exceptions=False)
-        del agent_main.app.state.accounts_repository
+        _uninstall()
 
     @pytest.mark.parametrize("method,path,body", [
         ("post", "/auth/register", {"email": "a@b.co", "password": GOOD_PW}),
@@ -698,13 +716,19 @@ def test_live_account_visit_and_place_edit():
     import psycopg
 
     from core.config import settings
-    from db.store.accounts_store import PostgresAccountRepository
+    from db.store.places import PostgresPlaceRepository
+    from db.store.stats import PostgresStatsRepository
+    from db.store.users import PostgresUserRepository
 
     admin = psycopg.connect(settings.DSN, autocommit=True)
     _apply_migration(admin)
 
-    repo = PostgresAccountRepository()
-    agent_main.app.state.accounts_repository = repo
+    users = PostgresUserRepository()
+    places = PostgresPlaceRepository()
+    stats = PostgresStatsRepository()
+    agent_main.app.state.users_repository = users
+    agent_main.app.state.places_repository = places
+    agent_main.app.state.stats_repository = stats
     tc = TestClient(agent_main.app, raise_server_exceptions=False)
     email = f"live-{uuid.uuid4().hex[:10]}@example.com"
     place_id: int | None = None
@@ -772,6 +796,7 @@ def test_live_account_visit_and_place_edit():
         finally:
             cleanup.close()
         admin.close()
-        repo.close()
-        if hasattr(agent_main.app.state, "accounts_repository"):
-            delattr(agent_main.app.state, "accounts_repository")
+        users.close()
+        places.close()
+        stats.close()
+        _uninstall()

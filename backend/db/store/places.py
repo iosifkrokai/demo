@@ -18,9 +18,12 @@ import re
 from collections.abc import Iterable, Sequence
 from typing import Any
 
+import psycopg
+
 from db.models.place import Place
 from db.store.base import PostgresRepository
-from db.store.columns import PLACE_SELECT
+from db.store.columns import PLACE_SELECT, PLACE_WRITE_COLUMNS
+from db.store.errors import DuplicateSource
 from db.store.mappers import place_from_row, place_payload
 from db.store.services import (
     DEFAULT_PROFILE,
@@ -383,3 +386,93 @@ class PostgresPlaceRepository(PostgresRepository):
                 "UPDATE places SET embedding = %s::vector WHERE id = %s",
                 (str(list(vector)), place_id),
             )
+
+    # --- the admin's reads and writes ---------------------------------------
+
+    def list_places_paged(
+        self, *, q: str = "", category: str = "", limit: int = 50, offset: int = 0
+    ) -> tuple[list[Place], int]:
+        """Admin browse: filtered by free text and category, name order.
+
+        Returns the page and the total that matched, so the panel can paginate
+        without a second query of its own.
+        """
+        pattern = f"%{q}%"
+        where = (
+            "(%s = '' OR name ILIKE %s OR town ILIKE %s OR district ILIKE %s) "
+            "AND (%s = '' OR category = %s)"
+        )
+        args = (q, pattern, pattern, pattern, category, category)
+        with self._cursor() as cur:
+            cur.execute(
+                f"SELECT {PLACE_SELECT} FROM places WHERE {where} "
+                "ORDER BY name, id LIMIT %s OFFSET %s",
+                (*args, limit, offset),
+            )
+            places = [place_from_row(row) for row in cur.fetchall()]
+            cur.execute(f"SELECT count(*) AS n FROM places WHERE {where}", args)
+            total = int(cur.fetchone()["n"])
+        return places, total
+
+    def create_place(self, fields: dict[str, Any]) -> Place:
+        """Insert a hand-curated point. Raises :class:`DuplicateSource` on a clash.
+
+        A category supplied by an admin is a curated one by definition, so the
+        row is stamped `curated` and the trigger protects it from the seed.
+        """
+        cols = [c for c in PLACE_WRITE_COLUMNS if c in fields]
+        extra_cols = ["category_source"] if "category" in cols else []
+        values_sql = ", ".join(["%s"] * (len(cols) + len(extra_cols)))
+        params = [fields[c] for c in cols]
+        if extra_cols:
+            params.append("curated")
+        with self._cursor() as cur:
+            try:
+                cur.execute(
+                    f"INSERT INTO places ({', '.join([*cols, *extra_cols])}) "
+                    f"VALUES ({values_sql}) RETURNING {PLACE_SELECT}",
+                    tuple(params),
+                )
+            except psycopg.errors.UniqueViolation as exc:
+                raise DuplicateSource(str(fields.get("source_url"))) from exc
+            row = cur.fetchone()
+        assert row is not None
+        return place_from_row(row)
+
+    def update_place(
+        self, place_id: int, fields: dict[str, Any]
+    ) -> Place | None:
+        """Patch a point; ``None`` when the id is unknown.
+
+        A category change is an admin decision, so it runs with the
+        curated-category guard explicitly lowered — and re-stamps `curated`.
+        """
+        cols = [c for c in PLACE_WRITE_COLUMNS if c in fields]
+        if not cols:
+            return self.get_by_id(place_id)
+        sets = [f"{c} = %s" for c in cols]
+        params: list[Any] = [fields[c] for c in cols]
+        if "category" in cols:
+            sets.append("category_source = 'curated'")
+        params.append(place_id)
+        with self._tx_cursor() as cur:
+            if "category" in cols:
+                cur.execute(
+                    "SELECT set_config('grodno.allow_curated_category_change', "
+                    "'on', true)"
+                )
+            try:
+                cur.execute(
+                    f"UPDATE places SET {', '.join(sets)} WHERE id = %s "
+                    f"RETURNING {PLACE_SELECT}",
+                    tuple(params),
+                )
+            except psycopg.errors.UniqueViolation as exc:
+                raise DuplicateSource(str(fields.get("source_url"))) from exc
+            row = cur.fetchone()
+        return place_from_row(row) if row is not None else None
+
+    def delete_place(self, place_id: int) -> bool:
+        with self._cursor() as cur:
+            cur.execute("DELETE FROM places WHERE id = %s", (place_id,))
+            return cur.rowcount > 0

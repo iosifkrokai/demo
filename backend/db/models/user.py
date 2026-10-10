@@ -23,6 +23,19 @@ class User:
 
 
 @dataclass(frozen=True)
+class AdminUser(User):
+    """A user as the admin list shows one: the row plus its activity counts.
+
+    Not a row of `users` — the counts come from `saved_routes` and
+    `visited_places` and exist only for that one listing, which is why this is a
+    projection beside the schema-pinned models rather than a change to `User`.
+    """
+
+    saved_routes: int = 0
+    visited: int = 0
+
+
+@dataclass(frozen=True)
 class UserSession:
     """One signed-in browser. Only the hash of the token is ever stored."""
 

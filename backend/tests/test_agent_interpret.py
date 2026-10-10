@@ -25,7 +25,11 @@ from agent import (
     telemetry as ai_telemetry,
     tools,
 )
-from agent.tools import areas as tools_areas, places as tools_places
+from agent.tools import (
+    areas as tools_areas,
+    places as tools_places,
+    services as tools_services,
+)
 from core.config import settings
 from core.errors import InterpretationUnavailable
 from db.models.area import Area
@@ -490,28 +494,28 @@ def test_an_answer_that_is_not_a_reading_is_recorded_as_an_error():
 
 
 def test_search_places_caps_results(repos):
-    out = tools.search_places("замки", category_codes=["замок"], limit=999, repos=repos)
+    out = tools_places.search_places("замки", category_codes=["замок"], limit=999, repos=repos)
     assert out["error"] is None
-    assert out["count"] == tools.MAX_PLACES_PER_SEARCH
+    assert out["count"] == tools_places.MAX_PLACES_PER_SEARCH
     assert out["capped"] is True
-    assert out["provenance"]["result_cap"] == tools.MAX_PLACES_PER_SEARCH
-    assert all(set(row) <= set(tools._PLACE_FIELDS) for row in out["results"])
+    assert out["provenance"]["result_cap"] == tools_places.MAX_PLACES_PER_SEARCH
+    assert all(set(row) <= set(tools_places._PLACE_FIELDS) for row in out["results"])
 
-    small = tools.search_places("замки", category_codes=["замок"], limit=3, repos=repos)
+    small = tools_places.search_places("замки", category_codes=["замок"], limit=3, repos=repos)
     assert small["count"] == 3 and small["capped"] is False
 
-    mixed = tools.search_places("замки", category_codes=["замок", "вертолёт"], limit=2, repos=repos)
+    mixed = tools_places.search_places("замки", category_codes=["замок", "вертолёт"], limit=2, repos=repos)
     assert mixed["provenance"]["categories"] == ["замок"]
     assert mixed["provenance"]["dropped_codes"] == ["вертолёт"]
 
 
 def test_search_places_clamps_radius():
     store = _repos(_rows(2))
-    out = tools.search_places(
+    out = tools_places.search_places(
         "замки", near_lat=53.67, near_lon=23.82, radius_m=10_000_000, repos=store
     )
     assert out["provenance"]["strategy"] == "nearby"
-    assert out["provenance"]["radius_m"] == tools.MAX_RADIUS_M
+    assert out["provenance"]["radius_m"] == tools_places.MAX_RADIUS_M
     assert out["capped"] is True
 
 
@@ -530,19 +534,19 @@ def test_tools_never_raise_raw_errors(monkeypatch):
         lambda term, locale, limit: (_ for _ in ()).throw(ImportError("no reference.areas")),
     )
 
-    search = tools.search_places("замки", repos=store)
+    search = tools_places.search_places("замки", repos=store)
     assert search["error"] == tools.ERR_DB_UNAVAILABLE and search["results"] == []
-    assert tools.find_areas("старый город", repos=store)["error"] == tools.ERR_DB_UNAVAILABLE
-    assert tools.get_place_facts(1, repos=store)["error"] == tools.ERR_DB_UNAVAILABLE
+    assert tools_areas.find_areas("старый город", repos=store)["error"] == tools.ERR_DB_UNAVAILABLE
+    assert tools_places.get_place_facts(1, repos=store)["error"] == tools.ERR_DB_UNAVAILABLE
 
-    assert tools.search_places("  ")["error"] == tools.ERR_EMPTY_QUERY
-    assert tools.find_areas("")["error"] == tools.ERR_BAD_ARGUMENT
-    assert tools.get_place_facts(-3)["error"] == tools.ERR_BAD_ARGUMENT
+    assert tools_places.search_places("  ")["error"] == tools.ERR_EMPTY_QUERY
+    assert tools_areas.find_areas("")["error"] == tools.ERR_BAD_ARGUMENT
+    assert tools_places.get_place_facts(-3)["error"] == tools.ERR_BAD_ARGUMENT
 
     # "No driver installed" is expressed as "no repositories" now: nothing
     # imports psycopg lazily any more, and `_fetch` reports the missing store
     # with the same honest error code the driver failure used to produce.
-    assert tools.search_places("замки")["error"] == tools.ERR_DB_UNAVAILABLE
+    assert tools_places.search_places("замки")["error"] == tools.ERR_DB_UNAVAILABLE
 
 
 def test_get_place_facts_returns_raw_facts_with_provenance():
@@ -565,17 +569,17 @@ def test_get_place_facts_returns_raw_facts_with_provenance():
             {"title": "d", "url": "w"},
         ],
     }
-    out = tools.get_place_facts(7, repos=_repos([row]))
+    out = tools_places.get_place_facts(7, repos=_repos([row]))
     assert out["error"] is None and out["count"] == 1
     facts = out["results"][0]
     assert facts["opening_hours"] == "Mo-Su 10:00-18:00"
     assert facts["ticket_price"] == "10 BYN"
     assert facts["source_url"].endswith("/7")
-    assert len(facts["links"]) == tools.MAX_LINKS_PER_PLACE
+    assert len(facts["links"]) == tools_places.MAX_LINKS_PER_PLACE
     assert out["provenance"]["fact_status"] == "raw_unverified"
-    assert out["provenance"]["result_cap"] == tools.MAX_FACTS_PER_CALL
+    assert out["provenance"]["result_cap"] == tools_places.MAX_FACTS_PER_CALL
 
-    assert tools.get_place_facts(4242, repos=_repos())["error"] == tools.ERR_NOT_FOUND
+    assert tools_places.get_place_facts(4242, repos=_repos())["error"] == tools.ERR_NOT_FOUND
 
 
 def test_find_areas_resolves_through_the_registry(monkeypatch):
@@ -602,19 +606,19 @@ def test_find_areas_resolves_through_the_registry(monkeypatch):
         lambda term, locale=None: "grodno-old-town" if "стар" in term.lower() else None,
     )
 
-    out = tools.find_areas("старый город")
+    out = tools_areas.find_areas("старый город")
     assert out["error"] is None
     assert out["results"][0]["code"] == "grodno-old-town"
     assert out["provenance"]["source"] == "areas.json"
 
-    assert tools.find_areas("Старогородка")["results"][0]["code"] == "grodno-old-town"
-    assert tools.find_areas("Вильнюс")["results"] == []
-    assert tools.find_areas("Вильнюс")["error"] is None
+    assert tools_areas.find_areas("Старогородка")["results"][0]["code"] == "grodno-old-town"
+    assert tools_areas.find_areas("Вильнюс")["results"] == []
+    assert tools_areas.find_areas("Вильнюс")["error"] is None
 
-    capped = tools.find_areas("район")
-    assert capped["count"] == tools.MAX_AREAS_PER_CALL
+    capped = tools_areas.find_areas("район")
+    assert capped["count"] == tools_areas.MAX_AREAS_PER_CALL
     assert capped["capped"] is True
-    assert set(capped["results"][0]) == set(tools._AREA_FIELDS)
+    assert set(capped["results"][0]) == set(tools_areas._AREA_FIELDS)
 
 
 def test_find_areas_falls_back_to_the_db_without_the_registry(monkeypatch):
@@ -627,9 +631,9 @@ def test_find_areas_falls_back_to_the_db_without_the_registry(monkeypatch):
     ]
     monkeypatch.setattr(tools_areas, "_areas_from_registry", no_registry)
 
-    out = tools.find_areas("район", repos=_repos(area_rows=rows))
+    out = tools_areas.find_areas("район", repos=_repos(area_rows=rows))
     assert out["error"] is None
-    assert out["count"] == tools.MAX_AREAS_PER_CALL and out["capped"] is True
+    assert out["count"] == tools_areas.MAX_AREAS_PER_CALL and out["capped"] is True
     assert out["provenance"]["source"] == "areas (db fallback)"
 
 
@@ -638,13 +642,13 @@ def test_broken_area_registry_is_an_error_not_an_exception(monkeypatch):
         raise ValueError("areas.json: duplicate slug")
 
     monkeypatch.setattr(tools_areas, "_areas_from_registry", broken)
-    out = tools.find_areas("Гродно")
+    out = tools_areas.find_areas("Гродно")
     assert out["error"] == tools.ERR_AREA_REGISTRY
     assert out["results"] == []
 
 
 def test_services_near_route_is_an_honest_gap():
-    out = tools.services_near_route(
+    out = tools_services.services_near_route(
         ["туалет", "вертолёт"], shape=[[53.67, 23.82]] * 100, max_detour_minutes=999
     )
     assert out["error"] == tools.ERR_NOT_IMPLEMENTED
@@ -653,7 +657,7 @@ def test_services_near_route_is_an_honest_gap():
     prov = out["provenance"]
     assert prov["dropped_codes"] == ["вертолёт"]
     assert prov["points_in"] == 100
-    assert prov["max_detour_minutes"] == tools.MAX_DETOUR_MINUTES
+    assert prov["max_detour_minutes"] == tools_services.MAX_DETOUR_MINUTES
     assert "not implemented" in out["message"]
 
 

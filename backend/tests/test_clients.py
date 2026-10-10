@@ -21,12 +21,10 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from api import main as agent_main
 from core.config import settings
-from db.store.clients_store import (
-    PREFERENCE_COLUMNS,
-    PostgresClientRepository,
-    StorageUnavailable,
-    TooManyRoutes,
-)
+from db.models.client import ClientPreferences
+from db.models.route import SavedRoute, SavedRouteSummary
+from db.store.clients import PREFERENCE_COLUMNS, PostgresClientRepository
+from db.store.errors import StorageUnavailable, TooManyRoutes
 from db.store.mappers import route_metrics
 
 CLIENT_A = "11111111-1111-4111-8111-111111111111"
@@ -69,10 +67,13 @@ class FakeRepo:
     def delete_client(self, client_id: uuid.UUID) -> bool:
         return self.db.pop(client_id, None) is not None
 
-    def get_preferences(self, client_id: uuid.UUID) -> dict | None:
-        return self.db.get(client_id, {}).get("prefs")
+    def get_preferences(self, client_id: uuid.UUID) -> ClientPreferences | None:
+        state = self.db.get(client_id, {}).get("prefs")
+        return ClientPreferences(**state) if state is not None else None
 
-    def upsert_preferences(self, client_id: uuid.UUID, fields: dict) -> dict:
+    def upsert_preferences(
+        self, client_id: uuid.UUID, fields: dict
+    ) -> ClientPreferences:
         self.ensure_client(client_id)
         state = self.db[client_id]["prefs"]
         if state is None:
@@ -82,50 +83,55 @@ class FakeRepo:
                 state[key] = fields[key]
         state["updated_at"] = _now()
         self.db[client_id]["prefs"] = state
-        return dict(state)
+        return ClientPreferences(**state)
 
     def add_route(self, client_id: uuid.UUID, route_id: uuid.UUID, *,
                   query: str, plan: dict, name: str | None = None,
-                  visit_overrides: dict | None = None) -> dict:
+                  visit_overrides: dict | None = None) -> SavedRoute:
         self.ensure_client(client_id)
         routes = self.db[client_id]["routes"]
         if len(routes) >= self.max_routes:
             raise TooManyRoutes(self.max_routes)
         now = _now()
-        routes.append({
-            "id": route_id, "name": name, "query": query, "plan": plan,
-            "visit_overrides": visit_overrides,
+        route = {
+            "id": route_id, "client_id": client_id, "name": name,
+            "query": query, "plan": plan, "visit_overrides": visit_overrides,
             "created_at": now, "updated_at": now,
-        })
-        return {"id": route_id, "created_at": now}
+        }
+        routes.append(route)
+        return SavedRoute(**route)
 
-    def list_routes(self, client_id: uuid.UUID, limit: int = 50) -> list[dict]:
+    def list_routes(
+        self, client_id: uuid.UUID, limit: int = 50
+    ) -> list[SavedRouteSummary]:
         routes = self.db.get(client_id, {}).get("routes", [])
         out = []
         for r in sorted(routes, key=lambda r: r["created_at"], reverse=True)[:limit]:
             points = r["plan"].get("points") if isinstance(r["plan"], dict) else None
             count = len(points) if isinstance(points, list) else 0
-            out.append({
-                "id": r["id"], "name": r["name"], "query": r["query"],
-                "created_at": r["created_at"],
+            out.append(SavedRouteSummary(
+                id=r["id"], name=r["name"], query=r["query"],
+                created_at=r["created_at"],
                 **route_metrics(count, r["plan"].get("summary"),
                                 r["plan"].get("budget")),
-            })
+            ))
         return out
 
-    def get_route(self, client_id: uuid.UUID, route_id: uuid.UUID) -> dict | None:
+    def get_route(
+        self, client_id: uuid.UUID, route_id: uuid.UUID
+    ) -> SavedRoute | None:
         for r in self.db.get(client_id, {}).get("routes", []):
             if r["id"] == route_id:
-                return dict(r)
+                return SavedRoute(**r)
         return None
 
     def rename_route(self, client_id: uuid.UUID, route_id: uuid.UUID,
-                     name: str) -> dict | None:
+                     name: str) -> SavedRoute | None:
         for r in self.db.get(client_id, {}).get("routes", []):
             if r["id"] == route_id:
                 r["name"] = name
                 r["updated_at"] = _now()
-                return dict(r)
+                return SavedRoute(**r)
         return None
 
     def delete_route(self, client_id: uuid.UUID, route_id: uuid.UUID) -> bool:
@@ -481,7 +487,7 @@ class TestStore:
         row = dict.fromkeys(PREFERENCE_COLUMNS)
         row["transport"] = "auto"
         repo, _ = _repo(lambda _s, _p: {"one": row})
-        assert repo.get_preferences(uuid.UUID(CLIENT_A))["transport"] == "auto"
+        assert repo.get_preferences(uuid.UUID(CLIENT_A)).transport == "auto"
 
     def test_upsert_touches_only_the_sent_columns(self):
         repo, conn = _repo(lambda _s, _p: {"one": {"transport": "auto"}})
@@ -512,7 +518,7 @@ class TestStore:
         rid = uuid.uuid4()
         repo, _ = _repo(lambda _s, _p: {"one": {"id": rid, "created_at": _now()}})
         out = repo.add_route(uuid.UUID(CLIENT_A), rid, query="q", plan=PLAN)
-        assert out["id"] == rid
+        assert out.id == rid
 
     def test_add_route_over_the_cap_raises_too_many(self):
         repo, _ = _repo(lambda _s, _p: {"one": None}, max_routes=1)
@@ -526,8 +532,8 @@ class TestStore:
             "stop_count": 2, "summary": PLAN["summary"], "budget": PLAN["budget"],
         }]})
         items = repo.list_routes(uuid.UUID(CLIENT_A), 50)
-        assert items[0]["distance_m"] == 1500
-        assert items[0]["duration_min"] == 90
+        assert items[0].distance_m == 1500
+        assert items[0].duration_min == 90
         select = conn.executed[-1][0]
         assert "plan->'points'" in select
         assert "plan->'shape'" not in select

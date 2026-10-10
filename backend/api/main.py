@@ -28,8 +28,11 @@ from api.routers import (
 from api.routers.routes import route_progress, route_trace
 from core.config import openrouter_api_key, settings
 from db.store.areas import PostgresAreaRepository
+from db.store.clients import PostgresClientRepository
 from db.store.places import PostgresPlaceRepository
 from db.store.registry import Repositories
+from db.store.stats import PostgresStatsRepository
+from db.store.users import PostgresUserRepository
 from ml import embeddings
 from planner.pipeline import Pipeline
 from telemetry import trace
@@ -50,6 +53,9 @@ async def lifespan(_: FastAPI):
     repos = Repositories(
         places=PostgresPlaceRepository(),
         areas=PostgresAreaRepository(),
+        users=PostgresUserRepository(),
+        stats=PostgresStatsRepository(),
+        clients=PostgresClientRepository(),
     )
     app.state.repos = repos
     app.state.planner = Pipeline(repos=repos)

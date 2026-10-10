@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, Query, Request, Response
 
 from api import deps
 from api.models.accounts import (
+    MAX_LIST_LIMIT,
     REASON_INVALID_REQUEST,
     REASON_LAST_ADMIN,
     REASON_PLACE_NOT_FOUND,
@@ -30,12 +31,11 @@ from api.models.accounts import (
     StatsOut,
     public_user,
 )
-from db.store.accounts_store import (
-    MAX_LIST_LIMIT,
-    AccountRepository,
-    DuplicateSource,
-    place_payloads,
-)
+from db.store.errors import DuplicateSource
+from db.store.mappers import place_payload
+from db.store.places import PostgresPlaceRepository
+from db.store.stats import StatsRepository
+from db.store.users import UserRepository
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -47,15 +47,14 @@ def admin_list_users(
     q: str = Query(default="", max_length=200),
     limit: int = Query(default=50, ge=1, le=MAX_LIST_LIMIT),
     offset: int = Query(default=0, ge=0),
-    repo: AccountRepository = Depends(deps.get_account_repository),
+    repo: UserRepository = Depends(deps.get_user_repository),
 ) -> Any:
     _, err = deps.require_admin(request, repo)
     if err is not None:
         return err
-    rows, total = repo.list_users(q=q.strip(), limit=limit, offset=offset)
-    return AdminUserListOut(
-        items=[AdminUserItem(**row) for row in rows], total=total
-    )
+    users, total = repo.list_users(q=q.strip(), limit=limit, offset=offset)
+    items = [AdminUserItem.model_validate(user, from_attributes=True) for user in users]
+    return AdminUserListOut(items=items, total=total)
 
 
 @router.patch("/users/{user_id}", response_model=PublicUser)
@@ -64,7 +63,7 @@ def admin_patch_user(
     user_id: str,
     body: AdminUserPatch,
     request: Request,
-    repo: AccountRepository = Depends(deps.get_account_repository),
+    repo: UserRepository = Depends(deps.get_user_repository),
 ) -> Any:
     actor, err = deps.require_admin(request, repo)
     if err is not None:
@@ -81,10 +80,10 @@ def admin_patch_user(
     role = fields.get("role")
     display_name_set = "display_name" in fields
 
-    if role is not None and role != target["role"]:
-        if target_id == actor["id"]:
+    if role is not None and role != target.role:
+        if target_id == actor.id:
             return deps.error(409, REASON_SELF_ROLE)
-        if target["role"] == ROLE_ADMIN and role != ROLE_ADMIN:
+        if target.role == ROLE_ADMIN and role != ROLE_ADMIN:
             if repo.count_admins() <= 1:
                 return deps.error(409, REASON_LAST_ADMIN)
 
@@ -104,7 +103,7 @@ def admin_patch_user(
 def admin_delete_user(
     user_id: str,
     request: Request,
-    repo: AccountRepository = Depends(deps.get_account_repository),
+    repo: UserRepository = Depends(deps.get_user_repository),
 ) -> Any:
     actor, err = deps.require_admin(request, repo)
     if err is not None:
@@ -113,12 +112,12 @@ def admin_delete_user(
     target_id = deps.parse_uuid(user_id)
     if target_id is None:
         return deps.error(404, REASON_USER_NOT_FOUND)
-    if target_id == actor["id"]:
+    if target_id == actor.id:
         return deps.error(409, REASON_SELF_DELETE)
     target = repo.get_user(target_id)
     if target is None:
         return deps.error(404, REASON_USER_NOT_FOUND)
-    if target["role"] == ROLE_ADMIN and repo.count_admins() <= 1:
+    if target.role == ROLE_ADMIN and repo.count_admins() <= 1:
         return deps.error(409, REASON_LAST_ADMIN)
     repo.delete_user(target_id)
     return Response(status_code=204)
@@ -132,16 +131,17 @@ def admin_list_places(
     category: str = Query(default="", max_length=120),
     limit: int = Query(default=50, ge=1, le=MAX_LIST_LIMIT),
     offset: int = Query(default=0, ge=0),
-    repo: AccountRepository = Depends(deps.get_account_repository),
+    repo: UserRepository = Depends(deps.get_user_repository),
+    places: PostgresPlaceRepository = Depends(deps.get_place_repository),
 ) -> Any:
     _, err = deps.require_admin(request, repo)
     if err is not None:
         return err
-    rows, total = repo.list_places(
+    found, total = places.list_places_paged(
         q=q.strip(), category=category.strip(), limit=limit, offset=offset
     )
     return AdminPlaceListOut(
-        items=[PlaceItem(**payload) for payload in place_payloads(rows)],
+        items=[PlaceItem(**place_payload(place)) for place in found],
         total=total,
     )
 
@@ -151,16 +151,17 @@ def admin_list_places(
 def admin_create_place(
     body: AdminPlaceIn,
     request: Request,
-    repo: AccountRepository = Depends(deps.get_account_repository),
+    repo: UserRepository = Depends(deps.get_user_repository),
+    places: PostgresPlaceRepository = Depends(deps.get_place_repository),
 ) -> Any:
     _, err = deps.require_admin(request, repo)
     if err is not None:
         return err
     try:
-        row = repo.create_place(body.model_dump(exclude_unset=True))
+        place = places.create_place(body.model_dump(exclude_unset=True))
     except DuplicateSource:
         return deps.error(409, REASON_SOURCE_TAKEN)
-    return PlaceItem(**place_payloads([row])[0])
+    return PlaceItem(**place_payload(place))
 
 
 @router.patch("/places/{place_id}", response_model=PlaceItem)
@@ -169,7 +170,8 @@ def admin_patch_place(
     place_id: int,
     body: AdminPlacePatch,
     request: Request,
-    repo: AccountRepository = Depends(deps.get_account_repository),
+    repo: UserRepository = Depends(deps.get_user_repository),
+    places: PostgresPlaceRepository = Depends(deps.get_place_repository),
 ) -> Any:
     _, err = deps.require_admin(request, repo)
     if err is not None:
@@ -178,12 +180,12 @@ def admin_patch_place(
     if not fields:
         return deps.error(422, REASON_INVALID_REQUEST)
     try:
-        row = repo.update_place(place_id, fields)
+        place = places.update_place(place_id, fields)
     except DuplicateSource:
         return deps.error(409, REASON_SOURCE_TAKEN)
-    if row is None:
+    if place is None:
         return deps.error(404, REASON_PLACE_NOT_FOUND)
-    return PlaceItem(**place_payloads([row])[0])
+    return PlaceItem(**place_payload(place))
 
 
 @router.delete("/places/{place_id}", status_code=204, response_model=None)
@@ -191,12 +193,13 @@ def admin_patch_place(
 def admin_delete_place(
     place_id: int,
     request: Request,
-    repo: AccountRepository = Depends(deps.get_account_repository),
+    repo: UserRepository = Depends(deps.get_user_repository),
+    places: PostgresPlaceRepository = Depends(deps.get_place_repository),
 ) -> Any:
     _, err = deps.require_admin(request, repo)
     if err is not None:
         return err
-    if not repo.delete_place(place_id):
+    if not places.delete_place(place_id):
         return deps.error(404, REASON_PLACE_NOT_FOUND)
     return Response(status_code=204)
 
@@ -205,9 +208,10 @@ def admin_delete_place(
 @deps.storage_guarded
 def admin_stats(
     request: Request,
-    repo: AccountRepository = Depends(deps.get_account_repository),
+    repo: UserRepository = Depends(deps.get_user_repository),
+    stats: StatsRepository = Depends(deps.get_stats_repository),
 ) -> Any:
     _, err = deps.require_admin(request, repo)
     if err is not None:
         return err
-    return StatsOut(**repo.stats())
+    return StatsOut(**stats.stats())

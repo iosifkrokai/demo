@@ -26,11 +26,8 @@ from api.models.clients import (
     RouteListItem,
     RoutePatchIn,
 )
-from db.store.clients_store import (
-    MAX_SAVED_ROUTES,
-    ClientRepository,
-    TooManyRoutes,
-)
+from db.store.clients import MAX_SAVED_ROUTES, ClientRepository
+from db.store.errors import TooManyRoutes
 
 router = APIRouter(prefix="/clients/me", tags=["clients"])
 
@@ -64,7 +61,9 @@ def get_preferences(
         return PreferencesOut()
     repo.ensure_client(client_id)
     stored = repo.get_preferences(client_id)
-    return PreferencesOut(**(stored or {}))
+    if stored is None:
+        return PreferencesOut()
+    return PreferencesOut.model_validate(stored, from_attributes=True)
 
 
 @router.put("/preferences", response_model=PreferencesOut)
@@ -82,7 +81,7 @@ def put_preferences(
         return deps.error(503, REASON_STORAGE_UNAVAILABLE)
     fields = body.model_dump(exclude_unset=True)
     stored = repo.upsert_preferences(client_id, fields)
-    return PreferencesOut(**stored)
+    return PreferencesOut.model_validate(stored, from_attributes=True)
 
 
 @router.post("/routes", response_model=RouteCreated, status_code=201)
@@ -109,7 +108,7 @@ def create_route(
         )
     except TooManyRoutes:
         return deps.error(409, REASON_TOO_MANY_ROUTES)
-    return RouteCreated(**created)
+    return RouteCreated.model_validate(created, from_attributes=True)
 
 
 @router.get("/routes", response_model=list[RouteListItem])
@@ -126,7 +125,10 @@ def list_routes(
     if client_id is None:
         return []
     repo.ensure_client(client_id)
-    return [RouteListItem(**row) for row in repo.list_routes(client_id, limit)]
+    return [
+        RouteListItem.model_validate(item, from_attributes=True)
+        for item in repo.list_routes(client_id, limit)
+    ]
 
 
 @router.get("/routes/{route_id}", response_model=RouteDetail)
@@ -147,7 +149,7 @@ def get_route(
     row = repo.get_route(client_id, rid)
     if row is None:
         return deps.error(404, REASON_ROUTE_NOT_FOUND)
-    return RouteDetail(**row)
+    return RouteDetail.model_validate(row, from_attributes=True)
 
 
 @router.patch("/routes/{route_id}", response_model=RouteDetail)
@@ -168,7 +170,7 @@ def rename_route(
     row = repo.rename_route(client_id, rid, body.name)
     if row is None:
         return deps.error(404, REASON_ROUTE_NOT_FOUND)
-    return RouteDetail(**row)
+    return RouteDetail.model_validate(row, from_attributes=True)
 
 
 @router.delete("/routes/{route_id}", status_code=204, response_model=None)

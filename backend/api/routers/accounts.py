@@ -37,11 +37,11 @@ from core.passwords import (
     new_session_token,
     verify_password,
 )
-from db.store.accounts_store import (
-    AccountRepository,
-    EmailTaken,
-    place_payloads,
-)
+from db.models.user import User
+from db.store.errors import EmailTaken
+from db.store.mappers import place_payload
+from db.store.places import PostgresPlaceRepository
+from db.store.users import UserRepository
 
 router = APIRouter(tags=["accounts"])
 
@@ -60,14 +60,15 @@ def _optional_client_id(request: Request) -> uuid.UUID | None:
 def _start_session(
     request: Request,
     response: Response,
-    repo: AccountRepository,
-    user_id: uuid.UUID,
+    repo: UserRepository,
+    user: User,
 ) -> None:
     """Mint a session, store only its hash, and hand the token to the browser."""
+    assert user.id is not None
     token = new_session_token()
     expires = datetime.now(UTC) + timedelta(seconds=SESSION_TTL_S)
-    repo.create_session(hash_token(token), user_id, expires)
-    repo.touch_login(user_id)
+    repo.create_session(hash_token(token), user.id, expires)
+    repo.touch_login(user.id)
     response.set_cookie(
         SESSION_COOKIE,
         token,
@@ -85,7 +86,7 @@ def register(
     body: RegisterIn,
     request: Request,
     response: Response,
-    repo: AccountRepository = Depends(deps.get_account_repository),
+    repo: UserRepository = Depends(deps.get_user_repository),
 ) -> Any:
     """Create an account (always ``role=user``) and sign it in.
 
@@ -99,7 +100,7 @@ def register(
         return deps.error(422, problem)
     display_name = (body.display_name or "").strip() or None
     try:
-        row = repo.create_user(
+        user = repo.create_user(
             uuid.uuid4(),
             email=email,
             password_hash=hash_password(body.password),
@@ -109,8 +110,8 @@ def register(
         )
     except EmailTaken:
         return deps.error(409, REASON_EMAIL_TAKEN)
-    _start_session(request, response, repo, row["id"])
-    return public_user(row)
+    _start_session(request, response, repo, user)
+    return public_user(user)
 
 
 @router.post("/auth/login", response_model=PublicUser)
@@ -119,24 +120,25 @@ def login(
     body: LoginIn,
     request: Request,
     response: Response,
-    repo: AccountRepository = Depends(deps.get_account_repository),
+    repo: UserRepository = Depends(deps.get_user_repository),
 ) -> Any:
     email = normalize_email(body.email)
-    row = repo.get_user_by_email(email) if email is not None else None
-    if row is None or not verify_password(body.password, row.get("password_hash")):
+    user = repo.get_user_by_email(email) if email is not None else None
+    if user is None or not verify_password(body.password, user.password_hash):
         return deps.error(401, REASON_INVALID_CREDENTIALS)
     client_id = _optional_client_id(request)
     if client_id is not None:
-        repo.link_client(row["id"], client_id)
-    _start_session(request, response, repo, row["id"])
-    return public_user(row)
+        assert user.id is not None
+        repo.link_client(user.id, client_id)
+    _start_session(request, response, repo, user)
+    return public_user(user)
 
 
 @router.post("/auth/logout", status_code=204, response_model=None)
 @deps.storage_guarded
 def logout(
     request: Request,
-    repo: AccountRepository = Depends(deps.get_account_repository),
+    repo: UserRepository = Depends(deps.get_user_repository),
 ) -> Any:
     out = Response(status_code=204)
     token = deps.session_token(request)
@@ -150,7 +152,7 @@ def logout(
 @deps.storage_guarded
 def me(
     request: Request,
-    repo: AccountRepository = Depends(deps.get_account_repository),
+    repo: UserRepository = Depends(deps.get_user_repository),
 ) -> Any:
     """Honest about the anonymous case: ``{authenticated: false}``, not a 401.
 
@@ -166,18 +168,21 @@ def me(
 @deps.storage_guarded
 def list_visited(
     request: Request,
-    repo: AccountRepository = Depends(deps.get_account_repository),
+    repo: UserRepository = Depends(deps.get_user_repository),
+    places: PostgresPlaceRepository = Depends(deps.get_place_repository),
 ) -> Any:
     user, err = deps.require_user(request, repo)
     if err is not None:
         return err
-    assert user is not None
-    rows = repo.list_visited(user["id"])
-    payloads = place_payloads(rows)
-    items = [
-        VisitedItem(**payload, visited_at=row["visited_at"])
-        for payload, row in zip(payloads, rows)
-    ]
+    assert user is not None and user.id is not None
+    marks = repo.list_visited(user.id)
+    by_id = {place.id: place for place in places.get_by_ids([m.place_id for m in marks])}
+    items: list[VisitedItem] = []
+    for mark in marks:
+        place = by_id.get(mark.place_id)
+        if place is None or mark.visited_at is None:
+            continue
+        items.append(VisitedItem(**place_payload(place), visited_at=mark.visited_at))
     return VisitedListOut(items=items, count=len(items))
 
 
@@ -186,18 +191,18 @@ def list_visited(
 def mark_visited(
     place_id: int,
     request: Request,
-    repo: AccountRepository = Depends(deps.get_account_repository),
+    repo: UserRepository = Depends(deps.get_user_repository),
+    places: PostgresPlaceRepository = Depends(deps.get_place_repository),
 ) -> Any:
     user, err = deps.require_user(request, repo)
     if err is not None:
         return err
-    assert user is not None
-    marked = repo.mark_visited(user["id"], place_id)
-    place = repo.get_place(place_id) if marked is not None else None
-    if marked is None or place is None:
+    assert user is not None and user.id is not None
+    mark = repo.mark_visited(user.id, place_id)
+    place = places.get_by_id(place_id) if mark is not None else None
+    if mark is None or place is None or mark.visited_at is None:
         return deps.error(404, REASON_PLACE_NOT_FOUND)
-    payload = place_payloads([place])[0]
-    return VisitedItem(**payload, visited_at=marked["visited_at"])
+    return VisitedItem(**place_payload(place), visited_at=mark.visited_at)
 
 
 @router.post("/me/visited", response_model=VisitedBulkOut)
@@ -205,13 +210,13 @@ def mark_visited(
 def mark_visited_bulk(
     body: VisitedBulkIn,
     request: Request,
-    repo: AccountRepository = Depends(deps.get_account_repository),
+    repo: UserRepository = Depends(deps.get_user_repository),
 ) -> Any:
     user, err = deps.require_user(request, repo)
     if err is not None:
         return err
-    assert user is not None
-    marked = repo.mark_visited_many(user["id"], body.place_ids)
+    assert user is not None and user.id is not None
+    marked = repo.mark_visited_many(user.id, body.place_ids)
     return VisitedBulkOut(marked=marked, count=len(marked))
 
 
@@ -220,11 +225,11 @@ def mark_visited_bulk(
 def unmark_visited(
     place_id: int,
     request: Request,
-    repo: AccountRepository = Depends(deps.get_account_repository),
+    repo: UserRepository = Depends(deps.get_user_repository),
 ) -> Any:
     user, err = deps.require_user(request, repo)
     if err is not None:
         return err
-    assert user is not None
-    repo.unmark_visited(user["id"], place_id)
+    assert user is not None and user.id is not None
+    repo.unmark_visited(user.id, place_id)
     return Response(status_code=204)

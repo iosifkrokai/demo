@@ -11,7 +11,8 @@ import uuid
 
 from core.accounts import normalize_email, password_problem
 from core.passwords import hash_password
-from db.store.accounts_store import EmailTaken, PostgresAccountRepository
+from db.store.errors import EmailTaken
+from db.store.users import PostgresUserRepository
 
 
 def create_admin(
@@ -23,13 +24,14 @@ def create_admin(
         print(f"not an email: {email!r}", file=sys.stderr)
         return 2
 
-    repo = PostgresAccountRepository()
+    repo = PostgresUserRepository()
     try:
         existing = repo.get_user_by_email(normalized)
         if existing is not None:
-            updated = repo.update_user(existing["id"], role="admin")
+            assert existing.id is not None
+            updated = repo.update_user(existing.id, role="admin")
             assert updated is not None
-            print(f"promoted to admin: {updated['email']} ({updated['id']})")
+            print(f"promoted to admin: {updated.email} ({updated.id})")
             return 0
 
         secret = password or os.environ.get("GRODNO_ADMIN_PASSWORD")
@@ -41,7 +43,7 @@ def create_admin(
             return 2
 
         try:
-            row = repo.create_user(
+            user = repo.create_user(
                 uuid.uuid4(),
                 email=normalized,
                 password_hash=hash_password(secret),
@@ -51,7 +53,7 @@ def create_admin(
         except EmailTaken:
             print(f"email taken: {normalized}", file=sys.stderr)
             return 1
-        print(f"admin created: {row['email']} ({row['id']})")
+        print(f"admin created: {user.email} ({user.id})")
         return 0
     finally:
         repo.close()

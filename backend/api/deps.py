@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import functools
 import logging
-import threading
 import uuid
 from collections.abc import Callable
 from typing import Any
@@ -31,32 +30,16 @@ from api.models.accounts import (
 from core.config import openrouter_api_key
 from core.errors import AgentError
 from core.passwords import hash_token
-from db.store.accounts_store import (
-    AccountRepository,
-    PostgresAccountRepository,
-    StorageUnavailable as AccountStorageUnavailable,
-)
-from db.store.clients_store import (
-    ClientRepository,
-    PostgresClientRepository,
-    StorageUnavailable as ClientStorageUnavailable,
-)
-from db.store.errors import StorageUnavailable as StoreStorageUnavailable
+from db.models.user import User
+from db.store.clients import ClientRepository
+from db.store.errors import StorageUnavailable
+from db.store.places import PostgresPlaceRepository
 from db.store.registry import Repositories
+from db.store.stats import StatsRepository
+from db.store.users import UserRepository
 from planner.pipeline import Pipeline
 
 log = logging.getLogger(__name__)
-
-# The stores raised three separate `StorageUnavailable` classes; a shared guard
-# has to catch all three or it would let one store's outage escape as a 500.
-_STORAGE_UNAVAILABLE = (
-    StoreStorageUnavailable,
-    AccountStorageUnavailable,
-    ClientStorageUnavailable,
-)
-
-_default_account_repo_lock = threading.Lock()
-_default_client_repo_lock = threading.Lock()
 
 
 # --- request guards ---------------------------------------------------------
@@ -98,13 +81,17 @@ def http_error(status: int, reason: str) -> HTTPException:
 
 
 def storage_guarded(fn: Callable[..., Any]) -> Callable[..., Any]:
-    """Turn a storage outage into ``503 storage_unavailable``, never a 500."""
+    """Turn a storage outage into ``503 storage_unavailable``, never a 500.
+
+    Every repository raises the one :class:`db.store.errors.StorageUnavailable`,
+    so a single ``except`` catches the whole storage layer — no per-store tuple.
+    """
 
     @functools.wraps(fn)
     def wrapper(*args: Any, **kwargs: Any) -> Any:
         try:
             return fn(*args, **kwargs)
-        except _STORAGE_UNAVAILABLE as exc:
+        except StorageUnavailable as exc:
             log.warning("storage unavailable: %s", exc)
             return error(503, REASON_STORAGE_UNAVAILABLE)
 
@@ -135,7 +122,7 @@ def session_token(request: Request) -> str | None:
     return None
 
 
-def session_user(request: Request, repo: AccountRepository) -> dict[str, Any] | None:
+def session_user(request: Request, repo: UserRepository) -> User | None:
     token = session_token(request)
     if token is None:
         return None
@@ -143,8 +130,8 @@ def session_user(request: Request, repo: AccountRepository) -> dict[str, Any] | 
 
 
 def require_user(
-    request: Request, repo: AccountRepository
-) -> tuple[dict[str, Any] | None, JSONResponse | None]:
+    request: Request, repo: UserRepository
+) -> tuple[User | None, JSONResponse | None]:
     user = session_user(request, repo)
     if user is None:
         return None, error(401, REASON_NOT_AUTHENTICATED)
@@ -152,13 +139,13 @@ def require_user(
 
 
 def require_admin(
-    request: Request, repo: AccountRepository
-) -> tuple[dict[str, Any] | None, JSONResponse | None]:
+    request: Request, repo: UserRepository
+) -> tuple[User | None, JSONResponse | None]:
     user, err = require_user(request, repo)
     if err is not None:
         return None, err
     assert user is not None
-    if user["role"] != ROLE_ADMIN:
+    if user.role != ROLE_ADMIN:
         return None, error(403, REASON_NOT_ADMIN)
     return user, None
 
@@ -172,23 +159,39 @@ def get_planner(request: Request) -> Pipeline:
 
 
 def get_repos(request: Request) -> Repositories:
-    """The repositories the lifespan built onto ``app.state.repos``."""
+    """The repositories the lifespan built onto ``app.state.repos``.
+
+    Tests set ``app.state.repos`` directly (no lifespan runs), so the per-kind
+    accessors below fall back to it only when no fake was injected.
+    """
     return request.app.state.repos
 
 
-def get_account_repository(request: Request) -> AccountRepository:
+def get_place_repository(request: Request) -> PostgresPlaceRepository:
+    """The process-wide place repository, or a test-injected fake.
+
+    Tests set ``app.state.places_repository``.
+    """
+    repo = getattr(request.app.state, "places_repository", None)
+    return repo if repo is not None else get_repos(request).places
+
+
+def get_user_repository(request: Request) -> UserRepository:
     """The process-wide account repository, or a test-injected fake.
 
-    Tests set ``app.state.accounts_repository``.
+    Tests set ``app.state.users_repository``.
     """
-    repo = getattr(request.app.state, "accounts_repository", None)
-    if repo is None:
-        with _default_account_repo_lock:
-            repo = getattr(request.app.state, "accounts_repository", None)
-            if repo is None:
-                repo = PostgresAccountRepository()
-                request.app.state.accounts_repository = repo
-    return repo
+    repo = getattr(request.app.state, "users_repository", None)
+    return repo if repo is not None else get_repos(request).users
+
+
+def get_stats_repository(request: Request) -> StatsRepository:
+    """The process-wide stats repository, or a test-injected fake.
+
+    Tests set ``app.state.stats_repository``.
+    """
+    repo = getattr(request.app.state, "stats_repository", None)
+    return repo if repo is not None else get_repos(request).stats
 
 
 def get_client_repository(request: Request) -> ClientRepository:
@@ -197,10 +200,4 @@ def get_client_repository(request: Request) -> ClientRepository:
     Tests set ``app.state.clients_repository``.
     """
     repo = getattr(request.app.state, "clients_repository", None)
-    if repo is None:
-        with _default_client_repo_lock:
-            repo = getattr(request.app.state, "clients_repository", None)
-            if repo is None:
-                repo = PostgresClientRepository()
-                request.app.state.clients_repository = repo
-    return repo
+    return repo if repo is not None else get_repos(request).clients

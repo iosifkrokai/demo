@@ -23,3 +23,21 @@ class SavedRoute:
     visit_overrides: dict[str, int] | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
+
+
+@dataclass(frozen=True)
+class SavedRouteSummary:
+    """One row of the saved-routes list: the scalars, never the geometry.
+
+    `stop_count`/`distance_m`/`duration_min` are derived from the stored plan by
+    the list query, so this projection is not a row of `saved_routes` — fetching
+    the whole row would drag a polyline across the wire to print three numbers.
+    """
+
+    id: UUID | None = None
+    name: str | None = None
+    query: str = ""
+    created_at: datetime | None = None
+    stop_count: int = 0
+    distance_m: int | None = None
+    duration_min: int | None = None

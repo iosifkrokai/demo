@@ -124,9 +124,9 @@ def test_valhalla_profiles_map_onto_walking_thresholds():
 def test_live_services_along_a_real_street_in_grodno():
     """A walk down Советская must find real cafés and toilets beside the line."""
     try:
-        from db.store.clients_store import default_connect
+        from db.store.base import autocommit_connect
 
-        conn = default_connect()
+        conn = autocommit_connect()
     except Exception as exc:
         pytest.skip(f"нет базы: {exc}")
 

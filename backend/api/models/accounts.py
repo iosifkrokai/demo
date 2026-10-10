@@ -10,12 +10,13 @@ administrator with the very same ones.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Literal
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field, model_validator
 
 from core.accounts import DISPLAY_NAME_MAX, EMAIL_MAX, PASSWORD_MAX_LENGTH
+from db.models.user import User
 
 REASON_STORAGE_UNAVAILABLE = "storage_unavailable"
 REASON_NOT_AUTHENTICATED = "not_authenticated"
@@ -31,6 +32,9 @@ REASON_SELF_DELETE = "self_delete"
 REASON_INVALID_REQUEST = "invalid_request"
 
 SESSION_COOKIE = "grodno_session"
+
+# The largest page an admin listing will serve; the HTTP cap, not a storage one.
+MAX_LIST_LIMIT = 500
 
 ROLE_USER = "user"
 ROLE_ADMIN = "admin"
@@ -206,12 +210,10 @@ class StatsOut(BaseModel):
     saved_routes: int
 
 
-def public_user(row: dict[str, Any]) -> PublicUser:
-    """Project a ``users`` row onto the public shape (drops ``password_hash``)."""
-    return PublicUser(
-        id=row["id"],
-        email=row["email"],
-        display_name=row.get("display_name"),
-        role=row["role"],
-        created_at=row["created_at"],
-    )
+def public_user(user: User) -> PublicUser:
+    """Project a :class:`db.models.user.User` onto the public shape.
+
+    Built from attributes, so ``password_hash`` — populated only by the login
+    lookup — is simply never read.
+    """
+    return PublicUser.model_validate(user, from_attributes=True)

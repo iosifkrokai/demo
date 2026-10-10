@@ -1,25 +1,23 @@
 """Storage for the anonymous client entity.
 
-One job: persist a client's preferences and saved routes and answer nothing else.
+One job: persist a client's preferences and saved routes and answer nothing
+else. The connection, the lock and the mapping from a driver error to
+:class:`StorageUnavailable` are the base repository's — this module is only the
+queries and the shapes they return.
 """
 
 from __future__ import annotations
 
-import logging
-import threading
 import uuid
-from collections.abc import Callable, Iterator
-from contextlib import contextmanager
 from typing import Any, Protocol
 
-import psycopg
-from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
-from db.connection import connect
-from db.store.mappers import route_metrics
-
-log = logging.getLogger(__name__)
+from db.models.client import ClientPreferences
+from db.models.route import SavedRoute, SavedRouteSummary
+from db.store.base import ConnectionFactory, PostgresRepository
+from db.store.errors import TooManyRoutes
+from db.store.mappers import model_from_row, route_metrics
 
 MAX_SAVED_ROUTES = 200
 
@@ -42,17 +40,9 @@ _ROUTE_DETAIL_SELECT = (
     "id, name, query, plan, visit_overrides, created_at, updated_at"
 )
 
-
-class StorageUnavailable(RuntimeError):
-    """The client store could not reach Postgres (→ ``503 storage_unavailable``)."""
-
-
-class TooManyRoutes(RuntimeError):
-    """The client already holds ``limit`` saved routes."""
-
-    def __init__(self, limit: int) -> None:
-        super().__init__(f"client already has {limit} saved routes")
-        self.limit = limit
+_ROUTE_INSERT_SELECT = (
+    "id, client_id, name, query, plan, visit_overrides, created_at, updated_at"
+)
 
 
 class ClientRepository(Protocol):
@@ -60,11 +50,11 @@ class ClientRepository(Protocol):
 
     def ensure_client(self, client_id: uuid.UUID) -> None: ...
 
-    def get_preferences(self, client_id: uuid.UUID) -> dict[str, Any] | None: ...
+    def get_preferences(self, client_id: uuid.UUID) -> ClientPreferences | None: ...
 
     def upsert_preferences(
         self, client_id: uuid.UUID, fields: dict[str, Any]
-    ) -> dict[str, Any]: ...
+    ) -> ClientPreferences: ...
 
     def add_route(
         self,
@@ -75,31 +65,23 @@ class ClientRepository(Protocol):
         plan: dict[str, Any],
         name: str | None = None,
         visit_overrides: dict[str, int] | None = None,
-    ) -> dict[str, Any]: ...
+    ) -> SavedRoute: ...
 
     def list_routes(
         self, client_id: uuid.UUID, limit: int = 50
-    ) -> list[dict[str, Any]]: ...
+    ) -> list[SavedRouteSummary]: ...
 
     def get_route(
         self, client_id: uuid.UUID, route_id: uuid.UUID
-    ) -> dict[str, Any] | None: ...
+    ) -> SavedRoute | None: ...
 
     def rename_route(
         self, client_id: uuid.UUID, route_id: uuid.UUID, name: str
-    ) -> dict[str, Any] | None: ...
+    ) -> SavedRoute | None: ...
 
     def delete_route(self, client_id: uuid.UUID, route_id: uuid.UUID) -> bool: ...
 
     def delete_client(self, client_id: uuid.UUID) -> bool: ...
-
-
-def default_connect() -> psycopg.Connection:
-    """One autocommit connection through the DSN from config.py.
-
-    ``connect_timeout`` is short so a down database fails fast into ``503``.
-    """
-    return connect(autocommit=True)
 
 
 def _adapt(value: Any, column: str) -> Any:
@@ -114,53 +96,21 @@ def _adapt(value: Any, column: str) -> Any:
     return value
 
 
-class PostgresClientRepository:
+class PostgresClientRepository(PostgresRepository):
     """A :class:`ClientRepository` backed by Postgres.
 
-    The connection is lazy and reused; a lock serialises concurrent access.
+    The cap on saved routes is per-instance, so a test can lower it without
+    touching the schema.
     """
 
     def __init__(
         self,
-        connect: Callable[[], psycopg.Connection] | None = None,
+        connect: ConnectionFactory | None = None,
         *,
         max_routes: int = MAX_SAVED_ROUTES,
     ) -> None:
-        self._connect = connect or default_connect
-        self._conn: psycopg.Connection | None = None
-        self._lock = threading.Lock()
+        super().__init__(connect)
         self.max_routes = max_routes
-
-    def _connection(self) -> psycopg.Connection:
-        conn = self._conn
-        if conn is None or conn.closed:
-            conn = self._connect()
-            self._conn = conn
-        return conn
-
-    def _drop(self) -> None:
-        conn, self._conn = self._conn, None
-        if conn is not None:
-            try:
-                conn.close()
-            except Exception:
-                pass
-
-    @contextmanager
-    def _cursor(self) -> Iterator[Any]:
-        """A dict-row cursor, or :class:`StorageUnavailable` on any DB failure."""
-        try:
-            with self._lock:
-                conn = self._connection()
-                with conn.cursor(row_factory=dict_row) as cur:
-                    yield cur
-        except psycopg.Error as exc:
-            self._drop()
-            raise StorageUnavailable(str(exc)) from exc
-
-    def close(self) -> None:
-        with self._lock:
-            self._drop()
 
     def ensure_client(self, client_id: uuid.UUID) -> None:
         """Insert the client if unseen, otherwise refresh ``last_seen_at``."""
@@ -180,7 +130,7 @@ class PostgresClientRepository:
             cur.execute("DELETE FROM clients WHERE id = %s", (client_id,))
             return cur.rowcount > 0
 
-    def get_preferences(self, client_id: uuid.UUID) -> dict[str, Any] | None:
+    def get_preferences(self, client_id: uuid.UUID) -> ClientPreferences | None:
         """The stored row, or ``None`` when nothing has been saved yet."""
         with self._cursor() as cur:
             cur.execute(
@@ -189,11 +139,11 @@ class PostgresClientRepository:
                 (client_id,),
             )
             row = cur.fetchone()
-        return dict(row) if row is not None else None
+        return model_from_row(ClientPreferences, row) if row is not None else None
 
     def upsert_preferences(
         self, client_id: uuid.UUID, fields: dict[str, Any]
-    ) -> dict[str, Any]:
+    ) -> ClientPreferences:
         """Apply a partial update: only ``fields`` change, ``None`` clears.
 
         Creates the preferences row if this client has none yet.
@@ -216,7 +166,8 @@ class PostgresClientRepository:
         with self._cursor() as cur:
             cur.execute(sql, tuple(params))
             row = cur.fetchone()
-        return dict(row)
+        assert row is not None
+        return model_from_row(ClientPreferences, row)
 
     def add_route(
         self,
@@ -227,19 +178,19 @@ class PostgresClientRepository:
         plan: dict[str, Any],
         name: str | None = None,
         visit_overrides: dict[str, int] | None = None,
-    ) -> dict[str, Any]:
+    ) -> SavedRoute:
         """Store a checked plan verbatim.  The cap is enforced in the same
         statement, so two concurrent saves cannot both slip past it."""
         self.ensure_client(client_id)
         with self._cursor() as cur:
             cur.execute(
-                """
+                f"""
                 INSERT INTO saved_routes
                     (id, client_id, name, query, plan, visit_overrides,
                      created_at, updated_at)
                 SELECT %s, %s, %s, %s, %s, %s, now(), now()
                 WHERE (SELECT count(*) FROM saved_routes WHERE client_id = %s) < %s
-                RETURNING id, created_at
+                RETURNING {_ROUTE_INSERT_SELECT}
                 """,
                 (
                     route_id,
@@ -255,11 +206,11 @@ class PostgresClientRepository:
             row = cur.fetchone()
         if row is None:
             raise TooManyRoutes(self.max_routes)
-        return {"id": row["id"], "created_at": row["created_at"]}
+        return model_from_row(SavedRoute, row)
 
     def list_routes(
         self, client_id: uuid.UUID, limit: int = 50
-    ) -> list[dict[str, Any]]:
+    ) -> list[SavedRouteSummary]:
         """Newest first, without any heavy geometry.
 
         Only scalars are selected, so a saved polyline never crosses the wire."""
@@ -282,20 +233,20 @@ class PostgresClientRepository:
                 (client_id, limit),
             )
             rows = cur.fetchall()
-        out: list[dict[str, Any]] = []
-        for row in rows:
-            out.append({
-                "id": row["id"],
-                "name": row["name"],
-                "query": row["query"],
-                "created_at": row["created_at"],
+        return [
+            SavedRouteSummary(
+                id=row["id"],
+                name=row["name"],
+                query=row["query"],
+                created_at=row["created_at"],
                 **route_metrics(row["stop_count"], row["summary"], row["budget"]),
-            })
-        return out
+            )
+            for row in rows
+        ]
 
     def get_route(
         self, client_id: uuid.UUID, route_id: uuid.UUID
-    ) -> dict[str, Any] | None:
+    ) -> SavedRoute | None:
         """The full record (plan and visit_overrides included), or ``None``."""
         with self._cursor() as cur:
             cur.execute(
@@ -304,11 +255,11 @@ class PostgresClientRepository:
                 (route_id, client_id),
             )
             row = cur.fetchone()
-        return dict(row) if row is not None else None
+        return model_from_row(SavedRoute, row) if row is not None else None
 
     def rename_route(
         self, client_id: uuid.UUID, route_id: uuid.UUID, name: str
-    ) -> dict[str, Any] | None:
+    ) -> SavedRoute | None:
         with self._cursor() as cur:
             cur.execute(
                 f"UPDATE saved_routes SET name = %s, updated_at = now() "
@@ -317,7 +268,7 @@ class PostgresClientRepository:
                 (name, route_id, client_id),
             )
             row = cur.fetchone()
-        return dict(row) if row is not None else None
+        return model_from_row(SavedRoute, row) if row is not None else None
 
     def delete_route(self, client_id: uuid.UUID, route_id: uuid.UUID) -> bool:
         with self._cursor() as cur:

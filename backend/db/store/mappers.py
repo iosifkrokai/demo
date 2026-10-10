@@ -10,7 +10,7 @@ from __future__ import annotations
 import dataclasses
 import json
 from collections.abc import Mapping
-from typing import Any
+from typing import Any, TypedDict
 
 from db.models.area import Area
 from db.models.place import Place
@@ -122,11 +122,19 @@ def place_payload(place: Place) -> dict[str, Any]:
     }
 
 
+class RouteMetrics(TypedDict):
+    """The three scalars a saved-routes list row carries, `stop_count` always set."""
+
+    stop_count: int
+    distance_m: int | None
+    duration_min: int | None
+
+
 def route_metrics(
     stop_count: int,
     summary: dict[str, Any] | None,
     budget: dict[str, Any] | None,
-) -> dict[str, int | None]:
+) -> RouteMetrics:
     """Derive the list columns from the plan's lightweight sub-objects.
 
     A plan that does not carry a value yields null rather than a guessed one.
