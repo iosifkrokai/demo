@@ -95,7 +95,6 @@ services:
         VITE_CLIENT_ID: "${VITE_CLIENT_ID:-}"
     container_name: grodno-frontend
     environment:
-      SKIP_PREFLIGHT_CHECK: "true"
       # Rendered into nginx.conf at container start (nginx templates + envsubst).
       AGENT_UPSTREAM: "${AGENT_UPSTREAM:-agent:8080}"
       VALHALLA_UPSTREAM: "${VALHALLA_UPSTREAM:-valhalla:8002}"
