@@ -10,8 +10,6 @@ import time as _time
 from dataclasses import dataclass, field
 from typing import Any
 
-import psycopg
-
 from agent import interpret_cache
 from contracts.planner import (
     BudgetInfo,
@@ -33,7 +31,7 @@ from core.errors import (
     NoRoutePossible,
     UpstreamUnavailable,
 )
-from db.store.search import _name_match_search, fetch_points_by_ids, nearby_places
+from db.store.registry import Repositories
 from planner.valhalla_client import ping as valhalla_ping
 from telemetry import progress, trace
 
@@ -88,7 +86,7 @@ from .response import (
     alternatives_for,
     alternatives_sentence,
 )
-from .retrieve import _row_to_candidate, apply_negative_filter, retrieve
+from .retrieve import apply_negative_filter, candidate_of, retrieve
 from .validate import validate
 from .verify import overall_status, verify
 
@@ -191,8 +189,8 @@ class _Turn:
 class Pipeline:
     """Stateless planner. One instance, reused across requests."""
 
-    def __init__(self, db: psycopg.Connection):
-        self.db = db
+    def __init__(self, repos: Repositories):
+        self.repos = repos
 
     @staticmethod
     def _left(t0: float) -> float:
@@ -316,7 +314,7 @@ class Pipeline:
     def _step_interpret(self, turn: _Turn, pre):
         progress.note(progress.STAGE_INTERPRETING)
         requirements = build_requirements(
-            turn.req.query, turn.req, db=self.db, wall_clock_s=self._left(turn.t0)
+            turn.req.query, turn.req, repos=self.repos, wall_clock_s=self._left(turn.t0)
         )
         intent = intent_from_requirements(requirements, turn.req.query)
 
@@ -338,7 +336,7 @@ class Pipeline:
             explicit_bbox=turn.req.region_bbox,
             explicit_round_trip=turn.req.round_trip,
             outside=requirements.outside_coverage,
-            db=self.db,
+            places=self.repos.places,
         )
         trace.record(
             "resolve",
@@ -391,16 +389,17 @@ class Pipeline:
         if turn.req.origin is not None:
             near = (turn.req.origin.lat, turn.req.origin.lon)
         elif geo_anchor is not None and not turn.region_scope:
-            anchor_rows = fetch_points_by_ids(self.db, [geo_anchor])
+            anchor_rows = self.repos.places.get_by_ids([geo_anchor])
             if anchor_rows:
-                near = (float(anchor_rows[0]["lat"]), float(anchor_rows[0]["lon"]))
+                anchor = anchor_rows[0]
+                near = (float(anchor.lat), float(anchor.lon))
         turn.near = near
 
         progress.note(progress.STAGE_SEARCHING)
         candidates = retrieve(
             constraints,
             qvec,
-            self.db,
+            self.repos.places,
             query_text=turn.req.query,
             near=near,
         )
@@ -504,7 +503,7 @@ class Pipeline:
             candidates = mmr_select(
                 candidates,
                 n=min(constants.MMR_POOL_SIZE, len(candidates)),
-                db=self.db,
+                places=self.repos.places,
                 constraints=constraints,
             )
         else:
@@ -562,7 +561,7 @@ class Pipeline:
                     "optional_categories": sight_categories,
                 }
             )
-            wider = retrieve(relaxed, turn.qvec, self.db, query_text="", near=turn.near)
+            wider = retrieve(relaxed, turn.qvec, self.repos.places, query_text="", near=turn.near)
             if relaxed.forbidden_categories or relaxed.forbidden_keywords:
                 wider = apply_negative_filter(wider, relaxed)
             wider = _geo_focus(
@@ -803,7 +802,7 @@ class Pipeline:
             requirements,
             plan,
             turn.shape,
-            _services_along_evidence(self.db, requirements, turn.shape),
+            _services_along_evidence(self.repos.places, requirements, turn.shape),
         )
         status = overall_status(requirements)
         progress.note(progress.STAGE_DONE)
@@ -845,13 +844,12 @@ class Pipeline:
 
     def reroute(self, point_ids: list[int], profile: str | None = None) -> RouteResponse:
         """Re-route a chosen list of place IDs."""
-        from db.store.search import fetch_points_by_ids
-        rows = fetch_points_by_ids(self.db, point_ids)
+        rows = self.repos.places.get_by_ids(point_ids)
         if len(rows) != len(point_ids):
-            missing = set(point_ids) - {r["id"] for r in rows}
+            missing = set(point_ids) - {r.id for r in rows}
             raise NoCandidatesFound(f"unknown point_ids: {sorted(missing)}")
 
-        candidates = [_row_to_candidate(r, 1.0) for r in rows]
+        candidates = [candidate_of(r, 1.0) for r in rows]
         intent = IntentResult(
             decision=IntentDecision(intent_type="specific"), source="agent"
         )
@@ -859,7 +857,7 @@ class Pipeline:
             intent,
             explicit_time_budget=constants.MAX_BUDGET_MIN,
             explicit_bbox=None,
-            db=self.db,
+            places=self.repos.places,
         )
         constraints.must_visit_ids = list(point_ids)
 
@@ -893,25 +891,18 @@ class Pipeline:
 
     def explain_route(self, point_ids: list[int]) -> str:
         """Natural-language Russian description of a list of points."""
-        from db.store.search import fetch_points_by_ids
-        rows = fetch_points_by_ids(self.db, point_ids)
+        rows = self.repos.places.get_by_ids(point_ids)
         if len(rows) != len(point_ids):
-            missing = set(point_ids) - {r["id"] for r in rows}
+            missing = set(point_ids) - {r.id for r in rows}
             raise NoCandidatesFound(f"unknown point_ids: {sorted(missing)}")
 
-        cands = [_row_to_candidate(r, 1.0) for r in rows]
+        cands = [candidate_of(r, 1.0) for r in rows]
         trace = {"algorithm": "direct", "diversity": 1.0, "fits_budget": True}
         return explain_route(cands, trace, walk_seconds=0.0)
 
     def health(self) -> dict:
         """Cheap liveness/readiness snapshot."""
-        db_ok = False
-        try:
-            with self.db.cursor() as cur:
-                cur.execute("SELECT 1")
-                db_ok = cur.fetchone() is not None
-        except Exception as e:
-            log.warning("health.db err=%s", e)
+        db_ok = self.repos.places.ping()
 
         try:
             valhalla_ok = valhalla_ping()
@@ -938,7 +929,7 @@ class Pipeline:
         A hand-placed stop (map click, no DB id) is matched to the nearest place.
         """
         base_ids = [p.id for p in ctx.base_points if p.id is not None]
-        base_rows = fetch_points_by_ids(self.db, base_ids) if base_ids else []
+        base_rows = self.repos.places.get_by_ids(base_ids) if base_ids else []
 
         manual = [
             p
@@ -947,27 +938,27 @@ class Pipeline:
         ]
         for point in manual:
             try:
-                near_rows = nearby_places(
-                    self.db, point.lat, point.lon, radius_km=0.06, limit=1
+                near_places = self.repos.places.nearby(
+                    point.lat, point.lon, radius_km=0.06, limit=1
                 )
             except Exception as exc:
                 log.warning("context: hand-placed stop lookup failed: %s", exc)
                 continue
-            for row in near_rows:
-                if row["id"] not in {r["id"] for r in base_rows}:
-                    base_rows.append(row)
+            for place in near_places:
+                if place.id is not None and place.id not in {r.id for r in base_rows}:
+                    base_rows.append(place)
                     log.info(
                         "context: hand-placed stop «%s» matched to «%s»",
-                        point.name, row["name"],
+                        point.name, place.name,
                     )
 
         seen: set[int] = set()
         base: list[Candidate] = []
         for row in base_rows:
-            if row["id"] in seen:
+            if row.id is None or row.id in seen:
                 continue
-            seen.add(row["id"])
-            base.append(_row_to_candidate(row, 0.0))
+            seen.add(row.id)
+            base.append(candidate_of(row, 0.0))
         return base
 
     def _refinement_removals(
@@ -1011,7 +1002,7 @@ class Pipeline:
                 if c in constants.CONVENIENCE_CATEGORIES
             }
             if convenience:
-                for c in _nearby_convenience(self.db, base, convenience):
+                for c in _nearby_convenience(self.repos.places, base, convenience):
                     found[c.id] = c
 
             sights = {
@@ -1020,7 +1011,7 @@ class Pipeline:
             }
             if sights:
                 for c in _nearby_convenience(
-                    self.db, base, sights,
+                    self.repos.places, base, sights,
                     radius_m=constants.CONVENIENCE_RADIUS_M * 4,
                     max_added=constants.CONVENIENCE_MAX_ADDED,
                 ):
@@ -1030,14 +1021,14 @@ class Pipeline:
 
         for name in directive.add_names:
             try:
-                rows = _name_match_search(self.db, name, limit=1)
+                rows = self.repos.places.name_match(name, limit=1)
             except Exception as exc:
                 log.warning("refinement: named add lookup failed: %s", exc)
                 continue
-            for row in rows:
-                if row["id"] in base_ids or row["id"] in found:
+            for place, _similarity in rows:
+                if place.id is None or place.id in base_ids or place.id in found:
                     continue
-                found[row["id"]] = _row_to_candidate(row, 0.0)
+                found[place.id] = candidate_of(place, 0.0)
 
         return [c for c in found.values() if c.id not in base_ids]
 
@@ -1098,7 +1089,7 @@ class Pipeline:
             stops=len(route),
         )
 
-        requirements = build_requirements(instruction or req.query, req, db=self.db)
+        requirements = build_requirements(instruction or req.query, req, repos=self.repos)
         intent = intent_from_requirements(requirements, instruction or req.query)
         trace.record(
             "interpret",
@@ -1111,7 +1102,7 @@ class Pipeline:
             explicit_time_budget=req.time_budget_minutes,
             explicit_bbox=req.region_bbox,
             explicit_round_trip=req.round_trip,
-            db=self.db,
+            places=self.repos.places,
         )
         trace.record(
             "resolve",
@@ -1152,7 +1143,7 @@ class Pipeline:
             requirements,
             plan,
             shape,
-            _services_along_evidence(self.db, requirements, shape),
+            _services_along_evidence(self.repos.places, requirements, shape),
         )
         status = overall_status(requirements)
         trace.record(

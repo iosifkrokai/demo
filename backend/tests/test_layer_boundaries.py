@@ -57,22 +57,12 @@ _SQL = re.compile(
 
 _DRIVER = re.compile(r"^\s*(?:import|from)\s+psycopg\b", re.MULTILINE)
 
-# Violations that exist today. Each entry goes away with the workstream that
-# closes it; the last test in this file fails if one stays behind.
-_PENDING_SQL = {
-    "agent/tools/_db.py": "W4c — _db_area_rows moves to AreaRepository.search",
-    "planner/pipeline.py": "W4d — health()'s SELECT 1 becomes PlaceRepository.ping()",
-    "planner/resolve.py": "W4d — _without_forbidden becomes PlaceRepository.category_of()",
-    "planner/retrieve.py": "W4d — _category_signal becomes PlaceRepository.by_category()",
-    "quality/evals.py": "W4e — run_services() becomes PlaceRepository.with_category()",
-}
-_PENDING_DRIVER = {
-    "planner/pipeline.py": "W4 — Pipeline takes repositories, not a connection",
-    "planner/refine.py": "W4d — takes PlaceRepository",
-    "planner/resolve.py": "W4d — takes PlaceRepository",
-    "planner/retrieve.py": "W4d — takes PlaceRepository",
-    "quality/evals.py": "W4e — opens a repository instead of a connection",
-}
+# Violations that exist today, named with the workstream that closes each. Both
+# lists are empty: the campaign that introduced them paid them off in full, and
+# `test_pending_lists_are_current` keeps them from being re-added by accident.
+# A new exception belongs here with a reason and an owner, not in a code comment.
+_PENDING_SQL: dict[str, str] = {}
+_PENDING_DRIVER: dict[str, str] = {}
 
 # --- rule 3: what the tooling and the image must know about -----------------
 

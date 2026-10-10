@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import os
 import sys
-from unittest.mock import MagicMock, patch
 
 import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from contracts.planner import Candidate
+from db.models.place import Place
 from planner.explain import _area_name, explain
 from planner.optimize import _budget_constrain, _max_leg, _max_leg_seconds
 from planner.resolve import _is_town_or_district_match
@@ -19,6 +19,39 @@ from planner.retrieve import (
     _detect_category_keywords,
     rrf_fuse,
 )
+
+
+class _FakePlaces:
+    """An in-memory stand-in for :class:`PostgresPlaceRepository`.
+
+    The resolve/retrieve seams used to be monkeypatched module functions; the
+    repository is the seam now, so a test hands it one that answers in memory.
+    """
+
+    def __init__(
+        self,
+        *,
+        name_matches: list[tuple[Place, float]] | None = None,
+        keyword_rows: list[Place] | None = None,
+        categories: dict[int, str] | None = None,
+        category_rows: list[Place] | None = None,
+    ) -> None:
+        self._name_matches = list(name_matches or [])
+        self._keyword_rows = list(keyword_rows or [])
+        self._categories = dict(categories or {})
+        self._category_rows = list(category_rows or [])
+
+    def name_match(self, query: str, limit: int = 3) -> list[tuple[Place, float]]:
+        return self._name_matches[:limit]
+
+    def keyword_search(self, query: str, limit: int = 20) -> list[Place]:
+        return self._keyword_rows[:limit]
+
+    def category_of(self, ids: list[int]) -> dict[int, str]:
+        return {i: self._categories[i] for i in ids if i in self._categories}
+
+    def by_category(self, codes: list[str], limit: int) -> list[Place]:
+        return self._category_rows[:limit]
 
 
 def _c(
@@ -50,35 +83,35 @@ class TestIsTownOrDistrictMatch:
     """_is_town_or_district_match correctly identifies town/district-only rows."""
 
     def test_name_match_is_false(self):
-        row = {
-            "name": "Мирский замок",
-            "town": "Мир",
-            "district": "Новогрудский район",
-        }
-        assert _is_town_or_district_match(row, "Мирскому") is False, \
+        place = Place(
+            name="Мирский замок",
+            town="Мир",
+            district="Новогрудский район",
+        )
+        assert _is_town_or_district_match(place, "Мирскому") is False, \
             "Query 'Мирскому' is a substring of name 'Мирский замок' — not a town match"
 
     def test_town_match_is_true(self):
-        row = {
-            "name": "Фарный костёл",
-            "town": "Гродно",
-            "district": "Гродненский район",
-        }
-        assert _is_town_or_district_match(row, "Гродно") is True, \
+        place = Place(
+            name="Фарный костёл",
+            town="Гродно",
+            district="Гродненский район",
+        )
+        assert _is_town_or_district_match(place, "Гродно") is True, \
             "Query 'Гродно' matches town column — town match"
 
     def test_district_match_is_true(self):
-        row = {
-            "name": "Лидский замок",
-            "town": "Лида",
-            "district": "Лидский район",
-        }
-        assert _is_town_or_district_match(row, "Лидский") is True, \
+        place = Place(
+            name="Лидский замок",
+            town="Лида",
+            district="Лидский район",
+        )
+        assert _is_town_or_district_match(place, "Лидский") is True, \
             "Query 'Лидский' matches district column — district match"
 
     def test_town_match_case_insensitive(self):
-        row = {"name": "Старый замок", "town": "гродно", "district": ""}
-        assert _is_town_or_district_match(row, "Гродно") is True, \
+        place = Place(name="Старый замок", town="гродно", district="")
+        assert _is_town_or_district_match(place, "Гродно") is True, \
             "Town match must be case-insensitive"
 
 
@@ -86,25 +119,23 @@ class TestResolveNamedPlacesLogic:
     """Direct tests of the two-path resolution logic."""
 
     def test_name_above_threshold_goes_to_must_visit(self):
-        """When _name_match_search returns a high-similarity row (sim >= 0.3),
+        """When name_match returns a high-similarity row (sim >= 0.3),
         it is added to must_visit_ids and NOT used as area_anchor."""
-        row = {
-            "id": 38,
-            "name": "Мирский замок",
-            "town": "Мир",
-            "district": "Новогрудский район",
-            "category": "замок",
-            "lat": 53.95,
-            "lon": 26.47,
-            "_name_sim": 0.5,
-        }
-        with patch("planner.resolve._name_match_search", return_value=[row]):
-            with patch("planner.resolve._keyword_search", return_value=[]):
-                from planner.resolve import _resolve_named_places
+        place = Place(
+            id=38,
+            name="Мирский замок",
+            town="Мир",
+            district="Новогрудский район",
+            category="замок",
+            lat=53.95,
+            lon=26.47,
+        )
+        places = _FakePlaces(name_matches=[(place, 0.5)], keyword_rows=[])
+        from planner.resolve import _resolve_named_places
 
-                must_ids, area_anchor, resolved = _resolve_named_places(
-                    ["Мирскому"], MagicMock()
-                )
+        must_ids, area_anchor, resolved = _resolve_named_places(
+            ["Мирскому"], places
+        )
 
         assert must_ids == [38], \
             "Мирскому (sim=0.5 >= 0.3) -> must_visit_ids"
@@ -113,34 +144,23 @@ class TestResolveNamedPlacesLogic:
         assert resolved == ["Мирскому"]
 
     def test_name_below_threshold_town_match_goes_to_area_anchor(self):
-        """When _name_match_search returns low similarity (sim < 0.3),
+        """When name_match returns low similarity (sim < 0.3),
         the keyword search is used for area_anchor instead."""
-        name_row = {
-            "id": 49,
-            "name": "Старый замок (Гродно)",
-            "town": "Гродно",
-            "district": "Гродненский район",
-            "category": "замок",
-            "lat": 53.68,
-            "lon": 23.83,
-            "_name_sim": 0.2,
-        }
-        town_row = {
-            "id": 49,
-            "name": "Старый замок (Гродно)",
-            "town": "Гродно",
-            "district": "Гродненский район",
-            "category": "замок",
-            "lat": 53.68,
-            "lon": 23.83,
-        }
-        with patch("planner.resolve._name_match_search", return_value=[name_row]):
-            with patch("planner.resolve._keyword_search", return_value=[town_row]):
-                from planner.resolve import _resolve_named_places
+        place = Place(
+            id=49,
+            name="Старый замок (Гродно)",
+            town="Гродно",
+            district="Гродненский район",
+            category="замок",
+            lat=53.68,
+            lon=23.83,
+        )
+        places = _FakePlaces(name_matches=[(place, 0.2)], keyword_rows=[place])
+        from planner.resolve import _resolve_named_places
 
-                must_ids, area_anchor, resolved = _resolve_named_places(
-                    ["Гродно"], MagicMock()
-                )
+        must_ids, area_anchor, resolved = _resolve_named_places(
+            ["Гродно"], places
+        )
 
         assert must_ids == [], \
             "Гродно (name_sim=0.2 < 0.3) -> must_visit_ids must be empty"
@@ -179,17 +199,15 @@ class TestCategorySteering:
 
     def test_category_signal_ordered_by_priority(self):
         """_category_signal orders primary category first -> higher RRF rank."""
-        mock_db = MagicMock()
-        mock_cur = MagicMock()
-        mock_cur.fetchall.return_value = [
-            (1, "костёл"),
-            (2, "замок"),
-            (3, "замок"),
-        ]
-        mock_db.cursor.return_value.__enter__ = MagicMock(return_value=mock_cur)
-        mock_db.cursor.return_value.__exit__ = MagicMock(return_value=False)
+        places = _FakePlaces(
+            category_rows=[
+                Place(id=1, category="костёл"),
+                Place(id=2, category="замок"),
+                Place(id=3, category="замок"),
+            ]
+        )
 
-        result = _category_signal(mock_db, None, ["замок"], limit=10)
+        result = _category_signal(places, None, ["замок"], limit=10)
         ids = [pid for pid, _ in result]
 
         assert ids.index(2) < ids.index(1), \
@@ -363,12 +381,8 @@ class TestResolveIntegration:
     """resolve() returns area_anchor but empty must_visit_ids for town-only queries."""
 
     def test_town_query_creates_area_anchor_not_must_visit(self):
-        import psycopg
-
         from contracts.planner import IntentDecision, IntentResult
         from planner.resolve import resolve
-
-        mock_db = MagicMock(spec=psycopg.Connection)
 
         intent = IntentResult(
             decision=IntentDecision(
@@ -381,24 +395,23 @@ class TestResolveIntegration:
             source="agent",
         )
 
-        name_row = {
-            "id": 49,
-            "name": "Старый замок (Гродно)",
-            "town": "Гродно",
-            "district": "Гродненский район",
-            "category": "замок",
-            "lat": 53.68,
-            "lon": 23.83,
-            "_name_sim": 0.2,
-        }
-        with patch("planner.resolve._name_match_search", return_value=[name_row]):
-            with patch("planner.resolve._keyword_search", return_value=[name_row]):
-                constraints = resolve(
-                    intent,
-                    explicit_time_budget=120,
-                    explicit_bbox=None,
-                    db=mock_db,
-                )
+        place = Place(
+            id=49,
+            name="Старый замок (Гродно)",
+            town="Гродно",
+            district="Гродненский район",
+            category="замок",
+            lat=53.68,
+            lon=23.83,
+        )
+        places = _FakePlaces(name_matches=[(place, 0.2)], keyword_rows=[place])
+
+        constraints = resolve(
+            intent,
+            explicit_time_budget=120,
+            explicit_bbox=None,
+            places=places,
+        )
 
         assert constraints.must_visit_ids == [], \
             "Гродно matched on town only — must_visit_ids must be empty"
@@ -411,8 +424,6 @@ class TestBudgetRule:
 
     @staticmethod
     def _resolve(explicit, llm_budget):
-        import psycopg
-
         from contracts.planner import IntentDecision, IntentResult
         from planner.resolve import resolve
 
@@ -427,14 +438,12 @@ class TestBudgetRule:
             ),
             source="agent",
         )
-        with patch("planner.resolve._name_match_search", return_value=[]):
-            with patch("planner.resolve._keyword_search", return_value=[]):
-                return resolve(
-                    intent,
-                    explicit_time_budget=explicit,
-                    explicit_bbox=None,
-                    db=MagicMock(spec=psycopg.Connection),
-                ).time_budget_minutes
+        return resolve(
+            intent,
+            explicit_time_budget=explicit,
+            explicit_bbox=None,
+            places=_FakePlaces(),
+        ).time_budget_minutes
 
     def test_zero_budget_means_no_limit(self):
         assert self._resolve(0, None) is None

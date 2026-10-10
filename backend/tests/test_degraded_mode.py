@@ -12,6 +12,7 @@ import os
 import sys
 from collections.abc import Iterator
 from contextlib import contextmanager
+from typing import Any
 
 import psycopg
 import pytest
@@ -30,6 +31,9 @@ from core.errors import (
     NoRoutePossible,
     UpstreamUnavailable,
 )
+from db.store.areas import PostgresAreaRepository
+from db.store.places import PostgresPlaceRepository
+from db.store.registry import Repositories
 from ml import embeddings
 from planner import (
     intent as intent_mod,
@@ -225,28 +229,51 @@ class _StubPlanner:
     health = _raise
 
 
-class _FakeDB:
-    """Just enough connection for Pipeline.health()'s `SELECT 1`."""
+class _FakeCursor:
+    """Just enough cursor for `ping()` (`fetchone`) and `catalog()` (`fetchall`)."""
 
-    def cursor(self):
+    def __enter__(self) -> _FakeCursor:
         return self
 
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *_exc):
+    def __exit__(self, *_exc) -> bool:
         return False
 
-    def execute(self, _sql):
+    def execute(self, _sql: str, _params: object = None) -> None:
         return None
 
     def fetchone(self):
         return (1,)
 
+    def fetchall(self) -> list:
+        return []
+
+
+class _FakeDB:
+    """Just enough connection for a repository: a dict-row cursor, a liveness flag."""
+
+    closed = False
+
+    def cursor(self, row_factory=None) -> _FakeCursor:
+        return _FakeCursor()
+
+    def close(self) -> None:
+        return None
+
+
+def _repos(conn: Any) -> Repositories:
+    """The seam the planner is handed now: repositories reading through `conn`."""
+    return Repositories(
+        places=PostgresPlaceRepository(connect=lambda: conn),
+        areas=PostgresAreaRepository(connect=lambda: conn),
+    )
+
 
 def _client_with_planner(planner) -> TestClient:
     """TestClient without the lifespan → no DB connection is made."""
     agent_main.app.state.planner = planner
+    repos = getattr(planner, "repos", None)
+    if repos is not None:
+        agent_main.app.state.repos = repos
     return TestClient(agent_main.app, raise_server_exceptions=False)
 
 
@@ -255,14 +282,15 @@ class _HealthOnly:
         monkeypatch.setattr(pipeline_mod, "valhalla_ping", lambda: True, raising=False)
 
     def health(self) -> dict:
-        return Pipeline(db=_FakeDB()).health()  # type: ignore[arg-type]
+        return Pipeline(repos=_repos(_FakeDB())).health()
 
 
 @pytest.fixture
 def _restore_planner():
     yield
-    if hasattr(agent_main.app.state, "planner"):
-        delattr(agent_main.app.state, "planner")
+    for name in ("planner", "repos"):
+        if hasattr(agent_main.app.state, name):
+            delattr(agent_main.app.state, name)
 
 
 class TestHttpRefusal:
@@ -290,10 +318,10 @@ class TestHttpRefusal:
 
     def test_the_catalogue_answers_without_a_reader(self, no_key, _restore_planner):
         class _Catalogue:
-            db = _FakeDB()
+            repos = _repos(_FakeDB())
 
         client = _client_with_planner(_Catalogue())
-        assert client.get("/places").status_code != 503
+        assert client.get("/places").status_code == 200
 
 
 class TestHttpDegraded:
@@ -377,7 +405,7 @@ class TestLiveRefusal:
     def test_planning_refuses_without_a_key(self, no_key, live_db):
         with offline():
             with pytest.raises(InterpretationUnavailable):
-                Pipeline(db=live_db).generate(
+                Pipeline(repos=_repos(live_db)).generate(
                     GenerateReq(query=QUERY, time_budget_minutes=120)
                 )
 
@@ -396,7 +424,9 @@ class TestLiveRefusal:
             bbox=None, era_hint="any", party_type="solo", intent_type="discovery",
             must_visit_keywords=[], query_keywords=[],
         )
-        pool = retrieve_mod.retrieve(constraints, [], live_db, query_text=QUERY)
+        pool = retrieve_mod.retrieve(
+            constraints, [], _repos(live_db).places, query_text=QUERY
+        )
         assert calls == []
         assert len(pool) > 0, "keyword + category signals alone must still find places"
 

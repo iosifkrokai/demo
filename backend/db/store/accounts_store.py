@@ -569,6 +569,6 @@ class PostgresAccountRepository:
 
 def place_payloads(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Turn place rows into the shared card payload (one import site)."""
-    from db.store.places import place_payload
+    from db.store.mappers import place_from_row, place_payload
 
-    return [place_payload(row) for row in rows]
+    return [place_payload(place_from_row(row)) for row in rows]

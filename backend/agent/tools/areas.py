@@ -11,8 +11,8 @@ from agent.schema import InterpretDeps
 from agent.tools import (
     ERR_AREA_REGISTRY,
     ERR_BAD_ARGUMENT,
-    _db,
     _envelope,
+    _fetch,
     _norm_term,
     _project,
 )
@@ -60,16 +60,11 @@ def _areas_from_registry(term: str, locale: str, limit: int) -> list[dict]:
     return out
 
 
-def find_areas(term: str, locale: str = "ru") -> dict:
+def find_areas(term: str, locale: str = "ru", *, repos: Any = None) -> dict:
     """Resolve a territory name ("старый город", "Новогрудок") to area slugs.
 
     A name that matches nothing returns an empty result set — never a guessed radius.
     """
-    return find_areas_with_db(None, term, locale)
-
-
-def find_areas_with_db(db: Any, term: str, locale: str = "ru") -> dict:
-    """`find_areas` reusing a caller-owned connection (used by the agent)."""
     provenance: dict[str, Any] = {
         "source": "areas.json",
         "locale": locale if locale in ("ru", "en") else "ru",
@@ -88,8 +83,8 @@ def find_areas_with_db(db: Any, term: str, locale: str = "ru") -> dict:
         found = _areas_from_registry(term, provenance["locale"], MAX_AREAS_PER_CALL)
     except ImportError:
         provenance["source"] = "areas (db fallback)"
-        rows, error, message = _db._fetch(
-            db, lambda conn: _db._db_area_rows(conn, term, MAX_AREAS_PER_CALL)
+        rows, error, message = _fetch(
+            repos, lambda store: store.areas.search(term, MAX_AREAS_PER_CALL)
         )
         if error is not None:
             return _envelope("find_areas", [], provenance, error=error, message=message)
@@ -110,9 +105,13 @@ def find_areas_with_db(db: Any, term: str, locale: str = "ru") -> dict:
 
 
 def register_find_areas(agent: Any, remember: Callable[[Any, dict], dict]) -> None:
-    """Advertise ``find_areas`` to the agent."""
+    """Advertise ``find_areas`` to the agent.
 
-    @agent.tool
-    def find_areas(ctx: RunContext[InterpretDeps], term: str, locale: str = "ru") -> dict:
+    The Python name differs from the advertised one on purpose: a nested
+    ``find_areas`` would shadow the module function this body has to call.
+    """
+
+    @agent.tool(name="find_areas")
+    def _find_areas(ctx: RunContext[InterpretDeps], term: str, locale: str = "ru") -> dict:
         """Resolve a territory name to canonical area codes for this region."""
-        return find_areas_with_db(ctx.deps.db, term, locale)
+        return find_areas(term, locale, repos=ctx.deps.repos)

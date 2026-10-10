@@ -76,7 +76,7 @@ non-zero when *no* layer has numbers.
 ```
 
 Every category value — in `filters` and in `expectations` — is a **canonical domain
-code** from `domain/constants.CATEGORIES` (loaded from `data/taxonomy.csv`), never
+code** from `core/constants.CATEGORIES` (loaded from `data/taxonomy.csv`), never
 prose and never translated: an EN case carries the Russian code too. A code outside
 the set is a schema error, because it would silently grade nothing. Statuses:
 `ready`, `catalogue`, `degraded`, `pending`, `infeasible`, `rejected`,

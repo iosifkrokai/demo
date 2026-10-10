@@ -97,14 +97,14 @@ def is_available() -> bool:
     return _state.available
 
 
-def embed_missing(conn, *, batch: int = DB_BATCH) -> int:
+def embed_missing(places, *, batch: int = DB_BATCH) -> int:
     """Embed every row with ``embedding IS NULL``; returns how many were written.
 
-    Rows are keyed by id, so a re-run embeds nothing new.
+    Computing the vectors is this module's job; storing them is the repository's,
+    so the model layer never opens a transaction. Rows are keyed by id, so a
+    re-run embeds nothing new.
     """
-    with conn.cursor() as cur:
-        cur.execute("SELECT id, name, blurb FROM places WHERE embedding IS NULL ORDER BY id")
-        pending = cur.fetchall()
+    pending = places.rows_missing_embedding()
     if not pending:
         return 0
 
@@ -113,12 +113,8 @@ def embed_missing(conn, *, batch: int = DB_BATCH) -> int:
         chunk = pending[i:i + batch]
         texts = [f"{name}. {blurb or ''}" for _, name, blurb in chunk]
         vectors = embed_documents(texts)
-        with conn.cursor() as cur:
-            for (pid, _, _), vec in zip(chunk, vectors, strict=True):
-                cur.execute(
-                    "UPDATE places SET embedding = %s::vector WHERE id = %s",
-                    (str(vec), pid),
-                )
-        conn.commit()
+        for (pid, _, _), vec in zip(chunk, vectors, strict=True):
+            places.upsert_embedding(pid, vec)
+        places.commit()
         done += len(chunk)
     return done

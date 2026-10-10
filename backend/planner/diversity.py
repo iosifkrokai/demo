@@ -9,7 +9,7 @@ import numpy as np
 
 from contracts.planner import Candidate, ResolvedConstraints
 from core import constants
-from db.store.search import fetch_embeddings
+from db.store.places import PostgresPlaceRepository
 
 
 def mmr_select(
@@ -17,19 +17,19 @@ def mmr_select(
     n: int,
     *,
     lam: float | None = None,
-    db=None,
+    places: PostgresPlaceRepository | None = None,
     constraints: ResolvedConstraints | None = None,
 ) -> list[Candidate]:
     """Pick `n` diverse+relevant candidates from the input pool.
 
-    `db` is required for embedding lookup; without embeddings, relevance-only.
+    `places` is needed for the embedding lookup; without it, relevance-only.
     """
     if lam is None:
         lam = constants.MMR_LAMBDA
     if not candidates or len(candidates) <= n:
         return list(candidates)
 
-    embs = fetch_embeddings(db, [c.id for c in candidates]) if db else {}
+    embs = places.embeddings_by_ids([c.id for c in candidates]) if places else {}
     has_embs = len(embs) == len(candidates)
     if not has_embs:
         return _fallback_truncate(candidates, n, constraints)

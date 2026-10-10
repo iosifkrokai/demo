@@ -12,7 +12,8 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from db.store.places import list_places, place_payload
+from db.store.mappers import place_from_row, place_payload
+from db.store.places import PostgresPlaceRepository
 
 BASE_URL = os.environ.get("SMOKE_BASE_URL", "http://localhost:8080")
 
@@ -36,11 +37,16 @@ class _FakeCursor:
 
 
 class _FakeConn:
+    closed = False
+
     def __init__(self, rows: list[dict]) -> None:
         self.rows = rows
 
     def cursor(self, row_factory=None) -> _FakeCursor:
         return _FakeCursor(self.rows)
+
+    def close(self) -> None:
+        self.closed = True
 
 
 def _row(**over: object) -> dict:
@@ -71,18 +77,20 @@ def _row(**over: object) -> dict:
 
 def test_place_payload_carries_the_facts_a_card_prints():
     payload = place_payload(
-        _row(
-            id=10,
-            source_url="osm:old-castle",
-            name="Старый замок (Гродно)",
-            category="замок",
-            town="Гродно",
-            lat=53.6791,
-            lon=23.8216,
-            visit_minutes=90,
-            opening_hours="вт–вс 10:00–18:00",
-            blurb="Блиц",
-            fun_fact="Факт",
+        place_from_row(
+            _row(
+                id=10,
+                source_url="osm:old-castle",
+                name="Старый замок (Гродно)",
+                category="замок",
+                town="Гродно",
+                lat=53.6791,
+                lon=23.8216,
+                visit_minutes=90,
+                opening_hours="вт–вс 10:00–18:00",
+                blurb="Блиц",
+                fun_fact="Факт",
+            )
         )
     )
     assert payload["place_id"] == 10
@@ -102,7 +110,7 @@ def test_list_places_returns_every_row_with_a_stable_shape():
             _row(id=2, category="костёл", name="Б", town="Лида"),
         ]
     )
-    answer = list_places(conn)
+    answer = PostgresPlaceRepository(connect=lambda: conn).catalog()
 
     assert answer["total"] == 2
     assert answer["capped"] is False

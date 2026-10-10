@@ -8,15 +8,22 @@ service, a React/Vite frontend served by nginx.
 
 ```
 backend/     the service — api (HTTP) · agent (LLM) · planner (the pipeline)
-             contracts · domain · infra · core · quality · tests · data
-             db/  — the persistence side: store (queries) · seed (the projection) · alembic
+             contracts · core · reference · telemetry · ml · quality · tests · data
+             db/  — the persistence side: models (rows) · store (repositories)
+                    · seed (the projection) · alembic · connection.py
 frontend/    React + Vite + MapLibre, talked to over nginx
 docker-compose.yml   the whole stack, including the db image (inline)
 ```
 
-`api` → `planner`/`agent`/`db.store`; `planner` → `agent`/`db.store`/`infra`;
-nothing imports upward. `agent/` is the LLM layer (model, prompts, tools, runner) —
-the one place a provider is named is `agent/model.py`.
+`api` → `planner`/`agent`/`db`/`core`; `planner` → `agent`/`db`/`core`/`reference`;
+nothing imports upward, and `agent` is a leaf — it declares its own input
+(`agent/models.py::ReaderBrief`) rather than reaching for the HTTP body. `agent/`
+is the LLM layer (model, prompts, tools, runner); the one place a provider is
+named is `agent/model.py`.
+
+Nothing above `db/store` writes SQL or holds a connection: a logic layer is
+handed repositories (`db/store/registry.py::Repositories`) and calls them.
+`tests/test_layer_boundaries.py` enforces all of that.
 
 ## Bring it up
 

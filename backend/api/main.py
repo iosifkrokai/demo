@@ -31,8 +31,11 @@ from contracts.planner import (
 )
 from core.config import openrouter_api_key, settings
 from core.errors import AgentError, NoRoutePossible
-from db.connection import connect
-from db.store import itineraries as itineraries_mod, places as places_mod, services as services_mod
+from db.store import itineraries as itineraries_mod
+from db.store.areas import PostgresAreaRepository
+from db.store.places import PostgresPlaceRepository
+from db.store.registry import Repositories
+from db.store.services import DEFAULT_PROFILE, MAX_SERVICES
 from ml import embeddings
 from planner.pipeline import Pipeline
 from telemetry import progress, trace
@@ -46,8 +49,12 @@ log = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    db = connect(autocommit=True, timeout=None)
-    app.state.planner = Pipeline(db=db)
+    repos = Repositories(
+        places=PostgresPlaceRepository(),
+        areas=PostgresAreaRepository(),
+    )
+    app.state.repos = repos
+    app.state.planner = Pipeline(repos=repos)
     embeddings.embed_query("warmup")
     log.info("agent ready (embeddings=%s local, interpret=%s, key=%s)",
              embeddings.MODEL_NAME, DEFAULT_MODEL,
@@ -60,7 +67,7 @@ async def lifespan(_: FastAPI):
         )
     yield
     trace.shutdown()
-    db.close()
+    repos.close()
 
 
 app = FastAPI(title="grodno-poc-agent", lifespan=lifespan)
@@ -215,7 +222,7 @@ def itineraries() -> dict:
     `missing` names any stop key that no longer resolves.
     """
     try:
-        items, missing = itineraries_mod.resolve_itineraries(app.state.planner.db)
+        items, missing = itineraries_mod.resolve_itineraries(app.state.repos.places)
     except itineraries_mod.ItinerariesUnavailable as exc:
         log.error("itineraries unavailable: %s", exc)
         raise HTTPException(
@@ -230,7 +237,7 @@ def places() -> dict:
 
     A browse, not a search: no model is involved and nothing is capped by a query.
     """
-    return places_mod.list_places(app.state.planner.db)
+    return app.state.repos.places.catalog()
 
 
 @app.post("/routes/services")
@@ -242,13 +249,12 @@ def services_along_route(req: ServicesAlongReq) -> dict:
     trace.begin(uuid.uuid4().hex, session_id=req.session_id)
     try:
         try:
-            answer = services_mod.services_along(
-                app.state.planner.db,
+            answer = app.state.repos.places.services_along(
                 req.shape,
                 categories=req.categories,
-                profile=req.profile or services_mod.DEFAULT_PROFILE,
+                profile=req.profile or DEFAULT_PROFILE,
                 max_off_line_m=req.max_off_line_m,
-                limit=req.limit or services_mod.MAX_SERVICES,
+                limit=req.limit or MAX_SERVICES,
             )
         except ValueError as exc:
             trace.record(

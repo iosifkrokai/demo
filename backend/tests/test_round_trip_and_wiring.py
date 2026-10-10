@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import os
 import sys
-from types import SimpleNamespace
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -18,7 +17,9 @@ from contracts.planner import (
 )
 from core import constants
 from core.errors import UpstreamUnavailable
-from db.store import search as search_mod
+from db.store.areas import PostgresAreaRepository
+from db.store.places import PostgresPlaceRepository
+from db.store.registry import Repositories
 from planner import (
     optimize as optimize_mod,
     pipeline as pipeline_mod,
@@ -47,10 +48,10 @@ def _reqs(*requirements: Requirement) -> TripRequirements:
 
 
 def test_resolve_carries_the_round_trip_choice():
-    db = object()
+    places = PostgresPlaceRepository()
     intent = IntentResult(decision=IntentDecision(), source="agent")
-    plain = resolve(intent, db=db)
-    closed = resolve(intent, db=db, explicit_round_trip=True)
+    plain = resolve(intent, places=places)
+    closed = resolve(intent, places=places, explicit_round_trip=True)
 
     assert plain.round_trip is False
     assert closed.round_trip is True
@@ -207,21 +208,24 @@ def test_validate_records_the_pruner_report_in_the_trace():
 
 
 class _FakeCursor:
+    """A dict-row cursor over a fixed set of place rows.
+
+    The repository opens it with ``row_factory=dict_row``; the rows here are
+    already the mappings ``place_from_row`` reads.
+    """
+
     def __init__(self, rows: list[dict]) -> None:
         self._rows = rows
-        self.description = [
-            SimpleNamespace(name=name) for name in search_mod.CATEGORY_COLS.split(", ")
-        ]
 
     def execute(self, *_args, **_kwargs) -> None:
         return None
 
-    def fetchall(self) -> list[tuple]:
-        cols = [d.name for d in self.description]
-        return [tuple(self._row.get(c) for c in cols) for self._row in self._rows]
+    def fetchall(self) -> list[dict]:
+        return [dict(row) for row in self._rows]
 
-    def fetchone(self):
-        return self.fetchall()[0]
+    def fetchone(self) -> dict | None:
+        rows = self.fetchall()
+        return rows[0] if rows else None
 
     def __enter__(self) -> _FakeCursor:
         return self
@@ -230,14 +234,18 @@ class _FakeCursor:
         return False
 
 
-class _FakeDB:
+class _FakeConnection:
     """A psycopg-shaped connection over a fixed set of place rows."""
 
     def __init__(self, rows: list[dict]) -> None:
+        self.closed = False
         self._rows = rows
 
-    def cursor(self) -> _FakeCursor:
+    def cursor(self, row_factory=None) -> _FakeCursor:
         return _FakeCursor(self._rows)
+
+    def close(self) -> None:
+        self.closed = True
 
 
 def _row(pid: int, name: str, category: str, lat: float, lon: float) -> dict:
@@ -269,7 +277,13 @@ def test_reroute_returns_a_route_instead_of_raising(monkeypatch):
         _row(1, "Старый замок", "замок", 53.6788, 23.8230),
         _row(2, "Новый замок", "дворец", 53.6849, 23.8310),
     ]
-    pipeline = pipeline_mod.Pipeline(db=_FakeDB(rows))
+    connection = _FakeConnection(rows)
+    pipeline = pipeline_mod.Pipeline(
+        repos=Repositories(
+            places=PostgresPlaceRepository(connect=lambda: connection),
+            areas=PostgresAreaRepository(),
+        )
+    )
 
     monkeypatch.setattr(
         pipeline_mod,

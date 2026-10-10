@@ -65,9 +65,13 @@ def cmd_apply(args: argparse.Namespace) -> int:
 
                 embedded = 0
                 if not args.no_embed:
+                    from db.store.places import PostgresPlaceRepository
                     from ml import embeddings
 
-                    embedded = embeddings.embed_missing(conn)
+                    # Reuse the seed's own connection: one transaction, one commit.
+                    embedded = embeddings.embed_missing(
+                        PostgresPlaceRepository(connect=lambda: conn)
+                    )
                 db_stats = pipeline.gather_db_stats(conn)
                 db_stats.update({"upserted": totals, "areas_written": areas_written,
                                  "photos_written": photos_written,

@@ -18,6 +18,7 @@ from db.store.itineraries import (
     load_itineraries,
     resolve_itineraries,
 )
+from db.store.places import PostgresPlaceRepository
 
 BASE_URL = os.environ.get("SMOKE_BASE_URL", "http://localhost:8080")
 
@@ -74,7 +75,9 @@ class _FakeCursor:
 
 
 class _FakeConn:
-    """Only what `_resolve_stops` uses: a cursor with a dict row factory."""
+    """Only what `PostgresPlaceRepository` uses: a dict-row cursor, a liveness flag."""
+
+    closed = False
 
     def __init__(self, rows: list[dict]) -> None:
         self.rows = rows
@@ -83,6 +86,14 @@ class _FakeConn:
     def cursor(self, row_factory=None) -> _FakeCursor:
         self.queries += 1
         return _FakeCursor(self.rows)
+
+    def close(self) -> None:
+        self.closed = True
+
+
+def _repo(conn: _FakeConn) -> PostgresPlaceRepository:
+    """The repository the resolver is handed, reading through the fake connection."""
+    return PostgresPlaceRepository(connect=lambda: conn)
 
 
 def _row(source_url: str, **over: object) -> dict:
@@ -129,7 +140,7 @@ def test_keeps_the_authored_order_and_totals_the_stops():
             _row("city:shared", id=11, name="Общая", visit_minutes=15),
         ]
     )
-    items, _missing = resolve_itineraries(conn, ITEMS)
+    items, _missing = resolve_itineraries(_repo(conn), ITEMS)
 
     assert [i["id"] for i in items] == ["a", "b"]
     assert [s["name"] for s in items[0]["stops"]] == ["Первая", "Общая"]
@@ -140,7 +151,7 @@ def test_keeps_the_authored_order_and_totals_the_stops():
 
 def test_a_stop_that_no_longer_resolves_is_reported_not_hidden():
     conn = _FakeConn([_row("city:shared", id=11, name="Общая", visit_minutes=15)])
-    items, missing = resolve_itineraries(conn, ITEMS)
+    items, missing = resolve_itineraries(_repo(conn), ITEMS)
 
     assert missing == ["city:one", "city:gone"]
     assert items[1]["stop_count"] == 1
@@ -165,7 +176,7 @@ def test_stop_payload_carries_the_facts_a_card_prints():
             )
         ]
     )
-    items, _ = resolve_itineraries(conn, [ITEMS[0]])
+    items, _ = resolve_itineraries(_repo(conn), [ITEMS[0]])
     stop = items[0]["stops"][0]
     assert stop["place_id"] == 10
     assert stop["name"] == "Старый замок (Гродно)"
@@ -181,7 +192,7 @@ def test_a_service_in_the_authored_file_is_not_a_stop():
             _row("city:shared", name="Туалет", category="туалет", visit_minutes=10),
         ]
     )
-    items, _ = resolve_itineraries(conn, [ITEMS[0]])
+    items, _ = resolve_itineraries(_repo(conn), [ITEMS[0]])
 
     stops = items[0]["stops"]
     assert [s["category"] for s in stops] == ["замок"]
@@ -195,14 +206,14 @@ def test_a_service_in_the_authored_file_is_not_a_stop():
 
 def test_an_unmapped_category_counts_as_a_stop_not_as_a_service():
     conn = _FakeConn([_row("city:one", category="вертолётная площадка")])
-    items, _ = resolve_itineraries(conn, [ITEMS[0]])
+    items, _ = resolve_itineraries(_repo(conn), [ITEMS[0]])
     assert items[0]["stop_count"] == 1
     assert items[0]["services"] == []
 
 
 def test_visit_minutes_of_unknown_length_stays_zero_not_none():
     conn = _FakeConn([_row("city:one", visit_minutes=None)])
-    items, _ = resolve_itineraries(conn, [ITEMS[0]])
+    items, _ = resolve_itineraries(_repo(conn), [ITEMS[0]])
     assert items[0]["visit_minutes"] == 0
     assert items[0]["stops"][0]["visit_minutes"] is None
 

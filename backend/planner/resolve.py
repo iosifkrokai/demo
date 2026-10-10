@@ -8,11 +8,10 @@ from __future__ import annotations
 import logging
 from collections.abc import Sequence
 
-import psycopg
-
 from contracts.planner import IntentResult, ResolvedConstraints
 from core import constants
-from db.store.search import _keyword_search, _name_match_search
+from db.models.place import Place
+from db.store.places import PostgresPlaceRepository
 
 log = logging.getLogger(__name__)
 
@@ -181,7 +180,7 @@ def resolve(
     explicit_bbox: list[float] | None = None,
     explicit_round_trip: bool = False,
     outside: Sequence[str] = (),
-    db: psycopg.Connection,
+    places: PostgresPlaceRepository,
 ) -> ResolvedConstraints:
     d = intent.decision
 
@@ -198,10 +197,10 @@ def resolve(
         bbox = (w, s, e, n)
 
     must_visit_ids, area_anchor, resolved_names = _resolve_named_places(
-        d.named_places, db, outside
+        d.named_places, places, outside
     )
 
-    must_visit_ids = _without_forbidden(must_visit_ids, d.categories_neg, db)
+    must_visit_ids = _without_forbidden(must_visit_ids, d.categories_neg, places)
 
     must_visit_keywords = _expand_categories_to_keywords(d.categories_pos)
     must_visit_keywords.extend(d.keywords_pos)
@@ -242,16 +241,13 @@ def _is_location_suffix(name: str, query: str) -> bool:
 
 
 def _without_forbidden(
-    ids: list[int], forbidden: Sequence[str], db: psycopg.Connection
+    ids: list[int], forbidden: Sequence[str], places: PostgresPlaceRepository
 ) -> list[int]:
     """Drop must-visit ids whose own category the request forbids."""
     if not ids or not forbidden:
         return ids
 
-    rows = db.execute(
-        "SELECT id, category FROM places WHERE id = ANY(%s)", (list(ids),)
-    ).fetchall()
-    category_of = {r[0]: r[1] for r in rows}
+    category_of = places.category_of(ids)
 
     out: list[int] = []
     for pid in ids:
@@ -266,7 +262,7 @@ def _without_forbidden(
 
 
 def _resolve_named_places(
-    names: list[str], db: psycopg.Connection, outside: Sequence[str] = ()
+    names: list[str], places: PostgresPlaceRepository, outside: Sequence[str] = ()
 ) -> tuple[list[int], int | None, list[str]]:
     """Match named place strings to place IDs, distinguishing POI names from areas.
 
@@ -284,31 +280,29 @@ def _resolve_named_places(
 
         strict = name.strip().lower() in reported_outside
 
-        name_rows = _name_match_search(db, name, limit=3)
-        if name_rows:
-            top = name_rows[0]
-            sim = top.get("_name_sim", 0.0)
-            top_name = top.get("name", "")
+        name_matches = places.name_match(name, limit=3)
+        if name_matches:
+            top, sim = name_matches[0]
+            top_name = top.name
             if _is_location_suffix(top_name, name):
                 pass
             elif (
                 (sim >= constants.NAME_MATCH_MIN_SIM if not strict else _same_name(top_name, name))
-                and top["id"] not in seen
+                and top.id is not None
+                and top.id not in seen
             ):
-                seen.add(top["id"])
-                must_out.append(top["id"])
+                seen.add(top.id)
+                must_out.append(top.id)
                 resolved.append(name)
                 continue
 
         if area_anchor is None:
-            town_rows = _keyword_search(db, name, limit=5)
-            for row in town_rows:
-                row_name = row.get("name", "")
-                if row_name.strip().lower() == name.strip().lower():
+            for place in places.keyword_search(name, limit=5):
+                if place.name.strip().lower() == name.strip().lower():
                     continue
-                if _is_town_or_district_match(row, name):
-                    if row["id"] not in seen:
-                        area_anchor = row["id"]
+                if _is_town_or_district_match(place, name):
+                    if place.id is not None and place.id not in seen:
+                        area_anchor = place.id
                     break
 
     return must_out, area_anchor, resolved
@@ -340,14 +334,14 @@ def _word_boundary_match(text: str, query: str) -> bool:
     return _re.search(r"\b" + _re.escape(query) + r"\b", text) is not None
 
 
-def _is_town_or_district_match(row: dict, query: str) -> bool:
+def _is_town_or_district_match(place: Place, query: str) -> bool:
     """Return True if the query matched on town or district.
 
     Uses word-boundary regex for all three fields to prevent false matches.
     """
-    name = (row.get("name") or "").lower()
-    town = (row.get("town") or "").lower()
-    district = (row.get("district") or "").lower()
+    name = (place.name or "").lower()
+    town = (place.town or "").lower()
+    district = (place.district or "").lower()
     q = query.lower()
 
     if _word_boundary_match(town, q):

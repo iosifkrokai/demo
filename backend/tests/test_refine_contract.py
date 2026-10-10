@@ -13,11 +13,13 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from api import main as agent_main
 from contracts.planner import Candidate, GenerateReq, LatLon
 from core.errors import UpstreamUnavailable
+from db.store.areas import PostgresAreaRepository
+from db.store.mappers import place_from_row
+from db.store.registry import Repositories
 from planner import (
     cost as cost_mod,
     pipeline as pipeline_mod,
-    refine as refine_mod,
-    resolve as resolve_mod,
+    response as response_mod,
 )
 from planner.pipeline import (
     Pipeline,
@@ -81,28 +83,62 @@ BASE_ROWS = [
 ]
 
 
-def _patch_offline(monkeypatch, rows=None, nearby=None):
-    """Wire the refinement path to fakes: no DB, no Valhalla, no retrieval."""
-    rows = BASE_ROWS if rows is None else rows
-    by_id = {r["id"]: r for r in rows}
-    monkeypatch.setattr(
-        pipeline_mod, "fetch_points_by_ids",
-        lambda db, ids: [by_id[i] for i in ids if i in by_id],
+class _FakePlaceRepo:
+    """An in-memory stand-in for :class:`PostgresPlaceRepository`.
+
+    The refinement path used to reach module-level helpers
+    (``fetch_points_by_ids``, ``nearby_places``) that no longer exist; the
+    repository is the one seam now, so this answers those reads from memory.
+    """
+
+    def __init__(self, rows=None, nearby=None):
+        self._by_id = {r["id"]: place_from_row(r) for r in (rows or [])}
+        self._nearby = [place_from_row(r) for r in (nearby or [])]
+
+    def get_by_id(self, place_id):
+        return self._by_id.get(place_id)
+
+    def get_by_ids(self, ids):
+        return [self._by_id[i] for i in ids if i in self._by_id]
+
+    def nearby(self, lat, lon, radius_km=12.0, limit=50):
+        return list(self._nearby)[:limit]
+
+    def name_match(self, query, limit=5):
+        needle = query.strip().lower()
+        hits = [(p, 1.0) for p in self._by_id.values() if needle in p.name.lower()]
+        return hits[:limit]
+
+    def keyword_search(self, query, limit=20):
+        needle = query.strip().lower()
+        return [p for p in self._by_id.values() if needle in p.name.lower()][:limit]
+
+    def category_of(self, ids):
+        return {
+            i: self._by_id[i].category for i in ids if i in self._by_id
+        }
+
+
+def _fake_repos(rows=None, nearby=None) -> Repositories:
+    """Repositories wired to a fixed set of rows — no DB connection at all."""
+    return Repositories(
+        places=_FakePlaceRepo(rows=BASE_ROWS if rows is None else rows, nearby=nearby),
+        areas=PostgresAreaRepository(),
     )
-    monkeypatch.setattr(
-        pipeline_mod, "nearby_places",
-        lambda db, lat, lon, radius_km=12.0, limit=50: list(nearby or []),
-    )
-    monkeypatch.setattr(
-        refine_mod, "nearby_places",
-        lambda db, lat, lon, radius_km=12.0, limit=50: list(nearby or []),
-    )
+
+
+def _patch_offline(monkeypatch, rows=None, nearby=None) -> Repositories:
+    """Wire the refinement path to fakes: no DB, no Valhalla, no retrieval.
+
+    Returns the repositories to hand the ``Pipeline``; the module seams that
+    remain (cost and geometry) are patched so the turn never leaves the process.
+    """
     monkeypatch.setattr(
         cost_mod, "compute_cost_matrix",
         lambda *_a, **_kw: (_ for _ in ()).throw(UpstreamUnavailable("no valhalla")),
     )
     monkeypatch.setattr(
-        pipeline_mod, "render",
+        response_mod, "render",
         lambda *_a, **_kw: (_ for _ in ()).throw(UpstreamUnavailable("no valhalla")),
     )
     monkeypatch.setattr(
@@ -117,21 +153,12 @@ def _patch_offline(monkeypatch, rows=None, nearby=None):
             AssertionError("a refinement must not re-plan the trip")
         ),
     )
-    monkeypatch.setattr(
-        resolve_mod, "_name_match_search", lambda db, name, limit=5: []
-    )
-    monkeypatch.setattr(
-        resolve_mod, "_keyword_search", lambda db, q, limit=5: []
-    )
-
-
-class _FakeDB:
-    """Only ever reached through monkeypatched helpers."""
+    return _fake_repos(rows=rows, nearby=nearby)
 
 
 def _refine(monkeypatch, instruction, base_ids=(1, 12, 7),
             excluded=None, origin=None, query="Гродно, замки, 2 часа"):
-    _patch_offline(monkeypatch, rows=[r for r in BASE_ROWS if r["id"] in base_ids])
+    repos = _patch_offline(monkeypatch, rows=[r for r in BASE_ROWS if r["id"] in base_ids])
     ctx: dict = {
         "revision": 3,
         "base_points": [
@@ -147,7 +174,7 @@ def _refine(monkeypatch, instruction, base_ids=(1, 12, 7),
     if origin is not None:
         body["origin"] = origin
     req = GenerateReq.model_validate(body)
-    return Pipeline(db=_FakeDB()).generate(req)  # type: ignore[arg-type]
+    return Pipeline(repos=repos).generate(req)
 
 
 class TestInterpretRefinement:
@@ -341,7 +368,7 @@ class TestRefinementKeepsTheBaseRoute:
         self, reading, monkeypatch
     ):
         cafe = _row(500, "Кафе рядом", "кафе", 53.6785, 23.8285, 40)
-        _patch_offline(monkeypatch, nearby=[cafe])
+        repos = _patch_offline(monkeypatch, nearby=[cafe])
         ctx = {
             "revision": 1,
             "instruction": "добавь кофейню и туалет",
@@ -350,7 +377,7 @@ class TestRefinementKeepsTheBaseRoute:
                 for i in (1, 12, 7)
             ],
         }
-        resp = Pipeline(db=_FakeDB()).generate(  # type: ignore[arg-type]
+        resp = Pipeline(repos=repos).generate(
             GenerateReq.model_validate({"query": "Гродно, замки", "context": ctx})
         )
         ids = [p.id for p in resp.points]
@@ -377,8 +404,8 @@ class TestRefinementOverHttp:
 
     @pytest.fixture
     def client(self, reading, monkeypatch, _restore_planner):
-        _patch_offline(monkeypatch)
-        planner = Pipeline(db=_FakeDB())  # type: ignore[arg-type]
+        repos = _patch_offline(monkeypatch)
+        planner = Pipeline(repos=repos)
         agent_main.app.state.planner = planner
         return TestClient(agent_main.app, raise_server_exceptions=False)
 

@@ -10,6 +10,7 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from db.store import services
+from db.store.places import PostgresPlaceRepository
 from reference.taxonomy import all_categories
 
 CENTRE_LINE = {
@@ -82,24 +83,24 @@ def test_a_real_line_passes_through_unchanged():
 
 
 def test_the_answer_never_calls_distance_a_detour():
-    item = services._item(_row(), 1000.0)
+    item = services.item_of(_row(), 1000.0)
     assert item["off_line_m"] == 42
     assert item["detour_confirmed"] is False
 
 
 def test_position_along_the_line_comes_from_the_fraction():
-    item = services._item(_row(along_fraction=0.25), 4000.0)
+    item = services.item_of(_row(along_fraction=0.25), 4000.0)
     assert item["along_m"] == 1000
 
 
 def test_unknown_hours_are_quoted_as_unknown():
-    item = services._item(_row(opening_hours="  "), 1000.0)
+    item = services.item_of(_row(opening_hours="  "), 1000.0)
     assert item["opening_hours"] is None
     assert item["hours_known"] is False
 
 
 def test_known_hours_are_passed_through_untouched():
-    item = services._item(_row(opening_hours="ежедневно 9:00–19:00"), 1000.0)
+    item = services.item_of(_row(opening_hours="ежедневно 9:00–19:00"), 1000.0)
     assert item["opening_hours"] == "ежедневно 9:00–19:00"
     assert item["hours_known"] is True
 
@@ -130,9 +131,8 @@ def test_live_services_along_a_real_street_in_grodno():
         pytest.skip(f"нет базы: {exc}")
 
     try:
-        answer = services.services_along(
-            conn, CENTRE_LINE, profile="pedestrian", limit=8
-        )
+        places = PostgresPlaceRepository(connect=lambda: conn)
+        answer = places.services_along(CENTRE_LINE, profile="pedestrian", limit=8)
     finally:
         conn.close()
 

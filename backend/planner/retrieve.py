@@ -1,6 +1,9 @@
 """Step 3 — Multi-signal candidate retrieval + RRF fusion.
 
 Fuses vector, keyword, must and category signals; output has `rrf_score`.
+
+The signals run against a `PostgresPlaceRepository`, not a connection: this step
+reads places and nothing else, so it should not be able to reach past them.
 """
 
 from __future__ import annotations
@@ -9,18 +12,12 @@ import re
 from collections import defaultdict
 from collections.abc import Iterable
 
-import psycopg
-
 from contracts.planner import Candidate, Photo, ResolvedConstraints
 from core import constants
-from db.store.place_fields import parse_fun_facts, parse_links, parse_photo
-from db.store.search import (
-    _keyword_search,
-    candidates_by_embedding,
-    db_categories,
-    fetch_points_by_ids,
-    nearby_places,
-)
+from db.models.place import Place
+from db.store.mappers import parse_fun_facts, parse_links, photo_of
+from db.store.places import PostgresPlaceRepository
+from reference.taxonomy import db_values
 
 CATEGORY_KEYWORD_TO_LLM: dict[str, str] = {
     "замок": "замок", "замки": "замок", "замка": "замок", "замкам": "замок", "замках": "замок",
@@ -62,20 +59,20 @@ def _detect_category_keywords(query: str) -> list[str]:
 
 
 def _nearby_signal(
-    db: psycopg.Connection,
+    places: PostgresPlaceRepository,
     lat: float,
     lon: float,
     limit: int,
 ) -> list[tuple[int, float]]:
     """Places around a known point (tourist GPS or a named town)."""
-    rows = nearby_places(db, lat, lon, radius_km=constants.GEO_FOCUS_KM, limit=limit)
-    return [(r["id"], 0.0) for r in rows]
+    rows = places.nearby(lat, lon, radius_km=constants.GEO_FOCUS_KM, limit=limit)
+    return [(p.id, 0.0) for p in rows if p.id is not None]
 
 
 def retrieve(
     constraints: ResolvedConstraints,
     query_embedding: list[float],
-    db: psycopg.Connection,
+    places: PostgresPlaceRepository,
     query_text: str = "",
     near: tuple[float, float] | None = None,
 ) -> list[Candidate]:
@@ -93,27 +90,27 @@ def retrieve(
 
     vector_signal: list[tuple[int, float]] = []
     if query_embedding:
-        vector_signal = _vector_signal(query_embedding, db, constraints, limit=pool_limit)
+        vector_signal = _vector_signal(query_embedding, places, constraints, limit=pool_limit)
 
     kw_query = " ".join(constraints.must_visit_keywords + [query_text]).strip()
-    keyword_signal = _keyword_signal(db, kw_query, limit=pool_limit // 2) if kw_query else []
+    keyword_signal = _keyword_signal(places, kw_query, limit=pool_limit // 2) if kw_query else []
 
     must_signal = [(pid, 0.0) for pid in constraints.must_visit_ids]
 
     cat_signal: list[tuple[int, float]] = []
     if all_cats:
-        cat_signal = _category_signal(db, constraints, all_cats, limit=pool_limit // 2)
+        cat_signal = _category_signal(places, constraints, all_cats, limit=pool_limit // 2)
 
     cat_first_signal: list[tuple[int, float]] = []
     if explicit_cat_kw:
         primary_cat = [explicit_cat_kw[0]]
         cat_first_signal = _category_signal(
-            db, constraints, primary_cat, limit=pool_limit
+            places, constraints, primary_cat, limit=pool_limit
         )
 
     near_signal: list[tuple[int, float]] = []
     if near is not None:
-        near_signal = _nearby_signal(db, near[0], near[1], limit=pool_limit)
+        near_signal = _nearby_signal(places, near[0], near[1], limit=pool_limit)
 
     fused = rrf_fuse(
         [vector_signal, keyword_signal, must_signal, cat_signal, cat_first_signal,
@@ -123,7 +120,7 @@ def retrieve(
 
     top_ids = sorted(fused, key=lambda pid: -fused[pid])[:pool_limit]
 
-    candidates = _hydrate(db, top_ids, fused)
+    candidates = _hydrate(places, top_ids, fused)
 
     if constants.NEGATIVE_FILTER_ENABLED:
         candidates = apply_negative_filter(candidates, constraints)
@@ -132,9 +129,8 @@ def retrieve(
         present_ids = {c.id for c in candidates}
         missing = [mid for mid in constraints.must_visit_ids if mid not in present_ids]
         if missing:
-            extra_rows = fetch_points_by_ids(db, missing)
-            for r in extra_rows:
-                candidates.append(_row_to_candidate(r, fused.get(r["id"], 1.0)))
+            for place in places.get_by_ids(missing):
+                candidates.append(candidate_of(place, fused.get(place.id or 0, 1.0)))
 
     candidates.sort(key=lambda c: c.rrf_score, reverse=True)
     return candidates[:pool_limit]
@@ -157,7 +153,7 @@ def rrf_fuse(
 
 def _vector_signal(
     qvec: list[float],
-    db: psycopg.Connection,
+    places: PostgresPlaceRepository,
     constraints: ResolvedConstraints,
     limit: int,
 ) -> list[tuple[int, float]]:
@@ -165,23 +161,22 @@ def _vector_signal(
     if constraints.bbox:
         w, s, e, n = constraints.bbox
         region_bbox = [s, w, n, e]
-    rows = candidates_by_embedding(db, qvec, limit=limit, region_bbox=region_bbox)
-    return [(r["id"], float(r.get("cosine_dist", 0.0))) for r in rows]
+    found = places.by_embedding(qvec, limit=limit, region_bbox=region_bbox)
+    return [(p.id, dist) for p, dist in found if p.id is not None]
 
 
 def _keyword_signal(
-    db: psycopg.Connection,
+    places: PostgresPlaceRepository,
     query: str,
     limit: int,
 ) -> list[tuple[int, float]]:
     if not query.strip():
         return []
-    rows = _keyword_search(db, query, limit=limit)
-    return [(r["id"], 0.0) for r in rows]
+    return [(p.id, 0.0) for p in places.keyword_search(query, limit=limit) if p.id is not None]
 
 
 def _category_signal(
-    db: psycopg.Connection,
+    places: PostgresPlaceRepository,
     constraints: ResolvedConstraints,
     categories: list[str],
     limit: int,
@@ -190,55 +185,55 @@ def _category_signal(
 
     Explicit query categories come first so they outrank secondary ones in RRF.
     """
-    db_cats = db_categories(categories)
+    db_cats = db_values(categories)
     if not db_cats:
         return []
     cat_order = {c: i for i, c in enumerate(categories)}
-    with db.cursor() as cur:
-        cur.execute(
-            "SELECT id, category FROM places WHERE category = ANY(%s) LIMIT %s",
-            (db_cats, limit),
-        )
-        rows = cur.fetchall()
-    rows.sort(key=lambda r: cat_order.get(r[1], 99))
-    return [(r[0], 0.0) for r in rows]
+    rows = places.by_category(db_cats, limit)
+    rows.sort(key=lambda p: cat_order.get(p.category or "", 99))
+    return [(p.id, 0.0) for p in rows if p.id is not None]
 
 
 def _hydrate(
-    db: psycopg.Connection,
+    places: PostgresPlaceRepository,
     ids: list[int],
     scores: dict[int, float],
 ) -> list[Candidate]:
-    rows = fetch_points_by_ids(db, ids)
-    return [_row_to_candidate(r, scores.get(r["id"], 0.0)) for r in rows]
+    return [
+        candidate_of(place, scores.get(place.id or 0, 0.0))
+        for place in places.get_by_ids(ids)
+    ]
 
 
-def _photo_model(row: dict) -> Photo | None:
+def _photo_model(place: Place) -> Photo | None:
     """The point's picture as the response model, or nothing at all.
 
-    ``parse_photo`` answers a plain dict (or None); the API model is ``Photo``.
+    ``photo_of`` answers a plain dict (or None); the API model is ``Photo``.
     """
-    raw = parse_photo(row)
+    raw = photo_of(place)
     return Photo(**raw) if raw else None
 
 
-def _row_to_candidate(row: dict, rrf_score: float) -> Candidate:
+def candidate_of(place: Place, rrf_score: float) -> Candidate:
+    """A retrieved place as the planner's working currency."""
+    # A fetched row always has one; the model allows None only so a row can be
+    # built before it is inserted.
     return Candidate(
-        id=row["id"],
-        name=row["name"],
-        category=row.get("category"),
-        lat=row["lat"],
-        lon=row["lon"],
-        blurb=row.get("blurb"),
-        fun_fact=row.get("fun_fact"),
-        fun_facts=parse_fun_facts(row.get("fun_facts")),
-        links=parse_links(row.get("links")),
-        opening_hours=row.get("opening_hours"),
-        ticket_price=row.get("ticket_price"),
-        town=row.get("town"),
-        district=row.get("district"),
-        photo=_photo_model(row),
-        visit_minutes_db=row.get("visit_minutes"),
+        id=place.id or 0,
+        name=place.name,
+        category=place.category,
+        lat=place.lat,
+        lon=place.lon,
+        blurb=place.blurb,
+        fun_fact=place.fun_fact,
+        fun_facts=parse_fun_facts(place.fun_facts),
+        links=parse_links(place.links),
+        opening_hours=place.opening_hours,
+        ticket_price=place.ticket_price,
+        town=place.town,
+        district=place.district,
+        photo=_photo_model(place),
+        visit_minutes_db=place.visit_minutes,
         relevance=rrf_score,
         rrf_score=rrf_score,
     )

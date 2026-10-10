@@ -17,6 +17,9 @@ from contracts.planner import (
     IntentResult,
     ResolvedConstraints,
 )
+from db.store.areas import PostgresAreaRepository
+from db.store.places import PostgresPlaceRepository
+from db.store.registry import Repositories
 from planner import pipeline as pipeline_mod
 from planner.verify import (
     REASON_INTEREST_IN_CATALOGUE,
@@ -88,8 +91,15 @@ def test_catalogue_of_nothing_is_uncertain_not_unmet():
     assert result[0].reason == REASON_ROUTE_MISSING
 
 
+def _repos() -> Repositories:
+    """Empty repositories: the catalogue path answers without ever reading the DB."""
+    return Repositories(
+        places=PostgresPlaceRepository(), areas=PostgresAreaRepository()
+    )
+
+
 def _catalogue(candidates: list[Candidate], requirements: TripRequirements):
-    pipeline = pipeline_mod.Pipeline(db=object())
+    pipeline = pipeline_mod.Pipeline(repos=_repos())
     return pipeline._catalogue_response(
         req=pipeline_mod.GenerateReq(query="все костёлы Гродненской области", result_mode="catalogue"),
         requirements=requirements,

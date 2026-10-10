@@ -136,21 +136,13 @@ def run_services() -> dict[str, Any]:
 
     PostGIS vs a haversine reference; points near the gate are not counted as disagreement.
     """
-    from psycopg.rows import dict_row
-
     from db.store import services as services_mod
-    from db.store.clients_store import default_connect
+    from db.store.errors import StorageUnavailable
+    from db.store.places import PostgresPlaceRepository
     from reference import taxonomy
 
     checks: list[dict[str, Any]] = []
-    try:
-        conn = default_connect()
-    except Exception as exc:
-        return {
-            "stage": "services",
-            "checks": checks,
-            "skipped": f"нет доступа к базе: {type(exc).__name__}: {exc}",
-        }
+    places = PostgresPlaceRepository()
 
     near_gate = 0
     try:
@@ -163,24 +155,24 @@ def run_services() -> dict[str, Any]:
                 raw.get("profile", "pedestrian")
             ])
 
-            answer = services_mod.services_along(
-                conn, shape, categories=codes,
+            answer = places.services_along(
+                shape, categories=codes,
                 profile=raw.get("profile", "pedestrian"),
                 max_off_line_m=gate, limit=raw.get("limit", services_mod.MAX_SERVICES),
             )
             items = answer["items"]
 
-            with conn.cursor(row_factory=dict_row) as cur:
-                cur.execute(
-                    "SELECT id, lat, lon, category FROM places WHERE category = ANY(%s) AND lat IS NOT NULL",
-                    (codes,),
-                )
-                rows = cur.fetchall()
+            # The reference stays a plain, unfiltered read of the same rows: the
+            # point is to cross-check PostGIS with haversine, so it must not run
+            # the measured query.
+            reference = places.with_category(codes, lat_lon_only=True)
             ref: dict[int, tuple[float, float]] = {}
-            for row in rows:
-                off, along = _off_line_and_along(row["lat"], row["lon"], line)
+            for place in reference:
+                if place.id is None:
+                    continue
+                off, along = _off_line_and_along(place.lat, place.lon, line)
                 if off <= gate:
-                    ref[row["id"]] = (off, along)
+                    ref[place.id] = (off, along)
 
             bad_role = [
                 i["category"] for i in items
@@ -268,8 +260,8 @@ def run_services() -> dict[str, Any]:
 
             if raw.get("monotonic_with_gate"):
                 cap_here = int(raw.get("limit", services_mod.MAX_SERVICES))
-                wider = services_mod.services_along(
-                    conn, shape, categories=codes, profile=raw["profile"],
+                wider = places.services_along(
+                    shape, categories=codes, profile=raw["profile"],
                     max_off_line_m=gate * 3, limit=max(cap_here, cap_here * 3),
                 )
                 ok = len(wider["items"]) >= len(items)
@@ -278,8 +270,14 @@ def run_services() -> dict[str, Any]:
                     "detail": f"{len(items)} при {gate:.0f} м → {len(wider['items'])} при {gate * 3:.0f} м",
                     "why": case.why,
                 })
+    except StorageUnavailable as exc:
+        return {
+            "stage": "services",
+            "checks": checks,
+            "skipped": f"нет доступа к базе: {type(exc).__name__}: {exc}",
+        }
     finally:
-        conn.close()
+        places.close()
 
     return {"stage": "services", "checks": checks, "skipped": None, "near_gate_points": near_gate}
 

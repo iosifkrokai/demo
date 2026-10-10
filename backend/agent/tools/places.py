@@ -1,4 +1,9 @@
-"""``search_places`` and ``get_place_facts`` — the place lookups."""
+"""``search_places`` and ``get_place_facts`` — the place lookups.
+
+Both go through the place repository. The tools used to be handed a psycopg
+connection and look for the query helpers themselves; that is why a SQL statement
+had somewhere to hide in this package.
+"""
 
 from __future__ import annotations
 
@@ -12,8 +17,8 @@ from agent.tools import (
     ERR_EMPTY_QUERY,
     ERR_NOT_FOUND,
     _clamp,
-    _db,
     _envelope,
+    _fetch,
     _positive_int,
     _project,
 )
@@ -47,23 +52,12 @@ def search_places(
     near_lat: float | None = None,
     near_lon: float | None = None,
     radius_m: float | None = None,
+    *,
+    repos: Any = None,
 ) -> dict:
     """The ids are the only handles the agent may put into a requirement; unknown
     category codes are dropped, never sent to SQL.
     """
-    return search_places_with_db(None, query, category_codes, limit, near_lat, near_lon, radius_m)
-
-
-def search_places_with_db(
-    db: Any,
-    query: str,
-    category_codes: list[str] | None = None,
-    limit: int = DEFAULT_SEARCH_LIMIT,
-    near_lat: float | None = None,
-    near_lon: float | None = None,
-    radius_m: float | None = None,
-) -> dict:
-    """`search_places` reusing a caller-owned connection (used by the agent)."""
     requested = [c for c in (category_codes or []) if isinstance(c, str) and c.strip()]
     db_cats = db_values(requested)
     dropped = [c for c in requested if c not in db_cats]
@@ -95,15 +89,19 @@ def search_places_with_db(
             message="query must be a non-empty string",
         )
 
-    def run(conn: Any) -> list[dict]:
+    def run(store: Any) -> list[dict]:
         fetch = MAX_PLACES_PER_SEARCH if db_cats else want
-        rows = _db._db_search_rows(conn, query=query.strip(), limit=fetch, near=near)
+        if near is not None:
+            found = store.places.nearby(
+                near[0], near[1], radius_km=near[2] / 1000.0, limit=fetch
+            )
+        else:
+            found = store.places.keyword_search(query.strip(), limit=fetch)
         if db_cats:
-            rows = [r for r in rows if r.get("category") in db_cats]
-        rows = [_project(r, _PLACE_FIELDS) for r in rows]
-        return rows[:want]
+            found = [place for place in found if place.category in db_cats]
+        return [_project(place, _PLACE_FIELDS) for place in found][:want]
 
-    rows, error, message = _db._fetch(db, run)
+    rows, error, message = _fetch(repos, run)
     if error is not None:
         return _envelope("search_places", [], provenance, error=error, message=message)
     results = rows or []
@@ -115,15 +113,10 @@ def search_places_with_db(
     )
 
 
-def get_place_facts(place_id: int) -> dict:
+def get_place_facts(place_id: int, *, repos: Any = None) -> dict:
     """The provenance says so (`fact_status="raw_unverified"`); a missing place
     returns ``error="not_found"``.
     """
-    return get_place_facts_with_db(None, place_id)
-
-
-def get_place_facts_with_db(db: Any, place_id: int) -> dict:
-    """`get_place_facts` reusing a caller-owned connection (used by the agent)."""
     provenance: dict[str, Any] = {
         "source": "places",
         "result_cap": MAX_FACTS_PER_CALL,
@@ -138,18 +131,18 @@ def get_place_facts_with_db(db: Any, place_id: int) -> dict:
             message="place_id must be a positive integer",
         )
 
-    def run(conn: Any) -> list[dict]:
-        row = _db._db_place_row(conn, place_id)
-        if row is None:
+    def run(store: Any) -> list[dict]:
+        place = store.places.get_by_id(place_id)
+        if place is None:
             return []
-        facts = _project(row, _FACT_FIELDS)
-        links = row.get("links")
+        facts = _project(place, _FACT_FIELDS)
+        links = place.links
         facts["links"] = (
             list(links)[:MAX_LINKS_PER_PLACE] if isinstance(links, (list, tuple)) else None
         )
         return [facts]
 
-    rows, error, message = _db._fetch(db, run)
+    rows, error, message = _fetch(repos, run)
     if error is not None:
         return _envelope("get_place_facts", [], provenance, error=error, message=message)
     if not rows:
@@ -164,10 +157,14 @@ def get_place_facts_with_db(db: Any, place_id: int) -> dict:
 
 
 def register_search_places(agent: Any, remember: Callable[[Any, dict], dict]) -> None:
-    """Advertise ``search_places`` to the agent."""
+    """Advertise ``search_places`` to the agent.
 
-    @agent.tool
-    def search_places(
+    The Python name differs from the advertised one on purpose: a nested
+    ``search_places`` would shadow the module function this body has to call.
+    """
+
+    @agent.tool(name="search_places")
+    def _search_places(
         ctx: RunContext[InterpretDeps],
         query: str,
         category_codes: list[str] | None = None,
@@ -179,16 +176,25 @@ def register_search_places(agent: Any, remember: Callable[[Any, dict], dict]) ->
         """Search real places by text and/or canonical category codes (capped)."""
         return remember(
             ctx,
-            search_places_with_db(
-                ctx.deps.db, query, category_codes, limit, near_lat, near_lon, radius_m
+            search_places(
+                query,
+                category_codes,
+                limit,
+                near_lat,
+                near_lon,
+                radius_m,
+                repos=ctx.deps.repos,
             ),
         )
 
 
 def register_get_place_facts(agent: Any, remember: Callable[[Any, dict], dict]) -> None:
-    """Advertise ``get_place_facts`` to the agent."""
+    """Advertise ``get_place_facts`` to the agent.
 
-    @agent.tool
-    def get_place_facts(ctx: RunContext[InterpretDeps], place_id: int) -> dict:
+    Named apart from the module function for the same reason as above.
+    """
+
+    @agent.tool(name="get_place_facts")
+    def _get_place_facts(ctx: RunContext[InterpretDeps], place_id: int) -> dict:
         """Raw stored facts (hours, price, town, source URL) about one place."""
-        return remember(ctx, get_place_facts_with_db(ctx.deps.db, place_id))
+        return remember(ctx, get_place_facts(place_id, repos=ctx.deps.repos))

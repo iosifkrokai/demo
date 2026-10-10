@@ -7,13 +7,16 @@ the only way in. Everything else in the package is an implementation detail.
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING
 
 from agent import mapping, model, runner
 from agent.model import DEFAULT_MODEL, pydantic_ai
 from agent.models import ReaderBrief, TripRequirements
 from agent.schema import InterpretDeps
 from core.config import openrouter_api_key
+
+if TYPE_CHECKING:
+    from db.store.registry import Repositories
 
 log = logging.getLogger(__name__)
 
@@ -36,7 +39,7 @@ def interpret_with_agent(
     query: str,
     brief: ReaderBrief,
     *,
-    db: Any | None = None,
+    repos: Repositories | None = None,
     wall_clock_s: float | None = None,
 ) -> TripRequirements | None:
     """Returns a complete ``TripRequirements`` or ``None``.
@@ -51,7 +54,7 @@ def interpret_with_agent(
         runner._record_model_failure("agent_unavailable", runner._build_prompt(query, brief))
         return None
 
-    deps = InterpretDeps(db=db)
+    deps = InterpretDeps(repos=repos)
     try:
         reading, failure = runner._run_agent(query.strip(), brief, deps, wall_clock_s=wall_clock_s)
     except Exception as exc:

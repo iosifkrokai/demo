@@ -7,9 +7,12 @@ dependencies a single run carries (``InterpretDeps``).
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Literal
 
 from pydantic import BaseModel, Field
+
+if TYPE_CHECKING:
+    from db.store.registry import Repositories
 
 RequirementKindL = Literal["must_visit", "service", "interest", "avoid"]
 StrengthL = Literal["hard", "soft"]
@@ -44,9 +47,13 @@ class AgentReading(BaseModel):
 
 @dataclass
 class InterpretDeps:
-    """``observed_ids`` guards `place_id`: the model may only reference a place
-    the tools actually handed it.
+    """What one interpretation run is allowed to reach.
+
+    ``observed_ids`` guards `place_id`: the model may only reference a place the
+    tools actually handed it. ``repos`` is how the tools read anything at all —
+    they used to be handed a raw connection, which is why SQL lived in this
+    package.
     """
 
-    db: Any | None = None
+    repos: Repositories | None = None
     observed_ids: set[int] = field(default_factory=set)

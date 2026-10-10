@@ -7,7 +7,7 @@ means a new module under ``tools/`` plus one entry in :data:`TOOL_REGISTRARS`.
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from typing import Any
 
 log = logging.getLogger(__name__)
@@ -56,8 +56,29 @@ def _clamp(
     return value, False
 
 
-def _project(row: dict, fields: tuple[str, ...]) -> dict:
-    return {f: row.get(f) for f in fields if f in row}
+def _project(row: Any, fields: tuple[str, ...]) -> dict:
+    """Only these fields — from a mapping or from a model, whichever we hold."""
+    if isinstance(row, Mapping):
+        return {f: row.get(f) for f in fields if f in row}
+    return {f: getattr(row, f, None) for f in fields}
+
+
+def _fetch(repos: Any, fn: Callable[[Any], Any]) -> tuple[Any, str | None, str | None]:
+    """Run `fn(repos)`, or say why the database could not be reached.
+
+    Never raises: a tool that cannot read reports it, so the model learns the
+    answer is missing instead of the whole run dying on it.
+    """
+    if repos is None:
+        return None, ERR_DB_UNAVAILABLE, "database not available"
+    try:
+        return fn(repos), None, None
+    except ImportError as exc:
+        log.warning("tool: db driver unavailable: %s", exc)
+        return None, ERR_DB_UNAVAILABLE, "database driver not available"
+    except Exception as exc:
+        log.warning("tool: db access failed: %s", exc)
+        return None, ERR_DB_UNAVAILABLE, "database not reachable"
 
 
 def _positive_int(value: Any) -> bool:
@@ -71,25 +92,15 @@ def _norm_term(text: str) -> str:
 
 # The submodule imports sit below the shared helpers they reach back for.
 from agent.tools import (  # noqa: E402
-    _db,
     areas,
     places,
     services,
-)
-from agent.tools._db import (  # noqa: E402
-    DB_TIMEOUT_S,
-    _connect,
-    _db_area_rows,
-    _db_place_row,
-    _db_search_rows,
-    _fetch,
 )
 from agent.tools.areas import (  # noqa: E402
     _AREA_FIELDS,
     MAX_AREAS_PER_CALL,
     _areas_from_registry,
     find_areas,
-    find_areas_with_db,
 )
 from agent.tools.places import (  # noqa: E402
     _FACT_FIELDS,
@@ -102,9 +113,7 @@ from agent.tools.places import (  # noqa: E402
     MAX_RADIUS_M,
     MIN_RADIUS_M,
     get_place_facts,
-    get_place_facts_with_db,
     search_places,
-    search_places_with_db,
 )
 from agent.tools.services import (  # noqa: E402
     MAX_DETOUR_MINUTES,
@@ -130,7 +139,6 @@ def register_all(agent: Any, remember: Callable[[Any, dict], dict]) -> None:
 
 # Re-exported so `from agent import tools` keeps the historical tool surface.
 __all__ = [
-    "DB_TIMEOUT_S",
     "DEFAULT_RADIUS_M",
     "DEFAULT_SEARCH_LIMIT",
     "ERR_AREA_REGISTRY",
@@ -154,22 +162,14 @@ __all__ = [
     "_PLACE_FIELDS",
     "_areas_from_registry",
     "_clamp",
-    "_connect",
-    "_db",
-    "_db_area_rows",
-    "_db_place_row",
-    "_db_search_rows",
     "_envelope",
     "_fetch",
     "_norm_term",
     "_positive_int",
     "_project",
     "find_areas",
-    "find_areas_with_db",
     "get_place_facts",
-    "get_place_facts_with_db",
     "register_all",
     "search_places",
-    "search_places_with_db",
     "services_near_route",
 ]

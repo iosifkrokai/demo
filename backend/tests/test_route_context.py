@@ -12,6 +12,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from contracts.planner import Candidate, GenerateReq, LatLon, RouteContext
 from core import constants
+from db.store.mappers import place_from_row
 from planner.pipeline import (
     _cap_for_valhalla,
     _context_changes,
@@ -81,7 +82,7 @@ def test_base_stops_come_back_after_every_trim():
         {"id": 2, "name": "Новый замок", "category": "дворец", "lat": 53.67, "lon": 23.82},
     ]
 
-    merged, base = _with_base_points(pool, rows, set())
+    merged, base = _with_base_points(pool, [place_from_row(r) for r in rows], set())
 
     assert [c.id for c in merged] == [7, 1, 2]
     assert [c.name for c in base] == ["Старый замок", "Новый замок"]
@@ -92,7 +93,7 @@ def test_base_stop_the_user_deleted_is_not_resurrected():
     pool = [_cand(7, "Кафе Немо")]
     rows = [{"id": 1, "name": "Форт №16", "category": "инфраструктура", "lat": 53.6, "lon": 23.8}]
 
-    merged, base = _with_base_points(pool, rows, {1})
+    merged, base = _with_base_points(pool, [place_from_row(r) for r in rows], {1})
 
     assert [c.id for c in merged] == [7]
     assert base == []
@@ -102,7 +103,7 @@ def test_base_stop_already_in_the_pool_is_not_duplicated():
     pool = [_cand(1, "Старый замок")]
     rows = [{"id": 1, "name": "Старый замок", "category": "замок", "lat": 53.67, "lon": 23.82}]
 
-    merged, base = _with_base_points(pool, rows, set())
+    merged, base = _with_base_points(pool, [place_from_row(r) for r in rows], set())
 
     assert [c.id for c in merged] == [1]
     assert len(base) == 1
@@ -145,16 +146,19 @@ def test_convenience_stops_come_from_the_neighbourhood(monkeypatch):
     base = [_cand(1, "монастырь"), _cand(2, "храм")]
     calls: list[tuple[float, float, float]] = []
 
-    def fake_nearby(db, lat, lon, radius_km=12.0, limit=50):
-        calls.append((lat, lon, radius_km))
-        return [
-            {"id": 50 + len(calls), "name": "Кафе рядом", "category": "кафе",
-             "lat": lat, "lon": lon},
-        ]
+    class _Places:
+        """Stands in for the place repository: the neighbourhood, invented."""
 
-    monkeypatch.setattr("planner.refine.nearby_places", fake_nearby)
+        def nearby(self, lat, lon, radius_km=12.0, limit=50):
+            calls.append((lat, lon, radius_km))
+            return [
+                place_from_row({
+                    "id": 50 + len(calls), "name": "Кафе рядом", "category": "кафе",
+                    "lat": lat, "lon": lon,
+                }),
+            ]
 
-    found = _nearby_convenience(None, base, {"кафе"})
+    found = _nearby_convenience(_Places(), base, {"кафе"})
 
     assert calls == [
         (base[0].lat, base[0].lon, constants.CONVENIENCE_RADIUS_M / 1000.0),
@@ -166,14 +170,15 @@ def test_convenience_stops_come_from_the_neighbourhood(monkeypatch):
 def test_convenience_search_ignores_categories_nobody_asked_for(monkeypatch):
     base = [_cand(1, "монастырь")]
 
-    def fake_nearby(db, lat, lon, radius_km=12.0, limit=50):
-        return [
-            {"id": 60, "name": "Гостиница", "category": "гостиница", "lat": lat, "lon": lon},
-            {"id": 61, "name": "Туалет", "category": "туалет", "lat": lat, "lon": lon},
-        ]
+    class _Places:
+        def nearby(self, lat, lon, radius_km=12.0, limit=50):
+            return [
+                place_from_row({"id": 60, "name": "Гостиница", "category": "гостиница",
+                                "lat": lat, "lon": lon}),
+                place_from_row({"id": 61, "name": "Туалет", "category": "туалет",
+                                "lat": lat, "lon": lon}),
+            ]
 
-    monkeypatch.setattr("planner.refine.nearby_places", fake_nearby)
-
-    found = _nearby_convenience(None, base, {"туалет"})
+    found = _nearby_convenience(_Places(), base, {"туалет"})
 
     assert [c.name for c in found] == ["Туалет"]

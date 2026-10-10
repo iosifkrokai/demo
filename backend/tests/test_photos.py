@@ -20,8 +20,18 @@ from db.seed.photos import (
     commons_file_title,
     parse_wikipedia,
 )
-from db.store.itineraries import _stop_payload
-from planner.retrieve import parse_photo
+from db.store.mappers import photo_of, place_from_row, place_payload
+
+
+def _stop_payload(row: dict) -> dict:
+    """A stored place row as the card the panel prints."""
+    return place_payload(place_from_row(row))
+
+
+def parse_photo(row: dict) -> dict | None:
+    """The stored photo columns as the card's photo, or nothing at all."""
+    return photo_of(place_from_row(row))
+
 
 BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PHOTOS = str(PHOTOS_DIR / "place_photos.json")

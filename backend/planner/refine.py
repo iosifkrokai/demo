@@ -7,16 +7,15 @@ import re
 from dataclasses import dataclass
 from typing import Literal
 
-import psycopg
-
 from contracts.planner import Candidate, LatLon, RouteChange, RouteChanges
 from core import constants
-from db.store.search import nearby_places
+from db.models.place import Place
+from db.store.places import PostgresPlaceRepository
 from reference import taxonomy
 
 from .cost import visit_time_minutes
 from .resolve import CATEGORY_SYNONYMS, CATEGORY_SYNONYMS_EN
-from .retrieve import _row_to_candidate
+from .retrieve import candidate_of
 
 REFINEMENT_UNSUPPORTED = "refinement_unsupported"
 REFINEMENT_UNRECOGNIZED = "refinement_unrecognized"
@@ -420,20 +419,20 @@ def reason_text(reason_code: str) -> str:
 
 def _with_base_points(
     candidates: list[Candidate],
-    rows: list[dict],
+    rows: list[Place],
     excluded: set[int],
 ) -> tuple[list[Candidate], list[Candidate]]:
     """Stops from the previous turn are re-added after every trim; only an explicit
     request or Valhalla's verdict drops one.
     """
-    base = [_row_to_candidate(r, 0.0) for r in rows if r["id"] not in excluded]
+    base = [candidate_of(place, 0.0) for place in rows if place.id not in excluded]
     have = {c.id for c in candidates}
     merged = list(candidates) + [b for b in base if b.id not in have]
     return merged, base
 
 
 def _nearby_convenience(
-    db: psycopg.Connection,
+    places: PostgresPlaceRepository | None,
     base: list[Candidate],
     wanted: set[str],
     *,
@@ -441,21 +440,23 @@ def _nearby_convenience(
     max_added: int = constants.CONVENIENCE_MAX_ADDED,
 ) -> list[Candidate]:
     """Convenience stops (coffee, toilet, ...) that sit ON the route."""
+    if places is None:
+        return []
     found: dict[int, Candidate] = {}
     per_stop: dict[int, int] = {}
     for stop in base:
-        if per_stop.get(stop.id, 0) >= 2:
+        if stop.id is None or per_stop.get(stop.id, 0) >= 2:
             continue
-        rows = nearby_places(
-            db, stop.lat, stop.lon, radius_km=radius_m / 1000.0, limit=8
-        )
-        for row in rows:
-            cat = (row.get("category") or "").strip().lower()
-            if cat not in wanted or row["id"] in found:
+        near = places.nearby(stop.lat, stop.lon, radius_km=radius_m / 1000.0, limit=8)
+        for place in near:
+            if place.id is None:
                 continue
-            if row["id"] in {c.id for c in base}:
+            cat = (place.category or "").strip().lower()
+            if cat not in wanted or place.id in found:
                 continue
-            found[row["id"]] = _row_to_candidate(row, 0.0)
+            if place.id in {c.id for c in base}:
+                continue
+            found[place.id] = candidate_of(place, 0.0)
             per_stop[stop.id] = per_stop.get(stop.id, 0) + 1
             if len(found) >= max_added:
                 return list(found.values())

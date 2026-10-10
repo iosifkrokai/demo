@@ -58,7 +58,7 @@ working. Embeddings are local either way.
 
 Secrets, addresses and two deliberate escape hatches live in the environment
 (`core/config.py`); models, weights, thresholds and limits are reviewable code in
-`domain/constants.py`. `.env.example` holds the committed defaults (frontend build
+`core/constants.py`. `.env.example` holds the committed defaults (frontend build
 values, Postgres, proxy upstreams); the variables below are what the agent and
 seed read.
 
@@ -69,11 +69,11 @@ seed read.
 | `VALHALLA_URL` | routing engine address |
 | `AGENT_HOST` / `AGENT_PORT` | bind address |
 | `AGENT_INTERPRET_MODEL` | optional override of the interpretation model (its default is named in `agent/model.py`) |
-| `LANGFUSE_HOST` / `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` | optional self-hosted tracing (`infra/trace.py`); **both keys** are required, and without them tracing is a no-op |
+| `LANGFUSE_HOST` / `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` | optional self-hosted tracing (`telemetry/trace.py`); **both keys** are required, and without them tracing is a no-op |
 | `CACHE_BUST=1` | turn the in-process reading/embedding cache off for this process |
 | `INTERPRET_CACHE_SIZE` / `INTERPRET_CACHE_TTL_S` | bounds of that cache (defaults 128 entries / 30 min) |
 
-Changing a value in `domain/constants.py` is a code-review decision: edit → tests
+Changing a value in `core/constants.py` is a code-review decision: edit → tests
 → commit.
 
 ## Architecture
@@ -87,7 +87,7 @@ Browser → nginx :80 (frontend container)
   │                           │
   │  preprocess ─ interpret (PydanticAI over OpenRouter; refuses without a key)
   │  resolve ─ retrieve (vector + keyword + must-visit, RRF fusion)
-  │             vector = LOCAL embeddings (infra/embeddings.py, CPU ONNX)
+  │             vector = LOCAL embeddings (ml/embeddings.py, CPU ONNX)
   │  geo-focus ─ diversity (MMR) ─ cost (Valhalla matrix) ─ optimize
   │  validate ─ render (Valhalla /route) ─ explain ─ verify (deterministic)
   │
@@ -103,7 +103,7 @@ paths; the trailing slash on `/auth|/me|/admin/` is deliberate, so the *bare*
 retrieve → geo-focus → diversity → cost → optimize → validate → render → explain →
 verify — with `catalogue` and `refine` as alternate branches. The LLM layer is
 `backend/agent/` (client / model / runner / tools / prompts); the Valhalla client is
-`backend/infra/valhalla_client.py`, the search `backend/db/store/search.py`.
+`backend/planner/valhalla_client.py`, the place queries `backend/db/store/places.py`.
 
 Two request fields change the shape of the answer:
 
@@ -152,7 +152,7 @@ Apply it with `make migrate`.
 
 **`503 (valhalla ... sources_to_targets failed after retries)`.** Valhalla 3.5.1
 answers 500 `Could not find candidate edge used for label` for matrix shapes with
-`len(sources) >= 6 AND len(targets) >= 7`. `infra/valhalla_client.py` chunks around
+`len(sources) >= 6 AND len(targets) >= 7`. `planner/valhalla_client.py` chunks around
 it (`MATRIX_MAX_SOURCES` / `MATRIX_MAX_TARGETS`).
 
 **Route has no polyline / `length_km: null`.** `/route` answers 500 `Could not

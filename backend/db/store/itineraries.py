@@ -1,4 +1,9 @@
-"""Ready-made routes: a curated itinerary a tourist can open without asking."""
+"""Ready-made routes: a curated itinerary a tourist can open without asking.
+
+The file is a curated dataset, so reading it is `reference`'s job; attaching the
+stored facts to its stops is a read of `places`, so it goes through the place
+repository like every other one.
+"""
 
 from __future__ import annotations
 
@@ -8,22 +13,13 @@ from pathlib import Path
 from typing import Any
 
 from core.paths import ITINERARIES_JSON
+from db.store.errors import ItinerariesUnavailable
+from db.store.mappers import place_payload
+from db.store.places import PostgresPlaceRepository
 
 log = logging.getLogger(__name__)
 
 ITINERARIES_PATH = ITINERARIES_JSON
-
-_STOP_SQL = """
-    SELECT id, source_url, name, category, town, district, lat, lon,
-           visit_minutes, opening_hours, blurb, fun_fact, fun_facts, links,
-           ticket_price, photo_url, photo_author, photo_license, photo_source
-    FROM places
-    WHERE source_url = ANY(%s)
-"""
-
-
-class ItinerariesUnavailable(RuntimeError):
-    """The curated file is unreadable — a deployment bug, not a request error."""
 
 
 def load_itineraries(path: Path | None = None) -> list[dict[str, Any]]:
@@ -40,29 +36,6 @@ def load_itineraries(path: Path | None = None) -> list[dict[str, Any]]:
     if not isinstance(items, list) or not items:
         raise ItinerariesUnavailable(f"{target}: no itineraries")
     return items
-
-
-def _resolve_stops(conn: Any, keys: list[str]) -> tuple[dict[str, dict], list[str]]:
-    """Fetch every stop in one query. Returns (rows by source_url, missing keys)."""
-    if not keys:
-        return {}, []
-    from psycopg.rows import dict_row
-
-    with conn.cursor(row_factory=dict_row) as cur:
-        cur.execute(_STOP_SQL, (keys,))
-        rows = {row["source_url"]: dict(row) for row in cur.fetchall()}
-    missing = [key for key in keys if key not in rows]
-    return rows, missing
-
-
-def _stop_payload(row: dict) -> dict:
-    """One stop, in the shape the panel prints. Numbers stay numbers.
-
-    The payload is the catalogue's own (`places.place_payload`).
-    """
-    from db.store.places import place_payload
-
-    return place_payload(row)
 
 
 def _split_by_role(payloads: list[dict[str, Any]]) -> tuple[list[dict], list[dict]]:
@@ -84,7 +57,7 @@ def _split_by_role(payloads: list[dict[str, Any]]) -> tuple[list[dict], list[dic
 
 
 def resolve_itineraries(
-    conn: Any, items: list[dict[str, Any]] | None = None
+    places: PostgresPlaceRepository, items: list[dict[str, Any]] | None = None
 ) -> tuple[list[dict[str, Any]], list[str]]:
     """Attach dataset facts to every stop, in the authored order.
 
@@ -92,13 +65,15 @@ def resolve_itineraries(
     """
     authored = items if items is not None else load_itineraries()
     wanted = [key for item in authored for key in item.get("stops", [])]
-    rows, missing = _resolve_stops(conn, wanted)
+    found, missing = places.get_by_source_urls(wanted)
     if missing:
         log.warning("itineraries: %d stop(s) no longer resolve: %s", len(missing), missing)
 
     out: list[dict[str, Any]] = []
     for item in authored:
-        payloads = [_stop_payload(rows[key]) for key in item.get("stops", []) if key in rows]
+        payloads = [
+            place_payload(found[key]) for key in item.get("stops", []) if key in found
+        ]
         stops, services = _split_by_role(payloads)
         visit_minutes = sum(s["visit_minutes"] or 0 for s in stops)
         out.append(

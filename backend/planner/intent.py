@@ -107,11 +107,11 @@ def _interpret_cache_key(
 
 
 def _agent_contract(
-    query: str, brief: ReaderBrief, db, wall_clock_s: float | None = None
+    query: str, brief: ReaderBrief, repos, wall_clock_s: float | None = None
 ) -> TripRequirements | None:
     """The interpretation agent's contract, or None when it cannot be trusted."""
     try:
-        return client.interpret_with_agent(query, brief, db=db, wall_clock_s=wall_clock_s)
+        return client.interpret_with_agent(query, brief, repos=repos, wall_clock_s=wall_clock_s)
     except Exception as exc:
         log.warning("requirements: agent layer failed (%s)", exc)
         return None
@@ -246,7 +246,7 @@ def reader_brief(req: GenerateReq) -> ReaderBrief:
 
 
 def build_requirements(
-    query: str, req: GenerateReq, *, db: object | None = None,
+    query: str, req: GenerateReq, *, repos: object | None = None,
     wall_clock_s: float | None = None,
 ) -> TripRequirements:
     """Interpret one request into the frozen `TripRequirements` contract.
@@ -263,7 +263,7 @@ def build_requirements(
             trace.record("interpret · model", "skipped", cached=True)
             return cached.model_copy(deep=True)
 
-    contract = _agent_contract(query, brief, db, wall_clock_s)
+    contract = _agent_contract(query, brief, repos, wall_clock_s)
     if contract is None:
         raise InterpretationUnavailable(
             "the query could not be read: the interpretation model is unavailable"

@@ -135,7 +135,7 @@ def _render_tour(
 
 
 def _services_along_evidence(
-    db: Any, requirements: Any, shape: Any
+    places: Any, requirements: Any, shape: Any
 ) -> Any:
     """Measure the services beside the line for the codes the requirements name.
 
@@ -150,12 +150,12 @@ def _services_along_evidence(
     )
     if not codes or not shape:
         return None
-    from db.store import services as services_mod
+    from db.store.services import MAX_SERVICES
 
     from .verify import ServiceAlongEvidence
 
     try:
-        answer = services_mod.services_along(db, shape, categories=codes, limit=services_mod.MAX_SERVICES * 2)
+        answer = places.services_along(shape, categories=codes, limit=MAX_SERVICES * 2)
     except Exception:
         log.warning("services_along: measurement failed", exc_info=True)
         return ServiceAlongEvidence(measured=False, by_code={})
