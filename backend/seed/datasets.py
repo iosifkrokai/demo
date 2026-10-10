@@ -1,13 +1,5 @@
 """Versioned datasets, their validation, and the coverage report.
-
-Consolidated from ``scripts/seed_region.py``, ``scripts/load_osm.py``,
-``scripts/apply_curated.py`` and the pure half of ``scripts/seed_all.py``. All
-public names the old modules exposed are preserved under this module.
-
-Everything here is pure and offline: it reads the committed CSVs, validates and
-normalises them, and builds the machine-readable coverage report. Nothing in
-this module touches a database or the network — writing lives in
-:mod:`seed.pipeline`.
+Pure and offline: reads the committed CSVs and never touches a DB or network.
 """
 
 from __future__ import annotations
@@ -27,37 +19,26 @@ from domain.geofence import inside_project_area
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 
-# ── Category ownership markers ───────────────────────────────────────────────
 SOURCE_CURATED = "curated"
 SOURCE_DATASET = "dataset"
 SOURCE_AUTO = "auto"
-# Categories in these rows may never be rewritten by automatic classification.
 PROTECTED_CATEGORY_SOURCES = (SOURCE_CURATED, SOURCE_DATASET)
 
-# The geofence message emitted by the validators; used to split a plain
-# validation failure from a geofence rejection in the report.
 GEOFENCE_PROBLEM = "outside Grodno region"
 
 DEFAULT_DUP_RADIUS_M = _constants.DUPLICATE_RADIUS_M
 
-# Canonical 14-column pipe format every dataset uses.
 COLUMNS = [
     "name", "category", "district", "town", "lat", "lon", "blurb",
     "fun_fact", "fun_facts", "opening_hours", "ticket_price",
     "visit_minutes", "links", "source_url",
 ]
 
-# Fast bounding pre-check; the ADM1 polygon (inside_project_area) decides.
 BBOX = {"south": 52.75, "west": 23.35, "north": 54.80, "east": 27.00}
 
-# The canonical taxonomy (data/taxonomy.csv, read through domain/taxonomy.py) is
-# the ONE source of category codes. The sight/service split is the taxonomy's
-# ``role`` column, so the readers cannot drift from the agent's own sets.
 SIGHT_TAXONOMY = frozenset(c.code for c in taxonomy.all_categories() if c.role == "sight")
 SERVICE_TAXONOMY = frozenset(c.code for c in taxonomy.all_categories() if c.role == "service")
 
-
-# Readers / validators / normalisers (pure)
 
 def read_pipe_csv(path: Path) -> list[dict]:
     """Parse a pipe-delimited CSV whose header may be commented out."""
@@ -192,8 +173,6 @@ class Dataset:
         self.category_source = category_source
         self.fatal_invalid = fatal_invalid
         self.license = license
-        # Optional datasets may be absent on a fresh checkout (service POIs are
-        # produced by `seed fetch`); a missing optional file is skipped, not fatal.
         self.optional = optional
         self.path: Path = DATA_DIR / filename
 
@@ -228,8 +207,6 @@ def default_datasets() -> list[Dataset]:
     ]
 
 
-# Curated ground truth (folded from scripts/apply_curated.py)
-
 EXPECTED_CURATED_HEADER = [
     "id", "normalized_name", "category", "blurb", "fun_fact", "fun_facts", "links",
 ]
@@ -237,9 +214,7 @@ EXPECTED_CURATED_HEADER = [
 
 def read_curated(path: Path) -> list[dict]:
     """Parse the pipe-delimited curated file.
-
-    The header line is commented out in the repo (so the file stays valid CSV
-    for other tooling), hence the explicit fieldnames; a real header is accepted.
+    The header is commented out in the repo, hence the explicit fieldnames.
     """
     if not path.exists():
         return []
@@ -270,11 +245,7 @@ def read_curated(path: Path) -> list[dict]:
 
 def match_place(name: str, db_rows: list[dict]) -> dict | None:
     """Find the DB row for a curated name.
-
-    Curated ``normalized_name`` ("Дом офицеров") comes from scraped names like
-    "Бывший Дом офицеров в Гродно", so we match on equality first, then on
-    containment (case-insensitive). Matching by name — not by the SERIAL id —
-    keeps curation working across fresh DBs.
+    Match on equality first, then case-insensitive containment (not by id).
     """
     n = name.lower()
     exact = [r for r in db_rows if r["name"].strip().lower() == n]
@@ -289,8 +260,6 @@ def match_place(name: str, db_rows: list[dict]) -> dict | None:
         return fuzzy[0]
     return None
 
-
-# Collection + validation
 
 def load_dataset(ds: Dataset) -> list[dict]:
     """Read one dataset's raw pipe rows (empty for a missing optional dataset)."""
@@ -313,10 +282,7 @@ def classify_reject(problems: list[str]) -> str:
 
 def collect_records(datasets: list[Dataset]) -> dict[str, Any]:
     """Validate every dataset.
-
-    Returns ``records`` (valid, normalised, tagged by dataset), ``rejects``
-    (invalid + geofence, kept in quarantine) and ``fatal`` (True when a fatal
-    dataset had an invalid row — region/city must never be half-loaded).
+    Returns records, rejects (quarantined), per-dataset meta and the fatal flag.
     """
     records: list[dict] = []
     rejects: list[dict] = []
@@ -361,8 +327,6 @@ def collect_records(datasets: list[Dataset]) -> dict[str, Any]:
             "datasets": datasets_meta, "fatal": fatal}
 
 
-# Coverage report (pure, offline)
-
 _CYRILLIC_RE = re.compile(r"[А-Яа-яЁёІіЎў]")
 _LATIN_RE = re.compile(r"[A-Za-z]")
 _NORM_RE = re.compile(r"[^0-9a-zа-яёіў]+")
@@ -406,9 +370,7 @@ def find_suspected_duplicates(
     records: list[dict], radius_m: float = DEFAULT_DUP_RADIUS_M
 ) -> list[dict]:
     """Record pairs with the same normalised name within ``radius_m``.
-
-    Same-name-within-radius is a *candidate* for merging, not proof (spec §6.3),
-    so these are reported for review rather than dropped.
+    Candidates for merging, not proof — reported for review, not dropped.
     """
     buckets: dict[str, list[dict]] = {}
     for r in records:

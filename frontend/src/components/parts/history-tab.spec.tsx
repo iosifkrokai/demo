@@ -69,7 +69,6 @@ describe('вкладка «История»: что было пройдено', 
 
     const badge = screen.getByTestId('history-walk-h1');
     expect(badge).toHaveTextContent(/пройдено 1 из 3/i);
-    // Not «пройден»: the route is unfinished, and calling it walked would be a lie.
     expect(badge).not.toHaveTextContent(/^пройден$/i);
   });
 

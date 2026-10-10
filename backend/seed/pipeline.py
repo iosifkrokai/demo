@@ -1,9 +1,5 @@
 """The database-writing primitives of the seed — the one place rows are written.
-
-Every dataset upserts through the single :func:`upsert_sql`, so the
-curated-category guard cannot be bypassed by a dataset-specific SQL.
-
-Imported lazily by the CLI so ``--dry-run`` needs no database driver.
+Every dataset upserts through :func:`upsert_sql`, so the curated guard holds.
 """
 
 from __future__ import annotations
@@ -22,7 +18,6 @@ from .datasets import (
     match_place,
 )
 
-# Provider recorded in place_sources, keyed by the source_url prefix.
 PROVIDER_BY_PREFIX = {
     "city": "planetabelarus",
     "region": "planetabelarus",
@@ -38,12 +33,7 @@ def curated_category_is_protected(category_source: str | None) -> bool:
 
 def upsert_sql() -> str:
     """INSERT ... ON CONFLICT (source_url) DO UPDATE that respects curation.
-
-    A protected row (curated/dataset) keeps its category against *automatic*
-    writers (``EXCLUDED.category_source = 'auto'``), while the row's own
-    authoritative dataset can still refresh it — re-running city/region or
-    places_curated.csv applies edits to their own rows. An automatic writer can
-    therefore never overwrite hand-labelled data, no matter how often the seed runs.
+    A protected row keeps its category against automatic writers.
     """
     protected = "places.category_source IN ('curated', 'dataset')"
     guarded_cat = (f"CASE WHEN {protected} AND EXCLUDED.category_source = 'auto' "
@@ -89,11 +79,8 @@ def connect(dsn: str):
 
 
 def allow_curated_category_change(conn) -> None:
-    """Opt this transaction in to the 0004 guard trigger.
-
-    ``seed`` is the sanctioned writer: it enforces curated priority in its own
-    upsert SQL, so it may legitimately rewrite a curated row. Every other writer
-    stays blocked by the trigger.
+    """Opt this transaction in to the guard trigger.
+    ``seed`` is the sanctioned writer and enforces curated priority in its upsert.
     """
     with conn.cursor() as cur:
         cur.execute("SELECT set_config('grodno.allow_curated_category_change', 'on', true)")
@@ -127,10 +114,7 @@ def apply_dataset(conn, ds: Dataset, records: list[dict]) -> dict:
 
 def apply_curated_rows(conn, curated: list[dict]) -> dict:
     """Apply the curated CSV by name and mark its rows as curated.
-
-    Sets ``category_source='curated'`` so later automatic classification can never
-    rewrite those categories. The caller must have opted this transaction in to
-    the 0004 guard trigger (:func:`allow_curated_category_change`).
+    Sets ``category_source='curated'`` so later auto-classification cannot rewrite them.
     """
     with conn.cursor() as cur:
         cur.execute("SELECT id, name, category, blurb, fun_fact, fun_facts, links FROM places")
@@ -159,7 +143,6 @@ def apply_curated_rows(conn, curated: list[dict]) -> dict:
             )
             if differs:
                 updated += 1
-            # Curated normalised_name becomes a RU alias for grounding.
             cur.execute(
                 """
                 INSERT INTO place_aliases (place_id, alias, locale, source)
@@ -237,11 +220,7 @@ def gather_db_stats(conn) -> dict:
 
 def apply_photos(conn, data_dir: Path) -> int:
     """Write the committed ``place_photos.json`` onto ``places`` (no network).
-
-    The file is data like the CSVs, so a clean restore must produce the same
-    database whether or not Wikimedia is reachable: this reads what the resolve
-    stage wrote instead of re-resolving it. A checkout without the file simply
-    gets no photos — not an error.
+    A missing file yields no photos rather than an error.
     """
     path = data_dir / "place_photos.json"
     if not path.exists():
@@ -253,9 +232,7 @@ def apply_photos(conn, data_dir: Path) -> int:
 
 def prune_foreign(conn, *, apply: bool = False) -> int:
     """Drop places outside the project area; returns the number found (deleted if apply).
-
-    The ingest filters with ``domain.geofence`` now, so this only cleans DBs filled
-    before that filter existed.
+    The ingest filters now, so this only cleans older DBs.
     """
     with conn.cursor() as cur:
         cur.execute("SELECT id, name, category, district, lat, lon FROM places")

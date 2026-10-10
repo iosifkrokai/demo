@@ -1,10 +1,7 @@
 import { CircleCheck } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
-/**
- * Shown instead of the next stop once the walk is over — the panel keeps its
- * shape so the last stop does not make everything above it jump.
- */
+/** Shown instead of the next stop once the walk is over — the panel keeps its shape so the last stop does not make everything above it jump. */
 export const GuideRouteDone = ({ total }: { total: number }) => {
   const { t } = useTranslation();
 

@@ -9,14 +9,7 @@ import { useAdminStats } from '@/hooks/use-admin';
 import { PlacesPanel } from './places-panel';
 import { UsersPanel } from './users-panel';
 
-/**
- * The admin section (spec 005 §5): users and places, over one dashboard header.
- *
- * Access is decided by the server, not by this page: a plain user is refused with
- * `403 not_admin` regardless of what the UI renders. So the page does not pretend
- * the section is secret — it says plainly that admin rights are needed, and never
- * fires an `/admin/*` request for a non-admin.
- */
+/** The admin section: users and places, over one dashboard header. */
 
 type Tab = 'users' | 'places';
 

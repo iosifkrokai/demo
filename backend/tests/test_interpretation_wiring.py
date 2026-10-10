@@ -1,14 +1,6 @@
-"""The interpretation wiring (spec 002 §4): the model proposes MEANING, the
-deterministic verifier decides VERDICTS.
+"""The interpretation wiring: the model proposes MEANING, the verifier decides VERDICTS.
 
-Four contracts, all offline — no key, no network, no DB:
-
-1. no key → the deterministic reading answers, with honest provenance;
-2. a model contract can never override a *visible* UI filter;
-3. a tool/upstream failure in the interpretation layer degrades instead of
-   turning the request into a 500;
-4. a mandatory requirement the MODEL produced is decided by verify.py, never by
-   the model that proposed it.
+Four contracts, all offline — no key, no network, no DB.
 """
 
 from __future__ import annotations
@@ -38,8 +30,6 @@ GEOJSON = {
     "coordinates": [[23.82, 53.68], [23.825, 53.685]],
 }
 
-
-# Fixtures: the OpenRouter key is the switch between modes
 
 @pytest.fixture
 def no_key(monkeypatch):
@@ -73,13 +63,11 @@ def _plan(*stops: Candidate) -> ValidatedPlan:
     )
 
 
-# (1) No key → deterministic reading, honest provenance
-
 class TestNoKeyIsDeterministic:
 
     def test_no_key_produces_the_deterministic_contract(self, no_key):
         tr = build_requirements(RU, GenerateReq(query=RU, hard_services=["туалет"]))
-        assert tr.source == "explicit"          # UI filter + text reading
+        assert tr.source == "explicit"
         assert "туалет" in tr.hard_service_codes()
         assert tr.party.children == 2
         assert tr.areas == ["grodno-old-town"]
@@ -101,8 +89,6 @@ class TestNoKeyIsDeterministic:
         tr = build_requirements(RU, GenerateReq(query=RU))
         intent = intent_mod.intent_from_requirements(tr, RU)
         assert intent.source == "fallback"
-        # A query with no category word: only the model can supply one, so the
-        # code that shows up is proof the contract drove the reading.
         bare = "что посмотреть в Гродно"
         monkeypatch.setattr(
             intent_mod, "_agent_contract",
@@ -115,8 +101,6 @@ class TestNoKeyIsDeterministic:
         assert intent.source == "agent"
         assert intent.decision.categories_pos == ["замок"]
 
-
-# (2) A visible UI filter is never overridden by the model
 
 class TestUiFilterWins:
 
@@ -138,8 +122,8 @@ class TestUiFilterWins:
         assert len(svc) == 1
         assert svc[0].strength == "hard"
         assert svc[0].source == "ui"
-        assert tr.party.children == 1        # UI scalar, not the text's 2
-        assert tr.budget_minutes == 45       # UI budget, not the text's
+        assert tr.party.children == 1
+        assert tr.budget_minutes == 45
         assert tr.source == "mixed"
 
     def test_model_downgrading_a_ui_filter_does_not_win(self, with_key, monkeypatch):
@@ -171,8 +155,6 @@ class TestUiFilterWins:
         assert "музей" not in tr.avoid_codes()
         assert "музей" in tr.interest_codes()
 
-
-# (3) A tool/upstream failure degrades, never a 500
 
 class TestFailuresDegrade:
 
@@ -218,8 +200,6 @@ class TestFailuresDegrade:
         assert "502" in exc.value.detail
 
 
-# (4) verify.py decides, not the model
-
 class TestVerifierDecides:
 
     def _mandatory_toilet(self) -> TripRequirements:
@@ -264,14 +244,10 @@ class TestVerifierDecides:
         assert overall_status(tr) == "degraded"
 
 
-# (5) The client-visible interpretation block, unmet included
-
 class TestInterpretationBlock:
     """`RouteResponse.interpretation` — what the system understood, one place.
 
-    The frontend renders chips from it, so it must be codes + numbers only, and
-    a stated mandatory requirement that could not be met must appear in `unmet`
-    with its reason — never a silent success.
+    Codes + numbers only; an unmet requirement appears in `unmet` with its reason.
     """
 
     def _mandatory_toilet(self) -> TripRequirements:
@@ -285,7 +261,6 @@ class TestInterpretationBlock:
         """The owner's live bug: the same query sometimes planned a route with
         no toilet, silently.  The response must say so, with a reason code."""
         tr = self._mandatory_toilet()
-        # A route that satisfies the interest but has no toilet at all.
         plan = _plan(
             Candidate(id=4, name="Фарный костёл", category="костёл", lat=53.68, lon=23.82)
         )
@@ -300,7 +275,6 @@ class TestInterpretationBlock:
         assert toilet.strength == "hard"
         assert toilet.status == "unmet"
         assert toilet.reason == "hard_service_absent"
-        # and the requirement that WAS met is not in the unmet list
         assert "костёл" not in codes
 
     def test_a_satisfied_request_has_an_empty_unmet_list(self):
@@ -320,7 +294,6 @@ class TestInterpretationBlock:
         verify(tr, _plan(), GEOJSON)
         block = _interpretation(tr, overall_status(tr))
         dumped = block.model_dump()
-        # the fields the client needs for chips
         assert set(dumped) >= {
             "source", "locale", "status", "requirements", "unmet", "unknowns",
             "areas", "budget_minutes", "transport", "result_mode",
@@ -345,8 +318,8 @@ class TestInterpretationBlock:
         block = _interpretation(tr, "pending")
         assert block.source == "mixed"
         by_code = {s.code: s for s in block.requirements}
-        assert by_code["музей"].origin == "ui"       # a visible control
-        assert by_code["туалет"].origin == "agent"   # the model read the text
+        assert by_code["музей"].origin == "ui"
+        assert by_code["туалет"].origin == "agent"
 
     def test_the_parser_is_named_when_no_model_answered(self, no_key):
         tr = build_requirements(RU, GenerateReq(query=RU))
@@ -355,7 +328,7 @@ class TestInterpretationBlock:
         assert all(s.origin == "fallback" for s in block.requirements)
 
     def test_the_field_is_added_not_renamed(self):
-        """Item-5 contract: the response grows, existing fields stay untouched."""
+        """The response grows; existing fields stay untouched."""
         from contracts.planner import RouteResponse
 
         fields = RouteResponse.model_fields

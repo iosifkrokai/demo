@@ -23,17 +23,7 @@ import {
   type EditableFields,
 } from './place-fields';
 
-/**
- * The places half of the admin panel (spec 005 §3).
- *
- * List and map are two windows on the same page, side by side and always both
- * visible: clicking a row points the map at it, clicking a pin highlights its
- * row. «изменить» makes that pin draggable — dragging rewrites the coordinate
- * fields, and «сохранить» PATCHes them like any other field.
- *
- * Editing a place changes the same row the map, the «все точки» tab and the
- * planner read; there is no separate admin copy.
- */
+/** The places half of the admin panel. */
 
 const fieldLabel = 'flex flex-col gap-1 text-meta font-medium';
 
@@ -48,8 +38,6 @@ const finiteOr = (raw: string, fallback: number): number => {
 export function PlacesPanel({ enabled }: { enabled: boolean }) {
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('');
-  // The inputs stay instant; only the debounced value reaches the query key, so
-  // a burst of typing is one request rather than one per character.
   const debouncedQuery = useDebouncedValue(query);
   const debouncedCategory = useDebouncedValue(category);
   const places = useAdminPlaces(enabled, debouncedQuery, debouncedCategory);
@@ -65,7 +53,6 @@ export function PlacesPanel({ enabled }: { enabled: boolean }) {
   const editing = editingId != null && draft != null;
   const selected = places.items.find((p) => p.place_id === selectedId) ?? null;
 
-  // A pin clicked on the map is off-screen in a long list more often than not.
   useEffect(() => {
     if (selectedId == null) return;
     document
@@ -308,9 +295,6 @@ export function PlacesPanel({ enabled }: { enabled: boolean }) {
                 </div>
               ) : (
                 <div className="flex items-start justify-between gap-2">
-                  {/* The name is the list's half of the two-way link: clicking it
-                      points the map at this place. A real button, so it is also
-                      reachable by keyboard. */}
                   <button
                     type="button"
                     onClick={() => setSelectedId(place.place_id)}

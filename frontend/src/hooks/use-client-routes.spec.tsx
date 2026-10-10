@@ -93,7 +93,6 @@ describe('useClientRoutes', () => {
     });
     await waitFor(() => expect(result.current.isLoading).toBe(false));
 
-    // Nothing saved yet: the hook never collects a route on its own.
     expect(
       fetchMock.mock.calls.some(([, init]) => init?.method === 'POST')
     ).toBe(false);
@@ -154,7 +153,6 @@ describe('useClientRoutes', () => {
     const local = result.current.routes.find((route) => route.local_only);
     expect(local).toBeTruthy();
     expect(local?.query).toBe('что посмотреть');
-    // A local copy has no server summary — null, not a made-up number.
     expect(local?.stop_count).toBeNull();
 
     const stored = JSON.parse(

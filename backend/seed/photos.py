@@ -1,44 +1,5 @@
 """Photo hints from OSM, and the licensed pictures they resolve to.
-
-Two stages and one apply, kept apart on purpose so the heavy PBF read and the
-Wikimedia calls never share a step:
-
-  1. ``collect_hints()`` — scan an OSM extract (PBF) and keep only the photo tags
-     (``wikidata``, ``wikipedia``, ``wikimedia_commons``, ``image``) of the
-     objects our points claim to be (``places.source_url`` → ``<type>/<id>``),
-     writing ``data/osm_photo_hints.json``. This is the only stage that reads the
-     PBF, and the only one that needs pyosmium — imported lazily, so importing
-     this module (and ``python -m seed``) does not require it.
-
-  2. ``resolve_photos()`` — turn each hint into at most one picture through
-     Commons/Wikidata/Wikipedia, writing ``data/place_photos.json``. This is the
-     only stage that talks to the network; its HTTP answers are cached on disk
-     (``$PHOTO_CACHE``) so a second run is nearly free.
-
-  3. ``apply_to_db()`` — the ``--apply`` path: write ``photo_url``,
-     ``photo_author``, ``photo_license`` and ``photo_source`` onto ``places``,
-     and withdraw a photo the file no longer vouches for.
-
-Only images we can point at are ever written. Deliberate refusals, each of which
-costs coverage:
-
-  * **No attribution, no photo.** A record missing its author or licence is
-    dropped rather than shown — an unattributed picture is worse than none.
-  * **Commons only.** The OSM ``image`` tag also holds share links
-    (``photos.app.goo.gl`` and friends); a URL outside ``upload.wikimedia.org`` /
-    ``commons.wikimedia.org`` has no metadata we can honestly show.
-  * **A category is not a photo** (``Category:…``, or a path such as
-    ``Belarus/Grodno/Farny``) — a category lists other things, so taking its
-    first member would be a guess.
-  * **A URL is verified, not assumed** — the content type has to come back
-    ``image/*``.
-
-Run from ``backend/``::
-
-    python -m seed.photos --hints           # 1. PBF → osm_photo_hints.json
-    python -m seed.photos --limit 20        # 2. hints → place_photos.json (probe)
-    python -m seed.photos                   # 2. hints → place_photos.json
-    python -m seed.photos --apply           # 3. …and into the DB
+Stages: collect hints from a PBF, resolve them via Wikimedia, then apply to the DB.
 """
 
 from __future__ import annotations
@@ -67,41 +28,25 @@ OUT = BACKEND / "data" / "place_photos.json"
 CACHE = Path(os.environ.get("PHOTO_CACHE", "/home/codespace/.hermes/cache/scratch/photo_cache"))
 DSN = os.environ.get("DATABASE_URL", "postgresql://grodno:grodno@localhost:5432/grodno")
 
-#: The Belarus extract, when the caller passes none — ``OSM_PBF`` or ``--pbf``.
-#: Deliberately no baked-in path: a checkout names its own extract.
 PBF = os.environ.get("OSM_PBF")
 
 UA = "GrodnoGuide/1.0 (tourist guide for Grodno Oblast; image attribution)"
 THUMB_WIDTH = 800
-SLEEP = 1.0  # politeness between API calls; Wikimedia is a donation-funded service
-#: 429 is the one that actually happens here; 5xx is worth the same patience.
-#: A long tail on purpose: giving up on a batch loses the pictures of every
-#: article in it, and the disk cache makes a patient retry nearly free to redo.
+SLEEP = 1.0
 RETRY_STATUS = {429, 500, 502, 503, 504}
 BACKOFF = (5.0, 15.0, 45.0, 90.0, 180.0)
 RETRIES = len(BACKOFF) + 1
 
 _OSM_REF = re.compile(r"^osm(?:_poi)?:([a-z]+/\d+)$")
-#: How far an article's own coordinates may sit from our point and still count
-#: as the same place. Wide enough for a big park or a castle grounds, far too
-#: narrow for a different town with a church of the same name.
 MAX_MATCH_M = 2000
-# Uploads live only here; anything else has no metadata we can honestly show.
 WIKIMEDIA_HOSTS = ("upload.wikimedia.org", "commons.wikimedia.org")
 
-#: The photo-ish OSM tags a hint may hold, kept verbatim, nothing inferred.
 WANTED = ("wikidata", "wikipedia", "webpage", "wikimedia_commons", "image")
-
-
-# Stage 1 — the PBF read (the only one), writing osm_photo_hints.json
 
 
 def _osmium() -> Any:
     """Import pyosmium on demand, with a clear error when it is not installed.
-
-    It is deliberately not a declared dependency (and not imported at module
-    scope), so a checkout that only resolves photos from an existing hints file
-    can import this module — and ``python -m seed`` — without it.
+    Not a declared dependency, so a hints-file-only checkout can still import this.
     """
     try:
         return importlib.import_module("osmium")
@@ -113,10 +58,7 @@ def _osmium() -> Any:
 
 def load_source_urls(dsn: str | None = None) -> list[str]:
     """Every ``places.source_url``, read from the DB rather than typed in.
-
-    The hints stage keeps only the objects these URLs claim to be, so the join
-    is exact (``osm:node/306067583`` → ``node/306067583``) and no name or
-    coordinate fuzzy-matching is involved.
+    The hints stage keeps only the exact objects these URLs claim to be.
     """
     with psycopg.connect(dsn or DSN) as conn, conn.cursor() as cur:
         cur.execute("SELECT source_url FROM places")
@@ -130,17 +72,7 @@ def collect_hints(
     out: Path,
 ) -> dict[str, dict[str, str]]:
     """Keep the photo tags OSM states for the objects our points *are*.
-
-    The full Belarus extract carries ~50k objects with some photo-ish tag while
-    the guide has ~3.7k points, ~450 of which line up with one, so committing the
-    whole scan would put a 3 MB file in the repo for nothing. ``source_urls`` is
-    the set of ``places.source_url`` values; only the ``<type>/<id>`` identities
-    they claim survive. The output is keyed ``<type>/<id>`` and sorted, so a
-    re-run on the same PBF produces a byte-identical file.
-
-    pyosmium is imported here, not at module scope: it is not a declared
-    dependency, and a checkout that only ever resolves photos from an existing
-    hints file must still be able to import this module.
+    Only the ``<type>/<id>`` identities in ``source_urls`` survive; output is sorted.
     """
     osmium: Any = _osmium()
 
@@ -190,16 +122,9 @@ def collect_hints(
     return found
 
 
-# Stage 2 — hints → Wikimedia/Wikidata → place_photos.json (the only network)
-
-
 def api(endpoint: str, params: dict[str, Any]) -> dict[str, Any]:
     """Ask a MediaWiki API, POSTing the query.
-
-    The query travels in the body: fifty Cyrillic article titles URL-encode into
-    a request line long enough for the server to answer 414, and that happened
-    here for real. The disk cache is still keyed on the equivalent GET string, so
-    answers fetched by an earlier run stay cached.
+    The body avoids 414 on long Cyrillic titles; cache is keyed on the GET string.
     """
     body = urllib.parse.urlencode(params).encode()
     return http_json(endpoint, post=body, cache_id=f"{endpoint}?{body.decode()}")
@@ -207,11 +132,7 @@ def api(endpoint: str, params: dict[str, Any]) -> dict[str, Any]:
 
 def http_json(url: str, post: bytes | None = None, cache_id: str | None = None) -> dict[str, Any]:
     """GET (or POST) a JSON API with a disk cache, retries and backoff.
-
-    Wikimedia answers 429 when asked too fast, and a reseed that dies halfway is
-    worse than a slow one — so a rate limit is waited out (honouring
-    `Retry-After` when it is sent) instead of propagating. Cached answers make a
-    second run cheap, which is what makes the retries affordable at all.
+    Rate limits are waited out (honouring ``Retry-After``), not propagated.
     """
     CACHE.mkdir(parents=True, exist_ok=True)
     key = CACHE / (hashlib.sha256((cache_id or url).encode()).hexdigest()[:24] + ".json")
@@ -250,11 +171,7 @@ def http_json(url: str, post: bytes | None = None, cache_id: str | None = None) 
 
 def is_image(url: str) -> str:
     """Does this URL serve an image: 'image', 'not_image', or 'unknown'.
-
-    One short attempt only. Commons named the file, so this is a sanity check
-    rather than the evidence, and a host that is slow or rate-limiting us must
-    not stretch a reseed into hours — the caller treats 'unknown' as "Commons
-    vouched, the check did not answer" and says so in the data.
+    One short attempt; 'unknown' means the check did not answer.
     """
     try:
         req = urllib.request.Request(url, headers={"User-Agent": UA}, method="HEAD")
@@ -264,7 +181,6 @@ def is_image(url: str) -> str:
     except urllib.error.HTTPError as exc:
         if exc.code in RETRY_STATUS:
             return "unknown"
-        # A definite "no such file / not an image" — believe it.
         return "not_image"
     except Exception:
         return "unknown"
@@ -281,13 +197,7 @@ def haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
 
 def page_meta(wiki: str, titles: list[str]) -> dict[str, dict[str, Any]]:
     """Each article's coordinates and Wikidata id, batched, redirects followed.
-
-    Half of our hand-written titles are redirects («Коложская церковь» →
-    «Борисоглебская церковь»), and the API returns a redirect stub with no
-    properties at all. Following them is not a nicety here: without it the
-    article looks like it has no coordinates and the point loses its photo.
-    The answer is keyed by BOTH the requested and the resolved title, so a
-    caller can look up the name it asked for.
+    Answer is keyed by both the requested and the resolved title.
     """
     out: dict[str, dict[str, Any]] = {}
     for i in range(0, len(titles), 40):
@@ -330,10 +240,7 @@ def page_meta(wiki: str, titles: list[str]) -> dict[str, dict[str, Any]]:
 
 def article_from_links(raw: str | None) -> tuple[str, str] | None:
     """The Wikipedia article a hand-authored row already points at.
-
-    The curated dataset carries its own source links, so the article is a fact
-    of our data rather than a guess at a famous name — and the whole search step
-    disappears with it (which also stops us hammering the search API).
+    Using the row's own source links removes the search step entirely.
     """
     items: list[dict[str, Any]] = []
     raw = (raw or "").strip()
@@ -365,11 +272,7 @@ def article_from_links(raw: str | None) -> tuple[str, str] | None:
 
 def is_settlement_article(place: dict[str, Any], title: str) -> bool:
     """Is this the article about the town rather than about the place in it?
-
-    Some of our curated links point at the settlement («Гродно» for Sovetskaya
-    street), which sits a kilometre away and would pass a distance check while
-    illustrating the wrong thing. Our own `town` field names the settlement, so
-    the comparison is data against data, not a guess.
+    Compares the article title against the row's own ``town`` field.
     """
     town = (place.get("town") or "").strip()
     if not town:
@@ -379,10 +282,7 @@ def is_settlement_article(place: dict[str, Any], title: str) -> bool:
 
 def match_article(place: dict[str, Any], meta: dict[str, dict[str, Any]]) -> dict[str, Any] | None:
     """Keep the candidate article only if its own coordinates agree with ours.
-
-    The name is not evidence — «Костёл Святого Михаила Архангела» is five
-    different churches — so a candidate without coordinates, or one further than
-    `MAX_MATCH_M` away, is dropped. A wrong photo is worse than none.
+    A candidate without coordinates, or further than ``MAX_MATCH_M``, is dropped.
     """
     for title, info in meta.items():
         if is_settlement_article(place, title):
@@ -404,30 +304,22 @@ def commons_file_title(hint: str) -> str | None:
     hint = (hint or "").strip()
     if hint.lower().startswith("file:"):
         return hint
-    # `Category:…`, `File:…` in another namespace, or a path such as
-    # `Belarus/Grodno/Farny` — none of these name one image file.
     if ":" in hint or "/" in hint:
         return None
     return f"File:{hint}"
 
 
 def clean_author(raw: str) -> str:
-    """The Artist field is wikitext-rendered HTML, and it shows.
-
-    Two shapes occur in the real data and both look like bugs in a UI:
-    a name with the raw link in parentheses ("Валацуга (https://fgb.by/view/1)"),
-    and a template that renders twice ("Unknown authorUnknown author").
-    A credit line is a name, so the link and the copy are stripped here.
+    """Clean a Commons Artist/Credit field, which is wikitext-rendered HTML.
+    Strips links, duplicated text and a trailing URL.
     """
     text = re.sub(r"<[^>]+>", "", raw or "")
     text = re.sub(r"\s*\((?:https?://|www\.)[^)]*\)?", " ", text)
     text = re.sub(r"\s*<https?://[^>]*>?", " ", text)
     text = re.sub(r"\s+", " ", text).strip()
-    # "FooFoo" — the same credit emitted twice by the source template.
     half = len(text) // 2
     if len(text) >= 8 and len(text) % 2 == 0 and text[:half] == text[half:]:
         text = text[:half].strip()
-    # "Namehttps://…" — a link glued to the name with no separator.
     text = re.sub(r"(https?://\S+)$", "", text).strip()
     return text
 
@@ -468,12 +360,7 @@ def commons_imageinfo(titles: list[str]) -> dict[str, dict[str, Any]]:
 
 
 def _extmetadata_value(meta: dict[str, Any], name: str) -> str:
-    """One field of a Commons extmetadata block, cleaned for display.
-
-    A module-level helper rather than a closure over the loop's `meta`: the
-    value is passed in, so nothing can bind to a variable that is about to be
-    rebound on the next page.
-    """
+    """One field of a Commons extmetadata block, cleaned for display."""
     return clean_author((meta.get(name, {}) or {}).get("value", "") or "")
 
 
@@ -488,11 +375,7 @@ def _first_claim(claims: dict[str, Any], prop: str) -> Any:
 
 def wikidata_claims(qids: list[str]) -> dict[str, dict[str, Any]]:
     """Q-id → its image and its own coordinates, in one batched call.
-
-    P18 (image) and P625 (coordinates) come from the same request, and P625 is
-    the reliable half: the wiki's own GeoData answers for fewer articles than
-    Wikidata does, and a point can be verified against Wikidata even when the
-    article carries no coordinate of its own.
+    P625 is the reliable half; a point can be verified against it.
     """
     out: dict[str, dict[str, Any]] = {}
     for i in range(0, len(qids), 50):
@@ -520,9 +403,7 @@ def wikidata_claims(qids: list[str]) -> dict[str, dict[str, Any]]:
 
 def wikipedia_pageimage(pairs: list[tuple[str, str]]) -> dict[tuple[str, str], str]:
     """(wiki, article) → the article's lead image file name, grouped per wiki.
-
-    A hint names a wiki we cannot vouch for, so an unreachable or nonsense code
-    is treated as "no image" rather than allowed to break the whole reseed.
+    An unreachable or nonsense wiki code yields "no image", not a crash.
     """
     by_wiki: dict[str, list[str]] = {}
     for wiki, title in pairs:
@@ -590,21 +471,15 @@ def resolve_photos(
     limit: int | None = None,
 ) -> dict[str, dict[str, Any]]:
     """Resolve every hint to at most one credited picture.
-
-    ``hints`` and ``places`` default to the shipped hints file and the live DB,
-    so a bare ``resolve_photos()`` is the whole pass; passing them in keeps the
-    resolution rules testable without either. The result is written to ``out``
-    (``data/place_photos.json``) unless it is ``None``, sorted so a reseed is
-    diffable, and returned as well.
+    ``hints``/``places`` default to the shipped file and live DB; result is returned.
     """
     if hints is None:
         hints = json.loads(HINTS.read_text(encoding="utf-8"))
-    assert hints is not None  # narrowing for the type checker; json.loads is never None
+    assert hints is not None
     if places is None:
         places = load_places()
     stats: Counter[str] = Counter()
 
-    # Only the points whose OSM object carries a hint are worth any call at all.
     candidates: list[tuple[dict[str, Any], dict[str, Any]]] = []
     for place in places:
         m = _OSM_REF.match(place["source_url"] or "")
@@ -617,10 +492,6 @@ def resolve_photos(
             continue
         candidates.append((place, hint))
 
-    # Hand-authored points carry `city:`/`region:` keys, so there is no OSM
-    # object to look up — and these are exactly the highlights a tourist sees
-    # first. They get a second, verifiable path below: the article's own
-    # coordinates have to agree with ours.
     named = [
         place
         for place in places
@@ -633,7 +504,6 @@ def resolve_photos(
         candidates = candidates[:limit]
     print(f"кандидатов: {len(candidates)}")
 
-    # ── batch the network work before touching any place ────────────────────
     qids = [h["wikidata"] for _, h in candidates if h.get("wikidata")]
     claims = wikidata_claims(sorted(set(qids))) if qids else {}
     with_image = sum(1 for c in claims.values() if c.get("image"))
@@ -649,11 +519,9 @@ def resolve_photos(
     pageimages = wikipedia_pageimage(sorted(set(wiki_pairs))) if wiki_pairs else {}
     print(f"Википедия дала лид-картинку: {len(pageimages)} из {len(set(wiki_pairs))}")
 
-    wanted: dict[str, tuple[str, str]] = {}  # source_url -> (file title, via)
-    #: How a hand-authored point was matched to its article, for review.
+    wanted: dict[str, tuple[str, str]] = {}
     provenance: dict[str, dict[str, Any]] = {}
 
-    # ── pick a file title per point, strongest hint first ───────────────────
     for place, hint in candidates:
         title = via = None
         if hint.get("wikimedia_commons"):
@@ -673,8 +541,6 @@ def resolve_photos(
         else:
             stats["подсказка не дала файла"] += 1
 
-    # ── hand-authored points: our own source link, verified by coordinates ──
-
     for place in named:
         article = article_from_links(place.get("links"))
         if not article:
@@ -692,8 +558,6 @@ def resolve_photos(
         f"авторских точек со ссылкой: {len(with_article)}, ответ по статье получен для {len(meta)}"
     )
 
-    # Wikidata holds the image and the coordinates for the same item, so the
-    # whole hand-authored set costs one extra call rather than two per point.
     article_qids = [info["qid"] for info in meta.values() if info.get("qid")]
     if article_qids:
         claims.update(wikidata_claims(sorted(set(article_qids))))
@@ -707,8 +571,6 @@ def resolve_photos(
             continue
         qid = info.get("qid")
         claim = claims.get(qid or "") or {}
-        # Wikidata's own coordinate first: the wiki answers for fewer articles
-        # than Wikidata does, and a redirect stub answers for none.
         lat = claim.get("lat") if claim.get("lat") is not None else info.get("lat")
         lon = claim.get("lon") if claim.get("lon") is not None else info.get("lon")
         match = match_article(place, {title: {"lat": lat, "lon": lon, "qid": qid, "wiki": wiki}})
@@ -752,7 +614,6 @@ def resolve_photos(
         if not entry or not entry.get("url"):
             stats[f"файла нет на Commons ({via})"] += 1
             continue
-        # Attribution is not optional: a file we cannot credit is a file we skip.
         if not entry.get("author") or not entry.get("license"):
             stats["без автора или лицензии"] += 1
             continue
@@ -764,8 +625,6 @@ def resolve_photos(
             stats["ссылка не отдала картинку"] += 1
             continue
         if verdict == "unknown":
-            # Commons named the file and the host is its upload server; a HEAD
-            # that went unanswered is not evidence the picture is missing.
             stats["проверку не подтвердили, но файл назван Commons"] += 1
         photos[source_url] = {
             "url": entry["url"],
@@ -793,15 +652,9 @@ def resolve_photos(
     return photos
 
 
-# Apply — write the file onto the DB, withdrawal included
-
-
 def apply_to_db(conn: psycopg.Connection, photos: dict[str, dict[str, Any]]) -> int:
     """Write the file into the DB, and take away what the file no longer has.
-
-    The JSON is the source of truth: a point whose photo the resolution pass no
-    longer stands behind must lose it here too, otherwise the database keeps
-    showing a picture that the data file refuses to vouch for.
+    The JSON is the source of truth, so a withdrawn photo is cleared here too.
     """
     with conn.cursor() as cur:
         cur.execute(
@@ -836,9 +689,6 @@ def apply_to_db(conn: psycopg.Connection, photos: dict[str, dict[str, Any]]) -> 
         return total
 
 
-# One entry for a caller that runs the stages in sequence
-
-
 def run_stage(
     *,
     stage: str,
@@ -849,19 +699,7 @@ def run_stage(
     dsn: str | None = None,
 ) -> int:
     """Run the photo pipeline stages, all three kept out of import time.
-
-    ``stage`` is one of ``{"hints", "resolve", "all"}``:
-
-      * ``hints``/``all`` regenerate ``data_dir/osm_photo_hints.json`` from the
-        PBF (``pbf_path`` or ``$OSM_PBF``; a clear error if neither is set, and
-        ``collect_hints`` names pyosmium if it is missing);
-      * ``resolve``/``all`` turn the hints into ``data_dir/place_photos.json``;
-      * with ``apply=True`` the result is also written into the DB (``dsn`` or
-        ``$DATABASE_URL``), withdrawal included.
-
-    ``limit`` caps how many points the resolve pass processes. Returns what the
-    stage produced/wrote: the hint count for ``hints``, the photo count for
-    ``resolve``/``all``. Nothing here imports osmium or opens a DB until called.
+    ``stage`` is one of ``{"hints", "resolve", "all"}``; returns the count produced.
     """
     if stage not in {"hints", "resolve", "all"}:
         raise ValueError(f"неизвестная стадия {stage!r}: ожидается hints/resolve/all")
@@ -873,7 +711,6 @@ def run_stage(
         pbf = pbf_path or (Path(PBF) if PBF else None)
         if pbf is None:
             raise RuntimeError("стадия hints требует PBF: передайте pbf_path или задайте OSM_PBF")
-        # Fail on a missing pyosmium before opening the DB for source_urls.
         _osmium()
         hints = collect_hints(pbf, load_source_urls(dsn), out=hints_path)
     else:
@@ -891,9 +728,6 @@ def run_stage(
             apply_to_db(conn, photos)
 
     return len(photos)
-
-
-# CLI
 
 
 def _shown(path: Path) -> Path | str:

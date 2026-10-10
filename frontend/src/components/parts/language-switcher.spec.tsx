@@ -37,7 +37,6 @@ describe('переключатель языка интерфейса', () => {
       'aria-pressed',
       'true'
     );
-    // The point of the button: the app's strings come out in the other language.
     expect(text('tabs.plan')).toBe('Plan');
     expect(text('ask.placeholder')).toBe('What would you like to see?');
   });
@@ -54,7 +53,6 @@ describe('переключатель языка интерфейса', () => {
   it('доступно называет каждый вариант на его собственном языке', () => {
     render(<LanguageSwitcher />);
 
-    // Otherwise an English-speaking tourist looks for «English» in a Russian menu.
     expect(screen.getByTestId('language-en')).toHaveAttribute('lang', 'en');
     expect(screen.getByTestId('language-en')).toHaveAccessibleName(/english/i);
     expect(screen.getByTestId('language-ru')).toHaveAccessibleName(/русский/i);

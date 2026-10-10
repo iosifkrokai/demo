@@ -1,16 +1,5 @@
 """The reading is cached; the verdicts, the measurements and the geometry are not.
 
-A reading is a function of the text, the visible UI filters and the prompt — the
-things that go into the key — so two requests may share one model call only when
-the model would have been asked exactly the same question. Everything else about
-a request is an answer about the world (the database, Valhalla) and is never
-cached: a stale verdict in the panel would be a lie, a stale reading is at worst
-a question asked twice.
-
-The dangerous part is not the lookup but the sharing: `TripRequirements` is
-mutated downstream by resolve() and the verifier, so a stored object handed out
-directly would make the next request inherit this one's place ids and verdicts.
-
 No network, no DB: the agent is replaced by a fixed contract.
 """
 
@@ -55,8 +44,6 @@ def clean_cache(monkeypatch):
     yield
     cache.INTERPRET_CACHE.clear()
 
-
-# the key
 
 def test_the_same_question_gets_the_same_key():
     instructions = "ты читаешь запрос"
@@ -105,9 +92,7 @@ def test_editing_the_prompt_invalidates_every_entry():
 def test_switching_the_model_invalidates_every_entry():
     """A reading is the MODEL's output, so a different model is a different answer.
 
-    Without the model in the key, a process that switched models kept answering
-    from the previous model's readings — cheap to miss, expensive to believe:
-    it makes every "we measured the new model" claim false.
+    Without the model in the key, "we measured the new model" claims become false.
     """
     instructions = "ты читаешь запрос"
     baseline = cache.interpret_key("замки", _req(), instructions, "google/gemini-2.5-pro")
@@ -117,8 +102,6 @@ def test_switching_the_model_invalidates_every_entry():
     ) != baseline
     assert cache.interpret_key("замки", _req(), instructions, None) != baseline
 
-
-# the store
 
 def test_an_expired_reading_is_not_returned():
     store = cache.TtlLru(maxsize=4, ttl_s=1)
@@ -135,7 +118,7 @@ def test_the_store_stays_bounded():
         store.put(key, _contract(key))
 
     assert store.stats()["size"] == 2
-    assert store.get("a") is None  # the oldest went first
+    assert store.get("a") is None
     assert store.get("c") is not None
 
 
@@ -161,15 +144,10 @@ def test_stats_are_countable_not_claimed():
     assert (stats["hits"], stats["misses"], stats["hit_rate"]) == (2, 1, 0.667)
 
 
-# the part that would bite: shared state
-
 def test_the_second_reading_does_not_inherit_the_first_ones_verdicts(monkeypatch):
     """A cached contract must be handed out as a copy.
 
-    Downstream the contract is mutated: place ids are attached, statuses are
-    written by the verifier. If the stored object were returned as-is, the next
-    request would start with the previous request's answers already in it — and
-    would report them as its own.
+    Downstream it is mutated: place ids attached, statuses written by the verifier.
     """
     calls = {"n": 0}
 
@@ -185,7 +163,6 @@ def test_the_second_reading_does_not_inherit_the_first_ones_verdicts(monkeypatch
     )
 
     first = intent.build_requirements("старый город за два часа", _req())
-    # What the pipeline does to it right after the reading.
     first.requirements[0].place_id = 777
     first.requirements[0].status = "satisfied"
 
@@ -194,7 +171,7 @@ def test_the_second_reading_does_not_inherit_the_first_ones_verdicts(monkeypatch
     assert calls["n"] == 1, "второй запрос должен был обойтись без модели"
     assert second.requirements[0].place_id is None
     assert second.requirements[0].status == "pending"
-    assert first.requirements[0].place_id == 777  # the caller keeps its own
+    assert first.requirements[0].place_id == 777
 
 
 def test_without_an_agent_nothing_is_cached(monkeypatch):
@@ -211,8 +188,7 @@ def test_without_an_agent_nothing_is_cached(monkeypatch):
 def test_a_cached_reading_says_so_in_the_trace(monkeypatch):
     """No model call happened, and the trace must not leave that to guesswork.
 
-    A hit that records nothing looks exactly like a call nobody recorded — the
-    one reading of the trace that is wrong.
+    A hit that records nothing looks exactly like a call nobody recorded.
     """
 
     def fake_agent(query, req, db, wall_clock_s=None):
@@ -223,7 +199,7 @@ def test_a_cached_reading_says_so_in_the_trace(monkeypatch):
         intent, "_interpret_cache_key", lambda query, req: ("trace-key", "prompt-hash")
     )
 
-    intent.build_requirements("старый город за два часа", _req())  # fills the cache, untraced
+    intent.build_requirements("старый город за два часа", _req())
 
     trace.begin("job-cache")
     try:
@@ -233,5 +209,5 @@ def test_a_cached_reading_says_so_in_the_trace(monkeypatch):
         trace.finish()
 
     assert span.name == "interpret · model"
-    assert span.status == "skipped"  # the step did not run; it is not an error
+    assert span.status == "skipped"
     assert span.facts == {"cached": True}

@@ -1,21 +1,6 @@
 """Canonical category taxonomy — the single source of category codes.
 
-Every code used by import, retrieval, costing and the API is defined once in
-``backend/data/taxonomy.csv`` and read here. There is no second list: modules
-import from this file instead of hard-coding their own categories.
-
-Public surface (frozen — see docs/specs/002-grodno-guide-rebuild/plan.md §2):
-
-    Category                 — one canonical category row
-    all_categories()         — every category, in file order
-    all_codes()              — canonical codes, in file order
-    get(code)                — Category | None
-    role(code)               — 'sight' | 'service'
-    visit_minutes(code)      — default visit time in minutes
-    db_values(codes)         — query codes → places.category values (dedup)
-    resolve_code(term, ...)  — free text (RU/EN, any inflection) → code | None
-
-The CSV is versioned data (constitution §3): edit the file, not this module.
+Every code is defined once in ``backend/data/taxonomy.csv`` and read here.
 """
 
 from __future__ import annotations
@@ -30,13 +15,10 @@ from typing import Literal
 Role = Literal["sight", "service"]
 Locale = Literal["ru", "en"]
 
-# data/taxonomy.csv sits next to the agent package, under backend/.
 _DATA_FILE = Path(__file__).resolve().parent.parent / "data" / "taxonomy.csv"
 
-# Columns split their multi-value fields on this separator.
 _LIST_SEP = "|"
 
-# Expected header, kept only to fail loudly if the file drifts.
 _COLUMNS = (
     "code", "ru", "en", "role", "osm_tags", "visit_minutes",
     "aliases_ru", "aliases_en",
@@ -125,8 +107,7 @@ def _code_set() -> frozenset[str]:
 def _surface_index() -> dict[str, str]:
     """normalised surface form → code, for every alias/name/locale.
 
-    Built once and validated: a form that maps to two different codes is
-    ambiguous, so it raises instead of silently picking one.
+    A form that maps to two different codes is ambiguous and raises.
     """
     index: dict[str, str] = {}
     for cat in all_categories():
@@ -142,21 +123,17 @@ def _surface_index() -> dict[str, str]:
     return index
 
 
-# Russian noun endings stripped when folding an inflected form to its lemma.
-# Longest first so «замками» → «замок», not «замка».
 _RU_ENDINGS = (
     "ами", "ями", "ах", "ях", "ов", "ев", "ей", "ам", "ям",
     "ой", "ом", "ем", "ы", "и", "а", "я", "у", "ю", "е", "ь",
 )
-# English plural endings.
 _EN_ENDINGS = ("es", "s")
 
 
 def _fold_candidates(norm: str) -> list[str]:
     """Candidate lemmas for an inflected surface form (may be empty).
 
-    Each stripped stem is also tried with a restored soft consonant («музеями»
-    → «музе» → «музей»), because Russian -й/-ь nouns drop it in oblique cases.
+    Stripped stems are also tried with a restored soft consonant («музеями» → «музей»).
     """
     out: list[str] = []
     for ending in _RU_ENDINGS + _EN_ENDINGS:
@@ -169,13 +146,7 @@ def _fold_candidates(norm: str) -> list[str]:
 def resolve_code(term: str, locale: Locale = "ru") -> str | None:
     """Resolve free text to a canonical code, or None when unknown.
 
-    Order, cheapest first (locale only disambiguates nothing today — every
-    surface form of both locales is indexed; it is accepted for API stability):
-      1. exact match on a code, name or alias;
-      2. case-insensitive / ё-normalised match;
-      3. plural + substring fold (no pg_trgm, no DB round-trip).
-
-    «туалеты» → «туалет», «cafe» → «кафе», «coffee» → «кафе».
+    Tries exact code/name/alias, ё-normalised match, then plural/substring fold.
     """
     if term is None:
         return None
@@ -183,28 +154,19 @@ def resolve_code(term: str, locale: Locale = "ru") -> str | None:
     if not raw:
         return None
 
-    # 1. Exact, case-sensitive.
     for cat in all_categories():
         if raw in (cat.code, cat.ru, cat.en) or raw in cat.aliases_ru or raw in cat.aliases_en:
             return cat.code
 
-    # 2. Case-insensitive / ё-normalised.
     norm = _norm(raw)
     index = _surface_index()
     if norm in index:
         return index[norm]
 
-    # 3. Plural fold, then a substring fold as the last resort.
     for candidate in _fold_candidates(norm):
         if candidate in index:
             return index[candidate]
 
-    # A known form may occur INSIDE the query («прогулка по костёлам» → костёл).
-    # The reverse containment is deliberately gone: it let a short query inherit
-    # a longer code's meaning, so the bare tourist word «остановка» — and even
-    # «транспорт» — resolved to the multiword code «остановка транспорта», and a
-    # church walk went hunting for bus stops. A word the index does not know
-    # returns None, and the caller reports it instead of guessing.
     longest: str | None = None
     for form in index:
         if len(form) >= 4 and form in norm:
@@ -243,9 +205,7 @@ def visit_minutes(code: str) -> int:
 def db_values(codes: Iterable[str]) -> list[str]:
     """Map query codes/terms to ``places.category`` values.
 
-    Deduplicates, preserves input order and drops unknown codes. Unknown input
-    is dropped rather than passed through, so a junk model category can never
-    reach the SQL category filter.
+    Deduplicates, preserves input order; unknown input is dropped, never passed through.
     """
     out: list[str] = []
     for raw in codes or ():

@@ -3,8 +3,6 @@ import type { NominationResponse } from '@/components/types';
 export const NOMINATIM_URL = `${import.meta.env.VITE_NOMINATIM_URL}/search`;
 export const NOMINATIME_URL_REVERSE = `${import.meta.env.VITE_NOMINATIM_URL}/reverse`;
 
-// Nominatim /search always answers with a JSON array (empty when nothing matched),
-// unlike /reverse which answers with a single object.
 export const forward_geocode = async (userInput: string) => {
   const params = new URLSearchParams({
     q: userInput,

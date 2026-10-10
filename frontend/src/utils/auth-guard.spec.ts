@@ -2,10 +2,7 @@ import { describe, it, expect } from 'vitest';
 
 import { loginRedirectFor, returnPathOf } from './auth-guard';
 
-/**
- * The mandatory-login rule (spec 005 §5), pinned on its own: the router only has
- * to turn `loginRedirectFor`'s answer into a `redirect()`.
- */
+/** The mandatory-login rule, pinned on its own: the router only has to turn `loginRedirectFor`'s answer into a `redirect()`. */
 describe('auth guard', () => {
   it('sends an anonymous visitor to /login and remembers where they were headed', () => {
     expect(

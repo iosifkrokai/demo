@@ -3,7 +3,7 @@ type HandleType = 'w' | 'n' | 'nw' | 'w, n, nw';
 interface ResizableOptions {
   handles?: HandleType;
   minWidth?: number;
-  minHeight?: number; // Minimum height in pixels
+  minHeight?: number;
   applyInlineSize?: boolean;
   onResize?: (size: { width: number; height: number }) => void;
   onStop?: () => void;
@@ -160,7 +160,6 @@ export default function makeResizable(
     state.resizing = false;
     target.classList.remove('resizing');
     if (applyInlineSize) {
-      // Remove explicit left/top to stick to bottom-right if consumer adjusts positioning
       target.style.left = '';
       target.style.top = '';
     }
@@ -200,7 +199,6 @@ function parseHandles(handles: string): HandleType[] {
 }
 
 function getElementPixelWidth(el: HTMLElement): number {
-  // Prefer attribute 'width' if present (leaflet.heightgraph uses an SVG width attr)
   const attr = el.getAttribute('width');
   if (attr && !isNaN(Number(attr))) {
     return Number(attr);

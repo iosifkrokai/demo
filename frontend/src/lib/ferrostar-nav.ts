@@ -1,23 +1,4 @@
-/**
- * Ferrostar navigation integration for the Grodno tourist guide.
- *
- * This module replaces the homemade "engine" (snap-to-line, course calculation,
- * off-route detection, step advance) with Ferrostar NavigationSession, while keeping
- * our map and guide-panel UI intact.
- *
- * Ferrostar ships as WASM. It is loaded lazily (a dynamic import, once, on first
- * use) rather than at the top of the module: a static import makes the whole file
- * fail to evaluate wherever the WASM cannot start — a test runner, an old browser,
- * a blocked asset — and a navigator that refuses to load must degrade to the
- * panel's own geometry engine, not take the panel down with it.
- *
- * Callers await `ferrostarReady` (or use `createFerrostarNavigator`, which does it
- * for them) and treat `null` as «Ferrostar is unavailable, use the fallback».
- *
- * Architecture:
- * - `buildFerrostarRoute()`  — pure function, converts Valhalla data → Ferrostar Route
- * - `FerrostarNavigator`      — stateful wrapper around NavigationSession; created per-route
- */
+/** Ferrostar navigation integration for the Grodno tourist guide. */
 
 import type {
   GeographicCoordinate,
@@ -45,12 +26,7 @@ type FerrostarModule = typeof import('@stadiamaps/ferrostar');
 let modulePromise: Promise<FerrostarModule> | null = null;
 let loadedModule: FerrostarModule | null = null;
 
-/**
- * Load the WASM core. Resolves with the module namespace, or with `null` when the
- * runtime could not bring the WASM up (a failed asset fetch, an environment with
- * no WASM support). Never rejects: navigation is worth having, but not at the
- * price of a broken guide panel.
- */
+/** Load the WASM core. */
 const loadFerrostar = async (): Promise<FerrostarModule | null> => {
   try {
     modulePromise ??= import('@stadiamaps/ferrostar');
@@ -63,14 +39,10 @@ const loadFerrostar = async (): Promise<FerrostarModule | null> => {
   }
 };
 
-/**
- * Resolves when Ferrostar is usable, or with `null` when it never became usable.
- * Import this and await it before creating a navigator if you need to be explicit
- * about the dependency; `createFerrostarNavigator` does it for you.
- */
+/** Resolves when Ferrostar is usable, or with `null` when it never became usable. */
 export const ferrostarReady: Promise<FerrostarModule | null> = loadFerrostar();
 
-/** Is the WASM core already loaded? True after `ferrostarReady` resolved to it. */
+/** Is the WASM core already loaded? */
 export const isFerrostarAvailable = (): boolean => loadedModule != null;
 
 interface LatLon {
@@ -109,13 +81,7 @@ const buildLineGeometry = (decoded: number[][]): LineGeometry | null => {
   return total > 0 ? { points, cum, total } : null;
 };
 
-/**
- * Geometry slice from `fromCum` to `toCum` metres along the line, read off the
- * cumulative distances of the same vertices (not straight-line distance from the
- * start: on a curvy walk those two disagree by more than a step's length).
- *
- * Returns an array of GeographicCoordinates suitable for Ferrostar RouteStep.geometry.
- */
+/** Geometry slice from `fromCum` to `toCum` metres along the line, read off the cumulative distances of the same vertices (not straight-line distance from the start: on a curvy walk those two disagree by more than a step's length). */
 const stepGeometry = (
   line: LineGeometry,
   fromCum: number,
@@ -154,14 +120,7 @@ const pointAtCum = (line: LineGeometry, dist: number): GeographicCoordinate => {
   return { lat: last.lat, lng: last.lon };
 };
 
-/**
- * Generate spoken instructions for a step at fixed trigger distances.
- *
- * Only the text and the trigger distance are ours: Ferrostar picks the entry
- * whose `triggerDistanceBeforeManeuver` the tourist has just crossed, and the
- * panel phrases it through i18next. No «через X метров» is baked in here — that
- * wording belongs to the interface language, not to the route.
- */
+/** Generate spoken instructions for a step at fixed trigger distances. */
 const generateSpokenInstructions = (
   instruction: string,
   stepIndex: number
@@ -180,30 +139,13 @@ const generateSpokenInstructions = (
 export interface FerrostarRouteResult {
   /** Ferrostar Route ready to pass to FerrostarNavigator. */
   route: Route;
-  /**
-   * Ordered list of maneuvers for the UI, with cumulative distance — one entry
-   * per `route.steps[i]`, so `maneuvers[i]` describes the step at index `i`.
-   * Carries Valhalla's own maneuver `type`, which is what the banner's icon is
-   * drawn from (Ferrostar reports a written instruction, not a type number).
-   */
+  /** Ordered list of maneuvers for the UI, with cumulative distance — one entry per `route.steps[i]`, so `maneuvers[i]` describes the step at index `i`. */
   maneuvers: GuideManeuver[];
-  /**
-   * Map from maneuver key (e.g. "0-1") → step index in `route.steps`.
-   */
+  /** Map from maneuver key (e.g. "0-1") → step index in `route.steps`. */
   stepKeyToIndex: Map<string, number>;
 }
 
-/**
- * Build a Ferrostar `Route` from our Valhalla response data.
- *
- * - geometry: all decoded shape points
- * - steps: one per maneuver, with geometry slice, distance, duration,
- *   spokenInstructions at [400, 200, 50, 0] m
- * - waypoints: first = Break (start), intermediates = Break (stops), last = Break (destination)
- *
- * Also returns a `GuideManeuver[]` aligned with the UI's expected shape
- * (key, type, instruction, along) plus a step-key → step-index map.
- */
+/** Build a Ferrostar `Route` from our Valhalla response data. */
 export const buildFerrostarRoute = (
   data: ParsedDirectionsGeometry | null
 ): FerrostarRouteResult | null => {
@@ -240,10 +182,6 @@ export const buildFerrostarRoute = (
       const roadName = mnv.street_names?.[0];
 
       const stepCoords = stepGeometry(line, beginDist, endDist);
-      // Distance measured on the route line, not Valhalla's own `length`: the
-      // latter follows the request's `units` (km by default) and would quietly
-      // become a hundredfold wrong, while the line is the same geometry Ferrostar
-      // computes `distanceRemaining` from. `time` is seconds either way.
       const distanceM = Math.max(0, endDist - beginDist);
       const durationS = mnv.time ?? 0;
 
@@ -252,7 +190,6 @@ export const buildFerrostarRoute = (
         stepIndex
       );
 
-      // Ferrostar requires at least 2 geometry points per step
       const safeStepCoords =
         stepCoords.length >= 2
           ? stepCoords
@@ -290,8 +227,6 @@ export const buildFerrostarRoute = (
 
   if (steps.length === 0) return null;
 
-  // Build waypoints: every stop of the plan is a Break — the first is the start,
-  // the last is the destination, and Ferrostar tracks them the same way.
   const locations = data?.trip?.locations ?? [];
   const waypoints = locations.map((loc) => ({
     coordinate: { lat: loc.lat, lng: loc.lon },
@@ -317,8 +252,6 @@ export const buildFerrostarRoute = (
     );
   }
 
-  // Compute bounding box in a loop: Math.min(...points) hands one argument per
-  // shape point and blows the stack on a long region-wide route.
   let minLat = line.points[0]!.lat;
   let maxLat = minLat;
   let minLon = line.points[0]!.lon;
@@ -371,40 +304,17 @@ const DEFAULT_CONFIG: SerializableNavigationControllerConfig = {
 /** Fallback accuracy when the browser reported none: 25 m, the config's own bar. */
 const DEFAULT_ACCURACY_M = 25;
 
-/**
- * Our wrapper around Ferrostar NavigationSession.
- *
- * Usage:
- * ```
- * const nav = await createFerrostarNavigator(route);  // null when WASM is out
- * const state = nav?.update(rawFix);  // rawFix = { lat, lon, accuracy, at }
- * // state is the latest TripState: Idle | Navigating | Complete
- * ```
- *
- * Note: WASM cleanup (`session.free()`) is called when `destroy()` is invoked.
- * Call `destroy()` when the guide exits moving mode.
- */
+/** Our wrapper around Ferrostar NavigationSession. */
 export class FerrostarNavigator {
   private session: NavigationSession | null;
   private _navState: SerializableNavState | null = null;
   private _state: TripState | null = null;
 
-  /**
-   * @param route  The route to navigate, from `buildFerrostarRoute`.
-   * @param mod    The loaded WASM module (see `createFerrostarNavigator`).
-   */
   constructor(route: Route, mod: FerrostarModule) {
     this.session = new mod.NavigationSession(route, DEFAULT_CONFIG);
   }
 
-  /**
-   * Feed a raw GPS fix into Ferrostar.
-   *
-   * @param rawFix  Our Fix object: { lat, lon, accuracy, at }
-   * @returns The current TripState, or null if the session cannot answer
-   *          (destroyed, or the WASM refused the update) — the caller keeps
-   *          whatever it had rather than losing the tour.
-   */
+  /** Feed a raw GPS fix into Ferrostar. */
   update(rawFix: {
     lat: number;
     lon: number;
@@ -446,9 +356,7 @@ export class FerrostarNavigator {
     return this._state;
   }
 
-  /**
-   * Advance to the next step manually (used by the "я на месте" button).
-   */
+  /** Advance to the next step manually (used by the "я на месте" button). */
   advanceToNextStep(): void {
     if (this.session && this._navState) {
       this._navState = this.session.advanceToNextStep(
@@ -458,7 +366,7 @@ export class FerrostarNavigator {
     }
   }
 
-  /** Release WASM resources. Call when the guide exits moving mode. */
+  /** Release WASM resources. */
   destroy(): void {
     this.session?.free();
     this.session = null;
@@ -467,11 +375,7 @@ export class FerrostarNavigator {
   }
 }
 
-/**
- * Create a navigator for `route` once the WASM core is up, or null if it is not
- * (unavailable runtime, or a session the WASM refused to build) — the caller
- * then falls back to its own geometry engine.
- */
+/** Create a navigator for `route` once the WASM core is up, or null if it is not (unavailable runtime, or a session the WASM refused to build) — the caller then falls back to its own geometry engine. */
 export const createFerrostarNavigator = async (
   route: Route
 ): Promise<FerrostarNavigator | null> => {
@@ -491,39 +395,27 @@ type NavigatingTripState = Extract<
   { Navigating: unknown }
 >['Navigating'];
 
-/**
- * Ferrostar's TripState is an externally tagged union (`{ Navigating: {...} }`),
- * so «are we navigating?» is a key check rather than a `.tag` comparison.
- */
+/** Ferrostar's TripState is an externally tagged union (`{ Navigating: {...} }`), so «are we navigating?» is a key check rather than a `.tag` comparison. */
 const navigating = (
   state: TripState | null | undefined
 ): NavigatingTripState | null =>
   state && 'Navigating' in state ? state.Navigating : null;
 
-/**
- * Extract `courseOverGround.degrees` from a Navigating TripState.
- */
+/** Extract `courseOverGround.degrees` from a Navigating TripState. */
 export const extractCourse = (state: TripState | null): number | null =>
   navigating(state)?.snappedUserLocation.courseOverGround?.degrees ?? null;
 
-/**
- * Extract distanceToNextManeuver from a Navigating TripState.
- */
+/** Extract distanceToNextManeuver from a Navigating TripState. */
 export const extractDistanceToNextManeuver = (
   state: TripState | null
 ): number | null => navigating(state)?.progress.distanceToNextManeuver ?? null;
 
-/**
- * Extract distanceRemaining from a Navigating TripState.
- */
+/** Extract distanceRemaining from a Navigating TripState. */
 export const extractDistanceRemaining = (
   state: TripState | null
 ): number | null => navigating(state)?.progress.distanceRemaining ?? null;
 
-/**
- * Is the user completely off-route?  Returns true for CompletelyOffRoute,
- * false for OffStepOnRoute or NoDeviation, null if not in Navigating state.
- */
+/** Is the user completely off-route? */
 export const isCompletelyOffRoute = (
   state: TripState | null
 ): boolean | null => {
@@ -533,23 +425,16 @@ export const isCompletelyOffRoute = (
   return 'CompletelyOffRoute' in deviation.Deviation.kind;
 };
 
-/**
- * The active spoken instruction from the Navigating state.
- */
+/** The active spoken instruction from the Navigating state. */
 export const extractSpokenInstruction = (
   state: TripState | null
 ): SpokenInstruction | null => navigating(state)?.spokenInstruction ?? null;
 
-/**
- * The next visual instruction (maneuver banner) from the Navigating state.
- */
+/** The next visual instruction (maneuver banner) from the Navigating state. */
 export const extractVisualInstruction = (
   state: TripState | null
 ): VisualInstruction | null => navigating(state)?.visualInstruction ?? null;
 
-/**
- * The remaining steps from the Navigating state — `remainingSteps[0]` is the
- * step the tourist is walking right now.
- */
+/** The remaining steps from the Navigating state — `remainingSteps[0]` is the step the tourist is walking right now. */
 export const extractRemainingSteps = (state: TripState | null): RouteStep[] =>
   navigating(state)?.remainingSteps ?? [];

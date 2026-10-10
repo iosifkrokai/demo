@@ -19,43 +19,16 @@ import {
 import type { MobileSnap } from './use-mobile-sheet-snap';
 import type { SheetHandleProps } from '@/components/parts/sheet-snap';
 
-/**
- * The mobile panel host: it owns the geometry (three positions, the height the
- * map controls ride above, the strip used while walking) and renders the same
- * panel contents inside it. Contents do not know how tall they are — that is
- * what went wrong when the panel's own blocks grew and pushed the main action
- * out of the sheet.
- *
- * Still a Radix sheet on purpose: the panel contains `SheetTitle`/`SheetDescription`,
- * which need the dialog context — and the dialog role/name is what screen
- * readers announce.
- */
+/** The mobile panel host: it owns the geometry (three positions, the height the map controls ride above, the strip used while walking) and renders the same panel contents inside it. */
 const SHEET_CLASS = [
   'bg-background p-0 gap-0 overflow-hidden rounded-t-3xl border-t border-border shadow-sheet',
-  // Keep the sheet's own content (the primary CTA) clear of the home indicator
-  // on notched devices — the floating controls ride above `--sheet-h`, but the
-  // content inside the sheet sits at its bottom edge.
   'pb-[env(safe-area-inset-bottom)]',
-  // The height is animated only when it is *not* being dragged. During a drag the
-  // height is rewritten on every pointer move to follow the finger, and a 200ms
-  // transition on top of that is what made the panel feel like it was being
-  // dragged through something: the sheet visibly trailed the glass by a fifth
-  // of a second. The spring back to a position, and the slide in and out, are
-  // still transitions.
   'transition-[height] duration-200 ease-out motion-reduce:transition-none',
   'data-[dragging=true]:transition-none',
 ].join(' ');
 
 export interface MobileShellProps {
-  /**
-   * The panel's contents. A prop so the shell can be tested without the real
-   * panel.
-   *
-   * It may be a function of the drag handlers, because the sheet's grab bar is
-   * what carries them — the bar lives in the panel's own header, which the
-   * shell does not render, so it hands them down rather than inventing a second
-   * handle of its own. The real panel takes the same handlers as props.
-   */
+  /** The panel's contents. */
   panel?: ReactNode | ((handle: SheetHandleProps) => ReactNode);
   /** Where the panel starts; a deep link or a test can open it fully. */
   initialSnap?: MobileSnap;
@@ -79,37 +52,19 @@ export const MobileShell = ({
       onDismiss: () => setDirectionsPanelOpen(false),
     });
 
-  // Keep the compact navigator strip at peek, but let the same handle expand it
-  // to a full route overview when needed.
   const guideCollapsed = guiding && snap === 'peek';
   const restingHeight = guideCollapsed ? MOBILE_GUIDE_HEIGHT : null;
 
-  // The position's own height, except for the compact guide strip — and, while
-  // a finger is down, exactly what the finger is asking for.
   const settled = restingHeight ?? height;
   const sheetHeight =
     dragHeight !== null ? `${Math.round(dragHeight)}px` : settled;
 
-  // A reopened sheet shows the planning height, not whatever it was left at:
-  // dismissing is a "put this away" gesture, and coming back to a full-screen
-  // panel the tourist had just swiped away would read as it refusing to go.
-  // Only on a *re*open: a sheet mounted straight into `initialSnap="full"`
-  // (a deep link, a test) must keep the position it was given.
   const wasOpen = useRef(panelOpen);
   useEffect(() => {
     if (panelOpen && !wasOpen.current) setSnap('peek');
     wasOpen.current = panelOpen;
   }, [panelOpen, setSnap]);
 
-  // Entering the guide puts the panel at the strip, whatever position the
-  // planning left it in. Without this the collapsed state below depended on the
-  // sheet happening to be at `peek`: pressing «начать маршрут» from the full
-  // height started walking behind a 90dvh sheet, with the navigator's map —
-  // the thing being watched — pushed off the screen entirely.
-  //
-  // Only on the *transition*: a drag up to the route overview while walking is
-  // meant to stick, and an effect that ran on every render would fold it back
-  // the moment the next render came.
   const wasGuiding = useRef(guiding);
   useEffect(() => {
     if (guiding && !wasGuiding.current) setSnap('peek');
@@ -131,12 +86,6 @@ export const MobileShell = ({
 
   return (
     <>
-      {/* The way *in*, and on a phone there is no other one: the desktop panel
-          is opened by a chevron standing on its own edge, which on a phone
-          sits in the middle of the map with nothing to be the edge of. A phone
-          opens its sheet the way its own map apps do — a button on the map. It
-          rides above the sheet by the same `--sheet-h` every other floating
-          control uses, so it never ends up underneath it. */}
       {!panelOpen && (
         <div
           data-testid="mobile-sheet-opener"
@@ -178,8 +127,6 @@ export const MobileShell = ({
           ) : (
             <Sidebar
               bare
-              // The three positions map onto the two the panel's own handle knows:
-              // it only needs «expanded» to be true in the full one.
               snap={snap === 'full' ? 'full' : 'peek'}
               handleProps={handleProps}
               publishSheetHeight={false}

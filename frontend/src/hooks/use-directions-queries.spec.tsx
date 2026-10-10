@@ -20,9 +20,6 @@ vi.mock('@/routes', () => ({
   router: { state: { location: { search: { profile: 'pedestrian' } } } },
 }));
 
-// The polylines the mocked Valhalla answers with are not worth encoding here:
-// the geometry is carried on the response so the merge of chunked legs (and the
-// summary that goes with it) can be asserted directly.
 vi.mock('@/utils/valhalla', async () => {
   const actual =
     await vi.importActual<typeof import('@/utils/valhalla')>(
@@ -157,7 +154,6 @@ describe('useDirectionsQuery — one route, one source (spec 002 §7)', () => {
     expect(data?.source).toBe('agent');
     expect(data?.hasVerifiedLine).toBe(true);
     expect(data?.decodedGeometry).toEqual(shape.coordinates);
-    // The summary belongs to the line on screen.
     expect(data?.trip.summary.length).toBe(7.5);
     expect(data?.trip.summary.time).toBe(1800);
     expect(useDirectionsStore.getState().results.data?.source).toBe('agent');
@@ -176,7 +172,6 @@ describe('useDirectionsQuery — one route, one source (spec 002 §7)', () => {
     expect(data?.source).toBe('agent');
     expect(data?.hasVerifiedLine).toBe(false);
     expect(data?.decodedGeometry).toEqual([]);
-    // Nothing to fit the map bounds to, and the user is told why.
     expect(zoomTo).not.toHaveBeenCalled();
     expect(mockToast.warning).toHaveBeenCalledWith(
       'Нет проверенной линии',
@@ -235,7 +230,6 @@ describe('useDirectionsQuery — one route, one source (spec 002 §7)', () => {
 
     const data = await refetch();
 
-    // Valhalla caps a request at 20 locations: two chained chunks, one line.
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(data?.source).toBe('client');
     expect(data?.decodedGeometry).toHaveLength(4);
@@ -254,7 +248,6 @@ describe('useDirectionsQuery — one route, one source (spec 002 §7)', () => {
       },
       summary: { length_km: 7.5, time_seconds: 1800 },
     });
-    // The tourist drags a stop / adds one by hand: this is their route now.
     setWaypoints(2);
     useDirectionsStore.setState({
       waypoints: [waypoint(0, 24.5, 54.5), waypoint(1, 24.6, 54.6)],

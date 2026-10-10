@@ -6,9 +6,6 @@ import { Sidebar } from './components/sidebar';
 import { Toaster } from '@/components/ui/sonner';
 
 export const App = () => {
-  // The ONE viewport branch in the app. Everything below belongs to exactly one
-  // of the two shells — the desktop column or the mobile sheet — and neither
-  // reaches into the other.
   const isMobile = useIsMobile();
 
   return (

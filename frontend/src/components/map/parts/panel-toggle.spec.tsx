@@ -4,8 +4,6 @@ import { describe, expect, it, vi, afterEach } from 'vitest';
 
 import { PanelToggle } from './panel-toggle';
 
-// jsdom shares one document across the files of a worker: without this, the
-// handle left behind by one case is found again by the next.
 afterEach(cleanup);
 
 describe('PanelToggle', () => {
@@ -32,8 +30,6 @@ describe('PanelToggle', () => {
     const { rerender } = render(
       <PanelToggle open={false} onToggle={() => {}} label="панель" />
     );
-    // The chevron points the way the panel moves, so the icon alone says what
-    // the next click does. lucide marks the two glyphs by name.
     expect(document.querySelector('.lucide-chevron-right')).toBeInTheDocument();
     expect(
       document.querySelector('.lucide-chevron-left')
@@ -67,19 +63,12 @@ describe('PanelToggle', () => {
       />
     );
 
-    // Position comes from the caller — the panel's own edge, clamped to the
-    // viewport — so the handle cannot drift away from the panel it belongs to.
     const handle = screen.getByTestId('panel-toggle');
     expect(handle.className).toContain('--panel-width');
     expect(handle.className).toContain('top-1/2');
   });
 
   it('на телефоне не рисуется вовсе: у шторки нет своего левого края', () => {
-    // On a phone the panel is a sheet across the bottom of the screen, so there
-    // is no vertical left edge for an edge-handle to stand on — and the clamped
-    // position parked it in the middle of the map as a floating tab. The way in
-    // and out there belongs to the sheet itself (its grab bar, a flick down to
-    // dismiss) and to the button on the map; see MobileShell.
     render(
       <PanelToggle
         open={false}
@@ -90,7 +79,6 @@ describe('PanelToggle', () => {
     );
 
     const handle = screen.getByTestId('panel-toggle');
-    // `hidden md:flex`: not moved off the map, not rendered there.
     expect(handle.className).toContain('hidden');
     expect(handle.className).toContain('md:flex');
   });

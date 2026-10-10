@@ -1,18 +1,4 @@
-"""Live smoke check: the three ordinary queries the product owner reported.
-
-These are the exact requests that must not 500, 422 or hang on the running
-backend.  The file is a pytest module so `pytest tests -q` stays offline (it
-skips when :8080 is not answering), and it can also be run directly:
-
-    ./.venv/bin/python tests/test_live_smoke.py            # 60 s per query
-    SMOKE_BASE_URL=http://localhost:8080 ./.venv/bin/python tests/test_live_smoke.py
-
-What is pinned, per query:
-  * HTTP 200 with a plan (>= 2 stops) inside the time budget below;
-  * `interpretation` is present, with the parsed party/budget and the chips;
-  * the mandatory toilet is either satisfied ON the route or reported in
-    `interpretation.unmet` — never silently dropped.
-"""
+"""Live smoke check: the three ordinary queries the product owner reported."""
 
 from __future__ import annotations
 
@@ -28,8 +14,6 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 BASE_URL = os.environ.get("SMOKE_BASE_URL", "http://localhost:8080")
-# A request may not take longer than this.  The interpretation agent has a 25 s
-# wall clock; the rest is retrieval + Valhalla + render.
 BUDGET_S = float(os.environ.get("SMOKE_BUDGET_S", "75"))
 
 QUERIES: list[tuple[str, dict]] = [
@@ -55,7 +39,7 @@ def _post(body: dict, timeout: float) -> tuple[int | None, dict | None, str | No
             return resp.status, json.loads(resp.read().decode()), None, time.monotonic() - t0
     except urllib.error.HTTPError as exc:
         return exc.code, None, exc.read().decode()[:200], time.monotonic() - t0
-    except Exception as exc:  # URLError, timeout, ...
+    except Exception as exc:
         return None, None, f"{type(exc).__name__}: {exc}", time.monotonic() - t0
 
 
@@ -90,7 +74,6 @@ def test_smoke_query(query: str, extra: dict):
     )
     assert interp["requirements"], "the chips list must not be empty"
 
-    # Every non-satisfied requirement is listed explicitly, with a reason code.
     for signal in interp["unmet"]:
         assert signal["status"] != "satisfied"
         assert signal["reason"], f"unmet {signal['code'] or signal['name']} has no reason"

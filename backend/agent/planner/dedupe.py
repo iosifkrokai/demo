@@ -1,9 +1,6 @@
 """Physical duplicate removal — the same POI stored more than once.
 
-The base stores a place twice whenever a curated row and an OSM row disagree on
-the name or the precise coordinates ("Новый замок (дворец Стефана Батория)" vs
-"Новый замок"), which put the same sight into a route twice.  Candidates arrive
-relevance-ordered, so the highest-ranked member of each cluster wins.
+Candidates arrive relevance-ordered, so the highest-ranked member wins.
 """
 
 from __future__ import annotations
@@ -27,14 +24,7 @@ def _norm_name(name: str) -> str:
 def _drop_duplicates(candidates: list[Candidate], radius_m: float) -> list[Candidate]:
     """Drop places that sit on top of an already-kept, better-ranked place.
 
-    The base stores the same POI more than once whenever a curated row and an
-    OSM row disagree on the name or the precise coordinates ("Новый замок
-    (дворец Стефана Батория)" vs "Новый замок"; "Дом-музей Адама Мицкевича"
-    twice, 340 m apart), which put the same sight into a route twice.
-    Candidates arrive relevance-ordered, so the highest-ranked member of each
-    cluster wins.  A candidate is dropped when it is within `radius_m` of a
-    kept place, or when it carries the same normalised name and lies within
-    `constants.DUPLICATE_NAME_RADIUS_M`.
+    Drops within `radius_m`, or same normalised name within `DUPLICATE_NAME_RADIUS_M`.
     """
     kept: list[Candidate] = []
     for cand in candidates:
@@ -60,13 +50,7 @@ def _drop_duplicates(candidates: list[Candidate], radius_m: float) -> list[Candi
 def _dupe_pairs(before: list[Any], after: list[Any], radius_m: float) -> list[dict[str, Any]]:
     """Which stored duplicate was folded into which surviving place.
 
-    ``_drop_duplicates`` keeps the best-ranked row of a cluster; the fact that
-    «убрано 3» came from one castle stored under two names, or from a museum
-    whose two rows sit 340 m apart, is what tells a reader the step worked as
-    intended rather than ate three sights. The pairing rule is the one that
-    function uses — within ``radius_m`` of a kept place, or the same normalised
-    name within ``DUPLICATE_NAME_RADIUS_M`` — reproduced here rather than
-    returned from it, so the pipeline's own signature stays as it was.
+    Same pairing rule as ``_drop_duplicates``, capped at ``_TRACE_NAMES_MAX``.
     """
     kept = list(after)
     kept_ids = {c.id for c in kept}

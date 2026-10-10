@@ -1,16 +1,6 @@
-"""Accounts, roles, visits and the admin surface (spec 005) — server side.
+"""Accounts, roles, visits and the admin surface — server side.
 
-No API key, no DB and no network: every endpoint test drives a fake repository
-injected as ``app.state.accounts_repository``. What is pinned here, per the
-accept criteria in ``docs/specs/005-accounts-visits-admin/spec.md`` §7:
-
-  * register/login/logout/me behave; ``/auth/me`` is honest when anonymous;
-  * the password never leaves the server and the DB holds a hash, not plaintext;
-  * ``admin`` reaches ``/admin/*``, ``user`` gets 403, nobody gets 500;
-  * a visited place round-trips, is idempotent, and a walk can mark a batch;
-  * the system can never be left with no administrator, and self-harm is refused;
-  * the anonymous ``X-Client-Id`` is adopted on register;
-  * a down store is 503 storage_unavailable everywhere, never a 500.
+No API key, DB or network: tests inject a fake repository into ``app.state``.
 """
 
 from __future__ import annotations
@@ -43,8 +33,6 @@ GOOD_PW = "correct-horse-42"
 def _now() -> datetime:
     return datetime.now(UTC)
 
-
-# Fakes
 
 def _place_row(
     pid: int,
@@ -95,7 +83,6 @@ class FakeRepo:
             3: _place_row(3, "Фарный костёл", category="костёл"),
         }
 
-    # helpers
     @staticmethod
     def _public(row: dict) -> dict:
         return {k: v for k, v in row.items() if k != "password_hash"}
@@ -107,7 +94,6 @@ class FakeRepo:
                 return row
         return None
 
-    # users
     def create_user(self, user_id, *, email, password_hash, display_name=None,
                     role="user", client_id=None):
         if self._by_email(email) is not None:
@@ -146,7 +132,6 @@ class FakeRepo:
         if user_id in self.users:
             self.users[user_id]["last_login_at"] = _now()
 
-    # sessions
     def create_session(self, token_hash, user_id, expires_at):
         self.sessions[token_hash] = {"user_id": user_id, "expires_at": expires_at}
 
@@ -159,7 +144,6 @@ class FakeRepo:
     def delete_session(self, token_hash):
         self.sessions.pop(token_hash, None)
 
-    # admin: users
     def list_users(self, *, q="", limit=50, offset=0):
         rows = [self._public(r) for r in self.users.values()]
         if q:
@@ -203,7 +187,6 @@ class FakeRepo:
                          if v["user_id"] != user_id}
         return True
 
-    # visits
     def list_visited(self, user_id):
         marks = self.visited.get(user_id, {})
         rows = []
@@ -234,7 +217,6 @@ class FakeRepo:
     def unmark_visited(self, user_id, place_id):
         return self.visited.get(user_id, {}).pop(place_id, None) is not None
 
-    # admin: places
     def list_places(self, *, q="", category="", limit=50, offset=0):
         rows = list(self.places.values())
         if q:
@@ -295,8 +277,6 @@ class DownRepo:
         return _boom
 
 
-# Fixtures + helpers
-
 @pytest.fixture
 def repo():
     fake = FakeRepo()
@@ -337,8 +317,6 @@ def _admin_client(repo, email=ADMIN_EMAIL, password=GOOD_PW):
     return tc
 
 
-# Registration
-
 class TestRegister:
 
     def test_creates_a_user_and_signs_it_in(self, client, repo):
@@ -348,7 +326,6 @@ class TestRegister:
         assert body["email"] == "tourist@example.com"
         assert body["role"] == "user"
         assert body["display_name"] == "Максим"
-        # The session cookie came back, and /auth/me agrees.
         assert "grodno_session" in client.cookies
         me = client.get("/auth/me").json()
         assert me["authenticated"] is True
@@ -358,7 +335,6 @@ class TestRegister:
         body = _register(client).json()
         assert "password_hash" not in body
         assert "password" not in body
-        # ... and neither does /auth/me or the admin list.
         assert "password_hash" not in client.get("/auth/me").json()["user"]
 
     def test_stores_a_hash_not_the_plaintext(self, client, repo):
@@ -399,8 +375,6 @@ class TestRegister:
         assert next(iter(repo.users.values()))["client_id"] is None
 
 
-# Login / logout / me
-
 class TestSession:
 
     def test_login_with_correct_password(self, client):
@@ -432,13 +406,10 @@ class TestSession:
 
     def test_an_expired_session_is_not_a_session(self, client, repo):
         _register(client)
-        # Age the stored session out from under the browser.
         for sess in repo.sessions.values():
             sess["expires_at"] = _now() - timedelta(seconds=1)
         assert client.get("/auth/me").json()["authenticated"] is False
 
-
-# Visits
 
 class TestVisits:
 
@@ -494,8 +465,6 @@ class TestVisits:
         assert client.get("/me/visited").json()["count"] == 0
 
 
-# Admin — access control
-
 class TestAdminAccess:
 
     def test_anonymous_is_401(self, client):
@@ -514,8 +483,6 @@ class TestAdminAccess:
         assert admin.get("/admin/stats").status_code == 200
 
 
-# Admin — users
-
 class TestAdminUsers:
 
     def test_list_carries_the_counts(self, repo):
@@ -523,7 +490,7 @@ class TestAdminUsers:
         _register(admin, email="tourist@example.com")
         admin.put("/me/visited/1")
         admin.post("/auth/logout")
-        assert _login(admin, ADMIN_EMAIL).status_code == 200  # back as the admin
+        assert _login(admin, ADMIN_EMAIL).status_code == 200
 
         body = admin.get("/admin/users").json()
         assert body["total"] == 2
@@ -550,7 +517,6 @@ class TestAdminUsers:
         admin = _admin_client(repo)
         admin_id = next(iter(repo.users))
         r = admin.patch(f"/admin/users/{admin_id}", json={"role": "user"})
-        # It is both self-role and last-admin; either guard may fire first.
         assert r.status_code == 409
         assert r.json()["reason"] in {"self_role", "last_admin"}
 
@@ -577,8 +543,6 @@ class TestAdminUsers:
                            json={"role": "admin"}).status_code == 404
         assert admin.delete(f"/admin/users/{uuid.uuid4()}").status_code == 404
 
-
-# Admin — places
 
 class TestAdminPlaces:
 
@@ -626,8 +590,6 @@ class TestAdminPlaces:
         assert r.json() == {"reason": "invalid_request"}
 
 
-# Storage down — 503 storage_unavailable everywhere, never a 500
-
 class TestStorageDown:
 
     @pytest.fixture
@@ -651,9 +613,6 @@ class TestStorageDown:
         }),
     ])
     def test_every_endpoint_degrades_to_503(self, down, method, path, body):
-        # A token is required for the storage layer to be *reached* at all: with
-        # no session the auth gate answers 401 before any query runs. Sending one
-        # makes the failure a genuine «the store is down».
         headers = {"Authorization": "Bearer any-token-shape"}
         r = getattr(down, method)(path, headers=headers, **json_body(body))
         assert r.status_code == 503, r.text
@@ -664,14 +623,12 @@ def json_body(body):
     return {"json": body} if body is not None else {}
 
 
-# Password hashing
-
 class TestPasswords:
 
     def test_hash_is_salted_and_verifies(self):
         a = hash_password(GOOD_PW)
         b = hash_password(GOOD_PW)
-        assert a != b  # a fresh salt each time
+        assert a != b
         assert verify_password(GOOD_PW, a)
         assert not verify_password("wrong", a)
 
@@ -690,9 +647,7 @@ class TestPasswords:
 def test_place_patch_forbids_null_coordinates():
     """Omitting a coordinate means «leave it»; an explicit null is a client bug.
 
-    `lat`/`lon` are NOT NULL, and the handler writes every key present in the
-    body — so a null would be a 500 from the database, not a no-op. The model
-    turns it into a clean 422 instead.
+    `lat`/`lon` are NOT NULL, so a null would be a 500; the model turns it into a 422.
     """
     from pydantic import ValidationError
 
@@ -709,8 +664,6 @@ def test_place_patch_forbids_null_coordinates():
         with pytest.raises(ValidationError):
             AdminPlacePatch(**bad)
 
-
-# The real thing: live Postgres, skipped when unreachable
 
 BACKEND = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 MIGRATION = os.path.join(BACKEND, "db", "migrations", "0008_accounts_visits.sql")
@@ -737,12 +690,7 @@ def _apply_migration(conn) -> None:
 def test_live_account_visit_and_place_edit():
     """Register, a durable visit and an admin edit against the real database.
 
-    This is the half the fake cannot prove: the ``citext`` email index, the
-    ``ON CONFLICT`` visit upsert, the session join that keeps a role change
-    visible without re-login, and — the sharp edge — the curated-category trigger
-    *not* reverting an admin write (the ``SET LOCAL`` opt-in in ``update_place``).
-
-    Skips when Postgres is not reachable, like ``test_clients.py``.
+    The half the fake cannot prove: the citext index, the visit upsert, the category guard.
     """
     if not _db_up():
         pytest.skip("live DB not reachable")
@@ -753,7 +701,7 @@ def test_live_account_visit_and_place_edit():
     from store.accounts_store import PostgresAccountRepository
 
     admin = psycopg.connect(settings.DSN, autocommit=True)
-    _apply_migration(admin)  # idempotent: safe to re-apply
+    _apply_migration(admin)
 
     repo = PostgresAccountRepository()
     agent_main.app.state.accounts_repository = repo
@@ -762,8 +710,6 @@ def test_live_account_visit_and_place_edit():
     place_id: int | None = None
     old_category = old_source = old_blurb = None
     try:
-        # A guarded place: curated/dataset rows own their category, so the guard
-        # is the thing that must be told to let this write through.
         with admin.cursor() as cur:
             cur.execute(
                 "SELECT id, category, category_source, blurb FROM places "
@@ -782,12 +728,10 @@ def test_live_account_visit_and_place_edit():
         uid = registered.json()["id"]
         assert tc.get("/auth/me").json()["user"]["email"] == email
 
-        # a durable visit, idempotent
         assert tc.put(f"/me/visited/{place_id}").status_code == 200
         assert tc.put(f"/me/visited/{place_id}").status_code == 200
         assert tc.get("/me/visited").json()["count"] == 1
 
-        # a plain user is refused; the role change reaches the same session
         assert tc.get("/admin/stats").status_code == 403
         with admin.cursor() as cur:
             cur.execute("UPDATE users SET role='admin' WHERE id=%s", (uid,))
@@ -807,12 +751,9 @@ def test_live_account_visit_and_place_edit():
             )
             got = cur.fetchone()
         assert got is not None
-        assert got[0] == "live-test-category"  # the guard did not revert it
+        assert got[0] == "live-test-category"
         assert got[1] == "curated"
     finally:
-        # Restore inside one transaction: the row is 'curated' now, so putting the
-        # original category back needs the guard's opt-in too. A non-autocommit
-        # connection gives `set_config(..., true)` a transaction to live in.
         cleanup = psycopg.connect(settings.DSN)
         try:
             with cleanup.cursor() as cur:

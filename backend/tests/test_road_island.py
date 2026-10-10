@@ -1,20 +1,4 @@
-"""A stop on a disconnected road island must not kill the whole route.
-
-Measured on the live engine with the auto costing:
-  * «Костел Святого Антония Падуанского» (53.007611,23.917041)
-  * /route Волковыск → it           → 400 {"error_code":442,"error":"No path could be found for input"}
-  * /route its neighbour → it       → 200, 2.28 km (a local island)
-  * /sources_to_targets for that pair → "time": null
-
-Consequences this file pins down:
-  1. time_matrix must NOT price a null cell as 0 seconds (that made the
-     impossible hop look free, so the optimizer ordered it).
-  2. prune_unroutable_stops must drop the stop behind an unroutable leg.
-  3. render must fall back to per-leg geometry instead of returning {}.
-  4. route_through must treat 400/442 as a route-level failure, not a 503.
-
-No network: _request_with_retry is monkeypatched.
-"""
+"""A stop on a disconnected road island must not kill the whole route."""
 
 from __future__ import annotations
 
@@ -31,8 +15,8 @@ from core.errors import UpstreamUnavailable
 from domain import constants
 from infra import valhalla_client as vc
 
-ISLAND = (53.007611, 23.917041)  # the chapel on the island
-MAINLAND = (53.290892, 23.932859)  # Волковыск
+ISLAND = (53.007611, 23.917041)
+MAINLAND = (53.290892, 23.932859)
 ISLAND_NEIGHBOUR = (53.017611, 23.917041)
 
 
@@ -47,18 +31,16 @@ def _no_path_error() -> UpstreamUnavailable:
     )
 
 
-# 1. the matrix must say "unreachable", not "free"
-
 def test_null_matrix_cell_is_the_unreachable_sentinel(monkeypatch):
     def fake_request(method, url, *, params, timeout):
         return {
             "sources_to_targets": [
                 [
                     {"from_index": 0, "to_index": 0, "time": 0.0},
-                    {"from_index": 0, "to_index": 1, "time": None},  # island
+                    {"from_index": 0, "to_index": 1, "time": None},
                 ],
                 [
-                    {"from_index": 1, "to_index": 0, "time": None},  # island
+                    {"from_index": 1, "to_index": 0, "time": None},
                     {"from_index": 1, "to_index": 1, "time": 0.0},
                 ],
             ]
@@ -77,14 +59,11 @@ def test_null_matrix_cell_is_the_unreachable_sentinel(monkeypatch):
     assert matrix[0][0] == 0.0 and matrix[1][1] == 0.0
 
 
-# 2. the stop behind an unroutable leg gets pruned
-
 def test_prune_drops_the_stop_after_an_unroutable_leg():
     a = _candidate(1, *MAINLAND, name="Волковыск")
     b = _candidate(2, *ISLAND, name="каплица на острове")
     c = _candidate(3, 53.6787, 23.8279, name="Гродно")
 
-    # Valhalla's verdict: a→b unroutable, everything else fine.
     a_b = float(constants.UNREACHABLE_S)
     cost = CostMatrix(
         walk_seconds=[[0.0, a_b, 600.0], [a_b, 0.0, 700.0], [600.0, 700.0, 0.0]],
@@ -114,15 +93,13 @@ def test_prune_leaves_a_healthy_tour_alone():
     assert dropped == []
 
 
-# 3. render falls back to legs
-
 def test_render_falls_back_to_legs_when_the_tour_is_refused(monkeypatch):
     calls: list[list[dict]] = []
 
     def fake_route_through(locations, costing="pedestrian", language="ru", timeout=None):
         locs = list(locations)
         calls.append(locs)
-        if len(locs) > 2:  # the whole-tour request is the one Valhalla refuses
+        if len(locs) > 2:
             return vc.RouteResult(
                 status=vc.RouteStatus.NO_ROUTE_EXISTS,
                 shape={},
@@ -154,8 +131,6 @@ def test_render_falls_back_to_legs_when_the_tour_is_refused(monkeypatch):
     assert summary["time"] == 600.0
 
 
-# 4. a 400/442 is a route failure, not an outage
-
 def test_no_path_400_is_classified_as_a_route_failure():
     assert vc._is_route_failure(_no_path_error())
     assert not vc._is_route_failure(
@@ -170,13 +145,12 @@ def test_route_through_drops_the_island_stop_instead_of_raising(monkeypatch):
         payload = json.loads(params["json"])
         locs = payload["locations"]
         routed_sizes.append(len(locs))
-        # Any request that has to reach the island fails, exactly like the engine.
         if any(abs(loc["lat"] - ISLAND[0]) < 1e-4 and abs(loc["lon"] - ISLAND[1]) < 1e-4 for loc in locs):
             raise _no_path_error()
         return {
             "trip": {
                 "summary": {"length": 10.0, "time": 600.0},
-                "legs": [{"shape": "yzocbAqzc_hB"}],  # not decoded here on purpose
+                "legs": [{"shape": "yzocbAqzc_hB"}],
             }
         }
 

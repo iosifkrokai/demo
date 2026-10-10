@@ -1,25 +1,4 @@
-"""A request about another country is refused, not answered with look-alikes.
-
-The case that produced this module: «Вильнюс: Кафедральный собор Святого
-Станислава — маршрут пешком» was answered ``ready`` with four stops in Лида. The
-reading had correctly said the object is in Lithuania; the name matcher then
-accepted a *different* cathedral (id 554, «Кафедральный собор святого Архангела
-Михаила», Лида) as the named place, and the route was planned around it. A plan
-that looks complete and leads a tourist to another town's landmarks under the
-name they asked for is worse than no plan at all.
-
-What is pinned here:
-
-  * a name the reading placed outside the region makes the request infeasible —
-    through the verifier's ordinary rule, not a special case;
-  * a look-alike inside the region can never satisfy that requirement, even when
-    it is standing in the plan;
-  * the cross-check that keeps a wrong reading harmless: a flagged name that did
-    resolve to a real place inside the region is not a refusal;
-  * the strict name matching those flags switch on.
-
-No network, no DB: plans, routes and contracts are built by hand.
-"""
+"""A request about another country is refused, not answered with look-alikes."""
 
 from __future__ import annotations
 
@@ -62,10 +41,7 @@ def _geom(n: int = 3) -> dict:
 
 def test_the_reason_is_structural_and_therefore_infeasible():
     """One code, in the vocabulary, and among the reasons that mean "cannot be".
-
-    The status is not decided by the refusal path: a hard requirement unmet for a
-    structural reason has always meant `infeasible`, and the client localises the
-    code rather than reading Russian prose.
+    A hard requirement unmet for a structural reason has always meant `infeasible`.
     """
     assert CONTRACT_REASON == "must_visit_outside_coverage"
     assert REASON_MUST_VISIT_OUTSIDE in REASON_CODES
@@ -101,15 +77,10 @@ def test_the_contract_keeps_what_the_tourist_asked_for():
 
 def test_a_look_alike_inside_the_region_cannot_satisfy_it():
     """The crux: the substituted place is in the plan and must prove nothing.
-
-    id 554 is the Lida cathedral the matcher had accepted. Even standing on the
-    route — which is exactly what used to happen — it is a different place, in a
-    different town, and the verdict stays `unmet`.
+    Even standing on the route it is a different place and the verdict stays `unmet`.
     """
     reqs = TripRequirements()
     mark_out_of_coverage(reqs, [VILNIUS_CATHEDRAL])
-    # The substitution the gate exists to stop, reproduced: the resolved id
-    # attached to a stop that really is on the route.
     reqs.requirements[0].place_id = 554
     route = [_cand(554, LIDA_CATHEDRAL)]
 
@@ -122,9 +93,7 @@ def test_a_look_alike_inside_the_region_cannot_satisfy_it():
 
 def test_a_flagged_name_that_did_resolve_in_region_is_not_a_refusal():
     """A wrong reading must not cost a servable request its route.
-
-    The model can flag «Старый замок» by mistake; the man-made check is whether
-    the name grounded to a real place inside the region. It did — so no refusal.
+    The check is whether the name grounded to a real place inside the region.
     """
     reqs = TripRequirements(outside_coverage=["Старый замок"])
     constraints = ResolvedConstraints(resolved_names=["Старый замок"])
@@ -148,15 +117,11 @@ def test_nothing_flagged_means_no_question_at_all():
 
 def test_strict_matching_takes_the_same_name_and_nothing_else():
     """What a flagged name may resolve to: itself, with a town suffix.
-
-    Similarity is how a Lida cathedral became «Кафедральный собор Святого
-    Станислава»; when the reader has already said the name is not in this region,
-    only the name itself counts.
+    When the reader says the name is not in this region, only the name itself counts.
     """
     assert _same_name("Старый замок (Гродно)", "Старый замок") is True
     assert _same_name("Старый замок", "старый  ЗАМОК") is True
     assert _same_name("  Костёл   Святого   Франциска  ", "Костёл Святого Франциска")
-    # The substitution itself, and its neighbours, must not pass.
     assert _same_name(LIDA_CATHEDRAL, VILNIUS_CATHEDRAL) is False
     assert _same_name("Фарный костёл", "Костёл") is False
     assert _same_name("", "Старый замок") is False

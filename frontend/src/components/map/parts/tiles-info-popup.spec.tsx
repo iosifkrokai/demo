@@ -71,8 +71,6 @@ describe('TilesInfoPopup', () => {
 
     expect(screen.getByText('Node')).toBeInTheDocument();
   });
-  // Ensures that features from the 'shortcuts' layer are correctly labeled as "Shortcut"
-  // in the popup header instead of defaulting to "Node"
   it('should display "Shortcut" label for shortcut features', () => {
     const shortcutFeature = createMockFeature('shortcuts', {
       id: '23456',

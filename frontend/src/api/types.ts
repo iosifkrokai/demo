@@ -1,12 +1,4 @@
-/**
- * The wire types of the client entity.
- *
- * Honesty rule that runs through this file: `null` means «не указано» — a
- * field the tourist never filled in, or one the server did not send. It is
- * never a stand-in for a real value and never a defaulted number, so a party
- * of "0 adults" and an unstated party stay distinguishable all the way to the
- * UI.
- */
+/** The wire types of the client entity. */
 
 /** Transport the plan was built for (Valhalla costing). */
 export type Transport = 'pedestrian' | 'bicycle' | 'auto';
@@ -28,11 +20,7 @@ export interface ClientPreferences {
   updated_at?: string | null;
 }
 
-/**
- * `PUT /clients/me/preferences` is a partial update: only the keys present are
- * written, and an explicit `null` clears a field. Do not send a key you do not
- * mean to change.
- */
+/** `PUT /clients/me/preferences` is a partial update: only the keys present are written, and an explicit `null` clears a field. */
 export type ClientPreferencesPatch = Partial<{
   transport: Transport | null;
   time_budget_minutes: number | null;
@@ -43,11 +31,7 @@ export type ClientPreferencesPatch = Partial<{
   visit_minutes_by_category: Record<string, number> | null;
 }>;
 
-/**
- * One row of `GET /clients/me/routes` — the light list, deliberately without
- * the plan. `distance_m`/`duration_min` are `null` when the stored plan does
- * not state them; they are never filled in with a guess.
- */
+/** One row of `GET /clients/me/routes` — the light list, deliberately without the plan. */
 export interface SavedRouteSummary {
   id: string;
   /** What the tourist called it; may be empty. */
@@ -61,19 +45,11 @@ export interface SavedRouteSummary {
 
 /** A saved route as the list needs it, plus where this copy actually lives. */
 export interface SavedRouteListItem extends SavedRouteSummary {
-  /**
-   * `true` when the server never took this route and the copy exists only in
-   * this browser. The UI shows it as such — a local fallback is not a fact
-   * about the tourist's account.
-   */
+  /** `true` when the server never took this route and the copy exists only in this browser. */
   local_only: boolean;
 }
 
-/**
- * The full saved record (`GET /clients/me/routes/{id}`), including the plan.
- * `plan` is the verified TripPlan as it was stored, passed through untouched:
- * re-reading a saved route must not rebuild it into something else.
- */
+/** The full saved record (`GET /clients/me/routes/{id}`), including the plan. */
 export interface SavedRoute {
   id: string;
   name: string | null;
@@ -98,11 +74,7 @@ export interface CreatedRoute {
   created_at: string | null;
 }
 
-/**
- * Machine reason codes the agent answers with (spec §3). `network_unavailable`
- * is added on the client: a request that never reached the server is the same
- * kind of «saving does not work right now» as a `503 storage_unavailable`.
- */
+/** Machine reason codes the agent answers with. */
 export type ClientApiErrorCode =
   | 'storage_unavailable'
   | 'route_not_found'
@@ -118,13 +90,7 @@ export const SAVING_UNAVAILABLE_CODES: readonly ClientApiErrorCode[] = [
   'network_unavailable',
 ];
 
-/**
- * One stop of a ready-made route (`GET /routes/itineraries`).
- *
- * The agent reads these fields from the same places table the planner uses, so
- * a card can only print facts the dataset actually holds — `opening_hours` and
- * `visit_minutes` are `null` where nothing is known, never a default.
- */
+/** One stop of a ready-made route (`GET /routes/itineraries`). */
 export interface ItineraryStop {
   place_id: number;
   /** Provenance key the curated file is authored against (`city:old-castle`). */
@@ -148,13 +114,7 @@ export interface ItineraryStop {
   photo: Photo | null;
 }
 
-/**
- * A picture of a point, always with the credit the licence requires.
- *
- * An incomplete record never reaches the client: the backend drops a photo
- * whose author or licence is missing (see `parse_photo` there), so `author` and
- * `license` are always printable when this object is present.
- */
+/** A picture of a point, always with the credit the licence requires. */
 export interface Photo {
   url: string;
   author: string;
@@ -173,64 +133,33 @@ export interface Itinerary {
   /** Curated visit time of the stops; travel time is added when it is drawn. */
   visit_minutes: number;
   stops: ItineraryStop[];
-  /**
-   * Secondary points the author put on the way (a toilet, a café).
-   *
-   * They are NOT stops: not numbered, not counted in `stop_count`, not part of
-   * `visit_minutes`. The server splits them by the taxonomy's role, so a toilet
-   * can never stand where the guide promised a sight.
-   */
+  /** Secondary points the author put on the way (a toilet, a café). */
   services?: ItineraryStop[];
 }
 
 export interface ItineraryList {
   items: Itinerary[];
-  /**
-   * Stop keys the dataset no longer holds. An itinerary can be served shorter
-   * than authored; this is how the client can tell that it happened.
-   */
+  /** Stop keys the dataset no longer holds. */
   missing: string[];
 }
 
-/**
- * One point of the full catalogue (`GET /places`), for the «все точки» tab.
- *
- * Same shape as a ready-made route stop: the agent reads both from the same
- * `places` table through the same payload, so a card prints identical facts
- * whether the point came from a plan, an itinerary or the whole-map browse.
- */
+/** One point of the full catalogue (`GET /places`), for the «все точки» tab. */
 export type Place = ItineraryStop;
 
 export interface PlacesAnswer {
   items: Place[];
   total: number;
-  /**
-   * True when the agent cut the list at its own cap — a backstop against a
-   * runaway query, never a feature. The Grodno dataset fits in one answer.
-   */
+  /** True when the agent cut the list at its own cap — a backstop against a runaway query, never a feature. */
   capped: boolean;
 }
 
-/**
- * A route line as Valhalla and the agent both speak it (WGS84, GeoJSON).
- *
- * The app already holds this for the line it draws, so asking «что есть по
- * пути» needs no recomputation.
- */
+/** A route line as Valhalla and the agent both speak it (WGS84, GeoJSON). */
 export interface RouteLine {
   type: 'LineString';
   coordinates: [number, number][];
 }
 
-/**
- * One secondary point beside the route: a café, a toilet, a hotel.
- *
- * `off_line_m` and `along_m` are measured (PostGIS). `detour_confirmed` is
- * always false here: the walk needed to reach the point is a real Valhalla
- * route, which this answer does not build — so no screen may print «+2 мин»
- * from it. `hours_known` is false for the ~55% of service points whose hours
- * the dataset does not have; unknown hours are never shown as «открыто».
- */
+/** One secondary point beside the route: a café, a toilet, a hotel. */
 export interface ServiceAlong {
   id: number;
   source_url: string;
@@ -264,12 +193,7 @@ export interface ServicesAlongAnswer {
   reason?: string;
 }
 
-// Accounts, visits and the admin panel (spec 005)
-//
-// Same honesty rule as everywhere else: `null` means «не указано» — a field the
-// server did not send — never a stand-in for a real value.
-
-/** A user's authority. Drives whether the admin panel is reachable at all. */
+/** A user's authority. */
 export type UserRole = 'user' | 'admin';
 
 /** A signed-in account as every response carries it — never the password hash. */
@@ -340,12 +264,7 @@ export interface AdminPlaceInput {
   ticket_price?: string | null;
 }
 
-/**
- * Machine reason codes the accounts API answers with (spec 005 §3).
- * `network_unavailable` / `bad_response` / `server_error` are added on the client,
- * the way `client.ts` does it — a request that never reached the server is the
- * same class of failure as a typed refusal.
- */
+/** Machine reason codes the accounts API answers with. */
 export type AccountApiErrorCode =
   | 'storage_unavailable'
   | 'not_authenticated'

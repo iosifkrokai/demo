@@ -1,13 +1,4 @@
-"""Valhalla render honesty: never show a route we did not get.
-
-Tests that render.py returns honest status codes for:
-- empty geometry → honest non-usable status
-- unreachable pair → treated as unreachable by the helper
-- timeout → service-unavailable
-- maneuvers without instructions reported
-
-No network — valhalla_client._request_with_retry is monkeypatched.
-"""
+"""Valhalla render honesty: never show a route we did not get."""
 
 from __future__ import annotations
 
@@ -99,7 +90,7 @@ def test_maneuvers_without_instructions_reported(monkeypatch):
             shape={"type": "LineString", "coordinates": [[23.8216, 53.6791], [23.8310, 53.6849]]},
             summary={"length": 1.2, "time": 900.0},
             maneuvers=[
-                {"type": "depart", "length": 0.0, "time": 0.0},  # missing instruction
+                {"type": "depart", "length": 0.0, "time": 0.0},
                 {"instruction": "Turn right", "length": 100.0, "time": 60.0, "type": "turn"},
             ],
             language=language,
@@ -119,7 +110,6 @@ def test_locale_mismatch_returns_honest_status(monkeypatch):
     route = [_c(0, 53.6791, 23.8216, "Старый замок"), _c(1, 53.6849, 23.8310, "Новый замок")]
 
     def fake_route_through(locations, costing, language):
-        # Request "ru" but response comes back as "en"
         return vc.RouteResult(
             status=vc.RouteStatus.USABLE,
             shape={"type": "LineString", "coordinates": [[23.8216, 53.6791], [23.8310, 53.6849]]},
@@ -127,7 +117,7 @@ def test_locale_mismatch_returns_honest_status(monkeypatch):
             maneuvers=[
                 {"instruction": "Turn right", "length": 100.0, "time": 60.0, "type": "turn"}
             ],
-            language="en",  # mismatch
+            language="en",
         )
 
     monkeypatch.setattr(render, "route_through", fake_route_through)
@@ -147,7 +137,7 @@ def test_missing_required_maneuver_fields_reported(monkeypatch):
             shape={"type": "LineString", "coordinates": [[23.8216, 53.6791], [23.8310, 53.6849]]},
             summary={"length": 1.2, "time": 900.0},
             maneuvers=[
-                {"instruction": "Turn right"},  # missing length, time, type
+                {"instruction": "Turn right"},
             ],
             language=language,
         )
@@ -171,7 +161,7 @@ def test_usable_route_with_valid_maneuvers_and_locale(monkeypatch):
             maneuvers=[
                 {"instruction": "Turn right", "length": 100.0, "time": 60.0, "type": "turn"}
             ],
-            language=language,  # matches requested locale
+            language=language,
         )
 
     monkeypatch.setattr(render, "route_through", fake_route_through)

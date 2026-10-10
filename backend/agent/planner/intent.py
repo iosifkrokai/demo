@@ -1,35 +1,4 @@
-"""Step 1 — Intent, and the TripRequirements interpretation entry point.
-
-There is no closed-question model call here any more.  Free-text understanding
-belongs to the tool-using interpretation agent (``planner/agent_interpret.py``,
-PydanticAI over OpenRouter), which fills the frozen ``TripRequirements``
-contract; this module keeps the *deterministic* reading that the agent degrades
-to when it cannot be trusted to answer.
-
-Two readings, one shape:
-
-  * ``build_requirements(query, req)`` — the single interpretation entry point.
-    It asks ``agent_interpret.interpret_with_agent`` first; when that returns a
-    complete contract (a key, an importable SDK and a model answer inside the
-    tool/request/token/timeout budgets) the contract is used, with the explicit
-    UI filters already merged in by the agent layer.  Otherwise — no key, no
-    SDK, an upstream failure, a budget overrun — it falls back to the
-    deterministic parse below, which still keeps every explicit UI filter.
-  * ``fallback_intent`` / ``_fallback_reading`` — a dependency-free parse of the
-    query text: categories via the SAME shared keyword→category map retrieval
-    uses (planner/resolve.py ``CATEGORY_SYNONYMS``, inverted), an explicit time
-    budget, the named-place tokens that resolve through the DB, a region-wide
-    scope.  Nothing stated → nothing invented.
-
-``extract_intent`` is the deterministic intent decision (``IntentResult``) that
-``resolve()`` consumes; ``intent_from_requirements`` derives the same shape from
-a ``TripRequirements`` contract so the plan is driven by the model reading.
-
-Degraded mode (no key, or an upstream that fails)
-    Every path here answers: a degraded route is worse than a good model
-    answer, but it is never a failed request — with no key the agent still
-    answers every /routes/generate.
-"""
+"""Step 1 — Intent, and the TripRequirements interpretation entry point."""
 
 from __future__ import annotations
 
@@ -49,24 +18,12 @@ from .resolve import CATEGORY_SYNONYMS, CATEGORY_SYNONYMS_EN
 
 log = _logging.getLogger(__name__)
 
-# Stop-list of capitalised words that look like region/administrative names
-# but are not place names tourists would visit.  Kept in lower-case so the
-# comparison against `.lower()` tokens is correct.
-# Covers nominative, genitive, dative, instrumental, and prepositional forms.
 _PLACE_STOP_LIST: frozenset[str] = frozenset({
     "гродненская", "гродненской", "гродненскому", "гродненском",
     "область", "области", "областью", "областях",
 })
 
 
-# Degraded mode — the same query, parsed without a model
-
-# An explicit duration in the query text.  The model-free path may only keep a
-# budget the user actually stated, so the patterns demand a number (or a
-# fixed-length phrase) — "на пару часов" or a bare "час" is ambiguous and is
-# treated as "no budget", exactly like a query that never mentions time.
-# Russian writes small durations as words ("на два часа"), English as words too
-# ("for two hours"), so the number may be a digit OR a number word.
 _HOUR_WORDS: dict[str, float] = {
     "один": 1, "одна": 1, "одного": 1, "одну": 1,
     "два": 2, "две": 2, "двоих": 2, "двух": 2,
@@ -90,7 +47,6 @@ _FALLBACK_HOURS_WORD_RE = _re.compile(
 _FALLBACK_MINUTES_RE = _re.compile(
     r"(\d{1,3})\s*(?:минут\w*|мин(?![а-яё])|minutes?\b|mins?\b)", _re.I
 )
-# Whole phrases that name a duration without a number.
 _FALLBACK_DAY_RE = _re.compile(
     r"(?:весь|целый|полный|на\s+весь)\s+день|сутк\w*|пол\s*дня|полдня|"
     r"\b(?:whole|full|all)\s+day|half\s+a?\s*day|"
@@ -102,9 +58,6 @@ _FALLBACK_FULL_DAY_RE = _re.compile(
     r"\b(?:whole|full|all)\s+day",
     _re.I,
 )
-# How wide the ask is.  "region" is the only value the pipeline branches on
-# (it skips the geo focus and drives instead of walking), so the region words
-# are the ones worth reading off the text; "район" is reported as a district.
 _FALLBACK_REGION_RE = _re.compile(
     r"област\w*|регион\w*|кра[йея]\b|по\s+все[йм][\w\s]*|всю\s+область",
     _re.I,
@@ -113,26 +66,13 @@ _FALLBACK_DISTRICT_RE = _re.compile(r"район\w*", _re.I)
 
 
 def _named_place_tokens(query: str) -> list[str]:
-    """Proper-noun candidates for must-visit resolution: capitalised words
-    inside the Russian query (works for toponyms and place names).
-
-    Known limitation — sentence-initial verbs
-    The regex [А-ЯЁ][а-яё\\-]{2,} captures any capitalised ≥3-char word, so
-    a query-initial verb ("Хочу к …") is included.  These tokens are
-    harmless because _resolve_named_places calls _keyword_search per token;
-    a verb returns no DB rows → the must_visit_ids list stays clean.
-    The pipeline then falls back to top-RRF as the geo anchor, which is
-    the correct behaviour for a discovery-style query with no named place.
+    """Proper-noun candidates for must-visit resolution: capitalised words inside
+    the Russian query (works for toponyms and place names).
     """
     tokens = _re.findall(r"[А-ЯЁ][а-яё\-]{2,}", query)
     return [t for t in tokens if t.lower() not in _PLACE_STOP_LIST]
 
 
-# The shared keyword→category taxonomy (resolve.CATEGORY_SYNONYMS), inverted:
-# every surface form the map knows → its category.  Multi-word retrieval
-# phrases ("гостевой дом") are skipped — the fallback matches query WORDS,
-# and a phrase is not a word.  A form listed under two categories would be
-# ambiguous; the map keeps them disjoint (asserted by the tests).
 _KEYWORD_TO_CATEGORY: dict[str, str] = {
     form: cat
     for cat, forms in CATEGORY_SYNONYMS.items()
@@ -140,9 +80,6 @@ _KEYWORD_TO_CATEGORY: dict[str, str] = {
     if " " not in form
 }
 
-# The same inversion, Russian AND English (spec 002 is RU/EN): the fallback has
-# to read an English query without a model too.  RU forms are registered first,
-# so a form both maps carry (e.g. "wc") keeps its Russian registration.
 _SURFACE_FORMS: dict[str, str] = dict(_KEYWORD_TO_CATEGORY)
 for _form, _cat in (
     (form, cat)
@@ -156,11 +93,7 @@ for _form, _cat in (
 def _fallback_categories(query: str) -> list[str]:
     """Categories the query text itself states, read off the shared map.
 
-    Deterministic word match on the lowercased query: «замкам» → "замок",
-    «костёлам» → "костёл", «кофейне» → "кафе", "castles" → "замок".  A word
-    the map does not know simply yields nothing, so a themed query with no
-    category word returns an empty set — the honest answer, exactly like the
-    model-free scope/time handling (nothing stated → nothing invented).
+    A word the map does not know yields nothing — nothing stated, nothing invented.
     """
     cats: list[str] = []
     seen: set[str] = set()
@@ -173,13 +106,7 @@ def _fallback_categories(query: str) -> list[str]:
 
 
 def _fallback_time_budget(query: str) -> int | None:
-    """Minutes of sightseeing the query itself budgets, or None.
-
-    Only what the text states: "за 3 часа" → 180, "на два часа" → 120,
-    "for two hours" → 120, "на 90 минут" → 90, "на полдня" → 240,
-    "на весь день" → 480.  resolve() clamps the result to
-    [MIN_BUDGET_MIN, MAX_BUDGET_MIN], so a wild number is bounded.
-    """
+    """Minutes of sightseeing the query itself budgets, or None."""
     m = _FALLBACK_HOURS_RE.search(query)
     if m:
         return int(m.group(1)) * 60
@@ -206,25 +133,10 @@ def _fallback_search_scope(query: str) -> str:
 def fallback_intent(query: str) -> IntentResult:
     """Model-free intent: everything the query text states, nothing invented.
 
-    Deliberately conservative, because a wrong guess is worse than an honest
-    default here:
-      * categories_pos comes from the SAME deterministic keyword→category map
-        retrieval uses (resolve.CATEGORY_SYNONYMS, inverted — see
-        _fallback_categories).  «замки Гродно» now retrieves castles in
-        degraded mode, not whatever bare keyword ILIKE happens to hit.
-        categories_neg stays EMPTY — exclusion ("без замков") is a judgement
-        call the text maps do not carry.
-      * named_places come from the same token regex the Jev path uses, so
-        they resolve through the DB exactly as before (must_visit_ids, and a
-        town-only match becomes the geo anchor).
-      * time_budget_minutes is kept only when the query states a duration.
-      * intent_type / party_type / era_hint are the neutral defaults: nothing
-        downstream branches on them (search_scope is the one that matters).
+    Deliberately conservative, because a wrong guess is worse than an honest default here.
     """
     t0 = time.perf_counter()
     d = IntentDecision(
-        # "vague" only for a query with no significant word at all ("?", "ааа");
-        # otherwise "discovery", the neutral default nothing branches on.
         intent_type="vague" if not WORD_RE.search(query) else "discovery",
         categories_pos=_fallback_categories(query),  # type: ignore[arg-type]
         categories_neg=[],
@@ -239,7 +151,7 @@ def fallback_intent(query: str) -> IntentResult:
     )
     return IntentResult(
         decision=d,
-        source="regex",  # no model was asked
+        source="regex",
         confidence=0.0,
         latency_ms=int((time.perf_counter() - t0) * 1000),
         raw_response=None,
@@ -247,34 +159,14 @@ def fallback_intent(query: str) -> IntentResult:
 
 
 def extract_intent(query: str) -> IntentResult:
-    """Deterministic intent decision in one call (source="regex").
-
-    Free-text understanding is the interpretation agent's job
-    (``build_requirements``); this function is the dependency-free reader that
-    ``resolve()`` consumes directly and that the agent path degrades to.  It
-    reads only what the query states: categories off the shared map, a stated
-    time budget, the proper-noun tokens that resolve through the DB, and the
-    area width (town / district / region).  It never calls a model, so it
-    always answers.
-    """
+    """Deterministic intent decision in one call (source="regex")."""
     return fallback_intent(query)
 
 
 def intent_from_requirements(
     requirements: TripRequirements, query: str
 ) -> IntentResult:
-    """Derive the ``IntentResult`` that ``resolve()`` consumes from a contract.
-
-    This is what makes the PLAN follow the model reading: when the interpretation
-    agent produced the requirements, its interest/service/avoid codes and named
-    places drive the constraints instead of a second, keyword-only parse.  The
-    search *scope* stays a deterministic text reading — a region word
-    ("область") is a fact in the query, not a model guess.
-
-    ``source`` is "agent" when the contract came from the model path
-    ("llm"/"mixed"), "fallback" otherwise — always honest about where the
-    meaning came from.
-    """
+    """Derive the ``IntentResult`` that ``resolve()`` consumes from a contract."""
     cats_pos: list[str] = []
     for code in (
         requirements.interest_codes()
@@ -290,9 +182,6 @@ def intent_from_requirements(
 
     named = [r.name for r in requirements.of_kind("must_visit") if r.name]
     if not named:
-        # A contract with no named place still needs the DB-resolved tokens the
-        # deterministic reader found, so a query that relies on them keeps
-        # working (must_visit_ids / area_anchor).
         named = _named_tokens(query)
 
     decision = IntentDecision(
@@ -317,31 +206,8 @@ def intent_from_requirements(
     )
 
 
-# W2 — TripRequirements: the single interpretation entry point
-#
-# `build_requirements(query, req)` is the ONE place that turns a tourist's free
-# text plus the explicit UI filters into the frozen `TripRequirements` contract.
-# It never touches the DB: named places and area slugs are names here, and the
-# resolve stage grounds them.  Two readings are possible and both produce the
-# same shape:
-#
-#   * LLM available — Jev's typed categories (planner/intent.extract_intent) are
-#     merged over the deterministic reading, which supplies provenance spans and
-#     the party/budget/area facts the typed model cannot give (a count, not
-#     "family").  source="llm" (or "mixed" with UI filters).
-#   * No key / upstream down — the deterministic reading alone.  source =
-#     "fallback" (or "explicit" when only UI filters produced requirements).
-#
-# Rule: nothing is invented.  "двое детей" is a count of 2 with NO age; "без
-# лестниц" is an unknown (there is no step-free graph to prove it), never a
-# satisfied requirement.  The UI's explicit values win over any text guess.
-
-# Everyday stops are services; everything else stated in the text is a theme.
 _SERVICE_CODES = frozenset(constants.CONVENIENCE_CATEGORIES)
 
-# A query-initial capitalised word is usually a verb ("Погулять", "Walk") — not
-# a place.  These are filtered out of must-visit candidates by name; the DB
-# would reject them anyway, but a clean name list is what the UI shows.
 _RU_NAME_STOP = _PLACE_STOP_LIST | frozenset({
     "хочу", "хотелось", "погулять", "гулять", "пойдём", "пойдем", "посмотреть",
     "показать", "посетить", "найти", "сходить", "пройти", "прогуляться",
@@ -358,7 +224,6 @@ _EN_NAME_STOP = frozenset({
     "good", "short", "long", "two", "three", "hour", "hours",
 })
 
-# Number words for a stated party size (RU has collective/case forms).
 _COUNT_WORDS: dict[str, float] = {
     **_HOUR_WORDS,
     "двое": 2, "двоих": 2, "двумя": 2, "трое": 3, "тремя": 3, "троих": 3,
@@ -369,8 +234,6 @@ _COUNT_WORD_ALT = "|".join(
     _re.escape(w) for w in sorted(_COUNT_WORDS, key=len, reverse=True)
 )
 
-# Children / adults, RU and EN.  Only a COUNT is read; an age is a separate,
-# explicitly-stated fact (see _AGE_RE) and is never derived from the count.
 _RU_CHILD_RE = _re.compile(
     r"(?:с\s+)?(?P<num>\d{1,2}|" + _COUNT_WORD_ALT + r")\s*"
     r"(?:дет\w*|ребёнк\w*|ребенк\w*|малыш\w*|ребятишк\w*)",
@@ -391,16 +254,12 @@ _CHILD_WORD_RE = _re.compile(
     r"дет\w*|ребёнк\w*|ребенк\w*|малыш\w*|child\w*|kid\w*|daughters?|sons?|baby|infant",
     _re.I,
 )
-# "детям 5 и 8 лет", "6 years old".  Anchored on an age word, so it can never
-# fire on "2 часа" / "3 stops".
 _AGE_RE = _re.compile(
     r"((?:\d{1,2}\s*(?:,|и|and)?\s*){1,4})\s*"
     r"(?:лет\b|год\b|года\b|years?\s*old|y\.?o\.?)",
     _re.I,
 )
 
-# A stated party property that the text itself states (never inferred from the
-# party size — a family of four is not automatically "with a stroller").
 _MOBILITY_MARKERS: list[tuple[_re.Pattern, str]] = [
     (_re.compile(
         r"инвалидн\w*\s+коляск|кресл\w*[\s-]*коляск|wheelchair|"
@@ -411,9 +270,6 @@ _MOBILITY_MARKERS: list[tuple[_re.Pattern, str]] = [
     (_re.compile(r"пожил\w*|престарел\w*|elderly|senior", _re.I), "elderly"),
 ]
 
-# Things the request asks for that the system cannot represent or prove with
-# the data it has.  These are surfaced to the user; they are NEVER satisfied
-# requirements ("без лестниц" without a step-free graph).
 _UNKNOWN_MARKERS: list[tuple[_re.Pattern, str]] = [
     (_re.compile(
         r"без\s+лестниц|без\s+ступен\w*|без\s+подъ[её]м\w*|безбарьерн\w*|"
@@ -431,8 +287,6 @@ _UNKNOWN_MARKERS: list[tuple[_re.Pattern, str]] = [
     ), "opening_hours"),
 ]
 
-# An obligation ("туалет обязательно", "must have a toilet") makes a service
-# HARD; a wish ("кафе если по пути", "maybe a café") keeps it SOFT.
 _OBLIGATION_RE = _re.compile(
     r"обязательн\w*|непременн\w*|необходим\w*|"
     r"\bнужен\b|\bнужна\b|\bнужно\b|\bнужны\b|"
@@ -441,16 +295,12 @@ _OBLIGATION_RE = _re.compile(
     r"нельзя\s+без",
     _re.I,
 )
-# A restriction removes a category from the route ("без замков", "not museums").
 _AVOID_RE = _re.compile(
     r"\bбез\b|\bкроме\b|не\s+надо|не\s+хочу|не\s+нужн\w*|"
     r"\bavoid\b|\bexcept\b|\bexcluding\b|\bwithout\b|\bno\s+\w+",
     _re.I,
 )
 
-# A verified area the request is restricted to.  Slugs come from ONE controlled
-# table (no areas DB exists yet); "старый город" must bind to a known area, not
-# to the adjective "старый" and a random radius (spec §4.3).
 _AREA_PATTERNS: list[tuple[str, _re.Pattern]] = [
     (
         "grodno-old-town",
@@ -467,8 +317,7 @@ _TERM_RE = _re.compile(r"[а-яёa-z]+")
 
 @dataclass
 class _Reading:
-    """One reading of the query text — the deterministic parse plus, when the
-    model is available, the categories Jev typed on top of it."""
+    """One reading of the query text — the deterministic parse of it."""
 
     source: str
     requirements: list[Requirement] = field(default_factory=list)
@@ -479,17 +328,11 @@ class _Reading:
     time_budget: int | None = None
     areas: list[str] = field(default_factory=list)
     unknowns: list[str] = field(default_factory=list)
-    # Names the reading placed outside the region. Only the agent can read
-    # geography; this stays empty on the deterministic path.
     outside_coverage: list[str] = field(default_factory=list)
 
 
 def _clause_containing(query: str, idx: int) -> str:
-    """The comma/sentence fragment that contains `idx` — the provenance span.
-
-    "туалет обязательно" is a fragment of "…, туалет обязательно, …", and that
-    fragment — not the whole query — is what `Requirement.text` records.
-    """
+    """The comma/sentence fragment that contains `idx` — the provenance span."""
     delims = ".,;:!?—–\n"
     start = 0
     for i in range(idx - 1, -1, -1):
@@ -592,16 +435,12 @@ def _unknowns_from_text(query: str) -> list[str]:
 def _named_tokens(query: str) -> list[str]:
     """Proper-noun candidates, RU and EN, minus query verbs / area names.
 
-    RU uses the same token regex the Jev path uses (`_named_place_tokens`), then
-    drops sentence-initial verbs; EN adds capitalised Latin words minus common
-    query words. Debate about a token's identity is not settled here — the
-    resolve stage matches it against the DB.
+    Identity is not settled here — the resolve stage matches tokens against the DB.
     """
     out: list[str] = []
     seen: set[str] = set()
     for token in _named_place_tokens(query):
         low = token.lower()
-        # A taxonomy word ("Замки") or a query verb ("Погулять") is not a place.
         if low in _RU_NAME_STOP or low in _SURFACE_FORMS or low in seen:
             continue
         seen.add(low)
@@ -622,13 +461,7 @@ def _is_grodno(text: str) -> bool:
 
 
 def _areas_from_text(query: str) -> list[str]:
-    """Controlled area slugs the text names — never a bare adjective.
-
-    "старый город" binds to Grodno's old town only when the query is about
-    Grodno (or names no other town): «Лида, замок и старый город» must not be
-    restricted to a Grodno area just because it contains the words "старый
-    город".
-    """
+    """Controlled area slugs the text names — never a bare adjective."""
     other_towns = [n for n in _named_tokens(query) if not _is_grodno(n)]
     out: list[str] = []
     for slug, rx in _AREA_PATTERNS:
@@ -648,8 +481,6 @@ def _party_from_text(query: str) -> tuple[int | None, int | None, list[int], lis
         children = None
     ages = _children_ages(query)
     if children is None and ages:
-        # "с детьми 5 и 9 лет" enumerates the children — the count is the number
-        # of ages the user stated, not a guess.
         children = len(ages)
     adults = _match_count(query, _RU_ADULT_RE)
     if adults is None:
@@ -683,8 +514,7 @@ def _fallback_reading(query: str, _locale: str) -> _Reading:
 def _read_text(query: str, locale: str) -> _Reading:
     """The deterministic reading of the query text.
 
-    This is the no-model path and, equally, the reading the agent path degrades
-    to: it keeps every fact the text itself states and invents nothing.
+    The no-model path, and what the agent path degrades to.
     """
     return _fallback_reading(query, locale)
 
@@ -692,12 +522,8 @@ def _read_text(query: str, locale: str) -> _Reading:
 def _interpret_cache_key(
     query: str, req: GenerateReq
 ) -> tuple[str | None, str]:
-    """A key for this reading, or None when there is nothing worth caching.
-
-    None when the agent cannot run at all (no key, no SDK): the deterministic
-    parse is a few milliseconds of regex, and caching it would only add a way
-    for it to go stale. The prompt is hashed into the key, so editing the
-    instructions invalidates every entry by itself.
+    """None when the agent cannot run at all; the prompt is hashed into the key, so
+    editing the instructions invalidates every entry.
     """
     try:
         from . import agent_interpret, interpret_cache
@@ -711,7 +537,7 @@ def _interpret_cache_key(
             ),
             interpret_cache.prompt_hash(instructions),
         )
-    except Exception as exc:  # never let bookkeeping fail a request
+    except Exception as exc:
         log.warning("requirements: cache key unavailable (%s)", exc)
         return None, ""
 
@@ -721,11 +547,7 @@ def _agent_contract(
 ) -> TripRequirements | None:
     """The interpretation agent's contract, or None when it cannot be trusted.
 
-    ``interpret_with_agent`` already returns None (never a half-filled contract)
-    for no key, no SDK, a budget overrun or any model/tool failure; this wrapper
-    only adds the last-resort guard so an unexpected error can never turn a
-    route request into a 500.  A local import keeps PydanticAI off the planner's
-    import path until a reading is actually attempted.
+    Last-resort guard: an unexpected error can never turn a route request into a 500.
     """
     from . import agent_interpret
     try:
@@ -738,16 +560,8 @@ def _agent_contract(
 
 
 def _territory_slug(name: str) -> str | None:
-    """The area slug a named token refers to — when the token is a territory.
-
-    Both readings used to turn *every* proper noun in the query into a
-    must-visit, so «нужен маршрут по Гродно с туалетом» produced a mandatory stop
-    named «Гродно». Nothing in the dataset carries that name, so the deterministic
-    verifier could only report it `unmet` — in almost every answer, which made
-    honest reporting look like noise. A territory names where to look, not what to
-    visit, so it becomes no requirement at all: it is not put into ``areas``
-    either, because those are the *sub-areas* the contract knows ("старый город"
-    → `grodno-old-town`), and «замки Гродно» is expected to name no area.
+    """A territory names where to look, not what to visit, so it is not a
+    requirement and not an area either.
     """
     from domain import areas as areas_mod
 
@@ -755,17 +569,8 @@ def _territory_slug(name: str) -> str | None:
 
 
 def mark_out_of_coverage(contract: TripRequirements, names: list[str]) -> None:
-    """Record named places that cannot be reached from this region at all.
-
-    The contract keeps what the tourist asked for and the verifier reports it; a
-    refusal is never invented here. Marking it `hard` is the one judgement this
-    function makes, and it is about the world, not about the request: no plan in
-    the Grodno region can ever contain Vilnius Cathedral, so the request cannot
-    be served — unlike a soft wish the plan may reasonably drop.
-
-    Satisfying it is impossible, which the verifier knows: the reason set here
-    survives planning, and a look-alike place inside the region cannot stand in
-    for it (see verify._verify_must_visit).
+    """Marks each `hard`; a refusal is never invented here — the verifier reports
+    what the contract keeps.
     """
     from domain.requirements import REASON_MUST_VISIT_OUTSIDE
 
@@ -791,13 +596,7 @@ def mark_out_of_coverage(contract: TripRequirements, names: list[str]) -> None:
 
 
 def _is_fragment_of(name: str, known: list[str]) -> bool:
-    """Is a named token a piece of a longer place name we already have?
-
-    «Старый и Новый замки» yields the tokens «Старый» and «Новый», and each used
-    to become its own mandatory stop — a place that does not exist, so the
-    verifier could only report it unmet. A token that is a whole word inside a
-    longer name already claimed is a fragment of that name, not a place.
-    """
+    """Is a named token a piece of a longer place name we already have?"""
     norm = name.strip().lower()
     if not norm:
         return False
@@ -811,25 +610,10 @@ def _is_fragment_of(name: str, known: list[str]) -> bool:
 def _finalize_agent_contract(
     contract: TripRequirements, query: str, req: GenerateReq
 ) -> TripRequirements:
-    """Top up an agent contract with the deterministic facts it must not omit.
-
-    The agent owns the MEANING of the free text, but three things are not its
-    to decide:
-
-      * explicit UI filters — they are visible to the tourist and WIN.  The
-        agent layer already merges them, but they are re-asserted here so a
-        contract that contradicts a visible filter can never override it;
-      * named places the query states as proper nouns (the pipeline grounds them
-        to ids / an area anchor in resolve()) — added only when the agent did
-        not already produce a must_visit for the same name;
-      * the text markers of asks the system cannot prove ("без лестниц"), which
-        belong in ``unknowns`` and are never satisfied.
-    """
+    """Top up an agent contract with the deterministic facts it must not omit."""
     contract.requirements, claimed = _merge_requirements(
         _ui_requirements(req), contract.requirements
     )
-    # A visible positive filter wins over a model's reading of the same code as
-    # something to avoid — the tourist turned that category ON, not off.
     ui_positive = {
         r.code for r in _ui_requirements(req) if r.code and r.kind in ("interest", "service")
     }
@@ -838,10 +622,6 @@ def _finalize_agent_contract(
         if not (r.kind == "avoid" and r.code in ui_positive)
     ]
 
-    # Facts the text states with a keyword are not the model's to drop: a
-    # service/interest/exclusion the deterministic reading found but the agent
-    # did not mention is added, so an EN phrasing the model under-reads still
-    # reaches the planner (the model may only ever ADD meaning, not lose facts).
     for r in _read_text(query, req.locale).requirements:
         if r.kind not in ("service", "interest", "avoid"):
             continue
@@ -851,9 +631,6 @@ def _finalize_agent_contract(
         claimed.add(key)
         contract.requirements.append(r)
 
-    # A mandatory ask the text states must not be softened by the model: "hard"
-    # wins when either reader says the user made it obligatory (the model may
-    # paraphrase, the deterministic span marks «обязательно»/«must»).
     text_mandatory = {
         (r.kind, r.code or r.name)
         for r in _read_text(query, req.locale).requirements
@@ -863,7 +640,6 @@ def _finalize_agent_contract(
         if r.strength == "soft" and (r.kind, r.code or r.name) in text_mandatory:
             r.strength = "hard"
 
-    # UI scalars win over the agent's reading of the same field.
     if req.party_children is not None:
         contract.party.children = req.party_children
     if req.party_adults is not None:
@@ -878,7 +654,7 @@ def _finalize_agent_contract(
 
     for name in _named_tokens(query):
         if _territory_slug(name):
-            continue  # a territory is a search scope, not a stop
+            continue
         if _is_fragment_of(
             name,
             [r.name for r in contract.requirements if r.kind == "must_visit" and r.name],
@@ -928,8 +704,7 @@ def _ui_requirements(req: GenerateReq) -> list[Requirement]:
 def _ui_used(req: GenerateReq, ui_reqs: list[Requirement]) -> bool:
     """True when an explicit control contributed anything to the request.
 
-    `time_budget_minutes == 0` is the selector's "без ограничения" value, the
-    same as an absent field; it does not count as an explicit choice.
+    `time_budget_minutes == 0` means "без ограничения" and does not count as a choice.
     """
     return bool(ui_reqs) or (
         req.party_adults is not None
@@ -959,33 +734,18 @@ def build_requirements(
     query: str, req: GenerateReq, *, db: object | None = None,
     wall_clock_s: float | None = None,
 ) -> TripRequirements:
-    """Interpret one request into the frozen `TripRequirements` contract.
-
-    The single entry point for "what did the tourist ask for".  It asks the
-    tool-using interpretation agent first (spec §4.2); the agent returns a
-    complete contract with the explicit UI filters merged in (they win), or
-    ``None`` — no key, no SDK, a model/tool failure, a budget overrun — and then
-    the deterministic reading below answers instead, keeping every UI filter.
-
-    ``db`` is an optional caller-owned psycopg connection the agent's bounded
-    tools reuse; without one each tool opens its own short-lived connection.
-    """
+    """Interpret one request into the frozen `TripRequirements` contract."""
     cache_key, prompt_hash = _interpret_cache_key(query, req)
     if cache_key is not None:
         cached = interpret_cache.INTERPRET_CACHE.get(cache_key)
         if cached is not None:
             log.info("requirements: cached reading (no model call)")
-            # Said out loud, because the absence of a model call is otherwise
-            # indistinguishable in the trace from a call nobody recorded.
             trace.record("interpret · model", "skipped", cached=True)
-            # The contract is MUTATED downstream — resolve() attaches place ids,
-            # the verifier writes statuses — so the stored copy is never handed
-            # out: the next request would otherwise inherit this one's verdicts.
             return cached.model_copy(deep=True)
 
     try:
         contract = _agent_contract(query, req, db, wall_clock_s)
-    except Exception as exc:  # the agent must never fail a request
+    except Exception as exc:
         log.warning("requirements: agent raised (%s) — deterministic parse", exc)
         contract = None
     if contract is not None:
@@ -1004,25 +764,16 @@ def build_requirements(
 
 
 def _deterministic_requirements(query: str, req: GenerateReq) -> TripRequirements:
-    """The no-model reading of one request, as the frozen contract.
-
-    Works RU and EN.  Explicit UI filters always win over a text reading, and
-    nothing the data cannot prove is presented as satisfied (it goes to
-    `unknowns` instead).  This is the whole interpretation when no model
-    answers, and the shape the agent path must match when one does.
-    """
+    """The no-model reading of one request, as the frozen contract."""
     locale = req.locale
     reading = _read_text(query, locale)
 
-    # Requirements: UI first (it wins), then the text reading
     ui_reqs = _ui_requirements(req)
     requirements, claimed = _merge_requirements(ui_reqs, reading.requirements)
 
-    # Named places the user asked for: names now, grounded to IDs in resolve().
-    # A territory is not one of them — see `_territory_slug`.
     for name in _named_tokens(query):
         if _territory_slug(name):
-            continue  # a territory is a search scope, not a stop
+            continue
         if _is_fragment_of(
             name,
             [r.name for r in requirements if r.kind == "must_visit" and r.name],
@@ -1036,7 +787,6 @@ def _deterministic_requirements(query: str, req: GenerateReq) -> TripRequirement
             Requirement(kind="must_visit", name=name, label=name, text=name, source="text")
         )
 
-    # Party: explicit values win; ages are never invented
     children = req.party_children if req.party_children is not None else reading.children
     adults = req.party_adults if req.party_adults is not None else reading.adults
     ages = (
@@ -1049,7 +799,6 @@ def _deterministic_requirements(query: str, req: GenerateReq) -> TripRequirement
         if code and code not in mobility:
             mobility.append(code)
 
-    # Budget: the UI selector wins, including "0 = без ограничения"
     if req.time_budget_minutes is not None:
         budget = req.time_budget_minutes or None
     else:
@@ -1057,12 +806,10 @@ def _deterministic_requirements(query: str, req: GenerateReq) -> TripRequirement
     if budget is not None:
         budget = max(constants.MIN_BUDGET_MIN, min(budget, constants.MAX_BUDGET_MIN))
 
-    # Unknowns: what cannot be proven is named, never promised
     unknowns = list(reading.unknowns)
     if "wheelchair" in mobility and "wheelchair_accessible" not in unknowns:
         unknowns.append("wheelchair_accessible")
 
-    # How the requirements were obtained
     ui_used = _ui_used(req, ui_reqs)
     if reading.source == "llm" and ui_used:
         source: str = "mixed"

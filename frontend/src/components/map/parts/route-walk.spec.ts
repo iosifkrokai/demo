@@ -16,7 +16,6 @@ describe('splitAtPosition', () => {
     expect(split).not.toBeNull();
     expect(split!.walked.at(-1)).toEqual([23.83, 53.685]);
     expect(split!.remaining[0]).toEqual([23.83, 53.685]);
-    // Halfway along the second leg: two ~1.11 km segments, right in the middle of the second.
     expect(split!.travelled).toBeGreaterThan(1600);
     expect(split!.travelled).toBeLessThan(1700);
     expect(split!.total).toBeGreaterThan(split!.travelled);
@@ -38,8 +37,6 @@ describe('splitAtPosition', () => {
   });
 
   it('молчит, когда турист далеко от маршрута', () => {
-    // Otherwise a route in another city would be "cut" at its very start, and the
-    // tourist would think they had already walked it.
     expect(splitAtPosition(LINE, { lat: 53.9, lon: 24.5 })).toBeNull();
   });
 

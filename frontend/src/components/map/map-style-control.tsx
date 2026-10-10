@@ -36,7 +36,6 @@ const MapStyleOption = memo(
     mapCenter,
     zoom,
   }: MapStyleOptionProps) => {
-    // Memoize the map style to prevent unnecessary re-renders
     const memoizedMapStyle = useMemo(
       () => style as unknown as maplibregl.StyleSpecification,
       [style]
@@ -99,7 +98,6 @@ export const MapStyleControl = ({
     onStyleChange?.(selectedStyle);
   }, [selectedStyle, onStyleChange]);
 
-  // Memoize the map options to prevent re-creating them on every render
   const mapOptions = useMemo(() => {
     const options: Array<{
       id: MapStyleType;

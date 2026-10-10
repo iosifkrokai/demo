@@ -1,18 +1,6 @@
 """Named areas and the single project-area geofence predicate.
 
-Area definitions live in data/areas.json (versioned, reviewed). Geometry is
-loaded at runtime from the border files it references — never duplicated
-here, never invented. Areas for which backend/data/ holds no boundary
-polygon carry ``geometry: null``: alias resolution still anchors a query to
-them, but containment is unknown (:func:`area_contains` returns ``None``) —
-an explicit unknown, never a silent default.
-
-:func:`in_project_area` is the ONE predicate shared by import-time
-validation (the seed package: seed/datasets.py, seed/pipeline.py, all
-via ``domain.geofence.inside_project_area``, which delegates here) and by
-query-time filtering. It is Grodno Oblast (geoBoundaries ADM1 polygon,
-data/grodno_border.json) OR one of the documented border exceptions
-(data/belarus_border_keep.json).
+Area definitions live in data/areas.json; geometry is loaded at runtime.
 """
 
 from __future__ import annotations
@@ -31,15 +19,9 @@ KEEP_PATH = DATA_DIR / "belarus_border_keep.json"
 LOCALES = ("ru", "en")
 PROJECT_AREA_SLUG = "grodno-oblast"
 
-# Longitude degrees are shorter than latitude degrees at ~53.7°N; these
-# factors match the historical geofence math exactly so the delegated
-# predicate stays behaviour-identical.
 _LAT_M_PER_DEG = 111_320
-_LON_M_PER_DEG = 111_320 * 0.6  # ~cos(53.7°)
+_LON_M_PER_DEG = 111_320 * 0.6
 _DEFAULT_EXCEPTION_RADIUS_M = 300.0
-
-
-# area registry
 
 
 @lru_cache(maxsize=1)
@@ -63,8 +45,6 @@ def load_areas() -> dict[str, dict[str, Any]]:
             key = _normalize(term)
             if not key:
                 continue
-            # Within-area duplicates (a name and its own alias) are harmless;
-            # only a term claimed by TWO different areas breaks resolution.
             if key in claimed_by and claimed_by[key] != slug:
                 raise ValueError(
                     f"areas.json: {key!r} claimed by both {claimed_by[key]!r} "
@@ -78,10 +58,7 @@ def load_areas() -> dict[str, dict[str, Any]]:
 def area_lookup_by_slug(slug: str | None) -> dict[str, Any] | None:
     """Area definition for ``slug`` with geometry provenance and exceptions.
 
-    Returns ``None`` for an unknown slug. For grodno-oblast the geometry
-    block is resolved from data/grodno_border.json and the documented border
-    exceptions from data/belarus_border_keep.json, so callers can audit the
-    exact data behind the predicate.
+    Returns ``None`` for an unknown slug.
     """
     if not slug:
         return None
@@ -103,11 +80,7 @@ def area_lookup_by_slug(slug: str | None) -> dict[str, Any] | None:
 def resolve_area(term: str | None, locale: str | None = None) -> str | None:
     """Resolve a user-facing term to an area slug, or ``None``.
 
-    Matching is exact after normalization (case, punctuation, whitespace)
-    against slug, RU/EN names and RU/EN aliases. The requested locale is
-    consulted first, the other locale second, so a Russian query may still
-    anchor to "Grodno". Unmatched terms return ``None`` — never a silent
-    default area.
+    Matching is exact after normalization against slug, RU/EN names and aliases.
     """
     if not isinstance(term, str):
         return None
@@ -131,10 +104,7 @@ def resolve_area(term: str | None, locale: str | None = None) -> str | None:
 def area_contains(slug: str | None, lat: float | None, lon: float | None) -> bool | None:
     """Containment of one point in one named area.
 
-    ``True``/``False`` when the area has geometry. ``None`` when the slug is
-    unknown or the area has no boundary polygon in backend/data/ — containment
-    is unknown, not false; callers must treat ``None`` as "no geometric
-    constraint", never as a silent default.
+    ``True``/``False`` when the area has geometry; ``None`` when unknown or no polygon.
     """
     if slug is None or lat is None or lon is None:
         return None
@@ -150,9 +120,7 @@ def area_contains(slug: str | None, lat: float | None, lon: float | None) -> boo
 def in_project_area(lat: float | None, lon: float | None) -> bool:
     """The single project-area predicate: Grodno Oblast + documented exceptions.
 
-    Shared by import-time validation and query-time filtering. False for
-    None coordinates and for every point outside Grodno Oblast (Vilnius,
-    Minsk, Brest, ...).
+    Shared by import-time validation and query-time filtering; False for unknown points.
     """
     if lat is None or lon is None:
         return False
@@ -162,9 +130,6 @@ def in_project_area(lat: float | None, lon: float | None) -> bool:
         _within_radius(lat, lon, exc["lat"], exc["lon"], exc["radius_m"])
         for exc in _exceptions()
     )
-
-
-# geometry
 
 
 @lru_cache(maxsize=1)

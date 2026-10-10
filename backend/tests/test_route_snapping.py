@@ -1,7 +1,4 @@
-"""route_through resilience: widen the snap radius, then drop unsnappable stops.
-
-No network — _request_with_retry is monkeypatched.
-"""
+"""route_through resilience: widen the snap radius, then drop unsnappable stops."""
 
 from __future__ import annotations
 
@@ -109,18 +106,12 @@ def test_non_snap_error_is_not_retried(monkeypatch):
 
 
 def test_unsnappable_stop_is_dropped_before_routing(monkeypatch):
-    """A stop with no edge is dropped up front, endpoints included.
-
-    It used to be retried at every radius and then dropped only if it sat in the
-    middle — when it was the first or last stop the whole /route call failed and
-    the UI showed "points drawn, no route".
-    """
+    """A stop with no edge is dropped up front, endpoints included."""
     routed: list[list[dict]] = []
 
     def fake(method, url, *, params, timeout):
         payload = json.loads(params["json"])
         if "/locate" in url:
-            # only the middle stop cannot be snapped anywhere near it
             if payload["locations"][0]["lat"] == NEW_CASTLE["lat"]:
                 return [{"edges": []}]
             return [{"edges": [{"correlated_lat": 53.68, "correlated_lon": 23.82}]}]
@@ -134,7 +125,6 @@ def test_unsnappable_stop_is_dropped_before_routing(monkeypatch):
     assert result.shape["coordinates"], "expected the tour to survive without that stop"
     assert len(routed) == 1, "no radius ladder needed once the bad stop is gone"
     assert len(routed[0]) == 2, "the unsnappable middle stop should be gone"
-    # the survivors are the /locate-snapped coordinates, not the raw POI points
     assert [loc["lat"] for loc in routed[0]] == [53.68, 53.68]
 
 

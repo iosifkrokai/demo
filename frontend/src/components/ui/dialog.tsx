@@ -36,13 +36,7 @@ const DialogClose = React.forwardRef<
 });
 DialogClose.displayName = 'DialogClose';
 
-/**
- * Radix renders `Dialog.Portal` through a `Slot`, which clones each child and
- * injects a ref into it. A plain function component silently drops that ref
- * (React 18 gives function components no ref), so the overlay's own node is
- * never attached — focus and outside-pointer logic then act on the wrong node.
- * forwardRef hands the ref on to the Radix overlay.
- */
+/** Radix renders `Dialog.Portal` through a `Slot`, which clones each child and injects a ref into it. */
 const DialogOverlay = React.forwardRef<
   React.ComponentRef<typeof DialogPrimitive.Overlay>,
   React.ComponentProps<typeof DialogPrimitive.Overlay>

@@ -30,12 +30,7 @@ interface CommonState {
   settings: PossibleSettings;
   dateTime: { type: number; value: string };
   mapReady: boolean;
-  /**
-   * A one-shot «look here» request from a panel row to the map.
-   *
-   * `at` is a timestamp rather than a flag so tapping the same place twice
-   * still moves the map: the payload changes even when the coordinates do not.
-   */
+  /** A one-shot «look here» request from a panel row to the map. */
   focus: { lng: number; lat: number; at: number } | null;
   /** The guide's latest fix, published so the map can follow it. */
   guideFix: {
@@ -43,11 +38,7 @@ interface CommonState {
     lat: number;
     /** Compass heading in degrees, when the device reports one. */
     heading: number | null;
-    /**
-     * Bearing along the ROUTE at the tourist's position — what the map turns
-     * to. The device's own heading is the direction the phone points, and on a
-     * walk it is the wrong number; see parts/guide-course.ts.
-     */
+    /** Bearing along the ROUTE at the tourist's position — what the map turns to. */
     course: number | null;
     at: number;
   } | null;
@@ -55,17 +46,9 @@ interface CommonState {
   guiding: boolean;
   /** Whether spoken navigation instructions are muted. */
   guideVoiceMuted: boolean;
-  /**
-   * True while the panel is on the «Все точки» tab. The map reads this to draw
-   * the whole catalogue as a layer, and the panel writes it on every tab switch
-   * so the two never disagree about what is on screen.
-   */
+  /** True while the panel is on the «Все точки» tab. */
   placesVisible: boolean;
-  /**
-   * Metres to the next turn, published by the guide so the camera can behave
-   * like a navigator instead of a viewer: it closes in as the turn comes.
-   * null while there is no line, no trusted fix, or nothing to turn into.
-   */
+  /** Metres to the next turn, published by the guide so the camera can behave like a navigator instead of a viewer: it closes in as the turn comes. null while there is no line, no trusted fix, or nothing to turn into. */
   guideTurnDistanceM: number | null;
 }
 
@@ -74,13 +57,7 @@ interface CommonActions {
   zoomTo: (coordinates: number[][]) => void;
   toggleSettings: () => void;
   toggleDirections: () => void;
-  /**
-   * Open or close the panel outright.
-   *
-   * Distinct from the toggle because the mobile sheet can now be *dismissed by
-   * a flick down*, and a dismiss must close rather than reopen: calling the
-   * toggle from there would be a coin toss if anything else closed it first.
-   */
+  /** Open or close the panel outright. */
   setDirectionsPanelOpen: (open: boolean) => void;
   updateSettings: (
     name: keyof PossibleSettings,
@@ -100,7 +77,6 @@ interface CommonActions {
 
 type CommonStore = CommonState & CommonActions;
 
-// Open the left panel by default on non-mobile viewports (Tailwind md breakpoint).
 const DEFAULT_PANEL_OPEN =
   typeof window !== 'undefined' && window.innerWidth >= 768;
 
@@ -143,9 +119,7 @@ export const useCommonStore = create<CommonStore>()(
         set({ guideVoiceMuted: muted }, undefined, 'setGuideVoiceMuted');
         try {
           localStorage.setItem('grodno-voice-muted', String(muted));
-        } catch {
-          // storage unavailable — value stays in memory for this session
-        }
+        } catch {}
       },
       setPlacesVisible: (placesVisible) =>
         set({ placesVisible }, undefined, 'setPlacesVisible'),
@@ -192,9 +166,6 @@ export const useCommonStore = create<CommonStore>()(
           (state) => {
             const base =
               profile === 'truck' ? settingsInitTruckOverride : settingsInit;
-            // Preserve quick-panel params — they're treated as cross-profile
-            // user preferences (URL-permalinked) and shouldn't be wiped on a
-            // profile change or an explicit Reset.
             const preserved: Partial<PossibleSettings> = {};
             for (const param of QUICK_SETTING_PARAMS) {
               preserved[param] = state.settings[param];
@@ -207,8 +178,6 @@ export const useCommonStore = create<CommonStore>()(
       updateDateTime: (key, value) =>
         set(
           (state) => {
-            // The Select control fires onValueChange with strings; coerce here
-            // so type stays numeric (formatTriggerLabel uses === comparisons).
             if (key === 'type') state.dateTime.type = Number(value);
             else state.dateTime.value = value as string;
           },

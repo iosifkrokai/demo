@@ -6,15 +6,8 @@ import { Input } from '@/components/ui/input';
 import { describeAccountError, useLogin } from '@/hooks/use-auth';
 import { appPath } from '@/utils/app-path';
 
-/**
- * Enter an existing account (spec 005 §3).
- *
- * Failures are shown as the machine code's Russian sentence, never a raw status:
- * «неверная почта или пароль» is what the tourist needs, and the agent
- * deliberately does not say which of the two was wrong.
- */
+/** Enter an existing account. */
 export function LoginPage() {
-  // Where the guard sent us from (`?redirect=…`); default is the map.
   const { redirect: returnTo } = useSearch({ from: '/login' });
   const login = useLogin();
   const [email, setEmail] = useState('');
@@ -28,8 +21,6 @@ export function LoginPage() {
       { email, password },
       {
         onSuccess: () =>
-          // A full navigation, not a router push: the app re-reads the session on
-          // load, so the guard sees the fresh cookie instead of a stale cache.
           window.location.assign(
             appPath(
               returnTo && returnTo.startsWith('/') ? returnTo : '/directions'

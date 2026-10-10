@@ -1,12 +1,6 @@
 import type { LocaleArea } from './guide';
 
-/**
- * Keys of the panel's own controls: filters, budgets, transport, statuses.
- *
- * Careful with the filter options: their `code` is the backend's canonical
- * category («замок»), which goes to the agent untouched; only the visible label
- * is translated. Translating the code would silently stop filtering.
- */
+/** Keys of the panel's own controls: filters, budgets, transport, statuses. */
 /** The shape both locales must satisfy — kept explicit so a missing key fails. */
 type SidebarShape = {
   budgets: Record<
@@ -51,10 +45,6 @@ type SidebarShape = {
     | 'impossibleTitle'
     | 'degradedTitle'
     | 'reasonFallback'
-    // The reason codes live in a nested object on purpose: the parity test walks
-    // the dictionaries by splitting paths on dots, so a flat key containing a
-    // dot would read as a path that does not exist. The i18n key stays
-    // `sidebar.status.reason.<code>` either way.
     | 'reason'
     | string,
     string | Record<string, string>
@@ -190,9 +180,6 @@ export const sidebarArea = {
         simulatedFix:
           'СИМУЛЯЦИЯ GPS: положение проигрывается, телефон ни при чём',
         restoredPrevious: 'вернул предыдущий маршрут',
-        // Why there is no plan, or why it is incomplete — the agent's own
-        // account, in words the tourist can act on. Place names are never
-        // translated: they come from the data and stay as they are.
         outsideCoverageTitle:
           'Сюда маршрут не построить: {{names}} — вне зоны покрытия (Гродненская область)',
         outsideCoverageHint: 'Попробуйте точку внутри области',
@@ -200,8 +187,6 @@ export const sidebarArea = {
           'Маршрут не построен: не удалось выполнить обязательное требование',
         degradedTitle: 'Часть запроса выполнить не удалось',
         reasonFallback: 'требование не выполнено',
-        // Reasons, keyed by the backend's codes; the key is the i18n path, so
-        // the codes live in a nested object rather than flat dotted keys.
         reason: {
           must_visit_on_route: 'обязательная точка не попала на маршрут',
           must_visit_absent: 'обязательная точка не найдена в данных',
@@ -254,9 +239,6 @@ export const sidebarArea = {
         hours_few: '{{count}} ч',
         hours_many: '{{count}} ч',
       },
-      // What the pipeline itself reports while a route is being built. Codes come
-      // from the backend (`agent/progress.py`); the wording is ours, in both
-      // languages, because the server does not speak one.
       progress: {
         cancel: 'отменить',
         elapsed_one: '{{count}} с',
@@ -298,13 +280,10 @@ export const sidebarArea = {
         myLocation: 'Моё местоположение',
       },
 
-      // The route-planning block, word for word what it puts on screen. Own
-      // group so the panel's stragglers are obvious rather than lost in `ui`.
       plan: {
         geoOverride: 'переопределить, откуда начинается маршрут',
         filtersPrecedence: 'применю фильтры поверх текста запроса — они важнее',
-        /** An example query: the place name stays a real Grodno place, in the
-         *  alphabet of the interface it is shown in. */
+        /** An example query: the place name stays a real Grodno place, in the alphabet of the interface it is shown in. */
         queryPlaceholder: 'Каложская церковь, Гродно',
         partyLabel: 'кто идёт',
         adults: 'взрослые',
@@ -339,8 +318,6 @@ export const sidebarArea = {
         decrement: 'убавить: {{label}}',
         increment: 'прибавить: {{label}}',
       },
-      // The chips of the always-visible filter summary. A counted noun uses
-      // i18next plural keys so «2 ребёнка» and «2 children» both read right.
       summary: {
         adults: '{{count}} взр.',
         ages: 'возраст {{ages}}',
@@ -352,8 +329,6 @@ export const sidebarArea = {
         children_few: '{{count}} ребёнка',
         children_many: '{{count}} детей',
       },
-      // The stops timeline (`waypoint-list.tsx`): the row's own labels, both
-      // visible and announced.
       waypoints: {
         move: 'переместить: {{name}}',
         dragHint: 'перетащить · стрелки вверх/вниз',
@@ -430,9 +405,6 @@ export const sidebarArea = {
         simulatedFix:
           'GPS SIMULATION: the position is replayed, no phone involved',
         restoredPrevious: 'restored the previous route',
-        // Why there is no plan, or why it is incomplete — the agent's own account,
-        // in words the tourist can act on. Place names are never translated: they
-        // come from the data and stay as they are.
         outsideCoverageTitle:
           'No route here: {{names}} — outside the coverage area (Hrodna region)',
         outsideCoverageHint: 'Try a point inside the region',
@@ -440,8 +412,6 @@ export const sidebarArea = {
           'Route not built: a mandatory requirement could not be met',
         degradedTitle: 'Part of the request could not be fulfilled',
         reasonFallback: 'requirement not met',
-        // Reasons, keyed by the backend's codes; the key is the i18n path, so the
-        // codes live in a nested object rather than flat dotted keys.
         reason: {
           must_visit_on_route: 'a mandatory stop is not on the route',
           must_visit_absent: 'a mandatory stop is not in the data',
@@ -495,9 +465,6 @@ export const sidebarArea = {
       },
       progress: {
         cancel: 'cancel',
-        // English plural rules only ever pick _one/_other, but the dictionary
-        // shape is shared with Russian, so the categories both languages need are
-        // declared here rather than left for one of them to be missing a key.
         elapsed_one: '{{count}} s',
         elapsed_other: '{{count}} s',
         elapsed_few: '{{count}} s',

@@ -1,12 +1,5 @@
 """Overpass transport, district resolution and the pipe-delimited CSV writer.
-
-Consolidated from ``scripts/ingest_osm.py`` (sights) and ``scripts/ingest_poi.py``
-(services). This module owns exactly one responsibility: talking to Overpass and
-resolving districts — the endpoint list, the retry/backoff + failover policy, the
-bbox → Overpass QL remap, the two query templates, the Nominatim reverse geocoder
-and the deterministic pipe-delimited CSV writer. It holds no tag knowledge and
-imports nothing from the other ``seed.*`` modules; tag → category and element →
-row conversion live in :mod:`seed.osm_tags`.
+Holds the endpoints, retry/failover, query templates and the reverse geocoder.
 """
 
 from __future__ import annotations
@@ -23,12 +16,7 @@ from typing import Any
 
 import httpx
 
-# Constants
-
-# Grodno region bbox in the public (W, S, E, N) order — the same box as
-# agent/constants.py GRODNO_BBOX = {south: 52.75, west: 23.35, north: 54.80,
-# east: 27.00}. build_overpass_query() maps it into the query.
-DEFAULT_BBOX: tuple[float, float, float, float] = (23.35, 52.75, 27.00, 54.80)  # W S E N
+DEFAULT_BBOX: tuple[float, float, float, float] = (23.35, 52.75, 27.00, 54.80)
 
 CACHE_DIR = Path(__file__).resolve().parent.parent / ".cache" / "nominatim"
 
@@ -38,17 +26,8 @@ OVERPASS_ENDPOINTS = [
     "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
 ]
 
-# Client-side timeout for an Overpass POST. Must be >= the query's own
-# [timeout:] (measured: 172 s for the full voblast bbox against
-# overpass-api.de). kumi.systems / maps.mail.ru were unreachable (25 s+
-# connect timeouts) when this was written — the retry loop marks such
-# endpoints dead for the rest of the run instead of paying that cost again.
 OVERPASS_HTTP_TIMEOUT_S = 360.0
 
-# {south},{west},{north},{east} is the bbox order Overpass QL requires
-# ("southern-most latitude, western-most longitude, northern-most latitude,
-# eastern-most longitude" — Overpass QL, Global bounding box). Only
-# build_overpass_query() fills them in, from a (W, S, E, N) tuple.
 SIGHT_QUERY = """
 [out:json][timeout:300];
 (
@@ -64,8 +43,6 @@ SIGHT_QUERY = """
 out center;
 """
 
-# Everyday services: coffee/food, toilets, accommodation and public-transport
-# boarding points (three Overpass spellings for one thing to a tourist).
 SERVICE_QUERY = """
 [out:json][timeout:300];
 (
@@ -87,7 +64,6 @@ SERVICE_QUERY = """
 out center;
 """
 
-# District centroids (raion centres) as fallback.
 RAION_CENTRES: dict[str, tuple[float, float]] = {
     "Гродненский": (53.6688, 23.8380),
     "Берестовицкий": (53.4420, 24.0353),
@@ -105,13 +81,8 @@ RAION_CENTRES: dict[str, tuple[float, float]] = {
     "Дятловский": (53.4522, 25.4618),
     "Зельвенский": (53.1480, 24.8190),
     "Вороновский": (54.2560, 25.3032),
-    # Slonim was missing, so points around it were labelled with a neighbour's
-    # district — the column the region CSV must stay away from anyway (its OSM
-    # values were proven unreliable, see tasks.md W4).
     "Слонимский": (53.0936, 25.3203),
 }
-
-# Helpers
 
 
 def haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -174,10 +145,10 @@ def nominatim_reverse(
 
     cache[key] = district
     tile_cache[str(key)] = district
-    with contextlib.suppress(Exception):  # cache write is best-effort, never fatal
+    with contextlib.suppress(Exception):
         tile_path.write_text(json.dumps(tile_cache, ensure_ascii=False), encoding="utf-8")
 
-    time.sleep(1.1)  # Nominatim rate limit: 1 req/s
+    time.sleep(1.1)
     return district
 
 
@@ -189,12 +160,7 @@ def resolve_district(
     use_nominatim: bool = True,
 ) -> str:
     """District: OSM addr:district → Nominatim reverse → nearest raion centre.
-
-    Nominatim costs 1.1 s per distinct coordinate (their usage policy), which is
-    ~40 min for a full-voblast run. Callers doing a bulk ingest pass
-    use_nominatim=False and get the nearest raion centre instead — the district
-    is cosmetic for routing, and the value is normalised to the
-    "<Name> район" form the curated rows already use.
+    ``use_nominatim=False`` skips Nominatim; the value is cosmetic for routing.
     """
     if cache is None:
         cache = {}
@@ -214,17 +180,7 @@ def resolve_district(
 
 def build_overpass_query(template: str, bbox: tuple[float, float, float, float]) -> str:
     """Render an Overpass `template` for `bbox`, which is (west, south, east, north).
-
-    The public order is (W, S, E, N) — the osmium order, and the one DEFAULT_BBOX,
-    --bbox and every doc example use. Overpass QL wants the four values as
-    (south, west, north, east) inside the `(...)` filter, so the remap happens
-    here, once, and nowhere else.
-
-    The bound check is what keeps the swap loud. Reading the tuple as
-    (S, W, N, E) while everything else said (W, S, E, N) never raised: the
-    voblast box turned into a perfectly valid-looking box over the Indian Ocean
-    (S=23.35, W=52.75, N=27.00, E=54.80) and the ingest silently wrote an empty
-    CSV. A malformed box now fails at query-build time.
+    Remaps to Overpass QL's (south, west, north, east); a malformed box raises.
     """
     west, south, east, north = bbox
     if not west < east:
@@ -242,30 +198,16 @@ def fetch_overpass(
     mock: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]] | None:
     """Query Overpass with retry+backoff, or return mock data. None on total failure.
-
-    `query` is the already-rendered Overpass QL (see build_overpass_query). With
-    `dry_run`, no network is touched: the caller supplies the fixture via `mock`
-    (an Overpass response dict with an “elements” list) and its elements are
-    returned, honouring `limit`.
-
-    Endpoints are tried in list order; a dead endpoint (connect/read/write
-    timeout or remote-protocol error) is dropped for the rest of the run, but an
-    HTTP status error such as a 504 stays in rotation, so the next endpoint in
-    the same attempt gets its turn. Every endpoint failing across all attempts
-    returns None.
+    Endpoints rotate; a timed-out endpoint is dropped, an HTTP error stays in rotation.
     """
     if dry_run:
         elements: list[dict[str, Any]] = (mock or {}).get("elements", [])
         return elements[:limit] if limit else elements
 
-    # A full-voblast run is heavy: measured 172 s / 6869 elements against
-    # overpass-api.de. A 120 s client timeout cuts it off mid-flight and the
-    # retry loop then burns hours on the endpoints that are down, so the
-    # request timeouts here must exceed the query's own [timeout:] budget.
     request_timeout = httpx.Timeout(OVERPASS_HTTP_TIMEOUT_S, connect=30.0)
 
     failed_endpoints: list[str] = []
-    dead: set[str] = set()  # endpoints that timed out / refused to connect
+    dead: set[str] = set()
     for attempt in range(4):
         for endpoint in OVERPASS_ENDPOINTS:
             if endpoint in dead:
@@ -285,13 +227,13 @@ def fetch_overpass(
                 sys.stderr.write(msg + "\n")
                 if isinstance(exc, (httpx.ConnectError, httpx.ReadTimeout, httpx.WriteTimeout,
                                     httpx.ConnectTimeout, httpx.RemoteProtocolError)):
-                    dead.add(endpoint)  # don't waste another timeout on it this run
-                if attempt == 3 and endpoint not in dead:  # last attempt: record for summary
+                    dead.add(endpoint)
+                if attempt == 3 and endpoint not in dead:
                     failed_endpoints.append(f"{endpoint} ({exc})")
 
         if all(ep in dead for ep in OVERPASS_ENDPOINTS):
             break
-        if attempt < 3:  # no sleep after the final attempt
+        if attempt < 3:
             wait = (2 ** attempt) * 5
             sys.stderr.write(f"[overpass] retry in {wait}s …\n")
             time.sleep(wait)
@@ -304,9 +246,7 @@ def fetch_overpass(
 
 def write_pipe_csv(rows: list[dict[str, Any]], path: Path, columns: Sequence[str]) -> None:
     """Write rows in pipe-separated CSV format, byte-stable across runs.
-
-    The header is written as a ``#`` comment so the file round-trips through the
-    same readers as the other versioned datasets (``seed.datasets.read_pipe_csv``).
+    The header is written as a ``#`` comment, matching the other dataset readers.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     fieldnames = list(columns)

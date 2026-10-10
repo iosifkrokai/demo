@@ -1,18 +1,6 @@
 """The interpretation layer's contracts: deterministic intent, agent hand-off.
 
-This file pins step 1 (intent / requirements) with NO network and NO model:
-
-  * `extract_intent` is the deterministic, map-driven reader — categories_pos is
-    filled from the SAME keyword→category map retrieval uses
-    (resolve.CATEGORY_SYNONYMS, inverted), «замкам» → замок, «костёлам» →
-    костёл, across singular/plural/case forms.  It never calls a model.
-  * `build_requirements` asks the tool-using agent first; when the agent answers
-    the contract comes from it, and when it does not (no key / failure) the
-    deterministic reading answers — with every explicit UI filter kept.
-  * `intent_from_requirements` turns a contract into the IntentResult resolve()
-    consumes, so the plan is driven by the reading that produced it.
-  * time_budget_minutes survives only when the query states a duration;
-    named-place extraction is unchanged (DB-driven, no LLM).
+Pins step 1 (intent / requirements) with no network and no model.
 """
 
 from __future__ import annotations
@@ -42,13 +30,10 @@ from domain.requirements import PartyComposition, Requirement, TripRequirements
 QUERY = "Хочу погулять по замкам Гродно"
 
 
-# Fixtures: the key is the switch between degraded and full mode
-
 @pytest.fixture
 def no_key(monkeypatch):
-    """A process without an OpenRouter key: the env var AND the import-time
-    settings snapshot are cleared — otherwise a key from the developer's
-    shell leaks in and the test would exercise the wrong branch."""
+    """A process without an OpenRouter key: the env var AND the settings snapshot are
+    cleared — otherwise a key from the developer's shell leaks into the test."""
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     monkeypatch.setattr(settings, "OPENROUTER_API_KEY", None, raising=False)
     assert openrouter_api_key() is None
@@ -78,8 +63,6 @@ def _agent_contract(*, source: str = "llm") -> TripRequirements:
     )
 
 
-# Categories: the shared map, read off the query text
-
 class TestFallbackCategories:
 
     def test_the_live_query_extracts_its_category(self, no_key):
@@ -91,7 +74,6 @@ class TestFallbackCategories:
     @pytest.mark.parametrize(
         "query,expected",
         [
-            # замок — the live form plus its declension and synonyms
             ("погулять по замкам Гродно", "замок"),
             ("замки Гродно", "замок"),
             ("старый замок", "замок"),
@@ -99,23 +81,18 @@ class TestFallbackCategories:
             ("замку не хватает ухода", "замок"),
             ("крепость Гродно", "замок"),
             ("крепости в области", "замок"),
-            # костёл — incl. the no-ё spelling queries/OSM names use
             ("костёлы Гродно", "костёл"),
             ("костёлам Новогрудка", "костёл"),
             ("костел без подъезда", "костёл"),
-            # храм and its synonyms
             ("храмы города", "храм"),
             ("храма на горе", "храм"),
             ("кирхи Гродно", "храм"),
             ("синагогу посмотреть", "храм"),
             ("каплицы старого города", "храм"),
-            # монастырь
             ("монастыри области", "монастырь"),
             ("монастыря не видно", "монастырь"),
-            # музей
             ("музеи Гродно", "музей"),
             ("музея хватит на час", "музей"),
-            # everyday stops
             ("где кафе рядом", "кафе"),
             ("кофейня в центре", "кафе"),
             ("кофейне не открыться", "кафе"),
@@ -124,7 +101,6 @@ class TestFallbackCategories:
             ("гостиница у вокзала", "гостиница"),
             ("хостела дешевле", "гостиница"),
             ("отеля с видом", "гостиница"),
-            # the rest of the heritage taxonomy
             ("дворцы Лиды", "дворец"),
             ("усадьбы Несвижа", "усадьба"),
             ("парки и скверы Гродно", "парк"),
@@ -147,16 +123,15 @@ class TestFallbackCategories:
         assert {"костёл", "замок"} <= set(d.categories_pos)
 
     def test_no_llm_path_never_raises_on_a_themed_query(self, no_key):
-        """Whatever the themed query says, the deterministic reader answers —
-        and with a category, not with whatever bare keyword ILIKE happens to
-        hit."""
+        """Whatever the themed query says, the deterministic reader answers — with a
+        category, not with whatever bare keyword ILIKE happens to hit."""
         for query in (
             QUERY,
             "костёлы и замки Новогрудка",
             "музеи и кафе Гродно",
             "руины крепостей по области",
         ):
-            res = extract_intent(query)          # must not raise
+            res = extract_intent(query)
             assert res.source == "regex"
             assert res.decision.categories_pos, query
 
@@ -172,8 +147,6 @@ class TestFallbackCategories:
         assert res.confidence == 0.0
         assert res.raw_response is None
         assert res.decision.intent_type in constants.INTENT_TYPES
-
-    # The map is reused, never duplicated
 
     def test_inverted_index_is_the_shared_map_turned_around(self):
         """The fallback's lookup must be exactly resolve.CATEGORY_SYNONYMS,
@@ -207,20 +180,17 @@ class TestFallbackCategories:
         query = "Гродно семья чтобы туалеты по пути были"
         d = extract_intent(query).decision
         assert "туалет" in d.categories_pos, "туалет category should be extracted"
-        # Sightseeing categories must not be forced exclusive (not in categories_neg)
         sightseeing = {"замок", "костёл", "церковь", "монастырь", "дворец", "усадьба",
                        "парк", "музей", "памятник", "храм", "архитектура", "инфраструктура", "кладбище"}
         assert not (sightseeing & set(d.categories_neg)), "sightseeing categories must not be exclusive"
 
-
-# Time budget: only what the query itself states
 
 class TestFallbackTimeBudget:
 
     @pytest.mark.parametrize(
         "query,minutes",
         [
-            ("погулять за 3 часа", 180),        # the phrase the task names
+            ("погулять за 3 часа", 180),
             ("погулять 2 часа по костёлам", 120),
             ("на 90 минут по замкам", 90),
             ("на полдня", 240),
@@ -233,9 +203,9 @@ class TestFallbackTimeBudget:
     @pytest.mark.parametrize(
         "query",
         [
-            QUERY,                          # no phrase → no budget
+            QUERY,
             "просто погулять",
-            "хочу в воскресенье",           # a bare "день" is not a budget
+            "хочу в воскресенье",
         ],
     )
     def test_no_phrase_no_budget(self, no_key, query):
@@ -247,20 +217,16 @@ class TestFallbackTimeBudget:
         assert d.time_budget_minutes == 180
 
 
-# Named places: DB-driven, unchanged
-
 class TestFallbackNamedPlaces:
 
     def test_named_places_still_extracted_without_an_llm(self, no_key):
         d = fallback_intent(QUERY).decision
         assert "Гродно" in d.named_places
-        # Region names are still filtered out (same regex as the Jev path).
         assert fallback_intent("достопримечательности Гродненской области").decision.named_places == []
 
     def test_discovery_query_pins_no_categories_named_place_town_scope_no_budget(self, no_key):
-        """A pure discovery query like «достопримечательности Гродно» has no
-        category keywords, extracts the named place, defaults to town scope,
-        discovery intent, and invents no time budget."""
+        """A pure discovery query like «достопримечательности Гродно» has no category
+        keywords, extracts the named place, defaults to town scope, invents no budget."""
         d = fallback_intent("достопримечательности Гродно").decision
         assert d.categories_pos == []
         assert "Гродно" in d.named_places
@@ -268,8 +234,6 @@ class TestFallbackNamedPlaces:
         assert d.intent_type == "discovery"
         assert d.time_budget_minutes is None
 
-
-# English in the degraded path: the shared map is RU *and* EN
 
 class TestFallbackEnglish:
 
@@ -294,8 +258,6 @@ class TestFallbackEnglish:
             assert _SURFACE_FORMS[form] == cat
         assert set(constants.CATEGORIES) <= set(_SURFACE_FORMS.values())
 
-
-# The requirements entry point in the degraded path (spec 002 §4.1/§4.2)
 
 class TestDegradedRequirements:
 
@@ -339,8 +301,6 @@ class TestDegradedRequirements:
         assert tr.source == "fallback"
 
 
-# With the agent answering: its contract drives, the map does not
-
 class TestAgentContractPath:
 
     def test_agent_contract_is_used_when_the_agent_answers(self, with_key, monkeypatch):
@@ -366,9 +326,8 @@ class TestAgentContractPath:
         assert "Мир" in intent.decision.named_places
 
     def test_extract_intent_is_always_deterministic(self, with_key):
-        """`extract_intent` never calls a model — source is always "regex",
-        whether or not a key is present.  Free-text meaning is the agent's job,
-        reached only through build_requirements."""
+        """`extract_intent` never calls a model — source is always "regex", key or not.
+        Free-text meaning is the agent's job, reached through build_requirements."""
         assert extract_intent(QUERY).source == "regex"
 
 

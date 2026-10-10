@@ -1,7 +1,4 @@
-/**
- * The saved-routes and privacy affordances of the client entity.
- * Wire these into the sidebar with `useClientRoutes()` / `useClientPreferences()`.
- */
+/** The saved-routes and privacy affordances of the client entity. */
 
 export { SavedRoutesList } from './saved-routes-list';
 export type { SavedRoutesListProps } from './saved-routes-list';

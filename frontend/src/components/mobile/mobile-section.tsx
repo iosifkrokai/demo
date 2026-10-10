@@ -16,20 +16,7 @@ export interface MobileSectionProps {
   children: ReactNode;
 }
 
-/**
- * One filter group in the plan panel: a titled block on desktop, a collapsed row
- * on a phone.
- *
- * Measured at 390x844 before this: opening «Больше фильтров» dropped the tourist
- * into one long wall — participants, four amenity pairs, interests, avoid, result
- * type — and the only way to reach the field again was a long scroll inside a
- * 41px window. Folding each secondary group to its own row keeps the open list
- * short and keeps what is chosen visible in the row itself.
- *
- * Desktop is not conditional on JS: the plain title and the open content are the
- * default, and the phone-only variants hide them. A state flip can therefore
- * never change the desktop panel.
- */
+/** One filter group in the plan panel: a titled block on desktop, a collapsed row on a phone. */
 export const MobileSection = ({
   id,
   title,
@@ -42,10 +29,6 @@ export const MobileSection = ({
 
   return (
     <div className="flex flex-col gap-1.5">
-      {/* Phone: a 36px row that says what is inside. Desktop keeps the group's
-          own heading above the open body — the words the panel has always
-          shown. (The inner contents carry no heading of their own; the row and
-          this span are the only two places the group is named.) */}
       <span
         data-testid={`section-title-${id}`}
         className="text-meta text-muted-foreground max-md:hidden"
@@ -79,8 +62,6 @@ export const MobileSection = ({
         />
       </button>
 
-      {/* Closed on a phone: hidden. Always open on desktop — the desktop panel
-          must not depend on a JS flag that only a phone can flip. */}
       <div
         id={panelId}
         data-testid={`section-body-${id}`}

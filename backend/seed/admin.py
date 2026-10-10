@@ -1,14 +1,5 @@
 """Create or promote the first administrator.
-
-There is no «first registered user becomes admin» backdoor: the only ways to gain
-the ``admin`` role are this command and another admin via
-``PATCH /admin/users/{id}``.
-
-    python -m seed admin --email boss@example.com            # password prompt
-    GRODNO_ADMIN_PASSWORD=... python -m seed admin --email boss@example.com
-
-Idempotent: if the email already has an account, its role is raised to ``admin``
-(the password is left untouched); otherwise a new admin is created.
+Idempotent: an existing account is raised to ``admin`` (password untouched).
 """
 
 from __future__ import annotations
@@ -58,7 +49,6 @@ def create_admin(
                 role="admin",
             )
         except EmailTaken:
-            # Raced with another process between the lookup and the insert.
             print(f"email taken: {normalized}", file=sys.stderr)
             return 1
         print(f"admin created: {row['email']} ({row['id']})")

@@ -509,7 +509,6 @@ describe('SettingsPanel', () => {
 
     it('should display current bicycle_type value from settings', () => {
       renderWithQueryClient(<SettingsPanel />);
-      // The mock has bicycle_type: 'Hybrid'
       expect(screen.getByText('Hybrid')).toBeInTheDocument();
     });
 
@@ -523,7 +522,6 @@ describe('SettingsPanel', () => {
     it('should display current pedestrian type value from settings', () => {
       mockUseSearch.mockReturnValue({ profile: 'pedestrian' });
       renderWithQueryClient(<SettingsPanel />);
-      // The mock has type: 'Foot'
       expect(screen.getByText('Foot')).toBeInTheDocument();
     });
 

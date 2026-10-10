@@ -192,7 +192,6 @@ describe('decideVoice', () => {
       muted: false,
       spoken: spokenNone,
     });
-    // The arrival band keeps the destination name; the panel adds no distance.
     expect(result).toMatchObject({
       type: 'announce',
       threshold: 0,
@@ -245,7 +244,6 @@ describe('decideVoice', () => {
   });
 
   it('announces at 80 even when the distance is larger', () => {
-    // Distance is still within the 80 m band
     const result = decideVoice({
       maneuver: maneuver('1', 'Поверните'),
       distanceM: 70,
@@ -258,9 +256,6 @@ describe('decideVoice', () => {
   });
 
   it('announces the smallest threshold the distance satisfies', () => {
-    // Distance 15 m satisfies thresholds 0, 10, 30, and 80.
-    // With ascending order [0, 10, 30, 80], 0 is checked first — distanceM=15 satisfies 0 (15 ≤ 0 is false),
-    // then 10 (15 ≤ 10 is false), then 30 (15 ≤ 30 is true) — so 30 fires.
     const result = decideVoice({
       maneuver: maneuver('1', 'Поверните'),
       distanceM: 15,

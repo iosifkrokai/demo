@@ -1,19 +1,6 @@
-"""Password hashing and session tokens (spec 005).
+"""Password hashing and session tokens.
 
-Two secrets are handled here, and neither may be recoverable from the database:
-
-* **Passwords** — hashed with :func:`hashlib.scrypt` from the standard library
-  (no new runtime dependency, no build step). The stored string is
-  self-describing: ``scrypt$n$r$p$<salt_b64>$<hash_b64>``. Because the algorithm
-  and its parameters travel with the hash, the KDF can be changed later (argon2,
-  higher N) and old hashes still verify — the prefix is what tells them apart.
-
-* **Session tokens** — minted with :func:`secrets.token_urlsafe` and handed to the
-  browser once, inside an HttpOnly cookie. Only their SHA-256 digest is stored,
-  so a leaked ``user_sessions`` table cannot be replayed as a login.
-
-Verification is constant-time (:func:`hmac.compare_digest`) and never raises on a
-malformed stored value: an unreadable hash is simply «does not match».
+Neither secret is recoverable from the database.
 """
 
 from __future__ import annotations
@@ -23,9 +10,6 @@ import hashlib
 import hmac
 import secrets
 
-# scrypt cost. N=2^15 with r=8 needs 32 MiB per hash; maxmem is raised above the
-# OpenSSL default so it is not refused. These are the defaults new hashes carry —
-# changing them only affects *new* passwords, since each hash records its own.
 SCRYPT_N = 2**15
 SCRYPT_R = 8
 SCRYPT_P = 1
@@ -35,8 +19,6 @@ SCRYPT_MAXMEM = 64 * 1024 * 1024
 
 _ALGO = "scrypt"
 
-# 30 days. Long enough that a tourist is not logged out mid-trip, short enough
-# that a stolen cookie does not live forever.
 SESSION_TTL_S = 30 * 24 * 60 * 60
 
 
@@ -70,9 +52,7 @@ def hash_password(password: str) -> str:
 def verify_password(password: str, stored: str | None) -> bool:
     """Constant-time check of ``password`` against a stored hash.
 
-    Returns ``False`` for any stored value that is missing, malformed, or uses an
-    unknown algorithm — a broken row must read as «wrong password», never as an
-    exception that leaks the row's shape or crashes the login endpoint.
+    Returns ``False`` for any missing, malformed, or unknown-algorithm stored value.
     """
     if not stored:
         return False

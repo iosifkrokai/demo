@@ -1,8 +1,4 @@
-"""Services ingest: tag mapping, name fallbacks, geofence, 150 m de-dup, Overpass failover.
-
-No network and no DB — pure helpers from seed.osm_tags + seed.overpass; the
-fetch_overpass tests stub httpx.post and time.sleep.
-"""
+"""Services ingest: tag mapping, name fallbacks, geofence, 150 m de-dup, Overpass failover."""
 
 from __future__ import annotations
 
@@ -47,7 +43,6 @@ def test_name_prefers_name_then_name_ru():
 def test_unnamed_toilet_gets_fallback_name():
     assert service_name({"amenity": "toilets"}, "туалет") == "Туалет"
     assert service_name({"addr:street": "ул. Советская"}, "туалет") == "Туалет (ул. Советская)"
-    # Everything else without a name is dropped.
     assert service_name({"amenity": "cafe"}, "кафе") is None
 
 
@@ -67,12 +62,7 @@ def test_osm_element_to_row_accepts_grodno_point():
 
 
 def test_osm_element_to_row_accepts_way_with_center_in_grodno():
-    """A way element with `center` coords inside Grodno must be accepted.
-
-    The center block replaces lat/lon for non-node elements; the
-    source_url must follow the ``osm_poi:way/<id>`` pattern, and
-    ``tourism=hotel`` must map to the hotel category.
-    """
+    """A way element with `center` coords inside Grodno must be accepted."""
     el = {"type": "way", "id": 12345,
           "center": {"lat": 53.6772, "lon": 23.8232},
           "tags": {"name": "Отель Гродно", "tourism": "hotel", "addr:city": "Гродно"}}
@@ -81,7 +71,6 @@ def test_osm_element_to_row_accepts_way_with_center_in_grodno():
     assert row["category"] == "гостиница"
     assert row["source_url"] == "osm_poi:way/12345"
 
-    # Same way, same tags — but centered in Vilnius → outside the project area.
     vilnius_el = {"type": "way", "id": 12345,
                   "center": {"lat": 54.6872, "lon": 25.2797},
                   "tags": {"name": "Отель Гродно", "tourism": "hotel", "addr:city": "Гродно"}}
@@ -90,15 +79,13 @@ def test_osm_element_to_row_accepts_way_with_center_in_grodno():
 
 def test_is_name_dup_within_150m():
     row = {"name": "Кафе X", "lat": 53.6772, "lon": 23.8232}
-    same_name_near = [{"name": "Кафе X", "lat": 53.6782, "lon": 23.8232}]  # ~111 m
+    same_name_near = [{"name": "Кафе X", "lat": 53.6782, "lon": 23.8232}]
     other_name_near = [{"name": "Кафе Y", "lat": 53.6782, "lon": 23.8232}]
-    same_name_far = [{"name": "Кафе X", "lat": 53.7000, "lon": 23.8232}]  # ~2.5 km
+    same_name_far = [{"name": "Кафе X", "lat": 53.7000, "lon": 23.8232}]
     assert is_name_dup(row, same_name_near) is True
     assert is_name_dup(row, other_name_near) is False
     assert is_name_dup(row, same_name_far) is False
 
-
-# Overpass retry/failover
 
 def _http_status_error(endpoint: str, status: int) -> httpx.HTTPStatusError:
     """A real status error — what httpx's raise_for_status() raises for a 5xx."""
@@ -113,13 +100,8 @@ def _service_query() -> str:
 
 
 def test_fetch_overpass_504_on_one_endpoint_fails_over_to_the_next(monkeypatch):
-    """A 504 from one endpoint must not stop a later endpoint's elements coming back.
-
-    HTTPStatusError is not in fetch_overpass's dead-endpoint list, so the 504
-    endpoint stays in rotation and the next endpoint in the same attempt gets
-    its turn. httpx.post and time.sleep are stubbed: no network, no backoff wait.
-    """
-    assert len(OVERPASS_ENDPOINTS) >= 2  # the scenario needs a "later" endpoint
+    """A 504 from one endpoint must not stop a later endpoint's elements coming back."""
+    assert len(OVERPASS_ENDPOINTS) >= 2
     failing, serving = OVERPASS_ENDPOINTS[0], OVERPASS_ENDPOINTS[1]
 
     valid_elements = [
@@ -153,18 +135,11 @@ def test_fetch_overpass_504_on_one_endpoint_fails_over_to_the_next(monkeypatch):
     elements = fetch_overpass(_service_query())
 
     assert elements == valid_elements
-    # The 504 endpoint was tried first, then the very next endpoint served the
-    # elements — the failover happened inside the first attempt, no sleep needed.
     assert posted == [failing, serving]
 
 
 def test_fetch_overpass_all_endpoints_504_returns_none(monkeypatch):
-    """When every endpoint returns 504, fetch_overpass must return None.
-
-    HTTPStatusError is not in the dead-endpoint list, so all endpoints stay
-    in rotation across all 4 configured attempts. httpx.post and time.sleep
-    are stubbed: no network, no backoff wait.
-    """
+    """When every endpoint returns 504, fetch_overpass must return None."""
     posted: list[str] = []
 
     def fake_post(url, **_kwargs):
@@ -177,5 +152,4 @@ def test_fetch_overpass_all_endpoints_504_returns_none(monkeypatch):
     result = fetch_overpass(_service_query())
 
     assert result is None
-    # 4 attempts × every endpoint tried each attempt (504 doesn't kill rotation)
     assert len(posted) == 4 * len(OVERPASS_ENDPOINTS)

@@ -76,7 +76,7 @@ describe('agentErrorMessage', () => {
     expect(message).toContain('404');
     expect(message).toContain('настройки');
     expect(message).not.toContain('не найдено место');
-    expect(message).toMatch(/найдено/); // only inside the «а не …» denial
+    expect(message).toMatch(/найдено/);
   });
 
   it('keeps the plain status wording for a server error', () => {

@@ -13,8 +13,6 @@ const authState = vi.hoisted(() => ({
 }));
 
 vi.mock('@tanstack/react-router', () => ({
-  // Forward the rest of the props: `Button asChild` merges `data-testid` onto
-  // the Link, and a stub that renders only `href` drops it.
   Link: ({
     to,
     children,

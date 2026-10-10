@@ -9,13 +9,7 @@ import { useDebouncedValue } from '@/hooks/use-debounced-value';
 import { useAdminUsers, useDeleteUser, usePatchUser } from '@/hooks/use-admin';
 import type { AdminUser, UserRole } from '@/api/types';
 
-/**
- * The users half of the admin panel (spec 005 §3).
- *
- * The guards live on the server (never demote/delete the last admin, never touch
- * your own role) — this panel only offers the actions and shows the reason code's
- * sentence when one is refused. It does not pre-hide a button to hide the rule.
- */
+/** The users half of the admin panel. */
 
 const fmtDate = (value: string | null): string => {
   if (!value) return '—';
@@ -36,8 +30,6 @@ interface UsersPanelProps {
 
 export function UsersPanel({ enabled, currentUserId }: UsersPanelProps) {
   const [query, setQuery] = useState('');
-  // The input stays instant; only the debounced value reaches the query key, so
-  // a burst of typing is one request rather than one per character.
   const debouncedQuery = useDebouncedValue(query);
   const users = useAdminUsers(enabled, debouncedQuery);
   const patchUser = usePatchUser();

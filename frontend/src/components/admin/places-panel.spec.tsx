@@ -28,8 +28,6 @@ const PLACES = [one(79, 'Землякам погибшим в ВОВ'), one(80, 
 
 const mutate = vi.hoisted(() => vi.fn());
 const refetch = vi.hoisted(() => vi.fn());
-// When set, `useAdminPlaces` reports failure instead of the list — so the error
-// path can be exercised without standing up a real query client.
 const errorOverride = vi.hoisted(() => ({ value: null as Error | null }));
 
 vi.mock('@/hooks/use-admin', () => ({
@@ -54,8 +52,6 @@ vi.mock('@/hooks/use-admin', () => ({
   useCreatePlace: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
-// The real map needs WebGL. This stands in for it and lets a test play the map's
-// side of the link: a pin click, and a dropped pin.
 vi.mock('@/components/place-map/place-map', () => ({
   PlaceMap: ({
     places,
@@ -167,8 +163,6 @@ describe('PlacesPanel — list and map are two windows on one page', () => {
     expect(args.patch.lon).toBe(23.7);
   });
 
-  // A failed load used to render the empty state's «ничего не найдено», which
-  // reads as «no such place» when the truth is «the request failed».
   it('shows an error with a retry instead of «ничего не найдено»', () => {
     errorOverride.value = new Error('offline');
     render(<PlacesPanel enabled />);

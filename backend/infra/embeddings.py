@@ -1,17 +1,6 @@
 """Local CPU embeddings — the ONE embedder for the agent and the seed.
 
-Retrieval used to call OpenRouter in five places (four seed scripts plus
-``planner.pipeline._openrouter_embed``). They are all replaced by this module:
-``intfloat/multilingual-e5-small`` (384-d) runs locally through fastembed/ONNX on
-the CPU, so embeddings need no API key and the vector signal never degrades.
-
-E5 models are trained with role prefixes: documents must be embedded with
-``"passage: "`` and queries with ``"query: "``. There is no public entry point
-that skips the prefixing — :func:`embed_documents` and :func:`embed_query` are
-the only ways in, so a caller cannot swap the two conventions by accident.
-
-Tests never load the real model (that would download hundreds of MB): they
-replace ``_state.model`` with a fake exposing ``.embed(list) -> iterable``.
+E5 role prefixes: documents use ``"passage: "`` and queries ``"query: "``.
 """
 
 from __future__ import annotations
@@ -25,11 +14,8 @@ EMBED_DIM = 384
 QUERY_PREFIX = "query: "
 PASSAGE_PREFIX = "passage: "
 
-# The ONNX file baked into the image. fp32 (onnx/model.onnx, ~470 MB) is the most
-# portable; the build may point at onnx/model_O4.onnx or the quantized variant.
 MODEL_FILE = os.environ.get("FASTEMBED_MODEL_FILE", "onnx/model.onnx")
 
-# How many rows to embed per DB round-trip in embed_missing.
 DB_BATCH = 64
 
 
@@ -37,10 +23,6 @@ class _State:
     """Module state holder (keeps module-level names patchable, no `global`)."""
 
     def __init__(self) -> None:
-        # A fastembed TextEmbedding in production; tests swap in a fake exposing
-        # `.embed(list)`. Typed `Any` rather than a Protocol because fastembed's
-        # `embed` signature (batch_size/parallel/**kwargs) does not structurally
-        # match a narrow protocol.
         self.model: Any = None
         self.registered = False
         self.available: bool | None = None
@@ -81,8 +63,7 @@ def _model_instance():
 def _embed_prefixed(prefixed: list[str]) -> list[list[float]]:
     """Embed already-prefixed texts. Returns plain float lists.
 
-    This is the single seam every caller (and every test) goes through; the
-    float coercion keeps pgvector honest (an int array silently mis-casts).
+    The float coercion keeps pgvector honest (an int array silently mis-casts).
     """
     if not prefixed:
         return []
@@ -119,8 +100,7 @@ def is_available() -> bool:
 def embed_missing(conn, *, batch: int = DB_BATCH) -> int:
     """Embed every row with ``embedding IS NULL``; returns how many were written.
 
-    The seed calls this after the upsert. Rows are keyed by id, so a re-run
-    embeds nothing new.
+    Rows are keyed by id, so a re-run embeds nothing new.
     """
     with conn.cursor() as cur:
         cur.execute("SELECT id, name, blurb FROM places WHERE embedding IS NULL ORDER BY id")

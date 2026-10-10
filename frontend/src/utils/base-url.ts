@@ -2,10 +2,6 @@ import { z } from 'zod';
 
 const BASE_URL_STORAGE_KEY = 'valhalla_base_url';
 
-// Same-origin by default (the webapp's nginx proxies /route, /status, … to the
-// Valhalla container), so the UI keeps working when it is opened through a
-// port-forwarded URL (Codespaces, tunnels). VITE_VALHALLA_URL overrides it when
-// a separate Valhalla host is used; the settings field writes to localStorage.
 const DEFAULT_BASE_URL =
   import.meta.env.VITE_VALHALLA_URL ||
   (typeof window !== 'undefined'

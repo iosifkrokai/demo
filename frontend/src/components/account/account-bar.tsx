@@ -15,21 +15,13 @@ import { appPath } from '@/utils/app-path';
 const menuLink =
   'flex items-center gap-2 rounded-xl px-2.5 py-2 text-meta transition-colors hover:bg-muted';
 
-/**
- * The account control over the map (spec 005 §5).
- *
- * Fixed top-right, over both the desktop column and the mobile sheet, so there is
- * exactly one way in: «Войти» when anonymous, and a small menu — «Мои посещённые»,
- * «Админка» (only for an admin) and «Выйти» — when signed in.
- */
+/** The account control over the map. */
 export function AccountBar() {
   const { user, authenticated, isAdmin, isLoading } = useAuth();
   const logout = useLogout();
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Dismissal beyond the toggle itself: Escape and a click/tap anywhere else.
-  // Without these the menu only closed by pressing the same button again.
   useEffect(() => {
     if (!open) return;
     const onKeyDown = (event: KeyboardEvent) => {
@@ -46,8 +38,6 @@ export function AccountBar() {
     };
   }, [open]);
 
-  // While the session resolves, keep the spot occupied with a spinner instead
-  // of nothing: the bar used to pop in after the probe and shift the corner.
   if (isLoading) {
     return (
       <div
@@ -131,8 +121,6 @@ export function AccountBar() {
                 data-testid="account-logout"
                 onClick={() => {
                   setOpen(false);
-                  // Signing out must leave the gated app: without this the page
-                  // the guard would refuse on the next navigation stays on screen.
                   logout.mutate(undefined, {
                     onSettled: () => window.location.assign(appPath('/login')),
                   });

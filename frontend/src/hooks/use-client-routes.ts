@@ -1,23 +1,4 @@
-/**
- * Saved routes for the anonymous client (spec 003 §4).
- *
- * Three rules from the spec drive this hook:
- *
- *  - **Saving is the tourist's action, never a side effect.** Nothing here
- *    saves on its own; `saveRoute` runs only when a button calls it. Silently
- *    collecting routes makes the list useless.
- *  - **A route that was saved is saved somewhere, and the UI is told where.**
- *    It goes to the server, and on `503 storage_unavailable` (or no network) it
- *    stays as a local copy and `saveRoute` returns `ok: false` with
- *    `storageUnavailable: true` — never a success.
- *  - **`plan` is opaque and passed through.** It is what the tourist saw when
- *    they saved; restoring re-applies exactly that, it does not rebuild a route.
- *
- * The list deliberately exposes only the light summary fields the list endpoint
- * promises — never a plan, never geometry. A local-only copy has no
- * `stop_count`/`distance_m`/`duration_min` to show, and says `null` rather than
- * inventing a number.
- */
+/** Saved routes for the anonymous client. */
 
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -61,7 +42,6 @@ export const loadLocalRoutes = (): LocalRouteCopy[] => {
         typeof (row as { id?: unknown }).id === 'string'
     );
   } catch {
-    // unreadable storage — start with no local copies
     return [];
   }
 };
@@ -69,23 +49,17 @@ export const loadLocalRoutes = (): LocalRouteCopy[] => {
 export const saveLocalRoutes = (routes: LocalRouteCopy[]): void => {
   try {
     if (routes.length === 0) {
-      // No copies left: the key goes, so «удалить мои данные» really leaves
-      // nothing behind in this browser.
       localStorage.removeItem(LOCAL_ROUTES_STORAGE_KEY);
       return;
     }
     localStorage.setItem(LOCAL_ROUTES_STORAGE_KEY, JSON.stringify(routes));
-  } catch {
-    // private mode / quota — the copies stay in memory for this session
-  }
+  } catch {}
 };
 
 export const clearLocalRoutes = (): void => {
   try {
     localStorage.removeItem(LOCAL_ROUTES_STORAGE_KEY);
-  } catch {
-    // storage unavailable: nothing to remove
-  }
+  } catch {}
 };
 
 /** A name the tourist can act on, keyed off the agent's machine code. */
@@ -213,8 +187,6 @@ export const useClientRoutes = (): ClientRoutesApi => {
         name: copy.name,
         query: copy.query,
         created_at: copy.created_at,
-        // The list endpoint never gave us these for a local copy, so they stay
-        // unstated instead of guessed.
         stop_count: null,
         distance_m: null,
         duration_min: null,
@@ -246,8 +218,6 @@ export const useClientRoutes = (): ClientRoutesApi => {
           visit_overrides: input.visit_overrides ?? null,
         });
 
-        // The server now owns this route: drop any local fallback for the same
-        // query so the list does not show it twice.
         setLocals(
           localRef.current.filter((copy) => copy.query !== input.query)
         );
@@ -310,8 +280,6 @@ export const useClientRoutes = (): ClientRoutesApi => {
           },
         };
       } catch (error) {
-        // The server no longer has it but this browser does: hand over the
-        // local copy rather than pretend the route is gone.
         if (
           error instanceof ClientApiError &&
           error.code === 'route_not_found' &&
@@ -362,7 +330,6 @@ export const useClientRoutes = (): ClientRoutesApi => {
 
   const deleteRoute = useCallback(
     async (id: string): Promise<RoutesActionResult> => {
-      // The local copy goes regardless: the tourist asked for it gone.
       setLocals(localRef.current.filter((copy) => copy.id !== id));
 
       const onServer = serverList.some((route) => route.id === id);
@@ -388,15 +355,12 @@ export const useClientRoutes = (): ClientRoutesApi => {
   const deleteMyData = useCallback(async (): Promise<DeleteMyDataOutcome> => {
     try {
       await deleteClient();
-      // The local copies are deleted in the same action, as the UI promises.
       setLocals([]);
       clearLocalPreferences();
       await refetch();
       setSavingUnavailable(false);
       return { ok: true, message: 'данные удалены' };
     } catch (error) {
-      // The tourist's intent is to erase their data; the local copies go even
-      // when the server cannot confirm. What stays unknown is said plainly.
       setLocals([]);
       clearLocalPreferences();
       if (isSavingUnavailable(error)) {

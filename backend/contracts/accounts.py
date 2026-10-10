@@ -1,10 +1,6 @@
-"""HTTP models for accounts, visits and the admin surface (spec 005).
+"""HTTP models for accounts, visits and the admin surface.
 
-Same wire discipline as ``clients_models``: field names and machine reason codes
-in, never Russian prose — the UI owns every human sentence. Validation that must
-produce a *coded* answer (``invalid_email``, ``weak_password``) is done by the
-endpoints with the helpers below, not by pydantic constraints, because a pydantic
-422 carries a body the client cannot read as a reason code.
+Field names and machine reason codes only; the UI owns every human sentence.
 """
 
 from __future__ import annotations
@@ -16,7 +12,6 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, model_validator
 
-# Reason codes — the machine vocabulary the API answers with
 REASON_STORAGE_UNAVAILABLE = "storage_unavailable"
 REASON_NOT_AUTHENTICATED = "not_authenticated"
 REASON_NOT_ADMIN = "not_admin"
@@ -32,7 +27,6 @@ REASON_SELF_ROLE = "self_role"
 REASON_SELF_DELETE = "self_delete"
 REASON_INVALID_REQUEST = "invalid_request"
 
-#: Cookie the session token travels in; HttpOnly, so no script ever reads it.
 SESSION_COOKIE = "grodno_session"
 
 ROLE_USER = "user"
@@ -44,9 +38,6 @@ PASSWORD_MAX_LENGTH = 200
 DISPLAY_NAME_MAX = 120
 EMAIL_MAX = 254
 
-# Deliberately permissive: an address is a local part, an «@», a dotted domain,
-# no spaces. Anything stricter rejects addresses that work and accepts none that
-# do not — the real check is whether the account ever logs in.
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
@@ -68,8 +59,6 @@ def password_problem(raw: str | None) -> str | None:
         return REASON_WEAK_PASSWORD
     return None
 
-
-# Users
 
 class RegisterIn(BaseModel):
     """POST /auth/register body."""
@@ -123,8 +112,6 @@ class AdminUserPatch(BaseModel):
     role: RoleLiteral | None = None
     display_name: str | None = Field(default=None, max_length=DISPLAY_NAME_MAX)
 
-
-# Places (shared shape with the catalogue — see agent/places.place_payload)
 
 class PhotoOut(BaseModel):
     url: str
@@ -200,9 +187,7 @@ class AdminPlacePatch(BaseModel):
     def _coordinates_are_never_nulled(self) -> AdminPlacePatch:
         """A null `lat`/`lon` would write NULL into a NOT NULL column (a 500).
 
-        The handler updates only the keys present in the body, so *omitting* a
-        coordinate is how a client says «leave it where it is». An explicit null
-        is a client bug and must fail as a 422, not as a database error.
+        Omitting a coordinate means leave it unchanged; an explicit null is a 422.
         """
         for name in ("lat", "lon"):
             if name in self.model_fields_set and getattr(self, name) is None:
@@ -211,8 +196,6 @@ class AdminPlacePatch(BaseModel):
                 )
         return self
 
-
-# Visits
 
 class VisitedItem(PlaceItem):
     """A visited place: the whole place payload plus *when* it was marked."""
@@ -235,8 +218,6 @@ class VisitedBulkOut(BaseModel):
     marked: list[int]
     count: int
 
-
-# Dashboard
 
 class StatsOut(BaseModel):
     """GET /admin/stats — the four numbers the admin header shows."""

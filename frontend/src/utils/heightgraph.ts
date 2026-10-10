@@ -1,6 +1,6 @@
-type Coordinate = [number, number]; // [latitude, longitude]
-type RangeHeightPoint = [number, number]; // [distance, elevation]
-type LineStringCoordinate = [number, number, number, number]; // [longitude, latitude, elevation, distance]
+type Coordinate = [number, number];
+type RangeHeightPoint = [number, number];
+type LineStringCoordinate = [number, number, number, number];
 type HeightClass = -5 | -4 | -3 | -2 | -1 | 0 | 1 | 2 | 3 | 4 | 5;
 
 interface HeightGraphFeature {
@@ -97,14 +97,7 @@ export const buildHeightgraphData = (
         declineTotal += rise * -1;
       }
 
-      // IDEA FOR BUILDING GEOJSON FOR HEIGHTGRAPH:
-      // Basic idea is keepon adding points to current LineString as long as they have same heightClass
-      // If we sense that the heightClass has changed, we add current LineString as one feature in GeoJSON
-      // new heightClass new LineString
-      // height graph works by taking a geojson with collection of LineStrings and coloring them based on heightClass property
-
       if (previousHeightClass !== heightClass) {
-        // since at this point we have a change in height class this will be the last point in current LineString
         LineStringCoordinates.push([
           coordinates[index]![0],
           coordinates[index]![1],
@@ -119,14 +112,11 @@ export const buildHeightgraphData = (
             coordinates: LineStringCoordinates,
           },
           properties: {
-            // attributeType is previousHeightClass because it is the heightClass upto this point in current LineString
-            // this is closing the linestring with all the points having same heightClass
             attributeType: previousHeightClass || 0,
           },
         });
         LineStringCoordinates = [];
       }
-      // the current point is also the starting point of the new LineString
       LineStringCoordinates.push([
         coordinates[index]![0],
         coordinates[index]![1],

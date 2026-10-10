@@ -1,12 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { activeTabBeforeLoad } from './routes';
 
-/**
- * The redirect the router throws carries its navigation options, so a test can
- * read back where it was sent without a router or a query client. The real
- * `activeTabBeforeLoad` is imported — not re-declared — so this suite fails if
- * the route's tab/profile rules drift from what is asserted here.
- */
+/** The redirect the router throws carries its navigation options, so a test can read back where it was sent without a router or a query client. */
 interface ThrownRedirect {
   options: {
     to?: string;

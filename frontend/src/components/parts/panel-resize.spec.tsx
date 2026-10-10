@@ -39,19 +39,15 @@ const drag = async (dx: number) => {
 
 beforeEach(() => {
   localStorage.clear();
-  // A desktop viewport: the ceiling is a share of it, not a fixed number.
   window.innerWidth = 1440;
 });
 
 describe('ширина панели', () => {
   it('не отдаёт панели всю ширину экрана', () => {
-    // 60% of 900 is 540, which is under the hard ceiling of 720.
     expect(clampPanelWidth(700, 900)).toBe(540);
-    // On a large screen the ceiling is the hard maximum, and it never goes wider.
     expect(clampPanelWidth(5000, 1440)).toBe(PANEL_WIDTH_MAX);
     expect(clampPanelWidth(700, 1440)).toBe(700);
     expect(clampPanelWidth(100, 1440)).toBe(PANEL_WIDTH_MIN);
-    // Garbage instead of a number is no reason to give the panel zero width.
     expect(clampPanelWidth(Number.NaN, 1440)).toBe(PANEL_WIDTH_DEFAULT);
   });
 
@@ -79,7 +75,6 @@ describe('ширина панели', () => {
 
     render(<Harness />);
 
-    // 700 is wider than this screen allows: the panel must not eat the map.
     expect(widthNow()).toBe(540);
   });
 
@@ -87,8 +82,7 @@ describe('ширина панели', () => {
     render(<Harness />);
     expect(widthNow()).toBe(PANEL_WIDTH_DEFAULT);
 
-    // The same tourist narrowed the window: the panel must not eat the map.
-    window.innerWidth = 500; // ceiling = max(340, min(720, 300)) = 340
+    window.innerWidth = 500;
     fireEvent(window, new Event('resize'));
 
     expect(widthNow()).toBe(PANEL_WIDTH_MIN);

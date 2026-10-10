@@ -1,22 +1,6 @@
 """How far along a route request is, told by the pipeline itself.
 
-The panel used to have two sentences to work with — «отправил запрос» and «рисую
-маршрут» — because those were the only things the client could observe from
-outside. For a request that takes half a minute that is a long silence, and the
-tempting fix (rotate invented captions) would be a lie about what the machine is
-doing. So the pipeline reports its own stages instead.
-
-Rules kept here:
-
-* **Codes, not sentences.** The API says ``searching_places``; the client
-  localises it. Same rule as reason codes — the backend does not speak one
-  language.
-* **No infrastructure.** One uvicorn worker in a demo, so a process-local
-  dict is enough. If a tracker is gone (restart, TTL), the client is told
-  ``unknown_progress_id`` and falls back to what it can observe itself — never to
-  an invented stage.
-* **A stage is a fact about the past.** ``note()`` records that the pipeline
-  *reached* a stage; it never predicts what comes next.
+The pipeline reports stage codes, not sentences; clients localise them.
 """
 
 from __future__ import annotations
@@ -26,7 +10,6 @@ import time
 import uuid
 from dataclasses import dataclass, field
 
-#: Stages, in the order they happen. The client owns their wording.
 STAGE_INTERPRETING = "interpreting_request"
 STAGE_SEARCHING = "searching_places"
 STAGE_SELECTING = "selecting_candidates"
@@ -47,10 +30,8 @@ ORDER = (
     STAGE_DONE,
 )
 
-#: A tracker is dropped this long after its last update.
 TTL_S = 300.0
 
-#: Bound to the request's own id, in the thread that runs the pipeline.
 _current: contextvars.ContextVar[str | None] = contextvars.ContextVar(
     "route_progress_id", default=None
 )
@@ -77,9 +58,7 @@ def new_id() -> str:
 def begin(progress_id: str | None) -> str | None:
     """Start tracking ``progress_id`` — called by the API, not by the pipeline.
 
-    Returns the id in use, or ``None`` when the client asked for no progress:
-    then every ``note()`` below is a no-op and costs nothing (the golden harness
-    and the benchmarks send no id and must not change behaviour).
+    Returns the id in use, or ``None`` when the client asked for no progress.
     """
     if not progress_id:
         _current.set(None)
@@ -96,7 +75,7 @@ def note(stage: str) -> None:
     if not progress_id:
         return
     tracker = _trackers.get(progress_id)
-    if tracker is None:  # TTL ran out under a long request — nothing to record
+    if tracker is None:
         return
     tracker.stage = stage
     tracker.updated_at = time.monotonic()

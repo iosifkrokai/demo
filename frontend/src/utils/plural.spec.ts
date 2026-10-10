@@ -40,7 +40,6 @@ describe('pluralRu', () => {
     expect(pluralRu(111, POINT_FORMS)).toBe('точек');
     expect(pluralRu(112, POINT_FORMS)).toBe('точек');
     expect(pluralRu(114, POINT_FORMS)).toBe('точек');
-    // …while 115 goes back to the few form.
     expect(pluralRu(121, POINT_FORMS)).toBe('точка');
   });
 

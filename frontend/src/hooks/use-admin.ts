@@ -1,14 +1,4 @@
-/**
- * The admin panel's data layer (spec 005 §3).
- *
- * Every hook is gated on `enabled`, which callers set to `auth.isAdmin`: a plain
- * user must never fire an `/admin/*` request just to be told 403 — the panel is
- * simply not reachable for them.
- *
- * Writes invalidate the catalogue (`['places']`) as well as the admin lists: an
- * edited place is the same row the map and the «все точки» tab show, so a stale
- * catalogue would print the old blurb.
- */
+/** The admin panel's data layer. */
 
 import {
   keepPreviousData,
@@ -56,8 +46,6 @@ export function useAdminUsers(enabled: boolean, q = '') {
     queryFn: () => adminListUsers({ q, limit: 100 }),
     enabled,
     retry: false,
-    // The search box changes the key on every debounced keystroke; keeping the
-    // previous rows means the list does not blank to «загружаю…» in between.
     placeholderData: keepPreviousData,
   });
   return {
@@ -75,7 +63,6 @@ export function useAdminPlaces(enabled: boolean, q = '', category = '') {
     queryFn: () => adminListPlaces({ q, category, limit: 100 }),
     enabled,
     retry: false,
-    // Same as the users list: a new key per keystroke must not clear the list.
     placeholderData: keepPreviousData,
   });
   return {

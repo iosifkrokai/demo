@@ -69,7 +69,6 @@ describe('PlanVerdict', () => {
       'Сюда маршрут не построить: Кафедральный собор Святого Станислава — вне зоны покрытия (Гродненская область)'
     );
     expect(verdict).toHaveTextContent('Попробуйте точку внутри области');
-    // Names print as the data gave them — no translation, and no reason on this line.
     expect(verdict).not.toHaveTextContent('must_visit_outside_coverage');
   });
 

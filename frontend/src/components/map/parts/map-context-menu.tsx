@@ -2,13 +2,7 @@ import { Button } from '@/components/ui/button';
 import { ButtonGroup } from '@/components/ui/button-group';
 import { useDirectionsStore } from '@/stores/directions-store';
 
-/**
- * This menu is opened by a long press, which only happens on a touch screen,
- * so every action here is pressed with a finger and needs a finger-sized
- * target: `size="sm"` is 32px, under the 44px a thumb can hit. The size stays
- * `sm` so the menu keeps its compact desktop look; the touch floor is added on
- * the same rule the rest of the map uses for finger input.
- */
+/** This menu is opened by a long press, which only happens on a touch screen, so every action here is pressed with a finger and needs a finger-sized target: `size="sm"` is 32px, under the 44px a thumb can hit. */
 const TOUCH_BUTTON = 'pointer-coarse:min-h-11 max-md:min-h-11';
 
 interface MapContextMenuProps {

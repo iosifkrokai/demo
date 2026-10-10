@@ -1,24 +1,6 @@
-"""Frozen request-semantics contract for spec 002 (Grodno Guide rebuild).
+"""Frozen request-semantics contract: what the tourist asked for.
 
-This module is the SINGLE typed representation of "what the tourist asked for".
-It is deliberately small and dependency-free: the planner, retrieval, optimizer,
-verifier and the HTTP layer all speak this one vocabulary instead of each
-re-deriving meaning from a query string.
-
-Rules of the contract
----------------------
-* Nothing here is a dictionary of natural-language phrases. Free-text
-  understanding belongs to the interpretation stage (LLM or the deterministic
-  fallback) which *fills* these structures; this module only describes them.
-* Category codes are canonical domain codes (see domain/taxonomy.py). A code that
-  has no data behind it must be reported as ``uncertain``, never invented.
-* Every requirement carries its provenance: the raw fragment of the user's text
-  or the explicit UI choice that produced it.
-* Hard requirements are decided by code against real data and a real route.
-  An LLM may propose the *meaning* of a requirement, never its satisfaction.
-
-This file is owned by the integration workstream. Do not change the public
-model shapes without updating docs/specs/002-grodno-guide-rebuild/plan.md.
+The single typed vocabulary shared by planner, retrieval, optimizer and HTTP.
 """
 
 from __future__ import annotations
@@ -27,28 +9,12 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-# Vocabulary
-
-# must_visit — a specific named place that must be in the route.
-# service    — a facility the route must (hard) or may (soft) pass by, by
-#              category code ("туалет", "кафе", ...).
-# interest   — a theme the tourist wants more of ("замки", "костёлы").
-# avoid      — something to keep out of the route.
 RequirementKind = Literal["must_visit", "service", "interest", "avoid"]
 
-# A named place that lies outside the region this system serves. Not "absent
-# from the plan" — it can never be in it, and no look-alike inside the region
-# may stand in for it. Lives here (not in verify.py) because both the contract
-# and the verifier name it, and requirements.py is what verify.py already
-# imports; a second copy would be free to drift.
 REASON_MUST_VISIT_OUTSIDE = "must_visit_outside_coverage"
 
 Strength = Literal["hard", "soft"]
 
-# pending   — extracted, not yet checked against data
-# satisfied — proven by real data (a real place, on the route)
-# unmet     — data exists, but the requirement could not be honoured
-# uncertain — the data to decide does not exist; never present as satisfied
 RequirementStatus = Literal["pending", "satisfied", "unmet", "uncertain"]
 
 RequirementSource = Literal["text", "ui"]
@@ -62,20 +28,12 @@ class Requirement(BaseModel):
     kind: RequirementKind
     strength: Strength = "soft"
 
-    # Canonical domain code for service/interest/avoid ("туалет", "замок").
-    # None for must_visit (which is identified by name/id instead).
     code: str | None = None
 
-    # Human-readable label for logs and for the UI when it needs one; the
-    # translatable text of the response is built from `code` + `kind`, not
-    # from this string.
     label: str | None = None
 
-    # Verbatim fragment of the user's request ("туалет по пути"), or None when
-    # the requirement came from an explicit UI control.
     text: str | None = None
 
-    # A named place the user asked for (must_visit only).
     name: str | None = None
     place_id: int | None = None
 
@@ -83,8 +41,6 @@ class Requirement(BaseModel):
     confidence: float = Field(default=1.0, ge=0.0, le=1.0)
 
     status: RequirementStatus = "pending"
-    # Places that prove satisfaction, and a machine-readable reason when the
-    # requirement is not satisfied (localized by the API layer).
     place_ids: list[int] = Field(default_factory=list)
     reason: str | None = None
 
@@ -97,18 +53,14 @@ class PartyComposition(BaseModel):
 
     adults: int | None = Field(default=None, ge=0, le=50)
     children: int | None = Field(default=None, ge=0, le=20)
-    # Filled only when the user named ages; an unknown age stays absent.
     children_ages: list[int] = Field(default_factory=list)
-    # e.g. ["stroller"], ["wheelchair"], ["elderly"] — free-form codes the UI
-    # sends and the text extractor fills; never inferred from party size.
     mobility: list[str] = Field(default_factory=list)
 
 
 class TripRequirements(BaseModel):
     """Everything the route must respect, in one place.
 
-    Built once per request (and rebuilt from the *delta* on a refinement turn,
-    while the surviving hard requirements carry over from the base plan).
+    Built once per request, rebuilt from the delta on a refinement turn.
     """
 
     locale: Literal["ru", "en"] = "ru"
@@ -116,22 +68,15 @@ class TripRequirements(BaseModel):
 
     party: PartyComposition = Field(default_factory=PartyComposition)
 
-    # None = the user named no limit: the route is not trimmed to fit one.
     budget_minutes: int | None = None
 
-    # Canonical costing for the Valhalla matrix ("pedestrian", "bicycle", ...).
     costing: str | None = None
 
-    # Human-readable origin coordinates, when the device supplied them.
     origin_lat: float | None = None
     origin_lon: float | None = None
 
-    # Resolved area slugs the request is restricted to (e.g. "grodno-old-town").
     areas: list[str] = Field(default_factory=list)
 
-    # Names in the request that lie outside the region (the model reads the
-    # geography, it decides nothing here). A request about them is not served by
-    # a route somewhere else — see planner.outside_coverage.
     outside_coverage: list[str] = Field(default_factory=list)
 
     result_mode: ResultMode = "route"
@@ -139,15 +84,9 @@ class TripRequirements(BaseModel):
 
     requirements: list[Requirement] = Field(default_factory=list)
 
-    # Things the user asked for that the system cannot represent or prove
-    # ("без лестниц" without a step-free graph). Surfaced to the user instead
-    # of being silently dropped.
     unknowns: list[str] = Field(default_factory=list)
 
-    # How the requirements were obtained. "mixed" = LLM plus explicit UI fields.
     source: Literal["llm", "explicit", "fallback", "mixed"] = "fallback"
-
-    # Queries the planner/verifier actually use
 
     def hard(self) -> list[Requirement]:
         return [r for r in self.requirements if r.strength == "hard"]
@@ -195,13 +134,10 @@ class TripRequirements(BaseModel):
         """True only when every hard requirement is proven satisfied."""
         return not self.failed_hard() and not self.unresolved_hard()
 
-    # Public projection
-
     def public_requirements(self) -> list[dict]:
         """Localizable view of the requirement list for the HTTP response.
 
-        The frontend renders these from `kind`/`code`/`status` so both locales
-        share one contract; `label`/`reason` stay diagnostic only.
+        Frontend renders from kind/code/status so both locales share one contract.
         """
         return [
             {

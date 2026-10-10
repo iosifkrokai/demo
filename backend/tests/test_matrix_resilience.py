@@ -1,10 +1,4 @@
-"""Matrix resilience: a chunk 500 must not become a 503 for the whole request.
-
-Valhalla answers /sources_to_targets with
-  {"error_code":499,"error":"Unknown: Could not find candidate edge used for destination label"}
-for some point combinations — it reached the UI as a 503 with that exact text.
-No network here: _request_with_retry is monkeypatched.
-"""
+"""Matrix resilience: a chunk 500 must not become a 503 for the whole request."""
 
 from __future__ import annotations
 
@@ -89,18 +83,13 @@ def test_unroutable_pair_becomes_the_unreachable_sentinel(monkeypatch):
     monkeypatch.setattr(vc, "_request_with_retry", fake)
     m = vc.time_matrix([A, B], [A, B])
 
-    # Finite on purpose: int(inf) would raise OverflowError in the optimizer.
     assert m[0][1] == float(constants.UNREACHABLE_S), "unreachable pair, not a 503"
     assert math.isfinite(m[0][1])
 
 
 def test_transport_failure_is_unknown_not_unreachable(monkeypatch):
     """A timeout must not be turned into "no path exists".
-
-    "We could not ask" (timeout/connect/5xx) is not "there is no path": the old
-    code returned UNREACHABLE_S for any persistent failure, and drop_unreachable
-    then deleted the stop for a Valhalla hiccup. It must surface as UNKNOWN_S
-    instead — the plan degrades, no stop is dropped.
+    It must surface as UNKNOWN_S instead — the plan degrades, no stop is dropped.
     """
 
     def fake(method, url, *, params, timeout):

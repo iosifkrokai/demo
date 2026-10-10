@@ -27,20 +27,11 @@ export const rootRoute = createRootRoute({ component: RootComponent });
 
 const TanStackQueryProviderContext = TanStackQueryProvider.getContext();
 
-/**
- * The mandatory-login gate (spec 005 §5): without a session there is no app.
- *
- * It reads the *same* `authQueryOptions` entry `useAuth` uses, so the gate and the
- * UI can never disagree about who is signed in. The visitor is sent to `/login`
- * with the path they asked for, so signing in returns them to it.
- */
+/** The mandatory-login gate: without a session there is no app. */
 const requireAuth = async (args: {
   context: unknown;
   location: { pathname: string; searchStr: string; hash: string };
 }): Promise<void> => {
-  // `context` is not statically typed at route-definition time (the router's
-  // `Register` is declared at the bottom of this file), so it is read defensively.
-  // «Unknown» fails closed: an unverifiable session is treated as no session.
   const queryClient = (args.context as { queryClient?: QueryClient })
     .queryClient;
   const authenticated = queryClient
@@ -75,13 +66,7 @@ export const indexRoute = createRoute({
   },
 });
 
-/**
- * The tab/profile half of the `/$activeTab` gate.
- *
- * Split out from `requireAuth` so the redirect rules can be exercised without a
- * router context or a query client: an unknown tab and a missing profile both
- * fall back to the directions tab, and any other search params are preserved.
- */
+/** The tab/profile half of the `/$activeTab` gate. */
 export const activeTabBeforeLoad = ({
   params,
   search,
@@ -129,14 +114,11 @@ const activeTabRoute = createRoute({
     ],
   },
   beforeLoad: async (args) => {
-    // Login first: an anonymous visitor is not asked to pick a tab.
     await requireAuth(args);
     activeTabBeforeLoad(args);
   },
 });
 
-// Account pages (spec 005). `/login` and `/register` are the only public routes;
-// everything else is behind `requireAuth`.
 const loginRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/login',

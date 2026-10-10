@@ -1,16 +1,6 @@
 """Step 8 — Render the canonical route via Valhalla /route.
 
-Takes the ordered Candidate list, calls Valhalla, returns (shape, summary, status).
-The first and last waypoints are 'break' (start/end of walking tour);
-intermediate waypoints are 'via' (must pass through).
-
-Valhalla is the only thing that draws geometry here. When it refuses the tour
-as a whole — a stop on a road island that is not connected to the rest of the
-network ("No path could be found for input"), a via it cannot pass in order —
-the tour is requested leg by leg and the legs that do route are kept, so the
-map gets a line instead of points with nothing between them.
-
-Returns honest status codes (machine-readable) instead of empty/degenerate routes.
+On a whole-tour refusal it falls back to drawing leg by leg.
 """
 
 from __future__ import annotations
@@ -35,18 +25,7 @@ def render(
 ) -> tuple[dict, dict, str]:
     """Call Valhalla /route. Returns (shape_geojson, summary_dict, status_code).
 
-    `origin` (tourist's GPS position) becomes the fixed start of the shape.
-    `locale` is the requested language for instructions (e.g., "ru" or "en").
-    `round_trip` closes the tour on its own start, so the drawn line and the
-    summary include the walk back.
-
-    Returns honest status codes:
-    - "usable": valid route with geometry
-    - "no_route_exists": no route can be built between these points
-    - "service_unavailable": Valhalla service unavailable/timeout
-    - "empty_geometry": route returned but has no geometry
-    - "locale_mismatch": requested locale does not match response
-    - "missing_maneuver_data": required maneuver fields are missing
+    `origin` is the fixed start; `round_trip` closes the tour on its own start.
     """
     if len(route) < 2:
         return {}, {}, "no_route_exists"
@@ -55,9 +34,6 @@ def render(
     if origin is not None:
         pts = [(origin.lat, origin.lon), *pts]
     if round_trip:
-        # «круговой маршрут»: the tour comes back to where it started. Valhalla
-        # draws the return leg like any other, so the summary (length/time) and
-        # the polyline both include the walk home.
         pts = [*pts, pts[0]]
 
     locations = [
@@ -69,11 +45,6 @@ def render(
         for i, (lat, lon) in enumerate(pts)
     ]
 
-    # Valhalla refuses more than 20 locations in ONE /route call with
-    # 400 error_code 150 ("Exceeded max locations: 20"). That is not a service
-    # failure — the tour is still routable leg by leg, which is exactly what the
-    # frontend already does on its own. Going straight to the per-leg renderer
-    # gives «все костёлы области» (46 stops) a real line instead of length_km:null.
     if len(locations) > constants.VALHALLA_MAX_LOCATIONS:
         log.info(
             "route: %d locations exceed Valhalla's %d cap — rendering leg by leg",
@@ -106,10 +77,6 @@ def render(
     if result and result.status == RouteStatus.SERVICE_UNAVAILABLE:
         return {}, {}, "service_unavailable"
 
-    # A refused whole-tour request (400/442 — e.g. a stop on a disconnected road
-    # island, see tests/test_road_island.py) is not the end of the road: the tour
-    # is retried leg by leg. With only two points there is no leg to fall back to,
-    # so the honest status stands.
     if result and result.status == RouteStatus.NO_ROUTE_EXISTS and len(pts) < 3:
         return {}, {}, "no_route_exists"
 
@@ -124,8 +91,7 @@ def render(
 def _verify_maneuver_fields(maneuvers: list[dict]) -> list[str]:
     """Verify that required maneuver fields are present.
 
-    Returns list of missing field names for maneuvers that lack them.
-    A maneuver without an instruction is a problem — the guide would show blank text.
+    Returns the missing field names; a maneuver without an instruction is blank.
     """
     missing_fields: list[str] = []
     required_fields = ["instruction", "length", "time", "type"]
@@ -141,10 +107,7 @@ def _verify_maneuver_fields(maneuvers: list[dict]) -> list[str]:
 def _render_legs(pts: list[tuple[float, float]], costing: str, locale: str) -> tuple[dict, dict, str]:
     """Draw every consecutive pair on its own and keep the legs that route.
 
-    A leg Valhalla refuses (an unreachable pair) is skipped, so one bad stop
-    costs its two legs, not the whole line.
-
-    Returns (shape, summary, status_code).
+    A leg Valhalla refuses is skipped, so one bad stop costs its two legs only.
     """
     coords: list[list[float]] = []
     length_km = 0.0

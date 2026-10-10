@@ -2,11 +2,7 @@ import * as React from 'react';
 
 import { cn } from '@/lib/utils';
 
-/**
- * React 19 still needs the ref forwarded explicitly here: the sidebar focuses
- * this field (the hint chips point at it), and without forwardRef React warns
- * «Function components cannot be given refs» and the ref is null.
- */
+/** React 19 still needs the ref forwarded explicitly here: the sidebar focuses this field (the hint chips point at it), and without forwardRef React warns «Function components cannot be given refs» and the ref is null. */
 const Textarea = React.forwardRef<
   HTMLTextAreaElement,
   React.ComponentProps<'textarea'>

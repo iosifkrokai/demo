@@ -1,10 +1,4 @@
-"""``python -m quality`` — the evaluation runner (see quality/runner.py).
-
-Sub-entry points:
-    python -m quality.runner   # live / replay / compare / compliance
-    python -m quality.evals    # the four offline + live flow stages
-    python -m quality.report   # the one-page quality readout
-"""
+"""``python -m quality`` — the evaluation runner."""
 
 from __future__ import annotations
 

@@ -1,7 +1,4 @@
-/**
- * DESIGN.md loading state: skeleton rows, never a spinner in the middle of the
- * panel — the panel keeps its shape while the agent thinks.
- */
+/** DESIGN.md loading state: skeleton rows, never a spinner in the middle of the panel — the panel keeps its shape while the agent thinks. */
 
 export const StopsSkeleton = ({ rows = 3 }: { rows?: number }) => (
   <div

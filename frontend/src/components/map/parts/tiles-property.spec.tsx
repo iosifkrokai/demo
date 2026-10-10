@@ -106,7 +106,6 @@ describe('TilesProperty', () => {
 
   describe('access bitmask properties', () => {
     it('should decode access:fwd bitmask to badges', () => {
-      // 1 (Auto) + 2 (Pedestrian) + 4 (Bicycle) = 7
       render(<TilesProperty propertyKey="access:fwd" value={7} />);
       expect(screen.getByText('Auto')).toBeInTheDocument();
       expect(screen.getByText('Pedestrian')).toBeInTheDocument();
@@ -114,7 +113,6 @@ describe('TilesProperty', () => {
     });
 
     it('should decode access:bwd bitmask to badges', () => {
-      // 8 (Truck) + 64 (Bus) = 72
       render(<TilesProperty propertyKey="access:bwd" value={72} />);
       expect(screen.getByText('Truck')).toBeInTheDocument();
       expect(screen.getByText('Bus')).toBeInTheDocument();
@@ -122,7 +120,6 @@ describe('TilesProperty', () => {
     });
 
     it('should show all access types for full bitmask', () => {
-      // All flags: 1+2+4+8+16+32+64+128+256+512+1024 = 2047
       render(<TilesProperty propertyKey="access:fwd" value={2047} />);
       expect(screen.getByText('Auto')).toBeInTheDocument();
       expect(screen.getByText('Pedestrian')).toBeInTheDocument();
@@ -145,7 +142,6 @@ describe('TilesProperty', () => {
 
   describe('bike_network bitmask properties', () => {
     it('should decode bike_network bitmask to badges', () => {
-      // 1 (National) + 4 (Local) = 5
       render(<TilesProperty propertyKey="bike_network" value={5} />);
       expect(screen.getByText('National')).toBeInTheDocument();
       expect(screen.getByText('Local')).toBeInTheDocument();
@@ -153,7 +149,6 @@ describe('TilesProperty', () => {
     });
 
     it('should show all bike network types for full bitmask', () => {
-      // All flags: 1+2+4+8 = 15
       render(<TilesProperty propertyKey="bike_network" value={15} />);
       expect(screen.getByText('National')).toBeInTheDocument();
       expect(screen.getByText('Regional')).toBeInTheDocument();

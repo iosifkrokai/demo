@@ -56,7 +56,6 @@ describe('EditStylesDialog', () => {
     await user.click(screen.getByRole('button', { name: 'Edit custom style' }));
 
     expect(screen.getByRole('dialog')).toBeInTheDocument();
-    // Use role heading to distinguish from the button
     expect(
       screen.getByRole('heading', { name: 'Edit custom style' })
     ).toBeInTheDocument();
@@ -75,7 +74,6 @@ describe('EditStylesDialog', () => {
 
     const textarea = screen.getByLabelText('Style JSON');
     await user.clear(textarea);
-    // Use paste to handle special characters like { }
     await user.paste('{ invalid-json: ');
 
     await user.click(screen.getByRole('button', { name: 'Save changes' }));
@@ -87,7 +85,7 @@ describe('EditStylesDialog', () => {
 
   it('should show error for invalid MapLibre style schema', async () => {
     const user = userEvent.setup();
-    const invalidSchemaStyle = { foo: 'bar' }; // Missing version, sources, layers
+    const invalidSchemaStyle = { foo: 'bar' };
 
     render(<EditStylesDialog styleData={validStyle} />);
 
@@ -151,8 +149,6 @@ describe('EditStylesDialog', () => {
 
     expect(screen.getByText('Invalid JSON syntax')).toBeInTheDocument();
 
-    // user-event cannot type the brace characters, so one plain character is
-    // enough to fire onChange and clear the error.
     await user.type(textarea, 'a');
 
     await waitFor(() => {

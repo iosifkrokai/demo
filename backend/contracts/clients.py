@@ -1,16 +1,6 @@
-"""HTTP models for the anonymous client entity (spec 003).
+"""HTTP models for the anonymous client entity.
 
-Everything here is machine-readable: field names, reason codes, JSON values.
-No Russian prose is produced or accepted on the wire — the UI owns all
-human text (see docs/specs/003-client-entity/spec.md §3).
-
-The one subtlety is the preferences contract: PUT is a *partial* update, so it
-must tell "the tourist did not send this field" apart from "the tourist sent
-null, which clears it". That is why every field of :class:`PreferencesIn` is
-optional with a ``None`` default and the endpoint reads
-``model_dump(exclude_unset=True)`` — a field that is absent from the request
-simply never appears in the dict, a field sent as ``null`` appears as ``None``
-and clears the stored value.
+Everything here is machine-readable — field names, reason codes, JSON values.
 """
 
 from __future__ import annotations
@@ -21,8 +11,6 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-# Reason codes — the machine vocabulary of §3. Kept as constants so the API and
-# its tests share one spelling.
 REASON_STORAGE_UNAVAILABLE = "storage_unavailable"
 REASON_ROUTE_NOT_FOUND = "route_not_found"
 REASON_INVALID_CLIENT_ID = "invalid_client_id"
@@ -34,14 +22,11 @@ TransportLiteral = Literal["pedestrian", "bicycle", "auto"]
 LanguageLiteral = Literal["ru", "en"]
 
 
-# Preferences
-
 class PreferencesIn(BaseModel):
     """PUT /clients/me/preferences body — partial, ``null`` clears a field."""
 
     transport: TransportLiteral | None = None
     time_budget_minutes: int | None = Field(default=None, ge=0)
-    # NULL is a real answer ("не указано"); the server never invents a number.
     party_adults: int | None = Field(default=None, ge=0, le=50)
     party_children: int | None = Field(default=None, ge=0, le=20)
     interests: list[str] | None = None
@@ -73,20 +58,15 @@ class PreferencesOut(BaseModel):
     updated_at: datetime | None = None
 
 
-# Saved routes
-
 class RouteCreateIn(BaseModel):
     """POST /clients/me/routes body.
 
-    ``plan`` is the checked TripPlan stored verbatim — the endpoint never
-    inspects or rewrites it, so a restored route is exactly what was saved.
+    ``plan`` is stored verbatim; the endpoint never inspects or rewrites it.
     """
 
     query: str = Field(min_length=1, max_length=500)
     plan: dict[str, Any]
-    # As named by the tourist; absent or empty is fine ("untitled").
     name: str | None = Field(default=None, max_length=200)
-    # {point id: minutes} — the visit time the tourist changed.
     visit_overrides: dict[str, int] | None = None
 
     @field_validator("query")
@@ -108,8 +88,7 @@ class RouteCreated(BaseModel):
 class RouteListItem(BaseModel):
     """One row of GET /clients/me/routes — no heavy geometry.
 
-    ``stop_count``/``distance_m``/``duration_min`` are derived from the stored
-    plan; any of the last two may be null when the plan does not carry them.
+    ``stop_count``/``distance_m``/``duration_min`` are derived from the stored plan.
     """
 
     id: UUID
@@ -138,11 +117,8 @@ class RoutePatchIn(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    # A rename, not a delete: null is not a name, so the field is required.
     name: str = Field(max_length=200)
 
-
-# Derived list metrics
 
 def route_metrics(
     stop_count: int,
@@ -151,11 +127,7 @@ def route_metrics(
 ) -> dict[str, int | None]:
     """Derive the list columns from the plan's lightweight sub-objects.
 
-    ``stop_count`` comes from the points array; ``distance_m`` from
-    ``summary.length_km`` (km → m); ``duration_min`` from
-    ``budget.total_minutes`` (visit + walk, what the UI shows) and, failing
-    that, from ``summary.time_seconds``. A plan that does not carry a value
-    yields null rather than a guessed one.
+    A plan that does not carry a value yields null rather than a guessed one.
     """
     distance_m: int | None = None
     duration_min: int | None = None

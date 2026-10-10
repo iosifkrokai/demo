@@ -1,9 +1,4 @@
-"""Catalogue response: the matching places grouped by town, and no route.
-
-The list *is* the answer: the tourist picks stops from it.  Verification uses
-``verify_catalogue`` — membership only — so nothing here claims a walkable route
-or a geometry this response does not have.
-"""
+"""Catalogue response: the matching places grouped by town, and no route."""
 
 from __future__ import annotations
 
@@ -38,11 +33,7 @@ def catalogue_response(
 ) -> RouteResponse:
     """Answer with the matching places, grouped by town, and no route.
 
-    The list *is* the answer: the tourist picks stops from it. Grouping is by
-    `town` (already on every point), ordered by town then by relevance so the
-    order is stable between runs. Verification uses ``verify_catalogue`` —
-    membership only — so nothing here claims a walkable route or a geometry
-    this response does not have.
+    Ordered by town then by relevance, so the order is stable between runs.
     """
     ordered = sorted(candidates, key=lambda c: ((c.town or "").strip().lower(), -c.relevance))
     verify_catalogue(requirements, ordered)
@@ -55,8 +46,6 @@ def catalogue_response(
         len(req.query), len(ordered), len(towns),
         int((_time.perf_counter() - t0) * 1000), status,
     )
-    # This branch returns before the walk steps, so the trace has to say what
-    # stood in for them: membership verification, and the list itself.
     trace.record(
         "verify",
         input=[r.code or r.text for r in requirements.requirements][:10],
@@ -82,8 +71,6 @@ def catalogue_response(
             source=intent.source,
         ),
         points=_to_places(ordered),
-        # A catalogue has no line to draw: an empty shape is the honest
-        # answer, and the client draws the places without connecting them.
         shape={},
         summary=RouteSummary(length_km=None, time_seconds=None),
         result_mode="catalogue",

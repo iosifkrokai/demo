@@ -1,9 +1,4 @@
-"""Coverage gate: refuse a request whose named place is outside the region.
-
-The reading can say that a name in the request lies outside the region this
-system serves; what follows from that is decided here, before anything is
-retrieved.  A refusal is the honest answer; a route to somewhere else is not.
-"""
+"""Coverage gate: refuse a request whose named place is outside the region."""
 
 from __future__ import annotations
 
@@ -30,10 +25,7 @@ def _outside_left_unresolved(
 ) -> list[str]:
     """Names the reading placed outside the region that stayed unresolvable.
 
-    The cross-check that keeps a wrong reading harmless: if the name DID resolve
-    to a place inside the region — the model flagged «Старый замок» although it
-    is in Grodno — it is not a refusal, whatever the reading said. Only a name
-    that has no place here at all (Vilnius Cathedral) is left in the list.
+    A name that resolved to a place inside the region is not a refusal.
     """
     flagged = getattr(requirements, "outside_coverage", None) or []
     if not flagged:
@@ -56,17 +48,9 @@ def refuse_out_of_coverage(
 ) -> RouteResponse:
     """Answer "not here" instead of planning a route somewhere else.
 
-    No stop is returned, and the reason is not prose invented for the client:
-    the contract carries a hard requirement that nothing in this region can
-    satisfy, so the verifier's own rule makes the status `infeasible` and the
-    client localises the reason code. Building a plan out of look-alikes would
-    look more complete and be worse — it would walk a tourist to another
-    town's landmarks under the name they asked for.
+    No stop is returned: the verifier's own rule makes the status `infeasible`.
     """
     mark_out_of_coverage(requirements, names)
-    # No stops at all: an empty matrix is what validate() expects here (it
-    # returns before touching it), and the costing is reported even though
-    # nothing was planned.
     plan = validate(
         [],
         CostMatrix(),
@@ -74,9 +58,6 @@ def refuse_out_of_coverage(
         {},
         requirements=requirements,
     )
-    # A refusal is a step like any other: the trace says which requirements
-    # were judged unmet and why, so «почему отказ» is answered by evidence
-    # rather than by the sentence the client is shown.
     status = overall_status(requirements)
     trace.record(
         "verify",

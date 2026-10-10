@@ -1,17 +1,4 @@
-/**
- * The agent's client API, in one place.
- *
- * Every call goes to a same-origin relative path: the webapp's nginx (and the
- * dev Vite proxy) forwards `/clients/*` to the agent, so nothing here hardcodes
- * a host — the same code works behind Codespaces, a tunnel, or a remote agent
- * with `VITE_AGENT_URL` set.
- *
- * Every call carries `X-Client-Id`, minted once and reused (see
- * `@/utils/client-id`). Failures are turned into a `ClientApiError` with the
- * agent's own machine code, so callers can tell
- * «saving is unavailable» (`storage_unavailable`, or a network that never
- * reached the server) apart from «this route does not exist».
- */
+/** The agent's client API, in one place. */
 
 import { getClientId } from '@/utils/client-id';
 
@@ -94,8 +81,6 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   try {
     response = await fetch(`${AGENT_URL}${path}`, { ...init, headers });
   } catch {
-    // The request never reached the agent. That is not a success and not a
-    // "route not found": it means saving cannot work right now.
     throw new ClientApiError(
       'network_unavailable',
       'агент недоступен — сохранение не работает'
@@ -126,10 +111,6 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     );
   }
 }
-
-// The response is normalised field by field instead of trusted as-is: a missing
-// field becomes `null` («не указано»), and junk is dropped rather than turned
-// into a number the tourist never chose.
 
 const asRecord = (value: unknown): Record<string, unknown> | null =>
   value && typeof value === 'object' && !Array.isArray(value)
@@ -212,11 +193,7 @@ const normalizeSummary = (value: unknown): SavedRouteSummary | null => {
   };
 };
 
-/**
- * The list endpoint may answer with a bare array or wrap it; either way only
- * the summary fields survive — anything heavy (a `plan`, a geometry) is dropped
- * here, so no caller can accidentally render what the list never promised.
- */
+/** The list endpoint may answer with a bare array or wrap it; either way only the summary fields survive — anything heavy (a `plan`, a geometry) is dropped here, so no caller can accidentally render what the list never promised. */
 export const normalizeRouteList = (body: unknown): SavedRouteSummary[] => {
   const rows: unknown = Array.isArray(body)
     ? body
@@ -252,8 +229,6 @@ export const getClientRoute = async (id: string): Promise<SavedRoute> => {
     id: body.id,
     name: typeof body.name === 'string' ? body.name : null,
     query: typeof body.query === 'string' ? body.query : '',
-    // The stored plan goes through untouched — restore re-applies exactly what
-    // was saved, it does not rebuild it.
     plan: body.plan,
     visit_overrides: overrides,
     created_at: typeof body.created_at === 'string' ? body.created_at : null,
@@ -267,8 +242,6 @@ export const renameClientRoute = (
 ): Promise<unknown> =>
   request<unknown>(`/clients/me/routes/${id}`, {
     method: 'PATCH',
-    // The contract's rename field is a string: an empty name clears it, `null`
-    // is not a name the server accepts (so clearing is sent as '').
     body: JSON.stringify({ name: name ?? '' }),
   });
 

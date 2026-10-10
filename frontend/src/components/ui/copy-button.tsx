@@ -9,10 +9,10 @@ interface CopyButtonProps
     Omit<React.ComponentProps<'button'>, 'children'>,
     VariantProps<typeof buttonVariants> {
   value: string;
-  /** Duration in ms to show the "copied" state. Default: 1500 */
+  /** Duration in ms to show the "copied" state. */
   copiedDuration?: number;
   onCopied?: () => void;
-  /** Custom icon size class. Default: "size-3.5" */
+  /** Custom icon size class. */
   iconClassName?: string;
 }
 

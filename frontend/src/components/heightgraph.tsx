@@ -43,7 +43,6 @@ const HeightGraph: React.FC<HeightGraphProps> = ({
       .append('g')
       .attr('transform', `translate(${margin.left},${margin.top})`);
 
-    // Coordinates are [lng, lat, elevation, distance]
     interface CoordinateData {
       lng: number;
       lat: number;
@@ -58,7 +57,7 @@ const HeightGraph: React.FC<HeightGraphProps> = ({
           lng: c[0] ?? 0,
           lat: c[1] ?? 0,
           elevation: c[2] ?? 0,
-          distance: c[3] ?? 0, // Distance from start in meters
+          distance: c[3] ?? 0,
           attributeType: (f.properties?.attributeType as number) ?? 0,
         }))
       ) || [];
@@ -82,7 +81,6 @@ const HeightGraph: React.FC<HeightGraphProps> = ({
       .range([chartHeight, 0])
       .nice();
 
-    // Coordinates are [lng, lat, elevation, distance]
     data[0]?.features.forEach((feature) => {
       const coords = (feature.geometry as { coordinates: number[][] })
         .coordinates;
@@ -94,9 +92,9 @@ const HeightGraph: React.FC<HeightGraphProps> = ({
 
       const area = d3
         .area<number[]>()
-        .x((d) => xScale(d[3] ?? 0)) // d[3] is distance
+        .x((d) => xScale(d[3] ?? 0))
         .y0(chartHeight)
-        .y1((d) => yScale(d[2] ?? 0)) // d[2] is elevation
+        .y1((d) => yScale(d[2] ?? 0))
         .curve(d3.curveMonotoneX);
 
       g.append('path')
@@ -225,8 +223,6 @@ const HeightGraph: React.FC<HeightGraphProps> = ({
             );
 
           if (onHighlight) {
-            // Pass the distance value instead of index
-            // The map component will find the closest point on the route
             onHighlight(d.distance);
           }
         }
@@ -274,7 +270,6 @@ const HeightGraph: React.FC<HeightGraphProps> = ({
     };
   }, [isExpanded]);
 
-  // Auto-collapse when disabled
   const [prevDisabled, setPrevDisabled] = useState(disabled);
   if (disabled !== prevDisabled) {
     setPrevDisabled(disabled);

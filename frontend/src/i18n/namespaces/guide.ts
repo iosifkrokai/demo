@@ -1,34 +1,10 @@
-/**
- * One locale area lives in one file: `ru` and `en` side by side.
- *
- * The point is ownership. A single shared dictionary meant two people editing
- * the same two files for unrelated screens; an area file plus the components of
- * that area is a self-contained piece of work. `src/i18n/index.ts` merges these
- * into the resources i18next gets, and a test asserts `ru`/`en` stay in step —
- * a missing translation is a failing test, not a raw key on screen.
- */
+/** One locale area lives in one file: `ru` and `en` side by side. */
 export interface LocaleArea<T = Record<string, unknown>> {
   ru: T;
   en: T;
 }
 
-/**
- * Keys of the navigator («Проводник»): stop states, progress, turn phrasing.
- *
- * This area owns everything the guide says. The panel (`guide-panel.tsx`) and
- * its parts (stop card, stop list, progress, route-done, empty) read their text
- * from here, and `parts/guide-mode.ts` / `parts/guide-format.ts` — which are
- * plain modules, not components — pull their words through the same i18n
- * instance, so nothing user-facing is hard-coded in Russian.
- *
- * The keys below also cover the two things the *sidebar* says about the guide
- * («Пойти по маршруту», «выйти», the «Проводник» title and the counted
- * «остановки»): the area file is merged over the core dictionary by key, so it
- * has to keep them, or the merge would drop the sidebar's copy.
- *
- * Plurals follow i18next: a counted noun gets `_one/_few/_many` in Russian and
- * `_one/_other` in English. The parity test checks both sets.
- */
+/** Keys of the navigator («Проводник»): stop states, progress, turn phrasing. */
 export const guideArea = {
   ru: {
     guide: {

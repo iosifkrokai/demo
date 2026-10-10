@@ -1,43 +1,6 @@
 """The same question, asked twice, read once.
 
-Reading a request is the expensive part of answering it: the model's pass over
-the text is 60–89 % of the wall clock (measured: 15.5 s of a 17.4 s request,
-25.5 s of 44.6 s) and it is the part that costs money per call. The same text
-arrives again and again, though — the demo query typed twice, and above all the
-measurement runs: a golden pass asks ~20 identical questions on every run, so
-each rerun pays the full model bill for answers it already has.
-
-Why in this process, and not in Redis
--------------------------------------
-One worker serves this app (`uvicorn api.main:app`, no `--workers`), so a
-dictionary in memory gives every bit of the speedup a server would, without a
-second service to run, monitor and keep in sync. Redis becomes worth its cost
-when one of these becomes true, and not before:
-
-  * a second worker appears — note that what breaks first is not this cache but
-    the progress tracker (`agent/progress.py`), which also lives in memory:
-    a client polling a different worker gets a 404;
-  * readings must survive a restart, or be shared between instances.
-
-What is cached, and what is not
--------------------------------
-Only the *reading* of the request into ``TripRequirements``. Never the
-verifier's verdicts, never the measured services, never the geometry: those are
-answers about the world (the database, Valhalla) and a stale one would be a
-lie in the panel. The reading is a function of the text, the visible UI filters
-and the prompt itself — all of which go into the key — so two requests collide
-only when the model would have been asked exactly the same thing.
-
-Two guards against that being wrong:
-
-  * the prompt text is hashed into the key, so editing the instructions or the
-    catalogue that is pasted into them invalidates every entry by itself;
-  * entries expire (`INTERPRET_CACHE_TTL_S`, default 30 minutes), because the
-    reading also depends on what the agent's tools returned from the database,
-    which this key cannot see.
-
-`CACHE_BUST=1` turns the cache off for one process — for demos and for
-measurement runs, which must time the model and not a dictionary.
+In-process TTL/LRU cache of the model's reading; `CACHE_BUST=1` turns it off.
 """
 
 from __future__ import annotations
@@ -84,8 +47,7 @@ class _Entry:
 class TtlLru:
     """A bounded, time-limited store, safe to touch from several requests.
 
-    Small on purpose: a reading is a few hundred bytes, and the useful working
-    set is "the questions this deployment is asked", not a database.
+    Small on purpose: a reading is a few hundred bytes, not a database.
     """
 
     def __init__(self, maxsize: int = DEFAULT_MAXSIZE, ttl_s: int = DEFAULT_TTL_S):
@@ -165,8 +127,7 @@ def _digest(*parts: object) -> str:
 def prompt_hash(instructions: str) -> str:
     """Identity of the prompt that produced a reading.
 
-    Editing the instructions — or the catalogue pasted into them — changes this,
-    and every entry keyed under the old prompt is then simply never found.
+    Editing the instructions changes it, so old entries are never found.
     """
     return _digest("prompt", instructions)
 
@@ -174,15 +135,7 @@ def prompt_hash(instructions: str) -> str:
 def interpret_key(query: str, req: Any, instructions: str, model: str | None = None) -> str:
     """Everything the model is shown, and nothing else.
 
-    Anything left out here would let two different questions share one answer;
-    anything included that the model never sees (the travel profile, the device
-    position) would only make the cache miss.
-
-    `model` is part of the identity even though the model never sees it: the
-    reading is the MODEL's output, so keying without it means a model switch
-    inside one live process is answered from the previous model's readings —
-    which is exactly how a "we measured the new model" claim turns out to be
-    false. `embed_key` already takes its model for the same reason.
+    `model` is part of the key: the reading is that model's output, not this one's.
     """
     return _digest(
         "interpret",

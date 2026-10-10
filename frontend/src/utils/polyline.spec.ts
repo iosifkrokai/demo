@@ -8,7 +8,6 @@ describe('decode', () => {
   });
 
   it('should decode single coordinate correctly', () => {
-    // This represents a single coordinate at (0, 0) with precision 6
     const result = decode('_', 6);
     expect(result).toEqual([[0, 0]]);
   });
@@ -112,7 +111,6 @@ describe('decode', () => {
   });
 
   it('should handle invalid input gracefully', () => {
-    // The function handles invalid inputs gracefully by returning empty arrays
     // @ts-expect-error - Testing with invalid input types
     const resultNull = decode(null, 6);
     // @ts-expect-error - Testing with invalid input types

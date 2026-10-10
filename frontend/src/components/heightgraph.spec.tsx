@@ -257,7 +257,6 @@ describe('HeightGraph', () => {
       />
     );
 
-    // Clicking is async, so drive the prop-change collapse path directly.
     rerender(
       <HeightGraph
         data={createMockData()}

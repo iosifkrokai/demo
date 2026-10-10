@@ -1,9 +1,4 @@
-"""Offline tests for the reproducible seed pipeline (spec 002, W4).
-
-No network and no database: the DB connect helper and the network stack are
-monkeypatched to fail loudly, and every fixture is a small CSV written to a
-pytest ``tmp_path``.
-"""
+"""Offline tests for the reproducible seed pipeline."""
 
 from __future__ import annotations
 
@@ -30,8 +25,6 @@ MIGRATION = BACKEND / "db" / "migrations" / "0004_places_taxonomy.sql"
 HEADER = ("# name|category|district|town|lat|lon|blurb|fun_fact|fun_facts|"
           "opening_hours|ticket_price|visit_minutes|links|source_url")
 
-# A Grodno-region point that the geofence accepts, and Vilnius (inside the
-# generous ingest bbox, outside the project area).
 IN_AREA = (53.6791, 23.8216)
 OUT_OF_AREA = (54.6872, 25.2797)
 
@@ -80,10 +73,8 @@ def fixture_dir(tmp_path: Path) -> Path:
         osm_rows=[
             _row("Лидский замок", "замок", "osm:way/1", 53.8845, 25.2925,
                  district="Лидский район", town="Лида"),
-            # Same name, ~2 m away → suspected duplicate of the row above.
             _row("Лидский замок", "замок", "osm:way/2", 53.88451, 25.29251,
                  district="Лидский район", town="Лида"),
-            # Inside the bbox, outside Grodno voblast → quarantined.
             _row("Cafe Vilnius", "музей", "osm:node/3", *OUT_OF_AREA,
                  district="", town=""),
         ],
@@ -94,8 +85,6 @@ def fixture_dir(tmp_path: Path) -> Path:
     )
     return tmp_path
 
-
-# --dry-run must never touch the DB or the network
 
 def test_dry_run_needs_no_db_and_no_network(fixture_dir, tmp_path, monkeypatch):
     def _explode(*_args, **_kwargs):  # pragma: no cover - must not be reached
@@ -111,7 +100,7 @@ def test_dry_run_needs_no_db_and_no_network(fixture_dir, tmp_path, monkeypatch):
     assert rc == 0
     report = json.loads(report_path.read_text(encoding="utf-8"))
     assert report["mode"] == "dry-run"
-    assert "db" not in report  # no apply happened
+    assert "db" not in report
 
 
 def test_dry_run_report_is_stable_across_runs(fixture_dir):
@@ -121,10 +110,8 @@ def test_dry_run_report_is_stable_across_runs(fixture_dir):
             datasets.collect_records(datasets_), mode="dry-run", generated_at="fixed")
 
     first, second = _report(), _report()
-    assert first == second  # no counters drift between runs
+    assert first == second
 
-
-# Validation + quarantine
 
 def test_collect_records_tags_category_source(fixture_dir):
     datasets_ = [d.with_data_dir(fixture_dir) for d in datasets.default_datasets()]
@@ -143,7 +130,6 @@ def test_geofence_rejects_are_quarantined_and_not_fatal(fixture_dir):
     assert len(rejected) == 1
     assert rejected[0]["kind"] == "geofence"
     assert "outside Grodno region" in rejected[0]["problems"][0]
-    # The rejected row is not among the published records.
     assert all(r["source_url"] != "osm:node/3" for r in collected["records"])
 
 
@@ -155,7 +141,7 @@ def test_bad_category_in_hand_authored_dataset_is_fatal(tmp_path):
         osm_rows=[],
     )
     rc = seed_cli.main(["--dry-run", "--data-dir", str(tmp_path)])
-    assert rc == 2  # region/city must never be half-loaded
+    assert rc == 2
 
 
 def test_non_finite_coordinates_are_invalid_not_geofence(tmp_path):
@@ -172,8 +158,6 @@ def test_non_finite_coordinates_are_invalid_not_geofence(tmp_path):
     assert kinds == {"invalid"}
 
 
-# Coverage report — the numbers must be honest and exact
-
 def test_coverage_counts_and_shares(fixture_dir):
     datasets_ = [d.with_data_dir(fixture_dir) for d in datasets.default_datasets()]
     collected = datasets.collect_records(datasets_)
@@ -182,7 +166,6 @@ def test_coverage_counts_and_shares(fixture_dir):
         collected, mode="dry-run", curated=curated,
         curated_stats={"rows": len(curated), "applied": False})
 
-    # 5 valid records (2 city, 1 region, 2 osm); the Vilnius row is quarantined.
     assert report["totals"]["records"] == 5
     assert report["totals"]["geofence_rejects"] == 1
     assert report["totals"]["invalid"] == 0
@@ -190,7 +173,6 @@ def test_coverage_counts_and_shares(fixture_dir):
     cov = report["coverage"]
     assert cov["source_url"] == {"count": 5, "total": 5, "share": 1.0}
     assert cov["coordinates"]["share"] == 1.0
-    # 2 of 5 fixture rows carry opening_hours (city row 1 + region row).
     assert cov["opening_hours"] == {"count": 2, "total": 5, "share": 0.4}
     assert cov["ticket_price"] == {"count": 2, "total": 5, "share": 0.4}
 
@@ -218,7 +200,7 @@ def test_alias_coverage_counts_ru_names(fixture_dir):
     aliases = report["aliases"]
     assert aliases["ru_script_names"]["count"] == 5
     assert aliases["en_script_names"]["count"] == 0
-    assert aliases["explicit_en_aliases"]["count"] == 0  # unknown stays unknown
+    assert aliases["explicit_en_aliases"]["count"] == 0
 
 
 def test_report_json_roundtrip(fixture_dir, tmp_path):
@@ -231,8 +213,6 @@ def test_report_json_roundtrip(fixture_dir, tmp_path):
         assert key in report, key
 
 
-# Curated-category protection
-
 @pytest.mark.parametrize("source,expected", [
     ("curated", True), ("dataset", True), ("auto", False), (None, False),
 ])
@@ -244,7 +224,6 @@ def test_upsert_sql_never_overwrites_protected_categories():
     sql = pipeline.upsert_sql()
     assert "ON CONFLICT (source_url) DO UPDATE" in sql
     assert "CASE WHEN places.category_source IN ('curated', 'dataset')" in sql
-    # Protected rows keep their category against automatic writers only.
     assert "AND EXCLUDED.category_source = 'auto'" in sql
     assert sql.count("THEN places.category ELSE EXCLUDED.category END") == 1
     assert sql.count("THEN places.category_source ELSE EXCLUDED.category_source END") == 1
@@ -257,19 +236,15 @@ def test_source_fields_maps_providers():
     assert pipeline.source_fields("city:old-castle")["url"] is None
 
 
-# Migration 0004
-
 def test_migration_adds_all_three_tables_and_is_idempotent():
     sql = MIGRATION.read_text(encoding="utf-8")
     for table in ("place_aliases", "place_sources", "areas"):
         assert f"CREATE TABLE IF NOT EXISTS {table}" in sql, table
-    # No bare CREATE TABLE / INDEX anywhere (would break a re-run).
     assert not re.search(r"CREATE TABLE(?! IF NOT EXISTS)", sql)
     assert not re.search(r"CREATE (?:UNIQUE )?INDEX(?! IF NOT EXISTS)", sql)
     assert "ADD COLUMN IF NOT EXISTS category_source" in sql
     assert "DROP TRIGGER IF EXISTS places_guard_curated_category" in sql
     assert "CREATE OR REPLACE FUNCTION places_guard_curated_category" in sql
-    # Indexes the retrieval paths rely on.
     assert "USING GIN (alias gin_trgm_ops)" in sql
     assert "USING GIST (geom)" in sql
     assert "place_sources (provider, external_id)" in sql
@@ -281,8 +256,6 @@ def test_migration_guard_reverts_protected_category_changes():
     assert "grodno.allow_curated_category_change" in sql
     assert "NEW.category := OLD.category" in sql
 
-
-# Real repo data stays consistent with the seed contract
 
 def test_real_curated_csv_is_parseable_and_in_taxonomy():
     curated = datasets.read_curated(BACKEND / "data" / "places_curated.csv")

@@ -16,26 +16,12 @@ import { PlacePhoto } from '@/components/parts/place-photo';
 import { VisitedToggle } from '@/components/visited/visited-toggle';
 import { fmtMin } from '@/components/parts/guide-format';
 
-/**
- * What a point has to say, laid out for the surface it is read on.
- *
- * Shared by the two ways a tourist can read about a point, so the words cannot
- * drift apart: the map popup on a wide screen, and the card that stands on the
- * bottom of the map on a phone (see `mobile/mobile-place-card.tsx`).
- *
- * `mobile` is not decoration. On a 390px card the desktop layout is a wall:
- * 12px text, a 24px close button, and eight separate blocks stacked, so the
- * point's *name* — the thing the tourist tapped for — ends up above the fold
- * and the fun fact that makes it worth visiting is a scroll away. So on a phone
- * the card is: the name, what it is and how long it is worth, one picture, one
- * paragraph, and the fun fact. Everything else — the extra facts and the links —
- * is behind one disclosure instead of being stacked up front.
- */
+/** What a point has to say, laid out for the surface it is read on. */
 export interface PlaceCardBodyProps {
   details: PlaceDetails;
   onClose: () => void;
   mobile?: boolean;
-  /** The DB `places.id`, so the card can offer the «посещено» toggle (spec 005). */
+  /** The DB `places.id`, so the card can offer the «посещено» toggle. */
   placeId?: number | null;
 }
 
@@ -67,16 +53,9 @@ export function PlaceCardBody({
       }
       data-testid="place-card-body"
       data-variant={mobile ? 'mobile' : 'popup'}
-      /* Clicks inside the card must not bubble to the map: the map's own click
-         handler would treat them as a miss and close the card mid-read — and on
-         a phone the card stands where the tourist is most likely to be reaching
-         for the map. */
       onClick={(e) => e.stopPropagation()}
       onMouseDown={(e) => e.stopPropagation()}
     >
-      {/* `icon-lg` (40px), not `icon` (36px): the close button is the way out
-          of the card, and 40px is this project's floor for a finger target
-          (mobile/density.ts). Measured on the phone card before: 36×36. */}
       <Button
         variant="ghost"
         size={mobile ? 'icon-lg' : 'icon-xs'}
@@ -98,8 +77,6 @@ export function PlaceCardBody({
             : 'pr-6 text-body font-semibold leading-tight'
         }
       >
-        {/* A point the dataset has no name for still needs a heading: without
-            one the card opens on a blank line and reads as broken. */}
         {details.name || t('sidebar.waypoints.unnamed')}
       </div>
 
@@ -117,7 +94,6 @@ export function PlaceCardBody({
         )}
       </div>
 
-      {/* The tourist's own mark: durable, per account (spec 005). */}
       <VisitedToggle placeId={placeId} />
 
       {details.photo && (
@@ -128,9 +104,6 @@ export function PlaceCardBody({
         />
       )}
 
-      {/* Visitor info: opening hours, ticket price, location. Before the
-          blurb on a phone — «when can I go and what does it cost» is what makes
-          a stop actionable, and it is two short lines. */}
       {hasVisitorInfo && (
         <div
           className={
@@ -178,8 +151,6 @@ export function PlaceCardBody({
         </p>
       )}
 
-      {/* Primary fun fact — the reason to stop, so it is on the phone card's
-          first screen too, not behind the extras. */}
       {details.funFact && (
         <div
           className={
@@ -205,8 +176,6 @@ export function PlaceCardBody({
         </div>
       )}
 
-      {/* Everything else is one tap away on a phone, and inline on a desktop
-          card that has the room for it. Same data, same words either way. */}
       {mobile ? (
         hasMore && (
           <>
@@ -238,12 +207,6 @@ export function PlaceCardBody({
                       {t('map.placeMoreFacts')}
                     </span>
                     {details.funFacts.slice(0, 3).map((fact, i) => (
-                      // Keyed by the fact's own text, not by its position: the
-                      // extras arrive from the server and can be replaced between
-                      // two opens of the card, and an index key then hands the
-                      // old DOM node (and its styling) to a different fact.
-                      // A repeated fact keeps the index as a tiebreaker so the
-                      // keys stay unique.
                       <div
                         key={`fact-${i}-${fact.slice(0, 24)}`}
                         className="flex items-start gap-1.5"

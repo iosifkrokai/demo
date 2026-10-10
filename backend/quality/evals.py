@@ -1,41 +1,5 @@
 #!/usr/bin/env python
-"""Stage evals for the Grodno guide: one runner, one honest report.
-
-Why this exists next to `benchmarks/` instead of inside it. The benchmark there
-grades *routes* (recall@K, order, detour, budget) against reference walks, and
-`quality/cases/compliance/` grades *request compliance* end-to-end. Both answer "did
-it turn out well overall". Neither can say **which part of the flow** produced a wrong
-answer, and that is what tuning needs: a route can be mediocre while the reading
-was perfect, and it can be perfect while the verifier lied.
-
-So each stage gets its own cases and its own checks, and every check is a claim
-that can be false:
-
-  verdicts        does the deterministic verifier reach the right (status, reason)?
-  services        does "what lies along the way" measure the truth? (cross-checked against an
-                  independent implementation — PostGIS spheroid vs plain haversine)
-  interpretation  did the request get read as it was meant? (live model path,
-                  falls back to the deterministic parse — the report says which
-                  answered, because a fallback run proves nothing about the model)
-
-Run:
-    ./.venv/bin/python -m quality.evals                     # offline stages
-    ./.venv/bin/python -m quality.evals --stage services     # one stage
-    ./.venv/bin/python -m quality.evals --with-interpretation  # + the live model stage
-    ./.venv/bin/python -m quality.evals --json quality/reports/evals_last.json
-
-Honesty rules this runner keeps, because the numbers are worthless without them:
-
-* every case carries `why` — the defect it exists to catch; a case nobody can
-  explain is deleted, not kept for the count;
-* a stage that could not run (no key, no database) reports `skipped` and is
-  excluded from the score — never counted as success;
-* expectations that encode a judgement (which readings of «кофе по пути» are
-  acceptable) list *all* acceptable answers, so the eval measures the contract
-  instead of one preferred phrasing;
-* the aggregate is a weighted check pass-rate, and the weights are a product
-  judgement written down in WEIGHTS — they are meant to be argued with.
-"""
+"""Stage evals for the Grodno guide: one runner, one honest report."""
 
 from __future__ import annotations
 
@@ -53,10 +17,6 @@ sys.path.insert(0, str(ROOT))
 
 CASES = Path(__file__).resolve().parent / "cases"
 
-#: Weights over stages, as a product judgement: what a tourist feels.
-#: Reading the request wrong poisons everything downstream, so it weighs most;
-#: a verdict that claims «выполнено» without evidence and a fabricated service
-#: are the two ways this guide could lie to someone standing in the street.
 WEIGHTS: dict[str, float] = {
     "verdicts": 0.25,
     "services": 0.20,
@@ -88,13 +48,10 @@ def _load(name: str) -> list[Case]:
     return out
 
 
-# ── stage: verdicts ──────────────────────────────────────────────────────────
-
 def run_verdicts() -> dict[str, Any]:
     """The deterministic verifier against the contract it must keep.
 
-    Offline and total: no DB, no model, no network — a verdict that depends on
-    the weather is not a contract.
+    Offline and total: no DB, no model, no network.
     """
     from agent.planner.verify import ServiceAlongEvidence, verify
     from domain.requirements import Requirement, TripRequirements
@@ -113,7 +70,7 @@ def run_verdicts() -> dict[str, Any]:
             )
         try:
             result = verify(reqs, raw["plan"], raw.get("geometry"), evidence)
-        except Exception as exc:  # a verifier that raises is a failed verdict
+        except Exception as exc:
             checks.append(
                 {"case": case.id, "check": "verdict", "ok": False,
                  "detail": f"{type(exc).__name__}: {exc}", "why": case.why}
@@ -127,9 +84,6 @@ def run_verdicts() -> dict[str, Any]:
                 "case": case.id,
                 "check": "verdict",
                 "ok": got == want,
-                # A documented gap stays visible but does not count as a failure:
-                # hiding it would be dishonest, and scoring it as a defect would
-                # make the number jump when nothing changed.
                 "known_gap": bool(raw.get("known_gap")) and got != want,
                 "detail": f"получено {got}, ожидалось {want}",
                 "why": case.why,
@@ -138,10 +92,8 @@ def run_verdicts() -> dict[str, Any]:
     return {"stage": "verdicts", "checks": checks, "skipped": None}
 
 
-# ── stage: services (cross-checked measurement) ───────────────────────────────
-
 def _haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    r = 6371008.8  # mean Earth radius, the sphere haversine assumes
+    r = 6371008.8
     p1, p2 = math.radians(lat1), math.radians(lat2)
     dp, dl = p2 - p1, math.radians(lon2 - lon1)
     a = math.sin(dp / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
@@ -153,10 +105,7 @@ def _off_line_and_along(
 ) -> tuple[float, float]:
     """Independent reference: metres off the polyline and metres along it.
 
-    Deliberately *not* PostGIS: the whole point is that a second implementation,
-    written differently (equirectangular local projection, sphere distances),
-    agrees with the database. Two independent methods agreeing is evidence; one
-    method agreeing with itself is not.
+    Deliberately *not* PostGIS, so it can cross-check the database independently.
     """
     lat0 = sum(p[0] for p in line) / len(line)
     kx = 111320.0 * math.cos(math.radians(lat0))
@@ -185,11 +134,7 @@ def _off_line_and_along(
 def run_services() -> dict[str, Any]:
     """Does the measurement tell the truth about what lies beside the line?
 
-    Two independent answers are compared: `store.services` on PostGIS and a plain
-    haversine/projection reference built here from the same rows. Points sitting
-    within a few metres of the gate are reported separately rather than counted
-    as disagreement — a spheroid and a sphere legitimately differ there, and
-    pretending otherwise would turn a real tolerance into fake precision.
+    PostGIS vs a haversine reference; points near the gate are not counted as disagreement.
     """
     from psycopg.rows import dict_row
 
@@ -225,7 +170,6 @@ def run_services() -> dict[str, Any]:
             )
             items = answer["items"]
 
-            # Independent reference from the same rows, no PostGIS involved.
             with conn.cursor(row_factory=dict_row) as cur:
                 cur.execute(
                     "SELECT id, lat, lon, category FROM places WHERE category = ANY(%s) AND lat IS NOT NULL",
@@ -238,8 +182,6 @@ def run_services() -> dict[str, Any]:
                 if off <= gate:
                     ref[row["id"]] = (off, along)
 
-            # ── checks ──────────────────────────────────────────────────────
-            # 1. Only services may come back, whatever was asked for.
             bad_role = [
                 i["category"] for i in items
                 if _role_of(taxonomy, i["category"]) != "service"
@@ -249,24 +191,18 @@ def run_services() -> dict[str, Any]:
                 "detail": f"не-услуги в ответе: {bad_role}", "why": case.why,
             })
 
-            # 2. The answer must be ordered along the route.
             alongs = [i["along_m"] for i in items]
             checks.append({
                 "case": case.id, "check": "ordered_along", "ok": alongs == sorted(alongs),
                 "detail": f"along_m = {alongs}", "why": case.why,
             })
 
-            # 3. Nothing may sit farther off the line than the gate.
             over = [i["off_line_m"] for i in items if i["off_line_m"] > gate + 1]
             checks.append({
                 "case": case.id, "check": "within_gate", "ok": not over,
                 "detail": f"за порогом {gate} м: {over}", "why": case.why,
             })
 
-            # 4. Membership agrees with the independent reference (gate ties set aside).
-            # The answer is capped by `limit` and ordered along the route, so the
-            # reference must be capped the same way — otherwise a correct capped
-            # answer looks like a pile of missing points.
             cap = int(raw.get("limit", services_mod.MAX_SERVICES))
             ref_capped = dict(
                 sorted(ref.items(), key=lambda kv: kv[1][1])[:cap]
@@ -296,18 +232,12 @@ def run_services() -> dict[str, Any]:
                 "why": case.why,
             })
 
-            # 5. For shared points the two distances must agree within tolerance.
             ref_off = {pid: off for pid, (off, _) in ref.items()}
             worst = 0.0
             allowance = 2.0
             for item in items:
                 if item["id"] in ref_off:
                     diff = abs(item["off_line_m"] - ref_off[item["id"]])
-                    # Both methods are approximations, and their difference grows
-                    # with the distance: PostGIS measures on the spheroid, the
-                    # reference on a sphere with a local projection. 0.5% of the
-                    # distance plus 2 m is the honest envelope — a fixed 2 m
-                    # would turn real geometry into a fake disagreement at 400 m.
                     allowance = max(allowance, 0.005 * ref_off[item["id"]] + 2.0)
                     worst = max(worst, diff)
             checks.append({
@@ -316,7 +246,6 @@ def run_services() -> dict[str, Any]:
                 "why": case.why,
             })
 
-            # 6. The answer must name what it measured and what it refused to.
             flags_ok = (
                 answer.get("detour_confirmed") is False
                 and answer.get("measured") == "distance_to_line"
@@ -329,7 +258,6 @@ def run_services() -> dict[str, Any]:
                 "why": case.why,
             })
 
-            # 7. A full answer must say that it was capped.
             if len(items) >= int(raw.get("limit", services_mod.MAX_SERVICES)):
                 checks.append({
                     "case": case.id, "check": "cap_is_declared",
@@ -338,10 +266,7 @@ def run_services() -> dict[str, Any]:
                     "why": case.why,
                 })
 
-            # 8. The gate must widen with the profile, not shrink.
             if raw.get("monotonic_with_gate"):
-                # The same cap on both calls: a wider gate must find *more*, and
-                # comparing 36 against 53 would only measure the cap.
                 cap_here = int(raw.get("limit", services_mod.MAX_SERVICES))
                 wider = services_mod.services_along(
                     conn, shape, categories=codes, profile=raw["profile"],
@@ -366,22 +291,13 @@ def _role_of(taxonomy: Any, code: str) -> str:
         return "unknown"
 
 
-# ── stage: plan ─────────────────────────────────────────────────────────────
-
-#: Where the served app answers. The plan stage asks the app itself.
 BASE_URL = os.environ.get("EVALS_BASE_URL", "http://localhost:8080")
 
 
 def run_plan() -> dict[str, Any]:
     """What the walk is actually made of, over HTTP.
 
-    This stage exists because the two defects it pins were invisible one level
-    down: a stop pool that keeps a service, and a prohibition the plan violates,
-    are properties of the *composed* route — the optimizer, the negative filter
-    and the must-visit bypass agreeing with each other. It asks the served app,
-    so a stale server answering with old code shows up as a failure of the
-    request rather than a green run (that happened: an orphaned process held the
-    port and the numbers looked fine).
+    It asks the served app, so a stale server shows up as a failure rather than a green run.
     """
     from domain import taxonomy
 
@@ -404,9 +320,6 @@ def run_plan() -> dict[str, Any]:
                 "query": raw["query"],
                 "time_budget_minutes": raw.get("budget_minutes", 120),
                 "profile": raw.get("profile", "pedestrian"),
-                # A tourist standing somewhere: without a position the pipeline
-                # has nothing to anchor the walk to and refuses the request, and
-                # the case would test the refusal instead of the plan.
                 "origin": raw.get("origin") or {"lat": 53.6789, "lon": 23.8295},
             }
         ).encode("utf-8")
@@ -475,16 +388,10 @@ def run_plan() -> dict[str, Any]:
     return {"stage": "plan", "checks": checks, "base_url": BASE_URL}
 
 
-# ── stage: interpretation ────────────────────────────────────────────────────
-
 def run_interpretation() -> dict[str, Any]:
     """Did the request get read as it was meant?
 
-    Live: this stage asks the same entry point the product uses
-    (`build_requirements`), which prefers the model and falls back to the
-    deterministic parse. The report records which one answered — a fallback run
-    says nothing about the model, and counting it as a pass would hide exactly
-    the thing we want to tune.
+    Live, via the product's `build_requirements`; the report records which source answered.
     """
     from agent.planner.intent import build_requirements
     from contracts.planner import GenerateReq
@@ -510,13 +417,9 @@ def run_interpretation() -> dict[str, Any]:
             (r.kind, r.code or r.name or "-", r.strength) for r in got.requirements
         )
 
-        # Acceptable readings are listed in the case: the eval measures the
-        # contract, not one preferred phrasing.
         ok = False
         for acceptable in raw["acceptable"]:
             if all(
-                # `code: null` in a case means "any code" — for must_visit, which
-                # is a place rather than a category.
                 any(k == a["kind"] and (a.get("code") is None or c == a["code"])
                     and s == a["strength"]
                     for k, c, s in reading)
@@ -531,7 +434,6 @@ def run_interpretation() -> dict[str, Any]:
             "why": case.why,
         })
 
-        # A code nobody can look up must never appear as a requirement.
         invented = [
             r.code for r in got.requirements
             if r.code and not _code_exists(taxonomy, r.code)
@@ -541,12 +443,6 @@ def run_interpretation() -> dict[str, Any]:
             "detail": f"выдуманные коды: {invented}", "why": case.why,
         })
 
-        # A mandatory place that resolved to nothing is a mandatory requirement
-        # the guide can only report as unmet — the tourist asked for something
-        # that does not exist in the data. Live examples: «Гродно за два часа»
-        # made the *city* a must-visit, and «Старый и Новый замки» produced the
-        # fragments «Старый»/«Новый». Whether it arrived with a name or without
-        # one, what matters is that nothing is attached to it.
         unplaceable = [
             (r.name or r.code or "-") for r in got.requirements
             if r.kind == "must_visit" and r.place_id is None
@@ -557,8 +453,6 @@ def run_interpretation() -> dict[str, Any]:
             "why": case.why,
         })
 
-    # A case that documents a known defect reports it as a gap, not as a
-    # failure — visible every run, without training everyone to ignore red.
     for check in checks:
         if not check["ok"] and any(
             c.raw.get("known_gap") and c.id == check["case"]
@@ -587,8 +481,6 @@ STAGES: dict[str, Callable[[], dict[str, Any]]] = {
     "plan": run_plan,
 }
 
-
-# ── report ───────────────────────────────────────────────────────────────────
 
 def _rate(checks: list[dict[str, Any]]) -> tuple[int, int]:
     """Pass rate over the checks that count; documented gaps are excluded."""
@@ -690,8 +582,6 @@ def main(argv: list[str] | None = None) -> int:
         )
         print(f"отчёт записан: {args.json}")
 
-    # A documented gap is not a failure: the gate must agree with the rate it
-    # prints, otherwise the number and the exit code tell different stories.
     return (
         1
         if any(

@@ -1,9 +1,4 @@
-"""Phase 0 of the two-mode UI: the refinement contract (RouteContext).
-
-The frontend sends the route it already has plus the delta instruction; the
-backend must accept it, ignore it safely on a first turn, and never resurrect a
-stop the user deleted by hand.
-"""
+"""The refinement contract (RouteContext): accept the route plus the delta instruction."""
 
 from __future__ import annotations
 
@@ -135,7 +130,7 @@ def test_valhalla_pool_keeps_base_stops_and_stays_under_20():
 
     assert len(capped) == 20
     ids = [c.id for c in capped]
-    assert all(b.id in ids for b in base)          # the route the user has survives
+    assert all(b.id in ids for b in base)
     assert ids[:12] == [b.id for b in base]
 
 
@@ -161,7 +156,6 @@ def test_convenience_stops_come_from_the_neighbourhood(monkeypatch):
 
     found = _nearby_convenience(None, base, {"кафе"})
 
-    # one lookup per stop, each with the small convenience radius
     assert calls == [
         (base[0].lat, base[0].lon, constants.CONVENIENCE_RADIUS_M / 1000.0),
         (base[1].lat, base[1].lon, constants.CONVENIENCE_RADIUS_M / 1000.0),

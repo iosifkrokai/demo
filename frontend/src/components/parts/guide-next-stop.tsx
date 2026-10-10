@@ -19,10 +19,7 @@ interface GuideNextStopProps {
   estimateMinutes?: number | null;
   /** When given, the tourist may set their own time at this stop. */
   onVisitMinutesChange?: (minutes: number | null) => void;
-  /**
-   * Live distance to the stop; null while the browser has not said where we are
-   * — or while the fix is too coarse to turn into a confident number.
-   */
+  /** Live distance to the stop; null while the browser has not said where we are — or while the fix is too coarse to turn into a confident number. */
   distance: number | null;
   /** Travel time to the stop, from the route's own time and length. */
   travelMinutes?: number | null;
@@ -31,31 +28,11 @@ interface GuideNextStopProps {
   /** How the tourist moves: «идти» on foot, «ехать» by bike or car. */
   mode: GuideTravelMode;
   mapsHref: string;
-  /**
-   * The navigator's version of the card: name, number and distance only.
-   *
-   * On a phone the full card is the wrong shape for the thing it is shown in.
-   * Over a map, with the turn banner above and the buttons below, it stood 208px
-   * tall — the category, the visit-time editor, the travel/arrival line and a
-   * 48px «open in maps» button. That is planning information on a screen that
-   * has none to spare: measured at 390×844 the whole HUD plus the guide sheet
-   * left 4 % of the map visible, against the ≥66 % the mobile spec asks for.
-   * So the walking card keeps what a walker reads at a glance and drops the rest,
-   * which stays one tap away in the route details.
-   */
+  /** The navigator's version of the card: name, number and distance only. */
   compact?: boolean;
 }
 
-/**
- * The one thing the tourist needs right now: where they are going next, how
- * far it is, when they get there, and how to hand it to a maps app. Remounted
- * (keyed on the stop) by the panel so the card fades in again when the next
- * stop changes.
- *
- * The card speaks the transport's language: footprints and «идти» on foot, a
- * bike or a car icon and «ехать» otherwise. A car route that says «идти ~40 мин»
- * is simply wrong, and a car needs to be told where it can be left.
- */
+/** The one thing the tourist needs right now: where they are going next, how far it is, when they get there, and how to hand it to a maps app. */
 export const GuideNextStop = ({
   number,
   name,
@@ -110,9 +87,6 @@ export const GuideNextStop = ({
         </span>
         <div className="min-w-0 flex-1">
           <div className="text-title font-semibold leading-tight">{name}</div>
-          {/* Category and visit time are planning facts, and both are editable in
-              the route details. On the walking card they cost a second line for
-              information nobody reads with one thumb on a map. */}
           {!compact && (
             <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-meta text-muted-foreground">
               {category && (
@@ -175,10 +149,6 @@ export const GuideNextStop = ({
           </div>
         )}
 
-      {/* In the navigator the maps link is a 48px button — a whole row of a screen
-          that has no whole row to spare. It shrinks to an icon in the corner
-          rather than disappearing: handing the next stop to a maps app is still
-          something a tourist does mid-walk, and a 44px target keeps it honest. */}
       {compact ? (
         <a
           href={mapsHref}

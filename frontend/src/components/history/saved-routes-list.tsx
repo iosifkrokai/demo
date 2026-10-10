@@ -1,12 +1,4 @@
-/**
- * The saved-routes list (spec 003 §4).
- *
- * It renders summaries and nothing else. The list endpoint deliberately leaves
- * the plan and its geometry behind, and this component has no access to them:
- * it shows name, query, stop count, distance, duration and whether the copy is
- * on the server or only in this browser. A value the server did not send stays
- * unstated — no `0 км`, no invented stop count.
- */
+/** The saved-routes list. */
 
 import { Pencil, Trash2 } from 'lucide-react';
 import { useState } from 'react';

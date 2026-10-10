@@ -1,22 +1,4 @@
-"""W3 — the independent requirement verifier, and optimizer honesty.
-
-Pins the four outcomes of ``verify(requirements, plan, geometry)``:
-
-  * satisfied — a real place on the route *and* a real geometry prove it; the
-    proving place_ids are listed;
-  * unmet     — the data exists (a named place, a known category) but the route
-    does not honour it;
-  * uncertain — the data needed to decide does not exist (no geometry, no route,
-    an unknown category code); never reported as satisfied;
-  * infeasible — a hard requirement cannot be honoured at all (a mandatory stop
-    absent or unroutable, a mandatory service missing).
-
-Plus the structural change that an unroutable must-visit stop is *never*
-silently removed: ``cost.prune_unroutable_stops`` keeps it and returns a machine
-reason, and ``validate`` records the breakdown for ``explain``.
-
-No network, no DB: routes, cost matrices and geometry are built by hand.
-"""
+"""The independent requirement verifier, and optimizer honesty."""
 
 from __future__ import annotations
 
@@ -59,7 +41,6 @@ from contracts.planner import Candidate, CostMatrix, ResolvedConstraints
 from domain import constants
 from domain.requirements import Requirement, TripRequirements
 
-# Fixtures / helpers
 
 def _cand(pid: int, name: str, category: str | None, lat: float = 53.68, lon: float = 23.83) -> Candidate:
     return Candidate(id=pid, name=name, category=category, lat=lat, lon=lon)
@@ -75,8 +56,6 @@ def _geom(n: int = 3) -> dict:
 def _reqs(*requirements: Requirement, budget: int | None = None) -> TripRequirements:
     return TripRequirements(requirements=list(requirements), budget_minutes=budget)
 
-
-# satisfied
 
 def test_must_visit_on_route_is_satisfied():
     route = [_cand(7, "Старый замок", "замок"), _cand(8, "Костёл", "костёл")]
@@ -104,12 +83,7 @@ def test_must_visit_matched_by_name_when_id_is_unknown():
 
 
 def test_a_service_beside_the_line_satisfies_the_requirement():
-    """«Кофе по пути» — the case that used to be permanently unmet.
-
-    The café is not a stop and must never become one; the requirement is closed
-    by the measurement the caller made along the line, and the proving ids are
-    the cafés themselves.
-    """
+    """«Кофе по пути» — the case that used to be permanently unmet."""
     route = [_cand(1, "Старый замок", "замок")]
     reqs = _reqs(Requirement(kind="service", strength="soft", code="кафе"))
     measured = ServiceAlongEvidence(True, {"кафе": [{"id": 42, "name": "Ссобойка", "off_line_m": 1}]})
@@ -122,8 +96,6 @@ def test_a_service_beside_the_line_satisfies_the_requirement():
 
 
 def test_a_failed_measurement_is_uncertain_not_unmet():
-    # The caller could not measure (bad shape, database down). Saying «нет»
-    # would be a claim we have no evidence for.
     route = [_cand(1, "Старый замок", "замок")]
     reqs = _reqs(Requirement(kind="service", strength="hard", code="туалет"))
 
@@ -206,8 +178,6 @@ def test_verify_accepts_a_validated_plan_object():
     assert result[0].place_ids == [7]
 
 
-# unmet
-
 def test_must_visit_absent_is_unmet_and_infeasible():
     route = [_cand(1, "Музей", "музей")]
     reqs = _reqs(Requirement(kind="must_visit", strength="hard", place_id=99, name="Форт"))
@@ -276,8 +246,6 @@ def test_avoid_honoured_is_satisfied():
     assert result[0].reason == REASON_AVOID_OK
 
 
-# uncertain
-
 @pytest.mark.parametrize(
     "geometry",
     [None, {}, {"type": "LineString", "coordinates": []}],
@@ -293,7 +261,6 @@ def test_missing_geometry_is_uncertain_never_satisfied(geometry):
 
     assert result[0].status == "uncertain"
     assert result[0].reason == REASON_GEOMETRY_MISSING
-    # The stop is known; only its reachability is unproven.
     assert result[0].place_ids == [7]
     assert reqs.is_ready() is False
     assert overall_status(reqs) == "degraded"
@@ -319,8 +286,6 @@ def test_unknown_category_code_is_uncertain():
     assert overall_status(reqs) == "degraded"
 
 
-# infeasible: the mandatory stop Valhalla cannot route
-
 def test_unroutable_must_visit_reports_infeasible_not_silence():
     route = [_cand(1, "Музей", "музей")]
     plan = {
@@ -339,8 +304,6 @@ def test_unroutable_must_visit_reports_infeasible_not_silence():
     assert result[0].reason == REASON_MUST_VISIT_UNROUTABLE
     assert overall_status(reqs) == "infeasible"
 
-
-# structural change: prune never silently drops a must-visit stop
 
 def _island_cost() -> CostMatrix:
     """a→b is unroutable, everything else routes (the road-island case)."""
@@ -400,8 +363,6 @@ def test_prune_leaves_a_healthy_tour_untouched():
     assert report == []
 
 
-# validate: budget vs actual time, and the recorded breakdown
-
 def test_validate_checks_budget_against_actual_time():
     route = [_cand(1, "Музей", "музей"), _cand(2, "Туалет", "туалет")]
     cost = CostMatrix(
@@ -409,7 +370,7 @@ def test_validate_checks_budget_against_actual_time():
         visit_minutes=[10, 10],
         indices=[0, 1],
     )
-    constraints = ResolvedConstraints(time_budget_minutes=30)  # 1800 s budget
+    constraints = ResolvedConstraints(time_budget_minutes=30)
     reqs = _reqs(Requirement(kind="service", strength="hard", code="туалет"))
 
     plan = validate(
@@ -425,7 +386,6 @@ def test_validate_checks_budget_against_actual_time():
     assert plan.trace["budget_exceeded"] is True
     assert plan.trace["requirement_summary"]["status"] == "ready"
     assert plan.trace["requirements"][0]["status"] == "satisfied"
-    # The verifier ran against the live object too.
     assert reqs.requirements[0].status == "satisfied"
 
 
@@ -466,15 +426,13 @@ def test_validate_without_requirements_is_unchanged():
     assert "requirement_summary" not in plan.trace
 
 
-# explain: the satisfied / unmet / uncertain breakdown
-
 def test_explain_includes_the_full_breakdown():
     route = [_cand(1, "Музей", "музей"), _cand(2, "Туалет у ратуши", "туалет")]
     reqs = _reqs(
-        Requirement(kind="service", strength="hard", code="туалет"),     # satisfied
-        Requirement(kind="service", strength="soft", code="кафе"),       # unmet
-        Requirement(kind="must_visit", strength="soft", place_id=500, name="Где-то"),  # unmet
-        Requirement(kind="service", strength="hard", code="самокат"),    # uncertain
+        Requirement(kind="service", strength="hard", code="туалет"),
+        Requirement(kind="service", strength="soft", code="кафе"),
+        Requirement(kind="must_visit", strength="soft", place_id=500, name="Где-то"),
+        Requirement(kind="service", strength="hard", code="самокат"),
     )
     trace = {"fits_budget": True, "algorithm": "brute_open", "diversity": 1.0}
     verify(reqs, {"route": route, "trace": trace}, _geom())

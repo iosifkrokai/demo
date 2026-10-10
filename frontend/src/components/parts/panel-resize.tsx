@@ -6,13 +6,7 @@ import type {
 
 import { cn } from '@/lib/utils';
 
-/**
- * The docked panel's width, the tourist's to choose.
- *
- * A single fixed width was wrong for both ends of the range: an itinerary with
- * seven stops has names that wrap three times at 380px, while someone reading
- * the map wants the map. So the edge drags.
- */
+/** The docked panel's width, the tourist's to choose. */
 export const PANEL_WIDTH_STORAGE_KEY = 'grodno-panel-width';
 
 /** Wider than the 380px it was fixed at — long stop names were wrapping. */
@@ -27,13 +21,7 @@ const KEYBOARD_STEP_LARGE = 64;
 /** Never let the panel eat the map: at most this share of the viewport. */
 const MAX_VIEWPORT_SHARE = 0.6;
 
-/**
- * Keep a requested width usable.
- *
- * Pure and viewport-aware so it can be tested: the ceiling is the smaller of the
- * hard maximum and the share of the screen, which is what stops the panel from
- * swallowing a small laptop display.
- */
+/** Keep a requested width usable. */
 export const clampPanelWidth = (
   width: number,
   viewportWidth: number = typeof window === 'undefined'
@@ -55,7 +43,6 @@ const readStoredWidth = (): number | null => {
     const parsed = Number.parseInt(raw, 10);
     return Number.isFinite(parsed) ? parsed : null;
   } catch {
-    // Private mode: no stored width is not a reason to fail the panel.
     return null;
   }
 };
@@ -63,9 +50,7 @@ const readStoredWidth = (): number | null => {
 const storeWidth = (width: number) => {
   try {
     localStorage.setItem(PANEL_WIDTH_STORAGE_KEY, String(width));
-  } catch {
-    // See above: remembering is a convenience.
-  }
+  } catch {}
 };
 
 export interface PanelWidthHandleProps {
@@ -86,12 +71,7 @@ export interface PanelWidth {
   handleProps: PanelWidthHandleProps;
 }
 
-/**
- * Resizable panel width with pointer and keyboard control.
- *
- * The stored value is *not* trusted blindly: it is clamped on the way in, so a
- * width saved on a big monitor cannot leave the panel unusable on a small one.
- */
+/** Resizable panel width with pointer and keyboard control. */
 export const usePanelWidth = (): PanelWidth => {
   const [width, setWidthState] = useState<number>(() =>
     clampPanelWidth(readStoredWidth() ?? PANEL_WIDTH_DEFAULT)
@@ -107,9 +87,6 @@ export const usePanelWidth = (): PanelWidth => {
 
   const reset = useCallback(() => setWidth(PANEL_WIDTH_DEFAULT), [setWidth]);
 
-  // The viewport share is re-applied on resize: a width chosen on a wide screen
-  // must not keep eating the map after the window is narrowed. The stored value
-  // is not rewritten, so the tourist's actual choice survives a reload.
   useEffect(() => {
     const onResize = () => setWidthState((current) => clampPanelWidth(current));
     window.addEventListener('resize', onResize);
@@ -118,7 +95,6 @@ export const usePanelWidth = (): PanelWidth => {
 
   const onPointerDown = useCallback(
     (event: ReactPointerEvent<HTMLElement>) => {
-      // Capture so the drag survives the pointer leaving this 8px strip.
       event.currentTarget.setPointerCapture?.(event.pointerId);
       drag.current = { startX: event.clientX, startWidth: width };
       setResizing(true);
@@ -129,7 +105,6 @@ export const usePanelWidth = (): PanelWidth => {
   const onPointerMove = useCallback(
     (event: ReactPointerEvent<HTMLElement>) => {
       if (!drag.current) return;
-      // The panel hangs off the left edge, so dragging right widens it.
       setWidth(drag.current.startWidth + (event.clientX - drag.current.startX));
     },
     [setWidth]
@@ -154,7 +129,6 @@ export const usePanelWidth = (): PanelWidth => {
       } else {
         return;
       }
-      // Only when handled: otherwise the page would scroll on a stray key.
       event.preventDefault();
     },
     [setWidth, width]
@@ -176,13 +150,7 @@ export const usePanelWidth = (): PanelWidth => {
   };
 };
 
-/**
- * The drag strip on the panel's right edge.
- *
- * A real `separator` with `aria-valuenow`, focusable and operable from the
- * keyboard: a resize that only exists under the mouse is one a keyboard user
- * cannot reach at all. Hidden on touch layouts, where the panel is a sheet.
- */
+/** The drag strip on the panel's right edge. */
 export const PanelResizeHandle = ({
   width,
   resizing,
@@ -213,7 +181,6 @@ export const PanelResizeHandle = ({
       className
     )}
   >
-    {/* The visible sliver: quiet until the pointer or focus reaches it. */}
     <span
       aria-hidden="true"
       className={cn(

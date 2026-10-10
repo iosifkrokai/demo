@@ -38,7 +38,6 @@ export const Waypoints = () => {
     (event: DragEndEvent) => {
       const { active, over } = event;
 
-      // dropped outside the list
       if (!over || active.id === over.id) {
         return;
       }

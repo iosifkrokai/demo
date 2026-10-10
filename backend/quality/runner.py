@@ -2,120 +2,7 @@
 """
 bench_routes.py — Golden-set evaluation for the Grodno route planner.
 
-Three modes, one metric implementation:
-
-  LIVE     .venv/bin/python -m quality --repeat 2 --snapshot
-           calls the agent, prints the tables, and (with --snapshot) appends one
-           JSONL row per (case, repeat) so the run can be replayed later.
-
-  REPLAY   .venv/bin/python -m quality --replay <snapshot dir>
-           recomputes EVERY metric offline from the recorded rows: no LLM, no
-           Valhalla, no Postgres. Deterministic by construction — nothing in the
-           replay path reads a clock, a random seed or a file outside the
-           snapshot — so two replays of the same snapshot are byte-identical.
-           `diff -r` them to check.
-
-  COMPARE  .venv/bin/python -m quality --compare <a> <b>
-           paired bootstrap over the cases the two snapshots share, per metric,
-           with a p-value and the noise floor next to every delta.
-
-  GOLDEN   .venv/bin/python -m quality --golden
-           scores the REQUIREMENT set (quality/cases/compliance/*.json) instead of the
-           reference walks: PASS/FAIL per case with a machine-readable reason
-           (missing mandatory category, forbidden category present, out-of-region
-           point, over budget, wrong status, RU/EN parity mismatch, ...) and an
-           aggregate compliance rate. `--replay-golden <snapshot dir>` re-scores
-           recorded responses offline. Neither mode fabricates anything: they
-           exit 2 with a clear message when the backend or Valhalla is down.
-
-The reference walks (quality/cases/routes/*.json) and the requirement cases
-(quality/cases/compliance/*.json) are different benchmarks that share this file and no
-metric — see quality/cases/compliance/README.md.
-
-SNAPSHOT FORMAT (one JSONL file, `rows.jsonl`; first line is the run meta):
-
-    {"record": "meta",  "schema": ..., "run_id": ..., "started_at": ...,
-     "git_sha": ..., "base_url": ..., "repeat": ..., "cases": [...],
-     "golden_sha256": {<case>: <sha>}, "bench_version": ...}
-    {"record": "row",   "schema": ..., "case": "mir", "repeat": 1, "ts": ...,
-     "request": {...the exact body sent...},
-     "http_status": 200, "api_error": null,
-     "candidate_ids": [...], "candidate_ids_source": "route_points",
-     "response": {...raw JSON...},
-     "metrics": {...}}
-
-`candidate_ids_source` records where the ids came from. The current API does
-NOT expose the pre-rerank candidate pool (see the stage-split section below), so
-today the field holds the returned stop ids in walking order and the source is
-"route_points". The probe is written to pick up a real pool the moment one is
-exposed, so the snapshot is forward-compatible rather than hard-coded.
-
-RETRIEVAL vs ASSEMBLY (itinerary-quality.md §4.2, retrieval-quality.md §1)
-
-The stochastic layers are retrieval (embed + RRF + Jev rerank + Jev intent) and
-assembly (matrix → optimize → Valhalla), and the assembly is deterministic given
-the candidate set. Without the split, a bad number cannot be attributed. What
-the API exposes today is `debug.intent_source`, `debug.constraints` and
-`debug.trace` (algorithm, walk/visit seconds, per-stop categories) — the pool
-produced by `retrieve()` never reaches the response, and the benchmark has no
-Postgres access offline, so ids alone could not be scored anyway. So stage-1 is
-measured as a PROXY and the report says so in those words:
-
-  stage-1 (retrieval)  — for each graded reference stop, was *anything* the
-      system returned within STAGE1_PROXY_RADIUS_M (250 m) of it? A place that
-      the retriever never saw cannot produce a returned stop anywhere near it,
-      so this is an upper bound on pool recall and a defensible "was it
-      reachable at all" line. 250 m, not the 750 m matcher: at 750 m a
-      reference church is "covered" by an unrelated church on the next street
-      (itinerary-quality.md §1.2c).
-  stage-2 (assembly)   — given the stops that stage 1 found, how good is the
-      route: which of them the route actually visited (route_recall_given_pool,
-      the conditional), plus precision, τ, detour, leg sanity and budget fit.
-
-METRICS (per run; with --repeat N the cells are mean±spread over the repeats)
-
-    recall@K      — reference stops covered by our route, greedy match within
-                    MATCH_RADIUS_KM (750 m); the historical headline
-    stage.recall  — stage-1 pool proxy, tight 250 m radius
-    stage...|pool — stage-2 recall conditional on a stage-1 hit
-    precision     — our stops that are reference places (not filler)
-    kendall_tau   — τ-b of OUR order against the REFERENCE WALK order, over the
-                    shared stops only; n/a below MIN_TAU_STOPS
-    detour_km     — our walk − the reference walk, both haversine
-    walk_diff     — (our_walk − est_walk) in minutes
-    budget_fit    — does the route fit the budget the reference names
-    max_leg_km    — the API's own `trace.max_leg_seconds`, converted to km at
-                    the route's own average speed (trace-only, offline)
-
-LEG SANITY + HARD FAILURES (itinerary-quality.md §1.2f, §4.5)
-
-  * max single leg vs MAX_WALK_LEG_KM, plus the straight-line maximum as an
-    offline lower bound;
-  * unreachable hops via the UNREACHABLE_S sentinel (the API saturates
-    `max_leg_seconds` / `walk_seconds` to 1e9 rather than shipping the matrix,
-    so the count is a lower bound and is labelled as one);
-  * duplicate-POI pairs inside a route's stops, under three explicit rules —
-    the pipeline's own two (`DUPLICATE_RADIUS_M` regardless of name, and an
-    identical normalised name within `DUPLICATE_NAME_RADIUS_M`) plus a third
-    that catches the pair the 2026-09-24 report found and the pipeline's dedup
-    missed: the same POI filed under two different names 745 m apart.
-
-Hard failures are printed in their own block, OUTSIDE every score. The gated
-kinds (api_error / http_status / zero_stops / unreachable_leg / geometry_missing)
-also drop the run out of the quality means, per §4.5 — they are never averaged
-into quality. The leg-sanity defects (duplicate_stop / leg_over_cap) stay IN the
-means and are counted separately, because hiding a duplicate POI by dropping the
-run would defeat the purpose of the check.
-
-STATISTICS
-
-Per-case means → bootstrap over the CASES (not the repeats: case-set sampling is
-the dominant uncertainty, itinerary-quality.md §4.1) → mean with a 95 % CI, B =
-10 000, from a seeded `random.Random` so the report is reproducible.
-`--compare` uses the PAIRED bootstrap (resample the shared cases once, take the
-difference) and reports a two-sided p-value. The noise floor (mean within-case
-spread across repeats) is printed next to every delta, because on this pipeline
-a delta smaller than it is not evidence.
+Modes: LIVE, REPLAY, COMPARE, GOLDEN — one metric implementation.
 """
 
 from __future__ import annotations
@@ -137,35 +24,20 @@ from datetime import UTC, datetime
 from itertools import pairwise
 from pathlib import Path
 
-# ── paths ────────────────────────────────────────────────────────────────────
-
 BACKEND = Path(__file__).parent.parent.resolve()
 QUALITY = BACKEND / "quality"
 BENCH_ROUTES = QUALITY / "cases" / "routes"
 BENCH_GOLDEN = QUALITY / "cases" / "compliance"
-# Generated output (snapshots, reports) is never committed.
 BENCH_OUT = QUALITY / "reports"
 BENCH_SNAPSHOTS = BENCH_OUT / "snapshots"
 
-# ── response status vocabulary ───────────────────────────────────────────────
-#
-# The API does not expose a top-level plan status yet (RouteResponse carries
-# parsed/points/shape/summary/budget/debug — no `status`, no `requirements`), so
-# the compliance scorer DERIVES one from what it can observe and records where
-# the status came from (`status_source`) rather than pretending the API said it.
-# A real `status` field or a `requirements[]` list wins the moment the API ships
-# one — see derive_status().
 STATUSES = frozenset(
     {"ready", "catalogue", "degraded", "pending", "infeasible", "rejected",
      "needs_clarification", "error"}
 )
-# Rejection-like statuses: an empty plan can satisfy these.
 REJECTION_STATUSES = frozenset({"rejected", "infeasible", "needs_clarification"})
 READY_STATUSES = frozenset({"ready", "catalogue", "degraded"})
 
-# Machine-readable compliance failure reasons. One per distinct way a plan can
-# violate a request. The report aggregates and prints by these codes, never by
-# prose, so a CI diff of two runs compares like with like.
 CHECK_API_ERROR = "api_error"
 CHECK_WRONG_STATUS = "wrong_status"
 CHECK_TOO_FEW_PLACES = "too_few_places"
@@ -177,9 +49,6 @@ CHECK_OVER_BUDGET = "over_budget"
 CHECK_RESULT_MODE = "result_mode_mismatch"
 CHECK_PARITY = "ru_en_parity_mismatch"
 
-# Fixed priority: when several checks fail, `reason` is the first one here. The
-# order is "the request was never answered" → "the answer is the wrong KIND of
-# answer" → "the answer breaks a stated condition", most-structural first.
 CHECK_PRIORITY: tuple[str, ...] = (
     CHECK_API_ERROR,
     CHECK_WRONG_STATUS,
@@ -192,18 +61,10 @@ CHECK_PRIORITY: tuple[str, ...] = (
     CHECK_RESULT_MODE,
 )
 
-# Canonical domain codes (agent/constants.CATEGORIES) are the contract between
-# UI, planner and data. A golden file may only name a code from this set: a
-# typo'd code would otherwise silently grade nothing. Defined after the agent
-# import below, because the set comes from the agent itself.
 CANONICAL_CATEGORIES: dict[str, str] = {}
 CANONICAL_CODES_NORM: frozenset[str] = frozenset()
 
 
-# The routing constants below (UNREACHABLE_S, the duplicate radii, the leg cap)
-# are read from the agent rather than copied, so a benchmark can never grade the
-# pipeline against thresholds the pipeline does not itself use. agent/__init__
-# and agent/constants import nothing, so this stays a stdlib-only script.
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 
@@ -216,7 +77,6 @@ CANONICAL_CATEGORIES = {
 }
 CANONICAL_CODES_NORM = frozenset(CANONICAL_CATEGORIES)
 
-# ── harness constants ────────────────────────────────────────────────────────
 
 UNREACHABLE_S = float(agent_constants.UNREACHABLE_S)
 MAX_WALK_LEG_KM = float(agent_constants.MAX_WALK_LEG_KM)
@@ -224,35 +84,14 @@ DUPLICATE_RADIUS_M = float(agent_constants.DUPLICATE_RADIUS_M)
 DUPLICATE_NAME_RADIUS_M = float(agent_constants.DUPLICATE_NAME_RADIUS_M)
 GRODNO_BBOX = dict(agent_constants.GRODNO_BBOX)
 
-# Radius of the stage-1 pool proxy. Deliberately far below MATCH_RADIUS_KM:
-# 250 m is the scale at which two rows are the same physical place (the agent
-# merges on DUPLICATE_RADIUS_M = 150 m), and well inside the 750 m matcher whose
-# over-merging ("Троицкий костёл" credited by a neighbouring church) the
-# research flagged.
 STAGE1_PROXY_RADIUS_M = 250.0
 
-# Third duplicate rule. The pipeline merges on (150 m, any name) and on (500 m,
-# identical normalised name); the duplicate that reached the 2026-09-24 Grodno
-# route broke both — "Костёл Обретения Святого Креста и монастырь бернардинцев"
-# and "Монастырь бернардинцев и костёл Обретения Креста" are 745 m apart with
-# token-Jaccard 0.86, i.e. the same building under two rows. So: same-place if
-# the normalised token sets overlap by at least DUPLICATE_SIM within
-# DUPLICATE_SIM_RADIUS_M. The similarity gate does the work; the radius is
-# margin around the 745 m that was observed.
 DUPLICATE_SIM = 0.6
 DUPLICATE_SIM_RADIUS_M = 1000.0
 
-# Reference grading (itinerary-quality.md §3.3): must-see 3, nice-to-have 1,
-# available 0. The three committed cases carry no `grade` field yet, so an
-# ungraded stop is treated as a must-see — the strictest reading, and the one
-# that cannot inflate a score. When the graded set lands this switches by
-# itself, with no code change.
 GRADE_WEIGHTS = {"must-see": 3.0, "nice-to-have": 1.0, "available": 0.0}
 DEFAULT_GRADE = "must-see"
 
-# Hard failures that also GATE the run out of every quality mean (§4.5: those
-# are never averaged into quality). Everything else is counted and printed
-# outside the scores but stays in the means.
 GATED_FAILURE_KINDS = frozenset(
     {"api_error", "http_status", "zero_stops", "unreachable_leg", "geometry_missing"}
 )
@@ -262,27 +101,17 @@ BOOTSTRAP_SEED = 20260926
 BOOTSTRAP_ALPHA = 0.05
 
 REQUEST_TIMEOUT_S = 300.0
-# The /health probe is a preflight, not a measurement: short, so a dead stack
-# fails in seconds instead of hanging the run.
 HEALTH_TIMEOUT_S = 5.0
 
 SNAPSHOT_SCHEMA = "bench_routes/snapshot/1"
 ROW_SCHEMA = "bench_routes/row/1"
 REPORT_SCHEMA = "bench_routes/report/2"
-# The golden set snapshots into its OWN file, so a golden run can never be
-# replayed by the route harness (or the other way round): the two row shapes
-# grade different things and mixing them would silently rescore nothing.
 GOLDEN_SNAPSHOT_FILE = "golden_rows.jsonl"
 GOLDEN_SNAPSHOT_SCHEMA = "bench_routes/golden_snapshot/1"
 GOLDEN_ROW_SCHEMA = "bench_routes/golden_row/1"
 
-# The noise floor measured on this pipeline before the harness existed. Printed
-# next to the computed one so a delta can be judged against a number that did
-# not come out of the same run.
 REFERENCE_NOISE_FLOOR = "recall 0.711 ± 0.150 over 9 runs (measured 2026-09-26)"
 
-
-# ── models ──────────────────────────────────────────────────────────────────
 
 @dataclass
 class GoldenStop:
@@ -290,8 +119,6 @@ class GoldenStop:
     lat: float
     lon: float
     visit_minutes: int | None = None
-    # "must-see" | "nice-to-have" | "available"; None == ungraded (see
-    # GRADE_WEIGHTS).
     grade: str | None = None
 
     @property
@@ -308,8 +135,6 @@ class GoldenRoute:
     stops: list[GoldenStop]
     est_walk_minutes: int | None = None
     path: Path = field(default=None)
-    # File stem of quality/cases/routes/<case>.json; the row key and the pairing
-    # key for --compare.
     case: str = ""
 
     @property
@@ -330,10 +155,7 @@ class OurStop:
 class ReferenceWalk:
     """The benchmark's reference walk, derived from the reference stop geometry.
 
-    `order` holds indices into `GoldenRoute.stops` in the order a walker should
-    visit them, and `distance_km` is the haversine length of that walk.
-    `article_distance_km` is the length of the raw .json order, kept only so the
-    report can show how much longer the article's ordering actually is.
+    `order` indexes `GoldenRoute.stops`; `distance_km` is its haversine length.
     """
 
     order: list[int]
@@ -345,9 +167,7 @@ class ReferenceWalk:
 class StageSplit:
     """Retrieval (stage 1) vs assembly (stage 2) for one run.
 
-    `pool_exposed` is False for the current API: `retrieve()`'s output never
-    reaches the response, so the pool proxy is computed over the stops the
-    system returned (an upper bound on pool recall) and the report says so.
+    `pool_exposed` is False for the current API: the pool proxy is the returned stops.
     """
 
     pool_exposed: bool
@@ -371,11 +191,11 @@ class LegSanity:
     n_stops: int = 0
     max_leg_seconds: float | None = None
     avg_speed_kmh: float | None = None
-    max_leg_km: float | None = None            # network, estimated from the trace
-    max_leg_km_straight: float | None = None   # haversine lower bound, offline
+    max_leg_km: float | None = None
+    max_leg_km_straight: float | None = None
     over_cap: bool = False
     unreachable_sentinel: bool = False
-    n_unreachable_legs: int = 0                # lower bound — see comment
+    n_unreachable_legs: int = 0
     duplicate_pairs: list[dict] = field(default_factory=list)
     n_duplicate_stops: int = 0
     geometry_missing: bool = False
@@ -411,11 +231,7 @@ class GoldenCase:
 class ComplianceVerdict:
     """PASS/FAIL for one golden case (or parity group) against a plan response.
 
-    `reason` is machine-readable and stable: "ok", or one of the CHECK_* codes.
-    `detail` is the human sentence the report prints beside it. `checks` holds
-    one entry per check actually performed, so a reader sees every condition that
-    was evaluated — including the ones a response could not prove, which are
-    marked `unverified` rather than silently passed.
+    `reason` is the first failed CHECK_* code or "ok"; unverified checks are marked.
     """
 
     case_id: str
@@ -452,19 +268,16 @@ class EvaluationResult:
     our_stops: list[OurStop] = field(default_factory=list)
     recall_at_k: float = 0.0
     precision: float = 0.0
-    # tau-b over the shared subset only; None == n/a (fewer than MIN_TAU_STOPS
-    # stops in common, i.e. there is no order left to compare).
     kendall_tau: float | None = None
     shared_stops: int = 0
     our_walk_km: float | None = None
-    our_walk_km_net: float | None = None  # Valhalla network length from the API
+    our_walk_km_net: float | None = None
     ref_walk_km: float | None = None
     detour_km: float | None = None
-    walk_diff_min: float | None = None  # ours − est_walk
+    walk_diff_min: float | None = None
     budget_fit: bool = False
     api_error: str | None = None
     latency_s: float = 0.0
-    # ── added by the freeze-and-replay harness ────────────────────────────
     http_status: int | None = None
     intent_source: str | None = None
     stops_dropped: int = 0
@@ -551,9 +364,6 @@ class RunRecord:
         return 0 if self.result.api_error else 1
 
 
-# ── geo helpers ─────────────────────────────────────────────────────────────
-
-# Earth radius in km (Haversine)
 _R = 6371.0
 
 
@@ -570,8 +380,7 @@ def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
 def _norm_name(name: str) -> str:
     """Lowercase, drop parentheticals and punctuation — the agent's own rule.
 
-    Mirrors planner/pipeline.py::_norm_name so a name the agent would consider
-    identical is a name this check considers identical.
+    Mirrors planner/pipeline.py::_norm_name, so both consider the same names identical.
     """
     n = re.sub(r"\([^)]*\)", " ", (name or "").lower())
     n = re.sub(r"[^0-9a-zа-яё]+", " ", n)
@@ -587,13 +396,7 @@ def name_similarity(a: str, b: str) -> float:
     return len(ta & tb) / len(ta | tb)
 
 
-# ── matching ────────────────────────────────────────────────────────────────
-
-MATCH_RADIUS_KM = 0.75  # ~750 m — generous for a pedestrian context
-
-# recall@K is taken over the whole reference route (K = len(golden.stops)). The
-# old cap of 8 mirrored a ROUTE_MAX_STOPS constant that no longer exists and
-# would have let recall exceed 1.0 for longer references.
+MATCH_RADIUS_KM = 0.75
 
 
 def match_golden_to_ours(
@@ -602,8 +405,7 @@ def match_golden_to_ours(
 ) -> list[tuple[int | None, int | None]]:
     """Greedy best-cost match between golden stops and our stops.
 
-    Returns a list aligned with golden_stops where each entry is
-    (golden_idx, our_idx | None) — None means no match within MATCH_RADIUS_KM.
+    Per golden stop, (golden_idx, our_idx | None); None = no match within MATCH_RADIUS_KM.
     """
     n = len(golden_stops)
     m = len(our_stops)
@@ -635,65 +437,8 @@ def match_golden_to_ours(
     return result
 
 
-# ── the reference walk ───────────────────────────────────────────────────────
-#
-# WHY THE ORDER OF STOPS IN THE .json FILE IS NOT A REFERENCE ORDER
-# Each quality/cases/routes/*.json lists its stops in the order the Wikivoyage
-# article happens to present its sections. That is an editorial layout, not a
-# walking route, and it is measurably a *worse* walk than the same stops visited
-# in the shortest possible order (haversine km, over the committed reference
-# coordinates):
-#
-#     route                           n   .json order   shortest order   penalty
-#     Grodno: Старый город (Фарный)   5     2.804 km        1.669 km       +68 %
-#     Mir: замок и исторический центр  3     1.252 km        0.795 km       +57 %
-#     Новогрудок: гора и старый город  4     1.504 km        1.023 km       +47 %
-#
-# So the old metric — Kendall tau between our stop order and the .json order —
-# was not merely noisy, it was inverted: its maximum score (+1.0) is attained by
-# the *longest* walk, while a provably shortest walk scores only +0.2 / +0.33.
-# The agent cannot observe how a webpage is laid out, so the only way to raise
-# that number was to walk further. On the real planner every route landed on
-# exactly -0.333, which is the signature of "a good route judged against an
-# editorial order" (3 shared stops, 2 discordant pairs, 1 concordant).
-#
-# THE FIX. Both the order and the length of the reference are derived from the
-# reference stops' own geometry instead of from the file layout:
-#
-#   1. reference walk = the shortest open Hamiltonian path over the reference
-#      stops (exact bitmask DP for n <= REF_WALK_EXACT_MAX_STOPS, nearest
-#      neighbour beyond). Deterministic: ties break on the lexicographically
-#      smallest stop-index sequence, so the same file always yields the same
-#      reference walk and the report is reproducible.
-#   2. kendall_tau = tau-b between OUR order and that reference order, computed
-#      ONLY over the stops present in both (matched within MATCH_RADIUS_KM).
-#      Under MIN_TAU_STOPS shared stops there is no order left to correlate and
-#      the metric is reported as n/a rather than as a made-up 0.0.
-#   3. detour_km = our walk length - the reference walk's own length, in km.
-#
-# The task suggested keeping tau on the shared subset; doing that alone does NOT
-# remove the artifact, because the shared subset is still *ranked* by the .json
-# order — the article ordering still scores 1.0 for a 68 % longer walk. Fixing
-# the *reference*, not just the *subset*, is what makes the number mean
-# something. Restricting to the shared subset is still necessary and is kept:
-# it stops a reference stop we never went to from dragging the correlation down
-# as if we had visited it out of order.
-#
-# detour_km is a difference of two haversine lengths, deliberately. Our route's
-# network length is available from the API (summary.length_km), but the
-# reference walk has no network length — the benchmark must stay offline and
-# deterministic. Subtracting a Valhalla street distance from a straight-line
-# reference length would bake in the ~1.3-1.4x street-circuity factor of this
-# city and make every route look like it detours. Like-for-like geometry makes
-# detour_km a pure ordering+selection measurement, and the API's network length
-# is reported separately as our_walk_km_net so no information is lost.
-
-# Above this many reference stops the exact DP is skipped (2^n states); the
-# reference walks in the committed set are all n <= 5.
 REF_WALK_EXACT_MAX_STOPS = 12
 
-# Fewer shared stops than this and tau-b is undefined: with 2 stops there is a
-# single pair, so tau is pinned to {-1, +1} and carries no information.
 MIN_TAU_STOPS = 3
 
 
@@ -720,10 +465,7 @@ def _nearest_neighbour_order(d: list[list[float]]) -> list[int]:
 def shortest_walk_order(points: list[tuple[float, float]]) -> list[int]:
     """Indices of `points` in the order of a shortest open walk through all of them.
 
-    Exact bitmask DP (Held-Karp without the return leg) for n <=
-    REF_WALK_EXACT_MAX_STOPS, nearest neighbour above that. Ties are broken on
-    the lexicographically smallest index sequence, so the result is a pure
-    function of the input and is stable across runs.
+    Exact DP up to REF_WALK_EXACT_MAX_STOPS, nearest neighbour above; ties are stable.
     """
     n = len(points)
     if n <= 1:
@@ -733,10 +475,6 @@ def shortest_walk_order(points: list[tuple[float, float]]) -> list[int]:
     if n > REF_WALK_EXACT_MAX_STOPS:
         return _nearest_neighbour_order(d)
 
-    # best[(mask, last)] = (length_km, order_tuple). Comparing the pair
-    # lexicographically minimises the length first and the order second, which
-    # is a consistent tie-break: two candidates reaching the same (mask, last)
-    # get the same suffix appended, so the smaller prefix stays smaller.
     best: dict[tuple[int, int], tuple[float, tuple[int, ...]]] = {}
     for i in range(n):
         best[(1 << i, i)] = (0.0, (i,))
@@ -774,8 +512,7 @@ def walk_distance_km(points: list[tuple[float, float]], order: list[int]) -> flo
 def max_leg_km(points: list[tuple[float, float]]) -> float | None:
     """Longest straight-line hop of an open walk, or None for < 2 points.
 
-    Named for what it measures (km), not for where it is used; the network
-    figure is LegSanity.max_leg_km and this is its offline lower bound.
+    This is the offline lower bound of the network figure LegSanity.max_leg_km.
     """
     if len(points) < 2:
         return None
@@ -796,16 +533,7 @@ def build_reference_walk(stops: list[GoldenStop]) -> ReferenceWalk:
 def kendall_tau(order_a: list[int], order_b: list[int]) -> float | None:
     """Kendall's tau-b between two orderings, over the elements they share.
 
-    `order_a` and `order_b` are sequences of element ids and may cover different
-    sets of stops. Only the shared elements are ranked, and only against each
-    other, so a stop missing from one side cannot contribute a spurious pair.
-
-    Returns None (reported as n/a) when fewer than MIN_TAU_STOPS elements are
-    shared: below 3 stops tau-b is pinned to {-1, +1} by a single pair, so
-    publishing it would add a number without adding information.
-
-    Both orderings are strict (no repeated ids), so there are no ties and
-    tau-b collapses to tau-a = (P - Q) / n_pairs.
+    Returns None below MIN_TAU_STOPS shared elements, where tau-b carries no information.
     """
     pos_a = {e: i for i, e in enumerate(order_a)}
     shared = [e for e in order_b if e in pos_a]
@@ -831,25 +559,13 @@ def kendall_tau(order_a: list[int], order_b: list[int]) -> float | None:
 def detour_km(our_distance_km: float | None, ref_distance_km: float | None) -> float | None:
     """How much longer our walk is than the reference walk, in km.
 
-    Negative means we covered the reference stops in a tighter order than the
-    reference walk itself (legitimate: our origin is chosen by the planner and
-    is not part of this comparison). None when either side is unknown.
+    Negative is legitimate; None when either side is unknown.
     """
     if our_distance_km is None or ref_distance_km is None:
         return None
     return our_distance_km - ref_distance_km
 
 
-# ── stage 1: retrieval vs stage 2: assembly ──────────────────────────────────
-#
-# The split §4.2 asks for. It is only honest if the report says where the pool
-# came from, so `pool_exposed` is a first-class field, not a footnote: with the
-# current API the pool is NOT observable and stage-1 is a proximity proxy over
-# the stops the system returned.
-
-# Probe order. Any of these carrying the candidate list is the real pre-rerank
-# pool; a list of objects with lat/lon is enough to score it offline, a list of
-# bare ids is recorded but not scoreable (the benchmark has no places table).
 POOL_PROBE_PATHS: tuple[tuple[str, ...], ...] = (
     ("debug", "trace", "candidates"),
     ("debug", "candidates"),
@@ -872,9 +588,7 @@ def _dig(raw: dict, path: tuple[str, ...]):
 def probe_stage1_pool(raw: dict) -> dict | None:
     """Find a candidate pool in a response, if the API happens to expose one.
 
-    Returns {"path", "ids", "points"} or None. A pool of bare ids is recorded
-    but carries no coordinates, so it cannot be scored offline; the report says
-    so rather than pretending an id list is a measurement.
+    Returns {"path", "ids", "points"} or None; bare ids cannot be scored offline.
     """
     for path in POOL_PROBE_PATHS:
         value = _dig(raw or {}, path)
@@ -906,9 +620,7 @@ def _any_within(
 ) -> list[bool]:
     """Per target: is ANY returned stop within `radius_m`?
 
-    Not a one-to-one assignment. Two reference stops can legitimately be served
-    by one returned stop at this radius, and the question stage 1 answers is
-    "was this place reachable at all", not "was it matched bijectively".
+    Not a one-to-one assignment — the question is "was this place reachable at all".
     """
     radius_km = radius_m / 1000.0
     out: list[bool] = []
@@ -930,9 +642,6 @@ def stage_split(
         source = "stage1_pool"
         exposed = True
     else:
-        # Fall back to what the response actually carries. The returned stops
-        # are a subset of the pool the assembly saw, so this is an UPPER bound
-        # on pool recall — stated in the report, never hidden.
         points = [(s.lat, s.lon) for s in our_stops]
         source = "route_points"
         exposed = False
@@ -944,10 +653,6 @@ def stage_split(
     recall = (n_cov / len(golden.stops)) if golden.stops else 0.0
     recall_w = (cov_w / total_w) if total_w > 0 else 0.0
 
-    # Stage 2, conditional on stage 1: of the reference stops the proxy says
-    # were reachable, how many did the route actually visit? This is the number
-    # that separates "the retriever never found the castle" from "it found the
-    # castle and the optimiser left it out".
     in_route = 0
     for gi, ok in enumerate(covered):
         if ok and result_matches_stop(golden, our_stops, gi):
@@ -981,19 +686,10 @@ def result_matches_stop(
     )
 
 
-# ── leg sanity ───────────────────────────────────────────────────────────────
-
 def find_duplicate_stop_pairs(our_stops: list[OurStop]) -> list[dict]:
     """Pairs of returned stops that are the same physical POI, in visit order.
 
-    Three explicit rules, first match wins, so the label says WHY:
-
-      coincident    within DUPLICATE_RADIUS_M, any name — the pipeline's own rule
-      same_name     identical normalised name within DUPLICATE_NAME_RADIUS_M —
-                    the pipeline's own rule
-      same_name_near  token overlap >= DUPLICATE_SIM within DUPLICATE_SIM_RADIUS_M
-                    — the rule the pipeline lacks, and the one that catches the
-                    "бернардинцев" pair the 2026-09-24 report found
+    Three rules, first match wins: coincident, same_name, same_name_near.
     """
     pairs: list[dict] = []
     for i in range(len(our_stops)):
@@ -1039,16 +735,7 @@ def leg_sanity(
 ) -> LegSanity:
     """Is the returned route physically walkable?
 
-    `max_leg_seconds` is the API's own trace field, so the leg check reads the
-    router's verdict rather than a second guess. The km figure converts it at
-    the route's own average speed, and the straight-line maximum is kept as an
-    offline lower bound for snapshots that have no trace at all.
-
-    UNREACHABLE_S (1e9) is MISSING DATA, not a cost: a route whose trace is
-    saturated contains at least one hop Valhalla could not connect, and the
-    exact count is not recoverable offline because the matrix is not shipped —
-    so `n_unreachable_legs` is documented as a lower bound, never a count of
-    unconnected hops.
+    UNREACHABLE_S (1e9) is missing data, so `n_unreachable_legs` is a lower bound.
     """
     leg = LegSanity(n_stops=len(our_stops))
     points = [(s.lat, s.lon) for s in our_stops]
@@ -1075,9 +762,6 @@ def leg_sanity(
         if leg.max_leg_seconds is not None:
             leg.max_leg_km = leg.max_leg_seconds / 3600.0 * leg.avg_speed_kmh
 
-    # Under-detect rather than over-detect: the straight line is the network's
-    # lower bound, so it can only fire when the network leg is definitely too
-    # long.
     for value in (leg.max_leg_km, leg.max_leg_km_straight):
         if value is not None and value > MAX_WALK_LEG_KM:
             leg.over_cap = True
@@ -1085,10 +769,6 @@ def leg_sanity(
 
     leg.duplicate_pairs = find_duplicate_stop_pairs(our_stops)
     leg.n_duplicate_stops = len(leg.duplicate_pairs)
-    # The API answers with an empty shape when Valhalla could not draw the tour
-    # (pipeline.py::_render_tour) — the UI then shows every point with no line
-    # between them. Only a response that actually carries an empty `shape` counts;
-    # a response with no shape key at all is an older/partial response.
     leg.geometry_missing = "shape" in (raw or {}) and not raw.get("shape")
     return leg
 
@@ -1098,8 +778,6 @@ def _saturated(value) -> bool:
         return False
     return not math.isfinite(float(value)) or float(value) >= UNREACHABLE_S
 
-
-# ── API call ─────────────────────────────────────────────────────────────────
 
 def build_request(
     query: str,
@@ -1143,8 +821,6 @@ def call_generate(
     )
     return raw
 
-
-# ── evaluation ──────────────────────────────────────────────────────────────
 
 def route_origin(golden: GoldenRoute) -> tuple[float | None, float | None]:
     """Origin estimate: the centroid of the reference stops."""
@@ -1193,9 +869,7 @@ def score_response(
 ) -> EvaluationResult:
     """Every metric for one run, from a response and nothing else.
 
-    The single scoring function: the live path, the snapshot path and `--replay`
-    all go through it, so a replayed number cannot drift from a live number.
-    Pure — no clock, no RNG, no I/O.
+    Shared by live, snapshot and replay; pure — no clock, no RNG, no I/O.
     """
     result = EvaluationResult(
         golden=golden, api_error=api_error, latency_s=latency_s, http_status=http_status
@@ -1265,19 +939,12 @@ def _score_coverage(result: EvaluationResult) -> None:
 def _score_reference(result: EvaluationResult) -> None:
     """Reference walk, tau over the shared stops, walk lengths and detour.
 
-    Rebuilt per run rather than cached on the route: it is a pure function of
-    the committed coordinates, so this is cheap and keeps the scorer usable as a
-    single self-contained call in the tests.
+    Rebuilt per run — a pure function of the committed coordinates.
     """
     golden = result.golden
     ref = build_reference_walk(golden.stops)
     result.ref_walk_km = ref.distance_km
 
-    # Element ids are positions in our_stops. `ref_shared` lists the matched
-    # stops in reference-walk order; `our_shared` lists the same stops in the
-    # order our route actually walks them (our_stops is already in visit
-    # order, so sorting by index gives it). kendall_tau intersects the two
-    # itself and returns None below MIN_TAU_STOPS.
     ref_shared = [
         result.matches[gi][1] for gi in ref.order if result.matches[gi][1] is not None
     ]
@@ -1335,12 +1002,6 @@ def _leg_failures(leg: LegSanity) -> list[Failure]:
     return out
 
 
-# ── statistics ───────────────────────────────────────────────────────────────
-#
-# Plain Python on purpose: numpy/scipy are not dependencies of this repo and a
-# 10k bootstrap over a few dozen cases costs milliseconds. The RNG is seeded, so
-# two replays of one snapshot print the same CIs to the last digit.
-
 def percentile(sorted_values: list[float], q: float) -> float:
     """Nearest-rank percentile of an already sorted list (clamped)."""
     if not sorted_values:
@@ -1352,9 +1013,7 @@ def percentile(sorted_values: list[float], q: float) -> float:
 def resample_indices(n: int, samples: int, seed: int) -> list[tuple[int, ...]]:
     """`samples` bootstrap resamples of `n` case indices, from a seeded RNG.
 
-    Cached per (n, samples, seed) so every metric in one report is resampled
-    with the SAME indices — the pairing is what makes the per-metric CIs
-    comparable to each other and to a --compare run.
+    Cached per (n, samples, seed) so every metric in one report shares the SAME indices.
     """
     key = (n, samples, seed)
     cached = _RESAMPLE_CACHE.get(key)
@@ -1400,15 +1059,7 @@ def paired_bootstrap(
 ) -> dict:
     """Paired bootstrap on the difference A − B over the shared cases.
 
-    Resample the case indices once per iteration and take the difference on that
-    resample, so query difficulty — the dominant shared component — cancels
-    instead of being counted twice. The p-value is the two-sided bootstrap
-    fraction: how often a resample puts the difference on the other side of 0.
-
-    A single paired case gets a difference and NO interval and NO p-value.
-    Resampling one case always reproduces that case, which would print a
-    degenerate CI that excludes 0 next to p = 1.0 — a "significant" number that
-    means nothing. Say n/a instead.
+    A single paired case gets a difference but no interval and no p-value.
     """
     n = len(a_values)
     if n != len(b_values) or n == 0:
@@ -1434,8 +1085,6 @@ def paired_bootstrap(
     }
 
 
-# ── snapshot I/O ─────────────────────────────────────────────────────────────
-
 def default_snapshot_dir() -> Path:
     return BENCH_SNAPSHOTS / datetime.now(UTC).strftime("%Y-%m-%d")
 
@@ -1443,7 +1092,7 @@ def default_snapshot_dir() -> Path:
 def _git_sha() -> str:
     """Short HEAD sha, or "unknown" outside a checkout (never fatal)."""
     try:
-        out = subprocess.run(  # fixed argv, no shell, no user input
+        out = subprocess.run(
             ["git", "rev-parse", "--short", "HEAD"],
             cwd=BACKEND.parent,
             capture_output=True,
@@ -1546,11 +1195,7 @@ def append_row(row: dict, path: Path) -> None:
 def load_snapshot(snapshot_dir: Path) -> tuple[dict, list[dict]]:
     """Read a snapshot dir → (meta, rows).
 
-    Only `rows*.jsonl` is snapshot data. A replay run writes report.json,
-    report.md and report.metrics.jsonl NEXT TO the snapshot by default, and
-    report.metrics.jsonl also carries a `case` key — globbing every *.jsonl
-    would make the second replay of a snapshot consume the first one's report
-    as input. Unknown record kinds are dropped for the same reason.
+    Only `rows*.jsonl` is snapshot data; unknown record kinds are dropped.
     """
     files = sorted(snapshot_dir.glob("rows*.jsonl"))
     if not files:
@@ -1589,8 +1234,6 @@ def _r(value, digits: int = 6):
     return value
 
 
-# ── aggregation over --repeat runs ───────────────────────────────────────────
-
 def _get(obj, path: str):
     """Read a (possibly dotted) attribute path off a run result."""
     cur = obj
@@ -1625,11 +1268,7 @@ def _std(values: list[float]) -> float | None:
 def _attr(runs: list[EvaluationResult], path: str) -> list[float]:
     """Defined values of `path` across runs.
 
-    Gated hard failures are SKIPPED, and so are runs the metric does not define
-    (None). A 422 and a route-with-zero-stops both score 0.0 recall; averaging
-    those in would be averaging a failure into quality, which is exactly what
-    §4.5 forbids. The per-case table shows the hard-failure count next to the
-    mean so the exclusion is visible rather than silent.
+    Gated hard failures and undefined (None) values are skipped, not averaged in.
     """
     out: list[float] = []
     for r in runs:
@@ -1665,10 +1304,6 @@ def case_value(runs: list[EvaluationResult], path: str) -> float | None:
     return _mean(vals)
 
 
-# ── the metric set the CI table reports ──────────────────────────────────────
-# (attribute path, label, decimals). Everything here is a quality number; the
-# hard-failure block deliberately has no entry here.
-
 CI_METRICS: tuple[tuple[str, str, int], ...] = (
     ("recall_at_k", "Rec@K (750 m greedy)", 3),
     ("stage.recall", "stage-1 pool proxy recall (250 m)", 3),
@@ -1693,8 +1328,6 @@ COMPARE_METRICS: tuple[tuple[str, str], ...] = (
 )
 
 
-# ── per-case / overall statistics over a run set ─────────────────────────────
-
 def _results(groups: list[list[RunRecord]]) -> list[EvaluationResult]:
     return [rec.result for g in groups for rec in g]
 
@@ -1702,8 +1335,7 @@ def _results(groups: list[list[RunRecord]]) -> list[EvaluationResult]:
 def per_case_scores(groups: list[list[RunRecord]]) -> dict[str, dict[str, float | None]]:
     """One score per case per metric: the mean over that case's defined runs.
 
-    The case is the resampling unit for every CI and every paired bootstrap, so
-    this dict is the single definition of "a case's score" in the whole script.
+    The case is the resampling unit for every CI and paired bootstrap.
     """
     out: dict[str, dict[str, float | None]] = {}
     for g in groups:
@@ -1739,9 +1371,7 @@ def overall_stats(
 def noise_floor(groups: list[list[RunRecord]]) -> dict[str, dict]:
     """Mean within-case spread across repeats — the LLM-sampling noise floor.
 
-    Reported next to every delta: a change smaller than this is indistinguishable
-    from re-running the same pipeline. (The topic/case-sampling variance is the
-    other half of the picture and is what the bootstrap CI over cases captures.)
+    Reported next to every delta; a smaller change is indistinguishable from a re-run.
     """
     out: dict[str, dict] = {}
     for path, label, _d in CI_METRICS:
@@ -1788,8 +1418,6 @@ def failure_summary(groups: list[list[RunRecord]]) -> dict:
     }
 
 
-# ── formatting helpers ───────────────────────────────────────────────────────
-
 def _f(v: float | None, decimals: int = 3) -> str:
     if v is None:
         return "—"
@@ -1814,15 +1442,11 @@ def _ci_cell(stats: dict, decimals: int = 3) -> str:
 def _stage2_is_trivial(overall: dict[str, dict]) -> bool:
     """True when stage-2 recall is 1.0 for want of a pool, not for want of skill.
 
-    Under the route-points fallback the pool IS the route, so the conditional
-    "did the route visit what stage 1 found?" is vacuously yes. Printed as a
-    caveat so a 1.000 in the table cannot be read as a quality result.
+    Under the route-points fallback the pool is the route, so the conditional is vacuous.
     """
     stats = overall.get("stage.route_recall_given_pool", {})
     return stats.get("mean") is not None and stats["mean"] >= 1.0
 
-
-# ── ASCII tables ─────────────────────────────────────────────────────────────
 
 COLS = [
     "name", "s1", "s2", "recall", "prec", "tau", "detour", "walk_diff", "fit",
@@ -1886,9 +1510,6 @@ def print_table(groups: list[list[RunRecord]]) -> None:
         )
         errs = [r.api_error for r in results if r.api_error]
         print(f"│ {row} │")
-        # Errors go under the row, never as a column: a column would make the
-        # table non-rectangular and the failure list is already printed, in full,
-        # in the hard-failure block below.
         for err in errs:
             print(f"│ {'':{COL_WIDTH['name']}} │{'':{sum(COL_WIDTH[k] for k in COLS[1:]) + 3 * (len(COLS) - 2)}}│ {err[:70]} │")
 
@@ -1956,8 +1577,6 @@ def print_failures(summary: dict, overall: dict | None = None) -> None:
         print(f"  headline (for reference only): Rec@K {_ci_cell(rec)}")
     print()
 
-
-# ── report writers ───────────────────────────────────────────────────────────
 
 def _agg(runs: list[EvaluationResult], path: str) -> dict:
     """mean / spread / min / max of one metric over the runs of a case."""
@@ -2306,8 +1925,6 @@ def write_md_report(
     return path
 
 
-# ── loader ──────────────────────────────────────────────────────────────────
-
 def load_golden_routes(routes_dir: Path) -> list[GoldenRoute]:
     """Load all *.json files from routes_dir as GoldenRoute objects."""
     routes: list[GoldenRoute] = []
@@ -2341,48 +1958,6 @@ def load_golden_map() -> dict[str, GoldenRoute]:
     return {r.case: r for r in load_golden_routes(BENCH_ROUTES)}
 
 
-# ── golden requirement compliance ────────────────────────────────────────────
-#
-# routes/*.json are REFERENCE WALKS: stops, and the order a good answer visits
-# them in, graded on geometry (recall, tau, detour). golden/*.json are
-# REQUIREMENT CASES: what the tourist asked for, and what must be true of ANY
-# acceptable answer. They share no file and no metric — a route can score a
-# perfect recall while quietly dropping the mandatory toilet, which is exactly
-# the defect class this set exists to catch. Spec §9 says so in one line: the
-# old benchmark measured points, never conditions.
-#
-# SCHEMA — the loader below IS the schema. It refuses unknown keys, so a case
-# cannot carry an expectation that nothing checks; prose copy:
-# quality/cases/compliance/README.md.
-#
-#   id             file stem; must match the file name
-#   locale         "ru" | "en" — the language `query` is written in
-#   query          the text POSTed to /routes/generate (3..500 chars)
-#   parity_group   cases sharing it are the SAME request in another locale
-#   filters{}      explicit UI filters, mapped 1:1 onto GenerateReq:
-#                    party_children       int|null
-#                    hard_services        [code]           (hard)
-#                    interests            [code]           (soft)
-#                    avoid                [code]
-#                    time_budget_minutes  int|null
-#                    origin               {lat, lon}|null
-#                    result_mode          "route"|"catalogue"
-#   expectations{} machine-checkable conditions:
-#                    must_contain_categories     [code]  each must appear
-#                    must_not_contain_categories [code]  none may appear
-#                    must_contain_names          [str]   (optional)
-#                    expected_status             [status] non-empty
-#                    expected_result_mode        route|catalogue (optional)
-#                    max_total_minutes           int|null, null = no cap
-#                    in_region                   every point in Grodno ADM1
-#                    allow_empty                 may the plan be empty?
-#                    min_places                  floor on stops (optional)
-#                    status_note                 documentation (optional)
-#
-# Category values are always CANONICAL CODES (agent/constants.CATEGORIES), never
-# natural language: an EN case still carries "туалет", because the codes are the
-# contract between the UI, the planner and the data.
-
 GOLDEN_REQUIRED_TOP = frozenset({"id", "locale", "query", "filters", "expectations"})
 GOLDEN_OPTIONAL_TOP = frozenset({"parity_group"})
 GOLDEN_FILTER_KEYS = frozenset({
@@ -2402,8 +1977,6 @@ GOLDEN_EXPECTATION_KEYS = GOLDEN_REQUIRED_EXPECTATIONS | GOLDEN_OPTIONAL_EXPECTA
 LOCALES = ("ru", "en")
 RESULT_MODES = ("route", "catalogue")
 _CYRILLIC_RE = re.compile(r"[а-яё]", re.IGNORECASE)
-# GenerateReq's own bounds for LatLon and time_budget_minutes, so a golden origin
-# or budget that the API would reject is a schema error here, not a 422 later.
 ORIGIN_BOUNDS = {"lat": (44.0, 62.0), "lon": (19.0, 42.0)}
 
 
@@ -2461,9 +2034,6 @@ def validate_golden_case(data, path: Path | None = None) -> list[str]:
     if not isinstance(query, str) or not (3 <= len(query.strip()) <= 500):
         errs.append(f"{where}: query must be a string of 3..500 characters")
     elif locale in LOCALES:
-        # A pair is only a parity pair if the two queries are actually written in
-        # the two languages: an "en" case with a Russian query would silently
-        # measure the same locale twice.
         has_cyrillic = bool(_CYRILLIC_RE.search(query))
         if locale == "en" and has_cyrillic:
             errs.append(f"{where}: locale is 'en' but the query contains Cyrillic")
@@ -2652,9 +2222,7 @@ def golden_by_id(cases: list[GoldenCase]) -> dict[str, GoldenCase]:
 def _parity_signature(case: GoldenCase) -> tuple:
     """What must be identical across a parity group: filters and conditions.
 
-    `status_note` is documentation and may be written per locale; everything
-    else — the stated conditions and the machine-checkable expectations — has to
-    be the same, or the pair is not the same request in two languages.
+    `status_note` is per-locale documentation; everything else must match.
     """
     exp = {k: v for k, v in case.expectations.items() if k != "status_note"}
     return (
@@ -2701,16 +2269,10 @@ def parity_groups(cases: list[GoldenCase]) -> dict[str, list[GoldenCase]]:
     return out
 
 
-# ── response status, derived from what the API actually exposes ──────────────
-
 def _status_from_requirements(requirements: list) -> str:
     """Mirror of planner/verify.py::overall_status over a public requirements list.
 
-    The planner's own ordering, restated here so the benchmark can grade a
-    response WITHOUT importing the planner (the script stays stdlib + two
-    dependency-free agent modules). A real top-level `status` still wins in
-    derive_status — this is the fallback for an API that ships `requirements[]`
-    before it ships a status field.
+    Restated so the benchmark can grade without importing the planner.
     """
     hard = [
         r for r in requirements
@@ -2734,14 +2296,7 @@ def derive_status(
 ) -> tuple[str, str]:
     """(status, source) for one response, using the best evidence available.
 
-    Precedence — and `source` records which rung was used, because a derived
-    status must never be presented as something the API said:
-
-      1. a transport/HTTP failure            → "rejected" (4xx) / "error" (5xx)
-      2. response["status"]                  → the API's own verdict
-      3. response["requirements"]            → verify.py::overall_status
-      4. a 200 with no points                → "infeasible"
-      5. a 200 with points                   → "ready"
+    `source` records which rung was used; a derived status is never passed off as the API's.
     """
     if api_error or (http_status is not None and http_status >= 400):
         code = int(http_status or 0)
@@ -2760,13 +2315,8 @@ def derive_status(
     return "ready", "derived:points"
 
 
-# ── the checks ───────────────────────────────────────────────────────────────
-
 def codes_in_name(name: str) -> set[str]:
     """Canonical category codes occurring as a word in a POI name."""
-    # ё and е are the same letter for matching purposes: the canonical code
-    # "костёл" arrives here as "костел" after _norm_code, so the name has to be
-    # normalised the same way or a "Костёл" would never be credited.
     tokens = {t.replace("ё", "е") for t in _norm_name(name).split()}
     return {code for code in CANONICAL_CODES_NORM if code in tokens}
 
@@ -2779,9 +2329,7 @@ def _canon_codes(codes) -> list[str]:
 def stop_category_codes(stop: dict) -> set[str]:
     """The canonical codes one returned stop counts as.
 
-    The point's own `category` is authoritative. Only when the API returned no
-    category at all does the name get a vote — otherwise a stop legitimately
-    named "Туалет у кафе" would read as a forbidden cafe and fail a good plan.
+    The point's own `category` is authoritative; the name only votes when it is missing.
     """
     category = _norm_code(stop.get("category"))
     if category:
@@ -2804,9 +2352,7 @@ def _unverified(detail: str, **extra) -> dict:
 def response_total_minutes(raw: dict | None, points: list[dict]) -> float | None:
     """Total route minutes: `budget.total_minutes`, or walk + visits as a fallback.
 
-    The API reports its own total; when a response predates that block the total
-    is recomputed from the summary and the per-stop visit times rather than
-    skipped, so an over-budget route cannot hide behind a missing field.
+    The fallback keeps an over-budget route from hiding behind a missing field.
     """
     raw = raw or {}
     budget = raw.get("budget") or {}
@@ -2832,9 +2378,7 @@ def evaluate_compliance(
 ) -> ComplianceVerdict:
     """Every expectation of one golden case against one response.
 
-    Pure: no clock, no RNG, no I/O. `reason` is the first failed check in
-    CHECK_PRIORITY (the same response therefore always produces the same code),
-    or "ok".
+    Pure; `reason` is the first failed check in CHECK_PRIORITY, or "ok".
     """
     exp = case.expectations
     raw = raw or {}
@@ -2853,9 +2397,6 @@ def evaluate_compliance(
             api_error or f"the backend failed with HTTP {http_status} — no plan"
         )
     elif api_error or (http_status is not None and http_status >= 400):
-        # A 4xx is the API answering the question honestly ("no route for this
-        # request"), not a fault. Whether that answer is acceptable is decided
-        # by the status check; here it is recorded as a refusal, not a failure.
         checks[CHECK_API_ERROR] = _ok(
             f"the backend refused the request (HTTP {http_status}) — an honest "
             f"refusal, judged by the status check"
@@ -2882,21 +2423,7 @@ def evaluate_compliance(
     seen: set[str] = set()
     for stop in points:
         seen |= stop_category_codes(stop)
-    # The plan's own categories, frozen BEFORE the requirement codes below are
-    # mixed in — the forbidden check must judge the plan, not the verdicts.
     stop_codes = set(seen)
-    # A mandatory category can be served without being a stop: a toilet is never
-    # a stop, so counting stops alone had the harness report "туалет не найден"
-    # for routes that do serve one — the requirement is closed by the verifier's
-    # own verdict (reason `service_along_route`), which is evidence about the
-    # route, not a promise from the plan. `requirements` carries no names, only
-    # codes and fates, so nothing here has to read Russian prose.
-    #
-    # Only `seen` gets this augmentation. It must NOT reach the forbidden check:
-    # an `avoid` requirement is satisfied precisely BECAUSE nothing of that
-    # category is in the plan, so adding its code to the same set made the
-    # harness report "forbidden category present" exactly when the prohibition
-    # was honoured — the check read as its own opposite.
     for req in raw.get("requirements") or []:
         if not isinstance(req, dict) or req.get("status") != "satisfied":
             continue
@@ -2905,9 +2432,6 @@ def evaluate_compliance(
             seen.add(_norm_code(code))
     wanted = [_norm_code(c) for c in exp["must_contain_categories"]]
     missing = [c for c in wanted if c not in seen]
-    # `missing`/`seen` are carried as data, not only as prose: the parity check
-    # compares the mandatory-category OUTCOME per code across locales, and it
-    # cannot re-derive it from a sentence.
     category_evidence = {
         "missing": _canon_codes(missing),
         "seen": sorted(_canon_codes(seen)),
@@ -2922,8 +2446,6 @@ def evaluate_compliance(
         )
     )
     forbidden = [_norm_code(c) for c in exp["must_not_contain_categories"]]
-    # stop_codes, not seen: a satisfied `avoid` code is proof the category is
-    # absent, not evidence that it is present.
     present = [c for c in forbidden if c in stop_codes]
     checks[CHECK_FORBIDDEN_CATEGORY_PRESENT] = (
         _ok(f"no forbidden category present {_canon_codes(forbidden)}")
@@ -3013,8 +2535,6 @@ def evaluate_compliance(
     )
 
 
-# ── RU/EN parity, measured on the responses, not only on the files ───────────
-
 def parity_verdict(
     group: str,
     members: list[GoldenCase],
@@ -3022,11 +2542,7 @@ def parity_verdict(
 ) -> ComplianceVerdict:
     """Did the same request in RU and EN get the same KIND of answer?
 
-    Compared across the locales: the derived status, the set of failed checks,
-    and whether each mandatory category was satisfied. The full stop list is
-    deliberately NOT compared — the two runs pick different stops, and demanding
-    identical routes would make the check noise instead of a contract. What must
-    not differ is whether the conditions of the request survived.
+    Status, failed checks and mandatory categories are compared, not the stop lists.
     """
     case_id = f"parity:{group}"
     missing = [c.id for c in members if c.id not in verdicts]
@@ -3040,8 +2556,6 @@ def parity_verdict(
     parts: dict[str, tuple] = {}
     for case in sorted(members, key=lambda c: c.locale):
         verdict = verdicts[case.id]
-        # Per-code, from the data the scorer recorded — not one flag for all of
-        # them, which would report a partial failure as a total one.
         missing_codes = set(
             (verdict.checks.get(CHECK_MISSING_MANDATORY_CATEGORY) or {}).get("missing") or []
         )
@@ -3078,8 +2592,6 @@ def parity_verdict(
     )
 
 
-# ── aggregate ────────────────────────────────────────────────────────────────
-
 def compliance_summary(
     cases: list[GoldenCase],
     verdicts: dict[str, ComplianceVerdict],
@@ -3087,9 +2599,7 @@ def compliance_summary(
 ) -> dict:
     """Per-case PASS/FAIL plus the aggregate rate over cases AND parity groups.
 
-    The rate is over UNITS: every golden case is one unit, every parity group is
-    one more, because a matched pair that disagrees between locales is a defect
-    even when both locales individually satisfy their file.
+    The rate is over units: one per golden case, one more per parity group.
     """
     parity = parity or []
     case_verdicts = [verdicts[c.id] for c in cases if c.id in verdicts]
@@ -3125,14 +2635,10 @@ def compliance_summary(
     }
 
 
-# ── golden I/O: request building, printing, reports ──────────────────────────
-
 def build_golden_request(case: GoldenCase) -> dict:
     """The exact body one golden case sends: the query plus its explicit filters.
 
-    The filters go on the wire as GenerateReq fields, not as prose: that is what
-    makes a case testable at all (spec 002 made them part of the request), and
-    what lets an EN case carry Russian category codes without a translation step.
+    The filters go on the wire as GenerateReq fields, not prose.
     """
     filters = case.filters
     payload: dict = {
@@ -3170,9 +2676,7 @@ class GoldenRun:
 def summarise_repeats(case: GoldenCase, runs: list[GoldenRun]) -> ComplianceVerdict:
     """One verdict per case over its repeats: PASS only when every repeat passed.
 
-    With --repeat > 1 a condition that survives one run out of N is a flake, not
-    a pass, so the case fails and the report names the repeat that failed. The
-    deterministic default is one repeat.
+    A condition that survives one run out of N is a flake, so the case fails.
     """
     verdicts = [r.verdict for r in runs if r.verdict is not None]
     if not verdicts:
@@ -3216,8 +2720,7 @@ def summarise_repeats(case: GoldenCase, runs: list[GoldenRun]) -> ComplianceVerd
 def run_golden(cases: list[GoldenCase], base_url: str, repeat: int) -> list[GoldenRun]:
     """Call the agent once per (case, repeat) and score each response.
 
-    It writes nothing: the snapshot is one file with two record kinds, so
-    `write_golden_snapshot` owns it and is called once, after the run.
+    Writes nothing: `write_golden_snapshot` owns the snapshot and runs once, after.
     """
     git_sha = _git_sha()
     runs: list[GoldenRun] = []
@@ -3312,9 +2815,7 @@ def write_golden_snapshot(
 ) -> Path:
     """Write the golden snapshot (one meta record + one row per run).
 
-    The snapshot is the only record of what the API actually answered, so it is
-    written once, after the run, by this function — meta first, then the rows
-    that `load_golden_snapshot` / `rescore_golden_rows` replay offline.
+    Meta first, then the rows that ``rescore_golden_rows`` replays offline.
     """
     snapshot_dir.mkdir(parents=True, exist_ok=True)
     path = snapshot_dir / GOLDEN_SNAPSHOT_FILE
@@ -3594,8 +3095,6 @@ def write_compliance_reports(
     (out_dir / "compliance.md").write_text("\n".join(md) + "\n", encoding="utf-8")
 
 
-# ── honesty gate: no backend (or no Valhalla) means no report ────────────────
-
 def fetch_health(base_url: str, timeout: float = HEALTH_TIMEOUT_S) -> dict:
     """GET /health → dict. Raises on transport failure (caller decides)."""
     req = urllib.request.Request(
@@ -3610,10 +3109,7 @@ def fetch_health(base_url: str, timeout: float = HEALTH_TIMEOUT_S) -> dict:
 def preflight_or_exit(base_url: str) -> dict:
     """Refuse to benchmark a backend that is not there.
 
-    A benchmark that cannot reach the stack must not write a report: an empty
-    table reads exactly like a bad result, and a saved file outlives the
-    terminal that would have explained it. Exit code 2 (distinct from 1, which
-    is the --strict / --min-compliance gate), with the reason on stderr.
+    Must not write a report without a live stack; exits 2 with the reason on stderr.
     """
     try:
         health = fetch_health(base_url)
@@ -3652,8 +3148,6 @@ def _no_report(message: str) -> None:
     )
     sys.exit(2)
 
-
-# ── golden modes ─────────────────────────────────────────────────────────────
 
 def _golden_output(args) -> tuple[list[GoldenRun], list[GoldenCase], Path, dict, str]:
     cases = load_golden_cases(Path(args.golden_dir) if args.golden_dir else BENCH_GOLDEN)
@@ -3746,8 +3240,6 @@ def emit_golden(args, out: tuple) -> None:
         sys.exit(1)
 
 
-# ── modes ───────────────────────────────────────────────────────────────────
-
 def run_live(
     routes: list[GoldenRoute],
     base_url: str,
@@ -3833,9 +3325,7 @@ def _print_run(rec: RunRecord, i: int, repeat: int, route: GoldenRoute) -> None:
 def run_replay(snapshot_dir: Path) -> tuple[list[list[RunRecord]], dict, list[dict]]:
     """Recompute every metric offline from a snapshot. No clock, no RNG, no I/O.
 
-    The only file reads are the snapshot itself and the reference .json files
-    (whose sha256 is checked against the value recorded at snapshot time, so a
-    golden that moved under us is reported instead of silently rescored).
+    Reference .json files are sha256-checked against the snapshot's recorded hashes.
     """
     meta, rows = load_snapshot(snapshot_dir)
     goldens = load_golden_map()
@@ -3908,14 +3398,10 @@ def _snapshot_info(meta: dict, snapshot_dir: Path, n_rows: int) -> dict:
     }
 
 
-# ── compare ──────────────────────────────────────────────────────────────────
-
 def compare_snapshots(dir_a: Path, dir_b: Path, samples: int, seed: int) -> dict:
     """Paired bootstrap A − B over the cases the two snapshots share.
 
-    Both sides are rescored from their own recorded responses against the SAME
-    (current) reference files, so a reference edit cannot masquerade as a
-    pipeline difference.
+    Both sides are rescored against the same current reference files, so the diff is fair.
     """
     groups_a, meta_a, _ = run_replay(dir_a)
     groups_b, meta_b, _ = run_replay(dir_b)
@@ -4046,8 +3532,6 @@ def write_compare_report(cmp: dict, out_dir: Path) -> Path:
     print(f"  compare report → {path}")
     return path
 
-
-# ── CLI ──────────────────────────────────────────────────────────────────────
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
@@ -4209,8 +3693,6 @@ def _live_output(args, routes: list[GoldenRoute]) -> RunOutput:
     print(f"Runs per case: {args.repeat}")
     print(f"Snapshot: {snapshot_dir}" if snapshot_dir else "Snapshot: off")
     print(f"Reports will be written to: {args.report_dir or BENCH_OUT}")
-    # No backend, no report: a live run that cannot reach the stack must fail
-    # loudly BEFORE it writes anything that could be mistaken for a measurement.
     preflight_or_exit(args.base_url)
     groups, meta = run_live(
         routes, args.base_url, args.repeat, snapshot_dir, args.append
@@ -4302,8 +3784,6 @@ def main() -> None:
         write_compare_report(cmp, out_dir)
         return
 
-    # The golden modes are offline-capable on replay and gated on a live stack
-    # otherwise; neither path can write a report it could not produce.
     if args.replay_golden:
         emit_golden(args, _replay_golden_output(args))
         return

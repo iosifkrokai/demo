@@ -1,23 +1,4 @@
-"""The route-refinement contract.
-
-A refinement instruction is either honoured or honestly refused — never
-silently replaced with a different route, never a crash.  These tests pin the
-three requirements:
-
-1. A refinement KEEPS the base route's stops unless the instruction explicitly
-   adds, removes or excludes something.  (Bug: it used to plan a fresh
-   region-wide route and throw the previous stops away.)
-2. REORDERING the existing stops by an attribute: visit time (visit_minutes,
-   each stop's own data) and distance from the route start.
-3. An operation the planner cannot perform is refused with a machine reason
-   code plus a short human text, and the previous route is returned intact.
-
-Plus the 422 path: a refinement context with 3 base_points must survive into
-the refinement instead of failing with
-``{"detail": "optimizer could not produce a route with ≥ 2 stops"}``.
-
-No API key, no DB and no network: the DB lookups and Valhalla calls are fakes.
-"""
+"""The route-refinement contract: honoured or honestly refused, never a crash."""
 
 from __future__ import annotations
 
@@ -54,7 +35,6 @@ from contracts.planner import Candidate, GenerateReq, LatLon
 from core.config import settings
 from core.errors import UpstreamUnavailable
 
-# Fakes: no key, no DB, no Valhalla
 
 @pytest.fixture
 def no_key(monkeypatch):
@@ -109,8 +89,6 @@ def _patch_offline(monkeypatch, rows=None, nearby=None):
         pipeline_mod, "nearby_places",
         lambda db, lat, lon, radius_km=12.0, limit=50: list(nearby or []),
     )
-    # `_nearby_convenience` lives in refine.py, so its `nearby_places` lookup is
-    # patched there (the pipeline binding only serves `_refinement_base` now).
     monkeypatch.setattr(
         refine_mod, "nearby_places",
         lambda db, lat, lon, radius_km=12.0, limit=50: list(nearby or []),
@@ -135,7 +113,6 @@ def _patch_offline(monkeypatch, rows=None, nearby=None):
             AssertionError("a refinement must not re-plan the trip")
         ),
     )
-    # resolve() must not reach the (fake) DB for named places either.
     monkeypatch.setattr(
         resolve_mod, "_name_match_search", lambda db, name, limit=5: []
     )
@@ -168,8 +145,6 @@ def _refine(monkeypatch, instruction, base_ids=(1, 12, 7),
     req = GenerateReq.model_validate(body)
     return Pipeline(db=_FakeDB()).generate(req)  # type: ignore[arg-type]
 
-
-# 1. Interpret the instruction into one typed operation
 
 class TestInterpretRefinement:
 
@@ -213,7 +188,6 @@ class TestInterpretRefinement:
         assert plan.operation == "add"
         assert plan.add_categories == ("кафе",)
         assert plan.exclude_categories == ("музей",)
-        # A category named for exclusion is never also an addition.
         assert "музей" not in plan.add_categories
 
     def test_excluded_category_is_never_added(self):
@@ -258,8 +232,6 @@ class TestInterpretRefinement:
         assert plan.reason_code == REFINEMENT_UNRECOGNIZED
 
 
-# 2. Reorder the existing stops by an attribute
-
 class TestReorder:
 
     STOPS = [
@@ -278,7 +250,6 @@ class TestReorder:
 
     def test_visit_minutes_from_the_stop_own_data(self):
         assert visit_minutes_of(_cand(1, "X", "замок", visit=123)) == 123
-        # No stored value → the taxonomy estimate, never a crash.
         assert visit_minutes_of(_cand(1, "X", "замок")) == 40
 
     def test_reorder_keeps_every_stop(self):
@@ -286,12 +257,11 @@ class TestReorder:
         assert sorted(c.id for c in out) == [1, 2, 3]
 
     def test_by_distance_from_the_origin(self):
-        origin = LatLon(lat=53.621, lon=23.821)  # nearest to the museum
+        origin = LatLon(lat=53.621, lon=23.821)
         out = reorder_stops(self.STOPS, by="distance", origin=origin)
         assert [c.name for c in out] == ["Музей", "Кафе", "Замок"]
 
     def test_by_distance_uses_the_road_matrix_when_supplied(self):
-        # start is stop 0; matrix says stop 2 is closest, then stop 1.
         matrix = [
             [0.0, 500.0, 100.0],
             [0.0, 0.0, 0.0],
@@ -317,8 +287,6 @@ class TestExcludedCategory:
         )
 
 
-# 3. The pipeline honours or honestly refuses — never a fresh route, never 422
-
 class TestRefinementKeepsTheBaseRoute:
 
     def test_no_instruction_keeps_the_previous_route(self, no_key, monkeypatch):
@@ -341,15 +309,15 @@ class TestRefinementKeepsTheBaseRoute:
         self, no_key, monkeypatch
     ):
         resp = _refine(monkeypatch, "отсортируй по времени посещения")
-        assert [p.id for p in resp.points] == [12, 7, 1]  # 45, 45, 90
+        assert [p.id for p in resp.points] == [12, 7, 1]
         assert resp.debug["refinement"]["reorder_by"] == "visit_minutes"
 
     def test_reorder_longest_first(self, no_key, monkeypatch):
         resp = _refine(monkeypatch, "сначала самые длинные")
-        assert [p.id for p in resp.points] == [1, 12, 7]  # 90, 45, 45
+        assert [p.id for p in resp.points] == [1, 12, 7]
 
     def test_reorder_by_distance_from_origin(self, no_key, monkeypatch):
-        origin = LatLon(lat=53.6785, lon=23.8266)  # nearest the museum
+        origin = LatLon(lat=53.6785, lon=23.8266)
         resp = _refine(monkeypatch, "по расстоянию от старта", origin=origin)
         assert resp.points[0].id == 12
         assert resp.debug["refinement"]["reorder_by"] == "distance"
@@ -382,7 +350,7 @@ class TestRefinementKeepsTheBaseRoute:
             GenerateReq.model_validate({"query": "Гродно, замки", "context": ctx})
         )
         ids = [p.id for p in resp.points]
-        assert ids[:3] == [1, 12, 7]  # the base route survives, in order
+        assert ids[:3] == [1, 12, 7]
         assert 500 in ids
         assert [c.name for c in resp.changes.added] == ["Кафе рядом"]
 
@@ -395,7 +363,7 @@ class TestRefinementKeepsTheBaseRoute:
         assert refine["operation"] == "unsupported"
         assert refine["supported"] is False
         assert refine["reason_code"] == REFINEMENT_UNSUPPORTED
-        assert refine["detail"]  # short human text
+        assert refine["detail"]
         assert resp.explanation == refine["detail"]
         assert resp.changes.added == []
         assert resp.changes.removed == []
@@ -446,8 +414,6 @@ class TestRefinementOverHttp:
         assert [p["id"] for p in data["points"]] == [1, 12, 7]
         assert data["debug"]["refinement"]["reason_code"] == REFINEMENT_UNSUPPORTED
 
-
-# Cost fallback: the base points survive even when Valhalla cannot answer
 
 class TestCostFallback:
 

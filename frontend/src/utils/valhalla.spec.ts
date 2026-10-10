@@ -45,17 +45,14 @@ describe('chunkWaypoints', () => {
   });
 
   it('splits longer lists into chained groups of at most 20 locations', () => {
-    // Valhalla errors out above 20 locations (error_code 150)
     for (const total of [21, 29, 40]) {
       const chunks = chunkWaypoints(points(total));
       expect(chunks.length).toBeGreaterThan(1);
       for (const chunk of chunks) {
         expect(chunk.length).toBeLessThanOrEqual(VALHALLA_MAX_LOCATIONS);
       }
-      // every stop is covered ...
       const seen = new Set(chunks.flat().map((w) => w.title));
       expect(seen.size).toBe(total);
-      // ... and consecutive chunks share their joint point, so the line is gapless
       for (let i = 1; i < chunks.length; i += 1) {
         const previousLast = chunks[i - 1]!.at(-1)?.title;
         expect(chunks[i]![0]?.title).toBe(previousLast);

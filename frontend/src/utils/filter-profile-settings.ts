@@ -32,7 +32,6 @@ export const filterProfileSettings = (
     },
   };
 
-  // Skip filtering if profile is 'auto' since it doesn't exist in settings
   if (!isValidSettingsProfile(profile)) {
     return filteredSettings;
   }

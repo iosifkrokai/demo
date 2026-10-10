@@ -2,20 +2,7 @@ import { Bike, Car, Footprints, type LucideIcon } from 'lucide-react';
 
 import i18n from '@/i18n';
 
-/**
- * How the guide talks about movement, per transport.
- *
- * The turn instructions themselves come from Valhalla with the plan's own
- * costing (a car route already gets driving instructions), and the speed behind
- * the ETA comes from the route summary — so both follow the transport. What did
- * NOT follow it was the guide's own voice: it said «идти», drew footprints and
- * counted «пройдено», which is wrong on a bicycle and nonsense in a car.
- *
- * The wording lives in the `guide` area of the dictionary; this module only
- * maps a costing name to the words that belong to it, resolved through the same
- * i18n instance the components use, so a mode reads correctly in either
- * language without every caller repeating the lookup.
- */
+/** How the guide talks about movement, per transport. */
 export type GuideTravelModeId = 'foot' | 'bike' | 'car';
 
 export interface GuideTravelMode {
@@ -63,18 +50,10 @@ const resolve = (mode: ModeDescriptor): GuideTravelMode => ({
     : undefined,
 });
 
-/**
- * Walking is the product's default: what a route without a stated transport
- * honestly means, and the wording the guide falls back to.
- */
+/** Walking is the product's default: what a route without a stated transport honestly means, and the wording the guide falls back to. */
 export const defaultTravelMode = (): GuideTravelMode => resolve(FOOT);
 
-/**
- * Valhalla costing name → the guide's travel mode.
- *
- * Unknown or absent costing stays pedestrian: walking is the product's default
- * and the honest reading of a route whose transport nobody stated.
- */
+/** Valhalla costing name → the guide's travel mode. */
 export const guideModeFor = (costing?: string | null): GuideTravelMode => {
   switch ((costing ?? '').toLowerCase()) {
     case 'bicycle':

@@ -1,13 +1,4 @@
-"""Migration 0007 renames the transit-stop category, and only for auto rows.
-
-The category code in data/taxonomy.csv moved «остановка» → «остановка транспорта».
-Rows already in the DB still carry the old value, and the typed taxonomy guard
-(see db/migrations/0004) silently reverts any category change on curated/dataset
-rows — so the migration must restrict itself to the OSM-seeded rows, and these
-tests must check that restriction inside the UPDATE statement itself, not
-somewhere in the file: the header comment mentions «auto» too, so a whole-file
-grep would keep passing after the WHERE clause lost the condition.
-"""
+"""Migration 0007 renames the transit-stop category, and only for auto rows."""
 
 from __future__ import annotations
 

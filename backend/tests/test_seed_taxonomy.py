@@ -1,20 +1,4 @@
-"""One taxonomy, checked at the seams the seed used to duplicate it.
-
-`data/taxonomy.csv` (read through `domain/taxonomy.py`) is the single source of
-category codes and their visit times. The seed used to carry its own copies of
-that knowledge in separate scripts; the copies were already drifting (the
-validation allow-lists excluded the service codes, so a café row would have been
-dropped silently). These tests pin the single source in place:
-
-  * seed.datasets.SIGHT_TAXONOMY = the taxonomy's sight role (this REPLACES the
-    old seed_region.TAXONOMY / load_osm.TAXONOMY copies — they are the same set);
-  * seed.osm_tags.visit_minutes_for = the taxonomy's visit_minutes;
-  * seed.osm_tags' OSM tag → code map stays explicit (a bare
-    `amenity=place_of_worship` is genuinely ambiguous between
-    костёл/церковь/монастырь/храм, so it cannot be derived) but must AGREE with
-    the taxonomy's own `osm_tags`;
-  * the district centres cover every district, spelled as the data spells it.
-"""
+"""One taxonomy, checked at the seams the seed used to duplicate it."""
 
 from __future__ import annotations
 
@@ -47,11 +31,7 @@ def _sight_codes() -> frozenset[str]:
     return frozenset(cat.code for cat in taxonomy.all_categories() if cat.role == "sight")
 
 
-# the validation allow-lists
-
 def test_seed_region_allow_list_is_the_taxonomy_sight_role():
-    # The two hand-authored copies (seed_region / load_osm) collapsed into one
-    # symbol, seed.datasets.SIGHT_TAXONOMY.
     assert set(SIGHT_TAXONOMY) == _sight_codes()
 
 
@@ -66,8 +46,6 @@ def test_the_region_csvs_only_use_categories_the_taxonomy_knows():
     assert seen <= _sight_codes(), f"unknown categories in the CSVs: {seen - _sight_codes()}"
 
 
-# visit times
-
 def test_ingest_osm_visit_times_come_from_the_taxonomy():
     for cat in taxonomy.all_categories():
         assert visit_minutes_for(cat.code) == cat.visit_minutes
@@ -76,8 +54,6 @@ def test_ingest_osm_visit_times_come_from_the_taxonomy():
 def test_ingest_osm_visit_time_falls_back_for_unknown_category():
     assert visit_minutes_for("нет такой категории") == 20
 
-
-# the OSM tag maps
 
 def test_ingest_poi_tag_map_codes_exist_in_the_taxonomy():
     for code in (*AMENITY_CATEGORY.values(), *TOURISM_CATEGORY.values()):
@@ -94,16 +70,8 @@ def test_ingest_poi_tag_map_agrees_with_the_taxonomy_osm_tags():
             )
 
 
-# public-transport stops are services, and the ingest knows all three spellings
-
-
 def test_transit_tag_maps_agree_with_the_taxonomy_osm_tags():
-    """Same rule as the amenity/tourism maps: a map may not claim an unlisted tag.
-
-    Three OSM spellings mean one thing to a tourist at the kerb — a stop you can
-    board — so all three must land on the same code, and that code must list each
-    of them.
-    """
+    """Same rule as the amenity/tourism maps: a map may not claim an unlisted tag."""
     for osm_key, mapping in (
         ("highway", HIGHWAY_CATEGORY),
         ("public_transport", PUBLIC_TRANSPORT_CATEGORY),
@@ -119,12 +87,7 @@ def test_transit_tag_maps_agree_with_the_taxonomy_osm_tags():
 
 
 def test_a_transit_stop_is_a_service_not_a_sight():
-    """It is never «visited» — it is where the walk can be cut short.
-
-    The visit time is the taxonomy's smallest positive default (the file's own
-    contract is `visit_minutes > 0`), not 0: a boarding point is not a place to
-    spend time, and if a request ever turns it into a stop it must not cost zero.
-    """
+    """It is never «visited» — it is where the walk can be cut short."""
     stop = taxonomy.get("остановка транспорта")
     assert stop.role == "service"
     assert taxonomy.visit_minutes("остановка транспорта") > 0
@@ -144,8 +107,6 @@ def test_an_unnamed_transit_stop_survives_with_a_placeholder_name():
     assert service_name({"highway": "bus_stop"}, "остановка транспорта") == "Остановка"
     assert service_name({"highway": "bus_stop", "name": "Вокзал"}, "остановка транспорта") == "Вокзал"
 
-
-# districts
 
 def test_every_district_has_a_centre_and_slonim_is_not_missing():
     areas = json.loads((DATA / "areas.json").read_text(encoding="utf-8"))["areas"]

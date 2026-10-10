@@ -1,7 +1,6 @@
 """The local embedder: prefixes, float coercion, and schema-drift guard.
 
-No model is loaded here — the real one would download hundreds of MB. A fake
-whose ``.embed`` records its inputs stands in for fastembed.
+A fake whose ``.embed`` records its inputs stands in for fastembed.
 """
 
 from __future__ import annotations
@@ -47,7 +46,6 @@ def test_query_gets_the_query_prefix(fake):
 
 
 def test_int_vectors_are_coerced_to_float(monkeypatch):
-    # pgvector silently mis-casts an int array; the seam must force floats.
     monkeypatch.setattr(embeddings._state, "model", _FakeModel([[1, 2, 3]]), raising=False)
     out = embeddings._embed_prefixed(["passage: x"])
     assert out == [[1.0, 2.0, 3.0]]

@@ -1,13 +1,6 @@
 """Step 9 — Template-based explanation.
 
-No LLM — assemble the trace into a short Russian description. The webapp
-surfaces this in the route summary; clients can hide it for compact view.
-
-The explanation is purely deterministic and reflects exactly what the
-pipeline did (which categories, what algorithm, any auto-relax) and, when the
-verifier ran, the satisfied / unmet / uncertain breakdown of the user's own
-requirements. This keeps the per-request cost at zero and ensures the user
-sees the truth.
+Deterministic, no LLM: assembles the trace into a short Russian description.
 """
 
 from __future__ import annotations
@@ -23,9 +16,7 @@ from .verify import verify_summary
 def _area_name(route: list[Candidate]) -> str:
     """Derive a human-readable area name from the route's stops.
 
-    Prefer district over town when all stops are in the same district
-    (e.g. "Лидский район" is more informative than "Лида").
-    If all stops share one town, use that.
+    Prefers a single shared district over a shared town.
     """
     if not route:
         return "Гродно"
@@ -33,20 +24,15 @@ def _area_name(route: list[Candidate]) -> str:
     towns = [c.town for c in route if c.town]
     districts = [c.district for c in route if c.district]
 
-    # If all stops share one district -> use the district.
     if districts and len(set(districts)) == 1:
         return districts[0]
 
-    # Mixed area: when the stops span several districts the tour covers the
-    # voblast — naming one of its towns ("по Волковыск") would be wrong.
     if districts and len(set(districts)) > 1:
         return "Гродненской области"
 
-    # If all stops share one town -> use the town.
     if towns and len(set(towns)) == 1:
         return towns[0]
 
-    # Mixed area: take the most common town or fall back to "Гродно".
     if towns:
         most_common = Counter(towns).most_common(1)[0][0]
         if most_common:
@@ -60,10 +46,7 @@ def _requirements_section(
 ) -> list[str]:
     """The satisfied / unmet / uncertain breakdown, from the verifier.
 
-    Prefers the live ``requirements`` object when one is passed (statuses were
-    written by ``verify``), else the snapshot ``validate`` stored in the trace.
-    Returns an empty list when the verifier never ran, so callers that do not
-    use requirements get byte-for-byte the old explanation.
+    Prefers the live ``requirements``, else the trace snapshot; [] if none ran.
     """
     if requirements is not None and requirements.requirements:
         summary = verify_summary(requirements)
@@ -107,8 +90,6 @@ def explain(
     n = len(route)
     walk_min = max(1, int(walk_seconds // 60))
     area = _area_name(route)
-    # A region-wide request is driven, not walked — saying "пешком" over 90 km
-    # is nonsense.
     if costing == "pedestrian":
         head = f"Пеший маршрут по {area}: {n} остановок, ≈{walk_min} мин ходьбы."
     else:

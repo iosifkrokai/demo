@@ -1,18 +1,6 @@
 """Step 2 — Resolve constraints.
 
-Merges IntentDecision with explicit client parameters:
-  * Time budget: explicit client > LLM > default (clamped to [MIN, MAX]).
-  * Bbox:        explicit client wins; otherwise None (whole Grodno).
-  * Named places → area_anchor (geo focus) or must_visit_ids (real POI name match).
-
-Rule for named-place resolution:
-  - A NAME match (similarity threshold MET) → the POI is a real place the user
-    explicitly asked for → must_visit_ids.  Example: "Мирскому замку" → Mir Castle.
-  - A TOWN / DISTRICT match only → the token names an area, not a specific POI →
-    area_anchor.  The pipeline uses it to set the geo focus; it does NOT force
-    a POI into the route.  Example: "Гродно" in "замки Гродно" → geo anchor only.
-
-Outputs ResolvedConstraints consumed by retrieve/optimize/etc.
+Merges IntentDecision with explicit client parameters (budget, bbox, names).
 """
 
 from __future__ import annotations
@@ -28,17 +16,7 @@ from store.search import _keyword_search, _name_match_search
 
 log = logging.getLogger(__name__)
 
-# Russian synonym expansion for retrieval — category → search keywords.
-#
-# Each list is the full declension of the head noun plus its synonyms,
-# because Russian inflection breaks naive matching: the query «по замкам»,
-# the POI name «Новый замок» and the keyword «замки» are one category, and
-# every surface form has to be known.  This single map is the taxonomy:
-# planner/retrieve.py reads category words off the query, and the no-LLM
-# intent fallback (planner/intent.py) inverts it to fill categories_pos —
-# the taxonomy lives HERE, never duplicated per call site.
 CATEGORY_SYNONYMS: dict[str, list[str]] = {
-    # heritage taxonomy
     "замок": [
         "замок", "замка", "замку", "замком", "замке",
         "замки", "замков", "замкам", "замками", "замках",
@@ -48,7 +26,6 @@ CATEGORY_SYNONYMS: dict[str, list[str]] = {
     "костёл": [
         "костёл", "костёла", "костёлу", "костёлом", "костёле",
         "костёлы", "костёлов", "костёлам", "костёлами", "костёлах",
-        # without ё — as written in queries and OSM names
         "костел", "костела", "костелу", "костелем", "костеле",
         "костелы", "костелов", "костелам", "костелами", "костелах",
     ],
@@ -108,7 +85,6 @@ CATEGORY_SYNONYMS: dict[str, list[str]] = {
         "кладбищам", "кладбищами", "кладбищах",
         "некрополь", "некрополя", "некрополю", "некрополем", "некрополе",
     ],
-    # everyday stops (OSM amenity/tourism POIs)
     "кафе": [
         "кафе",
         "кофейня", "кофейни", "кофейне", "кофейню", "кофейной",
@@ -134,13 +110,6 @@ CATEGORY_SYNONYMS: dict[str, list[str]] = {
         "хостел", "хостела", "хостелу", "хостелом", "хостеле",
         "гостевой дом",
     ],
-    # Boarding points. A tourist walking a route asks «где сесть на автобус», and
-    # the deterministic fallback has to read that without a model — so the three
-    # everyday words for a stop are registered here, not only in taxonomy.csv.
-    # The bare word «остановка» is deliberately NOT among them: to a tourist it
-    # means a stop on the walk («с обязательной остановкой у Фарного костёла»),
-    # and reading that as a bus stop sent a church request hunting for transport.
-    # Only the transport-qualified forms count.
     "остановка транспорта": [
         "автобус", "автобуса", "автобусу", "автобусом", "автобусе",
         "автобусы", "автобусов", "автобусам", "автобусах",
@@ -150,14 +119,6 @@ CATEGORY_SYNONYMS: dict[str, list[str]] = {
     ],
 }
 
-# English surface forms, same shape and same keys as CATEGORY_SYNONYMS.
-#
-# Spec 002 makes the product RU/EN, and the deterministic (no-LLM) fallback has
-# to read an English query too.  This map lives HERE, next to CATEGORY_SYNONYMS,
-# so the taxonomy is still one file per concern: the eventual W1 `taxonomy.py`
-# becomes the single source and this map is folded into it.  Forms are
-# lower-case; a form that names an ambiguous concept is mapped to the generic
-# code ("church" → церковь, not the Catholic костёл).
 CATEGORY_SYNONYMS_EN: dict[str, list[str]] = {
     "замок": [
         "castle", "castles", "fortress", "fortresses", "citadel", "citadels",
@@ -206,8 +167,6 @@ CATEGORY_SYNONYMS_EN: dict[str, list[str]] = {
     "гостиница": [
         "hotel", "hotels", "hostel", "hostels", "inn", "inns", "lodging",
     ],
-    # English: "stop" alone is as ambiguous as the Russian «остановка» (a stop on
-    # the walk), so only the transport-qualified forms are registered.
     "остановка транспорта": [
         "bus stop", "bus stops", "trolleybus stop", "tram stop",
         "transit stop", "boarding point",
@@ -226,47 +185,27 @@ def resolve(
 ) -> ResolvedConstraints:
     d = intent.decision
 
-    # Time budget: explicit > LLM > none
-    # No time limit stated by the user → no limit at all. A default of 120 min
-    # used to be applied silently, which trimmed the route to whatever fit two
-    # hours the user never asked for. 0 is the UI's "без ограничения" value and
-    # means exactly the same as an absent field.
     if explicit_time_budget is not None:
-        # The selector wins over any model guess; 0 = "без ограничения".
         budget = explicit_time_budget or None
     else:
         budget = d.time_budget_minutes or None
     if budget is not None:
         budget = max(constants.MIN_BUDGET_MIN, min(budget, constants.MAX_BUDGET_MIN))
 
-    # Bbox: explicit wins; else None. Format: (W, S, E, N) — matches ST_MakeEnvelope.
     bbox: tuple[float, float, float, float] | None = None
     if explicit_bbox is not None and len(explicit_bbox) == 4:
-        # Reorder from [south, west, north, east] (HTTP) to (W, S, E, N).
         s, w, n, e = (float(v) for v in explicit_bbox)
         bbox = (w, s, e, n)
 
-    # Named places → must_visit_ids + area_anchor
-    #   must_visit_ids  : real POI name matches (definite places the user named)
-    #   area_anchor     : first town/district-only match (for geo focus), or None
     must_visit_ids, area_anchor, resolved_names = _resolve_named_places(
         d.named_places, db, outside
     )
 
-    # The request's own prohibition outranks a place inferred from its words.
-    # «вечерняя прогулка по Советской, без музеев» gives the fragment «Советской»,
-    # which name-matches «Аптека-музей на Советской» → must-visit, and a must-visit
-    # *bypasses* the negative filter (see retrieve.apply_negative_filter) — so the
-    # user's «без музеев» was violated by a place our own reader had invented. Such
-    # an id is kept out here; the must-visit name stays in the contract and the
-    # verifier reports it honestly as absent.
     must_visit_ids = _without_forbidden(must_visit_ids, d.categories_neg, db)
 
-    # Build must_visit_keywords (used by retrieval as a strong positive signal)
     must_visit_keywords = _expand_categories_to_keywords(d.categories_pos)
     must_visit_keywords.extend(d.keywords_pos)
 
-    # Era hint: pass through
     era_hint = d.era_hint if d.era_hint in ("any", "pre1900", "soviet", "modern") else "any"
 
     return ResolvedConstraints(
@@ -283,7 +222,6 @@ def resolve(
         intent_type=d.intent_type,
         must_visit_keywords=must_visit_keywords,
         query_keywords=list(d.keywords_pos),
-        # A visible UI choice: the tourist asked for a closed tour.
         round_trip=explicit_round_trip,
     )
 
@@ -291,15 +229,11 @@ def resolve(
 def _is_location_suffix(name: str, query: str) -> bool:
     """Return True if name ends with '(Location)' or is just the location name.
 
-    E.g. name='Лютеранская кирха (Гродно)' and query='Гродно' → True.
-         name='Гродно' and query='Гродно' → True.
-    These are location rows (not specific POIs) and should become area_anchors.
+    These are location rows (not specific POIs) and become area_anchors.
     """
     q = query.strip()
     if name.lower() == q:
         return True
-    # Check for parenthetical location: "POI (Location)" pattern at the end
-    # " (Гродно)" has 8 chars
     if len(q) >= 3:
         suffix = f" ({q.lower()})"
         if name.lower().endswith(suffix):
@@ -336,13 +270,7 @@ def _resolve_named_places(
 ) -> tuple[list[int], int | None, list[str]]:
     """Match named place strings to place IDs, distinguishing POI names from areas.
 
-    Returns (must_visit_ids, area_anchor):
-      - must_visit_ids : POI-name matches only (NAME column similarity >= threshold)
-      - area_anchor     : first town/district-only match (for geo focus), or None
-
-    The heuristic:
-      1. Try NAME-only search (strict) → must_visit if similarity >= NAME_MATCH_MIN_SIM.
-      2. If no name match, try town/district search → area_anchor (not must_visit).
+    Returns (must_visit_ids, area_anchor, resolved_names).
     """
     must_out: list[int] = []
     seen: set[int] = set()
@@ -354,26 +282,15 @@ def _resolve_named_places(
         if not name or not name.strip():
             continue
 
-        # A name the reader placed outside the region is matched STRICTLY: it may
-        # only resolve to a place whose name really is that name (allowing for a
-        # town suffix). Similarity alone used to hand a Vilnius cathedral the
-        # Lida one (id 554) — a plausible-looking substitution for a place that
-        # does not exist in this region, which then anchored a route in the wrong
-        # town and answered `ready`. A name that does not resolve this way stays
-        # unresolved, and the planner refuses the request instead.
         strict = name.strip().lower() in reported_outside
 
-        # Step 1: name-only search — strict, high-quality matches only.
         name_rows = _name_match_search(db, name, limit=3)
         if name_rows:
             top = name_rows[0]
             sim = top.get("_name_sim", 0.0)
             top_name = top.get("name", "")
-            # Skip if the name match is just a location suffix in parentheses
-            # (e.g. "Лютеранская кирха (Гродно)" matched by "Гродно").
-            # These are area names, not specific POIs — fall through to area check.
             if _is_location_suffix(top_name, name):
-                pass  # don't add to must_visit; fall through to area check below
+                pass
             elif (
                 (sim >= constants.NAME_MATCH_MIN_SIM if not strict else _same_name(top_name, name))
                 and top["id"] not in seen
@@ -381,19 +298,12 @@ def _resolve_named_places(
                 seen.add(top["id"])
                 must_out.append(top["id"])
                 resolved.append(name)
-                continue  # resolved as a real POI; don't also use as area anchor
+                continue
 
-        # Step 2: town/district search — area anchor only, NOT a must-visit.
-        # Only take the first town-match as the area anchor (preserve order).
         if area_anchor is None:
             town_rows = _keyword_search(db, name, limit=5)
             for row in town_rows:
                 row_name = row.get("name", "")
-                # Skip a row that IS the location itself (a town/area row such as
-                # name="Гродно").  POIs whose name merely carries the town in
-                # parentheses ("Старый замок (Гродно)") are valid anchors — the
-                # anchor only sets the geo focus, it does not force the POI into
-                # the route, so a POI row is a fine anchor.
                 if row_name.strip().lower() == name.strip().lower():
                     continue
                 if _is_town_or_district_match(row, name):
@@ -407,10 +317,7 @@ def _resolve_named_places(
 def _same_name(row_name: str, wanted: str) -> bool:
     """Is `row_name` the very name asked for — not merely a similar one?
 
-    Allows the town suffix the data carries («Старый замок» for «Старый замок
-    (Гродно)») and nothing more: a different cathedral in a different town is a
-    different place, however close its name looks. Used when the reader has
-    already said the asked-for name is not in this region.
+    Allows the town suffix the data carries, and nothing more.
     """
     a = " ".join((row_name or "").lower().split())
     b = " ".join((wanted or "").lower().split())
@@ -418,7 +325,6 @@ def _same_name(row_name: str, wanted: str) -> bool:
         return False
     if a == b:
         return True
-    # The data's own spelling may add a parenthesised location: «… (Гродно)».
     head = a.split("(", 1)[0].strip()
     return head == b or a.startswith(b + " ") or b.startswith(a + " ")
 
@@ -426,8 +332,7 @@ def _same_name(row_name: str, wanted: str) -> bool:
 def _word_boundary_match(text: str, query: str) -> bool:
     """Return True if query appears as a standalone word in text.
 
-    Uses word-boundary regex to prevent "мир" matching inside "мискому".
-    Both text and query are lowercased by the caller.
+    Word boundaries prevent "мир" matching inside "мискому".
     """
     import re as _re
     if not text or not query:
@@ -438,24 +343,18 @@ def _word_boundary_match(text: str, query: str) -> bool:
 def _is_town_or_district_match(row: dict, query: str) -> bool:
     """Return True if the query matched on town or district.
 
-    Uses word-boundary regex for ALL three fields to prevent false matches:
-      - "Гродно" must NOT match district "Гродненский район" (substring).
-      - "Лидский" must NOT match name "Лидский замок" (word inside name).
-      - "Лидский" must match district "Лидский район" (standalone word).
+    Uses word-boundary regex for all three fields to prevent false matches.
     """
     name = (row.get("name") or "").lower()
     town = (row.get("town") or "").lower()
     district = (row.get("district") or "").lower()
     q = query.lower()
 
-    # Town and district: word-boundary match (prevents "Гродно" matching "Гродненский").
     if _word_boundary_match(town, q):
         return True
     if _word_boundary_match(district, q):
         return True
 
-    # Name word-boundary check: prevents "Лидский" in "Лидский замок" from
-    # triggering a false town match.
     if _word_boundary_match(name, q):
         return False
 

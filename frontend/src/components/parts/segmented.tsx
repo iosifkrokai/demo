@@ -7,12 +7,7 @@ import { cn } from '@/lib/utils';
 export interface SegmentedItem<T extends string> {
   value: T;
   label: string;
-  /**
-   * Shorter text for the pill when four items share a 380px column
-   * («Планирование» → «План»). `label` stays the full meaning: it is the title
-   * tooltip and the accessible name, so the shortened pill is never the only
-   * place the full wording lives.
-   */
+  /** Shorter text for the pill when four items share a 380px column («Планирование» → «План»). */
   short?: string;
   icon?: LucideIcon;
 }
@@ -23,22 +18,14 @@ interface SegmentedProps<T extends string> {
   onChange: (value: T) => void;
   /** Accessible name of the group («режим», «на чём»). */
   label: string;
-  /**
-   * Icon above the label. Four transports have to fit a 360px column, and the
-   * labels ("велосипед") do not survive a horizontal row next to an icon.
-   */
+  /** Icon above the label. */
   stacked?: boolean;
   disabled?: boolean;
   className?: string;
   testId?: (value: T) => string | undefined;
 }
 
-/**
- * DESIGN.md segmented control: grey track, the active item is a raised white
- * pill. Single-select, so it is a radiogroup rather than a row of toggles —
- * with the usual radiogroup keyboard contract: one tab stop (the selected
- * item), arrow keys move the selection and the focus together.
- */
+/** DESIGN.md segmented control: grey track, the active item is a raised white pill. */
 export function Segmented<T extends string>({
   items,
   value,
@@ -111,11 +98,9 @@ export function Segmented<T extends string>({
             type="button"
             role="radio"
             aria-checked={active}
-            // Roving tabindex: only the selected radio participates in tab order.
             tabIndex={active ? 0 : -1}
             disabled={disabled}
             data-testid={testId?.(item.value)}
-            // The pill may be shortened; the full wording stays the name.
             aria-label={item.short ? item.label : undefined}
             onClick={() => onChange(item.value)}
             onKeyDown={(event) => onKeyDown(event, index)}
@@ -134,9 +119,6 @@ export function Segmented<T extends string>({
                 : 'text-muted-foreground hover:text-foreground'
             )}
           >
-            {/* On a phone the label IS the tab: with the 44x44 language
-                switcher beside it, the icon costs the room that keeps «Routes»
-                from becoming «Rou…». Desktop keeps the icons. */}
             {Icon && (
               <Icon
                 className="h-4 w-4 shrink-0 max-md:hidden"

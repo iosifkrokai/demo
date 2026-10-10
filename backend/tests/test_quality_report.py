@@ -1,11 +1,4 @@
-"""The quality page must read the numbers the runner actually writes.
-
-`read_golden` looked for `compliance.json` under `benchmarks/snapshots/` (the
-runner writes it to the benchmarks root unless a snapshot dir was asked for) and
-then expected `summary["compliance"]` / `summary["passed"]`, while the artifact
-carries `compliance_rate` / `n_cases_passed`. So the layer rendered as
-«НЕ ИЗМЕРЯЛОСЬ» — the page lied in the one line its owner reads.
-"""
+"""The quality page must read the numbers the runner actually writes."""
 
 from __future__ import annotations
 
@@ -75,7 +68,6 @@ def test_read_golden_reads_the_reports_own_keys(tmp_path):
 
 def test_read_golden_finds_the_report_at_the_default_path(tmp_path, monkeypatch):
     """A run written to the default path must not read as «не измерялось».
-
     Nothing generated is committed any more, so the artifact is staged here.
     """
     report = tmp_path / "compliance.json"

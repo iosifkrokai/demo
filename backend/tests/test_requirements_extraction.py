@@ -1,22 +1,4 @@
-"""W2 — `build_requirements`: the single interpretation entry point.
-
-Pins the contract that turns a tourist's request (RU or EN) plus the explicit
-UI filters into `domain.requirements.TripRequirements`:
-
-  * party composition carries a child COUNT and never an invented age;
-  * the time budget is only the one the user stated (digit or word numeral);
-  * a service is HARD when the text obliges it and SOFT otherwise, each with
-    its verbatim provenance span;
-  * "старый город" binds to a known area — not to the adjective "старый";
-  * an explicit UI filter beats any text reading;
-  * what the data cannot prove ("без лестниц") lands in `unknowns`, never in a
-    satisfied requirement;
-  * the no-key fallback produces the same shape as the LLM path.
-
-The file is deterministic and offline: no DB, no network. When the model path is
-exercised, the interpretation agent's contract is stubbed by monkeypatching
-`intent_mod._agent_contract`, so no key and no network are needed.
-"""
+"""`build_requirements`: the single interpretation entry point."""
 
 from __future__ import annotations
 
@@ -38,7 +20,6 @@ from domain.requirements import PartyComposition, Requirement, TripRequirements
 RU = "ru"
 EN = "en"
 
-# The acceptance scenario (spec §9.1) and the measured degraded bug, verbatim.
 RU_ACCEPT = (
     "Погулять по старому Гродно с двумя детьми, "
     "туалет обязательно, кафе если по пути, на два часа"
@@ -49,8 +30,6 @@ EN_ACCEPT = (
     "toilet on the way, for two hours"
 )
 
-
-# Fixtures: the OpenRouter key is the switch between modes
 
 @pytest.fixture
 def no_key(monkeypatch):
@@ -86,14 +65,12 @@ def _agent_contract(*, source: str = "llm", codes: tuple[str, ...] = ()) -> Trip
     )
 
 
-# The acceptance scenario and the measured bug
-
 class TestAcceptanceScenarioRu:
 
     def test_party_is_two_children_with_no_invented_age(self, no_key):
         tr = build_requirements(RU_ACCEPT, _req(RU_ACCEPT))
         assert tr.party.children == 2
-        assert tr.party.children_ages == []          # never guessed
+        assert tr.party.children_ages == []
 
     def test_budget_is_the_stated_two_hours(self, no_key):
         tr = build_requirements(RU_ACCEPT, _req(RU_ACCEPT))
@@ -156,8 +133,6 @@ class TestMeasuredBugFixed:
         assert tr.source == "fallback"
 
 
-# Areas: a known slug, never the bare adjective
-
 class TestAreas:
 
     def test_old_grodno_binds_to_the_verified_area(self, no_key):
@@ -181,8 +156,6 @@ class TestAreas:
         assert "grodno-old-town" in build_requirements(q, _req(q, EN)).areas
 
 
-# Party: count known, age never invented
-
 class TestPartyComposition:
 
     @pytest.mark.parametrize(
@@ -193,8 +166,8 @@ class TestPartyComposition:
             ("двое детей и старый город", 2),
             ("с тремя детьми", 3),
             ("с 2 детьми", 2),
-            ("двое ребят", None),          # "ребят" is not a stated child word
-            ("семья погулять", None),      # no number stated → no count, not 0
+            ("двое ребят", None),
+            ("семья погулять", None),
         ],
     )
     def test_ru_child_count(self, no_key, query, children):
@@ -206,7 +179,7 @@ class TestPartyComposition:
         [
             ("walk with two children", 2),
             ("a trip with 3 kids", 3),
-            ("for the family", None),      # no number → None, never a guess
+            ("for the family", None),
             ("with one child", 1),
         ],
     )
@@ -223,7 +196,7 @@ class TestPartyComposition:
     def test_stated_ages_are_kept_and_give_the_count(self, no_key):
         tr = build_requirements("прогулка с детьми 5 и 9 лет", _req("прогулка с детьми 5 и 9 лет"))
         assert tr.party.children_ages == [5, 9]
-        assert tr.party.children == 2          # the ages enumerate the children
+        assert tr.party.children == 2
 
     def test_adults_count_when_stated(self, no_key):
         tr = build_requirements("двое взрослых и двое детей", _req("двое взрослых и двое детей"))
@@ -239,12 +212,9 @@ class TestPartyComposition:
     def test_mobility_is_read_from_text_not_inferred_from_size(self, no_key):
         tr = build_requirements("прогулка с двумя детьми в коляске", _req("прогулка с двумя детьми в коляске"))
         assert "stroller" in tr.party.mobility
-        # size alone proves nothing about mobility
         plain = build_requirements("прогулка с двумя детьми", _req("прогулка с двумя детьми"))
         assert plain.party.mobility == []
 
-
-# Budget: only what the text states
 
 class TestBudget:
 
@@ -279,8 +249,6 @@ class TestBudget:
         tr = build_requirements("погулять 20 часов", _req("погулять 20 часов"))
         assert tr.budget_minutes == constants.MAX_BUDGET_MIN
 
-
-# Hard vs soft, provenance, must-visit, avoid, interests
 
 class TestHardSoftAndProvenance:
 
@@ -341,14 +309,11 @@ class TestHardSoftAndProvenance:
         assert "музей" in tr.avoid_codes()
 
 
-# Unknowns: what cannot be proven is never satisfied
-
 class TestUnknowns:
 
     def test_no_stairs_is_unknown_not_satisfied(self, no_key):
         tr = build_requirements("прогулка без лестниц", _req("прогулка без лестниц"))
         assert "step_free" in tr.unknowns
-        # and it did NOT become a satisfied requirement
         assert all(r.status != "satisfied" for r in tr.requirements)
 
     def test_step_free_english(self, no_key):
@@ -364,8 +329,6 @@ class TestUnknowns:
         tr = build_requirements("замки Гродно", _req("замки Гродно"))
         assert tr.unknowns == []
 
-
-# Explicit UI filters win over a text guess
 
 class TestExplicitUiWins:
 
@@ -384,7 +347,7 @@ class TestExplicitUiWins:
     def test_ui_hard_service_beats_a_soft_text_reading(self, no_key):
         tr = build_requirements(RU_BUG, _req(RU_BUG, hard_services=["туалет"]))
         services = [r for r in tr.requirements if r.kind == "service" and r.code == "туалет"]
-        assert len(services) == 1                      # no duplicate
+        assert len(services) == 1
         assert services[0].strength == "hard"
         assert services[0].source == "ui"
 
@@ -415,8 +378,6 @@ class TestExplicitUiWins:
         assert tr.result_mode == "catalogue"
         assert tr.round_trip is True
 
-
-# The agent path produces the contract, and degrades cleanly
 
 class TestAgentPath:
 
@@ -470,8 +431,6 @@ class TestAgentPath:
         ).model_dump().keys()
 
 
-# Robustness
-
 class TestRobustness:
 
     @pytest.mark.parametrize(
@@ -490,11 +449,10 @@ class TestRobustness:
 
     def test_every_requirement_is_resolvable_by_the_contract_helpers(self, no_key):
         tr = build_requirements(RU_ACCEPT, _req(RU_ACCEPT))
-        # the frozen accessors must run over whatever we produced
         assert tr.hard() or tr.soft()
         assert tr.public_requirements()
         for r in tr.requirements:
-            assert r.status == "pending"          # nothing is proven at build time
+            assert r.status == "pending"
             assert r.is_resolved() is False
 
     def test_module_exposes_the_entry_point(self):

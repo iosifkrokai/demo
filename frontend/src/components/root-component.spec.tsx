@@ -41,8 +41,6 @@ describe('RootComponent — where the account bar belongs', () => {
     }
   );
 
-  // These pages are full pages with their own top-right «к карте» button; the
-  // bar sat on top of it below ~1248px.
   it.each(['/admin', '/visited'])(
     'hides the bar on the full page %s',
     (route) => {

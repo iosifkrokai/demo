@@ -1,11 +1,7 @@
 import { downloadFile } from '@/utils/download-file';
 import { getDateTimeString } from './date-time';
 
-/**
- * Exports data as a formatted JSON file
- * @param data - The data to export
- * @param fileNamePrefix - The prefix for the filename (e.g., 'valhalla-directions', 'valhalla-isochrones')
- */
+/** Exports data as a formatted JSON file */
 export const exportDataAsJson = (
   data: unknown,
   fileNamePrefix: string

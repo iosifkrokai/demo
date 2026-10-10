@@ -3,11 +3,7 @@ import { lazy, Suspense } from 'react';
 
 import { AccountBar } from './account/account-bar';
 
-/**
- * Devtools are opt-in: they used to mount (and open a panel) over the map in
- * every dev run, which reads as a broken overlay for anyone looking at the app.
- * Start the dev server with VITE_DEVTOOLS=1 when you actually want them.
- */
+/** Devtools are opt-in: they used to mount (and open a panel) over the map in every dev run, which reads as a broken overlay for anyone looking at the app. */
 const DEVTOOLS_ENABLED =
   import.meta.env.DEV && import.meta.env.VITE_DEVTOOLS === '1';
 
@@ -36,12 +32,6 @@ const TanStackRouterDevtoolsPanel = DEVTOOLS_ENABLED
   : () => null;
 
 export const RootComponent = () => {
-  // The account bar belongs over the app, not over the pages that are already a
-  // full page with their own header: on `/login` and `/register` a «Войти» pill
-  // would be asking for the thing already on screen, and on `/admin` and
-  // `/visited` the page's own «к карте» button sits in the same top-right
-  // corner, so below ~1248px the two collide. The bar stays on the map and the
-  // auth-adjacent routes.
   const pathname = useRouterState({
     select: (state) => state.location.pathname,
   });

@@ -1,15 +1,11 @@
 import { StrictMode } from 'react';
 import ReactDOM from 'react-dom/client';
 import './index.css';
-// Must run before the first render: the panel's own strings come from here.
 import './i18n';
 import { RouterProvider } from '@tanstack/react-router';
 import * as TanStackQueryProvider from './lib/tanstack-query/root-provider';
 import { router } from './routes';
 import { register } from './lib/service-worker-registry';
-// Before the first render: the guide reads `navigator.geolocation` when it
-// mounts, and `?sim=walk` replaces it there and then. With no such parameter
-// nothing happens here.
 import { installGeoSim } from './lib/geo-sim';
 
 installGeoSim();

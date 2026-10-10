@@ -9,18 +9,7 @@ interface PlacePhotoProps {
   className?: string;
 }
 
-/**
- * A point's picture, with the credit its licence requires.
- *
- * Renders **nothing** when there is no photo. That is the common case — most
- * points have none — and a grey placeholder would read as "still loading" on
- * every one of them.
- *
- * The credit is not optional chrome: for a CC BY-SA file the author and the
- * licence name must be shown, and the link goes to the file page so anyone can
- * check it. The data layer never hands over a photo without both (see
- * `parse_photo` on the backend), so this only has to print what it is given.
- */
+/** A point's picture, with the credit its licence requires. */
 export function PlacePhoto({ photo, name, className }: PlacePhotoProps) {
   const { t } = useTranslation();
 

@@ -89,7 +89,6 @@ describe('GuideNextStop', () => {
       />
     );
 
-    // The estimate is a hint, not a claim: it is shown with «≈».
     expect(screen.getByTestId('visit-time-chip')).toHaveTextContent('≈ 40 мин');
 
     fireEvent.click(screen.getByTestId('visit-time-chip'));
@@ -110,7 +109,6 @@ describe('GuideNextStop', () => {
       />
     );
 
-    // Their own number is shown without «≈» — it is not an estimate any more.
     expect(screen.getByTestId('visit-time-chip')).toHaveTextContent('70 мин');
 
     fireEvent.click(screen.getByTestId('visit-time-chip'));

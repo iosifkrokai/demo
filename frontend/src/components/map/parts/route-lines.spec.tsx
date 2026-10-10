@@ -50,7 +50,6 @@ const createMockState = (overrides = {}) => ({
 describe('RouteLines', () => {
   beforeEach(() => {
     mockSource.mockClear();
-    // By default the guide is not running: the line is drawn in full.
     mockUseCommonStore.mockReset();
     mockUseCommonStore.mockImplementation((selector) => selector({}));
     mockLayer.mockClear();
@@ -136,7 +135,6 @@ describe('RouteLines', () => {
         id: 'routes-line',
         type: 'line',
         paint: {
-          // The walked half of the line fades: the colour is picked by the walked flag.
           'line-color': [
             'case',
             ['==', ['get', 'walked'], true],
@@ -151,9 +149,6 @@ describe('RouteLines', () => {
   });
 
   it('гасит пройденную половину линии, пока ведёт проводник', () => {
-    // The navigator does not draw the whole route behind you: the walked part
-    // fades and the part ahead keeps the accent colour.
-    // The main route is active (index 0), and the position is its start.
     mockUseDirectionsStore.mockImplementation((selector) => {
       const state = createMockState({ activeRouteIndex: 0, show: { 0: true } });
       return selector(state);
@@ -277,7 +272,6 @@ describe('RouteLines', () => {
 
       const { container } = render(<RouteLines />);
 
-      // No substituted client line: the stops stay on the map, the line does not.
       expect(container.firstChild).toBeNull();
       expect(mockSource).not.toHaveBeenCalled();
     });
@@ -289,8 +283,6 @@ describe('RouteLines', () => {
 
       render(<RouteLines />);
 
-      // The hover popup and the route strip read this: the verified line's own
-      // numbers, not the ones a client-side request would have produced.
       expect(
         mockSource.mock.calls[0]?.[0]?.data.features[0].properties.summary
       ).toEqual({ length: 7.5, time: 1800 });

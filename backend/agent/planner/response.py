@@ -1,9 +1,6 @@
 """The response-shaping helpers: candidates → points, trace fragments, offers.
 
-Everything the pipeline turns a planned route into: the compact interpretation
-block, the per-requirement verdicts for the trace, the response `Place` list,
-the geometry drawing wrapper, the services-along measurement, and the
-profile-outgrown alternatives.
+Turns a planned route into the interpretation block, verdicts and Place list.
 """
 
 from __future__ import annotations
@@ -36,15 +33,9 @@ def _interpretation(
     """What the system understood, in one compact block for the client.
 
     Codes and numbers only — the client localises ``code``/``reason`` itself.
-    ``unmet`` lists EVERY requirement that the verifier did not prove satisfied
-    (unmet, uncertain or still pending), so a request whose mandatory stop could
-    not be placed is reported explicitly instead of quietly returning a plan
-    that ignores it.
     """
     if requirements is None:
         return None
-    # Per-requirement provenance defaults to wherever the reading came from;
-    # a requirement the user set with a visible control keeps "ui".
     origin = "agent" if requirements.source in ("llm", "mixed") else "fallback"
 
     def signal(r: Any) -> RequirementSignal:
@@ -82,11 +73,7 @@ def _interpretation(
 def _verdicts(requirements: Any) -> list[dict[str, Any]]:
     """One line per requirement: what was asked, what the verifier decided, why.
 
-    The verifier writes its verdict onto the requirement objects themselves
-    (``status``/``reason``/``place_ids``); this reads that back in the shape a
-    trace reader wants. Without it the `verify` step reports only the overall
-    status, which is the one thing a reader cannot ask a question about — «почему
-    туалет не выполнен» needs the per-requirement line.
+    Reads back the verdict the verifier wrote onto the requirement objects.
     """
     return [
         {
@@ -134,15 +121,12 @@ def _render_tour(
 ) -> tuple[dict, dict]:
     """Draw the tour, never failing the request over geometry.
 
-    render() already falls back to per-leg geometry; if even that yields
-    nothing we answer with the stops and no line, which the UI can explain,
-    instead of a 500 for a tour that was planned fine.
+    If nothing draws, answer with the stops and no line instead of a 500.
     """
     try:
         shape, summary, status = render(
             route, costing=costing, origin=origin, round_trip=round_trip
         )
-        # Log status for monitoring, but don't fail the request
         if status != "usable":
             log.info("render returned status: %s", status)
         return shape, summary
@@ -156,17 +140,7 @@ def _services_along_evidence(
 ) -> Any:
     """Measure the services beside the line for the codes the requirements name.
 
-    The verifier decides what a requirement means; it owns no database, so this
-    is where the geometry is actually measured (``store.services``). Returns
-
-    * ``None`` — nothing to measure (no service/interest codes, or no usable
-      line): the older semantics stay, so an absent café is still honestly
-      ``unmet``;
-    * ``ServiceAlongEvidence(measured=True, by_code=...)`` — measured. A code
-      missing from the mapping means «рядом нет», which is evidence;
-    * ``ServiceAlongEvidence(measured=False, ...)`` — the measurement itself
-      failed. A broken query is not evidence that the café is absent, so the
-      verifier reports ``uncertain`` rather than ``unmet``.
+    Returns None when nothing to measure; ``measured=False`` is a failed query.
     """
     codes = sorted(
         {
@@ -183,7 +157,7 @@ def _services_along_evidence(
 
     try:
         answer = services_mod.services_along(db, shape, categories=codes, limit=services_mod.MAX_SERVICES * 2)
-    except Exception:  # measurement is best-effort; its failure is reported, not hidden
+    except Exception:
         log.warning("services_along: measurement failed", exc_info=True)
         return ServiceAlongEvidence(measured=False, by_code={})
     out: dict[str, list[dict]] = {}
@@ -197,20 +171,9 @@ def alternatives_for(
 ) -> list[PlannedAlternative]:
     """What to offer when the plan outgrows the profile the tourist chose.
 
-    Pedestrian is the default, and the honest answer to «все костёлы Гродненской
-    области» measured 17 hours and 211 km of walking — a plan nobody can walk. The
-    far stops are NOT dropped: the request really did ask for the whole region, and
-    a silently trimmed dozen would lie about it. Instead the answer says the plan
-    cannot be walked and names the ways to actually do it.
-
-    Only costings we can genuinely route are offered, because the client submits
-    them back as `profile` — a suggestion we cannot serve is its own broken
-    promise. A taxi is an `auto` route; public transport is mentioned in the
-    sentence rather than offered as a costing, because transit tiles are not
-    loaded in this deployment and Valhalla would refuse the request.
+    The far stops are NOT dropped; only costings we can genuinely route are offered.
     """
     if costing not in ("pedestrian", "bicycle"):
-        # Already motorised: nothing in the answer is out of the profile's reach.
         return []
     far = (length_km or 0.0) >= constants.WALK_TOO_FAR_KM
     long = walk_s >= constants.WALK_TOO_LONG_MINUTES * 60
@@ -242,8 +205,6 @@ def alternatives_for(
     return offers
 
 
-#: The tourist-facing name of each costing we offer. Machine identifiers have no
-#: business in a sentence a person reads — the same rule the reason codes follow.
 _MODE_WORDS = {
     "bicycle": "на велосипеде",
     "auto": "на машине или такси",
@@ -267,11 +228,7 @@ def alternatives_sentence(offers: list[PlannedAlternative], walk_s: float) -> st
 def _gone(before: list[Any], after: list[Any]) -> list[str]:
     """The names a step removed, in the order they arrived.
 
-    A count on its own cannot answer «почему этой остановки нет в маршруте»: the
-    trace used to say ``before=50 candidates=46`` and leave the reader to guess
-    which four went. The names are the answer. They are capped by
-    ``_TRACE_NAMES_MAX`` so that a wide regional pool does not turn one span into
-    a page nobody reads — the count next to it stays exact.
+    Capped by ``_TRACE_NAMES_MAX`` so a wide pool does not flood the trace.
     """
     kept = {c.id for c in after}
     return [c.name for c in before if c.id not in kept][:_TRACE_NAMES_MAX]
@@ -280,8 +237,6 @@ def _gone(before: list[Any], after: list[Any]) -> list[str]:
 def _names(candidates: list[Any]) -> list[str]:
     """The first few names of a pool, for a step's Input panel.
 
-    What a step *received*, next to the facts that say what it did with it. The
-    trace used to show an input panel that was empty for every deterministic
-    step, so a reader could see «50 → 45» without ever seeing the fifty.
+    What a step *received*, capped at ``_TRACE_NAMES_MAX``.
     """
     return [c.name for c in candidates[:_TRACE_NAMES_MAX]]

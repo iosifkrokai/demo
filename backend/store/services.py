@@ -1,22 +1,6 @@
 """Secondary points: the services you pass on the way, never the reason to go.
 
-Three rules, in order of importance:
-
-1. **A service is never a stop.** `data/taxonomy.csv` decides the split
-   (`role = sight` vs `role = service`), not a name pattern and not a heuristic.
-   The planner already refuses to build a walk around a café (`planner/pipeline.py`,
-   `_is_sight_stop`); this module keeps the same split when it looks *along* a
-   route, so a café can be offered without ever being counted as a destination.
-
-2. **Geometry is not a detour.** How far a point sits from the route line is
-   exact and cheap — PostGIS measures it. How much *walking* it costs to reach
-   that point is a real Valhalla route, which this module does not build, so the
-   answer says `detour_confirmed: false` instead of printing a made-up «+2 мин».
-   Callers must not dress this number up as a detour time.
-
-3. **Hours are quoted, never interpreted.** `opening_hours` is passed through as
-   the dataset's own string with `hours_known`; nothing here claims a café is
-   open at the moment the tourist walks past it.
+A service is never a stop, and geometry is measured, never guessed as a detour.
 """
 
 from __future__ import annotations
@@ -27,8 +11,6 @@ from typing import Any
 
 log = logging.getLogger(__name__)
 
-#: How far off the line a point may sit and still count as «по пути». A walker
-#: will cross 150 m to reach a toilet; a driver will not cross 400 m for one.
 MAX_OFF_LINE_M: dict[str, float] = {
     "pedestrian": 150.0,
     "bicycle": 250.0,
@@ -37,8 +19,6 @@ MAX_OFF_LINE_M: dict[str, float] = {
 }
 DEFAULT_PROFILE = "pedestrian"
 
-#: The app names its costs the way Valhalla does ("auto", "truck" …), while the
-#: walking distance a driver tolerates only depends on being on wheels at all.
 _PROFILE_ALIASES: dict[str, str] = {
     "pedestrian": "pedestrian",
     "bicycle": "bicycle",
@@ -59,19 +39,14 @@ def threshold_for(profile: str, max_off_line_m: float | None = None) -> float:
     key = _PROFILE_ALIASES.get(profile, DEFAULT_PROFILE)
     return MAX_OFF_LINE_M[key]
 
-#: One misread query must not pull every café in the region into the answer.
 MAX_SERVICES = 12
-#: A line longer than this is a client bug, not a route.
 MAX_LINE_POINTS = 2000
 
 
 def service_codes(categories: Iterable[str] | None = None) -> list[str]:
     """The categories that count as services, from the taxonomy alone.
 
-    Unknown or non-service codes are dropped rather than trusted: a caller that
-    asks for «замок» as a service gets nothing, because a castle is never a
-    convenience stop. The dropped codes are reported by the caller, so a silent
-    typo cannot look like «услуг рядом нет».
+    Unknown or non-service codes are dropped rather than trusted.
     """
     from domain.taxonomy import all_categories
 
@@ -88,9 +63,7 @@ def service_codes(categories: Iterable[str] | None = None) -> list[str]:
 def route_line(shape: Any) -> dict:
     """Validate a GeoJSON LineString and return it unchanged.
 
-    Raises `ValueError` with a machine-readable reason instead of answering
-    «услуг нет» for a shape that could never be measured — an empty answer must
-    mean «measured, found nothing», never «the input was broken».
+    Raises `ValueError` with a machine-readable reason, never an empty answer.
     """
     if not isinstance(shape, dict) or shape.get("type") != "LineString":
         raise ValueError("shape_not_linestring")
@@ -122,13 +95,10 @@ def _item(row: dict[str, Any], line_m: float) -> dict[str, Any]:
         "lat": row["lat"],
         "lon": row["lon"],
         "opening_hours": hours or None,
-        # The dataset knows the hours for about half of these points; the rest
-        # are quoted as unknown rather than assumed open.
         "hours_known": bool(hours),
         "off_line_m": round(float(row.get("off_line_m") or 0.0)),
         "along_m": round(max(0.0, min(1.0, fraction)) * line_m),
         "along_fraction": round(fraction, 4),
-        # Distance to the line is measured; the detour to reach it is not.
         "detour_confirmed": False,
     }
 
@@ -166,13 +136,11 @@ def services_along(
 ) -> dict[str, Any]:
     """Services lying beside a route line, ordered along it.
 
-    Returns an envelope with `items` and the measurement's own provenance. The
-    caller decides how to show it; this function never mixes a service into the
-    route's stops.
+    Never mixes a service into the route's stops; the caller shows it.
     """
     import json
 
-    from psycopg.rows import dict_row  # local: matches the other modules here
+    from psycopg.rows import dict_row
 
     line = route_line(shape)
     codes = service_codes(categories)

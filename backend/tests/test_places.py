@@ -1,14 +1,4 @@
-"""The full point catalogue: `GET /places` and the payload it serves.
-
-Two layers on purpose:
-
-  * offline — a fake connection pins the contract: a place is described by the
-    same payload a ready-made route uses, the browse order is stable, and the
-    count is honest;
-  * live — over HTTP against the running backend, skipped when :8080 is not
-    answering, because the property that matters is that the endpoint really
-    returns the dataset with coordinates on every row.
-"""
+"""The full point catalogue: `GET /places` and the payload it serves."""
 
 from __future__ import annotations
 
@@ -101,7 +91,6 @@ def test_place_payload_carries_the_facts_a_card_prints():
     assert payload["lat"] == 53.6791 and payload["lon"] == 23.8216
     assert payload["visit_minutes"] == 90
     assert payload["opening_hours"] == "вт–вс 10:00–18:00"
-    # The JSON-holding columns are parsed, not passed through raw.
     assert payload["fun_facts"] == []
     assert payload["links"] == []
 
@@ -117,7 +106,6 @@ def test_list_places_returns_every_row_with_a_stable_shape():
 
     assert answer["total"] == 2
     assert answer["capped"] is False
-    # The browse order is the SQL's own; the payload only re-describes each row.
     assert [item["place_id"] for item in answer["items"]] == [1, 2]
     for item in answer["items"]:
         assert item["name"] and item["lat"] and item["lon"]

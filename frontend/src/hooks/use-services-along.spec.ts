@@ -4,22 +4,13 @@ import { cleanup, renderHook, waitFor } from '@testing-library/react';
 import type { ParsedDirectionsGeometry } from '@/components/types';
 import { lineFromGeometry, useServicesAlong } from './use-services-along';
 
-/**
- * The two things this file exists to pin:
- *
- * 1. **The coordinate order.** `decodedGeometry` is [lat, lon], GeoJSON is
- *    [lon, lat]; swapping them wrong would put every café of Grodno in Sudan and
- *    nothing else in the app would complain.
- * 2. **«не удалось проверить» is not «рядом ничего нет».** A failed request
- *    must never render as an empty-but-successful answer.
- */
+/** The two things this file exists to pin: */
 
 const geometry = (points: number[][]): ParsedDirectionsGeometry =>
   ({ decodedGeometry: points }) as ParsedDirectionsGeometry;
 
 describe('lineFromGeometry', () => {
   it('отдаёт GeoJSON-порядок координат, а не порядок Valhalla', () => {
-    // Grodno: 53.68 N, 23.83 E. In the answer the *first* number must be 23.83.
     const line = lineFromGeometry(
       geometry([
         [53.68, 23.83],
@@ -118,15 +109,11 @@ describe('useServicesAlong', () => {
     await waitFor(() => expect(result.current.state).toBe('ready'));
     expect(result.current.items).toHaveLength(1);
     expect(result.current.items[0]?.name).toBe('Ссобойка');
-    // The label under the list comes from the answer, not from the client.
     expect(result.current.measured).toBe('distance_to_line');
     expect(result.current.maxOffLineM).toBe(150);
   });
 
   it('не зацикливается, когда родитель отдаёт новый объект геометрии', async () => {
-    // Regression: the effect used to depend on the shape *object*, so a parent
-    // building an equal geometry every render restarted the request forever and
-    // the vitest worker died of heap exhaustion (2 GB, ~50 s).
     const fetchMock = vi
       .fn()
       .mockResolvedValue({ ok: true, json: async () => answer });
@@ -135,7 +122,6 @@ describe('useServicesAlong', () => {
     const { result, rerender } = renderHook(
       ({ n }) =>
         useServicesAlong(
-          // A fresh object every render, same coordinates — the trap.
           {
             decodedGeometry: [
               [53.68, 23.83],

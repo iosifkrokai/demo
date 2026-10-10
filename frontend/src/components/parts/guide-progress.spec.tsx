@@ -36,14 +36,12 @@ describe('GuideProgress', () => {
       />
     );
 
-    // Done part vs remaining, in words, straight off the line.
     expect(screen.getByTestId('guide-line-progress')).toHaveTextContent(
       'по линии пройдено 1,5 км'
     );
     expect(screen.getByTestId('guide-line-progress')).toHaveTextContent(
       'осталось 4,5 км'
     );
-    // The bar follows the line (25 %), not the stop count (25 % here too).
     expect(screen.getByRole('progressbar')).toHaveAttribute(
       'aria-valuetext',
       'пройдено 25% линии'
@@ -51,7 +49,6 @@ describe('GuideProgress', () => {
     expect(screen.getByTestId('guide-remaining')).toHaveTextContent(
       'с дорогой осталось ~1 ч 35 мин'
     );
-    // The stop-count number stays the headline.
     expect(screen.getByText(/пройдено 1 из 4/i)).toBeInTheDocument();
   });
 

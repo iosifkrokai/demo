@@ -60,9 +60,7 @@ export const TilesControl = () => {
             if (!entry.visible) {
               map.setLayoutProperty(entry.layer.id, 'visibility', 'none');
             }
-          } catch {
-            // Source not available yet so skip.
-          }
+          } catch {}
         }
       }
 

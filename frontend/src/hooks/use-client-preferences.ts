@@ -1,18 +1,4 @@
-/**
- * The tourist's preferences, loaded at startup and saved as they change
- * (spec 003 §4): transport, time budget, party, interests, language and the
- * «мой обычный темп» per category, all prefilled from the server so the guide
- * opens on the tourist's own numbers.
- *
- * There is no «сохранить» button on purpose. An edit is written to localStorage
- * immediately and pushed to the server on a short debounce, so nothing is lost
- * if the page closes and nothing depends on the tourist remembering to confirm.
- *
- * Honest degradation: when the server cannot store (`503 storage_unavailable`,
- * or a network that never reached it) the hook keeps working on the local copy
- * and reports `savingUnavailable: true` — the UI says so plainly rather than
- * pretending the change reached the server.
- */
+/** The tourist's preferences, loaded at startup and saved as they change : transport, time budget, party, interests, language and the «мой обычный темп» per category, all prefilled from the server so the guide opens on the tourist's own numbers. */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -45,7 +31,6 @@ export const loadLocalPreferences = (): ClientPreferences => {
     const parsed = JSON.parse(raw) as Partial<ClientPreferences>;
     return { ...EMPTY_PREFERENCES, ...parsed };
   } catch {
-    // unreadable storage — start from "everything unstated"
     return EMPTY_PREFERENCES;
   }
 };
@@ -56,18 +41,14 @@ export const saveLocalPreferences = (preferences: ClientPreferences): void => {
       CLIENT_PREFERENCES_STORAGE_KEY,
       JSON.stringify(preferences)
     );
-  } catch {
-    // private mode / quota — the values stay in memory for this session
-  }
+  } catch {}
 };
 
-/** Drop the local copy (used by «удалить мои данные», spec §5). */
+/** Drop the local copy (used by «удалить мои данные»,). */
 export const clearLocalPreferences = (): void => {
   try {
     localStorage.removeItem(CLIENT_PREFERENCES_STORAGE_KEY);
-  } catch {
-    // storage unavailable: nothing to remove
-  }
+  } catch {}
 };
 
 export interface UseClientPreferencesOptions {
@@ -95,11 +76,8 @@ export const useClientPreferences = (
     useState<ClientPreferences>(loadLocalPreferences);
   const [savingUnavailable, setSavingUnavailable] = useState(false);
 
-  // The committed values, readable from callbacks without re-creating them.
   const preferencesRef = useRef(preferences);
-  // Edits not yet accepted by the server.
   const pendingRef = useRef<ClientPreferencesPatch>({});
-  // The tourist changed something: a late server answer must not clobber it.
   const dirtyRef = useRef(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -109,9 +87,6 @@ export const useClientPreferences = (
     retry: false,
   });
 
-  // Server is the source of truth at startup — unless the tourist already
-  // edited, in which case their edit is the newer fact. The server is an
-  // external system: adopting its answer into local state is the sync.
   /* eslint-disable react-hooks/set-state-in-effect -- server preferences are an external system, adopted into local state */
   useEffect(() => {
     if (!query.data || dirtyRef.current) return;
@@ -122,8 +97,6 @@ export const useClientPreferences = (
   }, [query.data]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
-  // A load that fails for lack of storage is the same honest state as a failed
-  // save: the guide works locally and says saving is off. Derived, not stored.
   const loadUnavailable = query.isError && isSavingUnavailable(query.error);
 
   const flush = useCallback(async () => {
@@ -137,7 +110,6 @@ export const useClientPreferences = (
 
     try {
       const saved = await putClientPreferences(sent);
-      // Keep anything the tourist changed while the request was in flight.
       pendingRef.current = Object.fromEntries(
         Object.entries(pendingRef.current).filter(
           ([key, value]) =>
@@ -153,8 +125,6 @@ export const useClientPreferences = (
       if (isSavingUnavailable(error)) {
         setSavingUnavailable(true);
       }
-      // The local copy already holds the change: nothing is lost, it is just
-      // not on the server. A later edit will try again.
     }
   }, []);
 
@@ -176,8 +146,6 @@ export const useClientPreferences = (
     [debounceMs, flush]
   );
 
-  // No trailing save after unmount: the debounce is short and the local copy
-  // already has the change.
   useEffect(
     () => () => {
       if (timerRef.current != null) clearTimeout(timerRef.current);

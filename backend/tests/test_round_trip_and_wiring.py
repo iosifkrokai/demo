@@ -1,20 +1,4 @@
-"""Wiring regressions: the three defects that were "code present, not connected".
-
-Every one of these was invisible to the existing suite because the parts were
-tested in isolation and the *seam* between them was not:
-
-  * ``Pipeline.reroute`` called ``extract_intent`` without importing it, so the
-    documented ``POST /routes/reroute`` answered a NameError → HTTP 500. The
-    unit tests import ``extract_intent`` from ``intent``, never from ``pipeline``,
-    so nothing noticed;
-  * a round-trip request («круговой маршрут») was accepted, echoed back in the
-    response and then ignored: the tour was drawn and budgeted as an open one;
-  * an unroutable MANDATORY stop was pruned away silently — the pipeline never
-    handed the pruner its ``must_visit_ids`` nor the pruner's report to
-    ``validate``, so ``verify`` could only ever say "absent".
-
-No network, no DB.
-"""
+"""Wiring regressions: the defects where the code existed but was not connected."""
 
 from __future__ import annotations
 
@@ -58,24 +42,17 @@ def _reqs(*requirements: Requirement) -> TripRequirements:
     return TripRequirements(requirements=list(requirements))
 
 
-# 1. the import that /routes/reroute needs
-
 def test_pipeline_exposes_extract_intent():
     """The module the reroute handler runs in must actually define the name.
-
-    ``resolve(extract_intent(...))`` in ``Pipeline.reroute`` raised
-    ``NameError: name 'extract_intent' is not defined`` because the symbol was
-    never imported into ``pipeline``; this asserts the seam, not the function.
+    This asserts the seam, not the function.
     """
     assert hasattr(pipeline_mod, "extract_intent")
     assert pipeline_mod.extract_intent is intent_mod.extract_intent
     assert callable(pipeline_mod.extract_intent)
 
 
-# 2. round trip is applied, not just echoed
-
 def test_resolve_carries_the_round_trip_choice():
-    db = object()  # never touched: no named places, no prohibitions
+    db = object()
     plain = resolve(fallback_intent("прогулка по парку"), db=db)
     closed = resolve(fallback_intent("прогулка по парку"), db=db, explicit_round_trip=True)
 
@@ -96,7 +73,6 @@ def test_validate_counts_the_return_leg_for_a_round_trip():
     open_plan = validate(route, cost, ResolvedConstraints(), info)
     closed_plan = validate(route, cost, ResolvedConstraints(round_trip=True), info)
 
-    # C → A is 400 s; open tours never pay it, closed ones do.
     assert closed_plan.walk_seconds == open_plan.walk_seconds + 400.0
 
 
@@ -130,8 +106,6 @@ def test_render_closes_the_tour_when_asked(monkeypatch):
     assert len(captured[0]) == 2, "an open tour asks for no return leg"
 
 
-# 3. the pruner's report reaches the verifier
-
 def _island_cost() -> CostMatrix:
     """a→b is unroutable, everything else routes (the road-island case)."""
     bad = float(constants.UNREACHABLE_S)
@@ -157,16 +131,12 @@ def test_pipeline_pruner_keeps_a_mandatory_stop_and_returns_the_report():
 
 def test_the_order_follows_the_stops_a_prune_removed():
     """A prune shortens the route; ``info["order"]`` must follow it, not the dead.
-
-    ``info["order"]`` indexes the cost matrix and validate prices the walk
-    through it. The stale order made the lengths disagree, validate fell back to
-    ``range(n)`` and summed the first n candidates' legs — the walk of stops that
-    were pruned, reported as if it were the survivor's.
+    The stale order made the lengths disagree and validate fell back to ``range(n)``.
     """
     a = _cand(1, "А", "замок")
-    b = _cand(2, "Б", "музей")  # the stop the prune removes
+    b = _cand(2, "Б", "музей")
     c = _cand(3, "В", "парк", lon=23.86)
-    cost = _island_cost()  # a→b unroutable, a↔c and b↔c route
+    cost = _island_cost()
 
     info = pipeline_mod._order_after_prune({"order": [0, 1, 2]}, [a, c], [a, b, c])
     assert info["order"] == [0, 2], "index 1 (the pruned stop) is gone"
@@ -178,12 +148,7 @@ def test_the_order_follows_the_stops_a_prune_removed():
 
 def test_the_optional_tour_reorder_is_bounded_and_degrades(monkeypatch):
     """The Valhalla re-order must get a short single-shot budget.
-
-    It is an optimisation, not a requirement: over a region-wide tour the solver
-    answers nothing at all, and with the shared 20 s / 2-retry defaults the call
-    burned ≈61 s (3×20 s + backoff) before the matrix order was used anyway. The
-    cap and the zero retries are what keep that tail off the request — and a
-    failure still falls back to the planned order instead of propagating.
+    It is an optimisation, not a requirement; a failure falls back to the planned order.
     """
     captured: dict = {}
 
@@ -245,8 +210,6 @@ def test_validate_records_the_pruner_report_in_the_trace():
     ]
 
 
-# 4. the reroute endpoint runs end to end
-
 class _FakeCursor:
     def __init__(self, rows: list[dict]) -> None:
         self._rows = rows
@@ -305,10 +268,8 @@ def _row(pid: int, name: str, category: str, lat: float, lon: float) -> dict:
 
 
 def test_reroute_returns_a_route_instead_of_raising(monkeypatch):
-    """``POST /routes/reroute`` used to die two ways: an undefined
-    ``extract_intent`` and a three-value ``render()`` unpacked into two names.
-    Both are name/arity errors that the unit tests could not see — the endpoint
-    itself had no test. This runs the whole handler offline."""
+    """``POST /routes/reroute`` used to die two ways: an undefined ``extract_intent``
+    and a three-value ``render()`` unpacked into two names. This runs it offline."""
     rows = [
         _row(1, "Старый замок", "замок", 53.6788, 23.8230),
         _row(2, "Новый замок", "дворец", 53.6849, 23.8310),

@@ -1,12 +1,6 @@
 """Shared fixtures.
 
-The reading cache is a module-level store keyed by the question, not by who
-answers it. In a live process that is the point — the same question asked twice
-should not be read twice — but inside a test run two tests can ask the same
-question with *different* stubbed agents (one where a tool fails, one where it
-does not), and the second test would then be handed the first one's answer. That
-is not a cache being clever, it is one test leaking into another, so the store is
-emptied before every test.
+The reading cache is emptied before every test so one test cannot leak into another.
 """
 
 from __future__ import annotations

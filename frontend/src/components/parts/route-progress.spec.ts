@@ -7,11 +7,7 @@ import {
   routeStageText,
 } from './route-progress';
 
-/**
- * The waiting copy may only describe what the client can observe. There is no
- * "checking requirements" here: the client cannot see inside the agent's request,
- * and claiming it would be a lie to the user.
- */
+/** The waiting copy may only describe what the client can observe. */
 describe('routeStageText', () => {
   it('says the request is sent and the plan is being waited for', () => {
     expect(routeStageText('requesting')).toBe(

@@ -9,33 +9,17 @@ import { useCommonStore } from '@/stores/common-store';
 import { splitAtPosition, type LineCoords } from './route-walk';
 import type { ParsedDirectionsGeometry } from '@/components/types';
 
-/**
- * Where the line on screen came from (spec 002 §7 — one route, one source).
- *
- * `agent`  — the geometry the backend verified for the plan it returned. It is
- *            the authoritative line: never a second, independently routed one.
- * `client` — this webapp's own Valhalla `/route` request, used only for a route
- *            the tourist builds by hand (map click, typed address, dragged stop).
- */
+/** Where the line on screen came from. */
 export type RouteProvenance = 'agent' | 'client';
 
-/**
- * A route result plus the provenance of the geometry it carries.
- *
- * Declared here rather than in `components/types.ts` — that file belongs to
- * another workstream; this is the map-owned definition of what it draws.
- */
+/** A route result plus the provenance of the geometry it carries. */
 export interface ProvenancedRoute extends ParsedDirectionsGeometry {
   source: RouteProvenance;
-  /**
-   * False when an agent route is on screen but arrived without usable geometry:
-   * the line is then deliberately absent instead of being silently replaced by
-   * a client-side one (spec 002 §4.4 — an empty shape is not navigation).
-   */
+  /** False when an agent route is on screen but arrived without usable geometry: the line is then deliberately absent instead of being silently replaced by a client-side one. */
   hasVerifiedLine: boolean;
 }
 
-/** Provenance of a stored result. A result without one predates the flag: client. */
+/** Provenance of a stored result. */
 export const routeProvenance = (
   data: ParsedDirectionsGeometry | null | undefined
 ): RouteProvenance | null => {
@@ -43,10 +27,7 @@ export const routeProvenance = (
   return (data as Partial<ProvenancedRoute>).source ?? 'client';
 };
 
-/**
- * True when the stored result actually has a line to draw: at least two points,
- * and — for an agent route — geometry the backend actually produced.
- */
+/** True when the stored result actually has a line to draw: at least two points, and — for an agent route — geometry the backend actually produced. */
 export const hasUsableLine = (
   data: ParsedDirectionsGeometry | null | undefined
 ): boolean => {
@@ -57,10 +38,7 @@ export const hasUsableLine = (
   return (data.decodedGeometry?.length ?? 0) > 1;
 };
 
-/**
- * An agent route is on screen but its verified line is not: the honest "no line"
- * state. The map says so instead of quietly drawing a different geometry.
- */
+/** An agent route is on screen but its verified line is not: the honest "no line" state. */
 export const isMissingVerifiedLine = (
   data: ParsedDirectionsGeometry | null | undefined
 ): boolean => routeProvenance(data) === 'agent' && !hasUsableLine(data);
@@ -71,8 +49,6 @@ export function RouteLines() {
   const activeRouteIndex = useDirectionsStore(
     (state) => state.activeRouteIndex
   );
-  // While the guide runs, the line behind the tourist is spent: a navigator keeps
-  // the way ahead in focus and fades what has been walked.
   const guiding = useCommonStore((state) => state.guiding);
   const guideFix = useCommonStore((state) => state.guideFix);
 
@@ -82,9 +58,6 @@ export function RouteLines() {
     const hasNoData = Object.keys(directionResults.data).length === 0;
     if (hasNoData) return null;
 
-    // No usable line: draw nothing. For an agent route this is the honest
-    // "no verified line" state — the map states it in words instead of putting a
-    // second, differently routed line on screen.
     if (!hasUsableLine(directionResults.data)) return null;
 
     const response = directionResults.data;
@@ -170,7 +143,6 @@ export function RouteLines() {
       }
     }
 
-    // Sort so active route renders last (on top)
     features.sort((a, b) => {
       const aActive = a.properties?.routeIndex === activeRouteIndex ? 1 : 0;
       const bActive = b.properties?.routeIndex === activeRouteIndex ? 1 : 0;
@@ -206,8 +178,6 @@ export function RouteLines() {
         id="routes-line"
         type="line"
         paint={{
-          // The walked half greys out rather than disappearing: the tourist
-          // still sees where they came from, without it competing with the way on.
           'line-color': [
             'case',
             ['==', ['get', 'walked'], true],
@@ -223,9 +193,6 @@ export function RouteLines() {
           ],
         }}
       />
-      {/* Transparent wide line on top — used purely as a hit target so hover
-          and click trigger when the cursor is near the route. ~5px of extra
-          padding on each side of the visible 5px stroke. */}
       <Layer
         id="routes-hit-target"
         type="line"

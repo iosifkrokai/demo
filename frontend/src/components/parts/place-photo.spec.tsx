@@ -21,8 +21,6 @@ describe('фото точки', () => {
       <PlacePhoto photo={null} name="Старый замок" />
     );
 
-    // A placeholder would read as "still loading" on most points that simply
-    // have no photo.
     expect(container).toBeEmptyDOMElement();
     expect(screen.queryByRole('img')).not.toBeInTheDocument();
   });
@@ -33,7 +31,6 @@ describe('фото точки', () => {
     const img = screen.getByRole('img');
     expect(img).toHaveAttribute('src', PHOTO.url);
     expect(img).toHaveAttribute('alt', 'Старый замок');
-    // A photo below the fold must not hold up opening the panel.
     expect(img).toHaveAttribute('loading', 'lazy');
   });
 
@@ -43,7 +40,6 @@ describe('фото точки', () => {
     const credit = screen.getByRole('link');
     expect(credit).toHaveTextContent('Александр Липилин');
     expect(credit).toHaveTextContent('CC BY-SA 3.0');
-    // And it links to the file page so the credit can be checked.
     expect(credit).toHaveAttribute('href', PHOTO.source);
   });
 
@@ -62,7 +58,6 @@ describe('фото точки', () => {
 
     const credit = screen.getByRole('link');
     expect(credit).toHaveTextContent(/^photo:/);
-    // A proper name stays as in the source — it is a credit, not a word.
     expect(credit).toHaveTextContent('Александр Липилин');
   });
 });

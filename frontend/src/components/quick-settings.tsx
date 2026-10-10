@@ -115,7 +115,6 @@ export const QuickSettings = ({
 
   const [open, setOpen] = useState(true);
   const [language, setLanguage] = useState<DirectionsLanguage>(() => {
-    // URL wins on first render; otherwise localStorage / system locale.
     if (typeof window !== 'undefined') {
       const url = new URL(window.location.href).searchParams.get('lang');
       if (url && languageOptions.some((opt) => opt.value === url)) {
@@ -129,7 +128,6 @@ export const QuickSettings = ({
     ? (HIGHWAY_TOLL_PROFILES as readonly string[]).includes(profile)
     : false;
 
-  // Hydrate store from URL on mount (URL wins when present).
   const urlSettingsHydrated = useRef(false);
   useEffect(() => {
     if (urlSettingsHydrated.current) return;
@@ -153,7 +151,6 @@ export const QuickSettings = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Mirror store → URL (omit values at default to keep URLs clean).
   useEffect(() => {
     navigate({
       search: (prev) => ({
@@ -216,8 +213,6 @@ export const QuickSettings = ({
       const newLanguage = value as DirectionsLanguage;
       setDirectionsLanguage(newLanguage);
       setLanguage(newLanguage);
-      // Both, like every other control in this panel: the isochrones tab keeps
-      // its own result in the store and would otherwise stay as it was.
       refetchAll();
     },
     [refetchAll]

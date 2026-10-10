@@ -103,7 +103,6 @@ vi.mock('@/stores/common-store', () => ({
   ),
 }));
 
-// Capture the onLayerAdded prop so tests can seed custom layers
 let capturedOnLayerAdded: ((layer: LayerSpecification) => void) | null = null;
 
 vi.mock('./custom-layer-editor', () => ({
@@ -736,7 +735,6 @@ describe('TilesControl', () => {
         } as LayerSpecification);
       });
 
-      // Toggle visibility off so the layer is invisible in local state
       mockMap.addLayer({ id: 'hidden-layer' });
       const customLayerSwitch = screen.getByRole('switch', {
         name: /hidden-layer/,

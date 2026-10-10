@@ -23,8 +23,6 @@ const mockCommon = vi.hoisted(() => ({
 const mockSetOpen = vi.hoisted(() => vi.fn());
 const mockNavigate = vi.hoisted(() => vi.fn());
 
-// Only the hook is faked: the real module also exports schemas the rest of the
-// app reads at import time, and dropping them breaks the whole graph.
 vi.mock('@/stores/common-store', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/stores/common-store')>();
   return {
@@ -38,19 +36,13 @@ vi.mock('@/stores/common-store', async (importOriginal) => {
   };
 });
 
-// Partial: the real module also builds the route tree the store imports, so
-// only `useNavigate` is faked.
 vi.mock('@tanstack/react-router', async (importOriginal) => {
   const actual =
     await importOriginal<typeof import('@tanstack/react-router')>();
   return { ...actual, useNavigate: () => mockNavigate };
 });
 
-/**
- * The panel's contents; a stub keeps this spec about the shell's geometry. It
- * takes the drag handlers as the real panel does, so these tests can grab the
- * sheet's actual grab bar rather than a stand-in for it.
- */
+/** The panel's contents; a stub keeps this spec about the shell's geometry. */
 const stubPanel = (handle: SheetHandleProps) => (
   <>
     <SheetTitle>Панель</SheetTitle>
@@ -68,14 +60,7 @@ describe('MobileShell', () => {
     document.documentElement.style.removeProperty('--sheet-h');
   });
 
-  // The hook reads `performance.now()` for the release speed, so these tests
-  // own the clock: with the real one every gesture inside jsdom lands in a
-  // single millisecond and every release reads as a flick.
   beforeEach(() => vi.useFakeTimers());
-  // `cleanup()` explicitly, and not because this spec needs it: vitest here runs
-  // without `globals: true`, so Testing Library's automatic afterEach never
-  // registers, and this file's sheet is portalled into the shared document —
-  // where it would answer the next spec's queries.
   afterEach(() => {
     cleanup();
     vi.useRealTimers();
@@ -91,9 +76,6 @@ describe('MobileShell', () => {
   });
 
   it('publishes its own height, so the map controls ride above it', () => {
-    // The map's floating controls are siblings of the sheet: the custom
-    // property on the document is the only channel they share (the desktop
-    // panel publishes it too — the shell takes over that job on a phone).
     render(<MobileShell panel={stubPanel} />);
     expect(document.documentElement.style.getPropertyValue('--sheet-h')).toBe(
       '39dvh'
@@ -133,10 +115,6 @@ describe('MobileShell', () => {
   });
 
   it('сложится в полоску, если в проводник войти с развёрнутого листа', () => {
-    // «Начать маршрут» sits in the panel's footer, so it is pressed from any
-    // height. The strip only comes from `peek`, so without the reset, entering
-    // the guide from the full height left the map behind a 90dvh sheet — and
-    // the map is the navigator while walking.
     const { rerender } = render(<MobileShell panel={stubPanel} />);
 
     fireEvent.click(screen.getByTestId('sheet-handle'));
@@ -156,8 +134,6 @@ describe('MobileShell', () => {
   });
 
   it('разворот в обзор маршрута во время ведения не сбрасывается', () => {
-    // The reset happens only on the transition: the route overview opened while
-    // walking must stay open, not fold back on every re-render.
     mockCommon.guiding = true;
     render(<MobileShell panel={stubPanel} />);
 
@@ -193,21 +169,14 @@ describe('MobileShell', () => {
   });
 
   it('открывается кнопкой на карте, а не шевроном у края панели', () => {
-    // The desktop chevron stands on the panel's own vertical edge. On a phone
-    // the panel is a sheet across the bottom, so there is no such edge and the
-    // chevron ended up floating in the middle of the map. The way in here is a
-    // button on the map, as in a phone map app.
     mockCommon.directionsPanelOpen = false;
     render(<MobileShell panel={stubPanel} />);
 
     const open = screen.getByTestId('mobile-panel-open');
     expect(open).toHaveTextContent('Планировать маршрут');
-    // Above the sheet, by the same variable the map's own controls ride on, so
-    // it can never end up underneath it.
     expect(screen.getByTestId('mobile-sheet-opener').className).toContain(
       '--sheet-h'
     );
-    // And phone-only: the desktop column keeps the chevron.
     expect(screen.getByTestId('mobile-sheet-opener').className).toContain(
       'md:hidden'
     );
@@ -231,10 +200,6 @@ describe('MobileShell', () => {
   });
 
   it('флик вниз с полоски закрывает панель — кнопку искать не надо', () => {
-    // Sheet gestures own open/close on a phone. `setDirectionsPanelOpen(false)`
-    // rather than a toggle: a dismiss has to close, whatever else closed it
-    // first.
-    // Open, resting on the strip — the only place a downward flick can close.
     render(<MobileShell panel={stubPanel} initialSnap="bar" />);
 
     const grip = screen.getByTestId('sheet-handle');
@@ -252,9 +217,6 @@ describe('MobileShell', () => {
   });
 
   it('высота следует за пальцем, и переход при этом выключен', () => {
-    // An animated height on top of a per-move rewrite is what made the panel
-    // feel like it was being dragged through something: the sheet trailed the
-    // glass by a fifth of a second.
     render(<MobileShell panel={stubPanel} />);
     const grip = screen.getByTestId('sheet-handle');
 
@@ -266,7 +228,6 @@ describe('MobileShell', () => {
 
     const sheet = screen.getByTestId('mobile-sheet');
     expect(sheet).toHaveAttribute('data-dragging', 'true');
-    // A px height, not one of the three resting values: this is the finger's.
     expect(sheet.style.height).toMatch(/^\d+px$/);
     expect(sheet.style.height).not.toBe('39dvh');
     expect(sheet.className).toContain('data-[dragging=true]:transition-none');
@@ -275,13 +236,10 @@ describe('MobileShell', () => {
       vi.advanceTimersByTime(10);
       fireEvent.pointerUp(grip, { clientY: 700, pointerId: 1 });
     });
-    // And it settles back onto a position afterwards.
     expect(sheet).toHaveAttribute('data-dragging', 'false');
   });
 
   it('показывает планирование, а не то, чем панель закрыли', () => {
-    // Dismissing is a «put this away» gesture; coming back to the full height
-    // the tourist just swiped away would read as the panel refusing to go.
     const { rerender } = render(
       <MobileShell panel={stubPanel} initialSnap="full" />
     );

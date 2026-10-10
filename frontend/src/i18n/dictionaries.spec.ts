@@ -19,13 +19,7 @@ const valueAt = (node: Record<string, unknown>, path: string): string =>
       node
     ) as string;
 
-/**
- * i18next picks a plural form by a suffix appended to the key, and the forms
- * differ by language: Russian needs one/few/many, English one/other. Comparing
- * raw key sets would call that a missing translation, so the suffix is stripped
- * here and the forms are checked on their own — a Russian string that only has
- * `_other` silently renders empty.
- */
+/** i18next picks a plural form by a suffix appended to the key, and the forms differ by language: Russian needs one/few/many, English one/other. */
 const PLURAL_SUFFIX = /_(zero|one|two|few|many|other)$/;
 const baseKey = (path: string) => path.replace(PLURAL_SUFFIX, '');
 const isPlural = (path: string) => PLURAL_SUFFIX.test(path);
@@ -45,8 +39,6 @@ describe('словари локализации', () => {
       const suffixes = (list: Record<string, unknown>) =>
         paths(list)
           .filter((path) => baseKey(path) === base)
-          // From the last underscore: `_other` is longer than `_one`, so a
-          // fixed-width slice would compare half a word.
           .map((path) => path.slice(path.lastIndexOf('_')));
       return (
         !['_one', '_few', '_many'].every((f) => suffixes(ru).includes(f)) ||
@@ -58,8 +50,6 @@ describe('словари локализации', () => {
   });
 
   it('в английском не осталось русских строк', () => {
-    // `language.ru` is an exception: «Русский» is the language's own name, so
-    // the button must keep it in the English interface too.
     const untranslated = paths(en)
       .filter((path) => path !== 'language.ru')
       .filter((path) =>
@@ -68,8 +58,6 @@ describe('словари локализации', () => {
         )
       );
 
-    // Russian text in the English dictionary is an untranslated string, not a
-    // trifle: it is exactly what a half-done localisation looks like.
     expect(untranslated).toEqual([]);
   });
 

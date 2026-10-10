@@ -1,27 +1,6 @@
-"""Degraded mode: no OPENROUTER_API_KEY (or a model/upstream that is down)
-must never turn a route request into a 500.
+"""Degraded mode: no OPENROUTER_API_KEY (or a down model) must never 500 a route.
 
-The bug this file used to pin down, reproduced on a machine with no key: the
-old model-backed intent step raised on every request and the planner answered
-HTTP 500 for every POST /routes/generate.
-
-What must hold, per step:
-  * intent — the deterministic reader answers: categories from the shared
-    keyword→category map, an explicit duration kept, named places still
-    extracted.  It is a first-class mode, not an anomaly: no warning storm.
-  * the interpretation agent — when it fails (or has no key) `build_requirements`
-    silently takes the deterministic contract; when it answers, its contract
-    drives the reading the planner uses.
-  * embed   — local and key-free: the query vector comes from the CPU model, and
-    the vector signal drops to keyword/category-only ONLY if that model cannot
-    load (then retrieval still runs, and no exception escapes).
-  * health  — reports llm false but embedder true without a key: retrieval is
-    full-strength, only the interpretation degrades.
-  * HTTP    — an upstream error that escapes the planner is a 503 with a
-    detail, never an opaque 500.
-
-No network except the last class, which uses the live DB + Valhalla and
-skips when they are not reachable.
+Intent falls back to the deterministic reader; the local embedder stays key-free.
 """
 
 from __future__ import annotations
@@ -58,13 +37,10 @@ QUERY = "Хочу погулять по замкам Гродно"
 DSN = "postgresql://grodno:grodno@localhost:5432/grodno"
 
 
-# Fixtures: the key is the switch between degraded and full mode
-
 @pytest.fixture
 def no_key(monkeypatch):
-    """A process without an OpenRouter key: the env var AND the import-time
-    settings snapshot are cleared — otherwise a key from the developer's
-    shell leaks in and the test would exercise the wrong branch."""
+    """A process without an OpenRouter key: the env var AND the settings snapshot are
+    cleared — otherwise a key from the developer's shell leaks into the test."""
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     monkeypatch.setattr(settings, "OPENROUTER_API_KEY", None, raising=False)
     assert openrouter_api_key() is None
@@ -148,8 +124,6 @@ def fake_model(monkeypatch):
     interpret_cache.EMBED_CACHE.clear()
 
 
-# The interpretation agent — no key means no model, and that is not an error
-
 class TestAgentAvailability:
 
     def test_no_key_means_unavailable(self, no_key):
@@ -163,25 +137,20 @@ class TestAgentAvailability:
         assert ai.interpret_with_agent(QUERY, GenerateReq(query=QUERY)) is None
 
 
-# Step 1 — intent degrades to a deterministic parse of the same text
-
 class TestIntentFallback:
     """Step 1 with no model: the deterministic reader, and the agent hand-off."""
 
     def test_no_key_never_calls_openrouter(self, no_key, monkeypatch):
         monkeypatch.setattr(ai, "_run_agent", _explode)
-        res = extract_intent(QUERY)          # used to raise → HTTP 500
+        res = extract_intent(QUERY)
         assert res.source == "regex"
         assert res.raw_response is None
         assert res.confidence == 0.0
         assert res.decision.intent_type in constants.INTENT_TYPES
 
     def test_no_key_categories_come_from_the_shared_map(self, no_key):
-        """The reader fills categories from the deterministic keyword→category
-        map (resolve.CATEGORY_SYNONYMS) — the same taxonomy retrieval uses —
-        not from a model guess.  «замкам» → замок, so "замки Гродно" still
-        retrieves castles in degraded mode.  Exclusion ("без замков") and
-        keywords stay a no-invent zone: the maps do not carry them."""
+        """The reader fills categories from the deterministic keyword→category map
+        (resolve.CATEGORY_SYNONYMS) — the same taxonomy retrieval uses, not a guess."""
         d = extract_intent(QUERY).decision
         assert "замок" in d.categories_pos
         assert d.categories_neg == []
@@ -190,8 +159,7 @@ class TestIntentFallback:
 
     def test_no_key_keeps_the_named_places(self, no_key):
         d = fallback_intent(QUERY).decision
-        assert "Гродно" in d.named_places      # resolves through the DB path
-        # Region names are still filtered out (same stop-list as the agent path).
+        assert "Гродно" in d.named_places
         region = fallback_intent("достопримечательности Гродненской области").decision
         assert region.named_places == []
 
@@ -204,7 +172,7 @@ class TestIntentFallback:
             ("на полдня", 240),
             ("на весь день", 480),
             ("просто погулять", None),
-            ("хочу в воскресенье", None),        # a bare "день" is not a budget
+            ("хочу в воскресенье", None),
             ("погулять без ограничения", None),
         ],
     )
@@ -237,23 +205,15 @@ class TestIntentFallback:
             raise RuntimeError("agent: upstream failed: 502")
         monkeypatch.setattr(intent_mod, "_agent_contract", boom)
         with caplog.at_level("WARNING", logger="agent.planner.intent"):
-            tr = build_requirements(QUERY, GenerateReq(query=QUERY))  # must not propagate
+            tr = build_requirements(QUERY, GenerateReq(query=QUERY))
         assert tr.source == "fallback"
-        # The degraded reader must still understand the ask itself…
         assert "замок" in [r.code for r in tr.requirements if r.kind == "interest"]
-        # …but «Гродно» in the query is the city we are walking in, not a stop.
-        # This used to assert a mandatory place named «Гродно»: nothing in the
-        # data carries that name, so the deterministic verifier could only report
-        # it `unmet` — in nearly every answer. That phantom is what the stage
-        # evals caught (evals/cases/interpretation.jsonl), so the assertion now
-        # pins its absence rather than its presence.
         assert tr.must_visit_names() == []
         assert len(_warnings(caplog, "agent.planner.intent")) == 1
 
     def test_agent_contract_drives_the_reading(self, with_key, monkeypatch):
-        """With the agent answering, the IntentResult the planner consumes comes
-        from the contract — and the facts the text states are still there (the
-        model may add meaning, never lose a fact the parser found)."""
+        """With the agent answering, the IntentResult the planner consumes comes from
+        the contract — and facts the text states are still there (meaning adds, never loses)."""
         monkeypatch.setattr(
             intent_mod, "_agent_contract",
             lambda *a, **k: _agent_contract(codes=("костёл",)),
@@ -262,15 +222,13 @@ class TestIntentFallback:
         assert tr.source == "llm"
         intent = intent_mod.intent_from_requirements(tr, QUERY)
         assert intent.source == "agent"
-        assert "костёл" in intent.decision.categories_pos   # the model's reading
-        assert "замок" in intent.decision.categories_pos    # the text's own fact
+        assert "костёл" in intent.decision.categories_pos
+        assert "замок" in intent.decision.categories_pos
 
     def test_source_stays_inside_the_model_literal(self):
         assert fallback_intent(QUERY).source == "regex"
         assert intent_mod._fallback_time_budget("2 часа") == 120
 
-
-# Embeddings — local and key-free; keyword-only only if the model cannot load
 
 class TestEmbedLocal:
 
@@ -282,7 +240,6 @@ class TestEmbedLocal:
         assert fake_model.calls and all(t.startswith("query: ") for t in fake_model.calls[0])
 
     def test_embeds_without_any_key(self, no_key, fake_model):
-        # Embeddings no longer depend on OPENROUTER_API_KEY at all.
         assert _embed_query(QUERY) == [0.1, 0.2, 0.3]
 
     def test_a_broken_local_model_returns_no_vector(self, monkeypatch):
@@ -297,8 +254,6 @@ class TestEmbedLocal:
         assert len(warnings) == 1
         assert "local model" in warnings[0]
 
-
-# HTTP — the last-resort net, and the health flags
 
 class _StubPlanner:
     """A planner whose every entry point raises a preset error."""
@@ -382,13 +337,11 @@ class TestHttpDegraded:
     def test_health_without_a_key_keeps_embedder_and_degraded_llm(
             self, no_key, monkeypatch, fake_model, _restore_planner):
         body = _client_with_planner(_HealthOnly(monkeypatch)).get("/health").json()
-        # Embeddings are local: a missing key no longer disables retrieval.
         assert body["embedder"] is True
         assert body["llm"] is False
         assert body["interpretation"] == "deterministic"
         assert body["db"] is True
         assert body["valhalla"] is True
-        # Full-strength retrieval + deterministic reader is an ok product state.
         assert body["status"] == "ok"
 
     def test_health_flags_are_honest_with_a_key(
@@ -407,8 +360,6 @@ class TestHttpDegraded:
         assert body["embedder"] is False
         assert body["status"] == "degraded"
 
-
-# The real thing: a route request with no key, against the live DB + Valhalla
 
 def _db_up() -> bool:
     try:
@@ -453,8 +404,6 @@ class TestLiveDegradedRoute:
         assert len(resp.points) >= 2, "a route needs at least two stops"
         assert all(p.lat and p.lon for p in resp.points)
         assert resp.explanation
-        # The verifier's verdict travels with the response, and the
-        # requirements the (deterministic) reading produced are visible.
         assert resp.status in ("ready", "degraded", "needs_clarification")
         assert resp.requirements
 
@@ -489,15 +438,7 @@ class TestLiveDegradedRoute:
 def test_a_route_that_cannot_be_planned_is_an_answer_not_a_failed_request():
     """«Cannot plan here» must not leave as HTTP 422 with the optimizer's sentence.
 
-    The optimizer guard (`raise NoRoutePossible`) used to reach the client as
-    `422 {"detail": "optimizer could not produce a route with ≥ 2 stops"}`: an
-    English implementation detail, no plan, no reason code, nothing for the UI to
-    render — and a request the walk could not serve died outright, while the same
-    question asked with one extra clause answered 200. Measured live: «Старый
-    Гродно, два часа, туалет обязателен» → 422, while the same request with
-    «двое детей 6 и 9 лет … без музеев» → 200 and a three-stop plan. The coverage
-    gate already answers this class of «no» with an ordinary response, so this
-    pins the same shape for the optimizer's refusal.
+    A refusal to plan is an ordinary response: status infeasible, no points, a reason code.
     """
 
     class _Refusing:
@@ -517,7 +458,6 @@ def test_a_route_that_cannot_be_planned_is_an_answer_not_a_failed_request():
     assert body["shape"] == {}
     assert body["result_mode"] == "route"
     assert body["debug"]["reason"] == "no_walkable_route", "the reason stays machine-readable"
-    # The optimizer's own sentence is evidence, not the tourist's text.
     assert "optimizer" not in (body.get("explanation") or "")
 
 

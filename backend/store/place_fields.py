@@ -1,9 +1,6 @@
 """DB-column parsers for a place row's text columns.
 
-`fun_facts` and `links` are text columns holding JSON (or a legacy pipe format);
-`parse_photo` reads the four photo columns.  Kept in the store layer so a browse
-card (`store/places.py`) and a planned route (`planner/retrieve.py`) share the
-same reading of a row.
+`fun_facts`/`links` hold JSON or legacy pipe text; `parse_photo` reads the photo.
 """
 
 from __future__ import annotations
@@ -53,10 +50,7 @@ def parse_links(raw: str | None) -> list[dict]:
 def parse_photo(row: dict) -> dict | None:
     """The point's picture with its credit — or nothing at all.
 
-    All four fields are written by one resolution pass (`python -m seed photos --apply`).
-    A URL without its author and licence is deliberately not shown: Wikimedia
-    files are licensed, and a credit-less image is a licence violation rather
-    than a nice-to-have.
+    A URL without its author and licence is not shown (a licence violation).
     """
     url = (row.get("photo_url") or "").strip()
     if not url:

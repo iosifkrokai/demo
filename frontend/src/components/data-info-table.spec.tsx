@@ -23,7 +23,6 @@ describe('DataInfoTable', () => {
     mockUseQuery.mockReturnValue({
       data: {
         version: '3.8.3-1a53e4e',
-        // 07:17:16 UTC — deterministic regardless of the runner's timezone.
         buildFinished: new Date(Date.UTC(2026, 7, 18, 7, 17, 16)),
       },
       isLoading: false,
@@ -67,7 +66,6 @@ describe('DataInfoTable', () => {
     render(<DataInfoTable />);
     await user.hover(screen.getByText(/ago/));
 
-    // Radix renders the tooltip content into a portal; the exact instant shows.
     const utc = await screen.findAllByText('2026-08-18 07:17:16 UTC');
     expect(utc.length).toBeGreaterThan(0);
   });

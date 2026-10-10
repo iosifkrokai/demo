@@ -1,11 +1,4 @@
-/**
- * The signed-in tourist's «посещённые места» (spec 005 §3).
- *
- * This is the durable «я здесь был» registry, not walk progress: the guide's
- * per-walk ticks still live in localStorage (spec 003 §4). Marking is the
- * tourist's explicit action, and it is idempotent on the server, so a double tap
- * cannot double-count.
- */
+/** The signed-in tourist's «посещённые места». */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo } from 'react';
@@ -57,11 +50,7 @@ export interface ToggleVisitedInput {
   visited: boolean;
 }
 
-/**
- * Flip one place's visited mark. No optimistic cache surgery here: the mark is a
- * two-state fact, and refetching the list is cheap — a wrong optimistic guess
- * about a place the server refused would be worse than a short spinner.
- */
+/** Flip one place's visited mark. */
 export function useToggleVisited() {
   const client = useQueryClient();
   return useMutation<unknown, unknown, ToggleVisitedInput>({

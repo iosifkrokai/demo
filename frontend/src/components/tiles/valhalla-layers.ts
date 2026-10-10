@@ -10,8 +10,6 @@ export const VALHALLA_ACCESS_RESTRICTIONS_PERMANENT_LAYER_ID =
 export const VALHALLA_ACCESS_RESTRICTIONS_TIMED_LAYER_ID =
   'valhalla-access-restrictions-timed';
 
-// Pre-encoded JSON: {"tile":{"z":{z},"x":{x},"y":{y}}}
-// Placeholders {z}, {x}, {y} remain unencoded for MapLibre to replace
 const TILE_JSON_ENCODED =
   '%7B%22verbose%22%3A%20true%2C%20%22tile%22%3A%7B%22z%22%3A{z}%2C%22x%22%3A{x}%2C%22y%22%3A{y}%7D%7D';
 
@@ -72,7 +70,6 @@ export const VALHALLA_EDGES_LAYER: LayerSpecification = {
   },
 };
 
-// Shortcuts is a separate tile layer, sharing the edges line style.
 export const VALHALLA_SHORTCUTS_LAYER: LayerSpecification = {
   id: VALHALLA_SHORTCUTS_LAYER_ID,
   type: 'line',

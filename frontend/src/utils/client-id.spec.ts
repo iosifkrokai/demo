@@ -11,7 +11,6 @@ import {
 const STORED_ID = '11111111-1111-4111-8111-111111111111';
 
 beforeEach(() => {
-  // A fresh browser for each case: storage empty and no id kept in memory.
   clearClientId();
   localStorage.clear();
 });
@@ -69,7 +68,6 @@ describe('client id', () => {
     expect(peekClientId()).toBeNull();
     expect(localStorage.getItem(CLIENT_ID_STORAGE_KEY)).toBeNull();
 
-    // The next ask mints a fresh id, still created once.
     const second = getClientId();
     expect(isClientId(second)).toBe(true);
     expect(localStorage.getItem(CLIENT_ID_STORAGE_KEY)).toBe(second);

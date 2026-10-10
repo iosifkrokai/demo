@@ -1,11 +1,4 @@
 """The one seed command: ``python -m seed``.
-
-One runnable entry for the whole place database, replacing ten scripts. The
-default verb is ``apply`` — a full restore on an empty DB and an idempotent
-refresh on an existing one, read entirely from the committed CSVs (no network).
-The other verbs are deliberate re-acquisitions: ``fetch`` (Overpass → CSVs),
-``photos`` (PBF/Wikimedia → photo columns), ``prune`` (drop foreign rows).
-
 Exit codes: 0 = ok, 1 = DB/network error, 2 = fatal validation failure.
 """
 
@@ -33,8 +26,6 @@ def _count_by(rows: list[dict], key: str) -> dict[str, int]:
         out[str(r.get(key))] = out.get(str(r.get(key)), 0) + 1
     return out
 
-
-# ── apply (the default) ──────────────────────────────────────────────────────
 
 def cmd_apply(args: argparse.Namespace) -> int:
     from . import pipeline
@@ -117,8 +108,6 @@ def _print_summary(report: dict) -> None:
         print(f"  db: {report['db']}")
 
 
-# ── fetch (acquire OSM sources into versioned CSVs) ──────────────────────────
-
 def cmd_fetch(args: argparse.Namespace) -> int:
     from . import osm_tags, overpass
     from .datasets import COLUMNS
@@ -127,8 +116,6 @@ def cmd_fetch(args: argparse.Namespace) -> int:
     out_dir: Path = args.out_dir
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    # --input-json replays a saved Overpass response with no network; otherwise
-    # the query goes to Overpass. --dry-run still fetches but writes nothing.
     mock = None
     if args.input_json:
         mock = json.loads(Path(args.input_json).read_text(encoding="utf-8"))
@@ -158,8 +145,6 @@ def cmd_fetch(args: argparse.Namespace) -> int:
     return 0
 
 
-# ── photos (acquire/enrich photo columns) ────────────────────────────────────
-
 def cmd_photos(args: argparse.Namespace) -> int:
     from . import photos
 
@@ -175,8 +160,6 @@ def cmd_photos(args: argparse.Namespace) -> int:
     print(f"[seed] photos ({args.stage}): {done}")
     return 0
 
-
-# ── prune ────────────────────────────────────────────────────────────────────
 
 def cmd_prune(args: argparse.Namespace) -> int:
     from . import pipeline
@@ -196,8 +179,6 @@ def cmd_admin(args: argparse.Namespace) -> int:
 
     return create_admin(email=args.email, password=args.password, name=args.name)
 
-
-# ── parser ───────────────────────────────────────────────────────────────────
 
 def _add_apply_flags(p: argparse.ArgumentParser) -> None:
     p.add_argument("--dry-run", action="store_true",
@@ -247,7 +228,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     a.add_argument("--bbox", type=float, nargs=4, metavar=("W", "S", "E", "N"), default=None)
     a.add_argument("--input-json", type=Path, default=None)
     a.add_argument("--out-dir", type=Path, default=DATA_DIR)
-    a.set_defaults(func=None)  # set below to a handler that chains fetch → apply
+    a.set_defaults(func=None)
 
     pr = sub.add_parser("prune", help="Drop places outside the project area.")
     pr.add_argument("--apply", action="store_true", help="Actually delete.")

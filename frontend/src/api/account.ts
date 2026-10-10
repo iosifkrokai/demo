@@ -1,19 +1,4 @@
-/**
- * The accounts / visits / admin API.
- *
- * Every call is same-origin relative: nginx (and the dev Vite proxy) forwards
- * `/auth/*`, `/me/*` and `/admin/*` to the agent, so nothing hardcodes a host.
- *
- * Identity rides in an HttpOnly cookie the browser attaches itself — this module
- * never reads or stores the session token, which is the whole point of using a
- * cookie rather than localStorage. Every call still sends `X-Client-Id`: on
- * register/login the agent *adopts* that anonymous client, so routes and
- * preferences saved before signing in stay reachable.
- *
- * Failures become an `AccountApiError` carrying the agent's machine code, so a
- * caller can tell «the store is down» (`storage_unavailable`) from «wrong
- * password» (`invalid_credentials`) without parsing prose.
- */
+/** The accounts / visits / admin API. */
 
 import { getClientId } from '@/utils/client-id';
 
@@ -110,12 +95,9 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     response = await fetch(`${AGENT_URL}${path}`, {
       ...init,
       headers,
-      // The session cookie must travel; same-origin needs no CORS for it, but
-      // `include` also covers a remote VITE_AGENT_URL.
       credentials: 'include',
     });
   } catch {
-    // The request never reached the agent: a different failure from a refusal.
     throw new AccountApiError(
       'network_unavailable',
       'агент недоступен — попробуйте позже'

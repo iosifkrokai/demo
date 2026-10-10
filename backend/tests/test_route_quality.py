@@ -1,11 +1,4 @@
-"""Route quality tests — deterministic, no network, fake candidates.
-
-Covers:
-  1. A name match may become must_visit; a town-only match must NOT.
-  2. A castles query yields castles when the pool contains castles and churches.
-  3. A route with stops 13 km / 25 km apart is NOT accepted as in-budget walk.
-  4. The explanation names the correct town.
-"""
+"""Route quality tests — deterministic, no network, fake candidates."""
 
 from __future__ import annotations
 
@@ -27,7 +20,6 @@ from agent.planner.retrieve import (
 )
 from contracts.planner import Candidate
 
-# Fake helpers
 
 def _c(
     id: int,
@@ -54,13 +46,10 @@ def _c(
     )
 
 
-# Defect 1: town-only match → NOT must_visit; name match → may be must_visit
-
 class TestIsTownOrDistrictMatch:
     """_is_town_or_district_match correctly identifies town/district-only rows."""
 
     def test_name_match_is_false(self):
-        # "Мирскому" (query) should NOT match on name "Мирский замок"
         row = {
             "name": "Мирский замок",
             "town": "Мир",
@@ -88,7 +77,6 @@ class TestIsTownOrDistrictMatch:
             "Query 'Лидский' matches district column — district match"
 
     def test_town_match_case_insensitive(self):
-        # Query is "Гродно" (capital G), DB has "гродно" (lowercase)
         row = {"name": "Старый замок", "town": "гродно", "district": ""}
         assert _is_town_or_district_match(row, "Гродно") is True, \
             "Town match must be case-insensitive"
@@ -100,7 +88,6 @@ class TestResolveNamedPlacesLogic:
     def test_name_above_threshold_goes_to_must_visit(self):
         """When _name_match_search returns a high-similarity row (sim >= 0.3),
         it is added to must_visit_ids and NOT used as area_anchor."""
-        # Simulate: "Мирскому" matches "Мирский замок" with sim=0.5 (above threshold)
         row = {
             "id": 38,
             "name": "Мирский замок",
@@ -111,7 +98,6 @@ class TestResolveNamedPlacesLogic:
             "lon": 26.47,
             "_name_sim": 0.5,
         }
-        # Patch both functions at the module where resolve.py looks them up.
         with patch("agent.planner.resolve._name_match_search", return_value=[row]):
             with patch("agent.planner.resolve._keyword_search", return_value=[]):
                 from agent.planner.resolve import _resolve_named_places
@@ -124,14 +110,11 @@ class TestResolveNamedPlacesLogic:
             "Мирскому (sim=0.5 >= 0.3) -> must_visit_ids"
         assert area_anchor is None, \
             "Name match must NOT become area_anchor"
-        # The third value is how the planner tells a name that grounded here from
-        # one that did not: a resolved name can never trigger a coverage refusal.
         assert resolved == ["Мирскому"]
 
     def test_name_below_threshold_town_match_goes_to_area_anchor(self):
         """When _name_match_search returns low similarity (sim < 0.3),
         the keyword search is used for area_anchor instead."""
-        # Simulate: "Гродно" name-similarity = 0.2 (below threshold)
         name_row = {
             "id": 49,
             "name": "Старый замок (Гродно)",
@@ -140,7 +123,7 @@ class TestResolveNamedPlacesLogic:
             "category": "замок",
             "lat": 53.68,
             "lon": 23.83,
-            "_name_sim": 0.2,  # below NAME_MATCH_MIN_SIM = 0.3
+            "_name_sim": 0.2,
         }
         town_row = {
             "id": 49,
@@ -166,8 +149,6 @@ class TestResolveNamedPlacesLogic:
         assert resolved == [], \
             "an area anchor is not a resolved must-visit name"
 
-
-# Defect 2: category intent steers selection
 
 class TestCategoryKeywordDetection:
     """_detect_category_keywords extracts LLM categories from raw query text."""
@@ -220,15 +201,13 @@ class TestCategorySteering:
         church_id = 2
 
         keyword_signal = [(castle_id, 0.0), (church_id, 0.0)]
-        category_signal = [(castle_id, 0.0)]  # church not in category
+        category_signal = [(castle_id, 0.0)]
         must_signal: list[tuple[int, float]] = []
 
         fused = rrf_fuse([keyword_signal, category_signal, must_signal], k=60)
         assert fused[castle_id] > fused[church_id], \
             "Castle in both keyword+category signals must outrank church (keyword only)"
 
-
-# Defect 3: regional routes with 13-25 km legs are not in-budget walks
 
 class TestBudgetConstrain:
     """_budget_constrain removes stops that violate the budget or max-leg constraint."""
@@ -237,18 +216,15 @@ class TestBudgetConstrain:
         """13 km at 4 km/h = 117 min per leg — exceeds 25% share of 120 min (30 min).
         The budget_constrain must drop the far stop."""
         candidates = [
-            # id=1 (index 0): more relevant (rrf=1.0) but NOT must-visit
             _c(1, "Мирский замок", 53.9506, 26.4675, "замок",
                rrf_score=1.0, visit_minutes_db=40),
-            # id=2 (index 1): less relevant but IS must-visit
             _c(2, "Любчанский замок", 53.85, 26.27, "замок",
                rrf_score=0.9, visit_minutes_db=40),
         ]
-        # 13 km at 4 km/h = 117 min = 7020 s per leg
         matrix = [[0.0, 7020.0], [7020.0, 0.0]]
         visits = [40, 40]
-        budget_s = 120 * 60  # 120 minutes
-        must_ids = {2}  # id=2 is must-visit
+        budget_s = 120 * 60
+        must_ids = {2}
         order = [0, 1]
 
         constrained, _dropped = _budget_constrain(
@@ -268,7 +244,7 @@ class TestBudgetConstrain:
             _c(40, "Любчанский замок", 53.85, 26.27, "замок",
                rrf_score=0.8, visit_minutes_db=40),
         ]
-        matrix = [[0.0, 22500.0], [22500.0, 0.0]]  # 25 km
+        matrix = [[0.0, 22500.0], [22500.0, 0.0]]
         visits = [40, 40]
         budget_s = 150 * 60
         must_ids = {38}
@@ -317,8 +293,6 @@ class TestMaxLeg:
         assert _max_leg([0, 2], matrix) == 50.0
 
 
-# Defect 4: explanation derives area from stops
-
 class TestAreaName:
     """_area_name picks the right geographic descriptor for the route."""
 
@@ -330,7 +304,6 @@ class TestAreaName:
         assert _area_name(route) == "Мир"
 
     def test_single_district_returns_that_district(self):
-        # Two different towns in the same district -> prefer district
         route = [
             _c(1, "Place A", 53.88, 25.29, "замок",
                town="Лида", district="Лидский район"),
@@ -346,7 +319,6 @@ class TestAreaName:
             _c(2, "Лидский замок", 53.88, 25.29, "замок", town="Лида"),
             _c(3, "Новогрудский замок", 53.90, 25.80, "замок", town="Новогрудок"),
         ]
-        # All towns are different — should return one of them (deterministic: first)
         result = _area_name(route)
         assert result in ("Мир", "Лида", "Новогрудок")
 
@@ -387,8 +359,6 @@ class TestExplainArea:
             f"Explanation must NOT hardcode 'Гродно' for a Мир route; got: {text}"
 
 
-# Integration: full resolve() for a town-only query
-
 class TestResolveIntegration:
     """resolve() returns area_anchor but empty must_visit_ids for town-only queries."""
 
@@ -411,7 +381,6 @@ class TestResolveIntegration:
             source="regex",
         )
 
-        # Simulate: name_sim=0.2 (below threshold) so it's treated as a town match
         name_row = {
             "id": 49,
             "name": "Старый замок (Гродно)",
@@ -422,7 +391,6 @@ class TestResolveIntegration:
             "lon": 23.83,
             "_name_sim": 0.2,
         }
-        # Patch at the module where resolve.py imports them
         with patch("agent.planner.resolve._name_match_search", return_value=[name_row]):
             with patch("agent.planner.resolve._keyword_search", return_value=[name_row]):
                 constraints = resolve(

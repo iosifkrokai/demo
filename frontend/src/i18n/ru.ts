@@ -1,12 +1,4 @@
-/**
- * Russian strings — the source of truth for the UI.
- *
- * Every key here exists in `en`, and a test asserts the two dictionaries have
- * the same shape: a missing translation must fail the build, not appear as a
- * raw key in front of a tourist. Strings that the backend already returns with
- * its own text (place names, blurbs, turn instructions) are not here: they come
- * from data and are switched by the request's `language`, not by the UI.
- */
+/** Russian strings — the source of truth for the UI. */
 export const ru = {
   panel: {
     resize: 'изменять ширину панели',
@@ -35,17 +27,12 @@ export const ru = {
     placeholder: 'Что хотите посмотреть?',
     label: 'что хотите посмотреть',
     chips: {
-      // A chip *is* the query: it goes to the agent exactly as written, so it
-      // reads like something a tourist would say, not like a filter name.
       oldTown: 'Старый город за два часа пешком',
       castlesChurches: 'Замки и костёлы Гродно',
       food: 'Где поесть в центре, недорого',
       evening: 'Вечерняя прогулка по Советской',
       withChildren: 'С детьми: парки и замки',
     },
-    // Offered only when a route already exists: these edit it instead of
-    // planning a new one. Each is an instruction the pipeline can honour —
-    // add a stop, exclude one, shorten the budget, narrow the interests.
     chipsRefine: {
       addCafe: 'добавь кафе по пути',
       removeMuseum: 'убери музей из маршрута',

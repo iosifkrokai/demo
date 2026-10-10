@@ -30,20 +30,12 @@ interface GuideStopListProps {
   onToggle: (id: string) => void;
   /** Given by the panel: the tourist may set their own time at a stop. */
   onVisitMinutesChange?: (id: string, minutes: number | null) => void;
-  /**
-   * Movement mode folds the list behind a row with the count. The map is the
-   * main screen there, so the list is one tap away, not always in the way.
-   */
+  /** Movement mode folds the list behind a row with the count. */
   collapsible?: boolean;
   defaultOpen?: boolean;
 }
 
-/**
- * The route as a timeline: 52px rows, a hairline between the numbered circles,
- * done rows muted and struck through, the next one picked out in the accent.
- * A tap is the manual way to mark a stop — every row is a big, quiet target,
- * and the same tap advances the walk when geolocation is unavailable.
- */
+/** The route as a timeline: 52px rows, a hairline between the numbered circles, done rows muted and struck through, the next one picked out in the accent. */
 export const GuideStopList = ({
   stops,
   visited,
@@ -67,7 +59,6 @@ export const GuideStopList = ({
 
         return (
           <li key={stop.id} className="flex">
-            {/* Number + the hairline that ties this stop to the next one. */}
             <div className="flex w-7 shrink-0 flex-col items-center pt-[14px]">
               <span
                 className={[
@@ -84,8 +75,6 @@ export const GuideStopList = ({
               {!isLast && <span className="mt-1 w-px flex-1 bg-border" />}
             </div>
 
-            {/* The row is tapped to mark the stop; the visit time is its own
-                control, so it must not be nested inside the row button. */}
             <div className="flex min-h-[52px] w-full items-center gap-1 pr-2 pl-1">
               <button
                 type="button"

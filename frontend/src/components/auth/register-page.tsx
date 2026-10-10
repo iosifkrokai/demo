@@ -6,18 +6,8 @@ import { Input } from '@/components/ui/input';
 import { describeAccountError, useRegister } from '@/hooks/use-auth';
 import { appPath } from '@/utils/app-path';
 
-/**
- * Create an account (spec 005 §3).
- *
- * Registration always makes a plain `user`; the first administrator is created by
- * `python -m seed admin`, not by being first to sign up.
- *
- * The anonymous client is adopted here: the browser's `X-Client-Id` (sent by
- * `api/account.ts`) becomes this account's, so routes and preferences saved
- * before signing in are not orphaned.
- */
+/** Create an account. */
 export function RegisterPage() {
-  // Where the guard sent us from (`?redirect=…`); default is the map.
   const { redirect: returnTo } = useSearch({ from: '/register' });
   const register = useRegister();
   const [email, setEmail] = useState('');

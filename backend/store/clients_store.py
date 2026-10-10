@@ -1,26 +1,6 @@
-"""Storage for the anonymous client entity (spec 003).
+"""Storage for the anonymous client entity.
 
-One repository, one job: persist a client's preferences and saved routes in
-Postgres and answer nothing else.  The design keeps two promises the spec
-insists on:
-
-* **First sight creates the row.** ``ensure_client`` is an upsert, so the very
-  first request carrying an unknown ``X-Client-Id`` mints the ``clients`` row
-  and every later one just refreshes ``last_seen_at``.  The id itself is minted
-  by the browser; the server never invents one.
-
-* **Degradation is typed, not silent.** A row that does not exist comes back as
-  ``None`` (a read that finds nothing is not an error).  Postgres being
-  unreachable or erroring raises :class:`StorageUnavailable`, which the HTTP
-  layer turns into ``503 storage_unavailable`` so the client can keep working
-  locally and say so honestly.  No method ever returns an empty value to mask
-  a database outage.
-
-The plan blob is stored and returned verbatim — never rebuilt, never trimmed
-(spec §2).  The list query deliberately reads only the plan's lightweight
-sub-objects (``points`` length, ``summary``, ``budget``) so listing routes does
-not drag geometry across the wire; :func:`clients_models.route_metrics` turns
-those into ``stop_count``/``distance_m``/``duration_min``.
+One job: persist a client's preferences and saved routes and answer nothing else.
 """
 
 from __future__ import annotations
@@ -41,11 +21,8 @@ from core.config import settings
 
 log = logging.getLogger(__name__)
 
-# A tourist's shortlist stops being useful long before this; the cap keeps one
-# client from filling the table.  Over it, POST answers too_many_routes.
 MAX_SAVED_ROUTES = 200
 
-# The only columns a partial preferences update may touch.
 PREFERENCE_COLUMNS = (
     "transport",
     "time_budget_minutes",
@@ -67,16 +44,11 @@ _ROUTE_DETAIL_SELECT = (
 
 
 class StorageUnavailable(RuntimeError):
-    """The client store could not reach Postgres.
-
-    Raised instead of leaking a driver exception, so the HTTP layer can answer
-    ``503 storage_unavailable`` and the UI can fall back to local storage.
-    """
+    """The client store could not reach Postgres (→ ``503 storage_unavailable``)."""
 
 
 class TooManyRoutes(RuntimeError):
-    """The client already holds ``limit`` saved routes (spec reason code
-    ``too_many_routes``)."""
+    """The client already holds ``limit`` saved routes."""
 
     def __init__(self, limit: int) -> None:
         super().__init__(f"client already has {limit} saved routes")
@@ -125,8 +97,7 @@ class ClientRepository(Protocol):
 def default_connect() -> psycopg.Connection:
     """One autocommit connection through the DSN from config.py.
 
-    ``connect_timeout`` is deliberately short: when the database is down the
-    request must fail fast into ``503 storage_unavailable``, not hang.
+    ``connect_timeout`` is short so a down database fails fast into ``503``.
     """
     return psycopg.connect(settings.DSN, autocommit=True, connect_timeout=3)
 
@@ -134,9 +105,7 @@ def default_connect() -> psycopg.Connection:
 def _adapt(value: Any, column: str) -> Any:
     """Adapt a Python value for psycopg.
 
-    ``None`` must stay SQL NULL (jsonb ``null`` is a different value), so a
-    cleared jsonb column is passed as ``None``; a real dict/list is wrapped so
-    psycopg sends jsonb, not a string.
+    ``None`` stays SQL NULL; a dict/list is wrapped as jsonb, not a string.
     """
     if value is None:
         return None
@@ -148,10 +117,7 @@ def _adapt(value: Any, column: str) -> Any:
 class PostgresClientRepository:
     """A :class:`ClientRepository` backed by Postgres.
 
-    The connection is created lazily on first use and reused; a broken
-    connection is dropped and reopened on the next call.  A lock serialises
-    access because FastAPI runs sync endpoints in a thread pool and a psycopg
-    connection is not safe to share concurrently.
+    The connection is lazy and reused; a lock serialises concurrent access.
     """
 
     def __init__(
@@ -164,8 +130,6 @@ class PostgresClientRepository:
         self._conn: psycopg.Connection | None = None
         self._lock = threading.Lock()
         self.max_routes = max_routes
-
-    # connection plumbing
 
     def _connection(self) -> psycopg.Connection:
         conn = self._conn
@@ -198,8 +162,6 @@ class PostgresClientRepository:
         with self._lock:
             self._drop()
 
-    # clients
-
     def ensure_client(self, client_id: uuid.UUID) -> None:
         """Insert the client if unseen, otherwise refresh ``last_seen_at``."""
         with self._cursor() as cur:
@@ -217,8 +179,6 @@ class PostgresClientRepository:
         with self._cursor() as cur:
             cur.execute("DELETE FROM clients WHERE id = %s", (client_id,))
             return cur.rowcount > 0
-
-    # preferences
 
     def get_preferences(self, client_id: uuid.UUID) -> dict[str, Any] | None:
         """The stored row, or ``None`` when nothing has been saved yet."""
@@ -256,9 +216,7 @@ class PostgresClientRepository:
         with self._cursor() as cur:
             cur.execute(sql, tuple(params))
             row = cur.fetchone()
-        return dict(row)  # RETURNING on an upsert always yields exactly one row
-
-    # saved routes
+        return dict(row)
 
     def add_route(
         self,
@@ -304,10 +262,7 @@ class PostgresClientRepository:
     ) -> list[dict[str, Any]]:
         """Newest first, without any heavy geometry.
 
-        Only the plan's scalars are selected: the points array is measured in
-        the database (`jsonb_array_length`) and only ``summary``/``budget`` —
-        both tiny — are transferred, so a saved polyline never crosses the
-        wire for a list."""
+        Only scalars are selected, so a saved polyline never crosses the wire."""
         with self._cursor() as cur:
             cur.execute(
                 """

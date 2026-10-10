@@ -85,9 +85,6 @@ export const SettingsPanel = () => {
         setCopied(false);
       }, 1000);
     } catch {
-      // A clipboard write needs a secure context and a permission the browser
-      // may simply refuse — neither is the app's to grant, so the refusal is
-      // reported instead of swallowed into a button that never changes.
       toast.warning('Copy failed', {
         description: 'The browser refused clipboard access.',
         position: 'bottom-center',

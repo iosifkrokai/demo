@@ -35,8 +35,6 @@ vi.mock('@/hooks/use-admin', () => ({
   useAdminStats: () => statsState.current,
 }));
 
-// The panels have their own specs; here they are stand-ins so a single stats
-// failure can be isolated from the two list requests.
 vi.mock('./places-panel', () => ({
   PlacesPanel: () => <div data-testid="places-panel" />,
 }));

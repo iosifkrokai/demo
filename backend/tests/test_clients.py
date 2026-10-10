@@ -1,20 +1,6 @@
-"""The anonymous client entity (spec 003) — server side.
+"""The anonymous client entity — server side.
 
-No API key, no DB and no network: every endpoint test drives a fake repository
-injected as ``app.state.clients_repository``, and the storage-layer tests drive
-a fake psycopg connection.  The one integration test hits the live Postgres and
-skips cleanly when it is not reachable.
-
-What is pinned here, per the accept criteria:
-  * a request with no X-Client-Id still works (reads return the empty state,
-    writes answer 503 storage_unavailable);
-  * PUT preferences updates only the sent fields, and an explicit null clears
-    one;
-  * POST then GET returns a byte-identical plan;
-  * the list excludes heavy geometry but carries stop_count/distance_m/duration_min;
-  * PATCH renames;
-  * DELETE /clients/me cascades routes and preferences away;
-  * a down store is 503 storage_unavailable everywhere, never a 500.
+No API key, DB or network: tests inject a fake repository into ``app.state``.
 """
 
 from __future__ import annotations
@@ -49,9 +35,6 @@ MIGRATION = os.path.join(BACKEND, "db", "migrations", "0005_clients.sql")
 
 HEADERS = {"X-Client-Id": CLIENT_A}
 
-# A plan shaped like what POST /routes/generate answers (RouteResponse): points,
-# a heavy geometry blob, summary and budget.  The list must never return the
-# geometry; the detail must return the whole thing unchanged.
 PLAN = {
     "points": [
         {"id": 1, "name": "Старый замок", "lat": 53.6771, "lon": 23.8290},
@@ -69,14 +52,10 @@ def _now() -> datetime:
     return datetime.now(UTC)
 
 
-# Fakes
-
 class FakeRepo:
     """In-memory ClientRepository with real cascade semantics.
 
-    Deliberately mimics the store's contract: a client with no saved
-    preferences answers ``None`` (not an empty dict), and deleting a client
-    takes its preferences and routes with it.
+    No saved preferences answers ``None``; deleting a client takes its data with it.
     """
 
     def __init__(self, max_routes: int = 200) -> None:
@@ -190,8 +169,6 @@ def _save_route(client, *, plan=PLAN, query="замки Гродно",
     return client.post("/clients/me/routes", json=body, headers=headers)
 
 
-# No X-Client-Id at all — work, but honestly without saving
-
 class TestNoClientId:
 
     def test_get_preferences_is_the_empty_state(self, client):
@@ -234,8 +211,6 @@ class TestNoClientId:
         assert r.status_code == 200
 
 
-# Preferences — partial update, explicit null clears
-
 class TestPreferences:
 
     def test_get_before_anything_is_saved_is_null(self, client):
@@ -250,7 +225,6 @@ class TestPreferences:
         body = r.json()
         assert body["transport"] == "auto"
         assert body["party_adults"] == 2
-        # Everything not sent stays unset — never an invented default.
         assert body["party_children"] is None
         assert body["time_budget_minutes"] is None
         assert body["interests"] is None
@@ -260,7 +234,7 @@ class TestPreferences:
                    json={"transport": "bicycle", "language": "en"})
         body = client.put("/clients/me/preferences", headers=HEADERS,
                           json={"time_budget_minutes": 180}).json()
-        assert body["transport"] == "bicycle"      # untouched by the 2nd call
+        assert body["transport"] == "bicycle"
         assert body["language"] == "en"
         assert body["time_budget_minutes"] == 180
 
@@ -270,7 +244,7 @@ class TestPreferences:
         body = client.put("/clients/me/preferences", headers=HEADERS,
                           json={"party_adults": None}).json()
         assert body["party_adults"] is None
-        assert body["transport"] == "auto"          # the clear touched one field
+        assert body["transport"] == "auto"
 
     def test_interests_and_pace_round_trip(self, client):
         pace = {"замок": 90, "музей": 40}
@@ -297,8 +271,6 @@ class TestPreferences:
         assert other["transport"] is None
 
 
-# Routes — save verbatim, read back byte-identical
-
 class TestRoutes:
 
     def test_post_then_get_returns_the_plan_unchanged(self, client):
@@ -311,7 +283,6 @@ class TestRoutes:
                             headers=HEADERS)
         assert detail.status_code == 200, detail.text
         body = detail.json()
-        # The whole point: byte-identical, geometry included.
         assert body["plan"] == PLAN
         assert body["query"] == "замки Гродно"
         assert body["name"] == "Мои замки"
@@ -334,14 +305,12 @@ class TestRoutes:
         items = r.json()
         assert len(items) == 1
         item = items[0]
-        # Heavy geometry is NOT in the list payload.
         assert "plan" not in item
         assert "shape" not in item
         assert "points" not in item
-        # But the numbers the list UI needs are.
         assert item["stop_count"] == len(PLAN["points"]) == 2
-        assert item["distance_m"] == 1500          # 1.5 km
-        assert item["duration_min"] == 90          # budget.total_minutes
+        assert item["distance_m"] == 1500
+        assert item["duration_min"] == 90
         assert item["query"] == "замки Гродно"
         assert item["name"] == "Мои замки"
 
@@ -375,7 +344,6 @@ class TestRoutes:
                          json={"name": "Переименованный"})
         assert r.status_code == 200, r.text
         assert r.json()["name"] == "Переименованный"
-        # The rename did not touch the plan.
         assert r.json()["plan"] == PLAN
         listed = client.get("/clients/me/routes", headers=HEADERS).json()
         assert listed[0]["name"] == "Переименованный"
@@ -406,8 +374,6 @@ class TestRoutes:
             del agent_main.app.state.clients_repository
 
 
-# DELETE /clients/me — cascades
-
 class TestDeleteClient:
 
     def test_delete_removes_routes_and_preferences(self, client):
@@ -415,7 +381,6 @@ class TestDeleteClient:
                    json={"transport": "auto"})
         rid = _save_route(client).json()["id"]
         assert client.delete("/clients/me", headers=HEADERS).status_code == 204
-        # The client is gone: routes with it, preferences with it.
         assert client.get("/clients/me/routes", headers=HEADERS).json() == []
         assert client.get(f"/clients/me/routes/{rid}",
                           headers=HEADERS).status_code == 404
@@ -426,8 +391,6 @@ class TestDeleteClient:
         assert client.delete("/clients/me", headers=HEADERS).status_code == 204
         assert client.delete("/clients/me", headers=HEADERS).status_code == 204
 
-
-# Storage down — 503 storage_unavailable everywhere, never a 500
 
 class TestStorageDown:
 
@@ -453,8 +416,6 @@ class TestStorageDown:
         assert r.status_code == 503, r.text
         assert r.json() == {"reason": "storage_unavailable"}
 
-
-# The storage layer itself
 
 class FakeCursor:
     def __init__(self, conn):
@@ -566,7 +527,6 @@ class TestStore:
         items = repo.list_routes(uuid.UUID(CLIENT_A), 50)
         assert items[0]["distance_m"] == 1500
         assert items[0]["duration_min"] == 90
-        # The query asks for scalars, never the plan blob.
         select = conn.executed[-1][0]
         assert "plan->'points'" in select
         assert "plan->'shape'" not in select
@@ -596,8 +556,6 @@ class TestStore:
                 call()
 
 
-# route_metrics — the derivation the list leans on
-
 class TestRouteMetrics:
 
     def test_distance_from_length_km(self):
@@ -614,8 +572,6 @@ class TestRouteMetrics:
         m = route_metrics(0, None, None)
         assert m == {"stop_count": 0, "distance_m": None, "duration_min": None}
 
-
-# The real thing: live Postgres, skipped when unreachable
 
 def _db_up() -> bool:
     try:
@@ -649,7 +605,6 @@ def test_live_round_trip_and_cascade():
         tc = TestClient(agent_main.app, raise_server_exceptions=False)
         headers = {"X-Client-Id": str(client_id)}
 
-        # preferences: partial then clear
         assert tc.put("/clients/me/preferences", headers=headers,
                       json={"transport": "auto", "party_adults": 2}).json()[
             "transport"] == "auto"
@@ -657,7 +612,6 @@ def test_live_round_trip_and_cascade():
                          json={"party_adults": None}).json()
         assert cleared["party_adults"] is None and cleared["transport"] == "auto"
 
-        # route: save, read back byte-identical, list without geometry
         created = _save_route(tc, headers=headers).json()
         detail = tc.get(f"/clients/me/routes/{created['id']}",
                         headers=headers).json()
@@ -669,12 +623,10 @@ def test_live_round_trip_and_cascade():
         assert item["duration_min"] == 90
         assert "plan" not in item
 
-        # rename
         renamed = tc.patch(f"/clients/me/routes/{created['id']}",
                            headers=headers, json={"name": "Новое имя"}).json()
         assert renamed["name"] == "Новое имя"
 
-        # delete the client → cascade proves itself in the DB
         assert tc.delete("/clients/me", headers=headers).status_code == 204
         with admin.cursor() as cur:
             cur.execute("SELECT count(*) FROM clients WHERE id = %s", (client_id,))

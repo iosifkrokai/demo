@@ -1,25 +1,4 @@
-/**
- * Ferrostar bridge: the pure half.
- *
- * Two things are checked here and neither needs the WASM core:
- *
- * - `buildFerrostarRoute` turns our Valhalla response into a Ferrostar `Route` —
- *   one step per maneuver, geometry sliced off the line, spoken instructions at
- *   the trigger distances, waypoints for the stops. It is a pure function, so it
- *   is testable without a navigation session.
- * - the extractors read a `TripState`. Ferrostar's state is an externally tagged
- *   union (`{ Navigating: {...} }`), so the fixtures below build that shape by
- *   hand: the tests pin the reading logic against the real type, without a
- *   session, a GPS or a browser.
- *
- * NOT covered here, on purpose: `FerrostarNavigator.update()`. It needs the WASM
- * core, and the core does not start under vitest (jsdom + `pool: 'vmForks'`):
- * `@stadiamaps/ferrostar` evaluates `wasm.__wbindgen_start()` at import time and
- * the vitest pipeline does not serve the `.wasm` module, so the import throws
- * `wasm.__wbindgen_start is not a function`. That is a test-environment limit,
- * not a code path we can assert on — the navigation loop itself is therefore
- * unverified by this suite (see FERROSTAR-REPORT.md).
- */
+/** Ferrostar bridge: the pure half. */
 
 import { describe, expect, it } from 'vitest';
 import type {
@@ -191,9 +170,6 @@ describe('buildFerrostarRoute', () => {
 
   it('slices each step out of the line, in metres, not Valhalla units', () => {
     const steps = built!.route.steps;
-    // Valhalla answers `length` in kilometres (0.1 in the fixture). The step
-    // distance must be the real length of the line, or Ferrostar's progress and
-    // the panel's «пройдено» would disagree by a factor of a thousand.
     steps.forEach((step, i) => {
       expect(step.distance).toBeCloseTo(SEGMENTS_M[i]!, 3);
       expect(step.geometry.length).toBeGreaterThanOrEqual(2);
@@ -202,7 +178,6 @@ describe('buildFerrostarRoute', () => {
     expect(steps[1]!.geometry.at(-1)).toEqual({ lat: 53.001, lng: 23.001 });
     expect(steps[2]!.geometry[0]).toEqual({ lat: 53.001, lng: 23.001 });
     expect(steps[3]!.geometry.at(-1)).toEqual({ lat: 53.002, lng: 23.002 });
-    // Duration is Valhalla's own seconds.
     expect(steps[0]!.duration).toBe(60);
   });
 
@@ -227,7 +202,6 @@ describe('buildFerrostarRoute', () => {
     expect(
       new Set(step.spokenInstructions.map((s) => s.utteranceId)).size
     ).toBe(4);
-    // The text is the maneuver's own; «через X метров» is the panel's wording.
     expect(
       step.spokenInstructions.every((s) => s.text === 'Поверните направо')
     ).toBe(true);
@@ -237,8 +211,6 @@ describe('buildFerrostarRoute', () => {
   });
 
   it('keeps the UI list parallel to the steps', () => {
-    // `maneuvers[i]` describes `route.steps[i]`: the banner's icon comes from the
-    // Valhalla maneuver type, and the stable key from the step it belongs to.
     const along = SEGMENTS_M.reduce<number[]>(
       (acc, m) => [...acc, (acc[acc.length - 1] ?? 0) + m],
       [0]
@@ -300,7 +272,6 @@ describe('buildFerrostarRoute', () => {
         trip: { ...VALHALLA.trip, legs: [] },
       } as ParsedDirectionsGeometry)
     ).toBeNull();
-    // Geometry but no maneuvers: nothing to advance through.
     expect(
       buildFerrostarRoute({
         ...VALHALLA,
@@ -363,8 +334,7 @@ const VISUAL: VisualInstruction = {
 interface NavigatingOverrides {
   deviation?: RouteDeviation;
   progress?: { distanceToNextManeuver?: number; distanceRemaining?: number };
-  /** `undefined` here means «Ferrostar had nothing to say» — a real value, not
-   * «leave the default», so these overrides are read by key, not by destructuring. */
+  /** `undefined` here means «Ferrostar had nothing to say» — a real value, not «leave the default», so these overrides are read by key, not by destructuring. */
   spokenInstruction?: SpokenInstruction | undefined;
   visualInstruction?: VisualInstruction | undefined;
   remainingSteps?: RouteStep[];
@@ -423,7 +393,6 @@ const COMPLETELY_OFF: RouteDeviation = {
 describe('Ferrostar state extractors', () => {
   it('reads the course of the snapped position', () => {
     expect(extractCourse(navigating())).toBe(12.5);
-    // A course the device never reported stays unknown rather than becoming 0.
     expect(extractCourse(navigating({ course: undefined }))).toBeNull();
   });
 
@@ -463,7 +432,6 @@ describe('Ferrostar state extractors', () => {
       expect(extractSpokenInstruction(state)).toBeNull();
       expect(extractVisualInstruction(state)).toBeNull();
       expect(extractRemainingSteps(state)).toEqual([]);
-      // «Unknown», not «on route»: the panel must not act on it.
       expect(isCompletelyOffRoute(state)).toBeNull();
     }
   });

@@ -87,16 +87,9 @@ import {
 import type { SheetHandleProps, SheetSnap } from './parts/sheet-snap';
 import { forward_geocode } from '@/utils/nominatim';
 
-// Same-origin by default: the webapp's nginx proxies /routes/ to the agent
-// (see frontend/nginx.conf), so the UI keeps working when it is opened through
-// a port-forwarded URL (Codespaces, tunnels) where "localhost" would resolve to
-// the visitor's own machine. Set VITE_AGENT_URL only to point at a remote agent.
 const AGENT_URL = (import.meta.env.VITE_AGENT_URL as string | undefined) ?? '';
 
-/**
- * Time presets. 0 = «без ограничения»: no `time_budget_minutes` is sent at all
- * and the agent builds the full route. Anything >= 15 min is a real constraint.
- */
+/** Time presets. 0 = «без ограничения»: no `time_budget_minutes` is sent at all and the agent builds the full route. */
 const buildTimeBudgetOptions = (t: TFunction) => [
   { value: 30, label: t('sidebar.budgets.b30') },
   { value: 45, label: t('sidebar.budgets.b45') },
@@ -108,11 +101,7 @@ const buildTimeBudgetOptions = (t: TFunction) => [
   { value: 0, label: t('sidebar.budgets.none') },
 ];
 
-/**
- * Transport the tourist has. Empty value = "как удобно": nothing is sent and the
- * agent picks the costing that fits the query (a walk inside a town, a drive
- * across the region). Picking one sends it — transport is a real constraint.
- */
+/** Transport the tourist has. */
 const buildTransportOptions = (
   t: TFunction
 ): Array<SegmentedItem<'' | Profile> & { costing?: string }> => [
@@ -137,23 +126,10 @@ const buildTransportOptions = (
   { value: '', label: t('sidebar.transport.any'), icon: Sparkles },
 ];
 
-/**
- * Panel views — the content a tourist browses.
- *
- * The guide is deliberately *not* one of them. As a fourth tab it read as «ещё
- * один раздел панели», while walking a route is a different activity with its
- * own screen: in a navigator you enter it with one explicit action and the
- * navigation UI takes over, tabs and all. So `guiding` is a separate state (see
- * the panel header and the footer), not a view.
- */
+/** Panel views — the content a tourist browses. */
 export type PanelView = 'plan' | 'history' | 'itineraries' | 'places';
 
-/**
- * The strip's tabs, in the order the tourist actually works: plan a route, take
- * a ready-made one, look back at history. Built from the dictionary rather than
- * kept as a constant, so switching the interface language moves the labels with
- * it — the order itself is the point and must not drift.
- */
+/** The strip's tabs, in the order the tourist actually works: plan a route, take a ready-made one, look back at history. */
 const buildViews = (t: TFunction): SegmentedItem<PanelView>[] => [
   {
     value: 'plan',
@@ -184,22 +160,14 @@ const buildViewSubtitles = (t: TFunction): Record<PanelView, string> => ({
   history: t('tabSubtitles.history'),
 });
 
-/**
- * One-tap starters.
- *
- * The label *is* what gets sent: the tourist sees «замки» or «castles» and that
- * word goes to the agent, which reads either language. Showing English but
- * sending Russian would be a lie about what was asked.
- */
+/** One-tap starters. */
 interface HintChip {
   /** Stable id: the chip's text is a whole sentence, and it may be reworded. */
   id: string;
   text: string;
 }
 
-/**
- * The chips offered before anything is planned — how a tourist would start.
- */
+/** The chips offered before anything is planned — how a tourist would start. */
 const buildHintChips = (t: TFunction): HintChip[] => [
   { id: 'old-town', text: t('ask.chips.oldTown') },
   { id: 'castles-churches', text: t('ask.chips.castlesChurches') },
@@ -208,12 +176,7 @@ const buildHintChips = (t: TFunction): HintChip[] => [
   { id: 'with-children', text: t('ask.chips.withChildren') },
 ];
 
-/**
- * The chips offered once a route exists. Planning is over: from here the
- * tourist edits what they have, so a chip has to read like an instruction to
- * change the current route («убери музей»), not like a fresh request. Showing
- * the starting five again would invite them to start over by accident.
- */
+/** The chips offered once a route exists. */
 const buildRefineHintChips = (t: TFunction): HintChip[] => [
   { id: 'refine-add-cafe', text: t('ask.chipsRefine.addCafe') },
   { id: 'refine-remove-museum', text: t('ask.chipsRefine.removeMuseum') },
@@ -222,18 +185,9 @@ const buildRefineHintChips = (t: TFunction): HintChip[] => [
   { id: 'refine-with-children', text: t('ask.chipsRefine.withChildren') },
 ];
 
-/**
- * Options of the advanced filters. `code` is the canonical backend category
- * code (backend/agent/constants.CATEGORIES) — the value that goes to the
- * agent. The Russian label lives here only so W7 can centralize all strings
- * later; the sidebar keeps no translation dictionary of its own.
- */
+/** Options of the advanced filters. */
 interface FilterOption {
-  /**
-   * What the chip is called and remembered by. For a group («всё религиозное»)
-   * this is an id of its own, not a category: the codes that actually go to the
-   * agent are in `codes`.
-   */
+  /** What the chip is called and remembered by. */
   code: string;
   /** Codes the option stands for; absent means just `code`. */
   codes?: string[];
@@ -277,8 +231,6 @@ const buildInterestOptions = (t: TFunction): FilterOption[] => [
   { code: 'памятник', label: t('sidebar.interests.monuments') },
   { code: 'архитектура', label: t('sidebar.interests.architecture') },
   { code: 'парк', label: t('sidebar.interests.parks') },
-  // A shortcut for one traveller's whole taste: it sends four real codes rather
-  // than inventing a parent category the data does not have.
   {
     code: 'религиозное',
     codes: ['костёл', 'церковь', 'храм', 'монастырь'],
@@ -286,10 +238,7 @@ const buildInterestOptions = (t: TFunction): FilterOption[] => [
   },
 ];
 
-/**
- * Amenities a walk may need, each with a strength: «обязательно» goes out as a
- * hard service the route must serve, «желательно» as a soft interest.
- */
+/** Amenities a walk may need, each with a strength: «обязательно» goes out as a hard service the route must serve, «желательно» as a soft interest. */
 const buildAmenityOptions = (t: TFunction): FilterOption[] => [
   { code: 'туалет', label: t('sidebar.amenities.toilet') },
   { code: 'кафе', label: t('sidebar.amenities.cafe') },
@@ -323,27 +272,17 @@ const filterLabel = (code: string, t: TFunction): string =>
     (o) => o.code === code || optionCodes(o).includes(code)
   )?.label ?? code;
 
-/**
- * Ages the tourist actually typed ("4, 7" → [4, 7]). Free text is parsed for
- * digits only: an age nobody named stays absent, it is never invented (spec §7,
- * "возраст только если известен").
- */
+/** Ages the tourist actually typed ("4, 7" → [4, 7]). */
 const parseChildAges = (raw: string): number[] =>
   raw
     .split(/[^0-9]+/)
     .map((part) => Number.parseInt(part, 10))
     .filter((age) => Number.isInteger(age) && age >= 0 && age <= 18);
 
-/**
- * Map a /routes/generate failure to a short Russian line the tourist can act on.
- * Client-thrown Russian messages (validation) pass through unchanged; browser
- * English like "Failed to fetch" and raw backend JSON bodies do not.
- */
+/** Map a /routes/generate failure to a short Russian line the tourist can act on. */
 const routeSubmitErrorText = (err: unknown, t: TFunction): string => {
   if (!(err instanceof Error)) return String(err);
   const msg = err.message;
-  // fetch() network failures: Chromium "Failed to fetch", Firefox NetworkError,
-  // Safari "Load failed". TypeError is the usual name for those.
   if (
     msg === 'Failed to fetch' ||
     msg === 'Load failed' ||
@@ -376,8 +315,6 @@ const fmtMin = (m: number, t: TFunction) => {
   if (mins < 60) return t('sidebar.units.minutes', { count: mins });
   const hours = Math.floor(mins / 60);
   const rest = mins % 60;
-  // «1 ч 20 мин» / «1 hr 20 min»: the unit words come from the dictionary, the
-  // numbers do not.
   const hourPart = t('sidebar.units.hours', { count: hours });
   return rest
     ? `${hourPart} ${t('sidebar.units.minutes', { count: rest })}`
@@ -390,26 +327,8 @@ const fmtKm = (km: number, t: TFunction) => {
   return t('sidebar.units.km', { value });
 };
 
-/**
- * The planning panel that replaces the upstream RoutePlanner:
- *   1. ask — the query field, time budget, transport; on submit it hits
- *      /routes/generate and pushes the agent's ordered points into the
- *      directions store (with my own position as the start when known).
- *   2. waypoints — WaypointList (drag/drop, remove, pin).
- *   3. manual add — small Nominatim lookup → append to the list.
- *   4. history — previous routes, restored with their descriptions.
- *
- * Layout follows DESIGN.md: a 380px column on desktop, a bottom sheet with two
- * snap points under 768px, header and main action outside the scroll area.
- */
-/**
- * Fingerprint of the route as the guide will walk it.
- *
- * Taken from the waypoints — place id plus the *source* coordinates the guide
- * itself reads — and never from the API response. A key that differs by a metre
- * from the one the guide computes leaves a walked route with no history entry
- * to mark, which is exactly the bug this closes.
- */
+/** The planning panel that replaces the upstream RoutePlanner: 1. ask — the query field, time budget, transport; on submit it hits /routes/generate and pushes the agent's ordered points into the directions store (with my own position as the start when known). 2. waypoints — WaypointList (drag/drop, remove, pin). 3. manual add — small Nominatim lookup → append to the list. 4. history — previous routes, restored with their descriptions. */
+/** Fingerprint of the route as the guide will walk it. */
 const walkKey = (waypoints: readonly Waypoint[]) =>
   guideRouteKey(
     waypoints
@@ -428,17 +347,11 @@ const walkKey = (waypoints: readonly Waypoint[]) =>
       })
   );
 
-/** Why the panel could not say where you are — a code, not a finished sentence,
- * so the line follows the interface language instead of freezing in one. */
+/** Why the panel could not say where you are — a code, not a finished sentence, so the line follows the interface language instead of freezing in one. */
 type GeoReason = 'unsupported' | 'failedShort' | 'denied';
 
 export interface SidebarProps {
-  /**
-   * Render only the panel's contents: no `Sheet`/`SheetContent`, no desktop
-   * resize handle. The caller (the mobile shell) owns the geometry and wraps
-   * them in a sheet of its own. Because the panel's own `SheetTitle` needs the
-   * dialog context, the caller's wrapper must still be a sheet primitive.
-   */
+  /** Render only the panel's contents: no `Sheet`/`SheetContent`, no desktop resize handle. */
   bare?: boolean;
   /** Position and drag handlers, when the caller owns them (mobile shell). */
   snap?: SheetSnap;
@@ -472,31 +385,19 @@ export const Sidebar = ({
   const navigate = useNavigate({ from: '/$activeTab' });
 
   const [query, setQuery] = useState('');
-  // Which panel view is open: building/refining the route, the past routes, or
-  // the ready-made starting points. The guide is not a view — see `guiding`.
   const [mode, setMode] = useState<PanelView>('plan');
-  // Guide mode: the panel becomes the navigator's screen. Entered by an explicit
-  // action on a ready route, left by «выйти» in its own header.
   const [guiding, setGuiding] = useState(false);
   const setGuidingStore = useCommonStore((s) => s.setGuiding);
   const setPlacesVisible = useCommonStore((s) => s.setPlacesVisible);
   const placeDetails = useDirectionsStore((s) => s.placeDetails);
-  const [timeBudget, setTimeBudget] = useState(0); // 0 = no limit
-  // '' = «как удобно»: no transport constraint, the agent picks the costing
-  // (walking inside a town, driving across a region). Only an explicit pick —
-  // or the costing the agent answers with — is a real constraint.
+  const [timeBudget, setTimeBudget] = useState(0);
   const [transport, setTransport] = useState<'' | Profile>('');
   const [mirroredCosting, setMirroredCosting] = useState<Profile | null>(null);
 
-  // Progressive disclosure: the panel stays closed until asked for, and every
-  // value starts "not chosen" so nothing is invented for the tourist.
   const [advancedOpen, setAdvancedOpen] = useState(false);
-  // null = the tourist did not say. Adults/children are quantities, not ages:
-  // an age only travels when it was typed (see parseChildAges).
   const [partyAdults, setPartyAdults] = useState<number | null>(null);
   const [partyChildren, setPartyChildren] = useState<number | null>(null);
   const [childrenAgesText, setChildrenAgesText] = useState('');
-  // «обязательно» → hard_services, «желательно» → interests. Absent = off.
   const [amenities, setAmenities] = useState<Record<string, AmenityStrength>>(
     {}
   );
@@ -510,19 +411,12 @@ export const Sidebar = ({
   >('idle');
   const [geoReason, setGeoReason] = useState<GeoReason | null>(null);
   const [busy, setBusy] = useState(false);
-  // `stage` is one of the stages the client can actually observe, `elapsed` is
-  // the seconds that have passed, `abortRef` is what makes «отменить» real.
   const [stage, setStage] = useState<RouteStage>('requesting');
   const [elapsed, setElapsed] = useState(0);
-  // The pipeline reports its own stages under this id, so the panel can name
-  // them instead of guessing. `null` (no id, unknown id) keeps the client's own,
-  // observable sentence on screen.
   const [progressId, setProgressId] = useState<string | null>(null);
   const serverStage = useRouteProgress(progressId, { enabled: busy });
   const abortRef = useRef<AbortController | null>(null);
 
-  // Tick while a request is in flight. The interval is torn down with `busy`,
-  // so a finished or cancelled request stops counting immediately.
   useEffect(() => {
     if (!busy) return;
     const startedAt = Date.now();
@@ -553,17 +447,10 @@ export const Sidebar = ({
     budgetMinutes: number | null;
     fits: boolean;
   } | null>(null);
-  // The agent's own verdict on the last answer (why no route / what went
-  // unmet). Kept beside the summary: both describe the same plan, and both
-  // are cleared when the route is reset or replaced.
   const [verdict, setVerdict] = useState<AgentRouteResponse | null>(null);
 
-  // The query of the last successful build: switching transport re-plans it, so
-  // the stops, the drawn line and the "в пути" time all follow the new costing.
   const lastQueryRef = useRef<string | null>(null);
   const replanRef = useRef<() => void>(() => {});
-  // Always-current transport: state can be stale inside async callbacks, the
-  // ref cannot. The plan body and the re-plan both read it.
   const transportRef = useRef<'' | Profile>('');
 
   const [manualQuery, setManualQuery] = useState('');
@@ -571,15 +458,9 @@ export const Sidebar = ({
   const [manualErr, setManualErr] = useState<string | null>(null);
 
   const { t } = useTranslation();
-  // The docked width, dragged by the tourist and remembered across visits.
   const panel = usePanelWidth();
   const tabs = useMemo(() => buildViews(t), [t]);
-  // Filters and presets are built from the dictionary where they are rendered:
-  // their visible labels follow the language, while their `code`s never do —
-  // those are the backend's own categories.
   const subtitles = useMemo(() => buildViewSubtitles(t), [t]);
-  // Once a route exists the same field asks a different question, so it offers
-  // different chips: instructions that edit what is already built.
   const hints = useMemo(
     () =>
       waypoints.some(
@@ -596,7 +477,6 @@ export const Sidebar = ({
   const clearHistory = useDirectionsStore((s) => s.clearHistory);
   const markWalked = useDirectionsStore((s) => s.markWalked);
 
-  // Ready-made routes: fetched only when the tab that shows them is opened.
   const {
     itineraries,
     missing: itinerariesMissing,
@@ -613,13 +493,10 @@ export const Sidebar = ({
     reload: reloadPlaces,
   } = usePlaces({ enabled: mode === 'places' });
 
-  // The map draws the whole catalogue only while this tab is on screen. Publish
-  // it on every switch so the two never disagree about what is being looked at.
   useEffect(() => {
     setPlacesVisible(mode === 'places');
   }, [mode, setPlacesVisible]);
 
-  // The caller may own the position (mobile shell); otherwise the panel does.
   const { snap: ownSnap, handleProps: ownHandleProps } = useSheetSnap();
   const snap = snapProp ?? ownSnap;
   const handleProps = handlePropsProp ?? ownHandleProps;
@@ -632,10 +509,7 @@ export const Sidebar = ({
     el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
   }, [query]);
 
-  /**
-   * Pick a transport. `''` means «как удобно» — then nothing is sent to the
-   * agent unless it told us a costing, and the webapp keeps its own default.
-   */
+  /** Pick a transport. */
   const setTransportEverywhere = useCallback(
     (value: '' | Profile, replan = true) => {
       const changed = transportRef.current !== value;
@@ -643,19 +517,12 @@ export const Sidebar = ({
       setTransport(value);
       if (value === '') return;
       setMirroredCosting(value);
-      // the app's own routing (isochrones, directions) needs the costing too
       resetSettings(value);
-      // A transport is a real constraint: re-plan with it instead of leaving a
-      // walking route (and its travel time) on screen for a drive.
       if (replan && changed && lastQueryRef.current) replanRef.current();
     },
     [resetSettings]
   );
 
-  // The URL profile is what the webapp's own /route request rides on. It follows
-  // the transport only once one is known: the tourist's pick, or the costing the
-  // agent planned with (see the generate handler). Never on mount — «как удобно»
-  // must not be silently translated into the webapp's bicycle default.
   useEffect(() => {
     if (!mirroredCosting) return;
     navigate({
@@ -665,10 +532,7 @@ export const Sidebar = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mirroredCosting]);
 
-  /**
-   * Ask the browser where we are and pin it as the route start: the marker on
-   * the map, the first waypoint and the agent's `origin` all come from here.
-   */
+  /** Ask the browser where we are and pin it as the route start: the marker on the map, the first waypoint and the agent's `origin` all come from here. */
   const locateMe = useCallback(
     async (silent = false): Promise<{ lat: number; lon: number } | null> => {
       if (!navigator.geolocation) {
@@ -677,9 +541,6 @@ export const Sidebar = ({
         return null;
       }
       setGeoState('locating');
-      // The browser can neither grant nor deny (a permission prompt nobody
-      // answers, a headless context): getCurrentPosition then never calls back.
-      // Race it against our own timer so a query never hangs on geolocation.
       const GEO_WAIT_MS = 8000;
       try {
         const pos = await new Promise<GeolocationPosition | null>((resolve) => {
@@ -710,8 +571,6 @@ export const Sidebar = ({
         setMe(coords);
         setGeoState('ok');
         setGeoReason(null);
-        // Keep my position as waypoint 0 so the map shows it and the line the
-        // webapp draws starts there too.
         const current = useDirectionsStore.getState().waypoints;
         setWaypoint([
           meWaypoint(coords.lat, coords.lon, t('sidebar.ui.myLocation')),
@@ -720,10 +579,8 @@ export const Sidebar = ({
         if (!silent) refetchDirections();
         return coords;
       } catch (err) {
-        // 1 === PERMISSION_DENIED in the Geolocation API
         const code = (err as GeolocationPositionError | undefined)?.code;
         setGeoState('denied');
-        // 1 === PERMISSION_DENIED; anything else is «could not determine».
         setGeoReason(code === 1 ? 'denied' : 'failedShort');
         return null;
       }
@@ -731,8 +588,6 @@ export const Sidebar = ({
     [refetchDirections, setWaypoint, t]
   );
 
-  // Ages the tourist named, in order, deduplicated. Empty = unknown, and then
-  // `party_children_ages` is not sent at all.
   const childrenAges = useMemo(
     () => [...new Set(parseChildAges(childrenAgesText))],
     [childrenAgesText]
@@ -751,17 +606,12 @@ export const Sidebar = ({
         .map((o) => o.code),
     [amenities, t]
   );
-  // Soft amenities are interests like any theme: one list goes to the agent.
   const interestCodes = useMemo(
     () => [...interests, ...softAmenities],
     [interests, softAmenities]
   );
 
-  /**
-   * One line per condition the tourist actually set — the summary the panel
-   * shows so no filter is applied invisibly. Its length is also the badge on
-   * «ещё фильтры».
-   */
+  /** One line per condition the tourist actually set — the summary the panel shows so no filter is applied invisibly. */
   const filterSummary = useMemo(() => {
     const out: string[] = [];
     if (partyAdults != null)
@@ -803,11 +653,7 @@ export const Sidebar = ({
       return copy;
     });
 
-  /**
-   * Open a past route again: the same stops, on the map, with their facts — what
-   * the history row promised. Nothing is re-requested from the planner; the
-   * route that gets drawn is the one that was stored.
-   */
+  /** Open a past route again: the same stops, on the map, with their facts — what the history row promised. */
   const restoreFromHistory = (entry: RouteHistoryEntry) => {
     const restored: Waypoint[] = entry.places.map((p, i) => ({
       id: i.toString(),
@@ -840,7 +686,6 @@ export const Sidebar = ({
             blurb: p.blurb ?? null,
             funFact: p.funFact ?? null,
             funFacts: p.funFacts ?? [],
-            // A restored route shows the same picture it showed when it was built.
             photo: p.photo ?? null,
             links: p.links ?? [],
             visitMinutes: p.visitMinutes ?? null,
@@ -857,15 +702,7 @@ export const Sidebar = ({
     refetchDirections();
   };
 
-  /**
-   * Show a ready-made route on the map.
-   *
-   * The stops are real places from the dataset, so this is a plain hand-over:
-   * waypoints and their facts go into the store and the router draws the line.
-   * No request to the model — that is the point of the tab. The transport comes
-   * from the itinerary, the time budget is left exactly as the tourist set it
-   * (a curated «осмотр» figure is not a budget they chose).
-   */
+  /** Show a ready-made route on the map. */
   const openItinerary = (itinerary: Itinerary) => {
     const stops = itinerary.stops;
     const restored: Waypoint[] = stops.map((stop, i) => ({
@@ -884,15 +721,11 @@ export const Sidebar = ({
         },
       ],
     }));
-    // replan=false: the router is called once below, with the new stops.
     setTransportEverywhere(itinerary.transport, false);
     const next = me
       ? [meWaypoint(me.lat, me.lon, t('sidebar.ui.myLocation')), ...restored]
       : restored;
     setWaypoint(next);
-    // A ready-made route is still a route someone may walk, and a walk needs a
-    // history entry to attach to — without this, «пройдено» would be missing for
-    // exactly the routes most people take.
     addToHistory({
       query: itinerary.title,
       timeBudget: itinerary.visit_minutes,
@@ -942,18 +775,12 @@ export const Sidebar = ({
     abortRef.current = controller;
     setBusy(true);
     setStage('requesting');
-    // A fresh id per attempt: the pipeline reports under it, and a stale id from
-    // a previous request must never colour this one's progress.
     const requestProgressId = newProgressId();
     setProgressId(requestProgressId);
     setStatus(null);
     setSummary(null);
     setVerdict(null);
 
-    // A fresh position wins over the cached one; the position already stored as
-    // waypoint 0 is usable even when a previous attempt failed, because the map
-    // button may have found it in the meantime. Only then, and only if the
-    // browser has not refused us, do we ask again.
     let origin = me ?? storedMeCoords(useDirectionsStore.getState().waypoints);
     if (!origin && geoState !== 'denied') {
       origin = await locateMe(true);
@@ -965,8 +792,6 @@ export const Sidebar = ({
         time_budget_minutes?: number;
         profile?: string;
         origin?: { lat: number; lon: number };
-        // Explicit filters (spec 002) — each one is present only when the
-        // tourist actually chose it; an absent field means "no constraint".
         party_adults?: number;
         party_children?: number;
         party_children_ages?: number[];
@@ -998,31 +823,21 @@ export const Sidebar = ({
       if (chosen?.costing) body.profile = chosen.costing;
       if (origin) body.origin = origin;
 
-      // Party: counts only, and ages only when they were typed. «не указано»
-      // (null) sends nothing rather than inventing a group.
       if (partyAdults != null) body.party_adults = partyAdults;
       if (partyChildren != null) body.party_children = partyChildren;
       if (childrenAges.length > 0) body.party_children_ages = childrenAges;
       if (hardServices.length > 0) body.hard_services = hardServices;
       if (interestCodes.length > 0) body.interests = interestCodes;
       if (avoid.length > 0) body.avoid = avoid;
-      // «маршрут» is the backend default: only a catalogue changes the answer.
       if (resultMode === 'catalogue') body.result_mode = resultMode;
       if (roundTrip) body.round_trip = true;
 
-      // Second and later turns are refinements: the agent receives the route as
-      // it stands — stops, hand-pinned flags, hand-deleted ids — plus the delta
-      // text, so «добавь кофейню» rebuilds on top of the current route instead
-      // of starting over. Snapshot first: that is what «отменить уточнение»
-      // rolls back to.
       const prior = useDirectionsStore.getState();
       const basePoints = prior.waypoints
         .map((wp) => {
           const geo =
             wp.geocodeResults.find((g) => g.selected) ?? wp.geocodeResults[0];
           if (!geo) return null;
-          // Older saved routes carry only displaylnglat; skip anything without
-          // usable coordinates rather than sending NaN to the agent.
           const [lon, lat] = geo.sourcelnglat ?? geo.displaylnglat ?? [];
           if (lat === undefined || lon === undefined) return null;
           const isMe = wp.id === ME_WAYPOINT_ID;
@@ -1031,7 +846,6 @@ export const Sidebar = ({
             name: wp.userInput || geo.title || t('sidebar.waypoints.unnamed'),
             lat,
             lon,
-            // A stop the user placed by hand (no placeId) survives any refine.
             pinned: wp.pinned ?? (!isMe && wp.placeId == null),
             source: (isMe ? 'mine' : wp.placeId == null ? 'user' : 'agent') as
               | 'agent'
@@ -1050,41 +864,28 @@ export const Sidebar = ({
           base_points: basePoints,
         };
       }
-      // One run per topic: a refinement continues the current session, a first
-      // query on a cleared route opens a new one. The agent forwards this to
-      // Langfuse, so a run reads as one thread rather than separate traces.
       body.session_id = isRefinement ? currentRunSession() : startRunSession();
 
       const r = await fetch(`${AGENT_URL}/routes/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
-        // Cancel is real: the request is aborted, not just visually dismissed.
         signal: controller.signal,
       });
       if (!r.ok) {
-        // A 404 here means the app is talking to the wrong server, not that
-        // nothing was found — say that instead of blaming the query.
         throw new Error(agentErrorMessage(r.status));
       }
       const data = (await r.json()) as AgentRouteResponse;
-      // An infeasible plan carries no points at all, so the honest answer is
-      // the verdict — which requirements failed and why — not the generic
-      // "fewer than 2 places found": the tourist needs the reason, not a count.
-      // The query stays in the field so it can be adjusted and sent again.
       if (data.status === 'infeasible') {
         setVerdict(data);
         return;
       }
-      // A degraded plan still has a route; the verdict rides along with it.
       if (data.status === 'degraded') setVerdict(data);
       const pts = data.points ?? [];
       if (pts.length < 2) {
         throw new Error(t('sidebar.status.fewPlaces'));
       }
 
-      // The agent tells us which transport it planned for; adopt it (unless the
-      // tourist picked one) so the map's own line uses the same costing.
       if (!transportRef.current && data.costing) {
         const match = buildTransportOptions(t).find(
           (o) => o.costing === data.costing
@@ -1113,7 +914,6 @@ export const Sidebar = ({
       }));
       setWaypoint([...start, ...placeWaypoints]);
 
-      // The map reads blurb / fun facts from here when a marker is clicked.
       setPlaceDetails(
         Object.fromEntries(
           pts.map((p) => [
@@ -1135,10 +935,6 @@ export const Sidebar = ({
           ])
         )
       );
-      // The plan has arrived and the line is still being drawn: both facts are
-      // observable client-side, so both may be stated. The promise is awaited
-      // at the end of this block so «рисую маршрут» stays on screen exactly as
-      // long as the line is missing.
       setStage('drawing');
       const drawing = refetchDirections();
 
@@ -1161,8 +957,6 @@ export const Sidebar = ({
       addToHistory({
         query: q,
         timeBudget: data.budget?.budget_minutes ?? timeBudget,
-        // The route's fingerprint, so the guide (which walks these very stops)
-        // can find this entry later and record what was actually walked.
         routeKey: walkKey([...start, ...placeWaypoints]),
         places: pts.map((p) => ({
           id: p.id,
@@ -1183,8 +977,6 @@ export const Sidebar = ({
         })),
       });
 
-      // Tell the user what the refinement actually changed — a silent swap is
-      // what makes a replanned route feel random.
       if (isRefinement) {
         const beforeIds = new Set(
           prior.waypoints
@@ -1210,8 +1002,6 @@ export const Sidebar = ({
         });
       }
 
-      // Non-blocking: the route stands; only say the toilet ask could not be met.
-      // Either the text asked for it or the tourist marked «туалет» обязательным.
       if (
         (queryAsksForToilet(q) || hardServices.includes('туалет')) &&
         !pts.some((p) => p.category === 'туалет')
@@ -1220,10 +1010,8 @@ export const Sidebar = ({
       }
 
       setQuery('');
-      // Hold the panel's «рисую маршрут» status until the line is on the map.
       await drawing;
     } catch (e) {
-      // The tourist's own cancel is not a failure and leaves the route alone.
       if (isAbortError(e)) {
         setStatus({ kind: 'ok', text: requestCancelled(t) });
       } else {
@@ -1235,7 +1023,6 @@ export const Sidebar = ({
     }
   };
 
-  // Re-run the last query as-is: the body picks up the current transport/budget.
   replanRef.current = () => {
     const q = lastQueryRef.current;
     if (q) void submitPrompt(q);
@@ -1300,8 +1087,6 @@ export const Sidebar = ({
     }
   };
 
-  // The guide walks the same stops the planner built (the «моё местоположение»
-  // start is not a stop).
   const guideStops = useMemo<GuideStop[]>(
     () =>
       waypoints
@@ -1332,19 +1117,9 @@ export const Sidebar = ({
     [waypoints, placeDetails, t]
   );
 
-  // Guide mode is worth offering only when there is something to walk: two
-  // stops is the minimum that makes a route. The guide itself explains the
-  // empty case, but the panel should not dangle the action before then.
   const canGuide = guideStops.length >= 2;
 
-  /**
-   * Keep the route's history entry in step with the walk.
-   *
-   * The guide reports progress; this is what turns it into «пройдено 3 из 5» in
-   * the history, where it is still true after the guide is closed. Identical
-   * progress is not written twice (the guide re-reports on every render of its
-   * progress), and a route with fewer than two stops has no entry to mark.
-   */
+  /** Keep the route's history entry in step with the walk. */
   const lastWalkedRef = useRef('');
   const handleWalked = useCallback(
     ({ visited, total }: { visited: number; total: number }) => {
@@ -1386,29 +1161,10 @@ export const Sidebar = ({
     }
   }, [geoState, geoReason, t]);
 
-  // The guide is a mode of the whole app, not just of the panel: while it runs
-  // the map follows the walk (see the map's navigator effect). That only works
-  // if the map can see the mode.
   useEffect(() => {
     setGuidingStore(guiding);
   }, [guiding, setGuidingStore]);
 
-  // The map's own overlays (the route-line pill, the planner entry) are siblings
-  // of the panel, not children, so the `--panel-width` set on the panel below
-  // never reached them: they stayed at left-4 and were drawn on top of the
-  // panel. Publish the width where both sides can read it, and 0 while the
-  // panel is closed so the map keeps its full width.
-  //
-  // Zero in the two cases where there is no column on the left to reserve:
-  //
-  // * **on a phone** the panel is a sheet across the bottom edge, so a 420px
-  //   left reservation pushed the navigating camera (which pads by this number)
-  //   half a screen off centre;
-  // * **while guiding** the desktop column hides itself outright (see
-  //   GUIDE_SHEET_CLASS below), and a non-zero width left the map, the camera
-  //   and the whole navigation HUD reserving 420px of screen for a panel that
-  //   is not drawn — measured: an empty band down the left and the tourist's own
-  //   dot 210px right of the centre of a 1440px display.
   useEffect(() => {
     const root = document.documentElement;
     const publish = () => {
@@ -1424,22 +1180,11 @@ export const Sidebar = ({
     };
   }, [panelOpen, panel.width, guiding]);
 
-  // Same door for the sheet's HEIGHT, and for the same reason: the map's
-  // floating controls are siblings of the sheet, so they cannot see how tall it
-  // is and sat behind it on a phone. The number here must stay in step with the
-  // classes above — a mobile viewport is the only place it is non-zero, because
-  // from md up the panel is a column and covers nothing.
   useEffect(() => {
-    // The mobile shell publishes the height itself (it owns the geometry), so
-    // two writers never fight over the same custom property.
     if (!publishSheetHeight) return;
     const root = document.documentElement;
     const publish = () => {
-      // An innerWidth check, not matchMedia: jsdom has no matchMedia, and the
-      // unguarded call threw inside this effect — every Sidebar test failed at
-      // once. 768 is Tailwind's `md`, the breakpoint the sheet classes use.
       const mobile = window.innerWidth < 768;
-      // Same three positions the mobile shell uses, guide strip included.
       const height = !mobile
         ? '0px'
         : guiding && snap === 'peek'
@@ -1459,9 +1204,6 @@ export const Sidebar = ({
 
   const content = (
     <div className="flex h-full min-h-0 flex-col">
-      {/* First in the DOM, so the query field is the panel's first tab
-              stop — the tourist lands on the thing the panel is for, not on the
-              close button. `order-2` keeps it visually under the header. */}
       {!guiding && mode === 'plan' && (
         <section className="order-2 shrink-0 border-b border-border px-4 pb-3 pt-3 max-md:px-3 max-md:pb-1.5 max-md:pt-1.5">
           <div className="rounded-2xl border border-border bg-card px-3 py-2.5 shadow-card transition-colors focus-within:border-ring max-md:py-1.5">
@@ -1493,13 +1235,6 @@ export const Sidebar = ({
           <div
             role="group"
             aria-label={t('sidebar.plan.hintsAria')}
-            // Mobile: ONE scrolling row. Measured at 390x844 the five chips
-            // (44px each, the touch minimum) wrapped into five lines and ate
-            // 244px of the 380px sheet — the scroll body was squeezed to 36px
-            // and the sticky footer with «Построить» was pushed out of the
-            // sheet entirely, i.e. the panel's main action was unreachable
-            // without dragging the sheet open. A row of examples does not
-            // deserve a third of the screen; `md` keeps the wrapping grid.
             className="mt-2 flex gap-1.5 max-md:flex-nowrap max-md:overflow-x-auto max-md:pb-0.5 md:flex-wrap"
           >
             {hints.map((hint) => (
@@ -1519,9 +1254,6 @@ export const Sidebar = ({
         </section>
       )}
 
-      {/* Planning and browsing keep the tab strip and title.
-              While guiding, the sheet only keeps its grab handle; navigation
-              actions live with the HUD instead of in a second red footer bar. */}
       <header
         className={cn(
           'order-1 shrink-0 border-b border-border px-4 pb-2.5 max-md:px-3 max-md:pb-1.5',
@@ -1542,9 +1274,6 @@ export const Sidebar = ({
                 className="min-w-0 flex-1"
                 testId={(value) => `mode-${value}`}
               />
-              {/* No ✕ here: the panel is opened and closed by its own handle
-                      on the map's left edge — one control for one thing, and it
-                      cannot fall out of step with the panel's state. */}
               <LanguageSwitcher className="shrink-0" />
             </div>
             <div className="mt-2.5 flex min-w-0 items-center gap-2 max-md:mt-1">
@@ -1553,16 +1282,9 @@ export const Sidebar = ({
                 aria-hidden="true"
               />
               <div className="min-w-0">
-                {/* sr-only on a phone, like the description: the tab strip
-                        right above already says where you are, and the title row
-                        costs 46px of the sheet's 422px. Kept in the a11y tree —
-                        it is the dialog's name. */}
                 <SheetTitle className="truncate text-body max-md:sr-only">
                   {t('app.title')}
                 </SheetTitle>
-                {/* Radix wants a description for the dialog; the visible
-                        line below is the same sentence, so keep it out of the
-                        a11y tree. */}
                 <SheetDescription className="sr-only">
                   {t('app.description')}
                 </SheetDescription>
@@ -1575,12 +1297,7 @@ export const Sidebar = ({
         )}
       </header>
 
-      {/* The only part that scrolls. */}
       <div className="slim-scroll order-3 flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 pb-6 pt-3 max-md:px-3 max-md:pb-4">
-        {/* When guiding, the HUD (FerrostarNavigationHud inside GuidePanel)
-            owns the whole navigation screen. The sidebar body still renders
-            GuidePanel so the HUD appears, but the panel itself is hidden
-            by GUIDE_SHEET_CLASS so only the strip is visible. */}
         {guiding ? (
           <GuidePanel
             key={guideRouteKey(guideStops)}
@@ -1618,8 +1335,6 @@ export const Sidebar = ({
           />
         ) : (
           <>
-            {/* Constraints: time + transport. Both are the user's call —
-                    nothing is invented for them. */}
             <section className="flex flex-col gap-2.5">
               <div className="flex flex-col gap-1.5">
                 <span
@@ -1685,8 +1400,6 @@ export const Sidebar = ({
                 </span>
               </button>
 
-              {/* Progressive disclosure (spec 002): the two controls above
-                      are always visible; everything else waits behind this. */}
               <button
                 type="button"
                 data-testid="more-filters"
@@ -1717,8 +1430,6 @@ export const Sidebar = ({
                 />
               </button>
 
-              {/* The summary is always visible once anything is chosen, so
-                      no condition is applied invisibly. */}
               {filterSummary.length > 0 && (
                 <div
                   data-testid="filters-summary"
@@ -1751,7 +1462,6 @@ export const Sidebar = ({
                   data-testid="advanced-filters"
                   className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-3"
                 >
-                  {/* Party: counts, plus ages only when they were typed. */}
                   <MobileSection
                     id="party"
                     title={t('sidebar.plan.partyLabel')}
@@ -1797,7 +1507,6 @@ export const Sidebar = ({
                     </div>
                   </MobileSection>
 
-                  {/* Amenities, each «обязательно» or «желательно». */}
                   <MobileSection
                     id="amenities"
                     title={t('sidebar.plan.amenities')}
@@ -1833,7 +1542,6 @@ export const Sidebar = ({
                     </div>
                   </MobileSection>
 
-                  {/* Themes: soft by nature, they never force a detour. */}
                   <MobileSection
                     id="interests"
                     title={t('sidebar.plan.interests')}
@@ -1880,7 +1588,6 @@ export const Sidebar = ({
                     </div>
                   </MobileSection>
 
-                  {/* What to return, and whether to come back to the start. */}
                   <MobileSection
                     id="result-type"
                     title={t('sidebar.plan.resultType')}
@@ -1920,10 +1627,6 @@ export const Sidebar = ({
             </section>
 
             <section className="flex flex-col gap-2.5">
-              {/* The plan's own verdict, above the stops: for a degraded plan
-                      it heads the summary it qualifies, and for an infeasible
-                      one it shows at all precisely because there is no route —
-                      that is when the tourist most needs to hear why. */}
               <PlanVerdict response={verdict} />
               {hasRoute && (
                 <div className="flex items-center justify-between gap-2">
@@ -1945,8 +1648,6 @@ export const Sidebar = ({
               {summary ? (
                 <>
                   <StatTiles>
-                    {/* The tile inflects the noun itself: «2 точки», not
-                            «2 точек» — the count is right there. */}
                     <StatTile
                       value={summary.stops}
                       count={summary.stops}
@@ -1996,8 +1697,6 @@ export const Sidebar = ({
               ) : hasRoute ? (
                 <WaypointList onChanged={() => setStatus(null)} />
               ) : (
-                /* Never a bare blank panel: say what to do instead. The hint
-                       chips under the ask field are the empty state's chips. */
                 <div
                   data-testid="plan-empty"
                   className="flex flex-col items-center gap-2 rounded-2xl border border-border bg-card px-4 py-7 text-center"
@@ -2034,9 +1733,6 @@ export const Sidebar = ({
                 </div>
               )}
 
-              {/* What the refinement turns changed, and the two ways out of
-                      them. Stays visible for the whole route, not just while
-                      there is a log: the manual deletions outlive it. */}
               {hasRoute && (
                 <div className="flex flex-col gap-2 rounded-2xl border border-border bg-card p-3">
                   {(refinementLog.length > 0 ||
@@ -2187,15 +1883,8 @@ export const Sidebar = ({
         )}
       </div>
 
-      {/* The one action the panel exists for. Outside the scroll area, so it is
-              reachable at either snap point. The guide brings its own actions, so
-              the footer steps out of its way. */}
       {!guiding && mode === 'plan' && (
         <footer className="order-4 shrink-0 border-t border-border bg-background px-4 py-3 max-md:px-3 max-md:pt-1.5 max-md:pb-[calc(env(safe-area-inset-bottom)+0.375rem)]">
-          {/* Honest waiting: only what the client can observe — the request
-                  is in flight, or the plan has arrived and the line is being
-                  drawn — plus the seconds that have passed and a real cancel.
-                  No invented stages, and no bare spinner for 23 seconds. */}
           {busy && (
             <div
               role="status"
@@ -2237,9 +1926,6 @@ export const Sidebar = ({
               )}
             </div>
           )}
-          {/* Entering the guide is its own, louder action: walking a route
-                  is a different activity from planning one, and in a navigator
-                  it is a button you press once, not a tab you visit. */}
           {canGuide && (
             <Button
               type="button"
@@ -2258,8 +1944,6 @@ export const Sidebar = ({
             disabled={busy || !query.trim()}
             className={cn(
               'h-12 w-full rounded-xl text-body font-semibold transition hover:brightness-[0.97] active:scale-[0.99] motion-reduce:active:scale-100 disabled:opacity-40',
-              // With a route in hand, starting it is the hero action — the
-              // build button steps back to the quieter style.
               canGuide
                 ? 'bg-secondary text-secondary-foreground'
                 : 'bg-primary text-primary-foreground'
@@ -2275,8 +1959,6 @@ export const Sidebar = ({
     </div>
   );
 
-  // The mobile shell owns the sheet (geometry, position, drag handle), so the
-  // panel renders its contents only and the caller wraps them.
   if (bare) return content;
 
   return (
@@ -2285,25 +1967,11 @@ export const Sidebar = ({
         side="left"
         className={cn(
           PANEL_SHEET_CLASS,
-          // While walking, the sheet is a strip and the map is the navigator;
-          // a drag to 'full' still opens everything.
-          // While walking, the navigator IS the screen: the panel would be an
-          // empty 420px column (its body renders nothing but the portaled HUD),
-          // so from md up it is hidden outright and the map keeps the whole
-          // viewport. On a phone it stays as a handle-only strip; navigation
-          // actions are part of the HUD.
-          //
-          // Hidden, never unmounted: Radix `Presence` tears the content down on
-          // `open={false}`, and the HUD is a portal *from* this subtree, so an
-          // unmount takes the navigator with it.
           guiding ? GUIDE_SHEET_CLASS : SHEET_SNAP_CLASS[snap]
         )}
         style={{ '--panel-width': `${panel.width}px` } as CSSProperties}
       >
         {content}
-        {/* Last in the DOM on purpose: it is positioned absolutely on the right
-            edge, and the panel's first tab stop must stay the query field —
-            not a resize handle. */}
         <PanelResizeHandle
           width={panel.width}
           resizing={panel.resizing}
@@ -2325,11 +1993,7 @@ interface StepperProps {
   onChange: (next: number | null) => void;
 }
 
-/**
- * A small −/+ stepper for a party count. It starts unset («—»): a number the
- * tourist never picked must not go to the agent, and stepping one below the
- * minimum clears the field instead of inventing a 0-person group.
- */
+/** A small −/+ stepper for a party count. */
 const Stepper = ({
   label,
   testId,

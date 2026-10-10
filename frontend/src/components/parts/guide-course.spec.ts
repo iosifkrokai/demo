@@ -42,8 +42,6 @@ describe('курс вдоль маршрута', () => {
   });
 
   it('на повороте курс берётся с участка, до которого дошёл турист', () => {
-    // L-shaped route: east first, then north. It reads the segment the
-    // tourist is on, not the start of the line.
     const line: CourseLine = {
       points: [
         { lat: 53.7, lon: 23.8 },
@@ -53,8 +51,8 @@ describe('курс вдоль маршрута', () => {
       cum: [0, 669, 1781],
     };
 
-    close(courseAlongLine(line, 100), 90); // still on the east segment
-    close(courseAlongLine(line, 1000), 0); // now on the north one
+    close(courseAlongLine(line, 100), 90);
+    close(courseAlongLine(line, 1000), 0);
   });
 
   it('без линии курса нет — и карта не выдумывает поворот', () => {
@@ -65,8 +63,6 @@ describe('курс вдоль маршрута', () => {
   });
 
   it('курс можно найти по точке: «по курсу» работает ещё до первого хода', () => {
-    // A line from east to north: the tourist's point is somewhere on it, there
-    // is no progress yet (traveled = 0), but the course must still exist.
     const line: CourseLine = {
       points: [
         { lat: 53.7, lon: 23.8 },
@@ -76,11 +72,8 @@ describe('курс вдоль маршрута', () => {
       cum: [0, 669, 1781],
     };
 
-    // Tourist on the east segment → course east.
     close(courseAtPoint(line, 53.7, 23.805), 90);
-    // Tourist already on the north segment → course north.
     close(courseAtPoint(line, 53.705, 23.81), 0);
-    // Off to the side of the line — the nearest segment is taken, not a random one.
     close(courseAtPoint(line, 53.7005, 23.804), 90);
   });
 

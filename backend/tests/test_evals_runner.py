@@ -1,14 +1,6 @@
 """The stage-eval runner itself: it must not lie about its own results.
 
-Pins three things that make the numbers trustworthy:
-
-  * a case file with a broken line is a loud error, not a silently skipped case
-    (a case that disappears lowers the denominator and raises the score);
-  * a documented gap (`known_gap`) is reported but neither counted as a failure
-    nor turned into a non-zero exit code — the gate and the printed rate must
-    agree;
-  * the offline stages actually run here and pass, so a change that breaks the
-    verifier or the along-the-line measurement is caught by `pytest tests -q`.
+A broken case file is loud, and a documented gap is reported but never fails.
 """
 
 from __future__ import annotations
@@ -56,7 +48,7 @@ def test_the_offline_stages_pass_here():
     results = [evals.run_verdicts(), evals.run_services()]
     for res in results:
         if res.get("skipped"):
-            continue  # without a DB the stage is skipped, not "passed"
+            continue
         failed = [
             c for c in res["checks"] if not c["ok"] and not c.get("known_gap")
         ]

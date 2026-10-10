@@ -26,13 +26,7 @@ const EMPTY: ServicesAlongResult = {
   capped: false,
 };
 
-/**
- * The GeoJSON line the tourist is walking, from the geometry already on screen.
- *
- * `decodedGeometry` is [lat, lon] (see `route-lines.tsx`); GeoJSON wants
- * [lon, lat], and mixing the two up would put every café in the wrong country —
- * so the swap happens once, here, and offline tests pin it.
- */
+/** The GeoJSON line the tourist is walking, from the geometry already on screen. */
 export const lineFromGeometry = (
   data: ParsedDirectionsGeometry | null | undefined
 ): { type: 'LineString'; coordinates: [number, number][] } | null => {
@@ -46,22 +40,12 @@ export const lineFromGeometry = (
   };
 };
 
-/**
- * Secondary points beside the route: cafés, toilets, hotels along the way.
- *
- * Fetched only when asked for (`enabled`) and only when there is a line to
- * measure against. A failure is a state of its own (`unavailable`), never an
- * empty list — «не удалось проверить» and «рядом ничего нет» are different
- * things, and showing the second when the first is true would be a lie.
- */
+/** Secondary points beside the route: cafés, toilets, hotels along the way. */
 export const useServicesAlong = (
   data: ParsedDirectionsGeometry | null | undefined,
   { enabled, profile = 'pedestrian' }: { enabled: boolean; profile?: string }
 ): ServicesAlongResult => {
   const shape = useMemo(() => lineFromGeometry(data), [data]);
-  // Depend on the line's *content*, never on object identity: a parent that
-  // rebuilds an equal geometry on every render must not restart the request
-  // (and must certainly not loop: setResult → render → new object → effect …).
   const key = useMemo(() => (shape ? JSON.stringify(shape) : null), [shape]);
   const shapeRef = useRef(shape);
   const [result, setResult] = useState<ServicesAlongResult>(EMPTY);

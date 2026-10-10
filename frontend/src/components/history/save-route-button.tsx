@@ -1,12 +1,4 @@
-/**
- * «сохранить маршрут» — the one explicit action that saves (spec 003 §4).
- *
- * Nothing else in this feature saves a route: mounting this button saves
- * nothing, and a finished plan is not collected in the background. The tourist
- * clicks, optionally names the route, and hears the truth about where it went:
- * on the server, or — when storage is unavailable — only in this browser, said
- * in as many words. A failed save never shows «сохранён».
- */
+/** «сохранить маршрут» — the one explicit action that saves. */
 
 import { Bookmark, Check, TriangleAlert } from 'lucide-react';
 import { useState } from 'react';
@@ -47,7 +39,6 @@ export const SaveRouteButton = ({
       return;
     }
     if (outcome.storage === 'local') {
-      // `outcome.message` already says saving is unavailable; do not repeat it.
       setFeedback({ status: 'local', message: outcome.message });
       return;
     }

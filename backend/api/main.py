@@ -1,18 +1,6 @@
 """FastAPI agent: turns free-text Russian queries into pedestrian walking routes.
 
-The HTTP layer is deliberately thin: every business decision lives in
-agent.planner.pipeline.Pipeline (one orchestrator class). Endpoints:
-
-    GET  /health              liveness + readiness snapshot (db/llm/valhalla)
-    POST /routes/generate     body: GenerateReq  -> RouteResponse
-    POST /routes/reroute      body: RerouteReq   -> RouteResponse
-    POST /routes/explain      body: ExplainReq   -> {explanation: str}
-
-Embeddings and the interpretation agent come from OpenRouter through a single
-OPENROUTER_API_KEY.  With no key — or an upstream that times out — the
-planner degrades to keyword-only retrieval and the deterministic interpretation
-instead of failing; see agent/planner/pipeline.py.  `_call` maps the planner's
-own AgentError onto HTTP and never turns a degraded upstream into a bare 500.
+The HTTP layer is thin; business decisions live in agent.planner.pipeline.Pipeline.
 """
 
 from __future__ import annotations
@@ -59,11 +47,8 @@ log = logging.getLogger(__name__)
 async def lifespan(_: FastAPI):
     db = psycopg.connect(settings.DSN, autocommit=True)
     with db.cursor() as cur:
-        # trigram similarity threshold for the keyword search fallback
-        # (store/search.py); mirrors db/migrations/0003_trgm_search.sql
         cur.execute("SET pg_trgm.word_similarity_threshold = 0.45")
     app.state.planner = Pipeline(db=db)
-    # Warm the local embedding model so the first request does not pay the load.
     embeddings.embed_query("warmup")
     log.info("agent ready (embeddings=%s local, interpret=%s, key=%s)",
              embeddings.MODEL_NAME, DEFAULT_MODEL,
@@ -82,8 +67,6 @@ async def lifespan(_: FastAPI):
 app = FastAPI(title="grodno-poc-agent", lifespan=lifespan)
 
 app.include_router(clients_api.router)
-# Accounts, roles, visits and the admin panel (spec 005) — one router, so the
-# whole capability is wired in here.
 app.include_router(accounts_api.router)
 
 app.add_middleware(
@@ -96,16 +79,8 @@ app.add_middleware(
         "http://127.0.0.1:3000",
         "http://host.docker.internal",
     ],
-    # Sessions live in a cookie, so a credentialed cross-origin call (a remote
-    # VITE_AGENT_URL) must be allowed to carry it. Same-origin — the demo's own
-    # nginx — needs no CORS at all; this only widens the door for the listed
-    # origins, never to "*" (which the browser rejects together with credentials).
     allow_credentials=True,
     allow_methods=["POST", "GET", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    # X-Client-Id carries the anonymous client id the /clients/* routes read and
-    # /auth/register adopts; a preflight that does not allow it makes the client
-    # entity unreachable from a browser talking to the agent directly (nginx
-    # already allows it).
     allow_headers=["Content-Type", "X-Client-Id", "Authorization"],
 )
 
@@ -113,10 +88,7 @@ app.add_middleware(
 def _call(fn: Callable[[], Any], **kwargs: Any) -> Any:
     """Run a planner call and map its failures onto HTTP.
 
-    AgentError carries the status the planner chose (404 / 422 / 503).  Any
-    other failure is a real bug and stays a 500 — the interpretation agent and
-    its OpenRouter calls degrade internally (planner/agent_interpret.py returns
-    None), so an upstream outage must never reach the client as a 5xx from here.
+    AgentError carries the planner's status; any other failure stays a 500.
     """
     try:
         return fn(**kwargs)
@@ -127,23 +99,12 @@ def _call(fn: Callable[[], Any], **kwargs: Any) -> Any:
 def _no_route_response(req: GenerateReq, detail: str) -> RouteResponse:
     """Turn "there is no walk here" into an answer instead of a failed request.
 
-    The planner raises `NoRoutePossible` when nothing it retrieved can be walked
-    together (the sights pool and the services retry both end below two stops).
-    That used to leave as HTTP 422 carrying the optimizer's own English sentence:
-    the client got no plan, no reason code and nothing to render, and a wording
-    the walk cannot serve killed the request outright — the same question asked
-    with one extra clause answered 200. The coverage gate already says "no" this
-    way (an ordinary response with `status="infeasible"`), and this is the same
-    class of no, so it is the same shape: an empty plan, a machine-readable
-    reason in `debug`, and a sentence written for the tourist rather than for
-    whoever reads the logs.
+    Returns an empty plan with `status="infeasible"` and a machine-readable reason.
     """
     return RouteResponse(
         parsed=ParsedQuery(
             time_budget_minutes=req.time_budget_minutes, source="fallback"
         ),
-        # No stops and no line: nothing was planned, and inventing look-alikes
-        # would be worse than an honest empty answer.
         points=[],
         shape={},
         summary=RouteSummary(length_km=None, time_seconds=None),
@@ -169,11 +130,6 @@ def generate(req: GenerateReq) -> RouteResponse:
         try:
             return app.state.planner.generate(req=req)
         except NoRoutePossible as exc:
-            # Caught before the generic AgentError mapping below, which would
-            # have re-labelled it as a 422 carrying the optimizer's sentence.
-            # ``plan_status``, not ``status``: the second argument to record() is
-            # the step's fate (ok/skipped/error) — a verdict passed there is
-            # swallowed into the level and lost from the trace.
             trace.record(
                 "response",
                 input={"query": req.query, "budget_minutes": req.time_budget_minutes},
@@ -182,11 +138,9 @@ def generate(req: GenerateReq) -> RouteResponse:
             )
             return _no_route_response(req, str(exc))
         except AgentError as exc:
-            # Everything else keeps its own status (404 / 422 / 503): those are
-            # real refusals and upstream outages the client distinguishes.
             trace.record(
                 "response",
-                "error",  # this one really is a failed step, so it is marked red
+                "error",
                 input={"query": req.query, "budget_minutes": req.time_budget_minutes},
                 plan_status="error",
                 reason=type(exc).__name__,
@@ -194,9 +148,6 @@ def generate(req: GenerateReq) -> RouteResponse:
             )
             raise HTTPException(status_code=exc.http_status, detail=str(exc)) from exc
     finally:
-        # The tracker stops being interesting the moment the answer exists — and
-        # on failure too, so a client polling a rejected request is told so
-        # instead of watching a stage freeze.
         progress.finish()
         trace.finish()
 
@@ -205,10 +156,7 @@ def generate(req: GenerateReq) -> RouteResponse:
 def route_trace(trace_id: str) -> dict:
     """The structured spans of one run, for a client that wants them raw.
 
-    The same spans are exported to the self-hosted Langfuse (see trace.py); this
-    endpoint is the machine-readable fallback. An unknown id is a 404 with a
-    reason code, not an empty trace — «этого запуска нет» and «запуск ещё
-    ничего не сделал» are different things.
+    An unknown id is a 404 with a reason code, not an empty trace.
     """
     data = trace.get(trace_id)
     if data is None:
@@ -223,9 +171,7 @@ def route_trace(trace_id: str) -> dict:
 def route_progress(progress_id: str) -> dict:
     """Where the pipeline got to, in stage codes the client localises.
 
-    An unknown id is a 404 with a reason code, not an empty stage: «не знаю, где
-    мы» and «мы на этапе поиска» are different things, and the client falls back
-    to what it can observe itself rather than showing an invented caption.
+    An unknown id is a 404 with a reason code, not an empty stage.
     """
     snapshot = progress.snapshot(progress_id)
     if snapshot is None:
@@ -250,10 +196,7 @@ def explain(req: ExplainReq) -> dict:
 def itineraries() -> dict:
     """Ready-made routes — curated, and resolved against the live dataset.
 
-    No model is involved: the list is authored, and every stop is read from the
-    same places table the planner uses. `missing` names any stop key that no
-    longer resolves, so a shortened route is visible as such instead of passing
-    for a complete one.
+    `missing` names any stop key that no longer resolves.
     """
     try:
         items, missing = itineraries_mod.resolve_itineraries(app.state.planner.db)
@@ -267,9 +210,9 @@ def itineraries() -> dict:
 
 @app.get("/places")
 def places() -> dict:
-    """The full point catalogue — every place in the dataset, for the «все точки»
-    tab. A browse, not a search: no model is involved and nothing is capped by a
-    query, so the tourist can see all of it at once.
+    """The full point catalogue — every place in the dataset, for the «все точки» tab.
+
+    A browse, not a search: no model is involved and nothing is capped by a query.
     """
     return places_mod.list_places(app.state.planner.db)
 
@@ -278,18 +221,8 @@ def places() -> dict:
 def services_along_route(req: ServicesAlongReq) -> dict:
     """Secondary points beside the line: cafés, toilets, hotels — never stops.
 
-    Measured, not guessed: the distance from the line is PostGIS geometry, and
-    the position along the route comes from the same measurement. The walking
-    detour to reach a point is a real Valhalla route and is NOT computed here,
-    so every item carries `detour_confirmed: false` — nobody may print «+2 мин»
-    from this answer.
-
-    A shape that cannot be measured is a 422 with a reason code: an empty list
-    must always mean «измерили, рядом ничего нет».
+    Distance and position are measured; items carry `detour_confirmed: false`.
     """
-    # Traced under a server-minted id: the answer carries no id for the client to
-    # poll, but the span still groups into the same Langfuse session as the
-    # generate that drew the line, through req.session_id.
     trace.begin(uuid.uuid4().hex, session_id=req.session_id)
     try:
         try:
@@ -302,8 +235,6 @@ def services_along_route(req: ServicesAlongReq) -> dict:
                 limit=req.limit or services_mod.MAX_SERVICES,
             )
         except ValueError as exc:
-            # A failed step, so the span is marked as one; the machine reason
-            # rides beside it instead of taking the level's place.
             trace.record(
                 "services",
                 "error",

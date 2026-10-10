@@ -11,12 +11,12 @@ import { cn } from '@/lib/utils';
 interface CoordinateRowProps {
   label: string;
   value: string;
-  /** Text to copy to clipboard. If omitted, no copy button is shown */
+  /** Text to copy to clipboard. */
   copyText?: string;
   icon?: ReactNode;
   isLoading?: boolean;
   copyDisabled?: boolean;
-  /** Base test ID. Generates `${testId}-button` and `${testId}-copy-button` */
+  /** Base test ID. */
   testId?: string;
 }
 

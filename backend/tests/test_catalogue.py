@@ -1,17 +1,6 @@
 """The catalogue: «что показать: каталог» is a list, not a route.
 
-The selector was in the panel and the field in the schema, but nothing branched on
-it — so a catalogue request returned an ordinary walking route. These tests pin the
-implemented contract:
-
-  * the answer carries the matching places and NO geometry (there is no line to
-    draw, and inventing one would be a claim nobody made);
-  * it is not confined to one walkable cluster and not trimmed by a time budget —
-    that is exactly what a catalogue is for;
-  * verification is membership-only, with `*_in_catalogue` reason codes: no chip
-    may say «на маршруте» when no route exists.
-
-No network, no DB.
+A catalogue request carries places and no geometry; verification is membership-only.
 """
 
 from __future__ import annotations
@@ -46,8 +35,6 @@ def _cand(pid: int, name: str, category: str, town: str, relevance: float = 1.0)
 def _reqs(*requirements: Requirement) -> TripRequirements:
     return TripRequirements(requirements=list(requirements))
 
-
-# the verifier
 
 def test_catalogue_satisfies_a_must_visit_by_membership():
     places = [_cand(7, "Старый замок", "замок", "Гродно")]
@@ -97,8 +84,6 @@ def test_catalogue_of_nothing_is_uncertain_not_unmet():
     assert result[0].reason == REASON_ROUTE_MISSING
 
 
-# the response
-
 def _catalogue(candidates: list[Candidate], requirements: TripRequirements):
     pipeline = pipeline_mod.Pipeline(db=object())
     return pipeline._catalogue_response(
@@ -124,10 +109,6 @@ def test_catalogue_response_has_places_and_no_geometry():
     assert response.shape == {}, "a catalogue has no line to draw"
     assert response.budget is None
     assert response.summary.time_seconds is None and response.summary.length_km is None
-    # The mode is stated at the TOP level, not only in debug: the client (and the
-    # golden runner's result_mode check) reads it from the response itself, and an
-    # empty `shape` cannot stand in for it — that also happens on a route whose
-    # geometry Valhalla failed to build.
     assert response.result_mode == "catalogue"
     assert response.debug["result_mode"] == "catalogue"
     assert response.debug["towns"] == ["Гродно", "Лида"]

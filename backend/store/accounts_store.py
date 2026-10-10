@@ -1,26 +1,6 @@
-"""Storage for accounts, sessions, visits and the admin surface (spec 005).
+"""Storage for accounts, sessions, visits and the admin surface.
 
-Same shape as :mod:`store.clients_store`: one repository, one job — persist and
-read, and answer nothing else. It keeps the promises the spec depends on:
-
-* **Degradation is typed, not silent.** A read that finds nothing returns ``None``
-  (or an empty list); Postgres being unreachable or erroring raises
-  :class:`StorageUnavailable`, which the HTTP layer turns into ``503
-  storage_unavailable``. No method returns an empty value to mask an outage.
-
-* **Secrets never come back.** The password hash stays inside this module: it is
-  read only by :meth:`get_user_by_email` (for login) and never selected by any
-  query that feeds an API response. Session rows hold ``sha256(token)``.
-
-* **The curated-category guard is respected, not bypassed blindly.** Editing a
-  place's ``category`` sets ``category_source='curated'`` and opts the current
-  transaction in (``grodno.allow_curated_category_change``), because otherwise the
-  trigger from migration 0004 silently reverts the write.
-
-The place payload itself is not re-invented here: rows are read with the same
-column set the catalogue uses and handed to :func:`store.places.place_payload`, so
-a card printed by the admin panel and one printed by the «все точки» tab cannot
-disagree about the same place.
+Reads return ``None`` on miss; a Postgres failure raises ``StorageUnavailable``.
 """
 
 from __future__ import annotations
@@ -39,23 +19,17 @@ from core.config import settings
 
 log = logging.getLogger(__name__)
 
-#: Everything a place card prints — kept identical to ``agent/places._COLS`` so
-#: ``place_payload`` accepts these rows.
 PLACE_COLS = (
     "id, source_url, name, category, town, district, lat, lon, "
     "visit_minutes, opening_hours, blurb, fun_fact, fun_facts, links, "
     "ticket_price, photo_url, photo_author, photo_license, photo_source"
 )
 
-#: A user row as the API may see it. ``password_hash`` is deliberately absent —
-#: it is selected only by the login lookup, through a separate column list.
 USER_COLS = (
     "id, email, display_name, role, client_id, created_at, updated_at, "
     "last_login_at"
 )
 
-#: Columns a partial update of a place may touch (source_url included: an admin
-#: may correct a wrong provenance link).
 PLACE_WRITE_COLS = (
     "name",
     "lat",
@@ -71,7 +45,6 @@ PLACE_WRITE_COLS = (
     "ticket_price",
 )
 
-#: The in-process default allowed for LIST endpoints, as a backstop, not a view.
 MAX_LIST_LIMIT = 500
 
 
@@ -166,8 +139,7 @@ class AccountRepository(Protocol):
 def default_connect() -> psycopg.Connection:
     """One autocommit connection through the DSN from config.py.
 
-    ``connect_timeout`` is short on purpose: when the database is down the request
-    must fail fast into ``503 storage_unavailable``, not hang.
+    ``connect_timeout`` is short so a down database fails fast into ``503``.
     """
     return psycopg.connect(settings.DSN, autocommit=True, connect_timeout=3)
 
@@ -175,9 +147,7 @@ def default_connect() -> psycopg.Connection:
 class PostgresAccountRepository:
     """An :class:`AccountRepository` backed by Postgres.
 
-    The connection is created lazily and reused; a broken one is dropped and
-    reopened. A lock serialises access, because FastAPI runs sync endpoints in a
-    thread pool and a psycopg connection is not safe to share concurrently.
+    The connection is lazy and reused; a lock serialises concurrent access.
     """
 
     def __init__(
@@ -187,8 +157,6 @@ class PostgresAccountRepository:
         self._connect = connect or default_connect
         self._conn: psycopg.Connection | None = None
         self._lock = threading.Lock()
-
-    # connection plumbing
 
     def _connection(self) -> psycopg.Connection:
         conn = self._conn
@@ -221,9 +189,7 @@ class PostgresAccountRepository:
     def _tx_cursor(self) -> Iterator[Any]:
         """A cursor inside an explicit transaction (needed for ``SET LOCAL``).
 
-        The connection is autocommit, so ``set_config(..., is_local=true)`` would
-        be a no-op outside a transaction — this opens one for the curated-guard
-        opt-in and rolls it back on failure.
+        The connection is autocommit, so ``is_local`` config needs this wrapper.
         """
         try:
             with self._lock:
@@ -239,8 +205,6 @@ class PostgresAccountRepository:
         with self._lock:
             self._drop()
 
-    # users
-
     def create_user(
         self,
         user_id: uuid.UUID,
@@ -253,14 +217,10 @@ class PostgresAccountRepository:
     ) -> dict[str, Any]:
         """Insert an account. Raises :class:`EmailTaken` on a duplicate address.
 
-        The anonymous client is adopted only when it exists and is not already
-        owned by someone else — a registration never steals another account's
-        client, and never fails because of it.
+        An anonymous client is adopted only when nobody else already owns it.
         """
         with self._cursor() as cur:
             if client_id is not None:
-                # The clients row may not exist yet (the browser minted the id but
-                # never saved anything), and the FK below requires it.
                 cur.execute(
                     """
                     INSERT INTO clients (id, created_at, last_seen_at)
@@ -273,7 +233,7 @@ class PostgresAccountRepository:
                     "SELECT 1 FROM users WHERE client_id = %s", (client_id,)
                 )
                 if cur.fetchone() is not None:
-                    client_id = None  # already adopted elsewhere
+                    client_id = None
             try:
                 cur.execute(
                     f"""
@@ -346,8 +306,6 @@ class PostgresAccountRepository:
                 "UPDATE users SET last_login_at = now() WHERE id = %s", (user_id,)
             )
 
-    # sessions
-
     def create_session(
         self, token_hash: str, user_id: uuid.UUID, expires_at: Any
     ) -> None:
@@ -380,8 +338,6 @@ class PostgresAccountRepository:
             cur.execute(
                 "DELETE FROM user_sessions WHERE token_hash = %s", (token_hash,)
             )
-
-    # admin: users
 
     def list_users(
         self, *, q: str = "", limit: int = 50, offset: int = 0
@@ -449,8 +405,6 @@ class PostgresAccountRepository:
             cur.execute("DELETE FROM users WHERE id = %s", (user_id,))
             return cur.rowcount > 0
 
-    # visits
-
     def list_visited(self, user_id: uuid.UUID) -> list[dict[str, Any]]:
         place_cols = ", ".join(
             f"p.{c.strip()}" for c in PLACE_COLS.split(",")
@@ -517,8 +471,6 @@ class PostgresAccountRepository:
             )
             return cur.rowcount > 0
 
-    # admin: places
-
     def list_places(
         self, *, q: str = "", category: str = "", limit: int = 50, offset: int = 0
     ) -> tuple[list[dict[str, Any]], int]:
@@ -549,8 +501,6 @@ class PostgresAccountRepository:
 
     def create_place(self, fields: dict[str, Any]) -> dict[str, Any]:
         cols = [c for c in PLACE_WRITE_COLS if c in fields]
-        # A category authored by an admin is theirs: mark it curated so the guard
-        # from migration 0004 protects it from later dataset writes.
         extra_cols = ["category_source"] if "category" in cols else []
         values_sql = ", ".join(["%s"] * (len(cols) + len(extra_cols)))
         params = [fields[c] for c in cols]
@@ -577,8 +527,6 @@ class PostgresAccountRepository:
         sets = [f"{c} = %s" for c in cols]
         params: list[Any] = [fields[c] for c in cols]
         if "category" in cols:
-            # Curated wins over the dataset; record that and opt this transaction
-            # into the guard, or the trigger below silently reverts the change.
             sets.append("category_source = 'curated'")
         params.append(place_id)
         with self._tx_cursor() as cur:
@@ -602,8 +550,6 @@ class PostgresAccountRepository:
         with self._cursor() as cur:
             cur.execute("DELETE FROM places WHERE id = %s", (place_id,))
             return cur.rowcount > 0
-
-    # dashboard
 
     def stats(self) -> dict[str, int]:
         with self._cursor() as cur:

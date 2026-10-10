@@ -1,28 +1,4 @@
-"""Step 7b — Independent requirement verifier.
-
-``verify(requirements, plan, geometry)`` takes the *built* route and decides,
-per requirement, one of four fates:
-
-  * ``satisfied`` — a real place on the route (and a real geometry) proves it;
-                    the proving ``place_ids`` are listed.
-  * ``unmet``     — the data exists (a named place, a category the domain knows)
-                    but the route does not honour the requirement.
-  * ``uncertain`` — the data needed to decide does not exist (no geometry from
-                    Valhalla, an unknown category code, an empty route). Never
-                    reported as satisfied.
-  * ``pending``   — verify() has not run for this requirement.
-
-The verifier is deliberately independent from the optimizer: it re-reads the
-final route and the Valhalla geometry, it never trusts the optimizer's claim
-that a hard condition was met. An LLM may propose the meaning of a requirement
-and may re-plan after a failure, but it cannot overrule ``unmet``.
-
-Reasons are MACHINE STRINGS (``must_visit_absent``, ``hard_service_absent``,
-``geometry_missing`` …); the API/UI layer localizes them. Nothing here returns
-a Russian sentence.
-
-Owned by workstream W3 — see docs/specs/002-grodno-guide-rebuild/tasks.md.
-"""
+"""Step 7b — Independent requirement verifier."""
 
 from __future__ import annotations
 
@@ -46,24 +22,15 @@ __all__ = [
     "verify_summary",
 ]
 
-# Machine-readable reason codes
-# Localization happens in the API layer; these strings are the contract.
 
 REASON_MUST_VISIT_OK = "must_visit_on_route"
 REASON_MUST_VISIT_ABSENT = "must_visit_absent"
 REASON_MUST_VISIT_UNROUTABLE = "must_visit_unroutable"
 REASON_MUST_VISIT_UNSPECIFIED = "must_visit_unspecified"
-# Re-exported so callers here read like the rest of the vocabulary; the string
-# itself lives in requirements.py, next to the contract that sets it.
 REASON_MUST_VISIT_OUTSIDE = REASON_MUST_VISIT_OUTSIDE_CODE
 
 REASON_SERVICE_OK = "service_on_route"
-#: A service of the requested kind lies beside the line — measured, not assumed.
-#: The window is the one the measurement used; walking time to it is a detour and
-#: is never claimed here.
 REASON_SERVICE_ALONG_ROUTE = "service_along_route"
-#: The measurement itself failed (bad shape, database down). That is «мы не
-#: знаем», not «нет»: an unmet claim needs evidence we did not get.
 REASON_SERVICE_NOT_MEASURED = "service_not_measured"
 REASON_HARD_SERVICE_ABSENT = "hard_service_absent"
 REASON_SOFT_SERVICE_ABSENT = "soft_service_absent"
@@ -71,10 +38,6 @@ REASON_SOFT_SERVICE_ABSENT = "soft_service_absent"
 REASON_INTEREST_OK = "interest_on_route"
 REASON_INTEREST_ABSENT = "interest_absent"
 
-# Catalogue (a list to choose from, not a route to walk)
-# The requirement is honoured when the LIST contains a matching place. Nothing
-# here claims reachability — a catalogue has no route and no geometry, so a
-# reason that said «on the route» would be a claim nobody checked.
 REASON_MUST_VISIT_IN_CATALOGUE = "must_visit_in_catalogue"
 REASON_SERVICE_IN_CATALOGUE = "service_in_catalogue"
 REASON_INTEREST_IN_CATALOGUE = "interest_in_catalogue"
@@ -89,18 +52,8 @@ REASON_ROUTE_MISSING = "route_missing"
 REASON_GEOMETRY_MISSING = "geometry_missing"
 
 class ServiceAlongEvidence(NamedTuple):
-    """What the caller measured beside the line, and whether it managed to.
-
-    Three states, kept apart on purpose — collapsing any two of them would make
-    the verifier claim something nobody checked:
-
-    * nothing supplied (the parameter is ``None``): the caller does not measure,
-      so service requirements keep their older «on the route or unmet» reading;
-    * ``measured=True`` with ``by_code``: the measurement ran. A code that is
-      absent from the mapping means «рядом нет» — that is evidence, and it is
-      reported as ``unmet``;
-    * ``measured=False``: the measurement itself failed (a broken shape, the
-      database down). That is «мы не знаем» → ``uncertain``, never ``unmet``.
+    """Three states: nothing supplied keeps the older reading, ``measured=True`` is
+    evidence, ``measured=False`` is ``uncertain``, never ``unmet``.
     """
 
     measured: bool
@@ -133,8 +86,6 @@ REASON_CODES: frozenset[str] = frozenset(
     }
 )
 
-# Reasons that mean a hard requirement cannot be honoured at all: the request
-# is infeasible, not merely degraded.
 INFEASIBLE_REASONS: frozenset[str] = frozenset(
     {
         REASON_MUST_VISIT_UNROUTABLE,
@@ -147,15 +98,8 @@ INFEASIBLE_REASONS: frozenset[str] = frozenset(
 Status = Literal["pending", "satisfied", "unmet", "uncertain"]
 
 
-# Input normalisation (plan / geometry may be any of several shapes)
-
 def _route_stops(plan: Any) -> list[Any]:
-    """The ordered stops of the plan, from whatever shape the caller passed.
-
-    Accepts a ``ValidatedPlan`` (``.route``), a plain ``list[Candidate]``, or a
-    ``{"route": [...], "trace": {...}}`` mapping. Anything else is treated as
-    "no route".
-    """
+    """The ordered stops of the plan, from whatever shape the caller passed."""
     if plan is None:
         return []
     if isinstance(plan, dict):
@@ -178,13 +122,7 @@ def _plan_trace(plan: Any) -> dict:
 
 
 def _unroutable_ids(trace: dict) -> set[int]:
-    """Stop ids the pruner reported as unroutable in this order.
-
-    ``cost.prune_unroutable_stops`` returns machine reasons; the integration
-    step records them under ``trace["unroutable_stops"]`` (list of ids or of
-    ``{"id": ..., "reason": ...}`` mappings). We accept both, plus the legacy
-    ``pruned_stops`` key.
-    """
+    """Stop ids the pruner reported as unroutable in this order."""
     out: set[int] = set()
     for key in ("unroutable_stops", "pruned_stops"):
         for item in trace.get(key) or []:
@@ -193,7 +131,7 @@ def _unroutable_ids(trace: dict) -> set[int]:
             elif isinstance(item, dict):
                 pid = item.get("id")
             else:
-                pid = item.id  # a PrunedStop / Candidate
+                pid = item.id
             if isinstance(pid, int):
                 out.add(pid)
     return out
@@ -203,8 +141,6 @@ def geometry_ok(geometry: Any) -> bool:
     """True when ``geometry`` is a usable line: ≥2 coordinates.
 
     None, ``{}``, ``{"coordinates": []}`` and a bare Point all return False.
-    A missing/empty geometry means Valhalla could not confirm the route is
-    walkable, so nothing dependent on it may be called ``satisfied``.
     """
     if geometry is None or not isinstance(geometry, dict):
         return False
@@ -234,8 +170,6 @@ def _coord_count(coords: Any) -> int:
     return len(coords)
 
 
-# Category / name normalisation
-
 _PUNCT_RE = re.compile(r"[^\w\s]", re.UNICODE)
 
 
@@ -264,11 +198,7 @@ def _canonical_code(code: str | None) -> str | None:
 def _field(obj: Any, name: str, default: Any = None) -> Any:
     """Read a stop's field whether the plan arrived as objects or as mappings.
 
-    ``verify`` documents accepting a ``{"route": [...]}`` mapping, but the
-    matching below used to read attributes only — so a mapping plan matched
-    *nothing* and every requirement came back unmet (or, for ``avoid``,
-    "honoured") while looking perfectly verified. Reading both spellings removes
-    that whole class of silent wrong verdicts.
+    Reading both spellings removes a class of silent wrong verdicts.
     """
     if isinstance(obj, dict):
         return obj.get(name, default)
@@ -283,12 +213,9 @@ def _stop_matches_code(stop: Any, code: str) -> bool:
         return False
     if stop_cat == norm_code or norm_code in stop_cat or stop_cat in norm_code:
         return True
-    # Compound/free-form DB categories ("кафе-кондитерская") resolve via taxonomy.
     resolved = _canonical_code(stop_cat)
     return resolved is not None and _norm_cat(resolved) == norm_code
 
-
-# Per-kind verification
 
 def _set(requirement: Requirement, status: Status, place_ids: list[int], reason: str) -> None:
     requirement.status = status
@@ -299,9 +226,7 @@ def _set(requirement: Requirement, status: Status, place_ids: list[int], reason:
 def _match_named(r: Requirement, stops: list[Any]) -> Any | None:
     """The stop proving a named/numbered must-visit, or None.
 
-    Identity first (a real place id), then the normalised name — the same rule
-    the route verifier and the catalogue verifier share, so "is it there?" has
-    one answer in both.
+    Identity first (a real place id), then the normalised name.
     """
     if r.place_id is not None:
         for stop in stops:
@@ -322,10 +247,6 @@ def _verify_must_visit(
     unroutable: set[int],
     geom_ok: bool,
 ) -> None:
-    # A place outside the region is not "missing from the plan" — it can never
-    # be in it, and the look-alike the name matcher liked (a Lida cathedral for
-    # a Vilnius one) must not be allowed to satisfy it either. The deterministic
-    # layer set this reason before planning; nothing in the plan overturns it.
     if r.reason == REASON_MUST_VISIT_OUTSIDE:
         _set(r, "unmet", [], REASON_MUST_VISIT_OUTSIDE)
         return
@@ -334,10 +255,6 @@ def _verify_must_visit(
         _set(r, "uncertain", [], REASON_MUST_VISIT_UNSPECIFIED)
         return
 
-    # The pruner's verdict outranks mere presence in the stop list. A mandatory
-    # stop the matrix cannot reach in this order is kept on the route as a
-    # marker (never silently removed) AND reported here as unroutable — so a
-    # kept-but-unreachable place is `unmet`, not a satisfied requirement.
     if r.place_id is not None and r.place_id in unroutable:
         _set(r, "unmet", [], REASON_MUST_VISIT_UNROUTABLE)
         return
@@ -350,8 +267,6 @@ def _verify_must_visit(
         if geom_ok:
             _set(r, "satisfied", ids, REASON_MUST_VISIT_OK)
         else:
-            # The stop is in the plan, but without geometry we cannot prove the
-            # route actually reaches it — "uncertain", never "satisfied".
             _set(r, "uncertain", ids, REASON_GEOMETRY_MISSING)
         return
 
@@ -366,15 +281,14 @@ def _evidence_for(
 ) -> tuple[bool | None, list[dict] | None]:
     """``(measured_ok, items)`` for this requirement.
 
-    ``measured_ok`` is ``None`` when the caller measured nothing at all — the
-    older semantics — so a caller that does not measure keeps them.
+    ``measured_ok`` is ``None`` when the caller measured nothing at all.
     """
     if services_along is None:
         return None, None
     if not services_along.measured:
         return False, None
     if not r.code:
-        return True, None  # the code check reports that itself
+        return True, None
     code = _canonical_code(r.code)
     if code is None:
         return True, None
@@ -406,11 +320,7 @@ def _verify_service(
             _set(r, "uncertain", ids, REASON_GEOMETRY_MISSING)
         return
 
-    # No stop of this kind — but a café beside the line is exactly what «кофе по
-    # пути» asked for. The caller measured it; we only read the measurement.
     if measured_ok is False and r.strength == "hard":
-        # The caller owns the measurement; when it could not run one, saying
-        # «нет» would be a claim we cannot support.
         _set(r, "uncertain", [], REASON_SERVICE_NOT_MEASURED)
         return
     if measured:
@@ -474,13 +384,10 @@ def _verify_avoid(r: Requirement, stops: list[Any], route_present: bool) -> None
         _set(r, "unmet", ids, REASON_AVOID_VIOLATED)
         return
     if not route_present:
-        # "Nothing forbidden is present" is vacuous with no route to inspect.
         _set(r, "uncertain", [], REASON_ROUTE_MISSING)
         return
     _set(r, "satisfied", [], REASON_AVOID_OK)
 
-
-# Public API
 
 def verify(
     requirements: TripRequirements,
@@ -488,28 +395,8 @@ def verify(
     geometry: Any,
     services_along: ServiceAlongEvidence | None = None,
 ) -> list[Requirement]:
-    """Check a built route against the user's requirements.
-
-    ``plan``      — a ``ValidatedPlan``, a ``list[Candidate]``, or a
-                    ``{"route": [...], "trace": {...}}`` mapping.
-    ``geometry``  — the final Valhalla shape (GeoJSON LineString/Feature) or
-                    None when Valhalla could not draw the tour.
-    ``services_along`` — measured evidence, supplied by the caller (which owns
-                    the database). This function stays free of I/O and of
-                    models: it decides on the evidence it is handed, nothing
-                    else. When a service requirement has no stop of its kind,
-                    this evidence is what turns «не выполнено» into «есть по
-                    пути»; when the caller could not measure, the requirement
-                    becomes ``uncertain`` (``service_not_measured``).
-
-    Statuses are written onto the requirement objects *in place* and the same
-    list is returned, so ``requirements.failed_hard()`` / ``is_ready()`` and the
-    return value agree. Every requirement leaves this function resolved
-    (``satisfied`` / ``unmet`` / ``uncertain``) — never pending.
-
-    A missing or empty geometry is not an error: requirements that would need
-    the line to prove reachability become ``uncertain`` (``geometry_missing``),
-    never ``satisfied``.
+    """Statuses are written onto the requirement objects *in place* and the same
+    list is returned; every requirement leaves resolved.
     """
     stops = _route_stops(plan)
     trace = _plan_trace(plan)
@@ -539,17 +426,7 @@ def verify_catalogue(
 ) -> list[Requirement]:
     """Check a CATALOGUE (a list of places to choose from) against the request.
 
-    A catalogue is not a route: there is nothing to walk and no Valhalla geometry
-    to confirm reachability, so no verdict here claims «on the route» — the
-    satisfaction reasons are the `*_in_catalogue` codes. That keeps the panel
-    honest: a chip must not say «на маршруте», because no route exists yet.
-
-    Statuses, same vocabulary as the route verifier:
-      * ``satisfied`` — the list contains a matching place;
-      * ``unmet``     — the data has nothing to offer (the list is non-empty and
-                        the asked place/category is not in it);
-      * ``uncertain`` — nothing to decide on (an empty list, an unknown category
-                        code, a must_visit with neither a name nor an id).
+    Satisfaction reasons are the `*_in_catalogue` codes — no verdict claims "on the route".
     """
     empty = not places
     for r in requirements.requirements:
@@ -602,7 +479,6 @@ def verify_catalogue(
                 _set(r, "unmet", [], REASON_INTEREST_ABSENT)
             continue
 
-        # avoid: nothing forbidden may be in the list.
         offenders = [p for p in places if _stop_matches_code(p, code)]
         if offenders:
             ids = [i for i in (_field(p, "id") for p in offenders) if isinstance(i, int)]
@@ -636,14 +512,7 @@ def verify_summary(requirements: TripRequirements) -> dict:
 def overall_status(
     requirements: TripRequirements,
 ) -> Literal["ready", "infeasible", "degraded", "pending"]:
-    """Overall fate of the request.
-
-    * ``infeasible`` — a hard requirement is unmet for a structural reason
-      (a mandatory place absent or unroutable, a mandatory service missing).
-    * ``degraded``   — no hard requirement failed, but some are unproven.
-    * ``pending``    — verify() has not run.
-    * ``ready``      — every requirement is resolved and every hard one proven.
-    """
+    """Overall fate of the request."""
     reqs = requirements.requirements
     if not reqs:
         return "ready"

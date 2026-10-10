@@ -47,7 +47,6 @@ const formatTriggerLabel = (type: number, value: string): string | null => {
   if (type === 0) return 'Now';
   const date = parseISO(value);
   if (!isValid(date)) return TYPE_PREFIX[type] ?? '';
-  // Drop the date when it's today; keep it short and avoid wrapping.
   const stamp = isToday(date)
     ? format(date, 'HH:mm')
     : format(date, 'd MMM HH:mm');

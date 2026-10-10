@@ -1,15 +1,4 @@
-"""Photos of points: where the URL comes from, and what is never shown.
-
-Three layers, because "у точки есть фото" is only true if all of them hold:
-
-  * offline rules — a Commons file title is derived from a hint, a Wikipedia
-    hint turns into (wiki, article), and a record without its author or licence
-    is dropped instead of rendered;
-  * the shipped file — every entry in `data/place_photos.json` is a Wikimedia
-    image with a credit, and its key is a real hint key, not a leftover;
-  * live — against the running backend, the stops a client receives carry the
-    photo; skipped when :8080 is not answering.
-"""
+"""Photos of points: where the URL comes from, and what is never shown."""
 
 from __future__ import annotations
 
@@ -48,23 +37,18 @@ FULL_ROW = {
 }
 
 
-# Where a file title comes from
-
-
 def test_commons_hint_becomes_a_file_title():
     assert commons_file_title("File:Гродна. Аптэка.jpg") == "File:Гродна. Аптэка.jpg"
     assert commons_file_title("Гродна. Аптэка.jpg") == "File:Гродна. Аптэка.jpg"
 
 
 def test_a_category_is_not_a_photo():
-    # A category lists other things; taking its first member would be a guess.
     assert commons_file_title("Category:Old castles in Grodno") is None
     assert commons_file_title("Belarus/Grodno/Farny") is None
 
 
 def test_wikipedia_hint_becomes_wiki_and_article():
     assert parse_wikipedia("be:Ніжняя царква (Гродна)") == ("be", "Ніжняя царква (Гродна)")
-    # A section anchor is not part of the article title.
     assert parse_wikipedia("be:Касцёл Тройцы (Ішчална)#Сонечны гадзіннік") == (
         "be",
         "Касцёл Тройцы (Ішчална)",
@@ -84,12 +68,10 @@ def test_the_article_comes_from_our_own_links():
     raw = '[{"title":"Старый замок — Wikipedia","url":"https://ru.wikipedia.org/wiki/%D0%A1%D1%82%D0%B0%D1%80%D1%8B%D0%B9_%D0%B7%D0%B0%D0%BC%D0%BE%D0%BA_(%D0%93%D1%80%D0%BE%D0%B4%D0%BD%D0%BE)"}]'
     assert article_from_links(raw) == ("ru", "Старый замок (Гродно)")
 
-    # A section anchor is not part of the title.
     assert article_from_links('{"url":"https://be.wikipedia.org/wiki/Царква#Гісторыя"}') == (
         "be",
         "Царква",
     )
-    # Our data also has plain tourist-portal links — those give no article.
     assert article_from_links('[{"url":"https://grodno.by/"}]') is None
     assert article_from_links(None) is None
 
@@ -97,7 +79,6 @@ def test_the_article_comes_from_our_own_links():
 def test_distance_is_metres_not_degrees():
     from seed.photos import haversine_m
 
-    # One thousandth of a degree of latitude is ~111 m anywhere on Earth.
     assert haversine_m(53.0, 24.0, 53.001, 24.0) == pytest.approx(111, abs=2)
     assert haversine_m(53.0, 24.0, 53.0, 24.0) == 0
 
@@ -158,11 +139,9 @@ def test_an_article_only_counts_when_its_own_coordinates_agree():
 
     place = {"name": "Костёл Святого Михаила Архангела (Сморгонь)", "lat": 54.48, "lon": 26.4}
 
-    # The article is about the church of the same name in another town, 60 km away.
     far = {"Костёл Святого Михаила": {"lat": 54.9, "lon": 26.4, "qid": "Q1"}}
     assert match_article(place, far) is None
 
-    # The same article standing where our point is: accepted, with the gap.
     near = {"Костёл Святого Михаила": {"lat": 54.481, "lon": 26.4, "qid": "Q1", "wiki": "ru"}}
     match = match_article(place, near)
     assert match is not None
@@ -180,7 +159,6 @@ def test_the_town_article_is_not_the_article_about_the_place():
     assert is_settlement_article(place, "Гродно") is True
     assert is_settlement_article(place, "Городница") is False
     assert is_settlement_article({"name": "x"}, "что угодно") is False
-    # Even standing right next to our point, the town article is refused.
     assert match_article(place, {"Гродно": {"lat": 53.68, "lon": 23.82, "qid": "Q1"}}) is None
 
 
@@ -218,8 +196,6 @@ def test_a_rate_limit_is_waited_out_not_fatal(monkeypatch):
     monkeypatch.setattr(seed, "BACKOFF", (0,))
     monkeypatch.setattr(seed, "RETRIES", 2)
     monkeypatch.setattr(seed, "CACHE", pathlib.Path("/tmp/photo-cache-test"))
-    # A fresh URL each run: the disk cache is exactly what a retry builds on,
-    # and a repeated key would answer from the previous run instead of the wire.
     url = f"https://example.test/retry-{uuid.uuid4()}"
     calls: list[int] = []
 
@@ -251,17 +227,12 @@ def test_a_dead_wiki_does_not_break_the_reseed(monkeypatch):
     assert seed.wikipedia_pageimage([("not-a-wiki", "Title")]) == {}
 
 
-# What is never shown
-
-
 def test_a_point_without_a_url_has_no_photo():
     assert parse_photo({}) is None
     assert parse_photo({"photo_url": "   "}) is None
 
 
 def test_a_photo_without_its_credit_is_dropped():
-    # The licence requires the author and the licence name. Half a record is
-    # worse than none: it would render a picture nobody is credited for.
     assert parse_photo({**FULL_ROW, "photo_author": ""}) is None
     assert parse_photo({**FULL_ROW, "photo_license": ""}) is None
 
@@ -315,11 +286,7 @@ def test_an_itinerary_stop_carries_the_same_photo():
         **FULL_ROW,
     }
     assert _stop_payload(row)["photo"]["author"] == "Александр Липилин"
-    # A stop whose place has no photo says so instead of inventing one.
     assert _stop_payload({**row, "photo_url": None})["photo"] is None
-
-
-# The shipped file
 
 
 def _photos() -> dict:
@@ -344,10 +311,7 @@ def test_every_shipped_photo_is_creditable():
 
 def test_shipped_keys_were_resolved_one_of_the_two_honest_ways():
     """Every photo must be traceable to either OSM or our own source link.
-
-    An OSM-backed key has to exist among the hints we mined from the extract; a
-    hand-authored one has to carry the article and the distance that got it in.
-    A key that is neither would be a photo attached to nothing.
+    An OSM-backed key needs a hint; an authored one needs its article and distance.
     """
     with open(HINTS, encoding="utf-8") as fh:
         hints = json.load(fh)
@@ -366,9 +330,6 @@ def test_shipped_keys_were_resolved_one_of_the_two_honest_ways():
 def test_the_file_is_sorted_so_a_reseed_is_diffable():
     keys = list(_photos())
     assert keys == sorted(keys)
-
-
-# Live
 
 
 def _get(path: str):

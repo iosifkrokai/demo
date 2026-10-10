@@ -126,7 +126,6 @@ describe('client API', () => {
             stop_count: 5,
             distance_m: 3200,
             duration_min: 120,
-            // The list endpoint never promises this — it must not survive.
             plan: { shape: { coordinates: [[53.68, 23.83]] } },
           },
           { not: 'a route' },
@@ -207,7 +206,6 @@ describe('client API', () => {
     const [url, init] = fetchMock.mock.calls[0]!;
     expect(url).toBe('/clients/me/routes/r1');
     expect(init?.method).toBe('PATCH');
-    // The contract takes a string: `null` is not a name it accepts.
     expect(JSON.parse(String(init?.body))).toEqual({ name: '' });
     expect(headerOf(init, 'X-Client-Id')).toBe(CLIENT_ID);
   });

@@ -134,7 +134,6 @@ describe('CustomLayerEditor', () => {
       );
 
       await openDialog(user);
-      // userEvent.type interprets {} as keyboard shortcuts; fireEvent bypasses that.
       fireEvent.change(screen.getByRole('textbox'), {
         target: { value: 'not valid json' },
       });

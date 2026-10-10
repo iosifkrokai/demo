@@ -7,10 +7,7 @@ interface ChipProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   children: ReactNode;
 }
 
-/**
- * DESIGN.md chip: h-8, rounded-full, hairline border, quiet until it is picked —
- * then a solid fill. Used for the query hints and the time presets.
- */
+/** DESIGN.md chip: h-8, rounded-full, hairline border, quiet until it is picked — then a solid fill. */
 export const Chip = ({
   selected = false,
   className,

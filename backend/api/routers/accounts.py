@@ -1,23 +1,6 @@
-"""HTTP surface for accounts, visits and the admin panel (spec 005).
+"""HTTP surface for accounts, visits and the admin panel.
 
-Three groups of routes, registered as one APIRouter so a single line in main.py
-wires the whole capability in:
-
-* ``/auth/*``     — register / login / logout / me. Public; identity travels in an
-                    HttpOnly cookie (``grodno_session``), never in JS-readable state.
-* ``/me/visited`` — the signed-in tourist's durable «я здесь был» registry.
-* ``/admin/*``    — user and place management; every handler needs ``role=admin``.
-
-Three rules shape the handlers:
-
-* **The wire speaks codes, not prose.** Failures answer ``{"reason": "<code>"}``;
-  all human text belongs to the UI.
-* **A missing identity is not an error; a wrong one is.** A read with no cookie is
-  the empty state, but a write with no session is ``401 not_authenticated``, and a
-  valid ``user`` account hitting ``/admin`` is ``403 not_admin`` — never a bare 500.
-* **Storage failures are typed.** Any
-  :class:`~store.accounts_store.StorageUnavailable` becomes ``503
-  storage_unavailable`` (see :func:`_storage_guarded`).
+The wire speaks codes, not prose; a missing identity differs from a wrong one.
 """
 
 from __future__ import annotations
@@ -96,8 +79,7 @@ _default_repo_lock = threading.Lock()
 def get_repository(request: Request) -> AccountRepository:
     """The process-wide repository, or a test-injected fake.
 
-    Tests set ``app.state.accounts_repository``; nothing else needs to know
-    whether storage is a live Postgres or a fake.
+    Tests set ``app.state.accounts_repository``.
     """
     repo = getattr(request.app.state, "accounts_repository", None)
     if repo is None:
@@ -127,10 +109,8 @@ def _storage_guarded(fn):
     return wrapper
 
 
-# Identity helpers
-
 def _session_token(request: Request) -> str | None:
-    """The session token from the cookie, or a ``Bearer`` header (scripts/curl)."""
+    """The session token from the cookie, or a ``Bearer`` header."""
     cookie = request.cookies.get(SESSION_COOKIE)
     if cookie and cookie.strip():
         return cookie.strip()
@@ -208,13 +188,9 @@ def _start_session(
         httponly=True,
         samesite="lax",
         path="/",
-        # Secure only over https: a Secure cookie on plain http is dropped by the
-        # browser, which would silently break login on the demo's http origin.
         secure=request.url.scheme == "https",
     )
 
-
-# Auth
 
 @router.post("/auth/register", response_model=PublicUser, status_code=201)
 @_storage_guarded
@@ -226,8 +202,7 @@ def register(
 ) -> Any:
     """Create an account (always ``role=user``) and sign it in.
 
-    The first administrator is made by ``python -m seed admin``, not by
-    registering first — «first caller wins admin» is a hole, not a feature.
+    The first administrator is made by ``python -m seed admin``, not by registering.
     """
     email = normalize_email(body.email)
     if email is None:
@@ -261,8 +236,6 @@ def login(
 ) -> Any:
     email = normalize_email(body.email)
     row = repo.get_user_by_email(email) if email is not None else None
-    # One message for «no such user» and «wrong password»: distinguishing them
-    # would let anyone probe which addresses have accounts.
     if row is None or not verify_password(body.password, row.get("password_hash")):
         return _error(401, REASON_INVALID_CREDENTIALS)
     client_id = _optional_client_id(request)
@@ -278,8 +251,6 @@ def logout(
     request: Request,
     repo: AccountRepository = Depends(get_repository),
 ) -> Any:
-    # The response is built here, not injected: clearing the cookie has to travel
-    # on the very response that drops the session row.
     out = Response(status_code=204)
     token = _session_token(request)
     if token is not None:
@@ -296,16 +267,13 @@ def me(
 ) -> Any:
     """Honest about the anonymous case: ``{authenticated: false}``, not a 401.
 
-    The SPA calls this on startup; a 401 here would be noise in the console for
-    every visitor who has simply not logged in yet.
+    A 401 here would be console noise for every visitor who is not logged in.
     """
     user = _session_user(request, repo)
     if user is None:
         return AuthMeOut(authenticated=False, user=None)
     return AuthMeOut(authenticated=True, user=public_user(user))
 
-
-# Visits
 
 @router.get("/me/visited", response_model=VisitedListOut)
 @_storage_guarded
@@ -371,11 +339,9 @@ def unmark_visited(
     if err is not None:
         return err
     assert user is not None
-    repo.unmark_visited(user["id"], place_id)  # idempotent: absent is fine
+    repo.unmark_visited(user["id"], place_id)
     return Response(status_code=204)
 
-
-# Admin — users
 
 @router.get("/admin/users", response_model=AdminUserListOut)
 @_storage_guarded
@@ -422,7 +388,6 @@ def admin_patch_user(
         if target_id == actor["id"]:
             return _error(409, REASON_SELF_ROLE)
         if target["role"] == ROLE_ADMIN and role != ROLE_ADMIN:
-            # Never leave the system with no administrator.
             if repo.count_admins() <= 1:
                 return _error(409, REASON_LAST_ADMIN)
 
@@ -461,8 +426,6 @@ def admin_delete_user(
     repo.delete_user(target_id)
     return Response(status_code=204)
 
-
-# Admin — places
 
 @router.get("/admin/places", response_model=AdminPlaceListOut)
 @_storage_guarded
