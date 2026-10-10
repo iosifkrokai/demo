@@ -9,7 +9,7 @@ import json
 import logging
 from typing import Any
 
-from agent import model
+from agent import llm
 from agent.models import ReaderBrief
 from agent.prompts import compose_instructions
 from agent.prompts.notes import _ui_note
@@ -118,7 +118,7 @@ def _record_model_call(brief: ReaderBrief, prompt: str, result: Any) -> None:
         ],
         output=answer,
         kind="generation",
-        model=model.model_name(),
+        model=llm.model_name(),
         usage=_token_usage(usage),
         **facts,
     )

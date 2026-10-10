@@ -18,6 +18,8 @@ import psycopg
 import pytest
 from fastapi.testclient import TestClient
 
+from embeddings import model
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from agent import client as ai, runner as ai_runner
@@ -33,13 +35,12 @@ from core.errors import (
 from db.store.areas import PostgresAreaRepository
 from db.store.places import PostgresPlaceRepository
 from db.store.registry import Repositories
-from ml import embeddings
+from embeddings.query import embed_query as _embed_query
 from planner import (
     intent as intent_mod,
     pipeline as pipeline_mod,
     retrieve as retrieve_mod,
 )
-from planner.embedding import embed_query as _embed_query
 from planner.intent import build_requirements, reader_brief
 from planner.models import Candidate, GenerateReq, ResolvedConstraints
 from planner.pipeline import Pipeline
@@ -126,13 +127,13 @@ class _FakeModel:
 @pytest.fixture
 def fake_model(monkeypatch):
     """Install a fake local model; tests must never load the real one."""
-    from agent import interpret_cache
+    from core import cache as interpret_cache
 
     interpret_cache.EMBED_CACHE.clear()
-    model = _FakeModel()
-    monkeypatch.setattr(embeddings._state, "model", model, raising=False)
-    monkeypatch.setattr(embeddings._state, "available", None, raising=False)
-    yield model
+    onnx = _FakeModel()
+    monkeypatch.setattr(model._state, "model", onnx, raising=False)
+    monkeypatch.setattr(model._state, "available", None, raising=False)
+    yield onnx
     interpret_cache.EMBED_CACHE.clear()
 
 
@@ -201,14 +202,14 @@ class TestEmbedLocal:
         assert _embed_query(QUERY) == [0.1, 0.2, 0.3]
 
     def test_a_broken_local_model_returns_no_vector(self, monkeypatch):
-        monkeypatch.setattr(embeddings._state, "model", _FakeModel(fail=True), raising=False)
+        monkeypatch.setattr(model._state, "model", _FakeModel(fail=True), raising=False)
         assert _embed_query(QUERY) == []
 
     def test_logs_one_warning_naming_the_reason(self, monkeypatch, caplog):
-        monkeypatch.setattr(embeddings._state, "model", _FakeModel(fail=True), raising=False)
-        with caplog.at_level("WARNING", logger="planner.embedding"):
+        monkeypatch.setattr(model._state, "model", _FakeModel(fail=True), raising=False)
+        with caplog.at_level("WARNING", logger="embeddings.query"):
             assert _embed_query(QUERY) == []
-        warnings = _warnings(caplog, "planner.embedding")
+        warnings = _warnings(caplog, "embeddings.query")
         assert len(warnings) == 1
         assert "local model" in warnings[0]
 
@@ -365,8 +366,8 @@ class TestHttpDegraded:
 
     def test_health_is_degraded_when_the_local_model_cannot_load(
             self, monkeypatch, _restore_planner):
-        monkeypatch.setattr(embeddings._state, "model", None, raising=False)
-        monkeypatch.setattr(embeddings._state, "available", False, raising=False)
+        monkeypatch.setattr(model._state, "model", None, raising=False)
+        monkeypatch.setattr(model._state, "available", False, raising=False)
         body = _client_with_planner(_HealthOnly(monkeypatch)).get("/health").json()
         assert body["embedder"] is False
         assert body["status"] == "degraded"

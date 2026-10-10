@@ -16,6 +16,7 @@ from core.errors import (
     UpstreamUnavailable,
 )
 from db.store.registry import Repositories
+from embeddings.query import embed_query
 from planner.models import (
     Candidate,
     GenerateReq,
@@ -38,7 +39,6 @@ from .cost import (
 from .coverage import _outside_left_unresolved, refuse_out_of_coverage
 from .dedupe import _drop_duplicates, _dupe_pairs
 from .diversity import mmr_select
-from .embedding import embed_query
 from .explain import explain as explain_route
 from .geo import (
     _TRACE_NAMES_MAX,
@@ -640,9 +640,9 @@ class Pipeline:
         except Exception:
             valhalla_ok = False
 
-        from ml import embeddings
+        from embeddings import model
 
-        embedder_ok = embeddings.is_available()
+        embedder_ok = model.is_available()
         llm_ok = bool(openrouter_api_key())
 
         return {

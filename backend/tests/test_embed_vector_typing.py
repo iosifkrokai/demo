@@ -10,7 +10,7 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from ml import embeddings
+from embeddings import model
 
 MIXED = [0, 0.0123, 1, -1, 0.5, 2.0]
 
@@ -26,15 +26,15 @@ class _FakeModel:
 
 
 def test_embed_prefixed_coerces_model_output_to_floats(monkeypatch) -> None:
-    monkeypatch.setattr(embeddings._state, "model", _FakeModel([MIXED]))
-    vecs = embeddings._embed_prefixed(["passage: Старый замок. Королевский замок Витовта"])
+    monkeypatch.setattr(model._state, "model", _FakeModel([MIXED]))
+    vecs = model._embed_prefixed(["passage: Старый замок. Королевский замок Витовта"])
     assert len(vecs) == 1
     assert all(isinstance(x, float) for x in vecs[0]), f"mixed types survived: {vecs[0]}"
     assert vecs[0] == [float(x) for x in MIXED]
 
 
 def test_embed_prefixed_returns_nothing_for_no_texts() -> None:
-    assert embeddings._embed_prefixed([]) == []
+    assert model._embed_prefixed([]) == []
 
 
 def test_the_mixed_payload_really_is_what_psycopg_rejects() -> None:

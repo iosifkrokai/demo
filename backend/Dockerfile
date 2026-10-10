@@ -18,7 +18,7 @@ COPY api/ /app/api/
 COPY core/ /app/core/
 COPY data/ /app/data/
 COPY db/ /app/db/
-COPY ml/ /app/ml/
+COPY embeddings/ /app/embeddings/
 COPY planner/ /app/planner/
 COPY reference/ /app/reference/
 COPY telemetry/ /app/telemetry/

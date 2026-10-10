@@ -10,9 +10,9 @@ from __future__ import annotations
 
 import logging as _logging
 
-from agent import client, interpret_cache
+from agent import client
+from agent.llm import model_name
 from agent.mapping import ui_requirements, ui_used
-from agent.model import model_name
 from agent.models import (
     BriefStop,
     ReaderBrief,
@@ -22,7 +22,7 @@ from agent.models import (
 )
 from agent.prompts import compose_instructions
 from agent.prompts.notes import _ui_note
-from core import constants
+from core import cache as interpret_cache, constants
 from core.errors import InterpretationUnavailable
 from planner.models import GenerateReq, IntentDecision, IntentResult
 from telemetry import trace
@@ -98,7 +98,21 @@ def _interpret_cache_key(
             return None, ""
         instructions = compose_instructions(_ui_note(brief))
         return (
-            interpret_cache.interpret_key(query, brief, instructions, model_name()),
+            interpret_cache.interpret_key(
+                query,
+                instructions,
+                model_name(),
+                locale=brief.locale,
+                party_adults=brief.party_adults,
+                party_children=brief.party_children,
+                party_children_ages=brief.party_children_ages,
+                mobility=brief.mobility,
+                time_budget_minutes=brief.time_budget_minutes,
+                hard_services=brief.hard_services,
+                interests=brief.interests,
+                avoid=brief.avoid,
+                result_mode=brief.result_mode,
+            ),
             interpret_cache.prompt_hash(instructions),
         )
     except Exception as exc:

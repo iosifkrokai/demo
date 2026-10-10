@@ -14,8 +14,8 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agent import interpret_cache as cache
 from agent.models import Requirement, TripRequirements
+from core import cache
 from core.errors import InterpretationUnavailable
 from planner import intent
 from planner.models import GenerateReq
@@ -27,6 +27,29 @@ def _req(**over: Any) -> GenerateReq:
     body.update(over)
     return GenerateReq(**body)
 
+
+
+def _key(query: str, brief, instructions: str, model: str | None = None) -> str:
+    """The interpret key for a brief, built the way `planner.intent` builds it.
+
+    The cache takes values, not a request object — that is what lets it sit below
+    both layers — so the mapping lives where the brief is made, and here.
+    """
+    return cache.interpret_key(
+        query,
+        instructions,
+        model,
+        locale=brief.locale,
+        party_adults=brief.party_adults,
+        party_children=brief.party_children,
+        party_children_ages=brief.party_children_ages,
+        mobility=brief.mobility,
+        time_budget_minutes=brief.time_budget_minutes,
+        hard_services=brief.hard_services,
+        interests=brief.interests,
+        avoid=brief.avoid,
+        result_mode=brief.result_mode,
+    )
 
 def _contract(name: str = "Старый замок") -> TripRequirements:
     return TripRequirements(
@@ -49,7 +72,7 @@ def clean_cache(monkeypatch):
 
 def test_the_same_question_gets_the_same_key():
     instructions = "ты читаешь запрос"
-    assert cache.interpret_key("замки", intent.reader_brief(_req()), instructions) == cache.interpret_key(
+    assert _key("замки", intent.reader_brief(_req()), instructions) == _key(
         "замки", intent.reader_brief(_req()), instructions
     )
 
@@ -57,7 +80,7 @@ def test_the_same_question_gets_the_same_key():
 def test_a_changed_ui_filter_is_a_different_question():
     """The panel's controls go into the prompt, so they must go into the key."""
     instructions = "ты читаешь запрос"
-    base = cache.interpret_key("замки", intent.reader_brief(_req()), instructions)
+    base = _key("замки", intent.reader_brief(_req()), instructions)
 
     for changed in (
         _req(interests=["кафе"]),
@@ -70,7 +93,7 @@ def test_a_changed_ui_filter_is_a_different_question():
         _req(result_mode="catalogue"),
         _req(locale="en"),
     ):
-        assert cache.interpret_key(changed.query, intent.reader_brief(changed), instructions) != base
+        assert _key(changed.query, intent.reader_brief(changed), instructions) != base
 
 
 def test_the_travel_profile_is_not_part_of_the_question():
@@ -79,14 +102,14 @@ def test_the_travel_profile_is_not_part_of_the_question():
     walk = _req(profile="pedestrian")
     drive = _req(profile="car")
 
-    assert cache.interpret_key(walk.query, intent.reader_brief(walk), instructions) == cache.interpret_key(
+    assert _key(walk.query, intent.reader_brief(walk), instructions) == _key(
         drive.query, intent.reader_brief(drive), instructions
     )
 
 
 def test_editing_the_prompt_invalidates_every_entry():
-    before = cache.interpret_key("замки", intent.reader_brief(_req()), "один промпт")
-    after = cache.interpret_key("замки", intent.reader_brief(_req()), "другой промпт")
+    before = _key("замки", intent.reader_brief(_req()), "один промпт")
+    after = _key("замки", intent.reader_brief(_req()), "другой промпт")
 
     assert before != after
 
@@ -97,12 +120,12 @@ def test_switching_the_model_invalidates_every_entry():
     Without the model in the key, "we measured the new model" claims become false.
     """
     instructions = "ты читаешь запрос"
-    baseline = cache.interpret_key("замки", intent.reader_brief(_req()), instructions, "google/gemini-2.5-pro")
+    baseline = _key("замки", intent.reader_brief(_req()), instructions, "google/gemini-2.5-pro")
 
-    assert cache.interpret_key(
+    assert _key(
         "замки", intent.reader_brief(_req()), instructions, "google/gemini-2.5-flash"
     ) != baseline
-    assert cache.interpret_key("замки", intent.reader_brief(_req()), instructions, None) != baseline
+    assert _key("замки", intent.reader_brief(_req()), instructions, None) != baseline
 
 
 def test_an_expired_reading_is_not_returned():

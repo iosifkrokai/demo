@@ -9,8 +9,8 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from agent import mapping, model, runner
-from agent.model import DEFAULT_MODEL, pydantic_ai
+from agent import llm, mapping, runner
+from agent.llm import DEFAULT_MODEL, pydantic_ai
 from agent.models import ReaderBrief, TripRequirements
 from agent.schema import InterpretDeps
 from core.config import openrouter_api_key
@@ -32,7 +32,7 @@ def available() -> bool:
         return False
     if not openrouter_api_key():
         return False
-    return bool(model.model_name())
+    return bool(llm.model_name())
 
 
 def interpret_with_agent(

@@ -19,7 +19,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from agent import (
     client as ai,
-    model as ai_model,
+    llm as ai_model,
     runner as ai_runner,
     schema as ai_schema,
     telemetry as ai_telemetry,

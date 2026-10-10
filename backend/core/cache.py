@@ -1,6 +1,12 @@
 """The same question, asked twice, read once.
 
-In-process TTL/LRU cache of the model's reading; `CACHE_BUST=1` turns it off.
+In-process TTL/LRU caches for the two expensive things this process does: asking
+the model to read a query, and embedding one. `CACHE_BUST=1` turns both off.
+
+It lives in `core` because two layers want it — the agent caches its reading and
+the pipeline caches its query vector — and neither should own the other's cache.
+The key builders therefore take plain values: a cache has no business knowing
+what a `ReaderBrief` is.
 """
 
 from __future__ import annotations
@@ -10,10 +16,9 @@ import os
 import threading
 import time
 from collections import OrderedDict
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
-
-from agent.models import ReaderBrief
 
 
 def _flag(name: str, default: str = "") -> str:
@@ -135,27 +140,42 @@ def prompt_hash(instructions: str) -> str:
 
 
 def interpret_key(
-    query: str, brief: ReaderBrief, instructions: str, model: str | None = None
+    query: str,
+    instructions: str,
+    model: str | None = None,
+    *,
+    locale: str | None = None,
+    party_adults: int | None = None,
+    party_children: int | None = None,
+    party_children_ages: Sequence[int] = (),
+    mobility: Sequence[str] = (),
+    time_budget_minutes: int | None = None,
+    hard_services: Sequence[str] = (),
+    interests: Sequence[str] = (),
+    avoid: Sequence[str] = (),
+    result_mode: str | None = None,
 ) -> str:
     """Everything the model is shown, and nothing else.
 
     `model` is part of the key: the reading is that model's output, not this one's.
+    The controls are passed as values rather than as a request object, so this
+    module never has to know which layer built them.
     """
     return _digest(
         "interpret",
         model,
         instructions,
         query,
-        brief.locale,
-        brief.party_adults,
-        brief.party_children,
-        brief.party_children_ages,
-        brief.mobility,
-        brief.time_budget_minutes or 0,
-        brief.hard_services,
-        brief.interests,
-        brief.avoid,
-        brief.result_mode,
+        locale,
+        party_adults,
+        party_children,
+        tuple(party_children_ages),
+        tuple(mobility),
+        time_budget_minutes or 0,
+        tuple(hard_services),
+        tuple(interests),
+        tuple(avoid),
+        result_mode,
     )
 
 

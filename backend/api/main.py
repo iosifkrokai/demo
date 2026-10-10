@@ -31,7 +31,7 @@ from db.store.places import PostgresPlaceRepository
 from db.store.registry import Repositories
 from db.store.stats import PostgresStatsRepository
 from db.store.users import PostgresUserRepository
-from ml import embeddings
+from embeddings import model
 from planner.pipeline import Pipeline
 from telemetry import trace
 
@@ -54,9 +54,9 @@ async def lifespan(_: FastAPI):
     )
     app.state.repos = repos
     app.state.planner = Pipeline(repos=repos)
-    embeddings.embed_query("warmup")
+    model.embed_text("warmup")
     log.info("agent ready (embeddings=%s local, interpret=%s, key=%s)",
-             embeddings.MODEL_NAME, DEFAULT_MODEL,
+             model.MODEL_NAME, DEFAULT_MODEL,
              "set" if openrouter_api_key() else "MISSING")
     if not openrouter_api_key():
         log.warning(

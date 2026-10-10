@@ -76,8 +76,13 @@ def embed_documents(texts: Sequence[str]) -> list[list[float]]:
     return _embed_prefixed([PASSAGE_PREFIX + t for t in texts])
 
 
-def embed_query(text: str) -> list[float]:
-    """Embed a search query: the text gets the ``query: `` prefix."""
+def embed_text(text: str) -> list[float]:
+    """Embed one piece of text, with the E5 ``query: `` prefix.
+
+    This is the model itself. The entry point the pipeline calls is
+    `embeddings.query.embed_query`, which puts the in-process cache in front of
+    it; a warm-up or the seed wants the raw call and uses this one.
+    """
     vectors = _embed_prefixed([QUERY_PREFIX + text])
     return vectors[0] if vectors else []
 

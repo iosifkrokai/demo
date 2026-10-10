@@ -8,8 +8,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from agent import interpret_cache
-from core import constants
+from core import cache as interpret_cache, constants
 from core.errors import UpstreamUnavailable
 from planner.models import (
     BudgetInfo,

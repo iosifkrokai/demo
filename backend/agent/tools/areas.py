@@ -6,7 +6,7 @@ import logging
 from collections.abc import Callable
 from typing import Any
 
-from agent.model import RunContext
+from agent.llm import RunContext
 from agent.schema import InterpretDeps
 from agent.tools import (
     ERR_AREA_REGISTRY,

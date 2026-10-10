@@ -18,7 +18,8 @@ from pydantic_ai.models.function import AgentInfo, FunctionModel
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agent import interpret_cache, model
+from agent import llm as model
+from core import cache as interpret_cache
 
 
 @pytest.fixture(autouse=True)

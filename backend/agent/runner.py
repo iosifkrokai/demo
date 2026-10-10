@@ -6,8 +6,8 @@ import logging
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
 from typing import Any
 
-from agent import model as model_mod, telemetry
-from agent.model import SDK_IMPORT_ERROR, ModelSettings, UsageLimits, pydantic_ai
+from agent import llm as model_mod, telemetry
+from agent.llm import SDK_IMPORT_ERROR, ModelSettings, UsageLimits, pydantic_ai
 from agent.models import ReaderBrief
 from agent.prompts import compose_instructions
 from agent.prompts.notes import _request_note, _ui_note
