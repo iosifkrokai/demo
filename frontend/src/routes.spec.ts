@@ -53,10 +53,10 @@ describe('routes', () => {
       };
 
       const redirect = catchRedirect(() =>
-        activeTabBeforeLoad({ params: { activeTab: 'isochrones' }, search })
+        activeTabBeforeLoad({ params: { activeTab: 'directions' }, search })
       );
 
-      expect(redirect.options.params).toEqual({ activeTab: 'isochrones' });
+      expect(redirect.options.params).toEqual({ activeTab: 'directions' });
       expect(redirect.options.search?.style).toBe('custom');
       expect(redirect.options.search?.profile).toBeTruthy();
     });
@@ -70,22 +70,26 @@ describe('routes', () => {
       ).not.toThrow();
     });
 
-    it('should not redirect when profile is present on isochrones tab', () => {
-      expect(() =>
+    it('should redirect a removed tab even when profile is present', () => {
+      const redirect = catchRedirect(() =>
         activeTabBeforeLoad({
           params: { activeTab: 'isochrones' },
           search: { profile: 'truck' },
         })
-      ).not.toThrow();
+      );
+
+      expect(redirect.options.params).toEqual({ activeTab: 'directions' });
     });
 
-    it('should preserve existing profile when switching tabs', () => {
-      expect(() =>
+    it('should redirect a removed tab while switching tabs', () => {
+      const redirect = catchRedirect(() =>
         activeTabBeforeLoad({
-          params: { activeTab: 'isochrones' },
+          params: { activeTab: 'tiles' },
           search: { profile: 'car' },
         })
-      ).not.toThrow();
+      );
+
+      expect(redirect.options.params).toEqual({ activeTab: 'directions' });
 
       expect(() =>
         activeTabBeforeLoad({

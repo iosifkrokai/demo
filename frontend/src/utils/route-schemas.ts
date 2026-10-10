@@ -35,7 +35,7 @@ export const searchParamsSchema = z.object({
 
 export type SearchParamsSchema = z.infer<typeof searchParamsSchema>;
 
-export const VALID_TABS = ['directions', 'isochrones', 'tiles'] as const;
+export const VALID_TABS = ['directions'] as const;
 export type ValidTab = (typeof VALID_TABS)[number];
 
 export function isValidTab(tab: string): tab is ValidTab {

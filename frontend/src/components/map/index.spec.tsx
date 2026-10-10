@@ -51,15 +51,9 @@ const mockSetGuideVoiceMuted = vi.hoisted(() =>
   })
 );
 
-const mockQueryRenderedFeatures = vi.hoisted(() =>
-  vi.fn(() => [] as unknown[])
-);
-const mockGetLayer = vi.hoisted(() => vi.fn((): unknown => true));
 const mockGetMap = vi.hoisted(() =>
   vi.fn(() => ({
     getCanvas: vi.fn(() => ({ style: { cursor: '' } })),
-    queryRenderedFeatures: mockQueryRenderedFeatures,
-    getLayer: mockGetLayer,
     on: vi.fn(),
     off: vi.fn(),
   }))
@@ -184,12 +178,7 @@ vi.mock('react-map-gl/maplibre', async () => {
   };
 });
 
-const mockUseParams = vi.hoisted(() =>
-  vi.fn(() => ({ activeTab: 'directions' }))
-);
-
 vi.mock('@tanstack/react-router', () => ({
-  useParams: mockUseParams,
   useSearch: vi.fn(() => ({ profile: 'bicycle', style: undefined })),
   useNavigate: vi.fn(() => vi.fn()),
 }));
@@ -246,30 +235,12 @@ vi.mock('@/stores/directions-store', () => ({
   ),
 }));
 
-vi.mock('@/stores/isochrones-store', () => ({
-  useIsochronesStore: vi.fn((selector) => {
-    const state = {
-      geocodeResults: [],
-    };
-    return selector(state);
-  }),
-}));
-
 vi.mock('@/hooks/use-directions-queries', () => ({
   useDirectionsQuery: vi.fn(() => ({
     refetch: vi.fn(),
   })),
   useSetWaypointFromCoords: vi.fn(() => ({
     setWaypointFromCoords: vi.fn().mockResolvedValue([]),
-  })),
-}));
-
-vi.mock('@/hooks/use-isochrones-queries', () => ({
-  useIsochronesQuery: vi.fn(() => ({
-    refetch: vi.fn(),
-  })),
-  useReverseGeocodeIsochrones: vi.fn(() => ({
-    reverseGeocode: vi.fn().mockResolvedValue([]),
   })),
 }));
 
@@ -282,16 +253,6 @@ vi.mock('@/hooks/use-places', () => ({
     error: null,
     reload: vi.fn(),
   })),
-}));
-
-vi.mock('./map-style-control', () => ({
-  MapStyleControl: vi.fn(() => (
-    <div data-testid="map-style-control">Style Control</div>
-  )),
-}));
-
-vi.mock('./draw-control', () => ({
-  DrawControl: vi.fn(() => <div data-testid="draw-control">Draw Control</div>),
 }));
 
 vi.mock('./parts/route-lines', async () => {
@@ -307,18 +268,6 @@ vi.mock('./parts/route-lines', async () => {
 vi.mock('./parts/highlight-segment', () => ({
   HighlightSegment: vi.fn(() => (
     <div data-testid="highlight-segment">Highlight</div>
-  )),
-}));
-
-vi.mock('./parts/isochrone-polygons', () => ({
-  IsochronePolygons: vi.fn(() => (
-    <div data-testid="isochrone-polygons">Isochrone</div>
-  )),
-}));
-
-vi.mock('./parts/isochrone-locations', () => ({
-  IsochroneLocations: vi.fn(() => (
-    <div data-testid="isochrone-locations">Locations</div>
   )),
 }));
 
@@ -348,26 +297,10 @@ vi.mock('./parts/tool-button', () => ({
   ),
 }));
 
-vi.mock('./parts/map-info-popup', () => ({
-  MapInfoPopup: vi.fn(({ onClose }) => (
-    <div data-testid="map-info-popup">
-      <button onClick={onClose}>Close</button>
-    </div>
-  )),
-}));
-
 vi.mock('./parts/map-context-menu', () => ({
   MapContextMenu: vi.fn(({ onAddWaypoint }) => (
     <div data-testid="map-context-menu">
       <button onClick={() => onAddWaypoint(0)}>Add Waypoint</button>
-    </div>
-  )),
-}));
-
-vi.mock('./parts/tiles-info-popup', () => ({
-  TilesInfoPopup: vi.fn(({ onClose }) => (
-    <div data-testid="tiles-info-popup">
-      <button onClick={onClose}>Close Tiles Popup</button>
     </div>
   )),
 }));
@@ -453,16 +386,6 @@ describe('MapComponent', () => {
   it('should render highlight segment component', () => {
     render(<MapComponent />);
     expect(screen.getByTestId('highlight-segment')).toBeInTheDocument();
-  });
-
-  it('should render isochrone polygons component', () => {
-    render(<MapComponent />);
-    expect(screen.getByTestId('isochrone-polygons')).toBeInTheDocument();
-  });
-
-  it('should render isochrone locations component', () => {
-    render(<MapComponent />);
-    expect(screen.getByTestId('isochrone-locations')).toBeInTheDocument();
   });
 
   it('держит ручку панели на её собственном крае', () => {
@@ -1176,192 +1099,6 @@ describe('MapComponent', () => {
       expect(screen.getByLabelText('Точка 1')).toBeInTheDocument();
       expect(screen.getByLabelText('Точка 2')).toBeInTheDocument();
       expect(screen.queryByLabelText('Точка 3')).not.toBeInTheDocument();
-    });
-  });
-
-  describe('tiles tab behavior', () => {
-    beforeEach(() => {
-      mockUseParams.mockReturnValue({ activeTab: 'tiles' });
-      mockQueryRenderedFeatures.mockClear();
-      mockGetLayer.mockClear();
-    });
-
-    afterEach(() => {
-      mockUseParams.mockReturnValue({ activeTab: 'directions' });
-    });
-
-    it('should show tiles info popup when clicking on tiles with features', async () => {
-      vi.useFakeTimers();
-      mockGetLayer.mockReturnValue(true);
-      mockQueryRenderedFeatures.mockReturnValue([
-        {
-          type: 'Feature',
-          sourceLayer: 'edges',
-          properties: { id: '123', speed: 50 },
-          geometry: {
-            type: 'LineString',
-            coordinates: [
-              [0, 0],
-              [1, 1],
-            ],
-          },
-          layer: { id: 'valhalla-edges' },
-        },
-      ]);
-
-      render(<MapComponent />);
-
-      fireEvent.click(screen.getByTestId('map'));
-
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(250);
-      });
-
-      expect(screen.getByTestId('tiles-info-popup')).toBeInTheDocument();
-
-      vi.useRealTimers();
-    });
-
-    it('should not show tiles info popup when no features are found', async () => {
-      vi.useFakeTimers();
-      mockGetLayer.mockReturnValue(true);
-      mockQueryRenderedFeatures.mockReturnValue([]);
-
-      render(<MapComponent />);
-
-      fireEvent.click(screen.getByTestId('map'));
-
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(250);
-      });
-
-      expect(screen.queryByTestId('tiles-info-popup')).not.toBeInTheDocument();
-
-      vi.useRealTimers();
-    });
-
-    it('should not query features when valhalla layers do not exist', async () => {
-      vi.useFakeTimers();
-      mockGetLayer.mockReturnValue(undefined);
-
-      render(<MapComponent />);
-
-      fireEvent.click(screen.getByTestId('map'));
-
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(250);
-      });
-
-      expect(mockQueryRenderedFeatures).not.toHaveBeenCalled();
-      expect(screen.queryByTestId('tiles-info-popup')).not.toBeInTheDocument();
-
-      vi.useRealTimers();
-    });
-
-    it('should only query available layers when some layers exist', async () => {
-      vi.useFakeTimers();
-      mockGetLayer.mockImplementation((layerId?: string) =>
-        layerId === 'valhalla-edges' ? { id: 'valhalla-edges' } : undefined
-      );
-      mockQueryRenderedFeatures.mockReturnValue([
-        {
-          type: 'Feature',
-          sourceLayer: 'edges',
-          properties: { id: '123' },
-          geometry: {
-            type: 'LineString',
-            coordinates: [
-              [0, 0],
-              [1, 1],
-            ],
-          },
-          layer: { id: 'valhalla-edges' },
-        },
-      ]);
-
-      render(<MapComponent />);
-
-      fireEvent.click(screen.getByTestId('map'));
-
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(250);
-      });
-
-      expect(mockQueryRenderedFeatures).toHaveBeenCalledWith(
-        { x: 100, y: 100 },
-        { layers: ['valhalla-edges'] }
-      );
-
-      vi.useRealTimers();
-    });
-
-    it('should close tiles info popup when close button is clicked', async () => {
-      vi.useFakeTimers();
-      mockGetLayer.mockReturnValue(true);
-      mockQueryRenderedFeatures.mockReturnValue([
-        {
-          type: 'Feature',
-          sourceLayer: 'edges',
-          properties: { id: '123' },
-          geometry: {
-            type: 'LineString',
-            coordinates: [
-              [0, 0],
-              [1, 1],
-            ],
-          },
-          layer: { id: 'valhalla-edges' },
-        },
-      ]);
-
-      render(<MapComponent />);
-
-      fireEvent.click(screen.getByTestId('map'));
-
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(250);
-      });
-
-      expect(screen.getByTestId('tiles-info-popup')).toBeInTheDocument();
-
-      vi.useRealTimers();
-
-      const user = userEvent.setup();
-      await user.click(
-        screen.getByRole('button', { name: 'Close Tiles Popup' })
-      );
-
-      await waitFor(() => {
-        expect(
-          screen.queryByTestId('tiles-info-popup')
-        ).not.toBeInTheDocument();
-      });
-    });
-
-    it('should not show context menu on right click in tiles tab', () => {
-      render(<MapComponent />);
-
-      fireEvent.contextMenu(screen.getByTestId('map'));
-
-      expect(screen.queryByTestId('map-context-menu')).not.toBeInTheDocument();
-    });
-
-    it('should not show info popup on click in tiles tab', async () => {
-      vi.useFakeTimers();
-      mockGetLayer.mockReturnValue(undefined);
-      mockQueryRenderedFeatures.mockReturnValue([]);
-
-      render(<MapComponent />);
-
-      fireEvent.click(screen.getByTestId('map'));
-
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(250);
-      });
-
-      expect(screen.queryByTestId('map-info-popup')).not.toBeInTheDocument();
-
-      vi.useRealTimers();
     });
   });
 });

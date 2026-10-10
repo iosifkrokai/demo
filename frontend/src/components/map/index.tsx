@@ -1,8 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import type { MapGeoJSONFeature } from 'maplibre-gl';
-import { useParams, useSearch, useNavigate } from '@tanstack/react-router';
+import { useSearch, useNavigate } from '@tanstack/react-router';
 import { Map, Marker, Popup, type MapRef } from 'react-map-gl/maplibre';
-import type { MaplibreTerradrawControl } from '@watergis/maplibre-gl-terradraw';
 import type maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 
@@ -19,18 +17,8 @@ import {
   RouteLines,
 } from './parts/route-lines';
 import { HighlightSegment } from './parts/highlight-segment';
-import { IsochronePolygons } from './parts/isochrone-polygons';
-import { IsochroneLocations } from './parts/isochrone-locations';
 import { RouteHoverPopup } from './parts/route-hover-popup';
 import { MapContextMenu } from './parts/map-context-menu';
-import { TilesInfoPopup } from './parts/tiles-info-popup';
-import {
-  VALHALLA_EDGES_LAYER_ID,
-  VALHALLA_NODES_LAYER_ID,
-  VALHALLA_SHORTCUTS_LAYER_ID,
-  VALHALLA_ACCESS_RESTRICTIONS_PERMANENT_LAYER_ID,
-  VALHALLA_ACCESS_RESTRICTIONS_TIMED_LAYER_ID,
-} from '@/components/tiles/valhalla-layers';
 import { MarkerIcon, type MarkerColor } from './parts/marker-icon';
 import {
   PHONE_MAX_MARKS,
@@ -55,15 +43,10 @@ import {
 import { useServicesAlong } from '@/hooks/use-services-along';
 import { usePlaces } from '@/hooks/use-places';
 import type { Place } from '@/api/types';
-import { useIsochronesStore } from '@/stores/isochrones-store';
 import {
   useDirectionsQuery,
   useSetWaypointFromCoords,
 } from '@/hooks/use-directions-queries';
-import {
-  useIsochronesQuery,
-  useReverseGeocodeIsochrones,
-} from '@/hooks/use-isochrones-queries';
 
 const { center, zoom: zoom_initial } = getInitialMapPosition();
 
@@ -71,11 +54,9 @@ interface MarkerData {
   id: string;
   lng: number;
   lat: number;
-  type: 'waypoint' | 'isocenter';
   index?: number;
   title?: string;
   color?: MarkerColor;
-  shape?: string;
   number?: string;
   placeId?: number;
 }
@@ -97,7 +78,6 @@ const placeToDetails = (place: Place): PlaceDetails => ({
 });
 
 export const MapComponent = () => {
-  const { activeTab } = useParams({ from: '/$activeTab' });
   const navigate = useNavigate({ from: '/$activeTab' });
   const isMobile = useIsMobile();
 
@@ -133,19 +113,11 @@ export const MapComponent = () => {
   const missingVerifiedLine = isMissingVerifiedLine(routeResult);
 
   const { refetch: refetchDirections } = useDirectionsQuery();
-  const { refetch: refetchIsochrones } = useIsochronesQuery();
   const { setWaypointFromCoords } = useSetWaypointFromCoords();
-  const { reverseGeocode: reverseGeocodeIsochrones } =
-    useReverseGeocodeIsochrones();
   const [routeHoverPopup, setRouteHoverPopup] = useState<{
     lng: number;
     lat: number;
     summary: Summary;
-  } | null>(null);
-  const [tilesPopup, setTilesPopup] = useState<{
-    lng: number;
-    lat: number;
-    features: MapGeoJSONFeature[];
   } | null>(null);
   const [activePlace, setActivePlace] = useState<{
     id: number;
@@ -203,8 +175,6 @@ export const MapComponent = () => {
   const setGuideVoiceMuted = useCommonStore((s) => s.setGuideVoiceMuted);
   /** Navigator mode: the map keeps the tourist in view until a hand moves it. */
   const [follow, setFollow] = useState(true);
-  /** While the guide runs, the map always turns with the walk (never north-up). */
-  const drawRef = useRef<MaplibreTerradrawControl | null>(null);
   const touchStartTimeRef = useRef<number | null>(null);
   const touchLocationRef = useRef<{ x: number; y: number } | null>(null);
   const handledLongPressRef = useRef<boolean>(false);
@@ -240,15 +210,6 @@ export const MapComponent = () => {
     [setWaypointFromCoords, refetchDirections]
   );
 
-  const updateIsoPosition = useCallback(
-    (lng: number, lat: number) => {
-      reverseGeocodeIsochrones(lng, lat).then(() => {
-        refetchIsochrones();
-      });
-    },
-    [reverseGeocodeIsochrones, refetchIsochrones]
-  );
-
   /** The panel's handle does both: it closes what is open, opens what is not. */
   const handlePanelToggle = useCallback(() => {
     toggleDirections();
@@ -270,13 +231,6 @@ export const MapComponent = () => {
     [popupLngLat, updateWaypointPosition]
   );
 
-  const handleAddIsoWaypoint = useCallback(() => {
-    if (!popupLngLat) return;
-    setShowContextPopup(false);
-    updateIsoPosition(popupLngLat.lng, popupLngLat.lat);
-  }, [popupLngLat, updateIsoPosition]);
-
-  const geocodeResults = useIsochronesStore((state) => state.geocodeResults);
   const markers = useMemo<MarkerData[]>(() => {
     const next: MarkerData[] = [];
 
@@ -290,7 +244,6 @@ export const MapComponent = () => {
             id: ME_WAYPOINT_ID,
             lng: address.displaylnglat[0],
             lat: address.displaylnglat[1],
-            type: 'waypoint',
             index: 0,
             title: t('sidebar.ui.myLocation'),
             color: 'blue',
@@ -314,7 +267,6 @@ export const MapComponent = () => {
             id: `waypoint-${sourceIndex}`,
             lng: address.displaylnglat[0],
             lat: address.displaylnglat[1],
-            type: 'waypoint',
             index: sourceIndex,
             title: address.title,
             color,
@@ -325,23 +277,8 @@ export const MapComponent = () => {
       });
     });
 
-    geocodeResults.forEach((address) => {
-      if (address.selected) {
-        next.push({
-          id: 'iso-center',
-          lng: address.displaylnglat[0],
-          lat: address.displaylnglat[1],
-          type: 'isocenter',
-          title: address.title,
-          color: 'purple',
-          shape: 'star',
-          number: '1',
-        });
-      }
-    });
-
     return next;
-  }, [waypoints, geocodeResults, t]);
+  }, [waypoints, t]);
 
   /** The bounding box of the line the map draws, or null when there is none. */
   const routeBounds = useMemo(() => {
@@ -521,35 +458,6 @@ export const MapComponent = () => {
     return () => window.clearTimeout(id);
   }, [guiding, routeBounds]);
 
-  const handleMapTilesClick = useCallback(
-    (event: maplibregl.MapLayerMouseEvent) => {
-      if (!mapRef.current) return;
-
-      const map = mapRef.current.getMap();
-
-      const availableLayers = [
-        VALHALLA_EDGES_LAYER_ID,
-        VALHALLA_NODES_LAYER_ID,
-        VALHALLA_SHORTCUTS_LAYER_ID,
-        VALHALLA_ACCESS_RESTRICTIONS_PERMANENT_LAYER_ID,
-        VALHALLA_ACCESS_RESTRICTIONS_TIMED_LAYER_ID,
-      ].filter((layerId) => map.getLayer(layerId));
-
-      if (availableLayers.length === 0) return;
-
-      const features = map.queryRenderedFeatures(event.point, {
-        layers: availableLayers,
-      });
-
-      const { lng, lat } = event.lngLat;
-
-      if (features && features.length > 0) {
-        setTilesPopup({ lng, lat, features });
-      }
-    },
-    []
-  );
-
   const handleMapClick = useCallback(
     (event: maplibregl.MapLayerMouseEvent) => {
       if (handledLongPressRef.current) {
@@ -560,20 +468,6 @@ export const MapComponent = () => {
       if (showContextPopup) {
         setShowContextPopup(false);
         return;
-      }
-
-      if (drawRef.current) {
-        const terraDrawInstance = drawRef.current.getTerraDrawInstance();
-        if (terraDrawInstance) {
-          const mode = terraDrawInstance.getMode();
-          if (
-            mode === 'polygon' ||
-            mode === 'select' ||
-            mode === 'delete-selection'
-          ) {
-            return;
-          }
-        }
       }
 
       const routeFeature = event.features?.find(
@@ -616,9 +510,7 @@ export const MapComponent = () => {
       clickStateRef.current.timer = setTimeout(() => {
         const pendingLngLat = clickStateRef.current.pendingLngLat;
         if (pendingLngLat) {
-          if (activeTab === 'tiles') {
-            handleMapTilesClick(event);
-          } else if (markerClickRef.current) {
+          if (markerClickRef.current) {
             markerClickRef.current = false;
           } else {
             setActivePlace(null);
@@ -628,14 +520,7 @@ export const MapComponent = () => {
         clickStateRef.current.pendingLngLat = null;
       }, CLICK_DELAY_MS);
     },
-    [
-      showContextPopup,
-      cancelPendingClick,
-      activeTab,
-      handleMapTilesClick,
-      setActiveRouteIndex,
-      markerClickRef,
-    ]
+    [showContextPopup, cancelPendingClick, setActiveRouteIndex, markerClickRef]
   );
 
   const handleMapDblClick = useCallback(() => {
@@ -662,13 +547,11 @@ export const MapComponent = () => {
 
   const handleMapContextMenu = useCallback(
     (event: { lngLat: { lng: number; lat: number } }) => {
-      if (activeTab === 'tiles') return;
-
       const { lngLat } = event;
       setPopupLngLat(lngLat);
       setShowContextPopup(true);
     },
-    [activeTab]
+    []
   );
 
   const handleMoveEnd = useCallback(() => {
@@ -685,8 +568,6 @@ export const MapComponent = () => {
 
   const handleTouchStart = useCallback(
     (event: maplibregl.MapTouchEvent) => {
-      if (activeTab === 'tiles') return;
-
       const now = Date.now();
       const touchCount = event.originalEvent.touches.length;
 
@@ -704,13 +585,11 @@ export const MapComponent = () => {
       }
       clickStateRef.current.lastTapTime = now;
     },
-    [cancelPendingClick, activeTab]
+    [cancelPendingClick]
   );
 
   const handleTouchEnd = useCallback(
     (event: maplibregl.MapTouchEvent) => {
-      if (activeTab === 'tiles') return;
-
       const longTouchTimeMS = 100;
       const acceptableMoveDistance = 20;
 
@@ -723,22 +602,6 @@ export const MapComponent = () => {
             acceptableMoveDistance;
 
         if (touchTime > longTouchTimeMS && didNotMoveMap) {
-          if (drawRef.current) {
-            const terraDrawInstance = drawRef.current.getTerraDrawInstance();
-            if (terraDrawInstance) {
-              const mode = terraDrawInstance.getMode();
-              if (
-                mode === 'polygon' ||
-                mode === 'select' ||
-                mode === 'delete-selection'
-              ) {
-                touchStartTimeRef.current = null;
-                touchLocationRef.current = null;
-                return;
-              }
-            }
-          }
-
           handledLongPressRef.current = true;
           handleMapContextMenu({ lngLat: event.lngLat });
         }
@@ -747,7 +610,7 @@ export const MapComponent = () => {
       touchStartTimeRef.current = null;
       touchLocationRef.current = null;
     },
-    [handleMapContextMenu, activeTab]
+    [handleMapContextMenu]
   );
 
   const onRouteLineHover = useCallback(
@@ -788,21 +651,11 @@ export const MapComponent = () => {
       const isOverRoute =
         topLayerId === 'routes-line' || topLayerId === 'routes-hit-target';
 
-      const isOverTiles =
-        features &&
-        features.length > 0 &&
-        (features[0]?.layer?.id === VALHALLA_EDGES_LAYER_ID ||
-          features[0]?.layer?.id === VALHALLA_NODES_LAYER_ID ||
-          features[0]?.layer?.id === VALHALLA_SHORTCUTS_LAYER_ID ||
-          features[0]?.layer?.id ===
-            VALHALLA_ACCESS_RESTRICTIONS_PERMANENT_LAYER_ID ||
-          features[0]?.layer?.id ===
-            VALHALLA_ACCESS_RESTRICTIONS_TIMED_LAYER_ID);
       const isOverPlaces = topLayerId === PLACES_POINTS_LAYER_ID;
 
       if (isOverRoute && !isTouch) {
         onRouteLineHover(event);
-      } else if (isOverTiles || isOverPlaces) {
+      } else if (isOverPlaces) {
         const map = mapRef.current.getMap();
         map.getCanvas().style.cursor = 'pointer';
       } else {
@@ -839,18 +692,11 @@ export const MapComponent = () => {
         onTouchEnd={handleTouchEnd}
         onMouseMove={handleMouseMove}
         onMouseLeave={handleMouseLeave}
-        interactiveLayerIds={
-          activeTab === 'tiles'
-            ? [
-                VALHALLA_EDGES_LAYER_ID,
-                VALHALLA_NODES_LAYER_ID,
-                VALHALLA_SHORTCUTS_LAYER_ID,
-                VALHALLA_ACCESS_RESTRICTIONS_PERMANENT_LAYER_ID,
-                VALHALLA_ACCESS_RESTRICTIONS_TIMED_LAYER_ID,
-                PLACES_POINTS_LAYER_ID,
-              ]
-            : ['routes-line', 'routes-hit-target', PLACES_POINTS_LAYER_ID]
-        }
+        interactiveLayerIds={[
+          'routes-line',
+          'routes-hit-target',
+          PLACES_POINTS_LAYER_ID,
+        ]}
         mapStyle={resolvedMapStyle}
         attributionControl={false}
         style={{ width: '100%', height: '100dvh' }}
@@ -862,8 +708,6 @@ export const MapComponent = () => {
       >
         <RouteLines />
         <HighlightSegment />
-        <IsochronePolygons />
-        <IsochroneLocations />
         {guiding && guideFix && (
           <Marker
             anchor="center"
@@ -927,14 +771,10 @@ export const MapComponent = () => {
               }}
               onDragEnd={(e) => {
                 setActivePlace(null);
-                if (marker.type === 'waypoint') {
-                  updateWaypointPosition({
-                    latLng: { lat: e.lngLat.lat, lng: e.lngLat.lng },
-                    index: marker.index ?? 0,
-                  });
-                } else if (marker.type === 'isocenter') {
-                  updateIsoPosition(e.lngLat.lng, e.lngLat.lat);
-                }
+                updateWaypointPosition({
+                  latLng: { lat: e.lngLat.lat, lng: e.lngLat.lng },
+                  index: marker.index ?? 0,
+                });
               }}
             >
               <div className="relative">
@@ -969,9 +809,7 @@ export const MapComponent = () => {
             maxWidth="none"
           >
             <MapContextMenu
-              activeTab={activeTab}
               onAddWaypoint={handleAddWaypoint}
-              onAddIsoWaypoint={handleAddIsoWaypoint}
               popupLocation={popupLngLat}
             />
           </Popup>
@@ -983,21 +821,6 @@ export const MapComponent = () => {
             lat={routeHoverPopup.lat}
             summary={routeHoverPopup.summary}
           />
-        )}
-
-        {tilesPopup && (
-          <Popup
-            longitude={tilesPopup.lng}
-            latitude={tilesPopup.lat}
-            closeButton={false}
-            maxWidth="none"
-            onClose={() => setTilesPopup(null)}
-          >
-            <TilesInfoPopup
-              features={tilesPopup.features}
-              onClose={() => setTilesPopup(null)}
-            />
-          </Popup>
         )}
 
         {placesVisible && <PlacesLayer places={places} />}
