@@ -18,7 +18,7 @@ from pydantic_ai.models.function import AgentInfo, FunctionModel
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agent import agent_interpret, interpret_cache
+from agent import interpret_cache, model
 
 
 @pytest.fixture(autouse=True)
@@ -60,9 +60,9 @@ class FakeLLM:
 def fake_llm(monkeypatch) -> FakeLLM:
     """A key and a model that answer without OpenRouter.
 
-    Patches the one seam ``agent_interpret`` documents (``_make_model``).
+    Patches the one seam ``agent.model`` documents (``make_model``).
     """
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
     fake = FakeLLM()
-    monkeypatch.setattr(agent_interpret, "_make_model", fake.model)
+    monkeypatch.setattr(model, "make_model", fake.model)
     return fake

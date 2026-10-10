@@ -59,7 +59,7 @@ class TestNoReaderRefuses:
             build_requirements(RU_BUG, _req(RU_BUG))
 
     def test_a_failed_reading_is_not_replaced_by_a_guess(self, fake_llm, monkeypatch):
-        from agent import agent_interpret as ai
+        from agent import client as ai
 
         def boom(*_a, **_kw):
             raise RuntimeError("agent: tool search_places failed: db gone")

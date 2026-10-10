@@ -10,7 +10,11 @@ from __future__ import annotations
 
 import logging as _logging
 
-from agent import interpret_cache
+from agent import client, interpret_cache
+from agent.mapping import ui_requirements, ui_used
+from agent.model import model_name
+from agent.prompts import compose_instructions
+from agent.prompts.notes import _ui_note
 from contracts.planner import GenerateReq, IntentDecision, IntentResult
 from core.errors import InterpretationUnavailable
 from domain import constants
@@ -84,15 +88,11 @@ def _interpret_cache_key(
     editing the instructions invalidates every entry.
     """
     try:
-        from agent import agent_interpret, interpret_cache
-
-        if not agent_interpret.available():
+        if not client.available():
             return None, ""
-        instructions = agent_interpret._instructions(agent_interpret._ui_note(req))
+        instructions = compose_instructions(_ui_note(req))
         return (
-            interpret_cache.interpret_key(
-                query, req, instructions, agent_interpret._model_name()
-            ),
+            interpret_cache.interpret_key(query, req, instructions, model_name()),
             interpret_cache.prompt_hash(instructions),
         )
     except Exception as exc:
@@ -104,12 +104,8 @@ def _agent_contract(
     query: str, req: GenerateReq, db, wall_clock_s: float | None = None
 ) -> TripRequirements | None:
     """The interpretation agent's contract, or None when it cannot be trusted."""
-    from agent import agent_interpret
-
     try:
-        return agent_interpret.interpret_with_agent(
-            query, req, db=db, wall_clock_s=wall_clock_s
-        )
+        return client.interpret_with_agent(query, req, db=db, wall_clock_s=wall_clock_s)
     except Exception as exc:
         log.warning("requirements: agent layer failed (%s)", exc)
         return None
@@ -150,7 +146,7 @@ def _finalize_agent_contract(
     The model reads the text; the controls the tourist actually pressed must not
     be lost to a misreading, so they are merged in and win on conflict.
     """
-    ui_reqs = _ui_requirements(req)
+    ui_reqs = ui_requirements(req)
     contract.requirements, _ = _merge_requirements(ui_reqs, contract.requirements)
     ui_positive = {
         r.code for r in ui_reqs if r.code and r.kind in ("interest", "service")
@@ -182,41 +178,9 @@ def _finalize_agent_contract(
             constants.MIN_BUDGET_MIN,
             min(contract.budget_minutes, constants.MAX_BUDGET_MIN),
         )
-    if contract.source == "llm" and _ui_used(req, ui_reqs):
+    if contract.source == "llm" and ui_used(req):
         contract.source = "mixed"
     return contract
-
-
-def _ui_requirements(req: GenerateReq) -> list[Requirement]:
-    """Requirements the tourist set with a visible control (source="ui")."""
-    out: list[Requirement] = []
-    for code in req.hard_services:
-        out.append(
-            Requirement(kind="service", strength="hard", code=code, label=code, source="ui")
-        )
-    for code in req.interests:
-        out.append(
-            Requirement(kind="interest", strength="soft", code=code, label=code, source="ui")
-        )
-    for code in req.avoid:
-        out.append(
-            Requirement(kind="avoid", strength="hard", code=code, label=code, source="ui")
-        )
-    return out
-
-
-def _ui_used(req: GenerateReq, ui_reqs: list[Requirement]) -> bool:
-    """True when an explicit control contributed anything to the request.
-
-    `time_budget_minutes == 0` means "без ограничения" and does not count as a choice.
-    """
-    return bool(ui_reqs) or (
-        req.party_adults is not None
-        or req.party_children is not None
-        or bool(req.party_children_ages)
-        or bool(req.mobility)
-        or req.time_budget_minutes not in (None, 0)
-    )
 
 
 def _merge_requirements(

@@ -11,12 +11,11 @@ from collections.abc import Callable
 from contextlib import asynccontextmanager
 from typing import Any
 
-import psycopg
 import uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from agent.agent_interpret import DEFAULT_MODEL
+from agent.client import DEFAULT_MODEL
 from api.routers import accounts as accounts_api, clients as clients_api
 from api.schemas import (
     ExplainReq,
@@ -32,7 +31,7 @@ from contracts.planner import (
 )
 from core.config import openrouter_api_key, settings
 from core.errors import AgentError, NoRoutePossible
-from infra import embeddings, progress, trace
+from infra import db as infra_db, embeddings, progress, trace
 from planner.pipeline import Pipeline
 from store import itineraries as itineraries_mod, places as places_mod, services as services_mod
 
@@ -45,7 +44,7 @@ log = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    db = psycopg.connect(settings.DSN, autocommit=True)
+    db = infra_db.connect(autocommit=True, timeout=None)
     with db.cursor() as cur:
         cur.execute("SET pg_trgm.word_similarity_threshold = 0.45")
     app.state.planner = Pipeline(db=db)

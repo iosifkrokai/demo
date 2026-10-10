@@ -74,9 +74,9 @@ def source_fields(source_url: str, license: str | None = None) -> dict:
 
 def connect(dsn: str):
     """Open a psycopg connection (imported lazily so --dry-run needs no driver)."""
-    import psycopg
+    from infra.db import connect as db_connect
 
-    return psycopg.connect(dsn)
+    return db_connect(dsn, timeout=None)
 
 
 def allow_curated_category_change(conn) -> None:

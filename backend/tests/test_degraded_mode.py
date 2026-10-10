@@ -19,7 +19,7 @@ from fastapi.testclient import TestClient
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agent import agent_interpret as ai
+from agent import client as ai, runner as ai_runner
 from api import main as agent_main
 from contracts.planner import Candidate, GenerateReq, ResolvedConstraints
 from core.config import openrouter_api_key, settings
@@ -140,7 +140,7 @@ class TestAgentAvailability:
         assert ai.available() is True
 
     def test_no_key_returns_no_contract(self, no_key, monkeypatch):
-        monkeypatch.setattr(ai, "_run_agent", _explode)
+        monkeypatch.setattr(ai_runner, "_run_agent", _explode)
         assert ai.interpret_with_agent(QUERY, GenerateReq(query=QUERY)) is None
 
 
@@ -148,7 +148,7 @@ class TestNoReaderRefuses:
     """No reading means no plan — never a keyword guess dressed up as one."""
 
     def test_no_key_never_calls_the_model(self, no_key, monkeypatch):
-        monkeypatch.setattr(ai, "_run_agent", _explode)
+        monkeypatch.setattr(ai_runner, "_run_agent", _explode)
         with pytest.raises(InterpretationUnavailable):
             build_requirements(QUERY, GenerateReq(query=QUERY))
 

@@ -142,7 +142,7 @@ class TestFailuresDegrade:
     def test_a_tool_failure_refuses_the_request(self, with_key, monkeypatch):
         """A bounded tool blowing up inside the agent costs the reading, and with
         no reading there is no contract: the request is refused, never guessed at."""
-        from agent import agent_interpret as ai
+        from agent import client as ai
 
         def boom(*_a, **_k):
             raise RuntimeError("tool search_places failed: db gone")
@@ -154,12 +154,12 @@ class TestFailuresDegrade:
     def test_a_tool_failure_inside_the_agent_returns_no_contract(self, with_key, monkeypatch):
         """`interpret_with_agent` swallows a tool/model failure and returns None
         — a half-filled contract is never handed to the planner."""
-        from agent import agent_interpret as ai
+        from agent import client as ai, runner as ai_runner
 
         def boom(*_a, **_k):
             raise RuntimeError("tool services_near_route failed: db gone")
 
-        monkeypatch.setattr(ai, "_run_agent", boom)
+        monkeypatch.setattr(ai_runner, "_run_agent", boom)
         assert ai.interpret_with_agent(RU, GenerateReq(query=RU)) is None
 
     def test_a_missing_reading_refuses_the_request(self, with_key, monkeypatch):

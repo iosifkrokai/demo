@@ -16,7 +16,15 @@ from pydantic_ai.models.function import AgentInfo, FunctionModel
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agent import agent_interpret as ai, tools
+from agent import (
+    client as ai,
+    model as ai_model,
+    runner as ai_runner,
+    schema as ai_schema,
+    telemetry as ai_telemetry,
+    tools,
+)
+from agent.tools import _db as tools_db, areas as tools_areas
 from contracts.planner import GenerateReq
 from core.config import settings
 from core.errors import InterpretationUnavailable
@@ -55,7 +63,7 @@ def fake_key(monkeypatch):
 @pytest.fixture
 def no_db(monkeypatch):
     """Keep tools off the network/DB: a fake connection, never a real one."""
-    monkeypatch.setattr(tools, "_connect", _FakeConn)
+    monkeypatch.setattr(tools_db, "_connect", _FakeConn)
 
 
 def _rows(n: int = 40) -> list[dict]:
@@ -119,22 +127,22 @@ def test_model_failure_returns_none(fake_key, no_db, monkeypatch):
     def boom(messages, info: AgentInfo) -> ModelResponse:
         raise RuntimeError("upstream exploded")
 
-    monkeypatch.setattr(ai, "_make_model", lambda: FunctionModel(boom, model_name="boom"))
+    monkeypatch.setattr(ai_model, "make_model", lambda: FunctionModel(boom, model_name="boom"))
     assert ai.interpret_with_agent(QUERY, GenerateReq(query=QUERY)) is None
 
 
 def test_tool_call_budget_is_enforced(fake_key, no_db, monkeypatch):
     """A model that keeps calling tools hits the cap and yields None, not a hang."""
-    monkeypatch.setattr(tools, "_db_search_rows", lambda db, *, query, limit, near: _rows(5))
+    monkeypatch.setattr(tools_db, "_db_search_rows", lambda db, *, query, limit, near: _rows(5))
     model, _ = _fake_model(
-        None, tool_calls=[("search_places", {"query": "замок"})] * (ai.MAX_TOOL_CALLS + 3)
+        None, tool_calls=[("search_places", {"query": "замок"})] * (ai_runner.MAX_TOOL_CALLS + 3)
     )
-    monkeypatch.setattr(ai, "_make_model", lambda: model)
+    monkeypatch.setattr(ai_model, "make_model", lambda: model)
     assert ai.interpret_with_agent(QUERY, GenerateReq(query=QUERY)) is None
 
 
 def test_wall_clock_guard_times_out():
-    result, failure = ai._run_with_timeout(lambda: time.sleep(0.3), 0.01)
+    result, failure = ai_runner._run_with_timeout(lambda: time.sleep(0.3), 0.01)
     assert result is None and failure == "timeout"
 
 
@@ -143,11 +151,11 @@ def test_limits_are_bounded():
 
     The numbers are a product decision; finite, but roomy enough to finish thinking.
     """
-    assert 0 < ai.MAX_TOOL_CALLS <= 24
-    assert 0 < ai.MAX_REQUESTS <= 12
-    assert 0 < ai.MAX_OUTPUT_TOKENS <= 8192
-    assert 0 < ai.WALL_CLOCK_TIMEOUT_S <= 120
-    assert 0 < ai.MODEL_TIMEOUT_S < ai.WALL_CLOCK_TIMEOUT_S
+    assert 0 < ai_runner.MAX_TOOL_CALLS <= 24
+    assert 0 < ai_runner.MAX_REQUESTS <= 12
+    assert 0 < ai_runner.MAX_OUTPUT_TOKENS <= 8192
+    assert 0 < ai_runner.WALL_CLOCK_TIMEOUT_S <= 120
+    assert 0 < ai_runner.MODEL_TIMEOUT_S < ai_runner.WALL_CLOCK_TIMEOUT_S
 
 
 def test_the_default_model_is_the_measured_one():
@@ -155,11 +163,11 @@ def test_the_default_model_is_the_measured_one():
 
     The model is chosen by measurement, not preference; re-measure before changing it.
     """
-    assert ai._model_name(), "a model must always resolve"
-    assert ai.DEFAULT_MODEL == "deepseek/deepseek-v4.1-flash"
+    assert ai_model.model_name(), "a model must always resolve"
+    assert ai_model.DEFAULT_MODEL == "deepseek/deepseek-v4.1-flash"
     os.environ["AGENT_INTERPRET_MODEL"] = "example/override"
     try:
-        assert ai._model_name() == "example/override"
+        assert ai_model.model_name() == "example/override"
     finally:
         del os.environ["AGENT_INTERPRET_MODEL"]
 
@@ -213,14 +221,14 @@ def _payload() -> dict:
 @pytest.fixture
 def fake_run(fake_key, no_db, monkeypatch):
     """Wire a fake model that calls search_places, then answers `_payload()`."""
-    monkeypatch.setattr(tools, "_db_search_rows", lambda db, *, query, limit, near: _rows(20))
+    monkeypatch.setattr(tools_db, "_db_search_rows", lambda db, *, query, limit, near: _rows(20))
     model, seen = _fake_model(
         _payload(),
         tool_calls=[
             ("search_places", {"query": "замок", "category_codes": ["замок"], "limit": 999})
         ],
     )
-    monkeypatch.setattr(ai, "_make_model", lambda: model)
+    monkeypatch.setattr(ai_model, "make_model", lambda: model)
     return seen
 
 
@@ -270,9 +278,9 @@ def test_fake_model_fills_the_contract(fake_run):
 
 def test_agent_reading_has_no_status_field(fake_run):
     """Satisfaction is structurally unrepresentable in the agent's output."""
-    assert "status" not in ai.AgentReading.model_fields
-    assert "status" not in ai.AgentRequirement.model_fields
-    assert "place_ids" not in ai.AgentRequirement.model_fields
+    assert "status" not in ai_schema.AgentReading.model_fields
+    assert "status" not in ai_schema.AgentRequirement.model_fields
+    assert "place_ids" not in ai_schema.AgentRequirement.model_fields
 
 
 def test_agent_never_marks_a_requirement_satisfied(fake_run):
@@ -285,7 +293,7 @@ def test_agent_never_marks_a_requirement_satisfied(fake_run):
 
 
 def test_invented_place_id_is_rejected(fake_key, no_db, monkeypatch):
-    monkeypatch.setattr(tools, "_db_search_rows", lambda db, *, query, limit, near: _rows(3))
+    monkeypatch.setattr(tools_db, "_db_search_rows", lambda db, *, query, limit, near: _rows(3))
     payload = {
         "requirements": [
             {"kind": "must_visit", "name": "Старый замок", "place_id": 2, "confidence": 0.9},
@@ -298,7 +306,7 @@ def test_invented_place_id_is_rejected(fake_key, no_db, monkeypatch):
         ]
     }
     model, _ = _fake_model(payload, tool_calls=[("search_places", {"query": "замок"})])
-    monkeypatch.setattr(ai, "_make_model", lambda: model)
+    monkeypatch.setattr(ai_model, "make_model", lambda: model)
 
     tr = ai.interpret_with_agent("замок", GenerateReq(query="замок"))
     assert tr is not None
@@ -310,7 +318,7 @@ def test_invented_place_id_is_rejected(fake_key, no_db, monkeypatch):
 def test_children_ages_are_never_invented(fake_key, no_db, monkeypatch):
     payload = {"children": 2, "children_ages": [4, 7], "requirements": []}
     model, _ = _fake_model(payload)
-    monkeypatch.setattr(ai, "_make_model", lambda: model)
+    monkeypatch.setattr(ai_model, "make_model", lambda: model)
 
     query = "двое детей, погулять по Гродно"
     tr = ai.interpret_with_agent(query, GenerateReq(query=query))
@@ -321,7 +329,7 @@ def test_children_ages_are_never_invented(fake_key, no_db, monkeypatch):
 
 def test_ui_only_filters_still_mark_the_source_mixed(fake_key, no_db, monkeypatch):
     model, _ = _fake_model({"requirements": []})
-    monkeypatch.setattr(ai, "_make_model", lambda: model)
+    monkeypatch.setattr(ai_model, "make_model", lambda: model)
     req = GenerateReq(query="погулять по Гродно", party_children=1)
     tr = ai.interpret_with_agent("погулять по Гродно", req)
     assert tr is not None and tr.source == "mixed"
@@ -330,7 +338,7 @@ def test_ui_only_filters_still_mark_the_source_mixed(fake_key, no_db, monkeypatc
 
 def test_llm_only_reading_is_tagged_llm(fake_key, no_db, monkeypatch):
     model, _ = _fake_model({"requirements": [{"kind": "interest", "code": "замок"}]})
-    monkeypatch.setattr(ai, "_make_model", lambda: model)
+    monkeypatch.setattr(ai_model, "make_model", lambda: model)
     tr = ai.interpret_with_agent("замки", GenerateReq(query="замки"))
     assert tr is not None and tr.source == "llm"
     assert tr.interest_codes() == ["замок"]
@@ -351,7 +359,7 @@ def test_the_model_call_carries_the_prompt_it_was_given(fake_run):
 
     assert tr is not None
     assert call.name == "interpret · model"
-    assert call.model == ai.DEFAULT_MODEL
+    assert call.model == ai_model.DEFAULT_MODEL
     system, user = call.input
     assert system["role"] == "system" and "Grodno region" in system["content"]
     assert user["role"] == "user"
@@ -375,7 +383,7 @@ def test_an_answer_that_is_not_a_reading_is_recorded_as_an_error():
 
     trace.begin("job-bad-answer")
     try:
-        ai._record_model_call(GenerateReq(query=QUERY), "request='...'", Result())
+        ai_telemetry._record_model_call(GenerateReq(query=QUERY), "request='...'", Result())
         call, = _model_spans("job-bad-answer")
     finally:
         trace.finish()
@@ -386,7 +394,7 @@ def test_an_answer_that_is_not_a_reading_is_recorded_as_an_error():
 
 
 def test_search_places_caps_results(monkeypatch, no_db):
-    monkeypatch.setattr(tools, "_db_search_rows", lambda db, *, query, limit, near: _rows(40))
+    monkeypatch.setattr(tools_db, "_db_search_rows", lambda db, *, query, limit, near: _rows(40))
 
     out = tools.search_places("замки", category_codes=["замок"], limit=999)
     assert out["error"] is None
@@ -404,7 +412,7 @@ def test_search_places_caps_results(monkeypatch, no_db):
 
 
 def test_search_places_clamps_radius(monkeypatch, no_db):
-    monkeypatch.setattr(tools, "_db_search_rows", lambda db, *, query, limit, near: _rows(2))
+    monkeypatch.setattr(tools_db, "_db_search_rows", lambda db, *, query, limit, near: _rows(2))
     out = tools.search_places("замки", near_lat=53.67, near_lon=23.82, radius_m=10_000_000)
     assert out["provenance"]["strategy"] == "nearby"
     assert out["provenance"]["radius_m"] == tools.MAX_RADIUS_M
@@ -415,11 +423,11 @@ def test_tools_never_raise_raw_errors(monkeypatch, no_db):
     def boom(*args, **kwargs):
         raise RuntimeError("db on fire")
 
-    monkeypatch.setattr(tools, "_db_search_rows", boom)
-    monkeypatch.setattr(tools, "_db_area_rows", boom)
-    monkeypatch.setattr(tools, "_db_place_row", boom)
+    monkeypatch.setattr(tools_db, "_db_search_rows", boom)
+    monkeypatch.setattr(tools_db, "_db_area_rows", boom)
+    monkeypatch.setattr(tools_db, "_db_place_row", boom)
     monkeypatch.setattr(
-        tools,
+        tools_areas,
         "_areas_from_registry",
         lambda term, locale, limit: (_ for _ in ()).throw(ImportError("no domain.areas")),
     )
@@ -436,7 +444,7 @@ def test_tools_never_raise_raw_errors(monkeypatch, no_db):
     def no_driver():
         raise ImportError("no psycopg")
 
-    monkeypatch.setattr(tools, "_connect", no_driver)
+    monkeypatch.setattr(tools_db, "_connect", no_driver)
     assert tools.search_places("замки")["error"] == tools.ERR_DB_UNAVAILABLE
 
 
@@ -460,7 +468,7 @@ def test_get_place_facts_returns_raw_facts_with_provenance(monkeypatch, no_db):
             {"title": "d", "url": "w"},
         ],
     }
-    monkeypatch.setattr(tools, "_db_place_row", lambda db, place_id: row)
+    monkeypatch.setattr(tools_db, "_db_place_row", lambda db, place_id: row)
 
     out = tools.get_place_facts(7)
     assert out["error"] is None and out["count"] == 1
@@ -472,7 +480,7 @@ def test_get_place_facts_returns_raw_facts_with_provenance(monkeypatch, no_db):
     assert out["provenance"]["fact_status"] == "raw_unverified"
     assert out["provenance"]["result_cap"] == tools.MAX_FACTS_PER_CALL
 
-    monkeypatch.setattr(tools, "_db_place_row", lambda db, place_id: None)
+    monkeypatch.setattr(tools_db, "_db_place_row", lambda db, place_id: None)
     assert tools.get_place_facts(4242)["error"] == tools.ERR_NOT_FOUND
 
 
@@ -523,8 +531,8 @@ def test_find_areas_falls_back_to_the_db_without_the_registry(monkeypatch, no_db
         {"code": f"district:{i}", "name_ru": f"Район {i}", "name_en": None, "kind": "district"}
         for i in range(30)
     ]
-    monkeypatch.setattr(tools, "_areas_from_registry", no_registry)
-    monkeypatch.setattr(tools, "_db_area_rows", lambda db, term, limit: rows)
+    monkeypatch.setattr(tools_areas, "_areas_from_registry", no_registry)
+    monkeypatch.setattr(tools_db, "_db_area_rows", lambda db, term, limit: rows)
 
     out = tools.find_areas("район")
     assert out["error"] is None
@@ -536,7 +544,7 @@ def test_broken_area_registry_is_an_error_not_an_exception(monkeypatch, no_db):
     def broken(term, locale, limit):
         raise ValueError("areas.json: duplicate slug")
 
-    monkeypatch.setattr(tools, "_areas_from_registry", broken)
+    monkeypatch.setattr(tools_areas, "_areas_from_registry", broken)
     out = tools.find_areas("Гродно")
     assert out["error"] == tools.ERR_AREA_REGISTRY
     assert out["results"] == []
@@ -576,7 +584,7 @@ def test_services_near_route_reaches_the_agent_without_raising(fake_key, no_db, 
             ("services_near_route", {"category_codes": ["туалет"], "shape": [[53.7, 23.8]]})
         ],
     )
-    monkeypatch.setattr(ai, "_make_model", lambda: model)
+    monkeypatch.setattr(ai_model, "make_model", lambda: model)
 
     tr = ai.interpret_with_agent(QUERY, GenerateReq(query=QUERY))
     assert tr is not None and seen

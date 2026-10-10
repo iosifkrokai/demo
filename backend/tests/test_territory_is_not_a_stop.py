@@ -7,11 +7,8 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agent.agent_interpret import (
-    AgentReading,
-    AgentRequirement,
-    _reading_requirements,
-)
+from agent.mapping import _reading_requirements
+from agent.schema import AgentReading, AgentRequirement
 
 
 def _reading(*items: AgentRequirement) -> AgentReading:

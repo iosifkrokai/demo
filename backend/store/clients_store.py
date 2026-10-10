@@ -17,7 +17,7 @@ from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
 from contracts.clients import route_metrics
-from core.config import settings
+from infra import db
 
 log = logging.getLogger(__name__)
 
@@ -99,7 +99,7 @@ def default_connect() -> psycopg.Connection:
 
     ``connect_timeout`` is short so a down database fails fast into ``503``.
     """
-    return psycopg.connect(settings.DSN, autocommit=True, connect_timeout=3)
+    return db.connect(autocommit=True)
 
 
 def _adapt(value: Any, column: str) -> Any:
