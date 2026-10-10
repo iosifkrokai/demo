@@ -36,17 +36,8 @@ container startup script, so **`make migrate` must run before `make seed`** on a
 fresh volume. Both are idempotent: Alembic records the revision in
 `alembic_version` (a volume at `head` is a no-op; the DSN comes from `DATABASE_URL`).
 
-`make` alone lists every target. Without make:
-
-```bash
-cp .env.example .env
-docker compose up -d --build --wait
-cd backend && .venv/bin/python -m alembic upgrade head
-docker compose --profile seed run --rm seed
-```
-
-UI: <http://localhost/>. The agent runs inside compose; the frontend's nginx
-proxies to `agent:8080`.
+`make` alone lists every target. UI: <http://localhost/>. The agent runs inside
+compose; the frontend's nginx proxies to `agent:8080`.
 
 **No `OPENROUTER_API_KEY`?** The planner has no reader, so `/routes/generate`,
 `/routes/reroute` and `/routes/explain` answer **503 `llm_not_configured`**;
@@ -99,11 +90,9 @@ nginx (`frontend/nginx.conf`) proxies the agent prefixes above and the Valhalla
 paths; the trailing slash on `/auth|/me|/admin/` is deliberate, so the *bare*
 `/admin`, `/login` and `/visited` stay SPA routes.
 
-`backend/planner/` is the pipeline itself — preprocess → interpret → resolve →
-retrieve → geo-focus → diversity → cost → optimize → validate → render → explain →
-verify — with `catalogue` and `refine` as alternate branches. The LLM layer is
-`backend/agent/` (client / model / runner / tools / prompts); the Valhalla client is
-the `backend/planner/valhalla/` package, the place queries `backend/db/store/places.py`.
+The LLM layer is `backend/agent/` (client / model / runner / tools / prompts); the
+Valhalla client is the `backend/planner/valhalla/` package, the place queries
+`backend/db/store/places.py`.
 
 Two request fields change the shape of the answer:
 
@@ -114,19 +103,14 @@ Two request fields change the shape of the answer:
 - `round_trip=true` — the tour closes on its own start; `render()` asks Valhalla
   for the return leg and `validate()` counts it against the budget.
 
-`verify` is the honest half of the response: deterministic, it re-reads the final
-route and geometry and — not the interpretation model — decides `status` and each
-requirement's verdict. A refinement turn enters with the route as it stands and
-applies one typed operation (add / remove / reorder), or refuses with a reason code.
+A refinement turn enters with the route as it stands and applies one typed
+operation (add / remove / reorder), or refuses with a reason code.
 
-## Accounts, visits and the admin panel
+## The admin panel
 
-Signed-in accounts sit **beside** the anonymous `X-Client-Id` client, which is
-adopted on register/login. The Alembic baseline creates `users`, `user_sessions`
-(only `sha256(token)` stored) and `visited_places`; the session is an **HttpOnly
-cookie** (`grodno_session`). `/login`, `/register`, `/visited` and `/admin` are
-full pages behind a client-side guard; the first admin is created with
-`make admin EMAIL=boss@example.com`.
+`/admin` lists users and places and shows the counts. The first administrator is
+made with `make admin EMAIL=boss@example.com` — the account is created, or an
+existing one is promoted; its password is left alone either way.
 
 ## Quality
 
