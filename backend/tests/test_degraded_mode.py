@@ -43,7 +43,7 @@ from planner.embedding import embed_query as _embed_query
 from planner.intent import build_requirements, reader_brief
 from planner.models import Candidate, GenerateReq, ResolvedConstraints
 from planner.pipeline import Pipeline
-from planner.valhalla_client import ping as valhalla_ping
+from planner.valhalla.http import ping as valhalla_ping
 
 QUERY = "Хочу погулять по замкам Гродно"
 DSN = "postgresql://grodno:grodno@localhost:5432/grodno"

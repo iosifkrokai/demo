@@ -103,7 +103,7 @@ paths; the trailing slash on `/auth|/me|/admin/` is deliberate, so the *bare*
 retrieve → geo-focus → diversity → cost → optimize → validate → render → explain →
 verify — with `catalogue` and `refine` as alternate branches. The LLM layer is
 `backend/agent/` (client / model / runner / tools / prompts); the Valhalla client is
-`backend/planner/valhalla_client.py`, the place queries `backend/db/store/places.py`.
+the `backend/planner/valhalla/` package, the place queries `backend/db/store/places.py`.
 
 Two request fields change the shape of the answer:
 
@@ -152,13 +152,13 @@ Apply it with `make migrate`.
 
 **`503 (valhalla ... sources_to_targets failed after retries)`.** Valhalla 3.5.1
 answers 500 `Could not find candidate edge used for label` for matrix shapes with
-`len(sources) >= 6 AND len(targets) >= 7`. `planner/valhalla_client.py` chunks around
+`len(sources) >= 6 AND len(targets) >= 7`. `planner/valhalla/matrix.py` chunks around
 it (`MATRIX_MAX_SOURCES` / `MATRIX_MAX_TARGETS`).
 
 **Route has no polyline / `length_km: null`.** `/route` answers 500 `Could not
 find candidate edge used for destination label` for some POI coordinates. Fixed by
 sending `radius: 100` per location (`LOCATION_SNAP_RADIUS_M` in
-`valhalla_client.py`).
+`planner/valhalla/constants.py`).
 
 **No semantic results (only keyword hits).** The rows have `embedding IS NULL`.
 `python -m db.seed` embeds everything locally — re-run it. (A missing

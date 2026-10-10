@@ -7,8 +7,9 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from planner import render, valhalla_client as vc
+from planner import render
 from planner.models import Candidate
+from planner.valhalla.types import RouteResult, RouteStatus, is_unreachable_time
 
 
 def _c(id: int, lat: float, lon: float, name: str) -> Candidate:
@@ -31,8 +32,8 @@ def test_empty_geometry_returns_honest_status(monkeypatch):
     route = [_c(0, 53.6791, 23.8216, "Старый замок"), _c(1, 53.6849, 23.8310, "Новый замок")]
 
     def fake_route_through(locations, costing, language):
-        return vc.RouteResult(
-            status=vc.RouteStatus.EMPTY_GEOMETRY,
+        return RouteResult(
+            status=RouteStatus.EMPTY_GEOMETRY,
             shape={},
             summary=None,
             maneuvers=None,
@@ -52,9 +53,9 @@ def test_unreachable_pair_treated_by_helper(monkeypatch):
     """Unreachable pair should be handled by is_unreachable_time helper."""
     from core import constants
 
-    assert vc.is_unreachable_time(float(constants.UNREACHABLE_S))
-    assert not vc.is_unreachable_time(100.0)
-    assert not vc.is_unreachable_time(0.0)
+    assert is_unreachable_time(float(constants.UNREACHABLE_S))
+    assert not is_unreachable_time(100.0)
+    assert not is_unreachable_time(0.0)
 
 
 def test_timeout_returns_service_unavailable(monkeypatch):
@@ -62,8 +63,8 @@ def test_timeout_returns_service_unavailable(monkeypatch):
     route = [_c(0, 53.6791, 23.8216, "Старый замок"), _c(1, 53.6849, 23.8310, "Новый замок")]
 
     def fake_route_through(locations, costing, language):
-        return vc.RouteResult(
-            status=vc.RouteStatus.SERVICE_UNAVAILABLE,
+        return RouteResult(
+            status=RouteStatus.SERVICE_UNAVAILABLE,
             shape={},
             summary=None,
             maneuvers=None,
@@ -84,8 +85,8 @@ def test_maneuvers_without_instructions_reported(monkeypatch):
     route = [_c(0, 53.6791, 23.8216, "Старый замок"), _c(1, 53.6849, 23.8310, "Новый замок")]
 
     def fake_route_through(locations, costing, language):
-        return vc.RouteResult(
-            status=vc.RouteStatus.USABLE,
+        return RouteResult(
+            status=RouteStatus.USABLE,
             shape={"type": "LineString", "coordinates": [[23.8216, 53.6791], [23.8310, 53.6849]]},
             summary={"length": 1.2, "time": 900.0},
             maneuvers=[
@@ -109,8 +110,8 @@ def test_locale_mismatch_returns_honest_status(monkeypatch):
     route = [_c(0, 53.6791, 23.8216, "Старый замок"), _c(1, 53.6849, 23.8310, "Новый замок")]
 
     def fake_route_through(locations, costing, language):
-        return vc.RouteResult(
-            status=vc.RouteStatus.USABLE,
+        return RouteResult(
+            status=RouteStatus.USABLE,
             shape={"type": "LineString", "coordinates": [[23.8216, 53.6791], [23.8310, 53.6849]]},
             summary={"length": 1.2, "time": 900.0},
             maneuvers=[
@@ -131,8 +132,8 @@ def test_missing_required_maneuver_fields_reported(monkeypatch):
     route = [_c(0, 53.6791, 23.8216, "Старый замок"), _c(1, 53.6849, 23.8310, "Новый замок")]
 
     def fake_route_through(locations, costing, language):
-        return vc.RouteResult(
-            status=vc.RouteStatus.USABLE,
+        return RouteResult(
+            status=RouteStatus.USABLE,
             shape={"type": "LineString", "coordinates": [[23.8216, 53.6791], [23.8310, 53.6849]]},
             summary={"length": 1.2, "time": 900.0},
             maneuvers=[
@@ -153,8 +154,8 @@ def test_usable_route_with_valid_maneuvers_and_locale(monkeypatch):
     route = [_c(0, 53.6791, 23.8216, "Старый замок"), _c(1, 53.6849, 23.8310, "Новый замок")]
 
     def fake_route_through(locations, costing, language):
-        return vc.RouteResult(
-            status=vc.RouteStatus.USABLE,
+        return RouteResult(
+            status=RouteStatus.USABLE,
             shape={"type": "LineString", "coordinates": [[23.8216, 53.6791], [23.8310, 53.6849]]},
             summary={"length": 1.2, "time": 900.0},
             maneuvers=[
@@ -177,8 +178,8 @@ def test_no_route_exists_status(monkeypatch):
     route = [_c(0, 53.6791, 23.8216, "Старый замок"), _c(1, 53.6849, 23.8310, "Новый замок")]
 
     def fake_route_through(locations, costing, language):
-        return vc.RouteResult(
-            status=vc.RouteStatus.NO_ROUTE_EXISTS,
+        return RouteResult(
+            status=RouteStatus.NO_ROUTE_EXISTS,
             shape={},
             summary=None,
             maneuvers=None,

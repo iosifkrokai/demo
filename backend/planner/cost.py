@@ -10,7 +10,8 @@ from typing import Any
 from core import constants
 from core.errors import NoRoutePossible, UpstreamUnavailable
 from planner.models import Candidate, CostMatrix, ResolvedConstraints
-from planner.valhalla_client import snap_locations, time_matrix
+from planner.valhalla.matrix import time_matrix
+from planner.valhalla.snap import snap_locations
 from reference import taxonomy
 
 from .geo import _distance_m

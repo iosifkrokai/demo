@@ -11,7 +11,7 @@ from typing import Any
 from core import constants
 from core.errors import NoRoutePossible, UpstreamUnavailable
 from planner.models import Candidate, CostMatrix, ResolvedConstraints
-from planner.valhalla_client import optimized_route as valhalla_optimized_route
+from planner.valhalla.route import optimized_route as valhalla_optimized_route
 
 from .cost import prune_unroutable_stops, total_seconds, visit_cost, walk_cost
 

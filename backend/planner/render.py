@@ -11,7 +11,8 @@ from itertools import pairwise
 from core import constants
 from core.errors import UpstreamUnavailable
 from planner.models import Candidate, LatLon
-from planner.valhalla_client import RouteStatus, route_through
+from planner.valhalla.route import route_through
+from planner.valhalla.types import RouteStatus
 
 log = logging.getLogger(__name__)
 

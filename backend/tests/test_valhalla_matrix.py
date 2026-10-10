@@ -1,4 +1,4 @@
-"""Tests for valhalla_client time_matrix chunking."""
+"""Tests for planner.valhalla.matrix time_matrix chunking."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from core.errors import UpstreamUnavailable
-from planner import valhalla_client as vc
+from planner.valhalla import constants, http, matrix
 
 
 def fake_matrix_response(sources: list[dict], targets: list[dict]) -> dict:
@@ -80,8 +80,8 @@ def test_small_matrix_one_call():
         payload = json.loads(kwargs["params"]["json"])
         return fake_matrix_response(payload["sources"], payload["targets"])
 
-    with patch.object(vc, "_request_with_retry", side_effect=fake_request):
-        result = vc.time_matrix(sources, targets)
+    with patch.object(http, "request_with_retry", side_effect=fake_request):
+        result = matrix.time_matrix(sources, targets)
 
     assert len(calls) == 1
     assert_no_unsafe_shapes(calls)
@@ -99,8 +99,8 @@ def test_12x12_is_chunked():
         payload = json.loads(kwargs["params"]["json"])
         return fake_matrix_response(payload["sources"], payload["targets"])
 
-    with patch.object(vc, "_request_with_retry", side_effect=fake_request):
-        result = vc.time_matrix(sources, targets)
+    with patch.object(http, "request_with_retry", side_effect=fake_request):
+        result = matrix.time_matrix(sources, targets)
 
     assert_no_unsafe_shapes(calls)
     assert_matrix_correct(result, 12, 12)
@@ -118,8 +118,8 @@ def test_rectangular_chunking():
         payload = json.loads(kwargs["params"]["json"])
         return fake_matrix_response(payload["sources"], payload["targets"])
 
-    with patch.object(vc, "_request_with_retry", side_effect=fake_request):
-        result = vc.time_matrix(sources, targets)
+    with patch.object(http, "request_with_retry", side_effect=fake_request):
+        result = matrix.time_matrix(sources, targets)
 
     assert_no_unsafe_shapes(calls)
     assert_matrix_correct(result, 12, 8)
@@ -146,8 +146,8 @@ def test_fallback_on_upstream_error():
         payload = json.loads(kwargs["params"]["json"])
         return fake_matrix_response(payload["sources"], payload["targets"])
 
-    with patch.object(vc, "_request_with_retry", side_effect=fake_request):
-        result = vc.time_matrix(sources, targets)
+    with patch.object(http, "request_with_retry", side_effect=fake_request):
+        result = matrix.time_matrix(sources, targets)
 
     assert len(result) == 12
     assert all(len(row) == 12 for row in result)
@@ -165,8 +165,8 @@ def test_diagonal_zero_for_identical_coordinates():
         payload = json.loads(kwargs["params"]["json"])
         return fake_matrix_response(payload["sources"], payload["targets"])
 
-    with patch.object(vc, "_request_with_retry", side_effect=fake_request):
-        result = vc.time_matrix(sources, targets, costing="pedestrian")
+    with patch.object(http, "request_with_retry", side_effect=fake_request):
+        result = matrix.time_matrix(sources, targets, costing="pedestrian")
 
     for i in range(3):
         assert result[i][i] == 0.0, f"Diagonal [{i}][{i}] should be 0.0, got {result[i][i]}"
@@ -176,20 +176,20 @@ def test_diagonal_zero_for_identical_coordinates():
 
 def test_constants_recorded():
     """Every shape above 5x5 is split: a live 6x6 has 500'd on this box."""
-    assert vc.MATRIX_MAX_SOURCES == 5
-    assert vc.MATRIX_MAX_TARGETS == 5
+    assert constants.MATRIX_MAX_SOURCES == 5
+    assert constants.MATRIX_MAX_TARGETS == 5
 
-    assert vc._chunks_safe(5, 5) is True
-    assert vc._chunks_safe(3, 3) is True
-    assert vc._chunks_safe(1, 5) is True
-    assert vc._chunks_safe(5, 1) is True
+    assert matrix._chunks_safe(5, 5) is True
+    assert matrix._chunks_safe(3, 3) is True
+    assert matrix._chunks_safe(1, 5) is True
+    assert matrix._chunks_safe(5, 1) is True
 
-    assert vc._chunks_safe(6, 6) is False
-    assert vc._chunks_safe(5, 6) is False
-    assert vc._chunks_safe(6, 5) is False
-    assert vc._chunks_safe(6, 7) is False
-    assert vc._chunks_safe(7, 7) is False
-    assert vc._chunks_safe(12, 12) is False
+    assert matrix._chunks_safe(6, 6) is False
+    assert matrix._chunks_safe(5, 6) is False
+    assert matrix._chunks_safe(6, 5) is False
+    assert matrix._chunks_safe(6, 7) is False
+    assert matrix._chunks_safe(7, 7) is False
+    assert matrix._chunks_safe(12, 12) is False
 
 
 def test_6x7_is_chunked_not_one_call():
@@ -203,8 +203,8 @@ def test_6x7_is_chunked_not_one_call():
         payload = json.loads(kwargs["params"]["json"])
         return fake_matrix_response(payload["sources"], payload["targets"])
 
-    with patch.object(vc, "_request_with_retry", side_effect=fake_request):
-        result = vc.time_matrix(sources, targets)
+    with patch.object(http, "request_with_retry", side_effect=fake_request):
+        result = matrix.time_matrix(sources, targets)
 
     assert len(calls) > 1, "6x7 should be chunked, not one call"
     assert_no_unsafe_shapes(calls)

@@ -10,9 +10,12 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from core import constants
 from core.errors import UpstreamUnavailable
-from planner import render as render_mod, valhalla_client as vc
+from planner import render as render_mod
 from planner.cost import prune_unroutable_stops
 from planner.models import Candidate, CostMatrix
+from planner.valhalla import http, matrix, snap, types
+from planner.valhalla.matrix import _is_route_failure
+from planner.valhalla.route import route_through
 
 ISLAND = (53.007611, 23.917041)
 MAINLAND = (53.290892, 23.932859)
@@ -45,17 +48,17 @@ def test_null_matrix_cell_is_the_unreachable_sentinel(monkeypatch):
             ]
         }
 
-    monkeypatch.setattr(vc, "_request_with_retry", fake_request)
-    monkeypatch.setattr(vc, "_chunks_safe", lambda n_src, n_tgt: True)
+    monkeypatch.setattr(http, "request_with_retry", fake_request)
+    monkeypatch.setattr(matrix, "_chunks_safe", lambda n_src, n_tgt: True)
 
-    matrix = vc.time_matrix(
+    result = matrix.time_matrix(
         [{"lat": MAINLAND[0], "lon": MAINLAND[1]}, {"lat": ISLAND[0], "lon": ISLAND[1]}],
         [{"lat": MAINLAND[0], "lon": MAINLAND[1]}, {"lat": ISLAND[0], "lon": ISLAND[1]}],
     )
 
-    assert matrix[0][1] == float(constants.UNREACHABLE_S)
-    assert matrix[1][0] == float(constants.UNREACHABLE_S)
-    assert matrix[0][0] == 0.0 and matrix[1][1] == 0.0
+    assert result[0][1] == float(constants.UNREACHABLE_S)
+    assert result[1][0] == float(constants.UNREACHABLE_S)
+    assert result[0][0] == 0.0 and result[1][1] == 0.0
 
 
 def test_prune_drops_the_stop_after_an_unroutable_leg():
@@ -99,15 +102,15 @@ def test_render_falls_back_to_legs_when_the_tour_is_refused(monkeypatch):
         locs = list(locations)
         calls.append(locs)
         if len(locs) > 2:
-            return vc.RouteResult(
-                status=vc.RouteStatus.NO_ROUTE_EXISTS,
+            return types.RouteResult(
+                status=types.RouteStatus.NO_ROUTE_EXISTS,
                 shape={},
                 summary=None,
                 maneuvers=None,
                 language=language,
             )
-        return vc.RouteResult(
-            status=vc.RouteStatus.USABLE,
+        return types.RouteResult(
+            status=types.RouteStatus.USABLE,
             shape={"type": "LineString", "coordinates": [[23.9, 53.0], [23.91, 53.01]]},
             summary={"length": 1.5, "time": 300.0},
             maneuvers=None,
@@ -131,8 +134,8 @@ def test_render_falls_back_to_legs_when_the_tour_is_refused(monkeypatch):
 
 
 def test_no_path_400_is_classified_as_a_route_failure():
-    assert vc._is_route_failure(_no_path_error())
-    assert not vc._is_route_failure(
+    assert _is_route_failure(_no_path_error())
+    assert not _is_route_failure(
         UpstreamUnavailable("valhalla GET /route failed after retries: [Errno 111] Connection refused")
     )
 
@@ -153,11 +156,11 @@ def test_route_through_drops_the_island_stop_instead_of_raising(monkeypatch):
             }
         }
 
-    monkeypatch.setattr(vc, "_request_with_retry", fake_request)
-    monkeypatch.setattr(vc, "snap_locations", lambda locs, costing, timeout=None: list(locs))
-    monkeypatch.setattr(vc, "_snappable", lambda loc, costing, timeout: True)
+    monkeypatch.setattr(http, "request_with_retry", fake_request)
+    monkeypatch.setattr(snap, "snap_locations", lambda locs, costing, timeout=None: list(locs))
+    monkeypatch.setattr(snap, "_snappable", lambda loc, costing, timeout: True)
 
-    result = vc.route_through(
+    result = route_through(
         [
             {"lat": MAINLAND[0], "lon": MAINLAND[1], "type": "break"},
             {"lat": ISLAND[0], "lon": ISLAND[1], "type": "via"},
@@ -166,7 +169,7 @@ def test_route_through_drops_the_island_stop_instead_of_raising(monkeypatch):
         costing="auto",
     )
 
-    assert result.status == vc.RouteStatus.USABLE
+    assert result.status == types.RouteStatus.USABLE
     assert result.shape, "the tour still gets drawn without the island stop"
     assert routed_sizes[0] == 3, "first try has all three stops"
     assert 2 in routed_sizes[1:], "then the island stop is dropped and it routes"

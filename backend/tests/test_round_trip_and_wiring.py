@@ -31,7 +31,7 @@ from planner.models import (
     ResolvedConstraints,
 )
 from planner.resolve import resolve
-from planner.valhalla_client import RouteResult, RouteStatus
+from planner.valhalla.types import RouteResult, RouteStatus
 from planner.validate import validate
 from planner.verify import (
     REASON_MUST_VISIT_UNROUTABLE as VERIFY_UNROUTABLE,

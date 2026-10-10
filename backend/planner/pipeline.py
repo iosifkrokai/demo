@@ -27,7 +27,7 @@ from planner.models import (
     RouteResponse,
     RouteSummary,
 )
-from planner.valhalla_client import ping as valhalla_ping
+from planner.valhalla.http import ping as valhalla_ping
 from telemetry import progress, trace
 
 from .catalogue import catalogue_response
