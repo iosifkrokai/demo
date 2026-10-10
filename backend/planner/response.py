@@ -14,6 +14,7 @@ from core.errors import UpstreamUnavailable
 from planner.models import (
     BudgetInfo,
     Candidate,
+    GenerateReq,
     Interpretation,
     LatLon,
     OverallStatus,
@@ -102,6 +103,31 @@ def build_response(
             },
             "trace": plan.trace,
         },
+    )
+
+
+def no_route_response(req: GenerateReq, detail: str) -> RouteResponse:
+    """Turn "there is no walk here" into an answer instead of a failed request.
+
+    Returns an empty plan with `status="infeasible"` and a machine-readable reason.
+    """
+    return RouteResponse(
+        parsed=ParsedQuery(
+            time_budget_minutes=req.time_budget_minutes, source="agent"
+        ),
+        points=[],
+        shape={},
+        summary=RouteSummary(length_km=None, time_seconds=None),
+        budget=None,
+        explanation=(
+            "Маршрут не построен: в этой зоне не нашлось остановок, между которыми "
+            "можно пройти. Уточните запрос или расширьте район."
+        ),
+        status="infeasible",
+        requirements=[],
+        costing=req.profile or "pedestrian",
+        changes=None,
+        debug={"reason": "no_walkable_route", "detail": detail},
     )
 
 

@@ -1,47 +1,27 @@
-"""HTTP surface for accounts, visits and the admin panel.
+"""HTTP surface for accounts and visits.
 
 The wire speaks codes, not prose; a missing identity differs from a wrong one.
+The admin panel lives in ``api.routers.admin``.
 """
 
 from __future__ import annotations
 
-import functools
-import logging
-import threading
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from fastapi import APIRouter, Depends, Query, Request, Response
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Depends, Request, Response
 
+from api import deps
 from api.models.accounts import (
     REASON_EMAIL_TAKEN,
     REASON_INVALID_CREDENTIALS,
-    REASON_INVALID_REQUEST,
-    REASON_LAST_ADMIN,
-    REASON_NOT_ADMIN,
-    REASON_NOT_AUTHENTICATED,
     REASON_PLACE_NOT_FOUND,
-    REASON_SELF_DELETE,
-    REASON_SELF_ROLE,
-    REASON_SOURCE_TAKEN,
-    REASON_STORAGE_UNAVAILABLE,
-    REASON_USER_NOT_FOUND,
-    ROLE_ADMIN,
     SESSION_COOKIE,
-    AdminPlaceIn,
-    AdminPlaceListOut,
-    AdminPlacePatch,
-    AdminUserItem,
-    AdminUserListOut,
-    AdminUserPatch,
     AuthMeOut,
     LoginIn,
-    PlaceItem,
     PublicUser,
     RegisterIn,
-    StatsOut,
     VisitedBulkIn,
     VisitedBulkOut,
     VisitedItem,
@@ -58,96 +38,12 @@ from core.passwords import (
     verify_password,
 )
 from db.store.accounts_store import (
-    MAX_LIST_LIMIT,
     AccountRepository,
-    DuplicateSource,
     EmailTaken,
-    PostgresAccountRepository,
-    StorageUnavailable,
     place_payloads,
 )
 
-log = logging.getLogger(__name__)
-
 router = APIRouter(tags=["accounts"])
-
-_default_repo_lock = threading.Lock()
-
-
-def get_repository(request: Request) -> AccountRepository:
-    """The process-wide repository, or a test-injected fake.
-
-    Tests set ``app.state.accounts_repository``.
-    """
-    repo = getattr(request.app.state, "accounts_repository", None)
-    if repo is None:
-        with _default_repo_lock:
-            repo = getattr(request.app.state, "accounts_repository", None)
-            if repo is None:
-                repo = PostgresAccountRepository()
-                request.app.state.accounts_repository = repo
-    return repo
-
-
-def _error(status_code: int, reason: str) -> JSONResponse:
-    return JSONResponse(status_code=status_code, content={"reason": reason})
-
-
-def _storage_guarded(fn):
-    """Turn a storage outage into ``503 storage_unavailable``, never a 500."""
-
-    @functools.wraps(fn)
-    def wrapper(*args: Any, **kwargs: Any) -> Any:
-        try:
-            return fn(*args, **kwargs)
-        except StorageUnavailable as exc:
-            log.warning("account storage unavailable: %s", exc)
-            return _error(503, REASON_STORAGE_UNAVAILABLE)
-
-    return wrapper
-
-
-def _session_token(request: Request) -> str | None:
-    """The session token from the cookie, or a ``Bearer`` header."""
-    cookie = request.cookies.get(SESSION_COOKIE)
-    if cookie and cookie.strip():
-        return cookie.strip()
-    auth = request.headers.get("Authorization", "")
-    if auth.lower().startswith("bearer "):
-        token = auth[7:].strip()
-        if token:
-            return token
-    return None
-
-
-def _session_user(
-    request: Request, repo: AccountRepository
-) -> dict[str, Any] | None:
-    token = _session_token(request)
-    if token is None:
-        return None
-    return repo.get_session_user(hash_token(token))
-
-
-def _require_user(
-    request: Request, repo: AccountRepository
-) -> tuple[dict[str, Any] | None, JSONResponse | None]:
-    user = _session_user(request, repo)
-    if user is None:
-        return None, _error(401, REASON_NOT_AUTHENTICATED)
-    return user, None
-
-
-def _require_admin(
-    request: Request, repo: AccountRepository
-) -> tuple[dict[str, Any] | None, JSONResponse | None]:
-    user, err = _require_user(request, repo)
-    if err is not None:
-        return None, err
-    assert user is not None
-    if user["role"] != ROLE_ADMIN:
-        return None, _error(403, REASON_NOT_ADMIN)
-    return user, None
 
 
 def _optional_client_id(request: Request) -> uuid.UUID | None:
@@ -157,13 +53,6 @@ def _optional_client_id(request: Request) -> uuid.UUID | None:
         return None
     try:
         return uuid.UUID(raw.strip())
-    except (ValueError, AttributeError):
-        return None
-
-
-def _parse_uuid(value: str) -> uuid.UUID | None:
-    try:
-        return uuid.UUID(value)
     except (ValueError, AttributeError):
         return None
 
@@ -191,12 +80,12 @@ def _start_session(
 
 
 @router.post("/auth/register", response_model=PublicUser, status_code=201)
-@_storage_guarded
+@deps.storage_guarded
 def register(
     body: RegisterIn,
     request: Request,
     response: Response,
-    repo: AccountRepository = Depends(get_repository),
+    repo: AccountRepository = Depends(deps.get_account_repository),
 ) -> Any:
     """Create an account (always ``role=user``) and sign it in.
 
@@ -204,10 +93,10 @@ def register(
     """
     email = normalize_email(body.email)
     if email is None:
-        return _error(422, REASON_INVALID_EMAIL)
+        return deps.error(422, REASON_INVALID_EMAIL)
     problem = password_problem(body.password)
     if problem is not None:
-        return _error(422, problem)
+        return deps.error(422, problem)
     display_name = (body.display_name or "").strip() or None
     try:
         row = repo.create_user(
@@ -219,23 +108,23 @@ def register(
             client_id=_optional_client_id(request),
         )
     except EmailTaken:
-        return _error(409, REASON_EMAIL_TAKEN)
+        return deps.error(409, REASON_EMAIL_TAKEN)
     _start_session(request, response, repo, row["id"])
     return public_user(row)
 
 
 @router.post("/auth/login", response_model=PublicUser)
-@_storage_guarded
+@deps.storage_guarded
 def login(
     body: LoginIn,
     request: Request,
     response: Response,
-    repo: AccountRepository = Depends(get_repository),
+    repo: AccountRepository = Depends(deps.get_account_repository),
 ) -> Any:
     email = normalize_email(body.email)
     row = repo.get_user_by_email(email) if email is not None else None
     if row is None or not verify_password(body.password, row.get("password_hash")):
-        return _error(401, REASON_INVALID_CREDENTIALS)
+        return deps.error(401, REASON_INVALID_CREDENTIALS)
     client_id = _optional_client_id(request)
     if client_id is not None:
         repo.link_client(row["id"], client_id)
@@ -244,13 +133,13 @@ def login(
 
 
 @router.post("/auth/logout", status_code=204, response_model=None)
-@_storage_guarded
+@deps.storage_guarded
 def logout(
     request: Request,
-    repo: AccountRepository = Depends(get_repository),
+    repo: AccountRepository = Depends(deps.get_account_repository),
 ) -> Any:
     out = Response(status_code=204)
-    token = _session_token(request)
+    token = deps.session_token(request)
     if token is not None:
         repo.delete_session(hash_token(token))
     out.delete_cookie(SESSION_COOKIE, path="/")
@@ -258,28 +147,28 @@ def logout(
 
 
 @router.get("/auth/me", response_model=AuthMeOut)
-@_storage_guarded
+@deps.storage_guarded
 def me(
     request: Request,
-    repo: AccountRepository = Depends(get_repository),
+    repo: AccountRepository = Depends(deps.get_account_repository),
 ) -> Any:
     """Honest about the anonymous case: ``{authenticated: false}``, not a 401.
 
     A 401 here would be console noise for every visitor who is not logged in.
     """
-    user = _session_user(request, repo)
+    user = deps.session_user(request, repo)
     if user is None:
         return AuthMeOut(authenticated=False, user=None)
     return AuthMeOut(authenticated=True, user=public_user(user))
 
 
 @router.get("/me/visited", response_model=VisitedListOut)
-@_storage_guarded
+@deps.storage_guarded
 def list_visited(
     request: Request,
-    repo: AccountRepository = Depends(get_repository),
+    repo: AccountRepository = Depends(deps.get_account_repository),
 ) -> Any:
-    user, err = _require_user(request, repo)
+    user, err = deps.require_user(request, repo)
     if err is not None:
         return err
     assert user is not None
@@ -293,32 +182,32 @@ def list_visited(
 
 
 @router.put("/me/visited/{place_id}", response_model=VisitedItem)
-@_storage_guarded
+@deps.storage_guarded
 def mark_visited(
     place_id: int,
     request: Request,
-    repo: AccountRepository = Depends(get_repository),
+    repo: AccountRepository = Depends(deps.get_account_repository),
 ) -> Any:
-    user, err = _require_user(request, repo)
+    user, err = deps.require_user(request, repo)
     if err is not None:
         return err
     assert user is not None
     marked = repo.mark_visited(user["id"], place_id)
     place = repo.get_place(place_id) if marked is not None else None
     if marked is None or place is None:
-        return _error(404, REASON_PLACE_NOT_FOUND)
+        return deps.error(404, REASON_PLACE_NOT_FOUND)
     payload = place_payloads([place])[0]
     return VisitedItem(**payload, visited_at=marked["visited_at"])
 
 
 @router.post("/me/visited", response_model=VisitedBulkOut)
-@_storage_guarded
+@deps.storage_guarded
 def mark_visited_bulk(
     body: VisitedBulkIn,
     request: Request,
-    repo: AccountRepository = Depends(get_repository),
+    repo: AccountRepository = Depends(deps.get_account_repository),
 ) -> Any:
-    user, err = _require_user(request, repo)
+    user, err = deps.require_user(request, repo)
     if err is not None:
         return err
     assert user is not None
@@ -327,188 +216,15 @@ def mark_visited_bulk(
 
 
 @router.delete("/me/visited/{place_id}", status_code=204, response_model=None)
-@_storage_guarded
+@deps.storage_guarded
 def unmark_visited(
     place_id: int,
     request: Request,
-    repo: AccountRepository = Depends(get_repository),
+    repo: AccountRepository = Depends(deps.get_account_repository),
 ) -> Any:
-    user, err = _require_user(request, repo)
+    user, err = deps.require_user(request, repo)
     if err is not None:
         return err
     assert user is not None
     repo.unmark_visited(user["id"], place_id)
     return Response(status_code=204)
-
-
-@router.get("/admin/users", response_model=AdminUserListOut)
-@_storage_guarded
-def admin_list_users(
-    request: Request,
-    q: str = Query(default="", max_length=200),
-    limit: int = Query(default=50, ge=1, le=MAX_LIST_LIMIT),
-    offset: int = Query(default=0, ge=0),
-    repo: AccountRepository = Depends(get_repository),
-) -> Any:
-    _, err = _require_admin(request, repo)
-    if err is not None:
-        return err
-    rows, total = repo.list_users(q=q.strip(), limit=limit, offset=offset)
-    return AdminUserListOut(
-        items=[AdminUserItem(**row) for row in rows], total=total
-    )
-
-
-@router.patch("/admin/users/{user_id}", response_model=PublicUser)
-@_storage_guarded
-def admin_patch_user(
-    user_id: str,
-    body: AdminUserPatch,
-    request: Request,
-    repo: AccountRepository = Depends(get_repository),
-) -> Any:
-    actor, err = _require_admin(request, repo)
-    if err is not None:
-        return err
-    assert actor is not None
-    target_id = _parse_uuid(user_id)
-    if target_id is None:
-        return _error(404, REASON_USER_NOT_FOUND)
-    target = repo.get_user(target_id)
-    if target is None:
-        return _error(404, REASON_USER_NOT_FOUND)
-
-    fields = body.model_dump(exclude_unset=True)
-    role = fields.get("role")
-    display_name_set = "display_name" in fields
-
-    if role is not None and role != target["role"]:
-        if target_id == actor["id"]:
-            return _error(409, REASON_SELF_ROLE)
-        if target["role"] == ROLE_ADMIN and role != ROLE_ADMIN:
-            if repo.count_admins() <= 1:
-                return _error(409, REASON_LAST_ADMIN)
-
-    updated = repo.update_user(
-        target_id,
-        role=role,
-        display_name=fields.get("display_name"),
-        display_name_set=display_name_set,
-    )
-    if updated is None:
-        return _error(404, REASON_USER_NOT_FOUND)
-    return public_user(updated)
-
-
-@router.delete("/admin/users/{user_id}", status_code=204, response_model=None)
-@_storage_guarded
-def admin_delete_user(
-    user_id: str,
-    request: Request,
-    repo: AccountRepository = Depends(get_repository),
-) -> Any:
-    actor, err = _require_admin(request, repo)
-    if err is not None:
-        return err
-    assert actor is not None
-    target_id = _parse_uuid(user_id)
-    if target_id is None:
-        return _error(404, REASON_USER_NOT_FOUND)
-    if target_id == actor["id"]:
-        return _error(409, REASON_SELF_DELETE)
-    target = repo.get_user(target_id)
-    if target is None:
-        return _error(404, REASON_USER_NOT_FOUND)
-    if target["role"] == ROLE_ADMIN and repo.count_admins() <= 1:
-        return _error(409, REASON_LAST_ADMIN)
-    repo.delete_user(target_id)
-    return Response(status_code=204)
-
-
-@router.get("/admin/places", response_model=AdminPlaceListOut)
-@_storage_guarded
-def admin_list_places(
-    request: Request,
-    q: str = Query(default="", max_length=200),
-    category: str = Query(default="", max_length=120),
-    limit: int = Query(default=50, ge=1, le=MAX_LIST_LIMIT),
-    offset: int = Query(default=0, ge=0),
-    repo: AccountRepository = Depends(get_repository),
-) -> Any:
-    _, err = _require_admin(request, repo)
-    if err is not None:
-        return err
-    rows, total = repo.list_places(
-        q=q.strip(), category=category.strip(), limit=limit, offset=offset
-    )
-    return AdminPlaceListOut(
-        items=[PlaceItem(**payload) for payload in place_payloads(rows)],
-        total=total,
-    )
-
-
-@router.post("/admin/places", response_model=PlaceItem, status_code=201)
-@_storage_guarded
-def admin_create_place(
-    body: AdminPlaceIn,
-    request: Request,
-    repo: AccountRepository = Depends(get_repository),
-) -> Any:
-    _, err = _require_admin(request, repo)
-    if err is not None:
-        return err
-    try:
-        row = repo.create_place(body.model_dump(exclude_unset=True))
-    except DuplicateSource:
-        return _error(409, REASON_SOURCE_TAKEN)
-    return PlaceItem(**place_payloads([row])[0])
-
-
-@router.patch("/admin/places/{place_id}", response_model=PlaceItem)
-@_storage_guarded
-def admin_patch_place(
-    place_id: int,
-    body: AdminPlacePatch,
-    request: Request,
-    repo: AccountRepository = Depends(get_repository),
-) -> Any:
-    _, err = _require_admin(request, repo)
-    if err is not None:
-        return err
-    fields = body.model_dump(exclude_unset=True)
-    if not fields:
-        return _error(422, REASON_INVALID_REQUEST)
-    try:
-        row = repo.update_place(place_id, fields)
-    except DuplicateSource:
-        return _error(409, REASON_SOURCE_TAKEN)
-    if row is None:
-        return _error(404, REASON_PLACE_NOT_FOUND)
-    return PlaceItem(**place_payloads([row])[0])
-
-
-@router.delete("/admin/places/{place_id}", status_code=204, response_model=None)
-@_storage_guarded
-def admin_delete_place(
-    place_id: int,
-    request: Request,
-    repo: AccountRepository = Depends(get_repository),
-) -> Any:
-    _, err = _require_admin(request, repo)
-    if err is not None:
-        return err
-    if not repo.delete_place(place_id):
-        return _error(404, REASON_PLACE_NOT_FOUND)
-    return Response(status_code=204)
-
-
-@router.get("/admin/stats", response_model=StatsOut)
-@_storage_guarded
-def admin_stats(
-    request: Request,
-    repo: AccountRepository = Depends(get_repository),
-) -> Any:
-    _, err = _require_admin(request, repo)
-    if err is not None:
-        return err
-    return StatsOut(**repo.stats())

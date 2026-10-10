@@ -8,7 +8,7 @@ service, a React/Vite frontend served by nginx.
 
 ```
 backend/     the service — api (HTTP) · agent (LLM) · planner (the pipeline)
-             contracts · core · reference · telemetry · ml · quality · tests · data
+             core · reference · telemetry · ml · quality · tests · data
              db/  — the persistence side: models (rows) · store (repositories)
                     · seed (the projection) · alembic · connection.py
 frontend/    React + Vite + MapLibre, talked to over nginx
@@ -20,6 +20,11 @@ nothing imports upward, and `agent` is a leaf — it declares its own input
 (`agent/models.py::ReaderBrief`) rather than reaching for the HTTP body. `agent/`
 is the LLM layer (model, prompts, tools, runner); the one place a provider is
 named is `agent/model.py`.
+
+Each layer declares its own shapes: `db/models/` the rows, `planner/models.py` the
+currency the pipeline speaks, `api/models/` the wire. There is no shared
+`contracts/` — where a rule is genuinely needed by two layers it lives below both
+(`core/accounts.py` is the email/password rules the seed and the API share).
 
 Nothing above `db/store` writes SQL or holds a connection: a logic layer is
 handed repositories (`db/store/registry.py::Repositories`) and calls them.
