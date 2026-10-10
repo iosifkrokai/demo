@@ -13,7 +13,7 @@ from db.seed.datasets import (  # noqa: E402
     validate_osm_sight,
 )
 from db.seed.osm_tags import service_element_to_row, sight_element_to_row  # noqa: E402
-from domain.geofence import inside_project_area  # noqa: E402
+from reference.geofence import inside_project_area  # noqa: E402
 
 OTHER_VOBLASTS = [("Барановичи", 53.1307, 26.0139), ("Вилейка", 54.4903, 26.9107)]
 

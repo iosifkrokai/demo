@@ -18,12 +18,12 @@ from tests._schema import baseline_sql
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from api import main as agent_main
+from core.passwords import hash_password, hash_token, verify_password
 from db.store.accounts_store import (
     DuplicateSource,
     EmailTaken,
     StorageUnavailable,
 )
-from domain.passwords import hash_password, hash_token, verify_password
 
 CLIENT = "33333333-3333-4333-8333-333333333333"
 

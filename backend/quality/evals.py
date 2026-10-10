@@ -140,7 +140,7 @@ def run_services() -> dict[str, Any]:
 
     from db.store import services as services_mod
     from db.store.clients_store import default_connect
-    from domain import taxonomy
+    from reference import taxonomy
 
     checks: list[dict[str, Any]] = []
     try:
@@ -299,7 +299,7 @@ def run_plan() -> dict[str, Any]:
 
     It asks the served app, so a stale server shows up as a failure rather than a green run.
     """
-    from domain import taxonomy
+    from reference import taxonomy
 
     cases = _load("plan")
     checks: list[dict[str, Any]] = []
@@ -394,8 +394,8 @@ def run_interpretation() -> dict[str, Any]:
     Live, via the product's `build_requirements`; the report records which source answered.
     """
     from contracts.planner import GenerateReq
-    from domain import taxonomy
     from planner.intent import build_requirements
+    from reference import taxonomy
 
     checks: list[dict[str, Any]] = []
     sources: dict[str, int] = {}

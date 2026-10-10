@@ -10,8 +10,8 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from domain import areas
-from domain.geofence import inside_belarus, inside_project_area
+from reference import areas
+from reference.geofence import inside_belarus, inside_project_area
 
 INSIDE = [
     ("Гродно", 53.6772, 23.8232),
@@ -62,7 +62,7 @@ def test_project_area_still_rejects_foreign_points():
 
 
 def test_project_area_predicate_is_delegated_to_areas_module():
-    """inside_project_area must be domain.areas.in_project_area's single shared
+    """inside_project_area must be reference.areas.in_project_area's single shared
     predicate (one implementation for import and query), not a second copy."""
     for name, lat, lon in INSIDE:
         assert inside_project_area(lat, lon) == areas.in_project_area(lat, lon), name

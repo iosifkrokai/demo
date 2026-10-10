@@ -28,8 +28,8 @@ from agent.tools import _db as tools_db, areas as tools_areas
 from contracts.planner import GenerateReq
 from core.config import settings
 from core.errors import InterpretationUnavailable
-from domain import areas as areas_mod
 from planner.intent import build_requirements
+from reference import areas as areas_mod
 from telemetry import trace
 
 QUERY = "старый Гродно, двое детей 5 и 9 лет, два часа, туалет обязателен, кафе если по пути"
@@ -429,7 +429,7 @@ def test_tools_never_raise_raw_errors(monkeypatch, no_db):
     monkeypatch.setattr(
         tools_areas,
         "_areas_from_registry",
-        lambda term, locale, limit: (_ for _ in ()).throw(ImportError("no domain.areas")),
+        lambda term, locale, limit: (_ for _ in ()).throw(ImportError("no reference.areas")),
     )
 
     search = tools.search_places("замки")
@@ -525,7 +525,7 @@ def test_find_areas_resolves_through_the_registry(monkeypatch, no_db):
 
 def test_find_areas_falls_back_to_the_db_without_the_registry(monkeypatch, no_db):
     def no_registry(term, locale, limit):
-        raise ImportError("domain.areas missing")
+        raise ImportError("reference.areas missing")
 
     rows = [
         {"code": f"district:{i}", "name_ru": f"Район {i}", "name_en": None, "kind": "district"}

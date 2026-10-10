@@ -7,8 +7,8 @@ from __future__ import annotations
 import math
 from typing import Any
 
-from domain import taxonomy
-from domain.geofence import inside_project_area
+from reference import taxonomy
+from reference.geofence import inside_project_area
 
 DEFAULT_VISIT_MINUTES = 20
 

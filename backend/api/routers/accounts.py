@@ -52,6 +52,13 @@ from contracts.accounts import (
     public_user,
 )
 from contracts.clients import CLIENT_ID_HEADER
+from core.passwords import (
+    SESSION_TTL_S,
+    hash_password,
+    hash_token,
+    new_session_token,
+    verify_password,
+)
 from db.store.accounts_store import (
     MAX_LIST_LIMIT,
     AccountRepository,
@@ -60,13 +67,6 @@ from db.store.accounts_store import (
     PostgresAccountRepository,
     StorageUnavailable,
     place_payloads,
-)
-from domain.passwords import (
-    SESSION_TTL_S,
-    hash_password,
-    hash_token,
-    new_session_token,
-    verify_password,
 )
 
 log = logging.getLogger(__name__)

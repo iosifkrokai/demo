@@ -48,7 +48,7 @@ def service_codes(categories: Iterable[str] | None = None) -> list[str]:
 
     Unknown or non-service codes are dropped rather than trusted.
     """
-    from domain.taxonomy import all_categories
+    from reference.taxonomy import all_categories
 
     known = [
         cat.code

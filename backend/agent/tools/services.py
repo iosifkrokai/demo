@@ -8,7 +8,7 @@ from typing import Any
 from agent.model import RunContext
 from agent.schema import InterpretDeps
 from agent.tools import ERR_NOT_IMPLEMENTED, _clamp, _envelope
-from domain.taxonomy import db_values
+from reference.taxonomy import db_values
 
 MAX_SERVICES_PER_CALL = 5
 MAX_ROUTE_POINTS = 64

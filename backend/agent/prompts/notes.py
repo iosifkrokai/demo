@@ -14,7 +14,7 @@ def _known_areas_note() -> str:
 
     The slugs listed here are what `find_areas` resolves to and what `areas` must carry.
     """
-    from domain import areas as areas_mod
+    from reference import areas as areas_mod
 
     lines = []
     for slug, entry in sorted(areas_mod.load_areas().items()):

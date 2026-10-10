@@ -70,7 +70,7 @@ def _split_by_role(payloads: list[dict[str, Any]]) -> tuple[list[dict], list[dic
 
     An unknown code counts as a stop, never as a service.
     """
-    from domain import taxonomy
+    from reference import taxonomy
 
     stops: list[dict[str, Any]] = []
     services: list[dict[str, Any]] = []

@@ -26,7 +26,7 @@ _AREA_FIELDS = ("code", "name_ru", "name_en", "kind")
 
 def _areas_from_registry(term: str, locale: str, limit: int) -> list[dict]:
     """Canonical area slugs from the versioned registry (``domain/areas.py``)."""
-    from domain.areas import load_areas, resolve_area
+    from reference.areas import load_areas, resolve_area
 
     registry = load_areas()
     found: list[str] = []

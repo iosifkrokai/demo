@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from core.paths import GEO_DIR, PHOTOS_DIR
-from domain.geofence import inside_project_area
+from reference.geofence import inside_project_area
 
 from .datasets import (
     PROTECTED_CATEGORY_SOURCES,

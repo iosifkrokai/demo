@@ -9,8 +9,8 @@ import json
 from functools import lru_cache
 
 from core.paths import GEO_DIR
-from domain import areas
-from domain.areas import point_in_ring
+from reference import areas
+from reference.areas import point_in_ring
 
 BORDER_PATH = GEO_DIR / "belarus_border.json"
 
@@ -50,6 +50,6 @@ def inside_belarus(lat: float, lon: float) -> bool:
 def inside_project_area(lat: float, lon: float) -> bool:
     """Grodno ADM1, with the previously verified border-POI exceptions.
 
-    Delegates to domain.areas.in_project_area, the single shared predicate.
+    Delegates to reference.areas.in_project_area, the single shared predicate.
     """
     return areas.in_project_area(lat, lon)

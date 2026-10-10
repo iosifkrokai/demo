@@ -22,6 +22,7 @@ COPY db/ /app/db/
 COPY domain/ /app/domain/
 COPY ml/ /app/ml/
 COPY planner/ /app/planner/
+COPY reference/ /app/reference/
 COPY telemetry/ /app/telemetry/
 RUN uv sync --no-dev
 

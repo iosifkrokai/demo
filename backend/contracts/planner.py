@@ -10,7 +10,7 @@ from typing import Literal
 from pydantic import BaseModel, Field, field_validator
 
 from core import constants
-from domain.taxonomy import all_codes
+from reference.taxonomy import all_codes
 
 CategoryLiteral = Literal[*all_codes()]
 

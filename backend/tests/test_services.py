@@ -10,7 +10,7 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from db.store import services
-from domain.taxonomy import all_categories
+from reference.taxonomy import all_categories
 
 CENTRE_LINE = {
     "type": "LineString",

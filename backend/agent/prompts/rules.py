@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from agent.prompts.notes import _known_areas_note
-from domain.taxonomy import all_categories
+from reference.taxonomy import all_categories
 
 
 def base_rules() -> str:

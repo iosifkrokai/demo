@@ -22,7 +22,7 @@ from db.seed.osm_tags import (
 )
 from db.seed.overpass import RAION_CENTRES
 from db.store import services
-from domain import taxonomy
+from reference import taxonomy
 
 DATA = PLACES_DIR
 

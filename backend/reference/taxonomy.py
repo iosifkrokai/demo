@@ -1,20 +1,18 @@
 """Canonical category taxonomy — the single source of category codes.
 
-Every code is defined once in ``backend/data/taxonomy.csv`` and read here.
+Every code is defined once in ``backend/data/taxonomy.csv``; this module reads
+that file and resolves free text (codes, names, aliases, inflections) to a code.
+The row shape itself is :class:`db.models.category.Category`.
 """
 
 from __future__ import annotations
 
 import csv
 from collections.abc import Iterable
-from dataclasses import dataclass
 from functools import lru_cache
-from typing import Literal
 
 from core.paths import TAXONOMY_CSV
-
-Role = Literal["sight", "service"]
-Locale = Literal["ru", "en"]
+from db.models.category import Category, Locale, Role
 
 _DATA_FILE = TAXONOMY_CSV
 
@@ -26,18 +24,6 @@ _COLUMNS = (
 )
 
 
-@dataclass(frozen=True)
-class Category:
-    """One canonical category row (immutable — the file is the source)."""
-
-    code: str
-    ru: str
-    en: str
-    role: Role
-    osm_tags: tuple[str, ...]
-    visit_minutes: int
-    aliases_ru: tuple[str, ...] = ()
-    aliases_en: tuple[str, ...] = ()
 
 
 def _split(value: str) -> tuple[str, ...]:

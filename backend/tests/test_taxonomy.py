@@ -6,7 +6,7 @@ import pytest
 
 from core import constants
 from db.store.search import db_categories
-from domain.taxonomy import (
+from reference.taxonomy import (
     all_categories,
     all_codes,
     db_values,

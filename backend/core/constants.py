@@ -5,7 +5,7 @@ Deliberate engineering choices that belong in reviewable code, not a .env file.
 
 from __future__ import annotations
 
-from domain import taxonomy
+from reference import taxonomy
 
 REQUEST_DEADLINE_S = 240.0
 COST_MATRIX_MIN_LEFT_S = 26.0

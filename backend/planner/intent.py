@@ -67,7 +67,7 @@ def intent_from_requirements(
 
 def _scope_from_areas(areas: list[str]) -> str:
     """town / district / region, read off the territories the contract named."""
-    from domain import areas as areas_mod
+    from reference import areas as areas_mod
 
     kinds = {
         entry["kind"]

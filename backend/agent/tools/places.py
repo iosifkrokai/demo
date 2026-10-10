@@ -17,7 +17,7 @@ from agent.tools import (
     _positive_int,
     _project,
 )
-from domain.taxonomy import db_values
+from reference.taxonomy import db_values
 
 MAX_PLACES_PER_SEARCH = 8
 MAX_FACTS_PER_CALL = 1

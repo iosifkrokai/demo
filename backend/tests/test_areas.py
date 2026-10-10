@@ -14,15 +14,15 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from core.paths import GEO_DIR, PLACES_DIR
-from domain import areas
-from domain.areas import (
+from reference import areas
+from reference.areas import (
     area_contains,
     area_lookup_by_slug,
     in_project_area,
     load_areas,
     resolve_area,
 )
-from domain.geofence import inside_belarus, inside_project_area
+from reference.geofence import inside_belarus, inside_project_area
 
 CITY = ("Гродно (центр)", 53.6772, 23.8232)
 OBLAST_OUTSIDE_CITY = ("Новогрудок", 53.5941, 25.8249)
@@ -250,7 +250,7 @@ def test_geofence_delegates_to_the_single_areas_predicate():
 
 
 def test_delegation_is_live(monkeypatch):
-    """domain.geofence.inside_project_area must track domain.areas.in_project_area
+    """reference.geofence.inside_project_area must track reference.areas.in_project_area
     at call time — proving a single shared predicate, not a second copy."""
     monkeypatch.setattr(areas, "in_project_area", lambda lat, lon: True)
     assert inside_project_area(0.0, 0.0) is True
