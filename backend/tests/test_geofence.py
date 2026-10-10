@@ -1,6 +1,6 @@
 """Country geofence: the bbox ingest must not leak Vilnius/Poland POIs.
 
-No network — the border polygon is the committed data/belarus_border.json.
+No network — the border polygon is the committed data/geo/belarus_border.json.
 """
 
 from __future__ import annotations
@@ -45,7 +45,7 @@ def test_foreign_landmarks_are_outside():
 
 def test_border_keep_list_covers_verified_belarusian_pois():
     """The 10m polygon shaves a few Belarusian POIs off the border; they are kept
-    explicitly after Nominatim verification (data/belarus_border_keep.json)."""
+    explicitly after Nominatim verification (data/geo/belarus_border_keep.json)."""
     kept = [
         ("Костёл Пресвятой Троицы (Вороново)", 54.1330, 25.0660),
         ("Старый мост (разрушен)", 53.9114, 23.6292),

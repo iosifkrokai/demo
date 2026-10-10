@@ -1,6 +1,6 @@
 """Named areas and the single project-area geofence predicate.
 
-Area definitions live in data/areas.json; geometry is loaded at runtime.
+Area definitions live in data/geo/areas.json; geometry is loaded at runtime.
 """
 
 from __future__ import annotations
@@ -8,13 +8,13 @@ from __future__ import annotations
 import json
 import re
 from functools import lru_cache
-from pathlib import Path
 from typing import Any
 
-DATA_DIR = Path(__file__).resolve().parent.parent / "data"
-AREAS_PATH = DATA_DIR / "areas.json"
-GRODNO_BORDER_PATH = DATA_DIR / "grodno_border.json"
-KEEP_PATH = DATA_DIR / "belarus_border_keep.json"
+from core.paths import GEO_DIR
+
+AREAS_PATH = GEO_DIR / "areas.json"
+GRODNO_BORDER_PATH = GEO_DIR / "grodno_border.json"
+KEEP_PATH = GEO_DIR / "belarus_border_keep.json"
 
 LOCALES = ("ru", "en")
 PROJECT_AREA_SLUG = "grodno-oblast"

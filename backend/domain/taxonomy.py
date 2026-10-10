@@ -9,13 +9,14 @@ import csv
 from collections.abc import Iterable
 from dataclasses import dataclass
 from functools import lru_cache
-from pathlib import Path
 from typing import Literal
+
+from core.paths import TAXONOMY_CSV
 
 Role = Literal["sight", "service"]
 Locale = Literal["ru", "en"]
 
-_DATA_FILE = Path(__file__).resolve().parent.parent / "data" / "taxonomy.csv"
+_DATA_FILE = TAXONOMY_CSV
 
 _LIST_SEP = "|"
 

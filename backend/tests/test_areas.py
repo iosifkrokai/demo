@@ -13,6 +13,7 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from core.paths import GEO_DIR, PLACES_DIR
 from domain import areas
 from domain.areas import (
     area_contains,
@@ -93,7 +94,7 @@ def test_every_geometry_is_derivable_from_backend_data():
     without_geometry = [a for a in doc["areas"] if not a.get("geometry")]
     assert [a["slug"] for a in with_geometry] == [areas.PROJECT_AREA_SLUG]
     for area in with_geometry:
-        source = areas.DATA_DIR / area["geometry"]["source"]
+        source = GEO_DIR / area["geometry"]["source"]
         assert source.exists(), source
         meta = json.loads(source.read_text(encoding="utf-8"))
         assert area["geometry"]["ring_count"] == len(meta["rings"])
@@ -109,7 +110,7 @@ def test_every_geometry_is_derivable_from_backend_data():
 def test_district_areas_match_places_region_csv():
     """District areas are sourced from the CSV's district column verbatim —
     no district invented, none missed."""
-    lines = (areas.DATA_DIR / "places_region.csv").read_text(encoding="utf-8").splitlines()
+    lines = (PLACES_DIR / "places_region.csv").read_text(encoding="utf-8").splitlines()
     header = next(line for line in lines if line.startswith("# name|"))
     di = header.lstrip("# ").split("|").index("district")
     rows = (line.split("|") for line in lines if line and not line.startswith("#"))

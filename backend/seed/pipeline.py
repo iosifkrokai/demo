@@ -9,6 +9,7 @@ import re
 from pathlib import Path
 from typing import Any
 
+from core.paths import GEO_DIR, PHOTOS_DIR
 from domain.geofence import inside_project_area
 
 from .datasets import (
@@ -155,11 +156,11 @@ def apply_curated_rows(conn, curated: list[dict]) -> dict:
                 "unmatched": unmatched[:50], "unmatched_count": len(unmatched)}
 
 
-def load_areas(conn, records: list[dict], data_dir: Path) -> int:
+def load_areas(conn, records: list[dict], geo_dir: Path | None = None) -> int:
     """Idempotently load the project-area polygon + one row per district."""
     written = 0
     with conn.cursor() as cur:
-        border = data_dir / "grodno_border.json"
+        border = (geo_dir or GEO_DIR) / "grodno_border.json"
         if border.exists():
             meta = json.loads(border.read_text(encoding="utf-8"))
             rings = meta.get("rings", [])
@@ -218,11 +219,11 @@ def gather_db_stats(conn) -> dict:
     return stats
 
 
-def apply_photos(conn, data_dir: Path) -> int:
+def apply_photos(conn, photos_dir: Path | None = None) -> int:
     """Write the committed ``place_photos.json`` onto ``places`` (no network).
     A missing file yields no photos rather than an error.
     """
-    path = data_dir / "place_photos.json"
+    path = (photos_dir or PHOTOS_DIR) / "place_photos.json"
     if not path.exists():
         return 0
     from .photos import apply_to_db

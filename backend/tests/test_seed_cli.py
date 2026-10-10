@@ -7,10 +7,11 @@ import shutil
 import socket
 from pathlib import Path
 
+from core.paths import PLACES_DIR
 from seed import cli, datasets, pipeline
 
 BACKEND = Path(__file__).resolve().parents[1]
-DATA = BACKEND / "data"
+DATA = PLACES_DIR
 
 
 def _copy_datasets(dst: Path) -> None:

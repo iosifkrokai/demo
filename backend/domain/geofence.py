@@ -7,12 +7,12 @@ from __future__ import annotations
 
 import json
 from functools import lru_cache
-from pathlib import Path
 
+from core.paths import GEO_DIR
 from domain import areas
 from domain.areas import point_in_ring
 
-BORDER_PATH = Path(__file__).resolve().parent.parent / "data" / "belarus_border.json"
+BORDER_PATH = GEO_DIR / "belarus_border.json"
 
 
 @lru_cache(maxsize=1)

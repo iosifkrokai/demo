@@ -5,10 +5,10 @@ from __future__ import annotations
 import json
 import os
 import sys
-from pathlib import Path
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from core.paths import GEO_DIR, PLACES_DIR
 from domain import taxonomy
 from seed.datasets import SIGHT_TAXONOMY
 from seed.osm_tags import (
@@ -24,7 +24,7 @@ from seed.osm_tags import (
 from seed.overpass import RAION_CENTRES
 from store import services
 
-DATA = Path(__file__).resolve().parents[1] / "data"
+DATA = PLACES_DIR
 
 
 def _sight_codes() -> frozenset[str]:
@@ -109,7 +109,7 @@ def test_an_unnamed_transit_stop_survives_with_a_placeholder_name():
 
 
 def test_every_district_has_a_centre_and_slonim_is_not_missing():
-    areas = json.loads((DATA / "areas.json").read_text(encoding="utf-8"))["areas"]
+    areas = json.loads((GEO_DIR / "areas.json").read_text(encoding="utf-8"))["areas"]
     districts = [
         a for a in areas if a["kind"] == "district" and a["slug"] != "grodno-district"
     ]
@@ -123,7 +123,7 @@ def test_every_district_has_a_centre_and_slonim_is_not_missing():
 def test_volkovysk_is_spelled_with_two_s():
     """The dataset's typo («Волковыссккий») must not come back, and the old
     spelling stays resolvable as a legacy alias."""
-    areas = json.loads((DATA / "areas.json").read_text(encoding="utf-8"))["areas"]
+    areas = json.loads((GEO_DIR / "areas.json").read_text(encoding="utf-8"))["areas"]
     volkovysk = next(a for a in areas if a["slug"] == "volkovysk-district")
 
     assert volkovysk["name_ru"] == "Волковысский район"

@@ -16,6 +16,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from agent.planner.retrieve import parse_photo
 from contracts.planner import Photo, Place
+from core.paths import PHOTOS_DIR
 from seed.photos import (
     commons_file_title,
     parse_wikipedia,
@@ -23,8 +24,8 @@ from seed.photos import (
 from store.itineraries import _stop_payload
 
 BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-PHOTOS = os.path.join(BACKEND, "data", "place_photos.json")
-HINTS = os.path.join(BACKEND, "data", "osm_photo_hints.json")
+PHOTOS = str(PHOTOS_DIR / "place_photos.json")
+HINTS = str(PHOTOS_DIR / "osm_photo_hints.json")
 BASE_URL = os.environ.get("SMOKE_BASE_URL", "http://localhost:8080")
 
 WIKIMEDIA_HOSTS = ("upload.wikimedia.org", "commons.wikimedia.org")

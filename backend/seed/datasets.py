@@ -14,10 +14,9 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from core.paths import PLACES_DIR
 from domain import constants as _constants, taxonomy
 from domain.geofence import inside_project_area
-
-DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 
 SOURCE_CURATED = "curated"
 SOURCE_DATASET = "dataset"
@@ -174,7 +173,7 @@ class Dataset:
         self.fatal_invalid = fatal_invalid
         self.license = license
         self.optional = optional
-        self.path: Path = DATA_DIR / filename
+        self.path: Path = PLACES_DIR / filename
 
     def with_data_dir(self, data_dir: Path) -> Dataset:
         self.path = data_dir / self.filename

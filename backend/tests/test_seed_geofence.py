@@ -6,6 +6,7 @@ from pathlib import Path
 BACKEND = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BACKEND))
 
+from core.paths import PLACES_DIR  # noqa: E402
 from domain.geofence import inside_project_area  # noqa: E402
 from seed.datasets import (  # noqa: E402
     read_pipe_csv,
@@ -33,8 +34,8 @@ def test_osm_ingest_paths_exclude_other_voblasts():
 
 
 def test_csv_loaders_reject_other_voblasts_and_nonfinite_coordinates():
-    city = read_pipe_csv(BACKEND / "data" / "places_grodno_city.csv")[0]
-    osm = read_pipe_csv(BACKEND / "data" / "places_osm_raw.csv")[0]
+    city = read_pipe_csv(PLACES_DIR / "places_grodno_city.csv")[0]
+    osm = read_pipe_csv(PLACES_DIR / "places_osm_raw.csv")[0]
     for _, lat, lon in OTHER_VOBLASTS:
         assert validate_city_region(dict(city, lat=lat, lon=lon))
         assert validate_osm_sight(dict(osm, lat=str(lat), lon=str(lon)))
@@ -44,7 +45,7 @@ def test_csv_loaders_reject_other_voblasts_and_nonfinite_coordinates():
 
 def test_curated_seed_records_validate_clean():
     for name in ("places_grodno_city.csv", "places_region.csv"):
-        path = BACKEND / "data" / name
+        path = PLACES_DIR / name
         for raw in read_pipe_csv(path):
             problems = validate_city_region(raw)
             assert not problems, f"{path.name}: {raw['name']}: {'; '.join(problems)}"

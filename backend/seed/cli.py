@@ -10,8 +10,10 @@ import os
 import sys
 from pathlib import Path
 
+from core.paths import GEO_DIR, PHOTOS_DIR, PLACES_DIR
+
 from . import datasets as ds_mod
-from .datasets import DATA_DIR, Dataset, build_coverage_report, collect_records, read_curated
+from .datasets import Dataset, build_coverage_report, collect_records, read_curated
 
 DEFAULT_DSN = "postgresql://grodno:grodno@localhost:5432/grodno"
 
@@ -57,8 +59,8 @@ def cmd_apply(args: argparse.Namespace) -> int:
                     curated_stats["applied"] = True
                 areas_written = 0
                 if not args.no_areas:
-                    areas_written = pipeline.load_areas(conn, collected["records"], data_dir)
-                photos_written = pipeline.apply_photos(conn, data_dir)
+                    areas_written = pipeline.load_areas(conn, collected["records"], GEO_DIR)
+                photos_written = pipeline.apply_photos(conn, PHOTOS_DIR)
                 conn.commit()
 
                 embedded = 0
@@ -88,7 +90,7 @@ def cmd_apply(args: argparse.Namespace) -> int:
     if collected["fatal"]:
         sys.stderr.write(
             "[seed] fatal: a hand-authored dataset (city/region) has invalid rows — "
-            "fix data/*.csv before publishing\n")
+            "fix data/places/*.csv before publishing\n")
         return 2
     return 0
 
@@ -183,8 +185,8 @@ def cmd_admin(args: argparse.Namespace) -> int:
 def _add_apply_flags(p: argparse.ArgumentParser) -> None:
     p.add_argument("--dry-run", action="store_true",
                    help="Validate + report only. No DB, no network.")
-    p.add_argument("--data-dir", type=Path, default=DATA_DIR,
-                   help="Directory holding the CSV datasets (default: backend/data).")
+    p.add_argument("--data-dir", type=Path, default=PLACES_DIR,
+                   help="Directory holding the CSV datasets (default: backend/data/places).")
     p.add_argument("--report", type=Path, default=None,
                    help="Write the machine-readable JSON report to this path.")
     p.add_argument("--json", action="store_true", help="Print the JSON report to stdout.")
@@ -209,7 +211,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     f.add_argument("--limit", type=int, default=None, help="Max elements (for testing).")
     f.add_argument("--input-json", type=Path, default=None,
                    help="Reuse a saved Overpass response instead of the network.")
-    f.add_argument("--out-dir", type=Path, default=DATA_DIR, help="Where to write the CSVs.")
+    f.add_argument("--out-dir", type=Path, default=PLACES_DIR, help="Where to write the CSVs.")
     f.add_argument("--dry-run", action="store_true", help="Fetch but write nothing.")
     f.set_defaults(func=cmd_fetch)
 
@@ -218,7 +220,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     ph.add_argument("--pbf", type=Path, default=None, help="OSM PBF for the hints stage.")
     ph.add_argument("--limit", type=int, default=None)
     ph.add_argument("--apply", action="store_true", help="Write the photos into the DB.")
-    ph.add_argument("--data-dir", type=Path, default=DATA_DIR)
+    ph.add_argument("--data-dir", type=Path, default=PHOTOS_DIR)
     ph.add_argument("--database-url", default=None)
     ph.set_defaults(func=cmd_photos)
 
@@ -227,7 +229,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     a.add_argument("--source", choices=["osm", "poi", "all"], default="all")
     a.add_argument("--bbox", type=float, nargs=4, metavar=("W", "S", "E", "N"), default=None)
     a.add_argument("--input-json", type=Path, default=None)
-    a.add_argument("--out-dir", type=Path, default=DATA_DIR)
+    a.add_argument("--out-dir", type=Path, default=PLACES_DIR)
     a.set_defaults(func=None)
 
     pr = sub.add_parser("prune", help="Drop places outside the project area.")

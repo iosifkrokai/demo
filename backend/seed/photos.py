@@ -22,9 +22,11 @@ from typing import Any
 
 import psycopg
 
+from core.paths import PHOTOS_DIR
+
 BACKEND = Path(__file__).resolve().parent.parent
-HINTS = BACKEND / "data" / "osm_photo_hints.json"
-OUT = BACKEND / "data" / "place_photos.json"
+HINTS = PHOTOS_DIR / "osm_photo_hints.json"
+OUT = PHOTOS_DIR / "place_photos.json"
 CACHE = Path(os.environ.get("PHOTO_CACHE", "/home/codespace/.hermes/cache/scratch/photo_cache"))
 DSN = os.environ.get("DATABASE_URL", "postgresql://grodno:grodno@localhost:5432/grodno")
 
@@ -692,7 +694,7 @@ def apply_to_db(conn: psycopg.Connection, photos: dict[str, dict[str, Any]]) -> 
 def run_stage(
     *,
     stage: str,
-    data_dir: Path,
+    data_dir: Path | None = None,
     pbf_path: Path | None = None,
     limit: int | None = None,
     apply: bool = False,
@@ -704,8 +706,8 @@ def run_stage(
     if stage not in {"hints", "resolve", "all"}:
         raise ValueError(f"неизвестная стадия {stage!r}: ожидается hints/resolve/all")
 
-    hints_path = data_dir / "osm_photo_hints.json"
-    photos_path = data_dir / "place_photos.json"
+    hints_path = (data_dir or PHOTOS_DIR) / "osm_photo_hints.json"
+    photos_path = (data_dir or PHOTOS_DIR) / "place_photos.json"
 
     if stage in {"hints", "all"}:
         pbf = pbf_path or (Path(PBF) if PBF else None)
@@ -749,7 +751,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         count = run_stage(
             stage="hints" if args.hints else "resolve",
-            data_dir=BACKEND / "data",
+            data_dir=PHOTOS_DIR,
             pbf_path=args.pbf,
             limit=args.limit,
             apply=args.apply,

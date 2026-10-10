@@ -1,24 +1,27 @@
 # backend/data — datasets and the seed contract
 
-Data is code (`docs/specs/constitution.md` §3). Every dataset here is a versioned
-text file; the Postgres database is a *projection* built from these files by one
-idempotent command.
+Data is code. Every dataset here is a versioned text file; the Postgres database
+is a *projection* built from these files by one idempotent command.
+
+Layout: `geo/` is map geometry, `places/` the place datasets, `photos/` the
+photo hints and their resolution; `taxonomy.csv` and `itineraries.json` sit at
+the top level. Paths are resolved once in `core/paths.py`.
 
 ## Files
 
 | File | Role | Natural key (prefix) |
 |---|---|---|
-| `places_grodno_city.csv` | Hand-authored Grodno city sights | `city:` |
-| `places_region.csv` | Hand-authored Grodno voblast sights | `region:` |
-| `places_osm_raw.csv` | OSM sight POIs (bbox pull, pre-geofenced) | `osm:` |
-| `places_poi.csv` | OSM everyday services (cafes, toilets, …) — written by `seed fetch` | `osm_poi:` |
-| `places_curated.csv` | Hand-labelled ground truth (category/blurb/fun_fact) | matched by **name** |
+| `places/places_grodno_city.csv` | Hand-authored Grodno city sights | `city:` |
+| `places/places_region.csv` | Hand-authored Grodno voblast sights | `region:` |
+| `places/places_osm_raw.csv` | OSM sight POIs (bbox pull, pre-geofenced) | `osm:` |
+| `places/places_poi.csv` | OSM everyday services (cafes, toilets, …) — written by `seed fetch` | `osm_poi:` |
+| `places/places_curated.csv` | Hand-labelled ground truth (category/blurb/fun_fact) | matched by **name** |
 | `taxonomy.csv` | Canonical category codes (role: sight/service) | — |
-| `grodno_border.json` | Grodno ADM1 polygon used by the geofence | — |
-| `belarus_border.json`, `belarus_border_keep.json` | Country polygon + documented POI exceptions | — |
-| `osm_photo_hints.json` | Photo tags of the OSM objects our points are | `type/id` |
-| `place_photos.json` | Resolved pictures **with attribution** | `places.source_url` |
-| `areas.json`, `itineraries.json` | Area registry + hand-written itineraries | — |
+| `geo/grodno_border.json` | Grodno ADM1 polygon used by the geofence | — |
+| `geo/belarus_border.json`, `geo/belarus_border_keep.json` | Country polygon + documented POI exceptions | — |
+| `photos/osm_photo_hints.json` | Photo tags of the OSM objects our points are | `type/id` |
+| `photos/place_photos.json` | Resolved pictures **with attribution** | `places.source_url` |
+| `geo/areas.json`, `itineraries.json` | Area registry + hand-written itineraries | — |
 
 Sight and service rows share the pipe-delimited 14-column shape:
 
@@ -27,7 +30,7 @@ name|category|district|town|lat|lon|blurb|fun_fact|fun_facts|opening_hours|ticke
 ```
 
 `fun_facts` and `links` are JSON. `opening_hours` / `ticket_price` are **reference
-only** (constitution §7) — `source_url` is the field to check them against.
+only** — `source_url` is the field to check them against.
 Services carry `visit_minutes` empty (NULL): they are stops *beside* a route, not
 sights. `places_curated.csv` uses a 7-column shape
 (`id|normalized_name|category|blurb|fun_fact|fun_facts|links`).
@@ -106,6 +109,4 @@ silently published.
 
 Known gaps the report exposes: `opening_hours`/`ticket_price` are sparse (too thin
 to power an "open now" or price filter), there are no EN names/aliases yet, and
-same-name-within-radius pairs are candidates for merging, not proof. See
-`data_quality.md` for why curation beats the classifier, and
-`docs/specs/002-grodno-guide-rebuild/tasks.md` (W4) for the open data work.
+same-name-within-radius pairs are candidates for merging, not proof.

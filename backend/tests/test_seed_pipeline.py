@@ -13,6 +13,7 @@ import pytest
 BACKEND = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BACKEND))
 
+from core.paths import PLACES_DIR  # noqa: E402
 from domain import constants  # noqa: E402
 from seed import (  # noqa: E402
     cli as seed_cli,
@@ -258,7 +259,7 @@ def test_migration_guard_reverts_protected_category_changes():
 
 
 def test_real_curated_csv_is_parseable_and_in_taxonomy():
-    curated = datasets.read_curated(BACKEND / "data" / "places_curated.csv")
+    curated = datasets.read_curated(PLACES_DIR / "places_curated.csv")
     assert len(curated) == 76
     for row in curated:
         assert row["category"] in constants.CATEGORIES, row["name"]

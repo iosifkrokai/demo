@@ -7,9 +7,11 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from core.paths import ITINERARIES_JSON
+
 log = logging.getLogger(__name__)
 
-ITINERARIES_PATH = Path(__file__).resolve().parent.parent / "data" / "itineraries.json"
+ITINERARIES_PATH = ITINERARIES_JSON
 
 _STOP_SQL = """
     SELECT id, source_url, name, category, town, district, lat, lon,
