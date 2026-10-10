@@ -55,9 +55,9 @@ async def lifespan(_: FastAPI):
              "set" if openrouter_api_key() else "MISSING")
     if not openrouter_api_key():
         log.warning(
-            "no OPENROUTER_API_KEY — deterministic interpretation only: the query "
-            + "is read by the regex/keyword parser; retrieval keeps local embeddings "
-            + "(routes are still built)"
+            "no OPENROUTER_API_KEY — the planner has no reader for a request: "
+            "/routes/generate, /routes/reroute and /routes/explain will refuse "
+            "with 503 llm_not_configured. The catalogue endpoints still answer."
         )
     yield
     trace.shutdown()
@@ -85,6 +85,20 @@ app.add_middleware(
 )
 
 
+def _require_llm() -> None:
+    """Refuse a planning request when the interpreter is not configured.
+
+    Reading a free-text query is the model's job; without a key there is no
+    reader. Answering anyway — with a keyword parse — would silently give the
+    tourist a worse route and no way to tell, so the request is refused instead.
+    """
+    if not openrouter_api_key():
+        raise HTTPException(
+            status_code=503,
+            detail={"reason": "llm_not_configured"},
+        )
+
+
 def _call(fn: Callable[[], Any], **kwargs: Any) -> Any:
     """Run a planner call and map its failures onto HTTP.
 
@@ -103,7 +117,7 @@ def _no_route_response(req: GenerateReq, detail: str) -> RouteResponse:
     """
     return RouteResponse(
         parsed=ParsedQuery(
-            time_budget_minutes=req.time_budget_minutes, source="fallback"
+            time_budget_minutes=req.time_budget_minutes, source="agent"
         ),
         points=[],
         shape={},
@@ -124,6 +138,7 @@ def _no_route_response(req: GenerateReq, detail: str) -> RouteResponse:
 @app.post("/routes/generate", response_model=RouteResponse)
 def generate(req: GenerateReq) -> RouteResponse:
     """Build a route. With a `progress_id`, the work is reported as it happens."""
+    _require_llm()
     progress.begin(req.progress_id)
     trace.begin(req.progress_id, session_id=req.session_id)
     try:
@@ -184,11 +199,13 @@ def route_progress(progress_id: str) -> dict:
 
 @app.post("/routes/reroute", response_model=RouteResponse)
 def reroute(req: RerouteReq) -> RouteResponse:
+    _require_llm()
     return _call(app.state.planner.reroute, point_ids=req.point_ids, profile=req.profile)
 
 
 @app.post("/routes/explain")
 def explain(req: ExplainReq) -> dict:
+    _require_llm()
     return {"explanation": _call(app.state.planner.explain_route, point_ids=req.point_ids)}
 
 

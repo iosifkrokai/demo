@@ -378,7 +378,7 @@ class TestResolveIntegration:
                 keywords_pos=[],
                 keywords_neg=[],
             ),
-            source="regex",
+            source="agent",
         )
 
         name_row = {
@@ -425,7 +425,7 @@ class TestBudgetRule:
                 keywords_neg=[],
                 time_budget_minutes=llm_budget,
             ),
-            source="regex",
+            source="agent",
         )
         with patch("agent.planner.resolve._name_match_search", return_value=[]):
             with patch("agent.planner.resolve._keyword_search", return_value=[]):

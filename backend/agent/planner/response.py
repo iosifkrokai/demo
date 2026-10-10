@@ -36,7 +36,6 @@ def _interpretation(
     """
     if requirements is None:
         return None
-    origin = "agent" if requirements.source in ("llm", "mixed") else "fallback"
 
     def signal(r: Any) -> RequirementSignal:
         return RequirementSignal(
@@ -44,7 +43,7 @@ def _interpretation(
             strength=r.strength,
             code=r.code,
             name=r.name,
-            origin="ui" if r.source == "ui" else origin,
+            origin="ui" if r.source == "ui" else "agent",
             status=r.status,
             reason=r.reason,
             place_ids=list(r.place_ids),

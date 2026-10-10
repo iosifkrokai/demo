@@ -21,6 +21,7 @@ from agent.planner import agent_interpret as ai
 from agent.planner.intent import build_requirements
 from contracts.planner import GenerateReq
 from core.config import settings
+from core.errors import InterpretationUnavailable
 from domain import areas as areas_mod
 from infra import trace
 
@@ -99,13 +100,9 @@ def test_no_key_returns_none_and_ui_filters_survive(no_key):
     req = GenerateReq(query=QUERY, hard_services=["туалет"], party_children=2)
     assert ai.interpret_with_agent(QUERY, req) is None
 
-    tr = build_requirements(QUERY, req)
-    assert tr.source == "explicit"
-    assert tr.party.children == 2
-    assert "туалет" in tr.hard_service_codes()
-    ui_reqs = [r for r in tr.of_kind("service") if r.code == "туалет"]
-    assert len(ui_reqs) == 1 and ui_reqs[0].source == "ui" and ui_reqs[0].strength == "hard"
-    assert tr.raw_query == QUERY
+    # No reading, no plan: the request is refused rather than guessed at.
+    with pytest.raises(InterpretationUnavailable):
+        build_requirements(QUERY, req)
 
 
 def test_missing_sdk_is_the_same_degradation(monkeypatch, fake_key):

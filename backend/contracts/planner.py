@@ -137,7 +137,7 @@ class ParsedQuery(BaseModel):
     keywords: list[str] = []
     categories: list[str] = []
     time_budget_minutes: int | None = None
-    source: Literal["agent", "llm", "fallback", "explicit", "regex"] = "fallback"
+    source: Literal["agent", "explicit"] = "agent"
 
 
 class BudgetInfo(BaseModel):
@@ -164,7 +164,7 @@ class RequirementSignal(BaseModel):
     strength: Literal["hard", "soft"] = "soft"
     code: str | None = None
     name: str | None = None
-    origin: Literal["ui", "agent", "fallback"] = "fallback"
+    origin: Literal["ui", "agent"] = "agent"
     status: Literal["satisfied", "unmet", "uncertain", "pending"] = "pending"
     reason: str | None = None
     place_ids: list[int] = Field(default_factory=list)
@@ -179,7 +179,7 @@ class Interpretation(BaseModel):
     Every field is a code or a number; the wording is the client's.
     """
 
-    source: Literal["llm", "mixed", "explicit", "fallback"] = "fallback"
+    source: Literal["llm", "mixed", "explicit"] = "llm"
     locale: Literal["ru", "en"] = "ru"
     status: OverallStatus = "pending"
 
@@ -252,7 +252,7 @@ class IntentDecision(BaseModel):
 
 class IntentResult(BaseModel):
     decision: IntentDecision
-    source: Literal["agent", "regex", "fallback"] = "regex"
+    source: Literal["agent", "explicit"] = "agent"
     confidence: float = 1.0
     latency_ms: int = 0
     raw_response: dict | None = None

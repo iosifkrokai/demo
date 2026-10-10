@@ -23,3 +23,8 @@ class UpstreamUnavailable(AgentError):
     http_status = 503
 
 
+class InterpretationUnavailable(AgentError):
+    """The reading model is not configured, or did not answer."""
+    http_status = 503
+
+

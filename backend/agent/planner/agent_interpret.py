@@ -332,7 +332,7 @@ def _run_agent(
     """Run one bounded interpretation. Returns (reading, failure_reason)."""
     if pydantic_ai is None:
         log.info(
-            "agent_interpret: pydantic-ai not importable (%s) — deterministic path",
+            "agent_interpret: pydantic-ai not importable (%s) — no reader",
             SDK_IMPORT_ERROR,
         )
         return None, "pydantic_ai_unavailable"
@@ -699,13 +699,15 @@ def interpret_with_agent(
     db: Any | None = None,
     wall_clock_s: float | None = None,
 ) -> TripRequirements | None:
-    """Returns a complete ``TripRequirements`` or ``None``; ``None`` is never a
-    half-filled contract, so the caller falls back to the deterministic path.
+    """Returns a complete ``TripRequirements`` or ``None``.
+
+    ``None`` is never a half-filled contract: it means there is no reading at all,
+    and the caller refuses the request rather than guessing at the query.
     """
     if not isinstance(query, str) or not query.strip():
         return None
     if not available():
-        log.info("agent_interpret: agent unavailable (no key/model) — deterministic path")
+        log.info("agent_interpret: agent unavailable (no key/model) — no reader")
         _record_model_failure("agent_unavailable", _build_prompt(query, req))
         return None
 
@@ -716,6 +718,6 @@ def interpret_with_agent(
         log.warning("agent_interpret: unexpected failure: %s: %s", type(exc).__name__, exc)
         return None
     if reading is None:
-        log.info("agent_interpret: no usable answer (%s) — deterministic path", failure)
+        log.info("agent_interpret: no usable answer (%s) — no reader", failure)
         return None
     return _merge(query.strip(), req, reading, deps.observed_ids)

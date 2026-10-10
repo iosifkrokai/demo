@@ -43,6 +43,5 @@ class HealthResponse(BaseModel):
     status: Literal["ok", "starting", "degraded"]
     embedder: bool
     llm: bool
-    interpretation: Literal["llm", "deterministic"]
     db: bool
     valhalla: bool

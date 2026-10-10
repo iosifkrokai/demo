@@ -16,6 +16,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from agent.planner import intent, interpret_cache as cache
 from contracts.planner import GenerateReq
+from core.errors import InterpretationUnavailable
 from domain.requirements import Requirement, TripRequirements
 from infra import trace
 
@@ -174,13 +175,14 @@ def test_the_second_reading_does_not_inherit_the_first_ones_verdicts(monkeypatch
     assert first.requirements[0].place_id == 777
 
 
-def test_without_an_agent_nothing_is_cached(monkeypatch):
-    """The deterministic parse is milliseconds of regex; caching it is pointless."""
+def test_without_a_cache_key_nothing_is_cached(monkeypatch):
+    """No key means no reading at all — and nothing to cache."""
     monkeypatch.setattr(
         intent, "_interpret_cache_key", lambda query, req: (None, "")
     )
 
-    intent.build_requirements("замки Гродно", _req())
+    with pytest.raises(InterpretationUnavailable):
+        intent.build_requirements("замки Гродно", _req())
 
     assert cache.INTERPRET_CACHE.stats()["size"] == 0
 

@@ -32,14 +32,18 @@ from agent.planner.refine import (
 )
 from api import main as agent_main
 from contracts.planner import Candidate, GenerateReq, LatLon
-from core.config import settings
 from core.errors import UpstreamUnavailable
 
 
 @pytest.fixture
-def no_key(monkeypatch):
-    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
-    monkeypatch.setattr(settings, "OPENROUTER_API_KEY", None)
+def reading(fake_llm):
+    """A model reading so a refinement turn can reach the contract.
+
+    Reading the free text is the model's job; an empty reading is enough here —
+    these tests exercise the refinement operation, not the interpreter.
+    """
+    fake_llm.set()
+    return fake_llm
 
 
 def _cand(
@@ -289,14 +293,14 @@ class TestExcludedCategory:
 
 class TestRefinementKeepsTheBaseRoute:
 
-    def test_no_instruction_keeps_the_previous_route(self, no_key, monkeypatch):
+    def test_no_instruction_keeps_the_previous_route(self, reading, monkeypatch):
         resp = _refine(monkeypatch, None)
         assert [p.id for p in resp.points] == [1, 12, 7]
         assert resp.debug["refinement"]["operation"] == "none"
         assert resp.changes.kept == 3
         assert resp.changes.added == []
 
-    def test_three_base_points_do_not_422(self, no_key, monkeypatch):
+    def test_three_base_points_do_not_422(self, reading, monkeypatch):
         """The exact bug: 3 base_points + a refinement used to answer
         HTTP 422 'optimizer could not produce a route with ≥ 2 stops'."""
         for instruction in [None, "сделай маршрут короче",
@@ -306,35 +310,35 @@ class TestRefinementKeepsTheBaseRoute:
             assert {p.id for p in resp.points} == {1, 12, 7}
 
     def test_reorder_by_visit_time_changes_the_order_only(
-        self, no_key, monkeypatch
+        self, reading, monkeypatch
     ):
         resp = _refine(monkeypatch, "отсортируй по времени посещения")
         assert [p.id for p in resp.points] == [12, 7, 1]
         assert resp.debug["refinement"]["reorder_by"] == "visit_minutes"
 
-    def test_reorder_longest_first(self, no_key, monkeypatch):
+    def test_reorder_longest_first(self, reading, monkeypatch):
         resp = _refine(monkeypatch, "сначала самые длинные")
         assert [p.id for p in resp.points] == [1, 12, 7]
 
-    def test_reorder_by_distance_from_origin(self, no_key, monkeypatch):
+    def test_reorder_by_distance_from_origin(self, reading, monkeypatch):
         origin = LatLon(lat=53.6785, lon=23.8266)
         resp = _refine(monkeypatch, "по расстоянию от старта", origin=origin)
         assert resp.points[0].id == 12
         assert resp.debug["refinement"]["reorder_by"] == "distance"
 
-    def test_exclude_category_removes_matching_stops(self, no_key, monkeypatch):
+    def test_exclude_category_removes_matching_stops(self, reading, monkeypatch):
         resp = _refine(monkeypatch, "без музеев")
         assert [p.id for p in resp.points] == [1, 7]
         assert [c.name for c in resp.changes.removed] == ["Музей истории города Гродно"]
         assert resp.debug["refinement"]["exclude_categories"] == ["музей"]
 
-    def test_excluded_ids_never_come_back(self, no_key, monkeypatch):
+    def test_excluded_ids_never_come_back(self, reading, monkeypatch):
         resp = _refine(monkeypatch, None, excluded=[12])
         assert 12 not in {p.id for p in resp.points}
         assert resp.changes.kept == 2
 
     def test_add_pulls_cafes_by_the_route_and_keeps_the_base(
-        self, no_key, monkeypatch
+        self, reading, monkeypatch
     ):
         cafe = _row(500, "Кафе рядом", "кафе", 53.6785, 23.8285, 40)
         _patch_offline(monkeypatch, nearby=[cafe])
@@ -355,7 +359,7 @@ class TestRefinementKeepsTheBaseRoute:
         assert [c.name for c in resp.changes.added] == ["Кафе рядом"]
 
     def test_unsupported_leaves_the_route_intact_with_a_reason_code(
-        self, no_key, monkeypatch
+        self, reading, monkeypatch
     ):
         resp = _refine(monkeypatch, "сделай маршрут короче")
         assert [p.id for p in resp.points] == [1, 12, 7]
@@ -372,7 +376,7 @@ class TestRefinementKeepsTheBaseRoute:
 class TestRefinementOverHttp:
 
     @pytest.fixture
-    def client(self, no_key, monkeypatch, _restore_planner):
+    def client(self, reading, monkeypatch, _restore_planner):
         _patch_offline(monkeypatch)
         planner = Pipeline(db=_FakeDB())  # type: ignore[arg-type]
         agent_main.app.state.planner = planner

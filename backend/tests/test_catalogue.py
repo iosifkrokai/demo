@@ -11,7 +11,6 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from agent.planner import pipeline as pipeline_mod
-from agent.planner.intent import fallback_intent
 from agent.planner.verify import (
     REASON_INTEREST_IN_CATALOGUE,
     REASON_MUST_VISIT_ABSENT,
@@ -21,7 +20,12 @@ from agent.planner.verify import (
     overall_status,
     verify_catalogue,
 )
-from contracts.planner import Candidate, ResolvedConstraints
+from contracts.planner import (
+    Candidate,
+    IntentDecision,
+    IntentResult,
+    ResolvedConstraints,
+)
 from domain.requirements import Requirement, TripRequirements
 
 
@@ -89,7 +93,7 @@ def _catalogue(candidates: list[Candidate], requirements: TripRequirements):
     return pipeline._catalogue_response(
         req=pipeline_mod.GenerateReq(query="все костёлы Гродненской области", result_mode="catalogue"),
         requirements=requirements,
-        intent=fallback_intent("все костёлы Гродненской области"),
+        intent=IntentResult(decision=IntentDecision(), source="agent"),
         constraints=ResolvedConstraints(),
         candidates=candidates,
         t0=0.0,

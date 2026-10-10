@@ -20,7 +20,7 @@ from agent.planner.verify import overall_status, verify
 from api import main as agent_main
 from contracts.planner import Candidate, GenerateReq, ValidatedPlan
 from core.config import settings
-from core.errors import UpstreamUnavailable
+from core.errors import InterpretationUnavailable, UpstreamUnavailable
 from domain.requirements import PartyComposition, Requirement, TripRequirements
 
 RU = "Погулять по старому Гродно с двумя детьми, туалет обязательно, кафе если по пути"
@@ -63,39 +63,20 @@ def _plan(*stops: Candidate) -> ValidatedPlan:
     )
 
 
-class TestNoKeyIsDeterministic:
+class TestNoReaderRefuses:
 
-    def test_no_key_produces_the_deterministic_contract(self, no_key):
-        tr = build_requirements(RU, GenerateReq(query=RU, hard_services=["туалет"]))
-        assert tr.source == "explicit"
-        assert "туалет" in tr.hard_service_codes()
-        assert tr.party.children == 2
-        assert tr.areas == ["grodno-old-town"]
+    def test_no_key_refuses_the_request(self, no_key):
+        with pytest.raises(InterpretationUnavailable):
+            build_requirements(RU, GenerateReq(query=RU, hard_services=["туалет"]))
 
-    def test_provenance_is_honest_on_both_paths(self, no_key, with_key, monkeypatch):
-        """"fallback"/"explicit" when no model answered, "llm"/"mixed" when one
-        did — the contract never claims a model that did not run."""
-        det = build_requirements(RU, GenerateReq(query=RU))
-        assert det.source == "fallback"
+    def test_a_reading_is_tagged_llm(self, fake_llm):
+        """A model answered, so the contract says so — never a source it did not earn."""
+        fake_llm.set()
+        assert build_requirements(RU, GenerateReq(query=RU)).source == "llm"
 
-        monkeypatch.setattr(
-            intent_mod, "_agent_contract",
-            lambda *a, **k: _contract(source="llm"),
-        )
-        agent = build_requirements(RU, GenerateReq(query=RU))
-        assert agent.source == "llm"
-
-    def test_the_planner_reading_says_where_meaning_came_from(self, no_key, monkeypatch):
-        tr = build_requirements(RU, GenerateReq(query=RU))
-        intent = intent_mod.intent_from_requirements(tr, RU)
-        assert intent.source == "fallback"
+    def test_the_planner_reading_says_where_meaning_came_from(self, fake_llm):
         bare = "что посмотреть в Гродно"
-        monkeypatch.setattr(
-            intent_mod, "_agent_contract",
-            lambda *a, **k: _contract(
-                Requirement(kind="interest", strength="soft", code="замок", label="замок")
-            ),
-        )
+        fake_llm.set(requirements=[{"kind": "interest", "strength": "soft", "code": "замок"}])
         tr = build_requirements(bare, GenerateReq(query=bare))
         intent = intent_mod.intent_from_requirements(tr, bare)
         assert intent.source == "agent"
@@ -158,20 +139,17 @@ class TestUiFilterWins:
 
 class TestFailuresDegrade:
 
-    def test_a_tool_failure_degrades_to_the_deterministic_reading(
-        self, with_key, monkeypatch
-    ):
-        """A bounded tool blowing up inside the agent must cost the reading, not
-        the request: the deterministic contract answers, UI filters intact."""
+    def test_a_tool_failure_refuses_the_request(self, with_key, monkeypatch):
+        """A bounded tool blowing up inside the agent costs the reading, and with
+        no reading there is no contract: the request is refused, never guessed at."""
         from agent.planner import agent_interpret as ai
 
         def boom(*_a, **_k):
             raise RuntimeError("tool search_places failed: db gone")
 
         monkeypatch.setattr(ai, "interpret_with_agent", boom)
-        tr = build_requirements(RU, GenerateReq(query=RU, hard_services=["туалет"]))
-        assert tr.source == "explicit"
-        assert "туалет" in tr.hard_service_codes()
+        with pytest.raises(InterpretationUnavailable):
+            build_requirements(RU, GenerateReq(query=RU, hard_services=["туалет"]))
 
     def test_a_tool_failure_inside_the_agent_returns_no_contract(self, with_key, monkeypatch):
         """`interpret_with_agent` swallows a tool/model failure and returns None
@@ -184,10 +162,10 @@ class TestFailuresDegrade:
         monkeypatch.setattr(ai, "_run_agent", boom)
         assert ai.interpret_with_agent(RU, GenerateReq(query=RU)) is None
 
-    def test_a_no_agent_reading_is_not_an_error(self, with_key, monkeypatch):
+    def test_a_missing_reading_refuses_the_request(self, with_key, monkeypatch):
         monkeypatch.setattr(intent_mod, "_agent_contract", lambda *a, **k: None)
-        tr = build_requirements(RU, GenerateReq(query=RU))
-        assert tr.source == "fallback"
+        with pytest.raises(InterpretationUnavailable):
+            build_requirements(RU, GenerateReq(query=RU))
 
     def test_an_upstream_error_is_503_not_500(self):
         """The last-resort net: what escapes the planner is a typed 503."""
@@ -320,12 +298,6 @@ class TestInterpretationBlock:
         by_code = {s.code: s for s in block.requirements}
         assert by_code["музей"].origin == "ui"
         assert by_code["туалет"].origin == "agent"
-
-    def test_the_parser_is_named_when_no_model_answered(self, no_key):
-        tr = build_requirements(RU, GenerateReq(query=RU))
-        block = _interpretation(tr, "ready")
-        assert block.source == "fallback"
-        assert all(s.origin == "fallback" for s in block.requirements)
 
     def test_the_field_is_added_not_renamed(self):
         """The response grows; existing fields stay untouched."""

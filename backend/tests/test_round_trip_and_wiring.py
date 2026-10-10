@@ -9,7 +9,6 @@ from types import SimpleNamespace
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from agent.planner import (
-    intent as intent_mod,
     optimize as optimize_mod,
     pipeline as pipeline_mod,
     render as render_mod,
@@ -18,7 +17,6 @@ from agent.planner.cost import (
     REASON_MUST_VISIT_UNROUTABLE,
     PrunedStop,
 )
-from agent.planner.intent import fallback_intent
 from agent.planner.resolve import resolve
 from agent.planner.validate import validate
 from agent.planner.verify import (
@@ -26,7 +24,13 @@ from agent.planner.verify import (
     overall_status,
     verify,
 )
-from contracts.planner import Candidate, CostMatrix, ResolvedConstraints
+from contracts.planner import (
+    Candidate,
+    CostMatrix,
+    IntentDecision,
+    IntentResult,
+    ResolvedConstraints,
+)
 from core.errors import UpstreamUnavailable
 from domain import constants
 from domain.requirements import Requirement, TripRequirements
@@ -42,19 +46,11 @@ def _reqs(*requirements: Requirement) -> TripRequirements:
     return TripRequirements(requirements=list(requirements))
 
 
-def test_pipeline_exposes_extract_intent():
-    """The module the reroute handler runs in must actually define the name.
-    This asserts the seam, not the function.
-    """
-    assert hasattr(pipeline_mod, "extract_intent")
-    assert pipeline_mod.extract_intent is intent_mod.extract_intent
-    assert callable(pipeline_mod.extract_intent)
-
-
 def test_resolve_carries_the_round_trip_choice():
     db = object()
-    plain = resolve(fallback_intent("прогулка по парку"), db=db)
-    closed = resolve(fallback_intent("прогулка по парку"), db=db, explicit_round_trip=True)
+    intent = IntentResult(decision=IntentDecision(), source="agent")
+    plain = resolve(intent, db=db)
+    closed = resolve(intent, db=db, explicit_round_trip=True)
 
     assert plain.round_trip is False
     assert closed.round_trip is True
@@ -268,8 +264,7 @@ def _row(pid: int, name: str, category: str, lat: float, lon: float) -> dict:
 
 
 def test_reroute_returns_a_route_instead_of_raising(monkeypatch):
-    """``POST /routes/reroute`` used to die two ways: an undefined ``extract_intent``
-    and a three-value ``render()`` unpacked into two names. This runs it offline."""
+    """``POST /routes/reroute`` runs offline: it reads no query, so it needs no model."""
     rows = [
         _row(1, "Старый замок", "замок", 53.6788, 23.8230),
         _row(2, "Новый замок", "дворец", 53.6849, 23.8310),

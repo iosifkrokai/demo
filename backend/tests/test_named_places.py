@@ -3,14 +3,12 @@
 from __future__ import annotations
 
 import os
-import re as _re
 import sys
 
 import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agent.planner.intent import _PLACE_STOP_LIST
 from agent.planner.pipeline import _geo_focus, should_skip_geo_focus
 from contracts.planner import Candidate, LatLon
 
@@ -32,12 +30,6 @@ def test_a_local_query_always_runs_the_focus():
     assert should_skip_geo_focus(region_scope=False, origin=LatLon(lat=53.6, lon=23.8)) is False
 
 
-def _extract_named_place_tokens(query: str) -> list[str]:
-
-    tokens = _re.findall(r"[А-ЯЁ][а-яё\-]{2,}", query)
-    return [t for t in tokens if t.lower() not in _PLACE_STOP_LIST]
-
-
 def _c(id: int, name: str, lat: float, lon: float, rrf_score: float = 0.0) -> Candidate:
     return Candidate(
         id=id,
@@ -47,38 +39,6 @@ def _c(id: int, name: str, lat: float, lon: float, rrf_score: float = 0.0) -> Ca
         lon=lon,
         rrf_score=rrf_score,
     )
-
-
-class TestExtractNamedPlaceTokens:
-    """Stop-list matching must handle lowercased entries and inflected forms."""
-
-    def test_single_named_place(self):
-        tokens = _extract_named_place_tokens("Хочу к Мирскому замку")
-        assert "Мирскому" in tokens
-        assert "Хочу" in tokens
-
-    def test_multi_place_captures_proper_nouns(self):
-        tokens = _extract_named_place_tokens("Новогрудок, замковая гора и центр")
-        assert "Новогрудок" in tokens
-        assert "центр" not in tokens
-
-    def test_sentence_initial_verb_captured(self):
-        tokens = _extract_named_place_tokens("Хочу погулять по замкам Гродно")
-        assert "Хочу" in tokens
-        assert "Гродно" in tokens
-
-    def test_stop_list_nominative(self):
-        assert _extract_named_place_tokens("Гродненская область") == []
-
-    def test_stop_list_inflected_genitive(self):
-        assert _extract_named_place_tokens("достопримечательности Гродненской области") == []
-
-    def test_stop_list_filters_region_preserves_real_place(self):
-        tokens = _extract_named_place_tokens("музеи Гродненской области и Новогрудок")
-        lowered = {t.lower() for t in tokens}
-        assert "гродненской" not in lowered
-        assert "области" not in lowered
-        assert "Новогрудок" in tokens
 
 
 class TestGeoFocus:
@@ -152,33 +112,6 @@ class TestGeoFocus:
     def test_empty_candidates_returns_empty(self):
         assert _geo_focus([]) == []
         assert _geo_focus([], anchor_id=1) == []
-
-
-class TestExtractIntentNamedPlaces:
-    """Verify that extract_intent populates named_places correctly."""
-
-    def test_named_places_single(self):
-        from agent.planner.intent import extract_intent
-        result = extract_intent("Хочу к Мирскому замку")
-        named = result.decision.named_places
-        assert "Мирскому" in named
-
-    def test_named_places_region_name_filtered(self):
-        from agent.planner import intent as intent_mod
-        result = intent_mod.extract_intent(
-            "достопримечательности Гродненской области"
-        )
-        named = result.decision.named_places
-        lowered = {t.lower() for t in named}
-        assert "гродненской" not in lowered
-        assert "области" not in lowered
-
-    def test_named_places_mixed_verb_and_real_place(self):
-        from agent.planner import intent as intent_mod
-        result = intent_mod.extract_intent("Хочу погулять по замкам Гродно")
-        named = result.decision.named_places
-        assert "Гродно" in named
-        assert "Хочу" in named
 
 
 if __name__ == "__main__":

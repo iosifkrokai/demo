@@ -51,8 +51,18 @@ def _live() -> bool:
         return False
 
 
+def _reader() -> bool:
+    """A stack without a key refuses to plan, so these checks cannot run."""
+    try:
+        with urllib.request.urlopen(f"{BASE_URL}/health", timeout=3) as resp:
+            return bool(json.loads(resp.read().decode()).get("llm"))
+    except Exception:
+        return False
+
+
 pytestmark = pytest.mark.skipif(
-    not _live(), reason=f"no live backend at {BASE_URL}"
+    not _live() or not _reader(),
+    reason=f"no live backend with a query reader at {BASE_URL}",
 )
 
 
@@ -68,7 +78,7 @@ def test_smoke_query(query: str, extra: dict):
 
     interp = body.get("interpretation")
     assert interp, f"{query!r} carries no `interpretation` block"
-    assert interp["source"] in ("llm", "mixed", "explicit", "fallback")
+    assert interp["source"] in ("llm", "mixed", "explicit")
     assert interp["status"] == body["status"] or interp["status"] in (
         "ready", "infeasible", "degraded", "pending",
     )

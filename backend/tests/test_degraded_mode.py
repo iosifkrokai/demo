@@ -1,6 +1,9 @@
-"""Degraded mode: no OPENROUTER_API_KEY (or a down model) must never 500 a route.
+"""No interpreter configured: the request is refused, not guessed at.
 
-Intent falls back to the deterministic reader; the local embedder stays key-free.
+Reading a free-text query is the model's job. Without a key there is no reading,
+so the planning endpoints answer 503 ``llm_not_configured`` and ``/health`` says
+so plainly. Nothing downstream pretends to have understood the query, and the
+catalogue endpoints (which need no reading) keep answering.
 """
 
 from __future__ import annotations
@@ -22,13 +25,17 @@ from agent.planner import (
     pipeline as pipeline_mod,
     retrieve as retrieve_mod,
 )
-from agent.planner.intent import build_requirements, extract_intent, fallback_intent
+from agent.planner.intent import build_requirements
 from agent.planner.pipeline import Pipeline, _embed_query
 from api import main as agent_main
 from contracts.planner import Candidate, GenerateReq, ResolvedConstraints
 from core.config import openrouter_api_key, settings
-from core.errors import NoCandidatesFound, NoRoutePossible, UpstreamUnavailable
-from domain import constants
+from core.errors import (
+    InterpretationUnavailable,
+    NoCandidatesFound,
+    NoRoutePossible,
+    UpstreamUnavailable,
+)
 from domain.requirements import PartyComposition, Requirement, TripRequirements
 from infra import embeddings
 from infra.valhalla_client import ping as valhalla_ping
@@ -87,7 +94,7 @@ def _agent_contract(*, source: str = "llm", codes: tuple[str, ...] = ()) -> Trip
 
 
 def _explode(*_a, **_kw):
-    raise AssertionError("OpenRouter must not be called in degraded mode")
+    raise AssertionError("OpenRouter must not be called without a key")
 
 
 def _warnings(caplog, logger: str) -> list[str]:
@@ -137,83 +144,23 @@ class TestAgentAvailability:
         assert ai.interpret_with_agent(QUERY, GenerateReq(query=QUERY)) is None
 
 
-class TestIntentFallback:
-    """Step 1 with no model: the deterministic reader, and the agent hand-off."""
+class TestNoReaderRefuses:
+    """No reading means no plan — never a keyword guess dressed up as one."""
 
-    def test_no_key_never_calls_openrouter(self, no_key, monkeypatch):
+    def test_no_key_never_calls_the_model(self, no_key, monkeypatch):
         monkeypatch.setattr(ai, "_run_agent", _explode)
-        res = extract_intent(QUERY)
-        assert res.source == "regex"
-        assert res.raw_response is None
-        assert res.confidence == 0.0
-        assert res.decision.intent_type in constants.INTENT_TYPES
-
-    def test_no_key_categories_come_from_the_shared_map(self, no_key):
-        """The reader fills categories from the deterministic keyword→category map
-        (resolve.CATEGORY_SYNONYMS) — the same taxonomy retrieval uses, not a guess."""
-        d = extract_intent(QUERY).decision
-        assert "замок" in d.categories_pos
-        assert d.categories_neg == []
-        assert d.keywords_pos == []
-        assert d.keywords_neg == []
-
-    def test_no_key_keeps_the_named_places(self, no_key):
-        d = fallback_intent(QUERY).decision
-        assert "Гродно" in d.named_places
-        region = fallback_intent("достопримечательности Гродненской области").decision
-        assert region.named_places == []
-
-    @pytest.mark.parametrize(
-        "query,minutes",
-        [
-            ("погулять за 3 часа", 180),
-            ("погулять 2 часа по костёлам", 120),
-            ("на 90 минут по замкам", 90),
-            ("на полдня", 240),
-            ("на весь день", 480),
-            ("просто погулять", None),
-            ("хочу в воскресенье", None),
-            ("погулять без ограничения", None),
-        ],
-    )
-    def test_time_budget_only_when_the_query_states_one(self, no_key, query, minutes):
-        assert fallback_intent(query).decision.time_budget_minutes == minutes
-
-    @pytest.mark.parametrize(
-        "query,scope",
-        [
-            ("все костёлы Гродненской области", "region"),
-            ("что посмотреть по всей области", "region"),
-            ("замки Гродно", "town"),
-            ("костёлы Лидского района", "district"),
-        ],
-    )
-    def test_scope_read_off_the_text(self, no_key, query, scope):
-        assert fallback_intent(query).decision.search_scope == scope
-
-    def test_no_key_is_quiet_on_the_intent_path(self, no_key, caplog):
-        """The deterministic reader is a first-class mode, not an anomaly: it
-        must not emit a warning for every call (the old degraded path did)."""
-        with caplog.at_level("WARNING", logger="agent.planner.intent"):
+        with pytest.raises(InterpretationUnavailable):
             build_requirements(QUERY, GenerateReq(query=QUERY))
-        assert _warnings(caplog, "agent.planner.intent") == []
 
-    def test_agent_failure_degrades_to_the_deterministic_contract(
-        self, with_key, monkeypatch, caplog
-    ):
+    def test_a_failed_reading_is_not_replaced_by_a_guess(self, with_key, monkeypatch):
         def boom(*_a, **_kw):
             raise RuntimeError("agent: upstream failed: 502")
-        monkeypatch.setattr(intent_mod, "_agent_contract", boom)
-        with caplog.at_level("WARNING", logger="agent.planner.intent"):
-            tr = build_requirements(QUERY, GenerateReq(query=QUERY))
-        assert tr.source == "fallback"
-        assert "замок" in [r.code for r in tr.requirements if r.kind == "interest"]
-        assert tr.must_visit_names() == []
-        assert len(_warnings(caplog, "agent.planner.intent")) == 1
+        monkeypatch.setattr(ai, "interpret_with_agent", boom)
+        with pytest.raises(InterpretationUnavailable):
+            build_requirements(QUERY, GenerateReq(query=QUERY))
 
-    def test_agent_contract_drives_the_reading(self, with_key, monkeypatch):
-        """With the agent answering, the IntentResult the planner consumes comes from
-        the contract — and facts the text states are still there (meaning adds, never loses)."""
+    def test_the_agent_contract_drives_the_reading(self, with_key, monkeypatch):
+        """With the agent answering, the IntentResult comes from the contract."""
         monkeypatch.setattr(
             intent_mod, "_agent_contract",
             lambda *a, **k: _agent_contract(codes=("костёл",)),
@@ -223,11 +170,17 @@ class TestIntentFallback:
         intent = intent_mod.intent_from_requirements(tr, QUERY)
         assert intent.source == "agent"
         assert "костёл" in intent.decision.categories_pos
-        assert "замок" in intent.decision.categories_pos
 
-    def test_source_stays_inside_the_model_literal(self):
-        assert fallback_intent(QUERY).source == "regex"
-        assert intent_mod._fallback_time_budget("2 часа") == 120
+    def test_an_explicit_ui_choice_survives_the_reading(self, with_key, monkeypatch):
+        """The model reads the text; the control the tourist pressed must not be lost."""
+        monkeypatch.setattr(
+            intent_mod, "_agent_contract", lambda *a, **k: _agent_contract()
+        )
+        tr = build_requirements(
+            QUERY, GenerateReq(query=QUERY, hard_services=["туалет"])
+        )
+        assert "туалет" in tr.hard_service_codes()
+        assert tr.source == "mixed"
 
 
 class TestEmbedLocal:
@@ -312,9 +265,40 @@ def _restore_planner():
         delattr(agent_main.app.state, "planner")
 
 
+class TestHttpRefusal:
+    """Without a reader the planning endpoints refuse; the catalogue does not."""
+
+    @pytest.mark.parametrize(
+        "path,body",
+        [
+            ("/routes/generate", {"query": QUERY}),
+            ("/routes/reroute", {"point_ids": [1, 2]}),
+            ("/routes/explain", {"point_ids": [1, 2]}),
+        ],
+    )
+    def test_planning_needs_a_reader(self, no_key, _restore_planner, path, body):
+        client = _client_with_planner(_StubPlanner())
+        r = client.post(path, json=body)
+        assert r.status_code == 503
+        assert r.json()["detail"]["reason"] == "llm_not_configured"
+
+    def test_the_refusal_comes_before_any_work(self, no_key, _restore_planner):
+        """The stub would fail loudly if the planner were reached at all."""
+        client = _client_with_planner(_StubPlanner())
+        r = client.post("/routes/generate", json={"query": QUERY})
+        assert r.status_code == 503
+
+    def test_the_catalogue_answers_without_a_reader(self, no_key, _restore_planner):
+        class _Catalogue:
+            db = _FakeDB()
+
+        client = _client_with_planner(_Catalogue())
+        assert client.get("/places").status_code != 503
+
+
 class TestHttpDegraded:
 
-    def test_escaped_upstream_error_is_503_not_500(self, _restore_planner):
+    def test_escaped_upstream_error_is_503_not_500(self, with_key, _restore_planner):
         client = _client_with_planner(
             _StubPlanner(UpstreamUnavailable("valhalla: /route failed: 502"))
         )
@@ -322,11 +306,11 @@ class TestHttpDegraded:
         assert r.status_code == 503
         assert "502" in r.json()["detail"]
 
-    def test_a_degraded_upstream_is_never_a_bare_500(self, _restore_planner):
+    def test_a_degraded_upstream_is_never_a_bare_500(self, with_key, _restore_planner):
         client = _client_with_planner(_StubPlanner(UpstreamUnavailable("db: gone")))
         assert client.post("/routes/generate", json={"query": QUERY}).status_code == 503
 
-    def test_planner_errors_keep_their_own_status(self, _restore_planner):
+    def test_planner_errors_keep_their_own_status(self, with_key, _restore_planner):
         client = _client_with_planner(
             _StubPlanner(NoCandidatesFound("no candidates matched the query"))
         )
@@ -334,22 +318,20 @@ class TestHttpDegraded:
         assert r.status_code == 404
         assert "no candidates" in r.json()["detail"]
 
-    def test_health_without_a_key_keeps_embedder_and_degraded_llm(
+    def test_health_without_a_key_says_so(
             self, no_key, monkeypatch, fake_model, _restore_planner):
         body = _client_with_planner(_HealthOnly(monkeypatch)).get("/health").json()
         assert body["embedder"] is True
         assert body["llm"] is False
-        assert body["interpretation"] == "deterministic"
         assert body["db"] is True
         assert body["valhalla"] is True
-        assert body["status"] == "ok"
+        assert body["status"] == "degraded", "no reader is not a healthy planner"
 
     def test_health_flags_are_honest_with_a_key(
             self, with_key, monkeypatch, fake_model, _restore_planner):
         body = _client_with_planner(_HealthOnly(monkeypatch)).get("/health").json()
         assert body["llm"] is True
         assert body["embedder"] is True
-        assert body["interpretation"] == "llm"
         assert body["status"] == "ok"
 
     def test_health_is_degraded_when_the_local_model_cannot_load(
@@ -389,33 +371,17 @@ def live_db() -> Iterator[psycopg.Connection]:
     db.close()
 
 
-class TestLiveDegradedRoute:
-    """The deliverable: no key ⇒ POST /routes/generate still returns points.
+class TestLiveRefusal:
+    """The deliverable: without a key the pipeline refuses instead of guessing."""
 
-    This is the exact request that answered HTTP 500 before the fix.
-    """
-
-    def test_route_request_without_a_key_returns_points(self, no_key, live_db):
+    def test_planning_refuses_without_a_key(self, no_key, live_db):
         with offline():
-            resp = Pipeline(db=live_db).generate(
-                GenerateReq(query=QUERY, time_budget_minutes=120)
-            )
-        assert resp.debug["intent_source"] == "fallback"
-        assert len(resp.points) >= 2, "a route needs at least two stops"
-        assert all(p.lat and p.lon for p in resp.points)
-        assert resp.explanation
-        assert resp.status in ("ready", "degraded", "needs_clarification")
-        assert resp.requirements
+            with pytest.raises(InterpretationUnavailable):
+                Pipeline(db=live_db).generate(
+                    GenerateReq(query=QUERY, time_budget_minutes=120)
+                )
 
-    def test_a_stated_duration_reaches_the_constraints(self, no_key, live_db):
-        with offline():
-            resp = Pipeline(db=live_db).generate(
-                GenerateReq(query="погулять по замкам Гродно 3 часа", time_budget_minutes=None)
-            )
-        assert resp.debug["constraints"]["time_budget_minutes"] == 180
-        assert len(resp.points) >= 2
-
-    def test_the_vector_signal_is_skipped(self, no_key, live_db, monkeypatch):
+    def test_the_vector_signal_is_skipped_without_a_query_vector(self, live_db, monkeypatch):
         """An empty query_embedding is what switches the vector signal off."""
         calls: list = []
 
@@ -435,7 +401,7 @@ class TestLiveDegradedRoute:
         assert len(pool) > 0, "keyword + category signals alone must still find places"
 
 
-def test_a_route_that_cannot_be_planned_is_an_answer_not_a_failed_request():
+def test_a_route_that_cannot_be_planned_is_an_answer_not_a_failed_request(with_key):
     """«Cannot plan here» must not leave as HTTP 422 with the optimizer's sentence.
 
     A refusal to plan is an ordinary response: status infeasible, no points, a reason code.

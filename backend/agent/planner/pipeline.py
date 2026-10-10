@@ -16,6 +16,8 @@ from contracts.planner import (
     BudgetInfo,
     Candidate,
     GenerateReq,
+    IntentDecision,
+    IntentResult,
     OverallStatus,
     ParsedQuery,
     ResolvedConstraints,
@@ -58,7 +60,7 @@ from .geo import (
     _geo_report,
     should_skip_geo_focus,
 )
-from .intent import build_requirements, extract_intent, intent_from_requirements
+from .intent import build_requirements, intent_from_requirements
 from .optimize import _order_after_prune, _prune_unroutable, _valhalla_order, optimize
 from .preprocess import preprocess
 from .refine import (
@@ -850,13 +852,15 @@ class Pipeline:
             raise NoCandidatesFound(f"unknown point_ids: {sorted(missing)}")
 
         candidates = [_row_to_candidate(r, 1.0) for r in rows]
+        intent = IntentResult(
+            decision=IntentDecision(intent_type="specific"), source="agent"
+        )
         constraints = resolve(
-            extract_intent("точки пользователя"),
-            explicit_time_budget=None,
+            intent,
+            explicit_time_budget=constants.MAX_BUDGET_MIN,
             explicit_bbox=None,
             db=self.db,
         )
-        constraints.time_budget_minutes = constants.MAX_BUDGET_MIN
         constraints.must_visit_ids = list(point_ids)
 
         turn = _Turn(
@@ -920,10 +924,10 @@ class Pipeline:
         llm_ok = bool(openrouter_api_key())
 
         return {
-            "status": "ok" if (db_ok and valhalla_ok and embedder_ok) else "degraded",
+            # A missing reader is not "ok": nothing can be planned without one.
+            "status": "ok" if (db_ok and valhalla_ok and embedder_ok and llm_ok) else "degraded",
             "embedder": embedder_ok,
             "llm": llm_ok,
-            "interpretation": "llm" if llm_ok else "deterministic",
             "db": db_ok,
             "valhalla": valhalla_ok,
         }
