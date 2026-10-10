@@ -14,7 +14,7 @@ from fastapi import HTTPException
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from agent.models import PartyComposition, Requirement, TripRequirements
-from api import main as agent_main
+from api.deps import call_planner
 from core.config import settings
 from core.errors import InterpretationUnavailable, UpstreamUnavailable
 from planner import intent as intent_mod
@@ -173,7 +173,7 @@ class TestFailuresDegrade:
             raise UpstreamUnavailable("valhalla: /route failed: 502")
 
         with pytest.raises(HTTPException) as exc:
-            agent_main._call(failing)
+            call_planner(failing)
         assert exc.value.status_code == 503
         assert "502" in exc.value.detail
 

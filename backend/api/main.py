@@ -16,7 +16,6 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from agent.client import DEFAULT_MODEL
-from api.deps import call_planner as _call
 from api.routers import (
     accounts as accounts_api,
     admin as admin_api,
@@ -25,7 +24,6 @@ from api.routers import (
     health as health_api,
     routes as routes_api,
 )
-from api.routers.routes import route_progress, route_trace
 from core.config import openrouter_api_key, settings
 from db.store.areas import PostgresAreaRepository
 from db.store.clients import PostgresClientRepository
@@ -45,9 +43,6 @@ log = logging.getLogger(__name__)
 
 # Re-exported: tests reach the shared planner caller and the two telemetry reads
 # through `api.main`, the module they have always come from.
-__all__ = ["_call", "app", "route_progress", "route_trace"]
-
-
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     repos = Repositories(

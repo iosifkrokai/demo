@@ -36,7 +36,6 @@ SESSION_COOKIE = "grodno_session"
 # The largest page an admin listing will serve; the HTTP cap, not a storage one.
 MAX_LIST_LIMIT = 500
 
-ROLE_USER = "user"
 ROLE_ADMIN = "admin"
 RoleLiteral = Literal["user", "admin"]
 

@@ -12,7 +12,7 @@ from fastapi import HTTPException
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from api.main import route_trace
+from api.routers.routes import route_trace
 from telemetry import trace
 
 

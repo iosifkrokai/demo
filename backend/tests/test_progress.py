@@ -11,7 +11,7 @@ from fastapi import HTTPException
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from api.main import route_progress
+from api.routers.routes import route_progress
 from planner.models import GenerateReq
 from telemetry import progress
 
