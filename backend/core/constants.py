@@ -16,8 +16,6 @@ VALHALLA_ORDER_RETRIES = 0
 RENDER_MIN_LEFT_S = 6.0
 
 
-INTENT_TYPES = ("discovery", "specific", "themed", "vague")
-
 CATEGORIES = taxonomy.all_codes()
 
 RRF_K = 60

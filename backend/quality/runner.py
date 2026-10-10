@@ -35,8 +35,6 @@ STATUSES = frozenset(
     {"ready", "catalogue", "degraded", "pending", "infeasible", "rejected",
      "needs_clarification", "error"}
 )
-REJECTION_STATUSES = frozenset({"rejected", "infeasible", "needs_clarification"})
-READY_STATUSES = frozenset({"ready", "catalogue", "degraded"})
 
 CHECK_API_ERROR = "api_error"
 CHECK_WRONG_STATUS = "wrong_status"
