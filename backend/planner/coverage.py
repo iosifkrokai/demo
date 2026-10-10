@@ -15,7 +15,7 @@ from core import constants
 from telemetry import trace
 
 from .intent import mark_out_of_coverage
-from .response import _verdicts
+from .response import _verdicts, build_response
 from .validate import validate
 from .verify import overall_status
 
@@ -38,7 +38,6 @@ def _outside_left_unresolved(
 
 
 def refuse_out_of_coverage(
-    pipeline: Any,
     req: GenerateReq,
     requirements: Any,
     intent: Any,
@@ -73,7 +72,7 @@ def refuse_out_of_coverage(
         refused=names,
         ms=int((_time.perf_counter() - t0) * 1000),
     )
-    return pipeline._build_response(
+    return build_response(
         intent=intent,
         changes=None,
         constraints=constraints,

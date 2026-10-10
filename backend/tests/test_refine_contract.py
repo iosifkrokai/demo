@@ -22,11 +22,8 @@ from planner import (
     plan_tail as plan_tail_mod,
     response as response_mod,
 )
-from planner.pipeline import (
-    Pipeline,
-    _refinement_cost,
-    _synthetic_cost,
-)
+from planner.cost import _refinement_cost, _synthetic_cost
+from planner.pipeline import Pipeline
 from planner.refine import (
     REFINEMENT_REORDER_ATTRIBUTE_MISSING,
     REFINEMENT_UNRECOGNIZED,

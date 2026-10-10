@@ -11,7 +11,6 @@ from typing import Any
 
 from agent import interpret_cache
 from contracts.planner import (
-    BudgetInfo,
     Candidate,
     GenerateReq,
     IntentDecision,
@@ -19,7 +18,6 @@ from contracts.planner import (
     OverallStatus,
     ParsedQuery,
     ResolvedConstraints,
-    RouteChanges,
     RouteResponse,
     RouteSummary,
 )
@@ -35,11 +33,8 @@ from telemetry import progress, trace
 
 from .catalogue import catalogue_response
 from .cost import (
-    _build_cost,
     _is_service_code,
     _is_sight_stop,
-    _refinement_cost,
-    _synthetic_cost,
 )
 from .coverage import _outside_left_unresolved, refuse_out_of_coverage
 from .dedupe import _drop_duplicates, _dupe_pairs, _norm_name
@@ -47,16 +42,11 @@ from .diversity import mmr_select
 from .explain import explain as explain_route
 from .geo import (
     _TRACE_NAMES_MAX,
-    _distance_from_origin_m,
-    _distance_m,
-    _distance_pt_m,
     _geo_focus,
     _geo_focus_report,
-    _geo_report,
     should_skip_geo_focus,
 )
 from .intent import build_requirements, intent_from_requirements
-from .optimize import _prune_unroutable, _valhalla_order
 from .plan_tail import run_plan_tail
 from .preprocess import preprocess
 from .refine import (
@@ -64,7 +54,6 @@ from .refine import (
     _context_changes,
     _drop_excluded,
     _nearby_convenience,
-    _with_base_points,
     interpret_refinement,
     is_excluded_category,
     reason_text,
@@ -73,60 +62,17 @@ from .refine import (
 from .render import render
 from .resolve import resolve
 from .response import (
-    _MODE_WORDS,
     _gone,
-    _interpretation,
     _names,
     _render_tour,
     _services_along_evidence,
     _to_places,
     _verdicts,
-    alternatives_for,
-    alternatives_sentence,
+    build_response,
 )
 from .retrieve import apply_negative_filter, candidate_of, retrieve
 from .turn import Turn, seconds_left
 from .verify import overall_status, verify
-
-__all__ = [
-    "_MODE_WORDS",
-    "_TRACE_NAMES_MAX",
-    "_build_cost",
-    "_build_response",
-    "_cap_for_valhalla",
-    "_context_changes",
-    "_distance_from_origin_m",
-    "_distance_m",
-    "_distance_pt_m",
-    "_drop_duplicates",
-    "_drop_excluded",
-    "_dupe_pairs",
-    "_geo_focus",
-    "_geo_focus_report",
-    "_geo_report",
-    "_gone",
-    "_interpretation",
-    "_is_service_code",
-    "_is_sight_stop",
-    "_names",
-    "_nearby_convenience",
-    "_norm_name",
-    "_outside_left_unresolved",
-    "_prune_unroutable",
-    "_refinement_cost",
-    "_render_tour",
-    "_services_along_evidence",
-    "_synthetic_cost",
-    "_to_places",
-    "_valhalla_order",
-    "_verdicts",
-    "_with_base_points",
-    "alternatives_for",
-    "alternatives_sentence",
-    "catalogue_response",
-    "refuse_out_of_coverage",
-    "should_skip_geo_focus",
-]
 
 log = logging.getLogger(__name__)
 
@@ -235,7 +181,7 @@ class Pipeline:
             route=[p.name for p in plan.route],
         )
 
-        return self._build_response(
+        return build_response(
             intent=intent,
             changes=changes,
             constraints=constraints,
@@ -639,7 +585,7 @@ class Pipeline:
     ) -> RouteResponse:
         """Answer "not here" instead of planning a route somewhere else."""
         return refuse_out_of_coverage(
-            self, req, requirements, intent, constraints, names, t0
+            req, requirements, intent, constraints, names, t0
         )
 
     def _catalogue_response(
@@ -999,7 +945,7 @@ class Pipeline:
             route=[c.name for c in route],
         )
 
-        resp = self._build_response(
+        resp = build_response(
             intent=intent,
             constraints=constraints,
             plan=plan,
@@ -1030,71 +976,3 @@ class Pipeline:
         }
         return resp
 
-    def _build_response(
-        self,
-        *,
-        intent,
-        constraints,
-        plan,
-        changes: RouteChanges | None,
-        shape: dict,
-        walk_s: float,
-        length_km: float | None,
-        explanation: str,
-        costing: str = "pedestrian",
-        requirements=None,
-        status: OverallStatus | None = None,
-        deadline: dict | None = None,
-    ) -> RouteResponse:
-        d = intent.decision
-        offers = alternatives_for(costing=costing, walk_s=walk_s, length_km=length_km)
-        if offers:
-            explanation = f"{explanation}\n\n{alternatives_sentence(offers, walk_s)}"
-        return RouteResponse(
-            parsed=ParsedQuery(
-                keywords=d.keywords_pos,
-                categories=d.categories_pos,
-                time_budget_minutes=d.time_budget_minutes,
-                source=intent.source,
-            ),
-            points=_to_places(plan.route),
-            shape=shape,
-            summary=RouteSummary(length_km=length_km, time_seconds=walk_s),
-            changes=changes,
-            costing=costing,
-            budget=BudgetInfo(
-                budget_minutes=constraints.time_budget_minutes,
-                walk_minutes=int(walk_s / 60) + 1,
-                visit_minutes=plan.visit_seconds // 60,
-                total_minutes=plan.total_seconds // 60,
-                fits=plan.fits_budget,
-                stops_dropped=plan.stops_dropped,
-            ),
-            explanation=explanation,
-            alternatives=offers or None,
-            status=status,
-            requirements=(
-                requirements.public_requirements() if requirements is not None else None
-            ),
-            interpretation=_interpretation(requirements, status),
-            debug={
-                "intent_source": intent.source,
-                "intent_latency_ms": intent.latency_ms,
-                "deadline": deadline,
-                "cache": interpret_cache.stats(),
-                "requirements_source": (
-                    getattr(requirements, "source", None) if requirements is not None else None
-                ),
-                "constraints": {
-                    "must_visit_ids": constraints.must_visit_ids,
-                    "area_anchor": constraints.area_anchor,
-                    "optional_categories": constraints.optional_categories,
-                    "forbidden_categories": constraints.forbidden_categories,
-                    "time_budget_minutes": constraints.time_budget_minutes,
-                },
-                "trace": plan.trace,
-            },
-        )
-
-
-_build_response = Pipeline._build_response

@@ -20,7 +20,7 @@ from core.config import settings
 from core.errors import InterpretationUnavailable, UpstreamUnavailable
 from planner import intent as intent_mod
 from planner.intent import build_requirements, reader_brief
-from planner.pipeline import _interpretation
+from planner.response import _interpretation
 from planner.verify import overall_status, verify
 
 RU = "Погулять по старому Гродно с двумя детьми, туалет обязательно, кафе если по пути"

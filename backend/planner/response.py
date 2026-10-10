@@ -8,14 +8,20 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from agent import interpret_cache
 from contracts.planner import (
+    BudgetInfo,
     Candidate,
     Interpretation,
     LatLon,
     OverallStatus,
+    ParsedQuery,
     Place,
     PlannedAlternative,
     RequirementSignal,
+    RouteChanges,
+    RouteResponse,
+    RouteSummary,
 )
 from core import constants
 from core.errors import UpstreamUnavailable
@@ -25,6 +31,78 @@ from .geo import _TRACE_NAMES_MAX
 from .render import render
 
 log = logging.getLogger(__name__)
+
+
+def build_response(
+    *,
+    intent,
+    constraints,
+    plan,
+    changes: RouteChanges | None,
+    shape: dict,
+    walk_s: float,
+    length_km: float | None,
+    explanation: str,
+    costing: str = "pedestrian",
+    requirements=None,
+    status: OverallStatus | None = None,
+    deadline: dict | None = None,
+) -> RouteResponse:
+    """The one place a planned route becomes the response body.
+
+    Earlier there were three: this, the catalogue branch, and a refusal built in
+    the HTTP layer. They differed in their defaults, which is exactly the kind of
+    drift a single builder prevents.
+    """
+    d = intent.decision
+    offers = alternatives_for(costing=costing, walk_s=walk_s, length_km=length_km)
+    if offers:
+        explanation = f"{explanation}\n\n{alternatives_sentence(offers, walk_s)}"
+    return RouteResponse(
+        parsed=ParsedQuery(
+            keywords=d.keywords_pos,
+            categories=d.categories_pos,
+            time_budget_minutes=d.time_budget_minutes,
+            source=intent.source,
+        ),
+        points=_to_places(plan.route),
+        shape=shape,
+        summary=RouteSummary(length_km=length_km, time_seconds=walk_s),
+        changes=changes,
+        costing=costing,
+        budget=BudgetInfo(
+            budget_minutes=constraints.time_budget_minutes,
+            walk_minutes=int(walk_s / 60) + 1,
+            visit_minutes=plan.visit_seconds // 60,
+            total_minutes=plan.total_seconds // 60,
+            fits=plan.fits_budget,
+            stops_dropped=plan.stops_dropped,
+        ),
+        explanation=explanation,
+        alternatives=offers or None,
+        status=status,
+        requirements=(
+            requirements.public_requirements() if requirements is not None else None
+        ),
+        interpretation=_interpretation(requirements, status),
+        debug={
+            "intent_source": intent.source,
+            "intent_latency_ms": intent.latency_ms,
+            "deadline": deadline,
+            "cache": interpret_cache.stats(),
+            "requirements_source": (
+                getattr(requirements, "source", None) if requirements is not None else None
+            ),
+            "constraints": {
+                "must_visit_ids": constraints.must_visit_ids,
+                "area_anchor": constraints.area_anchor,
+                "optional_categories": constraints.optional_categories,
+                "forbidden_categories": constraints.forbidden_categories,
+                "time_budget_minutes": constraints.time_budget_minutes,
+            },
+            "trace": plan.trace,
+        },
+    )
 
 
 def _interpretation(

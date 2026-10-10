@@ -120,7 +120,7 @@ def test_pipeline_pruner_keeps_a_mandatory_stop_and_returns_the_report():
     b = _cand(2, "Каплица на острове", "костёл", lat=53.007, lon=23.917)
     c = _cand(3, "Гродно", "памятник")
 
-    route, report = pipeline_mod._prune_unroutable([a, b, c], [a, b, c], _island_cost(), [2])
+    route, report = optimize_mod._prune_unroutable([a, b, c], [a, b, c], _island_cost(), [2])
 
     assert [x.id for x in route] == [1, 2, 3], "the mandatory stop stays on the route"
     assert [p.id for p in report] == [2]

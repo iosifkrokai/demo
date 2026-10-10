@@ -13,7 +13,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from contracts.planner import Candidate, GenerateReq, LatLon, RouteContext
 from core import constants
 from db.store.mappers import place_from_row
-from planner.pipeline import (
+from planner.refine import (
     _cap_for_valhalla,
     _context_changes,
     _drop_excluded,
