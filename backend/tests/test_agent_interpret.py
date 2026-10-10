@@ -200,13 +200,6 @@ def test_no_key_returns_none_and_ui_filters_survive(no_key):
         build_requirements(QUERY, req)
 
 
-def test_missing_sdk_is_the_same_degradation(monkeypatch, fake_key):
-    """No PydanticAI installed means no model — not an exception."""
-    monkeypatch.setattr(ai, "pydantic_ai", None)
-    assert ai.available() is False
-    assert ai.interpret_with_agent(QUERY, reader_brief(GenerateReq(query=QUERY))) is None
-
-
 def test_empty_query_returns_none(fake_key):
     assert ai.interpret_with_agent("   ", reader_brief(GenerateReq(query=QUERY))) is None
 

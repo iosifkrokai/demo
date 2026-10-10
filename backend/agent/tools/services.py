@@ -5,7 +5,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from agent.llm import RunContext
+from pydantic_ai import RunContext
+
 from agent.schema import InterpretDeps
 from agent.tools import ERR_NOT_IMPLEMENTED, _clamp, _envelope
 from reference.taxonomy import db_values

@@ -6,8 +6,11 @@ import logging
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
 from typing import Any
 
+import pydantic_ai
+from pydantic_ai import UsageLimits
+from pydantic_ai.settings import ModelSettings
+
 from agent import llm as model_mod, telemetry
-from agent.llm import SDK_IMPORT_ERROR, ModelSettings, UsageLimits, pydantic_ai
 from agent.models import ReaderBrief
 from agent.prompts import compose_instructions
 from agent.prompts.notes import _request_note, _ui_note
@@ -23,7 +26,7 @@ MAX_OUTPUT_TOKENS = 8192
 WALL_CLOCK_TIMEOUT_S = 120.0
 MODEL_TIMEOUT_S = 90.0
 
-_NO_MODEL = {"agent_unavailable", "pydantic_ai_unavailable", "model_unavailable"}
+_NO_MODEL = {"agent_unavailable", "model_unavailable"}
 
 
 def _build_prompt(query: str, brief: Any) -> str:
@@ -86,13 +89,6 @@ def _run_agent(
     query: str, brief: ReaderBrief, deps: InterpretDeps, wall_clock_s: float | None = None
 ) -> tuple[AgentReading | None, str | None]:
     """Run one bounded interpretation. Returns (reading, failure_reason)."""
-    if pydantic_ai is None:
-        log.info(
-            "agent_interpret: pydantic-ai not importable (%s) — no reader",
-            SDK_IMPORT_ERROR,
-        )
-        return None, "pydantic_ai_unavailable"
-
     try:
         model = model_mod.make_model()
     except Exception as exc:
