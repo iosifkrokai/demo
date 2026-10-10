@@ -108,11 +108,11 @@ From the host venv (no Docker) it is the same command:
 cd backend && .venv/bin/python -m seed --dry-run       # offline: no DB, no network
 ```
 
-`fetch` writes versioned files (`data/places_osm_raw.csv`, `data/places_poi.csv`)
+`fetch` writes versioned files (`data/places/places_osm_raw.csv`, `data/places/places_poi.csv`)
 and is the **only** step that touches Overpass; `apply` never does. The Overpass
 bbox covers a slice of Lithuania and Poland, so every row is checked against
 `domain.geofence.inside_project_area` (Grodno ADM1 polygon) before it is written;
-`data/belarus_border_keep.json` lists the documented exceptions.
+`data/geo/belarus_border_keep.json` lists the documented exceptions.
 
 Spot-check:
 ```bash
