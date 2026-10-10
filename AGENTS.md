@@ -68,3 +68,8 @@ pass you should ignore.
 | `backend/data/README.md` | the seed contract: dataset schema, natural keys, protection |
 | `backend/quality/README.md` | the three quality layers and how to run them |
 | `frontend/DESIGN.md` | the design system |
+
+Recurring multi-step jobs are skills under `.agents/skills/` (with `.claude/skills/`
+symlinked to them, so both conventions find them): `seed-db`, `add-dataset`,
+`run-quality`. Read the one that matches the task before improvising the steps —
+each carries the failure modes that are easy to get wrong.
