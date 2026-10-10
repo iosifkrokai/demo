@@ -20,7 +20,6 @@ from tests._schema import baseline_sql
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from api import main as agent_main
-from contracts.clients import route_metrics
 from core.config import settings
 from db.store.clients_store import (
     PREFERENCE_COLUMNS,
@@ -28,6 +27,7 @@ from db.store.clients_store import (
     StorageUnavailable,
     TooManyRoutes,
 )
+from db.store.mappers import route_metrics
 
 CLIENT_A = "11111111-1111-4111-8111-111111111111"
 CLIENT_B = "22222222-2222-4222-8222-222222222222"

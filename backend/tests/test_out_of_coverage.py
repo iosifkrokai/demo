@@ -12,8 +12,8 @@ from agent.models import (
     Requirement,
     TripRequirements,
 )
-from contracts.planner import Candidate, ResolvedConstraints
 from planner.intent import mark_out_of_coverage
+from planner.models import Candidate, ResolvedConstraints
 from planner.pipeline import _outside_left_unresolved
 from planner.resolve import _same_name
 from planner.verify import (

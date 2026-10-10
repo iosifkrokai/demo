@@ -26,7 +26,6 @@ from agent import (
     tools,
 )
 from agent.tools import areas as tools_areas, places as tools_places
-from contracts.planner import GenerateReq
 from core.config import settings
 from core.errors import InterpretationUnavailable
 from db.models.area import Area
@@ -34,6 +33,7 @@ from db.models.place import Place
 from db.store.mappers import area_from_row, place_from_row
 from db.store.registry import Repositories
 from planner.intent import build_requirements, reader_brief
+from planner.models import GenerateReq
 from reference import areas as areas_mod
 from telemetry import trace
 

@@ -12,11 +12,11 @@ import re
 from collections import defaultdict
 from collections.abc import Iterable
 
-from contracts.planner import Candidate, Photo, ResolvedConstraints
 from core import constants
 from db.models.place import Place
 from db.store.mappers import parse_fun_facts, parse_links, photo_of
 from db.store.places import PostgresPlaceRepository
+from planner.models import Candidate, Photo, ResolvedConstraints
 from reference.taxonomy import db_values
 
 CATEGORY_KEYWORD_TO_LLM: dict[str, str] = {

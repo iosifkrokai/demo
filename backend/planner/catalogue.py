@@ -6,7 +6,8 @@ import logging
 import time as _time
 from typing import Any
 
-from contracts.planner import (
+from core import constants
+from planner.models import (
     Candidate,
     GenerateReq,
     ParsedQuery,
@@ -14,7 +15,6 @@ from contracts.planner import (
     RouteResponse,
     RouteSummary,
 )
-from core import constants
 from telemetry import progress, trace
 
 from .response import _interpretation, _to_places, _verdicts

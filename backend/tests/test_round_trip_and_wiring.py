@@ -8,13 +8,6 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from agent.models import Requirement, TripRequirements
-from contracts.planner import (
-    Candidate,
-    CostMatrix,
-    IntentDecision,
-    IntentResult,
-    ResolvedConstraints,
-)
 from core import constants
 from core.errors import UpstreamUnavailable
 from db.store.areas import PostgresAreaRepository
@@ -29,6 +22,13 @@ from planner import (
 from planner.cost import (
     REASON_MUST_VISIT_UNROUTABLE,
     PrunedStop,
+)
+from planner.models import (
+    Candidate,
+    CostMatrix,
+    IntentDecision,
+    IntentResult,
+    ResolvedConstraints,
 )
 from planner.resolve import resolve
 from planner.valhalla_client import RouteResult, RouteStatus

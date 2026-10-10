@@ -1,24 +1,27 @@
 """HTTP models for accounts, visits and the admin surface.
 
 Field names and machine reason codes only; the UI owns every human sentence.
+
+The rules — what counts as an email, what makes a password too weak — live in
+`core.accounts`, below this layer, because `db/seed/admin` validates the first
+administrator with the very same ones.
 """
 
 from __future__ import annotations
 
-import re
 from datetime import datetime
 from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field, model_validator
 
+from core.accounts import DISPLAY_NAME_MAX, EMAIL_MAX, PASSWORD_MAX_LENGTH
+
 REASON_STORAGE_UNAVAILABLE = "storage_unavailable"
 REASON_NOT_AUTHENTICATED = "not_authenticated"
 REASON_NOT_ADMIN = "not_admin"
 REASON_INVALID_CREDENTIALS = "invalid_credentials"
 REASON_EMAIL_TAKEN = "email_taken"
-REASON_WEAK_PASSWORD = "weak_password"
-REASON_INVALID_EMAIL = "invalid_email"
 REASON_USER_NOT_FOUND = "user_not_found"
 REASON_PLACE_NOT_FOUND = "place_not_found"
 REASON_SOURCE_TAKEN = "source_taken"
@@ -32,32 +35,6 @@ SESSION_COOKIE = "grodno_session"
 ROLE_USER = "user"
 ROLE_ADMIN = "admin"
 RoleLiteral = Literal["user", "admin"]
-
-PASSWORD_MIN_LENGTH = 8
-PASSWORD_MAX_LENGTH = 200
-DISPLAY_NAME_MAX = 120
-EMAIL_MAX = 254
-
-_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
-
-
-def normalize_email(raw: str | None) -> str | None:
-    """Lower-case and trim an address; ``None`` when it is not one."""
-    if raw is None:
-        return None
-    value = raw.strip().lower()
-    if not value or len(value) > EMAIL_MAX or not _EMAIL_RE.match(value):
-        return None
-    return value
-
-
-def password_problem(raw: str | None) -> str | None:
-    """The reason code a password fails with, or ``None`` when it is acceptable."""
-    if raw is None or len(raw) < PASSWORD_MIN_LENGTH:
-        return REASON_WEAK_PASSWORD
-    if len(raw) > PASSWORD_MAX_LENGTH:
-        return REASON_WEAK_PASSWORD
-    return None
 
 
 class RegisterIn(BaseModel):

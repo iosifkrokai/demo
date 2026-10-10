@@ -22,9 +22,9 @@ from agent.models import (
 )
 from agent.prompts import compose_instructions
 from agent.prompts.notes import _ui_note
-from contracts.planner import GenerateReq, IntentDecision, IntentResult
 from core import constants
 from core.errors import InterpretationUnavailable
+from planner.models import GenerateReq, IntentDecision, IntentResult
 from telemetry import trace
 
 from .preprocess import WORD_RE

@@ -8,10 +8,10 @@ from __future__ import annotations
 import logging
 from collections.abc import Sequence
 
-from contracts.planner import IntentResult, ResolvedConstraints
 from core import constants
 from db.models.place import Place
 from db.store.places import PostgresPlaceRepository
+from planner.models import IntentResult, ResolvedConstraints
 
 log = logging.getLogger(__name__)
 

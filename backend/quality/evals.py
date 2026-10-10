@@ -391,8 +391,8 @@ def run_interpretation() -> dict[str, Any]:
 
     Live, via the product's `build_requirements`; the report records which source answered.
     """
-    from contracts.planner import GenerateReq
     from planner.intent import build_requirements
+    from planner.models import GenerateReq
     from reference import taxonomy
 
     checks: list[dict[str, Any]] = []

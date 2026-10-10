@@ -8,7 +8,7 @@ from __future__ import annotations
 import hashlib
 import re
 
-from contracts.planner import PreprocessedQuery
+from planner.models import PreprocessedQuery
 
 WORD_RE = re.compile(r"[а-яёa-z]{3,}")
 

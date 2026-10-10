@@ -9,7 +9,7 @@ import os
 import sys
 import uuid
 
-from contracts.accounts import normalize_email, password_problem
+from core.accounts import normalize_email, password_problem
 from core.passwords import hash_password
 from db.store.accounts_store import EmailTaken, PostgresAccountRepository
 

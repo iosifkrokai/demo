@@ -15,9 +15,9 @@ from __future__ import annotations
 import logging
 import time as _time
 
-from contracts.planner import Candidate, GenerateReq, RouteResponse
 from core import constants
 from db.store.registry import Repositories
+from planner.models import Candidate, GenerateReq, RouteResponse
 from telemetry import trace
 
 from .dedupe import _norm_name

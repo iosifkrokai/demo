@@ -9,7 +9,14 @@ import logging
 import time as _time
 from typing import Any
 
-from contracts.planner import (
+from core import constants
+from core.config import openrouter_api_key
+from core.errors import (
+    NoCandidatesFound,
+    UpstreamUnavailable,
+)
+from db.store.registry import Repositories
+from planner.models import (
     Candidate,
     GenerateReq,
     IntentDecision,
@@ -20,13 +27,6 @@ from contracts.planner import (
     RouteResponse,
     RouteSummary,
 )
-from core import constants
-from core.config import openrouter_api_key
-from core.errors import (
-    NoCandidatesFound,
-    UpstreamUnavailable,
-)
-from db.store.registry import Repositories
 from planner.valhalla_client import ping as valhalla_ping
 from telemetry import progress, trace
 

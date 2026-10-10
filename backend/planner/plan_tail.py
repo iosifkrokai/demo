@@ -15,9 +15,9 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from contracts.planner import Candidate, ResolvedConstraints
 from core import constants
 from core.errors import NoRoutePossible
+from planner.models import Candidate, ResolvedConstraints
 from telemetry import progress, trace
 
 from .cost import _build_cost, _is_sight_stop, _refinement_cost, compute_cost_matrix

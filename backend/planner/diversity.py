@@ -7,9 +7,9 @@ from __future__ import annotations
 
 import numpy as np
 
-from contracts.planner import Candidate, ResolvedConstraints
 from core import constants
 from db.store.places import PostgresPlaceRepository
+from planner.models import Candidate, ResolvedConstraints
 
 
 def mmr_select(

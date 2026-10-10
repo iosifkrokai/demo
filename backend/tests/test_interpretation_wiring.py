@@ -15,11 +15,11 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from agent.models import PartyComposition, Requirement, TripRequirements
 from api import main as agent_main
-from contracts.planner import Candidate, GenerateReq, ValidatedPlan
 from core.config import settings
 from core.errors import InterpretationUnavailable, UpstreamUnavailable
 from planner import intent as intent_mod
 from planner.intent import build_requirements, reader_brief
+from planner.models import Candidate, GenerateReq, ValidatedPlan
 from planner.response import _interpretation
 from planner.verify import overall_status, verify
 
@@ -301,7 +301,7 @@ class TestInterpretationBlock:
 
     def test_the_field_is_added_not_renamed(self):
         """The response grows; existing fields stay untouched."""
-        from contracts.planner import RouteResponse
+        from planner.models import RouteResponse
 
         fields = RouteResponse.model_fields
         for old in ("parsed", "points", "shape", "summary", "budget",

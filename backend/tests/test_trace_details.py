@@ -7,8 +7,8 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from contracts.planner import Candidate, LatLon
 from core import constants
+from planner.models import Candidate, LatLon
 from planner.pipeline import (
     _drop_duplicates,
     _dupe_pairs,

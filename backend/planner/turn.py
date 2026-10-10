@@ -15,8 +15,8 @@ import time
 from dataclasses import dataclass, field
 from typing import Any
 
-from contracts.planner import Candidate, GenerateReq
 from core import constants
+from planner.models import Candidate, GenerateReq
 
 
 @dataclass

@@ -63,6 +63,17 @@ class RouteChanges(BaseModel):
     kept: int = 0
 
 
+TransportLiteral = Literal[
+    "pedestrian", "bicycle", "auto", "car", "truck", "bus",
+    "motor_scooter", "motorcycle",
+]
+# The service lookup also accepts "any" — a service is not a journey.
+TransportOrAnyLiteral = Literal[
+    "pedestrian", "bicycle", "auto", "car", "truck", "bus",
+    "motor_scooter", "motorcycle", "any",
+]
+
+
 class GenerateReq(BaseModel):
     """POST /routes/generate body."""
     query: str = Field(min_length=3, max_length=500)
@@ -72,10 +83,7 @@ class GenerateReq(BaseModel):
         default=None, ge=0, le=constants.MAX_BUDGET_MIN
     )
     origin: LatLon | None = None
-    profile: Literal[
-        "pedestrian", "bicycle", "auto", "car", "truck", "bus",
-        "motor_scooter", "motorcycle",
-    ] | None = None
+    profile: TransportLiteral | None = None
     region_bbox: list[float] | None = Field(
         default=None,
         description="[south, west, north, east]. Used as a PostGIS envelope filter.",
@@ -312,3 +320,33 @@ class ValidatedPlan(BaseModel):
     stops_dropped: int = 0
     trace: dict = Field(default_factory=dict)
 
+
+class RerouteReq(BaseModel):
+    point_ids: list[int] = Field(min_length=2, max_length=10)
+    profile: TransportLiteral | None = None
+
+
+class ExplainReq(BaseModel):
+    point_ids: list[int] = Field(min_length=2, max_length=10)
+
+
+class ServicesAlongReq(BaseModel):
+    """POST /routes/services body: the line the tourist is walking.
+
+    `shape` is the GeoJSON LineString the client already has.
+    """
+
+    shape: dict = Field(description="GeoJSON LineString, WGS84")
+    profile: TransportOrAnyLiteral | None = None
+    categories: list[str] | None = Field(default=None, max_length=8)
+    max_off_line_m: float | None = Field(default=None, ge=10, le=1500)
+    limit: int | None = Field(default=None, ge=1, le=20)
+    session_id: str | None = Field(default=None, max_length=128)
+
+
+class HealthResponse(BaseModel):
+    status: Literal["ok", "starting", "degraded"]
+    embedder: bool
+    llm: bool
+    db: bool
+    valhalla: bool

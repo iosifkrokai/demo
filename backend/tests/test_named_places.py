@@ -9,7 +9,7 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from contracts.planner import Candidate, LatLon
+from planner.models import Candidate, LatLon
 from planner.pipeline import _geo_focus, should_skip_geo_focus
 
 

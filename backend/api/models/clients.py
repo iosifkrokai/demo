@@ -118,34 +118,3 @@ class RoutePatchIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str = Field(max_length=200)
-
-
-def route_metrics(
-    stop_count: int,
-    summary: dict[str, Any] | None,
-    budget: dict[str, Any] | None,
-) -> dict[str, int | None]:
-    """Derive the list columns from the plan's lightweight sub-objects.
-
-    A plan that does not carry a value yields null rather than a guessed one.
-    """
-    distance_m: int | None = None
-    duration_min: int | None = None
-
-    km = (summary or {}).get("length_km")
-    if isinstance(km, (int, float)) and not isinstance(km, bool):
-        distance_m = int(round(float(km) * 1000))
-
-    total = (budget or {}).get("total_minutes")
-    if isinstance(total, (int, float)) and not isinstance(total, bool):
-        duration_min = int(round(float(total)))
-    else:
-        secs = (summary or {}).get("time_seconds")
-        if isinstance(secs, (int, float)) and not isinstance(secs, bool):
-            duration_min = int(round(float(secs) / 60.0))
-
-    return {
-        "stop_count": int(stop_count),
-        "distance_m": distance_m,
-        "duration_min": duration_min,
-    }

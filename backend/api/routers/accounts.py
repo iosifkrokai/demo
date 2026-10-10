@@ -15,10 +15,9 @@ from typing import Any
 from fastapi import APIRouter, Depends, Query, Request, Response
 from fastapi.responses import JSONResponse
 
-from contracts.accounts import (
+from api.models.accounts import (
     REASON_EMAIL_TAKEN,
     REASON_INVALID_CREDENTIALS,
-    REASON_INVALID_EMAIL,
     REASON_INVALID_REQUEST,
     REASON_LAST_ADMIN,
     REASON_NOT_ADMIN,
@@ -47,11 +46,10 @@ from contracts.accounts import (
     VisitedBulkOut,
     VisitedItem,
     VisitedListOut,
-    normalize_email,
-    password_problem,
     public_user,
 )
-from contracts.clients import CLIENT_ID_HEADER
+from api.models.clients import CLIENT_ID_HEADER
+from core.accounts import REASON_INVALID_EMAIL, normalize_email, password_problem
 from core.passwords import (
     SESSION_TTL_S,
     hash_password,

@@ -5,13 +5,13 @@ from __future__ import annotations
 import time as _time
 from typing import Any
 
-from contracts.planner import (
+from core import constants
+from planner.models import (
     CostMatrix,
     GenerateReq,
     ResolvedConstraints,
     RouteResponse,
 )
-from core import constants
 from telemetry import trace
 
 from .intent import mark_out_of_coverage

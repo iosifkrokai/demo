@@ -199,7 +199,7 @@ class TestIntentCategoriesCantDriftFromTheTaxonomy:
     def test_intent_decision_accepts_every_taxonomy_code(self):
         from pydantic import ValidationError
 
-        from contracts.planner import IntentDecision
+        from planner.models import IntentDecision
 
         for code in all_codes():
             assert IntentDecision(categories_pos=[code]).categories_pos == [code], code

@@ -11,16 +11,16 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from agent.models import Requirement, TripRequirements
-from contracts.planner import (
+from db.store.areas import PostgresAreaRepository
+from db.store.places import PostgresPlaceRepository
+from db.store.registry import Repositories
+from planner import pipeline as pipeline_mod
+from planner.models import (
     Candidate,
     IntentDecision,
     IntentResult,
     ResolvedConstraints,
 )
-from db.store.areas import PostgresAreaRepository
-from db.store.places import PostgresPlaceRepository
-from db.store.registry import Repositories
-from planner import pipeline as pipeline_mod
 from planner.verify import (
     REASON_INTEREST_IN_CATALOGUE,
     REASON_MUST_VISIT_ABSENT,
@@ -132,7 +132,7 @@ def test_catalogue_response_has_places_and_no_geometry():
 
 def test_a_plain_route_is_the_default_mode_so_old_clients_see_no_change():
     """Only a catalogue opts in; every other answer keeps saying "route"."""
-    from contracts.planner import RouteResponse
+    from planner.models import RouteResponse
 
     assert RouteResponse.model_fields["result_mode"].default == "route"
 

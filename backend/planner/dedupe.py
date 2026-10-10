@@ -8,8 +8,8 @@ from __future__ import annotations
 import re as _re
 from typing import Any
 
-from contracts.planner import Candidate
 from core import constants
+from planner.models import Candidate
 
 from .geo import _TRACE_NAMES_MAX, _distance_pt_m
 

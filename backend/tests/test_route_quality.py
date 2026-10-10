@@ -9,9 +9,9 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from contracts.planner import Candidate
 from db.models.place import Place
 from planner.explain import _area_name, explain
+from planner.models import Candidate
 from planner.optimize import _budget_constrain, _max_leg, _max_leg_seconds
 from planner.resolve import _is_town_or_district_match
 from planner.retrieve import (
@@ -381,7 +381,7 @@ class TestResolveIntegration:
     """resolve() returns area_anchor but empty must_visit_ids for town-only queries."""
 
     def test_town_query_creates_area_anchor_not_must_visit(self):
-        from contracts.planner import IntentDecision, IntentResult
+        from planner.models import IntentDecision, IntentResult
         from planner.resolve import resolve
 
         intent = IntentResult(
@@ -424,7 +424,7 @@ class TestBudgetRule:
 
     @staticmethod
     def _resolve(explicit, llm_budget):
-        from contracts.planner import IntentDecision, IntentResult
+        from planner.models import IntentDecision, IntentResult
         from planner.resolve import resolve
 
         intent = IntentResult(
@@ -458,7 +458,7 @@ class TestBudgetRule:
         assert self._resolve(0, 120) is None
 
     def test_api_accepts_zero_as_no_limit(self):
-        from contracts.planner import GenerateReq
+        from planner.models import GenerateReq
 
         assert GenerateReq(query="костёлы Гродно", time_budget_minutes=0).time_budget_minutes == 0
         assert GenerateReq(query="костёлы Гродно").time_budget_minutes is None

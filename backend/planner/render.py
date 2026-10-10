@@ -8,9 +8,9 @@ from __future__ import annotations
 import logging
 from itertools import pairwise
 
-from contracts.planner import Candidate, LatLon
 from core import constants
 from core.errors import UpstreamUnavailable
+from planner.models import Candidate, LatLon
 from planner.valhalla_client import RouteStatus, route_through
 
 log = logging.getLogger(__name__)

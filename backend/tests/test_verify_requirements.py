@@ -10,7 +10,6 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from agent.models import Requirement, TripRequirements
-from contracts.planner import Candidate, CostMatrix, ResolvedConstraints
 from core import constants
 from planner.cost import (
     REASON_MUST_VISIT_UNROUTABLE as COST_REASON_MUST_VISIT_UNROUTABLE,
@@ -18,6 +17,7 @@ from planner.cost import (
     prune_unroutable_stops,
 )
 from planner.explain import explain
+from planner.models import Candidate, CostMatrix, ResolvedConstraints
 from planner.validate import validate
 from planner.verify import (
     REASON_AVOID_OK,
@@ -156,7 +156,7 @@ def test_feature_geometry_is_accepted():
 
 
 def test_verify_accepts_a_validated_plan_object():
-    from contracts.planner import ValidatedPlan
+    from planner.models import ValidatedPlan
 
     route = [_cand(7, "Старый замок", "замок")]
     plan = ValidatedPlan(

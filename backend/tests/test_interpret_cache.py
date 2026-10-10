@@ -16,9 +16,9 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from agent import interpret_cache as cache
 from agent.models import Requirement, TripRequirements
-from contracts.planner import GenerateReq
 from core.errors import InterpretationUnavailable
 from planner import intent
+from planner.models import GenerateReq
 from telemetry import trace
 
 

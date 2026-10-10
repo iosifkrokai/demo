@@ -5,8 +5,8 @@ Anchor priority: tourist GPS > must-visit/named place > densest cluster.
 
 from __future__ import annotations
 
-from contracts.planner import LatLon
 from core import constants
+from planner.models import LatLon
 
 _TRACE_NAMES_MAX = 15
 

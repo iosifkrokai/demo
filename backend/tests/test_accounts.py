@@ -653,7 +653,7 @@ def test_place_patch_forbids_null_coordinates():
     """
     from pydantic import ValidationError
 
-    from contracts.accounts import AdminPlacePatch
+    from api.models.accounts import AdminPlacePatch
 
     omitted = AdminPlacePatch(name="Старый замок")
     assert omitted.lat is None

@@ -11,7 +11,6 @@ from fastapi.testclient import TestClient
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from api import main as agent_main
-from contracts.planner import Candidate, GenerateReq, LatLon
 from core.errors import UpstreamUnavailable
 from db.store.areas import PostgresAreaRepository
 from db.store.mappers import place_from_row
@@ -23,6 +22,7 @@ from planner import (
     response as response_mod,
 )
 from planner.cost import _refinement_cost, _synthetic_cost
+from planner.models import Candidate, GenerateReq, LatLon
 from planner.pipeline import Pipeline
 from planner.refine import (
     REFINEMENT_REORDER_ATTRIBUTE_MISSING,

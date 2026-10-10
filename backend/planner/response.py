@@ -9,7 +9,9 @@ import logging
 from typing import Any
 
 from agent import interpret_cache
-from contracts.planner import (
+from core import constants
+from core.errors import UpstreamUnavailable
+from planner.models import (
     BudgetInfo,
     Candidate,
     Interpretation,
@@ -23,8 +25,6 @@ from contracts.planner import (
     RouteResponse,
     RouteSummary,
 )
-from core import constants
-from core.errors import UpstreamUnavailable
 
 from .cost import visit_time_minutes
 from .geo import _TRACE_NAMES_MAX

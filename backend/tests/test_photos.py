@@ -14,13 +14,13 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from contracts.planner import Photo, Place
 from core.paths import PHOTOS_DIR
 from db.seed.photos import (
     commons_file_title,
     parse_wikipedia,
 )
 from db.store.mappers import photo_of, place_from_row, place_payload
+from planner.models import Photo, Place
 
 
 def _stop_payload(row: dict) -> dict:

@@ -16,8 +16,8 @@ import psycopg
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
-from contracts.clients import route_metrics
 from db.connection import connect
+from db.store.mappers import route_metrics
 
 log = logging.getLogger(__name__)
 

@@ -14,7 +14,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, Query, Request, Response
 from fastapi.responses import JSONResponse
 
-from contracts.clients import (
+from api.models.clients import (
     CLIENT_ID_HEADER,
     REASON_INVALID_CLIENT_ID,
     REASON_ROUTE_NOT_FOUND,

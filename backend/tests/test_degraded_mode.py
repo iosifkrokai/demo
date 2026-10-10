@@ -23,7 +23,6 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from agent import client as ai, runner as ai_runner
 from agent.models import PartyComposition, Requirement, TripRequirements
 from api import main as agent_main
-from contracts.planner import Candidate, GenerateReq, ResolvedConstraints
 from core.config import openrouter_api_key, settings
 from core.errors import (
     InterpretationUnavailable,
@@ -42,6 +41,7 @@ from planner import (
 )
 from planner.embedding import embed_query as _embed_query
 from planner.intent import build_requirements, reader_brief
+from planner.models import Candidate, GenerateReq, ResolvedConstraints
 from planner.pipeline import Pipeline
 from planner.valhalla_client import ping as valhalla_ping
 

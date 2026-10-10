@@ -7,10 +7,10 @@ import re
 from dataclasses import dataclass
 from typing import Literal
 
-from contracts.planner import Candidate, LatLon, RouteChange, RouteChanges
 from core import constants
 from db.models.place import Place
 from db.store.places import PostgresPlaceRepository
+from planner.models import Candidate, LatLon, RouteChange, RouteChanges
 from reference import taxonomy
 
 from .cost import visit_time_minutes

@@ -17,18 +17,6 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from agent.client import DEFAULT_MODEL
 from api.routers import accounts as accounts_api, clients as clients_api
-from api.schemas import (
-    ExplainReq,
-    HealthResponse,
-    RerouteReq,
-    ServicesAlongReq,
-)
-from contracts.planner import (
-    GenerateReq,
-    ParsedQuery,
-    RouteResponse,
-    RouteSummary,
-)
 from core.config import openrouter_api_key, settings
 from core.errors import AgentError, NoRoutePossible
 from db.store import itineraries as itineraries_mod
@@ -37,6 +25,16 @@ from db.store.places import PostgresPlaceRepository
 from db.store.registry import Repositories
 from db.store.services import DEFAULT_PROFILE, MAX_SERVICES
 from ml import embeddings
+from planner.models import (
+    ExplainReq,
+    GenerateReq,
+    HealthResponse,
+    ParsedQuery,
+    RerouteReq,
+    RouteResponse,
+    RouteSummary,
+    ServicesAlongReq,
+)
 from planner.pipeline import Pipeline
 from telemetry import progress, trace
 

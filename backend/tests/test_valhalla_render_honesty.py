@@ -7,8 +7,8 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from contracts.planner import Candidate
 from planner import render, valhalla_client as vc
+from planner.models import Candidate
 
 
 def _c(id: int, lat: float, lon: float, name: str) -> Candidate:

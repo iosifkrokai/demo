@@ -15,7 +15,6 @@ RUN uv lock && uv sync --no-install-project --no-dev
 
 COPY agent/ /app/agent/
 COPY api/ /app/api/
-COPY contracts/ /app/contracts/
 COPY core/ /app/core/
 COPY data/ /app/data/
 COPY db/ /app/db/
