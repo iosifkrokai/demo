@@ -22,7 +22,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from api import main as agent_main
 from contracts.clients import route_metrics
 from core.config import settings
-from store.clients_store import (
+from db.store.clients_store import (
     PREFERENCE_COLUMNS,
     PostgresClientRepository,
     StorageUnavailable,

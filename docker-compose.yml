@@ -127,7 +127,7 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    command: ["/app/.venv/bin/python", "-m", "seed"]
+    command: ["/app/.venv/bin/python", "-m", "db.seed"]
 
 volumes:
   pgdata:

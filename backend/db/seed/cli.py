@@ -1,4 +1,4 @@
-"""The one seed command: ``python -m seed``.
+"""The one seed command: ``python -m db.seed``.
 Exit codes: 0 = ok, 1 = DB/network error, 2 = fatal validation failure.
 """
 
@@ -199,7 +199,7 @@ def _add_apply_flags(p: argparse.ArgumentParser) -> None:
 
 def build_arg_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
-        prog="python -m seed",
+        prog="python -m db.seed",
         description="One reproducible seed: validate → upsert → embed → report.")
     _add_apply_flags(p)
     sub = p.add_subparsers(dest="command")

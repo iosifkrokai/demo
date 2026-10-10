@@ -60,7 +60,7 @@ def _stop_payload(row: dict) -> dict:
 
     The payload is the catalogue's own (`places.place_payload`).
     """
-    from store.places import place_payload
+    from db.store.places import place_payload
 
     return place_payload(row)
 

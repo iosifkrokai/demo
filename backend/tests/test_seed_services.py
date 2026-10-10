@@ -9,13 +9,13 @@ import httpx
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from seed.osm_tags import (
+from db.seed.osm_tags import (
     is_name_dup,
     service_element_to_row,
     service_name,
     service_tag_to_category,
 )
-from seed.overpass import (
+from db.seed.overpass import (
     DEFAULT_BBOX,
     OVERPASS_ENDPOINTS,
     SERVICE_QUERY,
@@ -129,8 +129,8 @@ def test_fetch_overpass_504_on_one_endpoint_fails_over_to_the_next(monkeypatch):
         posted.append(url)
         return _GatewayTimeoutResp() if url == failing else _OkResp()
 
-    monkeypatch.setattr("seed.overpass.httpx.post", fake_post)
-    monkeypatch.setattr("seed.overpass.time.sleep", lambda _seconds: None)
+    monkeypatch.setattr("db.seed.overpass.httpx.post", fake_post)
+    monkeypatch.setattr("db.seed.overpass.time.sleep", lambda _seconds: None)
 
     elements = fetch_overpass(_service_query())
 
@@ -146,8 +146,8 @@ def test_fetch_overpass_all_endpoints_504_returns_none(monkeypatch):
         posted.append(url)
         raise _http_status_error(url, 504)
 
-    monkeypatch.setattr("seed.overpass.httpx.post", fake_post)
-    monkeypatch.setattr("seed.overpass.time.sleep", lambda _seconds: None)
+    monkeypatch.setattr("db.seed.overpass.httpx.post", fake_post)
+    monkeypatch.setattr("db.seed.overpass.time.sleep", lambda _seconds: None)
 
     result = fetch_overpass(_service_query())
 

@@ -138,9 +138,9 @@ def run_services() -> dict[str, Any]:
     """
     from psycopg.rows import dict_row
 
+    from db.store import services as services_mod
+    from db.store.clients_store import default_connect
     from domain import taxonomy
-    from store import services as services_mod
-    from store.clients_store import default_connect
 
     checks: list[dict[str, Any]] = []
     try:

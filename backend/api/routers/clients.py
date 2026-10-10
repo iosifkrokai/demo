@@ -28,7 +28,7 @@ from contracts.clients import (
     RouteListItem,
     RoutePatchIn,
 )
-from store.clients_store import (
+from db.store.clients_store import (
     MAX_SAVED_ROUTES,
     ClientRepository,
     PostgresClientRepository,

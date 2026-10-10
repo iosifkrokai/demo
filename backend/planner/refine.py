@@ -10,8 +10,8 @@ from typing import Literal
 import psycopg
 
 from contracts.planner import Candidate, LatLon, RouteChange, RouteChanges
+from db.store.search import nearby_places
 from domain import constants, taxonomy
-from store.search import nearby_places
 
 from .cost import visit_time_minutes
 from .resolve import CATEGORY_SYNONYMS, CATEGORY_SYNONYMS_EN

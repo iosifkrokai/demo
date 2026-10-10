@@ -16,13 +16,13 @@ only** — `source_url` is what to check them against. Services carry `visit_min
 empty (NULL): stops *beside* a route, not sights. `places/places_curated.csv` uses
 a 7-column shape (`id|normalized_name|category|blurb|fun_fact|fun_facts|links`).
 
-## The one entry point: `python -m seed`
+## The one entry point: `python -m db.seed`
 
 ```bash
 cd backend
-.venv/bin/python -m seed --dry-run                # offline: no DB, no network
-.venv/bin/python -m seed --report /tmp/seed.json  # apply + machine-readable report
-.venv/bin/python -m seed fetch --source poi       # regenerate places_poi.csv
+.venv/bin/python -m db.seed --dry-run                # offline: no DB, no network
+.venv/bin/python -m db.seed --report /tmp/seed.json  # apply + machine-readable report
+.venv/bin/python -m db.seed fetch --source poi       # regenerate places_poi.csv
 ```
 
 Order of a full apply — validate, upsert by natural key, embed locally, report:
@@ -31,7 +31,7 @@ Order of a full apply — validate, upsert by natural key, embed locally, report
    row is **fatal** (exit 2), so the hand-authored sets are never half-loaded.
 2. `osm:` — `category_source = 'auto'`, keyed on `source_url`; invalid or
    out-of-area rows are quarantined and counted, not published (exit stays 0).
-3. `osm_poi:` — same; optional (a checkout without `seed fetch` has no services).
+3. `osm_poi:` — same; optional (a checkout without `db.seed fetch` has no services).
 4. `places_curated.csv` — matched by name, applied last, `category_source =
    'curated'`; each name also becomes a `place_aliases(locale='ru')` row.
 5. `areas` (project polygon + one row per district) and `place_sources` (one row
@@ -45,12 +45,12 @@ absent.
 
 ## Curated categories cannot be overwritten by automatic classification
 
-Three layers, enforced in `seed/pipeline.py` and pinned by
+Three layers, enforced in `db/seed/pipeline.py` and pinned by
 `tests/test_seed_pipeline.py`:
 
 1. `places.category_source ∈ {curated, dataset, auto}` (the Alembic baseline,
-   `backend/alembic/versions/0001_baseline.py`).
-2. `seed.pipeline.upsert_sql()` keeps a protected row's category against an
+   `backend/db/alembic/versions/0001_baseline.py`).
+2. `db.seed.pipeline.upsert_sql()` keeps a protected row's category against an
    automatic writer (`EXCLUDED.category_source = 'auto'`); the row's own
    authoritative dataset can still refresh it.
 3. The `places_guard_curated_category` trigger reverts a category change on a

@@ -1,4 +1,4 @@
-"""``python -m seed`` entry point."""
+"""``python -m db.seed`` entry point."""
 
 from __future__ import annotations
 

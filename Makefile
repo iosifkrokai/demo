@@ -72,7 +72,7 @@ test: test-backend test-frontend ## run every gate
 test-backend: ## ruff + pyright + pytest + the offline seed contract
 	$(BACKEND)/ruff check .
 	$(BACKEND)/pyright
-	$(BACKEND)/python -m seed --dry-run
+	$(BACKEND)/python -m db.seed --dry-run
 	$(BACKEND)/python -m pytest -q
 
 test-frontend: ## typecheck + lint + unit tests

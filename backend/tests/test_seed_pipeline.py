@@ -14,12 +14,12 @@ BACKEND = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BACKEND))
 
 from core.paths import PLACES_DIR  # noqa: E402
-from domain import constants  # noqa: E402
-from seed import (  # noqa: E402
+from db.seed import (  # noqa: E402
     cli as seed_cli,
     datasets,
     pipeline,
 )
+from domain import constants  # noqa: E402
 from tests._schema import baseline_sql  # noqa: E402
 
 HEADER = ("# name|category|district|town|lat|lon|blurb|fun_fact|fun_facts|"

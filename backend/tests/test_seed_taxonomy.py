@@ -9,9 +9,8 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from core.paths import GEO_DIR, PLACES_DIR
-from domain import taxonomy
-from seed.datasets import SIGHT_TAXONOMY
-from seed.osm_tags import (
+from db.seed.datasets import SIGHT_TAXONOMY
+from db.seed.osm_tags import (
     AMENITY_CATEGORY,
     HIGHWAY_CATEGORY,
     PUBLIC_TRANSPORT_CATEGORY,
@@ -21,8 +20,9 @@ from seed.osm_tags import (
     service_tag_to_category,
     visit_minutes_for,
 )
-from seed.overpass import RAION_CENTRES
-from store import services
+from db.seed.overpass import RAION_CENTRES
+from db.store import services
+from domain import taxonomy
 
 DATA = PLACES_DIR
 

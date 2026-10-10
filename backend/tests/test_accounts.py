@@ -18,12 +18,12 @@ from tests._schema import baseline_sql
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from api import main as agent_main
-from domain.passwords import hash_password, hash_token, verify_password
-from store.accounts_store import (
+from db.store.accounts_store import (
     DuplicateSource,
     EmailTaken,
     StorageUnavailable,
 )
+from domain.passwords import hash_password, hash_token, verify_password
 
 CLIENT = "33333333-3333-4333-8333-333333333333"
 
@@ -698,7 +698,7 @@ def test_live_account_visit_and_place_edit():
     import psycopg
 
     from core.config import settings
-    from store.accounts_store import PostgresAccountRepository
+    from db.store.accounts_store import PostgresAccountRepository
 
     admin = psycopg.connect(settings.DSN, autocommit=True)
     _apply_migration(admin)

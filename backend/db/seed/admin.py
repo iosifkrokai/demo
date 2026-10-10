@@ -10,8 +10,8 @@ import sys
 import uuid
 
 from contracts.accounts import normalize_email, password_problem
+from db.store.accounts_store import EmailTaken, PostgresAccountRepository
 from domain.passwords import hash_password
-from store.accounts_store import EmailTaken, PostgresAccountRepository
 
 
 def create_admin(

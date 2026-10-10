@@ -11,14 +11,14 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from domain.constants import GRODNO_BBOX
-from seed.cli import build_arg_parser
-from seed.overpass import (
+from db.seed.cli import build_arg_parser
+from db.seed.overpass import (
     DEFAULT_BBOX,
     SIGHT_QUERY,
     build_overpass_query,
     fetch_overpass,
 )
+from domain.constants import GRODNO_BBOX
 
 WEST, SOUTH, EAST, NORTH = 23.0, 52.0, 28.0, 55.0
 BBOX = (WEST, SOUTH, EAST, NORTH)
@@ -106,7 +106,7 @@ def test_fetch_overpass_posts_the_mapped_query(monkeypatch):
         sent.append(data["data"])
         return _Resp()
 
-    monkeypatch.setattr("seed.overpass.httpx.post", fake_post)
+    monkeypatch.setattr("db.seed.overpass.httpx.post", fake_post)
 
     assert fetch_overpass(build_overpass_query(SIGHT_QUERY, BBOX)) == []
     assert len(sent) == 1

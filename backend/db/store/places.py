@@ -8,7 +8,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from store.place_fields import parse_fun_facts, parse_links, parse_photo
+from db.store.place_fields import parse_fun_facts, parse_links, parse_photo
 
 log = logging.getLogger(__name__)
 

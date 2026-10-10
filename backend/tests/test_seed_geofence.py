@@ -7,13 +7,13 @@ BACKEND = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BACKEND))
 
 from core.paths import PLACES_DIR  # noqa: E402
-from domain.geofence import inside_project_area  # noqa: E402
-from seed.datasets import (  # noqa: E402
+from db.seed.datasets import (  # noqa: E402
     read_pipe_csv,
     validate_city_region,
     validate_osm_sight,
 )
-from seed.osm_tags import service_element_to_row, sight_element_to_row  # noqa: E402
+from db.seed.osm_tags import service_element_to_row, sight_element_to_row  # noqa: E402
+from domain.geofence import inside_project_area  # noqa: E402
 
 OTHER_VOBLASTS = [("Барановичи", 53.1307, 26.0139), ("Вилейка", 54.4903, 26.9107)]
 

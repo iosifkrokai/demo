@@ -150,7 +150,7 @@ def _services_along_evidence(
     )
     if not codes or not shape:
         return None
-    from store import services as services_mod
+    from db.store import services as services_mod
 
     from .verify import ServiceAlongEvidence
 

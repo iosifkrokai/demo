@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from db.store.search import db_categories
 from domain import constants
 from domain.taxonomy import (
     all_categories,
@@ -14,7 +15,6 @@ from domain.taxonomy import (
     role,
     visit_minutes,
 )
-from store.search import db_categories
 
 
 class TestTaxonomyData:

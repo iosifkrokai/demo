@@ -1,7 +1,7 @@
 """The schema as SQL, read from the Alembic baseline.
 
-Tests used to read the loose files under `db/`; the schema now lives in one
-Alembic revision, so they render that instead of a file that no longer exists.
+Tests used to read loose SQL files; the schema now lives in one Alembic
+revision, so they render that instead of a file that no longer exists.
 """
 
 from __future__ import annotations
@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 BACKEND = Path(__file__).resolve().parents[1]
-BASELINE = BACKEND / "alembic" / "versions" / "0001_baseline.py"
+BASELINE = BACKEND / "db" / "alembic" / "versions" / "0001_baseline.py"
 
 
 def baseline_statements() -> list[str]:

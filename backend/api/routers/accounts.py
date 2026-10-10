@@ -52,14 +52,7 @@ from contracts.accounts import (
     public_user,
 )
 from contracts.clients import CLIENT_ID_HEADER
-from domain.passwords import (
-    SESSION_TTL_S,
-    hash_password,
-    hash_token,
-    new_session_token,
-    verify_password,
-)
-from store.accounts_store import (
+from db.store.accounts_store import (
     MAX_LIST_LIMIT,
     AccountRepository,
     DuplicateSource,
@@ -67,6 +60,13 @@ from store.accounts_store import (
     PostgresAccountRepository,
     StorageUnavailable,
     place_payloads,
+)
+from domain.passwords import (
+    SESSION_TTL_S,
+    hash_password,
+    hash_token,
+    new_session_token,
+    verify_password,
 )
 
 log = logging.getLogger(__name__)
@@ -202,7 +202,7 @@ def register(
 ) -> Any:
     """Create an account (always ``role=user``) and sign it in.
 
-    The first administrator is made by ``python -m seed admin``, not by registering.
+    The first administrator is made by ``python -m db.seed admin``, not by registering.
     """
     email = normalize_email(body.email)
     if email is None:

@@ -30,7 +30,7 @@ def _db_search_rows(
 
     Reuses the same signals the deterministic pipeline uses.
     """
-    from store import search as search_mod
+    from db.store import search as search_mod
 
     if near is not None:
         lat, lon, radius_m = near
@@ -40,7 +40,7 @@ def _db_search_rows(
 
 def _db_place_row(db: Any, place_id: int) -> dict | None:
     """One place row by id, or None."""
-    from store import search as search_mod
+    from db.store import search as search_mod
 
     rows = search_mod.fetch_points_by_ids(db, [place_id])
     return rows[0] if rows else None

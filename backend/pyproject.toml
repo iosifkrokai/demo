@@ -26,7 +26,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["agent", "api", "contracts", "core", "domain", "infra", "planner", "store"]
+packages = ["agent", "api", "contracts", "core", "db", "domain", "infra", "planner"]
 
 [dependency-groups]
 dev = [
@@ -92,7 +92,7 @@ ignore = [
 "**/__init__.py" = ["F401"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["agent", "api", "contracts", "core", "domain", "infra", "planner", "seed", "store"]
+known-first-party = ["agent", "api", "contracts", "core", "db", "domain", "infra", "planner"]
 combine-as-imports = true
 
 [tool.ruff.format]
@@ -100,7 +100,7 @@ quote-style = "double"
 indent-style = "space"
 
 [tool.pyright]
-include = ["agent", "api", "contracts", "core", "domain", "infra", "planner", "seed", "store"]
+include = ["agent", "api", "contracts", "core", "db", "domain", "infra", "planner"]
 exclude = [".venv"]
 pythonVersion = "3.12"
 pythonPlatform = "Linux"

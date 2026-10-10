@@ -8,14 +8,15 @@ service, a React/Vite frontend served by nginx.
 
 ```
 backend/     the service — api (HTTP) · agent (LLM) · planner (the pipeline)
-             contracts · domain · store · infra · core · seed · quality · alembic · tests
+             contracts · domain · infra · core · quality · tests · data
+             db/  — the persistence side: store (queries) · seed (the projection) · alembic
 frontend/    React + Vite + MapLibre, talked to over nginx
 docker-compose.yml   the whole stack, including the db image (inline)
 ```
 
-`api` → `planner`/`agent`/`store`; `planner` → `agent`/`store`/`infra`; nothing
-imports upward. `agent/` is the LLM layer (model, prompts, tools, runner) — the
-one place a provider is named is `agent/model.py`.
+`api` → `planner`/`agent`/`db.store`; `planner` → `agent`/`db.store`/`infra`;
+nothing imports upward. `agent/` is the LLM layer (model, prompts, tools, runner) —
+the one place a provider is named is `agent/model.py`.
 
 ## Bring it up
 
@@ -44,12 +45,12 @@ pass you should ignore.
 ## Things that are not negotiable
 
 - **Data is code.** Datasets are versioned files under `backend/data/`; the database
-  is a *projection* built by `python -m seed`. Never edit rows by hand — change the
-  file and re-seed. The schema is owned by Alembic (`backend/alembic/`), never by
+  is a *projection* built by `python -m db.seed`. Never edit rows by hand — change the
+  file and re-seed. The schema is owned by Alembic (`backend/db/alembic/`), never by
   hand-written DDL.
 - **Curated categories are protected.** A DB trigger plus the seed's guarded upsert
   keep an automatic writer from overwriting a `curated`/`dataset` category. If you
-  add a writer, go through `seed.pipeline.upsert_sql`.
+  add a writer, go through `db.seed.pipeline.upsert_sql`.
 - **`verify` is deterministic.** Whether a route satisfies the request is decided by
   code re-reading the final route — never by asking the model again.
 - **Reading a query needs the model.** Without `OPENROUTER_API_KEY` the planning

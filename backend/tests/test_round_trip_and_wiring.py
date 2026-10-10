@@ -16,6 +16,7 @@ from contracts.planner import (
     ResolvedConstraints,
 )
 from core.errors import UpstreamUnavailable
+from db.store import search as search_mod
 from domain import constants
 from domain.requirements import Requirement, TripRequirements
 from infra.valhalla_client import RouteResult, RouteStatus
@@ -35,7 +36,6 @@ from planner.verify import (
     overall_status,
     verify,
 )
-from store import search as search_mod
 
 
 def _cand(pid: int, name: str, category: str, lat: float = 53.68, lon: float = 23.83) -> Candidate:

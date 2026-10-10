@@ -8,7 +8,7 @@ import socket
 from pathlib import Path
 
 from core.paths import PLACES_DIR
-from seed import cli, datasets, pipeline
+from db.seed import cli, datasets, pipeline
 
 BACKEND = Path(__file__).resolve().parents[1]
 DATA = PLACES_DIR

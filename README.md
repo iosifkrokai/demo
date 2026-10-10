@@ -18,7 +18,7 @@ curl -LsSf https://astral.sh/uv/install.sh | sh    # uv, for the host venv
 ```
 
 Outbound HTTPS reaches `download.geofabrik.de` (tiles), `huggingface.co` (the
-embedding model, baked at image build time), `overpass-api.de` (`seed fetch`) and
+embedding model, baked at image build time), `overpass-api.de` (`db.seed fetch`) and
 `openrouter.ai` (the reading).
 
 ## Bring it up
@@ -26,7 +26,7 @@ embedding model, baked at image build time), `overpass-api.de` (`seed fetch`) an
 ```bash
 git clone <repo> && cd demo
 make up      # build + start db, valhalla, agent, frontend; copies .env.example → .env if missing
-make migrate # apply the Alembic schema (backend/alembic/, upgrade head)
+make migrate # apply the Alembic schema (backend/db/alembic/, upgrade head)
 make seed    # load the committed CSVs (idempotent; no network, no Overpass)
 ```
 
@@ -103,7 +103,7 @@ paths; the trailing slash on `/auth|/me|/admin/` is deliberate, so the *bare*
 retrieve → geo-focus → diversity → cost → optimize → validate → render → explain →
 verify — with `catalogue` and `refine` as alternate branches. The LLM layer is
 `backend/agent/` (client / model / runner / tools / prompts); the Valhalla client is
-`backend/infra/valhalla_client.py`, the search `backend/store/search.py`.
+`backend/infra/valhalla_client.py`, the search `backend/db/store/search.py`.
 
 Two request fields change the shape of the answer:
 
@@ -145,7 +145,7 @@ curl -sX POST localhost:8080/routes/generate -H 'content-type: application/json'
 ## Troubleshooting
 
 **"relation 'places' does not exist", or the seed failing on a fresh volume.** The
-schema is owned by Alembic, not a container startup script: `backend/alembic/`
+schema is owned by Alembic, not a container startup script: `backend/db/alembic/`
 holds one baseline revision creating the complete schema (places, aliases, sources,
 areas, clients, saved routes, users/sessions/visited, the curated-category guard).
 Apply it with `make migrate`.
@@ -161,7 +161,7 @@ sending `radius: 100` per location (`LOCATION_SNAP_RADIUS_M` in
 `valhalla_client.py`).
 
 **No semantic results (only keyword hits).** The rows have `embedding IS NULL`.
-`python -m seed` embeds everything locally — re-run it. (A missing
+`python -m db.seed` embeds everything locally — re-run it. (A missing
 `OPENROUTER_API_KEY` does not affect retrieval.)
 
 ## What is not verified / not promised
@@ -169,7 +169,7 @@ sending `radius: 100` per location (`LOCATION_SNAP_RADIUS_M` in
 The following are **not guaranteed** and must not be shown to users as confirmed
 facts:
 
-- **Opening hours.** `seed fetch` stores raw OSM `opening_hours` strings as
+- **Opening hours.** `db.seed fetch` stores raw OSM `opening_hours` strings as
   harvested; they are not verified against live data and may be stale or absent.
 - **Ticket prices and admission fees.** OSM `charge`/`fee` tags are stored as-is,
   without verification against the venue's current policy.

@@ -12,15 +12,15 @@ from collections.abc import Iterable
 import psycopg
 
 from contracts.planner import Candidate, Photo, ResolvedConstraints
-from domain import constants
-from store.place_fields import parse_fun_facts, parse_links, parse_photo
-from store.search import (
+from db.store.place_fields import parse_fun_facts, parse_links, parse_photo
+from db.store.search import (
     _keyword_search,
     candidates_by_embedding,
     db_categories,
     fetch_points_by_ids,
     nearby_places,
 )
+from domain import constants
 
 CATEGORY_KEYWORD_TO_LLM: dict[str, str] = {
     "замок": "замок", "замки": "замок", "замка": "замок", "замкам": "замок", "замках": "замок",

@@ -32,10 +32,10 @@ from core.errors import (
     NoRoutePossible,
     UpstreamUnavailable,
 )
+from db.store.search import _name_match_search, fetch_points_by_ids, nearby_places
 from domain import constants
 from infra import progress, trace
 from infra.valhalla_client import ping as valhalla_ping
-from store.search import _name_match_search, fetch_points_by_ids, nearby_places
 
 from .catalogue import catalogue_response
 from .cost import (
@@ -845,7 +845,7 @@ class Pipeline:
 
     def reroute(self, point_ids: list[int], profile: str | None = None) -> RouteResponse:
         """Re-route a chosen list of place IDs."""
-        from store.search import fetch_points_by_ids
+        from db.store.search import fetch_points_by_ids
         rows = fetch_points_by_ids(self.db, point_ids)
         if len(rows) != len(point_ids):
             missing = set(point_ids) - {r["id"] for r in rows}
@@ -893,7 +893,7 @@ class Pipeline:
 
     def explain_route(self, point_ids: list[int]) -> str:
         """Natural-language Russian description of a list of points."""
-        from store.search import fetch_points_by_ids
+        from db.store.search import fetch_points_by_ids
         rows = fetch_points_by_ids(self.db, point_ids)
         if len(rows) != len(point_ids):
             missing = set(point_ids) - {r["id"] for r in rows}

@@ -17,12 +17,11 @@ COPY agent/ /app/agent/
 COPY api/ /app/api/
 COPY contracts/ /app/contracts/
 COPY core/ /app/core/
+COPY data/ /app/data/
+COPY db/ /app/db/
 COPY domain/ /app/domain/
 COPY infra/ /app/infra/
 COPY planner/ /app/planner/
-COPY store/ /app/store/
-COPY data/ /app/data/
-COPY seed/ /app/seed/
 RUN uv sync --no-dev
 
 ENV FASTEMBED_CACHE_PATH=/opt/fastembed \

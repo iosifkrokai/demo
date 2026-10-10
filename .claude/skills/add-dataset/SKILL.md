@@ -44,7 +44,7 @@ idempotency is keyed on, so never invent a `source_url`.
 automatic writer from overwriting a hand-made category:
 
 1. the column itself;
-2. the single guarded upsert (`seed/pipeline.py::upsert_sql`) — every dataset goes
+2. the single guarded upsert (`db/seed/pipeline.py::upsert_sql`) — every dataset goes
    through it, so there is no dataset-specific SQL to bypass the guard;
 3. a DB trigger (`places_guard_curated_category`) that reverts a category change
    unless the transaction opted in — only the seed does.
@@ -55,7 +55,7 @@ So: to change a category that a human set, edit `places_curated.csv`, not the OS
 
 ```bash
 cd backend
-.venv/bin/python -m seed --dry-run    # the report shows what the change does
+.venv/bin/python -m db.seed --dry-run    # the report shows what the change does
 .venv/bin/python -m pytest -q tests/test_seed_pipeline.py tests/test_seed_taxonomy.py
 make test-backend
 ```
