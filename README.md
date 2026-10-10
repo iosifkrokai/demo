@@ -15,9 +15,9 @@ curl -LsSf https://astral.sh/uv/install.sh | sh    # uv
 
 For network: outbound HTTPS to `download.geofabrik.de` (Valhalla tiles),
 `download.geofabrik.de`/`huggingface.co` (the embedding model, at image build time),
-`overpass-api.de` (`seed fetch`), and `openrouter.ai` (only if you set
-`OPENROUTER_API_KEY`). Without the key the request is read by the deterministic
-parser; embeddings are local, so routes are still built.
+`overpass-api.de` (`seed fetch`), and `openrouter.ai` (the query reading). Without
+`OPENROUTER_API_KEY` the planner has no reader and refuses a planning request —
+see §1.
 
 ## 0a. Bring it up (one command, fresh machine)
 
@@ -45,9 +45,11 @@ proxies to `agent:8080`). On a host whose Docker bridge filters container→cont
 traffic, use `docker compose -f docker-compose.yml -f docker-compose.host.yml up -d`
 (see §9).
 
-**No `OPENROUTER_API_KEY`?** Embeddings are local and always on, so retrieval is
-full-strength; only the query reading falls back to the deterministic parser.
-`/health` reports `llm: false, interpretation: "deterministic"`.
+**No `OPENROUTER_API_KEY`?** The planner cannot read a query, so `/routes/generate`,
+`/routes/reroute` and `/routes/explain` answer **503 `llm_not_configured`**; `/health`
+reports `llm: false` and `status: "degraded"`. The catalogue endpoints (`/places`,
+`/routes/itineraries`, `/routes/services`) need no reading and keep working.
+Embeddings are local either way.
 
 ## 1. Web-app subdir
 
@@ -129,7 +131,7 @@ from the checkout instead (e.g. to edit code without an image rebuild):
 cd backend
 export DATABASE_URL=postgresql://grodno:grodno@localhost:5432/grodno
 export VALHALLA_URL=http://localhost:8002
-export OPENROUTER_API_KEY=sk-or-...    # optional; see below
+export OPENROUTER_API_KEY=sk-or-...    # required to plan; see below
 .venv/bin/python -m uvicorn api.main:app --host 0.0.0.0 --port 8080
 ```
 
@@ -138,12 +140,10 @@ export OPENROUTER_API_KEY=sk-or-...    # optional; see below
 build time, so there is no key to set and no first-call download for retrieval —
 the vector signal is always on.
 
-`OPENROUTER_API_KEY` controls **only** the query reading. Without it the reading
-falls back to the deterministic parser (`planner/intent.py::build_requirements` →
-the regex/keyword reading, over the same CATEGORY_SYNONYMS map retrieval uses);
-routes are still built and `/health` reports `"llm": false,
-"interpretation": "deterministic"`. With it, the tool-using PydanticAI agent
-(`planner/agent_interpret.py`) reads the request. There is no re-scoring stage —
+`OPENROUTER_API_KEY` controls **only** the query reading. The tool-using PydanticAI
+agent (`planner/agent_interpret.py`) reads the request; without a key there is no
+reader, so `planner/intent.py::build_requirements` raises and the planning endpoints
+answer 503 rather than guessing with a keyword parse. There is no re-scoring stage —
 `retrieve()` already fuses the signals with RRF and that order *is* the relevance order.
 
 ## 5a. Accounts, visits and the admin panel (spec 005)
@@ -276,7 +276,7 @@ nothing that belongs in review (`core/config.py`, `agent/planner/interpret_cache
 
 | Variable | What it is |
 |---|---|
-| `OPENROUTER_API_KEY` | secret; **only** the interpretation agent (embeddings are local) |
+| `OPENROUTER_API_KEY` | secret; the query reading — **required to plan** (embeddings are local) |
 | `DATABASE_URL` | Postgres DSN (agent and seed; default is the local compose one) |
 | `VALHALLA_URL` | routing engine address |
 | `AGENT_HOST` / `AGENT_PORT` | bind address |
@@ -332,8 +332,7 @@ finish, or the `pgdata` volume lost embeddings — re-run the seed:
 
 **No semantic results (only keyword hits).** The rows have `embedding IS NULL` — e.g. the
 `0009` migration ran but the seed was not re-run. `python -m seed` embeds everything and
-the spot-check in §3 shows `count(embedding)`. (A missing `OPENROUTER_API_KEY` no longer
-affects retrieval — embeddings are local.)
+the spot-check in §3 shows `count(embedding)`. (A missing `OPENROUTER_API_KEY` does not affect retrieval — embeddings are local.)
 
 **`ConnectError` on `localhost:8002`.** Valhalla isn't ready. Poll `/status` until 200.
 
@@ -355,7 +354,7 @@ Browser → nginx :80  (frontend container)
   │                           │
   │               api.main → agent.planner.Pipeline
   │                           │
-  │  ┌─ preprocess ─ interpret (PydanticAI over OpenRouter; deterministic fallback) ─┐
+  │  ┌─ preprocess ─ interpret (PydanticAI over OpenRouter; refuses without a key) ─┐
   │  │                                                                               │
   │  ├─ resolve ─ retrieve (vector + keyword + must-visit, RRF fusion) ─────────────┤
   │  │              vector = LOCAL embeddings (infra/embeddings.py, CPU ONNX)      │

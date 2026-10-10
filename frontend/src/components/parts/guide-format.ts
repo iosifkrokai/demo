@@ -42,7 +42,8 @@ export const fmtStops = (count: number) =>
     : pluralCountRu(count, STOP_FORMS);
 
 /** The one honest wording for a failed `/routes/generate` request. */
-export const agentErrorMessage = (status: number) => {
+export const agentErrorMessage = (status: number, reason?: string | null) => {
+  if (reason === 'llm_not_configured') return i18n.t('guide.agentNoReader');
   if (status === 404) return i18n.t('guide.agentNotFound');
   if (status >= 500) return i18n.t('guide.agentServerError', { status });
   if (status === 401 || status === 403) {

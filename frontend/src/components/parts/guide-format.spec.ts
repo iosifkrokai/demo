@@ -85,6 +85,13 @@ describe('agentErrorMessage', () => {
     );
   });
 
+  it('names an unconfigured planner instead of a bare 503', () => {
+    const message = agentErrorMessage(503, 'llm_not_configured');
+
+    expect(message).toContain('ключ');
+    expect(message).not.toContain('503');
+  });
+
   it('names an access problem and a bad request for what they are', () => {
     expect(agentErrorMessage(403)).toContain('403');
     expect(agentErrorMessage(422)).toContain('422');

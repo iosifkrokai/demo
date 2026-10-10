@@ -873,7 +873,19 @@ export const Sidebar = ({
         signal: controller.signal,
       });
       if (!r.ok) {
-        throw new Error(agentErrorMessage(r.status));
+        // The reason rides in the body: «503» alone cannot say whether the
+        // planner is unconfigured or the upstream is down.
+        let reason: string | null = null;
+        try {
+          const body = (await r.json()) as { detail?: unknown };
+          const detail = body?.detail;
+          if (detail && typeof detail === 'object' && 'reason' in detail) {
+            reason = String((detail as { reason: unknown }).reason);
+          }
+        } catch {
+          // A body that is not JSON carries no reason code; the status stands.
+        }
+        throw new Error(agentErrorMessage(r.status, reason));
       }
       const data = (await r.json()) as AgentRouteResponse;
       if (data.status === 'infeasible') {

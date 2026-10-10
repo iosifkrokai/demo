@@ -130,6 +130,8 @@ export const guideArea = {
       agentNotFound:
         'агент не отвечает по этому адресу (404) — похоже, приложение обращается не к тому серверу. Это ошибка настройки, а не «ничего не найдено».',
       agentServerError: 'агент ответил ошибкой {{status}} — попробуйте ещё раз',
+      agentNoReader:
+        'планировщик не настроен: не задан ключ модели. Сообщите администратору — без ключа маршрут построить нечем',
       agentDenied:
         'агент отклонил запрос ({{status}}) — проверьте доступ к сервису.',
       agentBadRequest:
@@ -258,6 +260,8 @@ export const guideArea = {
       agentNotFound:
         'the agent does not answer at this address (404) — the app seems to be pointed at the wrong server. That is a configuration error, not “nothing found”.',
       agentServerError: 'the agent answered with error {{status}} — try again',
+      agentNoReader:
+        'the planner is not configured: no model key is set. Tell the administrator — without one there is nothing to plan with',
       agentDenied:
         'the agent refused the request ({{status}}) — check access to the service.',
       agentBadRequest:
