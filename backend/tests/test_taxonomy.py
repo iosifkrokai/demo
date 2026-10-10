@@ -5,7 +5,6 @@ from __future__ import annotations
 import pytest
 
 from core import constants
-from db.store.search import db_categories
 from reference.taxonomy import (
     all_categories,
     all_codes,
@@ -68,16 +67,16 @@ class TestRoundTrip:
 
 
 class TestServicesNoLongerEmpty:
-    """The reported defect: these four returned [] from db_categories()."""
+    """The reported defect: these four returned [] from db_values()."""
 
     @pytest.mark.parametrize("code", ["кафе", "ресторан", "туалет", "гостиница"])
     def test_service_category_maps_to_itself(self, code):
         assert db_values([code]) == [code]
-        assert db_categories([code]) == [code]
+        assert db_values([code]) == [code]
 
-    def test_search_db_categories_is_not_empty(self):
-        assert db_categories(["туалет"]) == ["туалет"]
-        assert db_categories(["кафе", "ресторан", "туалет", "гостиница"]) == [
+    def test_the_code_mapping_is_not_empty(self):
+        assert db_values(["туалет"]) == ["туалет"]
+        assert db_values(["кафе", "ресторан", "туалет", "гостиница"]) == [
             "кафе", "ресторан", "туалет", "гостиница",
         ]
 
@@ -90,7 +89,7 @@ class TestServicesNoLongerEmpty:
             "остановка транспорта",
         )
         for code in constants.CONVENIENCE_CATEGORIES:
-            assert db_categories([code]) == [code]
+            assert db_values([code]) == [code]
 
 
 class TestResolveCode:
