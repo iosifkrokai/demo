@@ -1,6 +1,6 @@
 """Pydantic models for requests and responses.
 
-HTTP-facing models plus internal planner models used by agent.planner.*.
+HTTP-facing models plus internal planner models used by planner.*.
 """
 
 from __future__ import annotations

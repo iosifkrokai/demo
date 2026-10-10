@@ -16,14 +16,13 @@ from pydantic_ai.models.function import AgentInfo, FunctionModel
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agent import tools
-from agent.planner import agent_interpret as ai
-from agent.planner.intent import build_requirements
+from agent import agent_interpret as ai, tools
 from contracts.planner import GenerateReq
 from core.config import settings
 from core.errors import InterpretationUnavailable
 from domain import areas as areas_mod
 from infra import trace
+from planner.intent import build_requirements
 
 QUERY = "старый Гродно, двое детей 5 и 9 лет, два часа, туалет обязателен, кафе если по пути"
 

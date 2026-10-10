@@ -19,6 +19,7 @@ COPY contracts/ /app/contracts/
 COPY core/ /app/core/
 COPY domain/ /app/domain/
 COPY infra/ /app/infra/
+COPY planner/ /app/planner/
 COPY store/ /app/store/
 COPY data/ /app/data/
 COPY seed/ /app/seed/

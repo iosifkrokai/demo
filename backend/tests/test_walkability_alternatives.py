@@ -7,8 +7,8 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agent.planner.pipeline import alternatives_for, alternatives_sentence
 from domain import constants
+from planner.pipeline import alternatives_for, alternatives_sentence
 
 
 def _costings(offers) -> list[str]:

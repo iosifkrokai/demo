@@ -8,12 +8,12 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agent.planner import render as render_mod
-from agent.planner.cost import prune_unroutable_stops
 from contracts.planner import Candidate, CostMatrix
 from core.errors import UpstreamUnavailable
 from domain import constants
 from infra import valhalla_client as vc
+from planner import render as render_mod
+from planner.cost import prune_unroutable_stops
 
 ISLAND = (53.007611, 23.917041)
 MAINLAND = (53.290892, 23.932859)

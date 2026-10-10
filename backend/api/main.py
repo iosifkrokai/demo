@@ -1,6 +1,6 @@
 """FastAPI agent: turns free-text Russian queries into pedestrian walking routes.
 
-The HTTP layer is thin; business decisions live in agent.planner.pipeline.Pipeline.
+The HTTP layer is thin; business decisions live in planner.pipeline.Pipeline.
 """
 
 from __future__ import annotations
@@ -16,8 +16,7 @@ import uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from agent.planner.agent_interpret import DEFAULT_MODEL
-from agent.planner.pipeline import Pipeline
+from agent.agent_interpret import DEFAULT_MODEL
 from api.routers import accounts as accounts_api, clients as clients_api
 from api.schemas import (
     ExplainReq,
@@ -34,6 +33,7 @@ from contracts.planner import (
 from core.config import openrouter_api_key, settings
 from core.errors import AgentError, NoRoutePossible
 from infra import embeddings, progress, trace
+from planner.pipeline import Pipeline
 from store import itineraries as itineraries_mod, places as places_mod, services as services_mod
 
 logging.basicConfig(

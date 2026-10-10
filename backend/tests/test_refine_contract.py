@@ -10,18 +10,21 @@ from fastapi.testclient import TestClient
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agent.planner import (
+from api import main as agent_main
+from contracts.planner import Candidate, GenerateReq, LatLon
+from core.errors import UpstreamUnavailable
+from planner import (
     cost as cost_mod,
     pipeline as pipeline_mod,
     refine as refine_mod,
     resolve as resolve_mod,
 )
-from agent.planner.pipeline import (
+from planner.pipeline import (
     Pipeline,
     _refinement_cost,
     _synthetic_cost,
 )
-from agent.planner.refine import (
+from planner.refine import (
     REFINEMENT_REORDER_ATTRIBUTE_MISSING,
     REFINEMENT_UNRECOGNIZED,
     REFINEMENT_UNSUPPORTED,
@@ -30,9 +33,6 @@ from agent.planner.refine import (
     reorder_stops,
     visit_minutes_of,
 )
-from api import main as agent_main
-from contracts.planner import Candidate, GenerateReq, LatLon
-from core.errors import UpstreamUnavailable
 
 
 @pytest.fixture

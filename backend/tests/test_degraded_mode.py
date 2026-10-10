@@ -19,14 +19,7 @@ from fastapi.testclient import TestClient
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agent.planner import (
-    agent_interpret as ai,
-    intent as intent_mod,
-    pipeline as pipeline_mod,
-    retrieve as retrieve_mod,
-)
-from agent.planner.intent import build_requirements
-from agent.planner.pipeline import Pipeline, _embed_query
+from agent import agent_interpret as ai
 from api import main as agent_main
 from contracts.planner import Candidate, GenerateReq, ResolvedConstraints
 from core.config import openrouter_api_key, settings
@@ -39,6 +32,13 @@ from core.errors import (
 from domain.requirements import PartyComposition, Requirement, TripRequirements
 from infra import embeddings
 from infra.valhalla_client import ping as valhalla_ping
+from planner import (
+    intent as intent_mod,
+    pipeline as pipeline_mod,
+    retrieve as retrieve_mod,
+)
+from planner.intent import build_requirements
+from planner.pipeline import Pipeline, _embed_query
 
 QUERY = "Хочу погулять по замкам Гродно"
 DSN = "postgresql://grodno:grodno@localhost:5432/grodno"
@@ -121,7 +121,7 @@ class _FakeModel:
 @pytest.fixture
 def fake_model(monkeypatch):
     """Install a fake local model; tests must never load the real one."""
-    from agent.planner import interpret_cache
+    from agent import interpret_cache
 
     interpret_cache.EMBED_CACHE.clear()
     model = _FakeModel()
@@ -201,9 +201,9 @@ class TestEmbedLocal:
 
     def test_logs_one_warning_naming_the_reason(self, monkeypatch, caplog):
         monkeypatch.setattr(embeddings._state, "model", _FakeModel(fail=True), raising=False)
-        with caplog.at_level("WARNING", logger="agent.planner.pipeline"):
+        with caplog.at_level("WARNING", logger="planner.pipeline"):
             assert _embed_query(QUERY) == []
-        warnings = _warnings(caplog, "agent.planner.pipeline")
+        warnings = _warnings(caplog, "planner.pipeline")
         assert len(warnings) == 1
         assert "local model" in warnings[0]
 

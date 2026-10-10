@@ -9,14 +9,17 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agent.planner.cost import (
+from contracts.planner import Candidate, CostMatrix, ResolvedConstraints
+from domain import constants
+from domain.requirements import Requirement, TripRequirements
+from planner.cost import (
     REASON_MUST_VISIT_UNROUTABLE as COST_REASON_MUST_VISIT_UNROUTABLE,
     REASON_UNROUTABLE_LEG,
     prune_unroutable_stops,
 )
-from agent.planner.explain import explain
-from agent.planner.validate import validate
-from agent.planner.verify import (
+from planner.explain import explain
+from planner.validate import validate
+from planner.verify import (
     REASON_AVOID_OK,
     REASON_AVOID_VIOLATED,
     REASON_CODE_UNKNOWN,
@@ -37,9 +40,6 @@ from agent.planner.verify import (
     verify,
     verify_summary,
 )
-from contracts.planner import Candidate, CostMatrix, ResolvedConstraints
-from domain import constants
-from domain.requirements import Requirement, TripRequirements
 
 
 def _cand(pid: int, name: str, category: str | None, lat: float = 53.68, lon: float = 23.83) -> Candidate:

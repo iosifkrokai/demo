@@ -53,8 +53,8 @@ def run_verdicts() -> dict[str, Any]:
 
     Offline and total: no DB, no model, no network.
     """
-    from agent.planner.verify import ServiceAlongEvidence, verify
     from domain.requirements import Requirement, TripRequirements
+    from planner.verify import ServiceAlongEvidence, verify
 
     checks: list[dict[str, Any]] = []
     for case in _load("verdicts"):
@@ -393,9 +393,9 @@ def run_interpretation() -> dict[str, Any]:
 
     Live, via the product's `build_requirements`; the report records which source answered.
     """
-    from agent.planner.intent import build_requirements
     from contracts.planner import GenerateReq
     from domain import taxonomy
+    from planner.intent import build_requirements
 
     checks: list[dict[str, Any]] = []
     sources: dict[str, int] = {}

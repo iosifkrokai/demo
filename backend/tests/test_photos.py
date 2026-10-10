@@ -14,9 +14,9 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agent.planner.retrieve import parse_photo
 from contracts.planner import Photo, Place
 from core.paths import PHOTOS_DIR
+from planner.retrieve import parse_photo
 from seed.photos import (
     commons_file_title,
     parse_wikipedia,

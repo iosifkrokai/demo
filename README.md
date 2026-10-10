@@ -272,7 +272,7 @@ Notes that make the gate reproducible:
 ## 8. Configuration
 
 Environment carries secrets, deployment addresses and two deliberate escape hatches —
-nothing that belongs in review (`core/config.py`, `agent/planner/interpret_cache.py`):
+nothing that belongs in review (`core/config.py`, `agent/interpret_cache.py`):
 
 | Variable | What it is |
 |---|---|
@@ -284,7 +284,7 @@ nothing that belongs in review (`core/config.py`, `agent/planner/interpret_cache
 | `CACHE_BUST=1` | turn the in-process reading/embedding cache off for this process (demos, measurement runs) |
 | `INTERPRET_CACHE_SIZE` / `INTERPRET_CACHE_TTL_S` | bounds of that cache (defaults 128 entries / 30 min) |
 
-Everything else is reviewable code in `agent/constants.py` — models, weights and limits:
+Everything else is reviewable code in `domain/constants.py` — models, weights and limits:
 `RRF_K`, `MMR_LAMBDA`, `RETRIEVAL_POOL_SIZE`,
 `MMR_POOL_SIZE`, `GEO_FOCUS_KM`, `GEO_FOCUS_DISCOVERY_MAX_KM`,
 `MAX_WALK_LEG_KM` / `WALK_LEG_BUDGET_SHARE` (walkability),
@@ -352,7 +352,7 @@ Browser → nginx :80  (frontend container)
   │
   ├─ /routes/*  → proxy → agent :8080
   │                           │
-  │               api.main → agent.planner.Pipeline
+  │               api.main → planner.Pipeline
   │                           │
   │  ┌─ preprocess ─ interpret (PydanticAI over OpenRouter; refuses without a key) ─┐
   │  │                                                                               │
@@ -399,8 +399,10 @@ route and the geometry, and it — not the interpretation model — decides `sta
 same verdicts reach the client as `interpretation.requirements` plus the explicit
 `interpretation.unmet` list.
 
-Planner files: `backend/agent/planner/{preprocess,intent,resolve,retrieve,diversity,cost,optimize,validate,render,explain,refine,verify,interpret_cache,agent_interpret,pipeline}.py`,
-clients in `backend/agent/{valhalla_client,search}.py`, tunables in `backend/agent/constants.py`.
+Planner files: `backend/planner/{preprocess,intent,resolve,retrieve,diversity,cost,optimize,validate,render,explain,refine,verify,pipeline}.py`;
+the LLM layer in `backend/agent/{agent_interpret,interpret_cache,tools}.py`; the Valhalla client in
+`backend/infra/valhalla_client.py`, the search in `backend/store/search.py`, tunables in
+`backend/domain/constants.py`.
 
 ## 11. What is not verified / not promised
 

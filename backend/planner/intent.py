@@ -10,13 +10,13 @@ from __future__ import annotations
 
 import logging as _logging
 
+from agent import interpret_cache
 from contracts.planner import GenerateReq, IntentDecision, IntentResult
 from core.errors import InterpretationUnavailable
 from domain import constants
 from domain.requirements import Requirement, TripRequirements
 from infra import trace
 
-from . import interpret_cache
 from .preprocess import WORD_RE
 
 log = _logging.getLogger(__name__)
@@ -84,7 +84,7 @@ def _interpret_cache_key(
     editing the instructions invalidates every entry.
     """
     try:
-        from . import agent_interpret, interpret_cache
+        from agent import agent_interpret, interpret_cache
 
         if not agent_interpret.available():
             return None, ""
@@ -104,7 +104,7 @@ def _agent_contract(
     query: str, req: GenerateReq, db, wall_clock_s: float | None = None
 ) -> TripRequirements | None:
     """The interpretation agent's contract, or None when it cannot be trusted."""
-    from . import agent_interpret
+    from agent import agent_interpret
 
     try:
         return agent_interpret.interpret_with_agent(

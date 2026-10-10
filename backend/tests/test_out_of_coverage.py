@@ -7,21 +7,21 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agent.planner.intent import mark_out_of_coverage
-from agent.planner.pipeline import _outside_left_unresolved
-from agent.planner.resolve import _same_name
-from agent.planner.verify import (
-    INFEASIBLE_REASONS,
-    REASON_CODES,
-    REASON_MUST_VISIT_OUTSIDE,
-    overall_status,
-    verify,
-)
 from contracts.planner import Candidate, ResolvedConstraints
 from domain.requirements import (
     REASON_MUST_VISIT_OUTSIDE as CONTRACT_REASON,
     Requirement,
     TripRequirements,
+)
+from planner.intent import mark_out_of_coverage
+from planner.pipeline import _outside_left_unresolved
+from planner.resolve import _same_name
+from planner.verify import (
+    INFEASIBLE_REASONS,
+    REASON_CODES,
+    REASON_MUST_VISIT_OUTSIDE,
+    overall_status,
+    verify,
 )
 
 VILNIUS_CATHEDRAL = "Кафедральный собор Святого Станислава"

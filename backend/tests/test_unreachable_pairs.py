@@ -10,10 +10,10 @@ from collections.abc import Callable
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agent.planner import cost as cost_mod
-from agent.planner.optimize import _budget_constrain, total_seconds
 from contracts.planner import Candidate, CostMatrix
 from domain import constants
+from planner import cost as cost_mod
+from planner.optimize import _budget_constrain, total_seconds
 
 BIG = float(constants.UNREACHABLE_S)
 
@@ -113,7 +113,7 @@ _ONE_WAY_HOLE = [
 
 def test_two_opt_terminates_on_a_one_way_unreachable_pair():
     """It must settle, and must not leave the walk worse than it found it."""
-    from agent.planner.optimize import _two_opt
+    from planner.optimize import _two_opt
 
     order = [5, 4, 6, 2, 1, 0, 3]
     before = cost_mod.walk_cost(order, _ONE_WAY_HOLE)
@@ -126,7 +126,7 @@ def test_two_opt_terminates_on_a_one_way_unreachable_pair():
 
 def test_two_opt_still_shortens_a_symmetric_route():
     """The real-cost check must not cost us the optimization itself."""
-    from agent.planner.optimize import _two_opt
+    from planner.optimize import _two_opt
 
     n = 8
     matrix = [[0.0] * n for _ in range(n)]

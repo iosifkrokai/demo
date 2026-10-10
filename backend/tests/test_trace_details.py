@@ -7,14 +7,14 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agent.planner.pipeline import (
+from contracts.planner import Candidate, LatLon
+from domain import constants
+from planner.pipeline import (
     _drop_duplicates,
     _dupe_pairs,
     _geo_focus,
     _geo_focus_report,
 )
-from contracts.planner import Candidate, LatLon
-from domain import constants
 
 
 def _c(pid: int, name: str, lat: float, lon: float, rrf_score: float = 0.0) -> Candidate:

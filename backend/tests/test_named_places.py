@@ -9,8 +9,8 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agent.planner.pipeline import _geo_focus, should_skip_geo_focus
 from contracts.planner import Candidate, LatLon
+from planner.pipeline import _geo_focus, should_skip_geo_focus
 
 
 def test_region_scope_may_keep_its_spread_without_a_position():

@@ -10,15 +10,15 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agent.planner.explain import _area_name, explain
-from agent.planner.optimize import _budget_constrain, _max_leg, _max_leg_seconds
-from agent.planner.resolve import _is_town_or_district_match
-from agent.planner.retrieve import (
+from contracts.planner import Candidate
+from planner.explain import _area_name, explain
+from planner.optimize import _budget_constrain, _max_leg, _max_leg_seconds
+from planner.resolve import _is_town_or_district_match
+from planner.retrieve import (
     _category_signal,
     _detect_category_keywords,
     rrf_fuse,
 )
-from contracts.planner import Candidate
 
 
 def _c(
@@ -98,9 +98,9 @@ class TestResolveNamedPlacesLogic:
             "lon": 26.47,
             "_name_sim": 0.5,
         }
-        with patch("agent.planner.resolve._name_match_search", return_value=[row]):
-            with patch("agent.planner.resolve._keyword_search", return_value=[]):
-                from agent.planner.resolve import _resolve_named_places
+        with patch("planner.resolve._name_match_search", return_value=[row]):
+            with patch("planner.resolve._keyword_search", return_value=[]):
+                from planner.resolve import _resolve_named_places
 
                 must_ids, area_anchor, resolved = _resolve_named_places(
                     ["Мирскому"], MagicMock()
@@ -134,9 +134,9 @@ class TestResolveNamedPlacesLogic:
             "lat": 53.68,
             "lon": 23.83,
         }
-        with patch("agent.planner.resolve._name_match_search", return_value=[name_row]):
-            with patch("agent.planner.resolve._keyword_search", return_value=[town_row]):
-                from agent.planner.resolve import _resolve_named_places
+        with patch("planner.resolve._name_match_search", return_value=[name_row]):
+            with patch("planner.resolve._keyword_search", return_value=[town_row]):
+                from planner.resolve import _resolve_named_places
 
                 must_ids, area_anchor, resolved = _resolve_named_places(
                     ["Гродно"], MagicMock()
@@ -365,8 +365,8 @@ class TestResolveIntegration:
     def test_town_query_creates_area_anchor_not_must_visit(self):
         import psycopg
 
-        from agent.planner.resolve import resolve
         from contracts.planner import IntentDecision, IntentResult
+        from planner.resolve import resolve
 
         mock_db = MagicMock(spec=psycopg.Connection)
 
@@ -391,8 +391,8 @@ class TestResolveIntegration:
             "lon": 23.83,
             "_name_sim": 0.2,
         }
-        with patch("agent.planner.resolve._name_match_search", return_value=[name_row]):
-            with patch("agent.planner.resolve._keyword_search", return_value=[name_row]):
+        with patch("planner.resolve._name_match_search", return_value=[name_row]):
+            with patch("planner.resolve._keyword_search", return_value=[name_row]):
                 constraints = resolve(
                     intent,
                     explicit_time_budget=120,
@@ -413,8 +413,8 @@ class TestBudgetRule:
     def _resolve(explicit, llm_budget):
         import psycopg
 
-        from agent.planner.resolve import resolve
         from contracts.planner import IntentDecision, IntentResult
+        from planner.resolve import resolve
 
         intent = IntentResult(
             decision=IntentDecision(
@@ -427,8 +427,8 @@ class TestBudgetRule:
             ),
             source="agent",
         )
-        with patch("agent.planner.resolve._name_match_search", return_value=[]):
-            with patch("agent.planner.resolve._keyword_search", return_value=[]):
+        with patch("planner.resolve._name_match_search", return_value=[]):
+            with patch("planner.resolve._keyword_search", return_value=[]):
                 return resolve(
                     intent,
                     explicit_time_budget=explicit,

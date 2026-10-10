@@ -14,11 +14,12 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agent.planner import intent, interpret_cache as cache
+from agent import interpret_cache as cache
 from contracts.planner import GenerateReq
 from core.errors import InterpretationUnavailable
 from domain.requirements import Requirement, TripRequirements
 from infra import trace
+from planner import intent
 
 
 def _req(**over: Any) -> GenerateReq:

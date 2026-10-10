@@ -13,15 +13,15 @@ from fastapi import HTTPException
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agent.planner import intent as intent_mod
-from agent.planner.intent import build_requirements
-from agent.planner.pipeline import _interpretation
-from agent.planner.verify import overall_status, verify
 from api import main as agent_main
 from contracts.planner import Candidate, GenerateReq, ValidatedPlan
 from core.config import settings
 from core.errors import InterpretationUnavailable, UpstreamUnavailable
 from domain.requirements import PartyComposition, Requirement, TripRequirements
+from planner import intent as intent_mod
+from planner.intent import build_requirements
+from planner.pipeline import _interpretation
+from planner.verify import overall_status, verify
 
 RU = "Погулять по старому Гродно с двумя детьми, туалет обязательно, кафе если по пути"
 
@@ -142,7 +142,7 @@ class TestFailuresDegrade:
     def test_a_tool_failure_refuses_the_request(self, with_key, monkeypatch):
         """A bounded tool blowing up inside the agent costs the reading, and with
         no reading there is no contract: the request is refused, never guessed at."""
-        from agent.planner import agent_interpret as ai
+        from agent import agent_interpret as ai
 
         def boom(*_a, **_k):
             raise RuntimeError("tool search_places failed: db gone")
@@ -154,7 +154,7 @@ class TestFailuresDegrade:
     def test_a_tool_failure_inside_the_agent_returns_no_contract(self, with_key, monkeypatch):
         """`interpret_with_agent` swallows a tool/model failure and returns None
         — a half-filled contract is never handed to the planner."""
-        from agent.planner import agent_interpret as ai
+        from agent import agent_interpret as ai
 
         def boom(*_a, **_k):
             raise RuntimeError("tool services_near_route failed: db gone")

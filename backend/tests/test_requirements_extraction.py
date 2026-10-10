@@ -16,13 +16,13 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agent.planner import intent as intent_mod
-from agent.planner.intent import build_requirements
 from contracts.planner import GenerateReq
 from core.config import openrouter_api_key, settings
 from core.errors import InterpretationUnavailable
 from domain import constants
 from domain.requirements import TripRequirements
+from planner import intent as intent_mod
+from planner.intent import build_requirements
 
 RU = "ru"
 
@@ -59,7 +59,7 @@ class TestNoReaderRefuses:
             build_requirements(RU_BUG, _req(RU_BUG))
 
     def test_a_failed_reading_is_not_replaced_by_a_guess(self, fake_llm, monkeypatch):
-        from agent.planner import agent_interpret as ai
+        from agent import agent_interpret as ai
 
         def boom(*_a, **_kw):
             raise RuntimeError("agent: tool search_places failed: db gone")

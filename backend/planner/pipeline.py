@@ -12,6 +12,7 @@ from typing import Any
 
 import psycopg
 
+from agent import interpret_cache
 from contracts.planner import (
     BudgetInfo,
     Candidate,
@@ -36,7 +37,6 @@ from infra import progress, trace
 from infra.valhalla_client import ping as valhalla_ping
 from store.search import _name_match_search, fetch_points_by_ids, nearby_places
 
-from . import interpret_cache
 from .catalogue import catalogue_response
 from .cost import (
     _build_cost,

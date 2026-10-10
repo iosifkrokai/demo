@@ -10,8 +10,15 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agent.planner import pipeline as pipeline_mod
-from agent.planner.verify import (
+from contracts.planner import (
+    Candidate,
+    IntentDecision,
+    IntentResult,
+    ResolvedConstraints,
+)
+from domain.requirements import Requirement, TripRequirements
+from planner import pipeline as pipeline_mod
+from planner.verify import (
     REASON_INTEREST_IN_CATALOGUE,
     REASON_MUST_VISIT_ABSENT,
     REASON_MUST_VISIT_IN_CATALOGUE,
@@ -20,13 +27,6 @@ from agent.planner.verify import (
     overall_status,
     verify_catalogue,
 )
-from contracts.planner import (
-    Candidate,
-    IntentDecision,
-    IntentResult,
-    ResolvedConstraints,
-)
-from domain.requirements import Requirement, TripRequirements
 
 
 def _cand(pid: int, name: str, category: str, town: str, relevance: float = 1.0) -> Candidate:
