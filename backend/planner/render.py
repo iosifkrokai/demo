@@ -9,9 +9,9 @@ import logging
 from itertools import pairwise
 
 from contracts.planner import Candidate, LatLon
+from core import constants
 from core.errors import UpstreamUnavailable
-from domain import constants
-from infra.valhalla_client import RouteStatus, route_through
+from planner.valhalla_client import RouteStatus, route_through
 
 log = logging.getLogger(__name__)
 

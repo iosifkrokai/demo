@@ -20,8 +20,9 @@ COPY core/ /app/core/
 COPY data/ /app/data/
 COPY db/ /app/db/
 COPY domain/ /app/domain/
-COPY infra/ /app/infra/
+COPY ml/ /app/ml/
 COPY planner/ /app/planner/
+COPY telemetry/ /app/telemetry/
 RUN uv sync --no-dev
 
 ENV FASTEMBED_CACHE_PATH=/opt/fastembed \
@@ -34,7 +35,7 @@ ENV FASTEMBED_CACHE_PATH=/opt/fastembed \
     VALHALLA_URL=http://valhalla:8002
 
 RUN /app/.venv/bin/python -c \
-    "import infra.embeddings as e; e.embed_query('warmup'); print('embedding model baked:', e.MODEL_NAME)"
+    "import ml.embeddings as e; e.embed_query('warmup'); print('embedding model baked:', e.MODEL_NAME)"
 
 EXPOSE 8080
 

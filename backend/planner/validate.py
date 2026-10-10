@@ -9,7 +9,7 @@ import math
 from typing import Any
 
 from contracts.planner import Candidate, CostMatrix, ResolvedConstraints, ValidatedPlan
-from domain import constants
+from core import constants
 from domain.requirements import TripRequirements
 
 from .verify import verify, verify_summary

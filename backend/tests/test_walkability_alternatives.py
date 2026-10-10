@@ -7,7 +7,7 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from domain import constants
+from core import constants
 from planner.pipeline import alternatives_for, alternatives_sentence
 
 

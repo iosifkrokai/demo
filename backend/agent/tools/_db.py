@@ -1,4 +1,4 @@
-"""The tools' connection handling, built on :func:`infra.db.connect`."""
+"""The tools' connection handling, built on :func:`db.connection.connect`."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from collections.abc import Callable
 from contextlib import suppress
 from typing import Any
 
-from infra import db as infra_db
+from db.connection import connect
 
 log = logging.getLogger(__name__)
 
@@ -16,7 +16,7 @@ DB_TIMEOUT_S = 3.0
 
 def _connect() -> Any:
     """Open a short-lived psycopg connection."""
-    return infra_db.connect(timeout=DB_TIMEOUT_S)
+    return connect(timeout=DB_TIMEOUT_S)
 
 
 def _db_search_rows(

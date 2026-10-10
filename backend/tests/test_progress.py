@@ -13,7 +13,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from api.main import route_progress
 from contracts.planner import GenerateReq
-from infra import progress
+from telemetry import progress
 
 
 @pytest.fixture(autouse=True)

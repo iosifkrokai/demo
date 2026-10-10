@@ -6,7 +6,7 @@ import logging
 
 from agent.schema import AgentReading
 from contracts.planner import GenerateReq
-from domain import constants
+from core import constants
 from domain.requirements import PartyComposition, Requirement, TripRequirements
 from domain.taxonomy import resolve_code
 

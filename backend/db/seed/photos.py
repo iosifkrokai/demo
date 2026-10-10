@@ -23,7 +23,7 @@ from typing import Any
 import psycopg
 
 from core.paths import PHOTOS_DIR
-from infra import db
+from db.connection import connect
 
 BACKEND = Path(__file__).resolve().parent.parent
 HINTS = PHOTOS_DIR / "osm_photo_hints.json"
@@ -63,7 +63,7 @@ def load_source_urls(dsn: str | None = None) -> list[str]:
     """Every ``places.source_url``, read from the DB rather than typed in.
     The hints stage keeps only the exact objects these URLs claim to be.
     """
-    with db.connect(dsn or DSN, timeout=None) as conn, conn.cursor() as cur:
+    with connect(dsn or DSN, timeout=None) as conn, conn.cursor() as cur:
         cur.execute("SELECT source_url FROM places")
         return [r[0] for r in cur.fetchall()]
 
@@ -449,7 +449,7 @@ def parse_wikipedia(hint: str) -> tuple[str, str] | None:
 
 
 def load_places(dsn: str | None = None) -> list[dict[str, Any]]:
-    with db.connect(dsn or DSN, timeout=None) as conn, conn.cursor() as cur:
+    with connect(dsn or DSN, timeout=None) as conn, conn.cursor() as cur:
         cur.execute(
             "SELECT source_url, name, lat, lon, links, town FROM places ORDER BY source_url"
         )
@@ -727,7 +727,7 @@ def run_stage(
     photos = resolve_photos(hints, load_places(dsn), out=photos_path, limit=limit)
 
     if apply:
-        with db.connect(dsn or DSN, timeout=None) as conn:
+        with connect(dsn or DSN, timeout=None) as conn:
             apply_to_db(conn, photos)
 
     return len(photos)

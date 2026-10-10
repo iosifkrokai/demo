@@ -10,7 +10,7 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from infra import embeddings
+from ml import embeddings
 
 MIXED = [0, 0.0123, 1, -1, 0.5, 2.0]
 

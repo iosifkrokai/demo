@@ -74,7 +74,7 @@ def source_fields(source_url: str, license: str | None = None) -> dict:
 
 def connect(dsn: str):
     """Open a psycopg connection (imported lazily so --dry-run needs no driver)."""
-    from infra.db import connect as db_connect
+    from db.connection import connect as db_connect
 
     return db_connect(dsn, timeout=None)
 

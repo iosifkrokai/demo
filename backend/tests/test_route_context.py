@@ -11,7 +11,7 @@ from pydantic import ValidationError
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from contracts.planner import Candidate, GenerateReq, LatLon, RouteContext
-from domain import constants
+from core import constants
 from planner.pipeline import (
     _cap_for_valhalla,
     _context_changes,

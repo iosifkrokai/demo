@@ -14,7 +14,7 @@ from agent.prompts import compose_instructions
 from agent.prompts.notes import _ui_note
 from agent.schema import AgentReading
 from contracts.planner import GenerateReq
-from infra import trace
+from telemetry import trace
 
 log = logging.getLogger(__name__)
 

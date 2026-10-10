@@ -31,9 +31,11 @@ from contracts.planner import (
 )
 from core.config import openrouter_api_key, settings
 from core.errors import AgentError, NoRoutePossible
+from db.connection import connect
 from db.store import itineraries as itineraries_mod, places as places_mod, services as services_mod
-from infra import db as infra_db, embeddings, progress, trace
+from ml import embeddings
 from planner.pipeline import Pipeline
+from telemetry import progress, trace
 
 logging.basicConfig(
     level=logging.INFO,
@@ -44,9 +46,7 @@ log = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    db = infra_db.connect(autocommit=True, timeout=None)
-    with db.cursor() as cur:
-        cur.execute("SET pg_trgm.word_similarity_threshold = 0.45")
+    db = connect(autocommit=True, timeout=None)
     app.state.planner = Pipeline(db=db)
     embeddings.embed_query("warmup")
     log.info("agent ready (embeddings=%s local, interpret=%s, key=%s)",

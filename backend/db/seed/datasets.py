@@ -14,8 +14,9 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from core import constants as _constants
 from core.paths import PLACES_DIR
-from domain import constants as _constants, taxonomy
+from domain import taxonomy
 from domain.geofence import inside_project_area
 
 SOURCE_CURATED = "curated"

@@ -8,8 +8,7 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from contracts.planner import Candidate
-from infra import valhalla_client as vc
-from planner import render
+from planner import render, valhalla_client as vc
 
 
 def _c(id: int, lat: float, lon: float, name: str) -> Candidate:
@@ -51,7 +50,7 @@ def test_empty_geometry_returns_honest_status(monkeypatch):
 
 def test_unreachable_pair_treated_by_helper(monkeypatch):
     """Unreachable pair should be handled by is_unreachable_time helper."""
-    from domain import constants
+    from core import constants
 
     assert vc.is_unreachable_time(float(constants.UNREACHABLE_S))
     assert not vc.is_unreachable_time(100.0)

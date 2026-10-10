@@ -26,6 +26,7 @@ from contracts.planner import (
     RouteResponse,
     RouteSummary,
 )
+from core import constants
 from core.config import openrouter_api_key
 from core.errors import (
     NoCandidatesFound,
@@ -33,9 +34,8 @@ from core.errors import (
     UpstreamUnavailable,
 )
 from db.store.search import _name_match_search, fetch_points_by_ids, nearby_places
-from domain import constants
-from infra import progress, trace
-from infra.valhalla_client import ping as valhalla_ping
+from planner.valhalla_client import ping as valhalla_ping
+from telemetry import progress, trace
 
 from .catalogue import catalogue_response
 from .cost import (
@@ -136,11 +136,11 @@ log = logging.getLogger(__name__)
 
 
 def _embed_query(text: str) -> list[float]:
-    """Embed a search query with the LOCAL model (infra.embeddings).
+    """Embed a search query with the LOCAL model (ml.embeddings).
 
     Returns [] only when the model cannot be loaded — keyword-only fallback.
     """
-    from infra import embeddings
+    from ml import embeddings
 
     cache_key = interpret_cache.embed_key([text], embeddings.MODEL_NAME)
     cached = interpret_cache.EMBED_CACHE.get(cache_key)
@@ -918,7 +918,7 @@ class Pipeline:
         except Exception:
             valhalla_ok = False
 
-        from infra import embeddings
+        from ml import embeddings
 
         embedder_ok = embeddings.is_available()
         llm_ok = bool(openrouter_api_key())

@@ -17,9 +17,9 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from contracts.planner import GenerateReq
+from core import constants
 from core.config import openrouter_api_key, settings
 from core.errors import InterpretationUnavailable
-from domain import constants
 from domain.requirements import TripRequirements
 from planner import intent as intent_mod
 from planner.intent import build_requirements

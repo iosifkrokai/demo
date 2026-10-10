@@ -11,7 +11,7 @@ from collections.abc import Callable
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from contracts.planner import Candidate, CostMatrix
-from domain import constants
+from core import constants
 from planner import cost as cost_mod
 from planner.optimize import _budget_constrain, total_seconds
 

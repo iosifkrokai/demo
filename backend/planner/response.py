@@ -17,8 +17,8 @@ from contracts.planner import (
     PlannedAlternative,
     RequirementSignal,
 )
+from core import constants
 from core.errors import UpstreamUnavailable
-from domain import constants
 
 from .cost import visit_time_minutes
 from .geo import _TRACE_NAMES_MAX

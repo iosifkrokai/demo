@@ -8,9 +8,10 @@ from dataclasses import dataclass
 from typing import Any
 
 from contracts.planner import Candidate, CostMatrix, ResolvedConstraints
+from core import constants
 from core.errors import NoRoutePossible, UpstreamUnavailable
-from domain import constants, taxonomy
-from infra.valhalla_client import snap_locations, time_matrix
+from domain import taxonomy
+from planner.valhalla_client import snap_locations, time_matrix
 
 from .geo import _distance_m
 

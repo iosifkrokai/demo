@@ -8,8 +8,8 @@ from __future__ import annotations
 import numpy as np
 
 from contracts.planner import Candidate, ResolvedConstraints
+from core import constants
 from db.store.search import fetch_embeddings
-from domain import constants
 
 
 def mmr_select(

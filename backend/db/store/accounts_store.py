@@ -15,7 +15,7 @@ from typing import Any, Protocol
 import psycopg
 from psycopg.rows import dict_row
 
-from infra import db
+from db.connection import connect
 
 log = logging.getLogger(__name__)
 
@@ -141,7 +141,7 @@ def default_connect() -> psycopg.Connection:
 
     ``connect_timeout`` is short so a down database fails fast into ``503``.
     """
-    return db.connect(autocommit=True)
+    return connect(autocommit=True)
 
 
 class PostgresAccountRepository:

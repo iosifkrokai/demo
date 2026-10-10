@@ -29,8 +29,8 @@ from contracts.planner import GenerateReq
 from core.config import settings
 from core.errors import InterpretationUnavailable
 from domain import areas as areas_mod
-from infra import trace
 from planner.intent import build_requirements
+from telemetry import trace
 
 QUERY = "старый Гродно, двое детей 5 и 9 лет, два часа, туалет обязателен, кафе если по пути"
 

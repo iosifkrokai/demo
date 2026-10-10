@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from infra import embeddings
+from ml import embeddings
 from tests._schema import baseline_sql
 
 BACKEND = Path(__file__).resolve().parents[1]

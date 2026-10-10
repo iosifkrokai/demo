@@ -11,6 +11,7 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from core.constants import GRODNO_BBOX
 from db.seed.cli import build_arg_parser
 from db.seed.overpass import (
     DEFAULT_BBOX,
@@ -18,7 +19,6 @@ from db.seed.overpass import (
     build_overpass_query,
     fetch_overpass,
 )
-from domain.constants import GRODNO_BBOX
 
 WEST, SOUTH, EAST, NORTH = 23.0, 52.0, 28.0, 55.0
 BBOX = (WEST, SOUTH, EAST, NORTH)

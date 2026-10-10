@@ -9,10 +9,9 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from contracts.planner import Candidate, CostMatrix
+from core import constants
 from core.errors import UpstreamUnavailable
-from domain import constants
-from infra import valhalla_client as vc
-from planner import render as render_mod
+from planner import render as render_mod, valhalla_client as vc
 from planner.cost import prune_unroutable_stops
 
 ISLAND = (53.007611, 23.917041)

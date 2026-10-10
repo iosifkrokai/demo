@@ -15,11 +15,10 @@ from contracts.planner import (
     IntentResult,
     ResolvedConstraints,
 )
+from core import constants
 from core.errors import UpstreamUnavailable
 from db.store import search as search_mod
-from domain import constants
 from domain.requirements import Requirement, TripRequirements
-from infra.valhalla_client import RouteResult, RouteStatus
 from planner import (
     optimize as optimize_mod,
     pipeline as pipeline_mod,
@@ -30,6 +29,7 @@ from planner.cost import (
     PrunedStop,
 )
 from planner.resolve import resolve
+from planner.valhalla_client import RouteResult, RouteStatus
 from planner.validate import validate
 from planner.verify import (
     REASON_MUST_VISIT_UNROUTABLE as VERIFY_UNROUTABLE,

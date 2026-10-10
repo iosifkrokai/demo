@@ -9,7 +9,7 @@ import re as _re
 from typing import Any
 
 from contracts.planner import Candidate
-from domain import constants
+from core import constants
 
 from .geo import _TRACE_NAMES_MAX, _distance_pt_m
 

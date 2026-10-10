@@ -14,8 +14,8 @@ from contracts.planner import (
     RouteResponse,
     RouteSummary,
 )
-from domain import constants
-from infra import progress, trace
+from core import constants
+from telemetry import progress, trace
 
 from .response import _interpretation, _to_places, _verdicts
 from .verify import overall_status, verify_catalogue

@@ -65,7 +65,7 @@ def cmd_apply(args: argparse.Namespace) -> int:
 
                 embedded = 0
                 if not args.no_embed:
-                    from infra import embeddings
+                    from ml import embeddings
 
                     embedded = embeddings.embed_missing(conn)
                 db_stats = pipeline.gather_db_stats(conn)

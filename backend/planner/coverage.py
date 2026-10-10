@@ -11,8 +11,8 @@ from contracts.planner import (
     ResolvedConstraints,
     RouteResponse,
 )
-from domain import constants
-from infra import trace
+from core import constants
+from telemetry import trace
 
 from .intent import mark_out_of_coverage
 from .response import _verdicts

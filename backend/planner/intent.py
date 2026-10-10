@@ -16,10 +16,10 @@ from agent.model import model_name
 from agent.prompts import compose_instructions
 from agent.prompts.notes import _ui_note
 from contracts.planner import GenerateReq, IntentDecision, IntentResult
+from core import constants
 from core.errors import InterpretationUnavailable
-from domain import constants
 from domain.requirements import Requirement, TripRequirements
-from infra import trace
+from telemetry import trace
 
 from .preprocess import WORD_RE
 

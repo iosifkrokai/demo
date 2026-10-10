@@ -13,7 +13,7 @@ from agent.prompts.notes import _request_note, _ui_note
 from agent.schema import AgentReading, InterpretDeps
 from agent.tools import register_all
 from contracts.planner import GenerateReq
-from infra import trace
+from telemetry import trace
 
 log = logging.getLogger(__name__)
 

@@ -18,8 +18,8 @@ from agent import interpret_cache as cache
 from contracts.planner import GenerateReq
 from core.errors import InterpretationUnavailable
 from domain.requirements import Requirement, TripRequirements
-from infra import trace
 from planner import intent
+from telemetry import trace
 
 
 def _req(**over: Any) -> GenerateReq:

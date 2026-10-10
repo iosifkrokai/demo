@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
+from core import constants
 from db.store.search import db_categories
-from domain import constants
 from domain.taxonomy import (
     all_categories,
     all_codes,

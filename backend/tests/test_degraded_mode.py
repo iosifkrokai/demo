@@ -30,8 +30,7 @@ from core.errors import (
     UpstreamUnavailable,
 )
 from domain.requirements import PartyComposition, Requirement, TripRequirements
-from infra import embeddings
-from infra.valhalla_client import ping as valhalla_ping
+from ml import embeddings
 from planner import (
     intent as intent_mod,
     pipeline as pipeline_mod,
@@ -39,6 +38,7 @@ from planner import (
 )
 from planner.intent import build_requirements
 from planner.pipeline import Pipeline, _embed_query
+from planner.valhalla_client import ping as valhalla_ping
 
 QUERY = "Хочу погулять по замкам Гродно"
 DSN = "postgresql://grodno:grodno@localhost:5432/grodno"

@@ -12,7 +12,7 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from core.errors import UpstreamUnavailable
-from infra import valhalla_client as vc
+from planner import valhalla_client as vc
 
 
 def fake_matrix_response(sources: list[dict], targets: list[dict]) -> dict:
