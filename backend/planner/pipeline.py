@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import logging
 import time as _time
-from dataclasses import dataclass, field
 from typing import Any
 
 from agent import interpret_cache
@@ -28,7 +27,6 @@ from core import constants
 from core.config import openrouter_api_key
 from core.errors import (
     NoCandidatesFound,
-    NoRoutePossible,
     UpstreamUnavailable,
 )
 from db.store.registry import Repositories
@@ -42,7 +40,6 @@ from .cost import (
     _is_sight_stop,
     _refinement_cost,
     _synthetic_cost,
-    compute_cost_matrix,
 )
 from .coverage import _outside_left_unresolved, refuse_out_of_coverage
 from .dedupe import _drop_duplicates, _dupe_pairs, _norm_name
@@ -59,7 +56,8 @@ from .geo import (
     should_skip_geo_focus,
 )
 from .intent import build_requirements, intent_from_requirements
-from .optimize import _order_after_prune, _prune_unroutable, _valhalla_order, optimize
+from .optimize import _prune_unroutable, _valhalla_order
+from .plan_tail import run_plan_tail
 from .preprocess import preprocess
 from .refine import (
     _cap_for_valhalla,
@@ -87,7 +85,7 @@ from .response import (
     alternatives_sentence,
 )
 from .retrieve import apply_negative_filter, candidate_of, retrieve
-from .validate import validate
+from .turn import Turn, seconds_left
 from .verify import overall_status, verify
 
 __all__ = [
@@ -157,48 +155,14 @@ def _embed_query(text: str) -> list[float]:
     return vec
 
 
-@dataclass
-class _Turn:
-    """The per-request state generate() threads through its steps.
-
-    Holds the request, its start time, decisions and pool state — never `self`.
-    """
-
-    req: GenerateReq
-    t0: float
-    region_scope: bool = False
-    catalogue: bool = False
-    refuse: list[str] | None = None
-    qvec: list[float] = field(default_factory=list)
-    near: tuple[float, float] | None = None
-    excluded: set[int] = field(default_factory=set)
-    costing: str = "pedestrian"
-    round_trip: bool = False
-    all_candidates: list[Candidate] = field(default_factory=list)
-    plan_info: dict[str, Any] | None = None
-    shape: dict = field(default_factory=dict)
-    walk_s: float = 0.0
-    length_km: float | None = None
-    base_candidates: list[Candidate] = field(default_factory=list)
-    deadline_trim: int | None = None
-    deadline_order_skipped: bool = False
-    deadline_geometry_skipped: bool = False
-    tail_mode: str = "generate"
-
-
 class Pipeline:
     """Stateless planner. One instance, reused across requests."""
 
     def __init__(self, repos: Repositories):
         self.repos = repos
 
-    @staticmethod
-    def _left(t0: float) -> float:
-        """Seconds left of this request's end-to-end deadline (may be < 0)."""
-        return constants.REQUEST_DEADLINE_S - (_time.perf_counter() - t0)
-
     def generate(self, req: GenerateReq) -> RouteResponse:
-        turn = _Turn(req=req, t0=_time.perf_counter())
+        turn = Turn(req=req, t0=_time.perf_counter())
         trace.record(
             "query",
             input=req.query,
@@ -292,7 +256,7 @@ class Pipeline:
             },
         )
 
-    def _step_preprocess(self, turn: _Turn):
+    def _step_preprocess(self, turn: Turn):
         pre = preprocess(turn.req.query)
         log.info(
             "preprocess: language=%s fingerprint=%s significant_words=%d",
@@ -311,10 +275,10 @@ class Pipeline:
         )
         return pre
 
-    def _step_interpret(self, turn: _Turn, pre):
+    def _step_interpret(self, turn: Turn, pre):
         progress.note(progress.STAGE_INTERPRETING)
         requirements = build_requirements(
-            turn.req.query, turn.req, repos=self.repos, wall_clock_s=self._left(turn.t0)
+            turn.req.query, turn.req, repos=self.repos, wall_clock_s=seconds_left(turn.t0)
         )
         intent = intent_from_requirements(requirements, turn.req.query)
 
@@ -329,7 +293,7 @@ class Pipeline:
         )
         return requirements, intent
 
-    def _step_resolve(self, turn: _Turn, requirements, intent):
+    def _step_resolve(self, turn: Turn, requirements, intent):
         constraints = resolve(
             intent,
             explicit_time_budget=turn.req.time_budget_minutes,
@@ -376,7 +340,7 @@ class Pipeline:
         return constraints
 
     def _step_retrieve(
-        self, turn: _Turn, constraints: ResolvedConstraints
+        self, turn: Turn, constraints: ResolvedConstraints
     ) -> list[Candidate]:
         qvec = _embed_query(turn.req.query)
         turn.qvec = qvec
@@ -425,7 +389,7 @@ class Pipeline:
         return candidates
 
     def _step_dedupe(
-        self, turn: _Turn, candidates: list[Candidate]
+        self, turn: Turn, candidates: list[Candidate]
     ) -> list[Candidate]:
         before_dupes = candidates
         candidates = _drop_duplicates(candidates, constants.DUPLICATE_RADIUS_M)
@@ -454,7 +418,7 @@ class Pipeline:
 
     def _step_geo_focus(
         self,
-        turn: _Turn,
+        turn: Turn,
         candidates: list[Candidate],
         constraints: ResolvedConstraints,
     ) -> list[Candidate]:
@@ -493,7 +457,7 @@ class Pipeline:
 
     def _step_diversify(
         self,
-        turn: _Turn,
+        turn: Turn,
         candidates: list[Candidate],
         constraints: ResolvedConstraints,
     ) -> list[Candidate]:
@@ -526,7 +490,7 @@ class Pipeline:
 
     def _step_plan(
         self,
-        turn: _Turn,
+        turn: Turn,
         candidates: list[Candidate],
         constraints: ResolvedConstraints,
     ):
@@ -534,7 +498,7 @@ class Pipeline:
 
         turn.costing = turn.req.profile or ("auto" if turn.region_scope else "pedestrian")
 
-        left = self._left(turn.t0)
+        left = seconds_left(turn.t0)
         if left < constants.COST_MATRIX_MIN_LEFT_S and len(candidates) > constants.POOL_TRIM_SIZE:
             log.info(
                 "deadline: %.1fs left — trimming %d candidates to %d before the cost matrix",
@@ -600,164 +564,14 @@ class Pipeline:
             services_off=_gone(before_narrowing, candidates),
         )
 
-        _candidates, _cost, _route, _info, plan = self._plan_tail(
+        _candidates, _cost, _route, _info, plan = run_plan_tail(
             turn, candidates, constraints
         )
         return plan
 
-    def _plan_tail(
-        self,
-        turn: _Turn,
-        candidates: list[Candidate],
-        constraints: ResolvedConstraints,
-    ):
-        """cost → optimize → validate, shared by the three planning entry points.
-
-        How the pool is costed, and whether an order is searched, is ``turn.tail_mode``.
-        """
-        costing = turn.costing
-
-        if turn.tail_mode == "refine":
-            route, cost = _refinement_cost(candidates, constraints, costing)
-            info = turn.plan_info or {}
-            plan = validate(route, cost, constraints, info)
-            return candidates, cost, route, info, plan
-
-        if turn.tail_mode == "reroute":
-            cost = compute_cost_matrix(candidates, constraints, costing=costing)
-            if cost.indices != list(range(len(candidates))):
-                candidates = [candidates[i] for i in cost.indices]
-            route, info = optimize(candidates, cost, constraints, costing=costing)
-            plan = validate(route, cost, constraints, info)
-            return candidates, cost, route, info, plan
-
-        progress.note(progress.STAGE_MEASURING_LEGS)
-        before_cost = candidates
-        candidates, cost = _build_cost(candidates, constraints, costing)
-        trace.record(
-            "cost",
-            input=_names(before_cost),
-            before=len(before_cost),
-            candidates=len(candidates),
-            costing=costing,
-            unreachable=_gone(before_cost, candidates),
-        )
-
-        progress.note(progress.STAGE_ORDERING)
-        route, info = optimize(candidates, cost, constraints, costing=costing)
-        by_id = {c.id: c.name for c in candidates}
-        trace.record(
-            "optimize",
-            input={"candidates": _names(candidates), "costing": costing},
-            stops=len(route),
-            costing=costing,
-            route=[c.name for c in route],
-            algorithm=info.get("algorithm"),
-            iterations=info.get("iterations"),
-            must_missing=[
-                by_id.get(i, str(i))
-                for i in info.get("missing_must_visit_ids") or []
-            ][:_TRACE_NAMES_MAX],
-        )
-        retry: dict[str, Any] | None = None
-        if len(route) < 2 and len(candidates) > 1:
-            sights = [c for c in candidates if _is_sight_stop(c)]
-            if 2 <= len(sights) < len(candidates):
-                log.info(
-                    "optimize collapsed to %d stop(s) — retrying on %d sight stop(s)",
-                    len(route), len(sights),
-                )
-                retry_candidates, retry_cost = _build_cost(sights, constraints, costing)
-                retry_route, retry_info = optimize(
-                    retry_candidates, retry_cost, constraints, costing=costing
-                )
-                if len(retry_route) >= 2:
-                    candidates, cost, route, info = (
-                        retry_candidates, retry_cost, retry_route, retry_info,
-                    )
-                    retry = {"why": "walkable", "pool": _names(sights)}
-        if len(route) < 2 and len(turn.all_candidates) > len(candidates):
-            log.info("optimize: sights alone give %d stop(s) — retrying with services", len(route))
-            retry_candidates, retry_cost = _build_cost(turn.all_candidates, constraints, costing)
-            retry_route, retry_info = optimize(
-                retry_candidates, retry_cost, constraints, costing=costing
-            )
-            if len(retry_route) >= 2:
-                candidates, cost, route, info = (
-                    retry_candidates, retry_cost, retry_route, retry_info,
-                )
-                retry = {"why": "services_back", "pool": _names(turn.all_candidates)}
-        if retry is not None:
-            trace.record(
-                "optimize · retry",
-                input=retry["pool"],
-                why=retry["why"],
-                stops=len(route),
-                algorithm=info.get("algorithm"),
-            )
-        if len(route) < 2:
-            raise NoRoutePossible("optimizer could not produce a route with ≥ 2 stops")
-
-        matrix_order = [c.name for c in route]
-        if self._left(turn.t0) >= constants.VALHALLA_ORDER_MIN_LEFT_S:
-            route, info = _valhalla_order(
-                route,
-                info,
-                costing=costing,
-                timeout=constants.VALHALLA_ORDER_TIMEOUT_S,
-                retries=constants.VALHALLA_ORDER_RETRIES,
-            )
-        else:
-            log.info(
-                "deadline: %.1fs left — skipping Valhalla re-ordering",
-                self._left(turn.t0),
-            )
-            turn.deadline_order_skipped = True
-        trace.record(
-            "order",
-            "skipped" if turn.deadline_order_skipped else "ok",
-            input=matrix_order,
-            skipped=turn.deadline_order_skipped,
-            before=matrix_order,
-            route=[c.name for c in route],
-        )
-
-        planned = len(route)
-        route, prune_report = _prune_unroutable(
-            route, candidates, cost, constraints.must_visit_ids
-        )
-        info = _order_after_prune(info, route, candidates)
-        trace.record(
-            "prune",
-            input=[c.name for c in route],
-            stops=len(route),
-            before=planned,
-            dropped=planned - len(route),
-            unroutable=[c.name for c in prune_report],
-        )
-
-        plan = validate(route, cost, constraints, info, prune_report=prune_report)
-        trace.record(
-            "validate",
-            input=[c.name for c in route],
-            stops=len(plan.route),
-            fits_budget=plan.trace.get("fits_budget"),
-            stops_dropped=plan.stops_dropped,
-            dropped=(info.get("stops_dropped_names") or [])[:_TRACE_NAMES_MAX],
-            walk_seconds=plan.trace.get("walk_seconds"),
-            visit_seconds=plan.trace.get("visit_seconds"),
-            total_seconds=plan.trace.get("total_seconds"),
-            budget_seconds=plan.trace.get("budget_seconds"),
-            max_leg_seconds=plan.trace.get("max_leg_seconds"),
-            budget_exceeded=plan.trace.get("budget_exceeded"),
-            stop_categories=plan.trace.get("categories"),
-            diversity=plan.trace.get("diversity"),
-        )
-        return candidates, cost, route, info, plan
-
-    def _step_render(self, turn: _Turn, plan) -> dict:
+    def _step_render(self, turn: Turn, plan) -> dict:
         progress.note(progress.STAGE_DRAWING)
-        if self._left(turn.t0) >= constants.RENDER_MIN_LEFT_S:
+        if seconds_left(turn.t0) >= constants.RENDER_MIN_LEFT_S:
             shape, summary = _render_tour(
                 plan.route,
                 costing=turn.costing,
@@ -765,7 +579,7 @@ class Pipeline:
                 round_trip=turn.round_trip,
             )
         else:
-            log.info("deadline: %.1fs left — skipping geometry", self._left(turn.t0))
+            log.info("deadline: %.1fs left — skipping geometry", seconds_left(turn.t0))
             shape, summary = {}, {}
             turn.deadline_geometry_skipped = True
         trace.record(
@@ -787,7 +601,7 @@ class Pipeline:
         turn.length_km = length_km
         return shape
 
-    def _step_explain(self, turn: _Turn, plan, shape: dict) -> str:
+    def _step_explain(self, turn: Turn, plan, shape: dict) -> str:
         explanation = explain_route(plan.route, plan.trace, turn.walk_s, turn.costing)
         trace.record(
             "explain",
@@ -796,7 +610,7 @@ class Pipeline:
         )
         return explanation
 
-    def _step_verify(self, turn: _Turn, plan, requirements) -> OverallStatus:
+    def _step_verify(self, turn: Turn, plan, requirements) -> OverallStatus:
         progress.note(progress.STAGE_CHECKING)
         verify(
             requirements,
@@ -861,13 +675,13 @@ class Pipeline:
         )
         constraints.must_visit_ids = list(point_ids)
 
-        turn = _Turn(
+        turn = Turn(
             req=GenerateReq(query="точки пользователя"),
             t0=_time.perf_counter(),
             costing=profile or "pedestrian",
             tail_mode="reroute",
         )
-        _candidates, _cost, _route, _info, plan = self._plan_tail(
+        _candidates, _cost, _route, _info, plan = run_plan_tail(
             turn, candidates, constraints
         )
 
@@ -1117,8 +931,8 @@ class Pipeline:
         )
         costing = req.profile or "pedestrian"
 
-        turn = _Turn(req=req, t0=t0, costing=costing, tail_mode="refine", plan_info=info)
-        _candidates, _cost, route, _info, plan = self._plan_tail(turn, route, constraints)
+        turn = Turn(req=req, t0=t0, costing=costing, tail_mode="refine", plan_info=info)
+        _candidates, _cost, route, _info, plan = run_plan_tail(turn, route, constraints)
         trace.record(
             "validate",
             input=[c.name for c in route],

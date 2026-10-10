@@ -19,6 +19,7 @@ from db.store.registry import Repositories
 from planner import (
     cost as cost_mod,
     pipeline as pipeline_mod,
+    plan_tail as plan_tail_mod,
     response as response_mod,
 )
 from planner.pipeline import (
@@ -148,7 +149,7 @@ def _patch_offline(monkeypatch, rows=None, nearby=None) -> Repositories:
         ),
     )
     monkeypatch.setattr(
-        pipeline_mod, "optimize",
+        plan_tail_mod, "optimize",
         lambda *_a, **_kw: (_ for _ in ()).throw(
             AssertionError("a refinement must not re-plan the trip")
         ),

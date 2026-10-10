@@ -23,6 +23,7 @@ from db.store.registry import Repositories
 from planner import (
     optimize as optimize_mod,
     pipeline as pipeline_mod,
+    plan_tail as plan_tail_mod,
     render as render_mod,
 )
 from planner.cost import (
@@ -135,7 +136,7 @@ def test_the_order_follows_the_stops_a_prune_removed():
     c = _cand(3, "В", "парк", lon=23.86)
     cost = _island_cost()
 
-    info = pipeline_mod._order_after_prune({"order": [0, 1, 2]}, [a, c], [a, b, c])
+    info = optimize_mod._order_after_prune({"order": [0, 1, 2]}, [a, c], [a, b, c])
     assert info["order"] == [0, 2], "index 1 (the pruned stop) is gone"
 
     plan = validate([a, c], cost, ResolvedConstraints(), info)
@@ -286,7 +287,7 @@ def test_reroute_returns_a_route_instead_of_raising(monkeypatch):
     )
 
     monkeypatch.setattr(
-        pipeline_mod,
+        plan_tail_mod,
         "compute_cost_matrix",
         lambda *a, **k: CostMatrix(
             walk_seconds=[[0.0, 300.0], [300.0, 0.0]], visit_minutes=[40, 30], indices=[0, 1]
