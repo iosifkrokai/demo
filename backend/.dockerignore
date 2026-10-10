@@ -1,10 +1,21 @@
-.venv
-__pycache__
-*.py[cod]
-.pytest_cache
-.ruff_cache
-.mypy_cache
-tests
-quality
-.git
+# never in the build context
+
+# vcs
+.git/
 .gitignore
+
+# deps
+.venv/
+
+# python
+__pycache__/
+*.py[cod]
+
+# caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# not shipped
+tests/
+quality/

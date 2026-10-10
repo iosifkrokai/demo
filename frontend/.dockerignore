@@ -1,14 +1,27 @@
-node_modules
-build
-coverage
-.idea
-**/.DS_Store
+# never in the build context
+
+# vcs
+.git/
+.gitignore
+.dockerignore
+Dockerfile
+
+# deps
+node_modules/
+
+# build
+build/
+coverage/
+
+# env
 .env.local
 .env.development.local
 .env.test.local
 .env.production.local
+
+# logs
 *.log
-.dockerignore
-Dockerfile
-.git
-.gitignore
+
+# os / ide
+**/.DS_Store
+.idea/

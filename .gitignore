@@ -1,16 +1,15 @@
-# Repo-wide only — each sub-project owns its own artifacts:
-#   backend/.gitignore   Python (venv, caches, byte-code)
-#   frontend/.gitignore  Node (node_modules, build, coverage)
+# repo-wide; backend/.gitignore and frontend/.gitignore own their own artifacts
 
-# Valhalla tiles / OSM extracts (1.3 GB — never commit)
+# data
 valhalla-data/
 
-# Env & secrets
+# env
 .env
 .env.local
 .env.production.local
 
+# logs
 *.log
 
-# Agent worktrees
+# agent worktrees
 .claude/worktrees/

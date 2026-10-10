@@ -1,17 +1,17 @@
-# Python — the venv, the byte-code, the tool caches
+# deps
 .venv/
+
+# python
 __pycache__/
 *.py[cod]
 *.egg-info/
+.python-version
 
-# Test / lint / type caches (pytest hides itself with its own .gitignore, ruff and
-# pyright do not)
+# caches
 .pytest_cache/
 .ruff_cache/
 .pyright/
 .mypy_cache/
 
-.python-version
-
-# Written by `python -m quality` — regenerate, never commit
+# generated
 quality/reports/
