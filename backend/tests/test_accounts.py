@@ -13,6 +13,8 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from fastapi.testclient import TestClient
 
+from tests._schema import baseline_sql
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from api import main as agent_main
@@ -666,7 +668,6 @@ def test_place_patch_forbids_null_coordinates():
 
 
 BACKEND = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-MIGRATION = os.path.join(BACKEND, "db", "migrations", "0008_accounts_visits.sql")
 
 
 def _db_up() -> bool:
@@ -682,9 +683,8 @@ def _db_up() -> bool:
 
 
 def _apply_migration(conn) -> None:
-    """Apply 0008 as one multi-statement call (idempotent, safe to re-run)."""
-    with open(MIGRATION, encoding="utf-8") as fh:
-        conn.execute(fh.read())
+    """Apply the schema baseline in one multi-statement call (idempotent)."""
+    conn.execute(baseline_sql())
 
 
 def test_live_account_visit_and_place_edit():

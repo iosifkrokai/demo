@@ -15,6 +15,8 @@ import pytest
 from fastapi.testclient import TestClient
 from psycopg.types.json import Jsonb
 
+from tests._schema import baseline_sql
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from api import main as agent_main
@@ -31,7 +33,6 @@ CLIENT_A = "11111111-1111-4111-8111-111111111111"
 CLIENT_B = "22222222-2222-4222-8222-222222222222"
 
 BACKEND = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-MIGRATION = os.path.join(BACKEND, "db", "migrations", "0005_clients.sql")
 
 HEADERS = {"X-Client-Id": CLIENT_A}
 
@@ -582,9 +583,8 @@ def _db_up() -> bool:
 
 
 def _apply_migration(conn) -> None:
-    """Apply 0005 as one multi-statement call (idempotent, safe to re-run)."""
-    with open(MIGRATION, encoding="utf-8") as fh:
-        conn.execute(fh.read())
+    """Apply the schema baseline in one multi-statement call (idempotent)."""
+    conn.execute(baseline_sql())
 
 
 def test_live_round_trip_and_cascade():

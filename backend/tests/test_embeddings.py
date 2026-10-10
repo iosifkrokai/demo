@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 
 from infra import embeddings
+from tests._schema import baseline_sql
 
 BACKEND = Path(__file__).resolve().parents[1]
 
@@ -65,11 +66,5 @@ def test_embedding_dim_matches_the_schema():
     def dims(sql: str) -> set[int]:
         return {int(n) for n in re.findall(r"vector\(\s*(\d+)\s*\)", sql, re.IGNORECASE)}
 
-    init = (BACKEND / "db" / "init.sql").read_text(encoding="utf-8")
-    assert embeddings.EMBED_DIM in dims(init), "init.sql embedding dim drifted from EMBED_DIM"
-
-    migrations = sorted((BACKEND / "db" / "migrations").glob("*.sql"))
-    assert migrations, "no migrations found"
-    last = migrations[-1].read_text(encoding="utf-8")
-    if dims(last):
-        assert embeddings.EMBED_DIM in dims(last)
+    schema = baseline_sql()
+    assert embeddings.EMBED_DIM in dims(schema), "the schema dim drifted from EMBED_DIM"

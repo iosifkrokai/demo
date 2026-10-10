@@ -15,7 +15,7 @@ SEED    := $(COMPOSE) --profile seed run --rm seed
 BACKEND := cd backend && .venv/bin
 FRONTEND := cd frontend && npm
 
-.PHONY: help check up down ps logs seed fetch photos prune admin \
+.PHONY: help check up down ps logs seed fetch photos prune admin migrate \
         test test-backend test-frontend quality lint
 
 help: ## show this help
@@ -60,6 +60,9 @@ prune: ## list rows outside the region (dry run; add APPLY=1 to delete)
 admin: ## create the first administrator: make admin EMAIL=boss@example.com
 	@test -n "$(EMAIL)" || { echo "usage: make admin EMAIL=boss@example.com" >&2; exit 2; }
 	$(SEED) admin --email "$(EMAIL)"
+
+migrate: ## apply the Alembic migrations to the database (upgrade head)
+	$(BACKEND)/python -m alembic upgrade head
 
 quality: ## regenerate the one-page quality report (reads what the runs wrote)
 	$(BACKEND)/python -m quality.report

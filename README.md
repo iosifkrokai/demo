@@ -150,9 +150,9 @@ answer 503 rather than guessing with a keyword parse. There is no re-scoring sta
 
 Signed-in accounts sit **beside** the anonymous client of spec 003, not on top of
 it: the browser's `X-Client-Id` is *adopted* on register/login, so routes and
-preferences saved before signing in stay reachable. Migration
-`db/migrations/0008_accounts_visits.sql` (mirrored in `db/init.sql`) adds `users`,
-`user_sessions` (only `sha256(token)` is stored) and `visited_places`.
+preferences saved before signing in stay reachable. The Alembic baseline
+(`backend/alembic/versions/0001_baseline.py`) creates `users`, `user_sessions`
+(only `sha256(token)` is stored) and `visited_places`.
 
 Endpoints — all answer machine reason codes, and the session is an **HttpOnly
 cookie** (`grodno_session`), never a JS-readable token:
@@ -311,27 +311,26 @@ Fixed by sending `radius: 100` per location (`LOCATION_SNAP_RADIUS_M` in
 `valhalla_client.py`); `search_radius` / `street_side_tolerance` do NOT help.
 
 **"relation 'places' does not exist", or the seed failing on a fresh volume.**
-`db/init.sql` loads only on the FIRST start of the `db` container, and it carries the
-COMPLETE current schema: `places`, `place_aliases`, `place_sources`, `areas`, `clients`,
-`client_preferences`, `saved_routes`, the `places.category_source` column and the
-curated-category guard trigger (the same DDL as `db/migrations/0004`/`0005`). Those
-migration files stay as the idempotent path for volumes created before `init.sql` caught
-up. They are **not** mounted into the container, so pipe them in:
+The schema is owned by Alembic, not by a container startup script: `backend/alembic/`
+holds a single baseline revision that creates the COMPLETE schema — `places`,
+`place_aliases`, `place_sources`, `areas`, `clients`, `client_preferences`,
+`saved_routes`, `users`, `user_sessions`, `visited_places`, the `places.category_source`
+column and the curated-category guard trigger. Apply it with:
 
 ```bash
-docker exec -i grodno-db psql -U grodno -d grodno < backend/db/migrations/0004_places_taxonomy.sql
-docker exec -i grodno-db psql -U grodno -d grodno < backend/db/migrations/0009_local_embeddings_384.sql
+make migrate          # cd backend && .venv/bin/python -m alembic upgrade head
 ```
 
-If a fresh volume comes up *without* those tables, `init.sql` has drifted from the
-migrations again — fix that, not the seed.
+Alembic records the applied revision in its own `alembic_version` table, so a volume
+already at `head` makes `make migrate` a no-op — it is safe to re-run. The DSN is read
+from `DATABASE_URL` (`core.config.settings.DSN`), never from `alembic.ini`.
 
 **Agent returns `503 UpstreamUnavailable` on every request.** Valhalla tile build didn't
 finish, or the `pgdata` volume lost embeddings — re-run the seed:
 `docker compose --profile seed run --rm seed`. Check `docker logs grodno-valhalla`.
 
 **No semantic results (only keyword hits).** The rows have `embedding IS NULL` — e.g. the
-`0009` migration ran but the seed was not re-run. `python -m seed` embeds everything and
+embedding column was reset to 384-d but the seed was not re-run. `python -m seed` embeds everything and
 the spot-check in §3 shows `count(embedding)`. (A missing `OPENROUTER_API_KEY` does not affect retrieval — embeddings are local.)
 
 **`ConnectError` on `localhost:8002`.** Valhalla isn't ready. Poll `/status` until 200.

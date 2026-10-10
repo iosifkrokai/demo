@@ -21,7 +21,6 @@ services:
       POSTGRES_DB: grodno
     ports: ["5432:5432"]
     volumes:
-      - ./backend/db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
       - pgdata:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U grodno -d grodno"]

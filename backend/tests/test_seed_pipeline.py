@@ -20,8 +20,7 @@ from seed import (  # noqa: E402
     datasets,
     pipeline,
 )
-
-MIGRATION = BACKEND / "db" / "migrations" / "0004_places_taxonomy.sql"
+from tests._schema import baseline_sql  # noqa: E402
 
 HEADER = ("# name|category|district|town|lat|lon|blurb|fun_fact|fun_facts|"
           "opening_hours|ticket_price|visit_minutes|links|source_url")
@@ -238,7 +237,7 @@ def test_source_fields_maps_providers():
 
 
 def test_migration_adds_all_three_tables_and_is_idempotent():
-    sql = MIGRATION.read_text(encoding="utf-8")
+    sql = baseline_sql()
     for table in ("place_aliases", "place_sources", "areas"):
         assert f"CREATE TABLE IF NOT EXISTS {table}" in sql, table
     assert not re.search(r"CREATE TABLE(?! IF NOT EXISTS)", sql)
@@ -252,7 +251,7 @@ def test_migration_adds_all_three_tables_and_is_idempotent():
 
 
 def test_migration_guard_reverts_protected_category_changes():
-    sql = MIGRATION.read_text(encoding="utf-8")
+    sql = baseline_sql()
     assert "OLD.category_source IN ('curated', 'dataset')" in sql
     assert "grodno.allow_curated_category_change" in sql
     assert "NEW.category := OLD.category" in sql
