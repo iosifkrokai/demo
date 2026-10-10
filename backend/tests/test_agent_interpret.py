@@ -28,7 +28,7 @@ from agent.tools import _db as tools_db, areas as tools_areas
 from contracts.planner import GenerateReq
 from core.config import settings
 from core.errors import InterpretationUnavailable
-from planner.intent import build_requirements
+from planner.intent import build_requirements, reader_brief
 from reference import areas as areas_mod
 from telemetry import trace
 
@@ -105,7 +105,7 @@ def test_no_key_returns_none_and_ui_filters_survive(no_key):
     assert ai.available() is False
 
     req = GenerateReq(query=QUERY, hard_services=["туалет"], party_children=2)
-    assert ai.interpret_with_agent(QUERY, req) is None
+    assert ai.interpret_with_agent(QUERY, reader_brief(req)) is None
 
     # No reading, no plan: the request is refused rather than guessed at.
     with pytest.raises(InterpretationUnavailable):
@@ -116,11 +116,11 @@ def test_missing_sdk_is_the_same_degradation(monkeypatch, fake_key):
     """No PydanticAI installed means no model — not an exception."""
     monkeypatch.setattr(ai, "pydantic_ai", None)
     assert ai.available() is False
-    assert ai.interpret_with_agent(QUERY, GenerateReq(query=QUERY)) is None
+    assert ai.interpret_with_agent(QUERY, reader_brief(GenerateReq(query=QUERY))) is None
 
 
 def test_empty_query_returns_none(fake_key):
-    assert ai.interpret_with_agent("   ", GenerateReq(query=QUERY)) is None
+    assert ai.interpret_with_agent("   ", reader_brief(GenerateReq(query=QUERY))) is None
 
 
 def test_model_failure_returns_none(fake_key, no_db, monkeypatch):
@@ -128,7 +128,7 @@ def test_model_failure_returns_none(fake_key, no_db, monkeypatch):
         raise RuntimeError("upstream exploded")
 
     monkeypatch.setattr(ai_model, "make_model", lambda: FunctionModel(boom, model_name="boom"))
-    assert ai.interpret_with_agent(QUERY, GenerateReq(query=QUERY)) is None
+    assert ai.interpret_with_agent(QUERY, reader_brief(GenerateReq(query=QUERY))) is None
 
 
 def test_tool_call_budget_is_enforced(fake_key, no_db, monkeypatch):
@@ -138,7 +138,7 @@ def test_tool_call_budget_is_enforced(fake_key, no_db, monkeypatch):
         None, tool_calls=[("search_places", {"query": "замок"})] * (ai_runner.MAX_TOOL_CALLS + 3)
     )
     monkeypatch.setattr(ai_model, "make_model", lambda: model)
-    assert ai.interpret_with_agent(QUERY, GenerateReq(query=QUERY)) is None
+    assert ai.interpret_with_agent(QUERY, reader_brief(GenerateReq(query=QUERY))) is None
 
 
 def test_wall_clock_guard_times_out():
@@ -240,7 +240,7 @@ def test_fake_model_fills_the_contract(fake_run):
         hard_services=["туалет"],
         origin=None,
     )
-    tr = ai.interpret_with_agent(QUERY, req)
+    tr = ai.interpret_with_agent(QUERY, reader_brief(req))
 
     assert tr is not None
     assert tr.source == "mixed"
@@ -284,7 +284,7 @@ def test_agent_reading_has_no_status_field(fake_run):
 
 
 def test_agent_never_marks_a_requirement_satisfied(fake_run):
-    tr = ai.interpret_with_agent(QUERY, GenerateReq(query=QUERY, hard_services=["туалет"]))
+    tr = ai.interpret_with_agent(QUERY, reader_brief(GenerateReq(query=QUERY, hard_services=["туалет"])))
     assert tr is not None
     assert tr.requirements, "the contract must not come back empty"
     assert all(r.status == "pending" for r in tr.requirements)
@@ -308,7 +308,7 @@ def test_invented_place_id_is_rejected(fake_key, no_db, monkeypatch):
     model, _ = _fake_model(payload, tool_calls=[("search_places", {"query": "замок"})])
     monkeypatch.setattr(ai_model, "make_model", lambda: model)
 
-    tr = ai.interpret_with_agent("замок", GenerateReq(query="замок"))
+    tr = ai.interpret_with_agent("замок", reader_brief(GenerateReq(query="замок")))
     assert tr is not None
     by_name = {r.name: r for r in tr.of_kind("must_visit")}
     assert by_name["Старый замок"].place_id == 2
@@ -321,7 +321,7 @@ def test_children_ages_are_never_invented(fake_key, no_db, monkeypatch):
     monkeypatch.setattr(ai_model, "make_model", lambda: model)
 
     query = "двое детей, погулять по Гродно"
-    tr = ai.interpret_with_agent(query, GenerateReq(query=query))
+    tr = ai.interpret_with_agent(query, reader_brief(GenerateReq(query=query)))
     assert tr is not None
     assert tr.party.children == 2
     assert tr.party.children_ages == [], "ages not named in the text must stay absent"
@@ -331,7 +331,7 @@ def test_ui_only_filters_still_mark_the_source_mixed(fake_key, no_db, monkeypatc
     model, _ = _fake_model({"requirements": []})
     monkeypatch.setattr(ai_model, "make_model", lambda: model)
     req = GenerateReq(query="погулять по Гродно", party_children=1)
-    tr = ai.interpret_with_agent("погулять по Гродно", req)
+    tr = ai.interpret_with_agent("погулять по Гродно", reader_brief(req))
     assert tr is not None and tr.source == "mixed"
     assert tr.party.children == 1
 
@@ -339,7 +339,7 @@ def test_ui_only_filters_still_mark_the_source_mixed(fake_key, no_db, monkeypatc
 def test_llm_only_reading_is_tagged_llm(fake_key, no_db, monkeypatch):
     model, _ = _fake_model({"requirements": [{"kind": "interest", "code": "замок"}]})
     monkeypatch.setattr(ai_model, "make_model", lambda: model)
-    tr = ai.interpret_with_agent("замки", GenerateReq(query="замки"))
+    tr = ai.interpret_with_agent("замки", reader_brief(GenerateReq(query="замки")))
     assert tr is not None and tr.source == "llm"
     assert tr.interest_codes() == ["замок"]
 
@@ -352,7 +352,7 @@ def _model_spans(trace_id: str) -> list:
 def test_the_model_call_carries_the_prompt_it_was_given(fake_run):
     trace.begin("job-model")
     try:
-        tr = ai.interpret_with_agent(QUERY, GenerateReq(query=QUERY, locale="ru"))
+        tr = ai.interpret_with_agent(QUERY, reader_brief(GenerateReq(query=QUERY, locale="ru")))
         call, = _model_spans("job-model")
     finally:
         trace.finish()
@@ -586,7 +586,7 @@ def test_services_near_route_reaches_the_agent_without_raising(fake_key, no_db, 
     )
     monkeypatch.setattr(ai_model, "make_model", lambda: model)
 
-    tr = ai.interpret_with_agent(QUERY, GenerateReq(query=QUERY))
+    tr = ai.interpret_with_agent(QUERY, reader_brief(GenerateReq(query=QUERY)))
     assert tr is not None and seen
     assert "туалет" in tr.hard_service_codes()
     assert all(r.status == "pending" for r in tr.requirements)

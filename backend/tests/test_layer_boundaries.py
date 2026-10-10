@@ -219,6 +219,23 @@ def test_logic_layers_do_not_import_a_driver() -> None:
     )
 
 
+def test_the_agent_layer_is_a_leaf() -> None:
+    """The reader declares its own input; it never reaches up for a wire model.
+
+    This is the edge that keeps `planner -> agent` one-way, and therefore the
+    pipeline able to drive the reader. The agent used to import `GenerateReq`
+    straight out of `contracts`, and `TripRequirements` out of `domain`; both
+    now live in `agent.models`.
+    """
+    offenders: dict[str, set[str]] = {}
+    for path in _python_files(BACKEND / "agent"):
+        reached = _imported_roots(ast.parse(path.read_text(encoding="utf-8")))
+        upward = reached & {"planner", "contracts"}
+        if upward:
+            offenders[path.relative_to(BACKEND).as_posix()] = upward
+    assert not offenders, f"the agent layer must stay a leaf: {offenders}"
+
+
 def test_pending_lists_are_current() -> None:
     """An entry that was fixed (or whose file vanished) must leave the list."""
     stale: list[str] = []

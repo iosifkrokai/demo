@@ -13,12 +13,18 @@ import logging as _logging
 from agent import client, interpret_cache
 from agent.mapping import ui_requirements, ui_used
 from agent.model import model_name
+from agent.models import (
+    BriefStop,
+    ReaderBrief,
+    RefinementBrief,
+    Requirement,
+    TripRequirements,
+)
 from agent.prompts import compose_instructions
 from agent.prompts.notes import _ui_note
 from contracts.planner import GenerateReq, IntentDecision, IntentResult
 from core import constants
 from core.errors import InterpretationUnavailable
-from domain.requirements import Requirement, TripRequirements
 from telemetry import trace
 
 from .preprocess import WORD_RE
@@ -82,7 +88,7 @@ def _scope_from_areas(areas: list[str]) -> str:
 
 
 def _interpret_cache_key(
-    query: str, req: GenerateReq
+    query: str, brief: ReaderBrief
 ) -> tuple[str | None, str]:
     """None when the agent cannot run at all; the prompt is hashed into the key, so
     editing the instructions invalidates every entry.
@@ -90,9 +96,9 @@ def _interpret_cache_key(
     try:
         if not client.available():
             return None, ""
-        instructions = compose_instructions(_ui_note(req))
+        instructions = compose_instructions(_ui_note(brief))
         return (
-            interpret_cache.interpret_key(query, req, instructions, model_name()),
+            interpret_cache.interpret_key(query, brief, instructions, model_name()),
             interpret_cache.prompt_hash(instructions),
         )
     except Exception as exc:
@@ -101,11 +107,11 @@ def _interpret_cache_key(
 
 
 def _agent_contract(
-    query: str, req: GenerateReq, db, wall_clock_s: float | None = None
+    query: str, brief: ReaderBrief, db, wall_clock_s: float | None = None
 ) -> TripRequirements | None:
     """The interpretation agent's contract, or None when it cannot be trusted."""
     try:
-        return client.interpret_with_agent(query, req, db=db, wall_clock_s=wall_clock_s)
+        return client.interpret_with_agent(query, brief, db=db, wall_clock_s=wall_clock_s)
     except Exception as exc:
         log.warning("requirements: agent layer failed (%s)", exc)
         return None
@@ -115,7 +121,7 @@ def mark_out_of_coverage(contract: TripRequirements, names: list[str]) -> None:
     """Marks each `hard`; a refusal is never invented here — the verifier reports
     what the contract keeps.
     """
-    from domain.requirements import REASON_MUST_VISIT_OUTSIDE
+    from agent.models import REASON_MUST_VISIT_OUTSIDE
 
     by_name = {
         (r.name or "").strip().lower(): r
@@ -139,14 +145,14 @@ def mark_out_of_coverage(contract: TripRequirements, names: list[str]) -> None:
 
 
 def _finalize_agent_contract(
-    contract: TripRequirements, req: GenerateReq
+    contract: TripRequirements, brief: ReaderBrief
 ) -> TripRequirements:
     """Top up an agent contract with the facts the request states explicitly.
 
     The model reads the text; the controls the tourist actually pressed must not
     be lost to a misreading, so they are merged in and win on conflict.
     """
-    ui_reqs = ui_requirements(req)
+    ui_reqs = ui_requirements(brief)
     contract.requirements, _ = _merge_requirements(ui_reqs, contract.requirements)
     ui_positive = {
         r.code for r in ui_reqs if r.code and r.kind in ("interest", "service")
@@ -156,17 +162,17 @@ def _finalize_agent_contract(
         if not (r.kind == "avoid" and r.code in ui_positive)
     ]
 
-    if req.party_children is not None:
-        contract.party.children = req.party_children
-    if req.party_adults is not None:
-        contract.party.adults = req.party_adults
-    if req.party_children_ages:
-        contract.party.children_ages = list(req.party_children_ages)
-    for code in req.mobility:
+    if brief.party_children is not None:
+        contract.party.children = brief.party_children
+    if brief.party_adults is not None:
+        contract.party.adults = brief.party_adults
+    if brief.party_children_ages:
+        contract.party.children_ages = list(brief.party_children_ages)
+    for code in brief.mobility:
         if code and code not in contract.party.mobility:
             contract.party.mobility.append(code)
-    if req.time_budget_minutes is not None:
-        contract.budget_minutes = req.time_budget_minutes or None
+    if brief.time_budget_minutes is not None:
+        contract.budget_minutes = brief.time_budget_minutes or None
 
     if (
         "wheelchair" in contract.party.mobility
@@ -178,7 +184,7 @@ def _finalize_agent_contract(
             constants.MIN_BUDGET_MIN,
             min(contract.budget_minutes, constants.MAX_BUDGET_MIN),
         )
-    if contract.source == "llm" and ui_used(req):
+    if contract.source == "llm" and ui_used(brief):
         contract.source = "mixed"
     return contract
 
@@ -198,6 +204,47 @@ def _merge_requirements(
     return merged, claimed
 
 
+def reader_brief(req: GenerateReq) -> ReaderBrief:
+    """Narrow the HTTP request to what the reader is told.
+
+    The reader never sees the wire shape — no client id, no raw payload — only the
+    controls that reach its prompt. Built here because `GenerateReq` is ours: this
+    function is the whole coupling between the planner and the LLM layer's input.
+    """
+    origin = None
+    if req.origin is not None:
+        origin = (req.origin.lat, req.origin.lon)
+
+    context = None
+    if req.context is not None:
+        context = RefinementBrief(
+            instruction=req.context.instruction,
+            revision=req.context.revision,
+            excluded_ids=tuple(req.context.excluded_ids),
+            base_points=tuple(
+                BriefStop(place_id=point.id, name=point.name, pinned=point.pinned)
+                for point in req.context.base_points
+            ),
+        )
+
+    return ReaderBrief(
+        locale=req.locale,
+        profile=req.profile,
+        origin=origin,
+        time_budget_minutes=req.time_budget_minutes,
+        party_adults=req.party_adults,
+        party_children=req.party_children,
+        party_children_ages=tuple(req.party_children_ages),
+        mobility=tuple(req.mobility),
+        hard_services=tuple(req.hard_services),
+        interests=tuple(req.interests),
+        avoid=tuple(req.avoid),
+        result_mode=req.result_mode,
+        round_trip=req.round_trip,
+        context=context,
+    )
+
+
 def build_requirements(
     query: str, req: GenerateReq, *, db: object | None = None,
     wall_clock_s: float | None = None,
@@ -207,7 +254,8 @@ def build_requirements(
     With no reading there is nothing to plan from: the request is refused rather
     than answered with a guess at what the tourist meant.
     """
-    cache_key, prompt_hash = _interpret_cache_key(query, req)
+    brief = reader_brief(req)
+    cache_key, prompt_hash = _interpret_cache_key(query, brief)
     if cache_key is not None:
         cached = interpret_cache.INTERPRET_CACHE.get(cache_key)
         if cached is not None:
@@ -215,7 +263,7 @@ def build_requirements(
             trace.record("interpret · model", "skipped", cached=True)
             return cached.model_copy(deep=True)
 
-    contract = _agent_contract(query, req, db, wall_clock_s)
+    contract = _agent_contract(query, brief, db, wall_clock_s)
     if contract is None:
         raise InterpretationUnavailable(
             "the query could not be read: the interpretation model is unavailable"
@@ -225,7 +273,7 @@ def build_requirements(
         "requirements: agent reading (source=%s, %d requirement(s))",
         contract.source, len(contract.requirements),
     )
-    final = _finalize_agent_contract(contract, req)
+    final = _finalize_agent_contract(contract, brief)
     if cache_key is not None:
         interpret_cache.INTERPRET_CACHE.put(
             cache_key, final.model_copy(deep=True), prompt_hash

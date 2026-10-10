@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from typing import Any, Literal, NamedTuple
 
-from domain.requirements import (
+from agent.models import (
     REASON_MUST_VISIT_OUTSIDE as REASON_MUST_VISIT_OUTSIDE_CODE,
     Requirement,
     TripRequirements,

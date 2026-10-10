@@ -19,7 +19,6 @@ COPY contracts/ /app/contracts/
 COPY core/ /app/core/
 COPY data/ /app/data/
 COPY db/ /app/db/
-COPY domain/ /app/domain/
 COPY ml/ /app/ml/
 COPY planner/ /app/planner/
 COPY reference/ /app/reference/

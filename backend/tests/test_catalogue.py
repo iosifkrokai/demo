@@ -10,13 +10,13 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from agent.models import Requirement, TripRequirements
 from contracts.planner import (
     Candidate,
     IntentDecision,
     IntentResult,
     ResolvedConstraints,
 )
-from domain.requirements import Requirement, TripRequirements
 from planner import pipeline as pipeline_mod
 from planner.verify import (
     REASON_INTEREST_IN_CATALOGUE,

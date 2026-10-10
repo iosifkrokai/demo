@@ -13,13 +13,13 @@ from fastapi import HTTPException
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from agent.models import PartyComposition, Requirement, TripRequirements
 from api import main as agent_main
 from contracts.planner import Candidate, GenerateReq, ValidatedPlan
 from core.config import settings
 from core.errors import InterpretationUnavailable, UpstreamUnavailable
-from domain.requirements import PartyComposition, Requirement, TripRequirements
 from planner import intent as intent_mod
-from planner.intent import build_requirements
+from planner.intent import build_requirements, reader_brief
 from planner.pipeline import _interpretation
 from planner.verify import overall_status, verify
 
@@ -160,7 +160,7 @@ class TestFailuresDegrade:
             raise RuntimeError("tool services_near_route failed: db gone")
 
         monkeypatch.setattr(ai_runner, "_run_agent", boom)
-        assert ai.interpret_with_agent(RU, GenerateReq(query=RU)) is None
+        assert ai.interpret_with_agent(RU, reader_brief(GenerateReq(query=RU))) is None
 
     def test_a_missing_reading_refuses_the_request(self, with_key, monkeypatch):
         monkeypatch.setattr(intent_mod, "_agent_contract", lambda *a, **k: None)

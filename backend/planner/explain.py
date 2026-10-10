@@ -7,8 +7,8 @@ from __future__ import annotations
 
 from collections import Counter
 
+from agent.models import TripRequirements
 from contracts.planner import Candidate
-from domain.requirements import TripRequirements
 
 from .verify import verify_summary
 

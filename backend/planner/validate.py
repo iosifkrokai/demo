@@ -8,9 +8,9 @@ from __future__ import annotations
 import math
 from typing import Any
 
+from agent.models import TripRequirements
 from contracts.planner import Candidate, CostMatrix, ResolvedConstraints, ValidatedPlan
 from core import constants
-from domain.requirements import TripRequirements
 
 from .verify import verify, verify_summary
 

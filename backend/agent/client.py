@@ -11,10 +11,9 @@ from typing import Any
 
 from agent import mapping, model, runner
 from agent.model import DEFAULT_MODEL, pydantic_ai
+from agent.models import ReaderBrief, TripRequirements
 from agent.schema import InterpretDeps
-from contracts.planner import GenerateReq
 from core.config import openrouter_api_key
-from domain.requirements import TripRequirements
 
 log = logging.getLogger(__name__)
 
@@ -35,7 +34,7 @@ def available() -> bool:
 
 def interpret_with_agent(
     query: str,
-    req: GenerateReq,
+    brief: ReaderBrief,
     *,
     db: Any | None = None,
     wall_clock_s: float | None = None,
@@ -49,16 +48,16 @@ def interpret_with_agent(
         return None
     if not available():
         log.info("agent_interpret: agent unavailable (no key/model) — no reader")
-        runner._record_model_failure("agent_unavailable", runner._build_prompt(query, req))
+        runner._record_model_failure("agent_unavailable", runner._build_prompt(query, brief))
         return None
 
     deps = InterpretDeps(db=db)
     try:
-        reading, failure = runner._run_agent(query.strip(), req, deps, wall_clock_s=wall_clock_s)
+        reading, failure = runner._run_agent(query.strip(), brief, deps, wall_clock_s=wall_clock_s)
     except Exception as exc:
         log.warning("agent_interpret: unexpected failure: %s: %s", type(exc).__name__, exc)
         return None
     if reading is None:
         log.info("agent_interpret: no usable answer (%s) — no reader", failure)
         return None
-    return mapping._merge(query.strip(), req, reading, deps.observed_ids)
+    return mapping._merge(query.strip(), brief, reading, deps.observed_ids)

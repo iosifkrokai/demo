@@ -8,11 +8,11 @@ from typing import Any
 
 from agent import model as model_mod, telemetry
 from agent.model import SDK_IMPORT_ERROR, ModelSettings, UsageLimits, pydantic_ai
+from agent.models import ReaderBrief
 from agent.prompts import compose_instructions
 from agent.prompts.notes import _request_note, _ui_note
 from agent.schema import AgentReading, InterpretDeps
 from agent.tools import register_all
-from contracts.planner import GenerateReq
 from telemetry import trace
 
 log = logging.getLogger(__name__)
@@ -26,10 +26,10 @@ MODEL_TIMEOUT_S = 90.0
 _NO_MODEL = {"agent_unavailable", "pydantic_ai_unavailable", "model_unavailable"}
 
 
-def _build_prompt(query: str, req: Any) -> str:
+def _build_prompt(query: str, brief: Any) -> str:
     """The text handed to the model, built in one place."""
     return (
-        f"locale={req.locale}\n{_request_note(req)}\nrequest={query!r}\n"
+        f"locale={brief.locale}\n{_request_note(brief)}\nrequest={query!r}\n"
         "Return the requirement list for this request."
     )
 
@@ -44,13 +44,13 @@ def _record_model_failure(reason: str, prompt: str = "") -> None:
     )
 
 
-def _build_agent(model: Any, req: GenerateReq) -> Any:
+def _build_agent(model: Any, brief: ReaderBrief) -> Any:
     """Create the PydanticAI agent and register the bounded tool surface."""
     agent = pydantic_ai.Agent(
         model,
         output_type=AgentReading,
         deps_type=InterpretDeps,
-        instructions=compose_instructions(_ui_note(req)),
+        instructions=compose_instructions(_ui_note(brief)),
     )
 
     def _remember(ctx: Any, out: dict) -> dict:
@@ -83,7 +83,7 @@ def _run_with_timeout(fn: Any, timeout_s: float) -> tuple[Any, str | None]:
 
 
 def _run_agent(
-    query: str, req: GenerateReq, deps: InterpretDeps, wall_clock_s: float | None = None
+    query: str, brief: ReaderBrief, deps: InterpretDeps, wall_clock_s: float | None = None
 ) -> tuple[AgentReading | None, str | None]:
     """Run one bounded interpretation. Returns (reading, failure_reason)."""
     if pydantic_ai is None:
@@ -104,10 +104,10 @@ def _run_agent(
         tool_calls_limit=MAX_TOOL_CALLS,
     )
     model_settings = ModelSettings(max_tokens=MAX_OUTPUT_TOKENS, timeout=MODEL_TIMEOUT_S)
-    prompt = _build_prompt(query, req)
+    prompt = _build_prompt(query, brief)
 
     def call() -> Any:
-        agent = _build_agent(model, req)
+        agent = _build_agent(model, brief)
         return agent.run_sync(
             prompt, deps=deps, usage_limits=usage_limits, model_settings=model_settings
         )
@@ -122,7 +122,7 @@ def _run_agent(
     if result is None:
         _record_model_failure("unexpected_output", prompt)
         return None, "unexpected_output"
-    telemetry._record_model_call(req, prompt, result)
+    telemetry._record_model_call(brief, prompt, result)
     if not isinstance(getattr(result, "output", None), AgentReading):
         return None, "unexpected_output"
     return result.output, None

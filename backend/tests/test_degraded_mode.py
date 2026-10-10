@@ -20,6 +20,7 @@ from fastapi.testclient import TestClient
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from agent import client as ai, runner as ai_runner
+from agent.models import PartyComposition, Requirement, TripRequirements
 from api import main as agent_main
 from contracts.planner import Candidate, GenerateReq, ResolvedConstraints
 from core.config import openrouter_api_key, settings
@@ -29,14 +30,13 @@ from core.errors import (
     NoRoutePossible,
     UpstreamUnavailable,
 )
-from domain.requirements import PartyComposition, Requirement, TripRequirements
 from ml import embeddings
 from planner import (
     intent as intent_mod,
     pipeline as pipeline_mod,
     retrieve as retrieve_mod,
 )
-from planner.intent import build_requirements
+from planner.intent import build_requirements, reader_brief
 from planner.pipeline import Pipeline, _embed_query
 from planner.valhalla_client import ping as valhalla_ping
 
@@ -141,7 +141,7 @@ class TestAgentAvailability:
 
     def test_no_key_returns_no_contract(self, no_key, monkeypatch):
         monkeypatch.setattr(ai_runner, "_run_agent", _explode)
-        assert ai.interpret_with_agent(QUERY, GenerateReq(query=QUERY)) is None
+        assert ai.interpret_with_agent(QUERY, reader_brief(GenerateReq(query=QUERY))) is None
 
 
 class TestNoReaderRefuses:

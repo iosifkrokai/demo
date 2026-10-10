@@ -15,9 +15,9 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from agent import interpret_cache as cache
+from agent.models import Requirement, TripRequirements
 from contracts.planner import GenerateReq
 from core.errors import InterpretationUnavailable
-from domain.requirements import Requirement, TripRequirements
 from planner import intent
 from telemetry import trace
 
@@ -49,15 +49,15 @@ def clean_cache(monkeypatch):
 
 def test_the_same_question_gets_the_same_key():
     instructions = "ты читаешь запрос"
-    assert cache.interpret_key("замки", _req(), instructions) == cache.interpret_key(
-        "замки", _req(), instructions
+    assert cache.interpret_key("замки", intent.reader_brief(_req()), instructions) == cache.interpret_key(
+        "замки", intent.reader_brief(_req()), instructions
     )
 
 
 def test_a_changed_ui_filter_is_a_different_question():
     """The panel's controls go into the prompt, so they must go into the key."""
     instructions = "ты читаешь запрос"
-    base = cache.interpret_key("замки", _req(), instructions)
+    base = cache.interpret_key("замки", intent.reader_brief(_req()), instructions)
 
     for changed in (
         _req(interests=["кафе"]),
@@ -70,7 +70,7 @@ def test_a_changed_ui_filter_is_a_different_question():
         _req(result_mode="catalogue"),
         _req(locale="en"),
     ):
-        assert cache.interpret_key(changed.query, changed, instructions) != base
+        assert cache.interpret_key(changed.query, intent.reader_brief(changed), instructions) != base
 
 
 def test_the_travel_profile_is_not_part_of_the_question():
@@ -79,14 +79,14 @@ def test_the_travel_profile_is_not_part_of_the_question():
     walk = _req(profile="pedestrian")
     drive = _req(profile="car")
 
-    assert cache.interpret_key(walk.query, walk, instructions) == cache.interpret_key(
-        drive.query, drive, instructions
+    assert cache.interpret_key(walk.query, intent.reader_brief(walk), instructions) == cache.interpret_key(
+        drive.query, intent.reader_brief(drive), instructions
     )
 
 
 def test_editing_the_prompt_invalidates_every_entry():
-    before = cache.interpret_key("замки", _req(), "один промпт")
-    after = cache.interpret_key("замки", _req(), "другой промпт")
+    before = cache.interpret_key("замки", intent.reader_brief(_req()), "один промпт")
+    after = cache.interpret_key("замки", intent.reader_brief(_req()), "другой промпт")
 
     assert before != after
 
@@ -97,12 +97,12 @@ def test_switching_the_model_invalidates_every_entry():
     Without the model in the key, "we measured the new model" claims become false.
     """
     instructions = "ты читаешь запрос"
-    baseline = cache.interpret_key("замки", _req(), instructions, "google/gemini-2.5-pro")
+    baseline = cache.interpret_key("замки", intent.reader_brief(_req()), instructions, "google/gemini-2.5-pro")
 
     assert cache.interpret_key(
-        "замки", _req(), instructions, "google/gemini-2.5-flash"
+        "замки", intent.reader_brief(_req()), instructions, "google/gemini-2.5-flash"
     ) != baseline
-    assert cache.interpret_key("замки", _req(), instructions, None) != baseline
+    assert cache.interpret_key("замки", intent.reader_brief(_req()), instructions, None) != baseline
 
 
 def test_an_expired_reading_is_not_returned():

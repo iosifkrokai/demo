@@ -9,9 +9,9 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from agent.models import Requirement, TripRequirements
 from contracts.planner import Candidate, CostMatrix, ResolvedConstraints
 from core import constants
-from domain.requirements import Requirement, TripRequirements
 from planner.cost import (
     REASON_MUST_VISIT_UNROUTABLE as COST_REASON_MUST_VISIT_UNROUTABLE,
     REASON_UNROUTABLE_LEG,

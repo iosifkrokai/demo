@@ -7,12 +7,12 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from contracts.planner import Candidate, ResolvedConstraints
-from domain.requirements import (
+from agent.models import (
     REASON_MUST_VISIT_OUTSIDE as CONTRACT_REASON,
     Requirement,
     TripRequirements,
 )
+from contracts.planner import Candidate, ResolvedConstraints
 from planner.intent import mark_out_of_coverage
 from planner.pipeline import _outside_left_unresolved
 from planner.resolve import _same_name

@@ -4,10 +4,9 @@ from __future__ import annotations
 
 import logging
 
+from agent.models import PartyComposition, ReaderBrief, Requirement, TripRequirements
 from agent.schema import AgentReading
-from contracts.planner import GenerateReq
 from core import constants
-from domain.requirements import PartyComposition, Requirement, TripRequirements
 from reference.taxonomy import resolve_code
 
 log = logging.getLogger(__name__)
@@ -27,31 +26,31 @@ def _verbatim(fragment: str | None, query: str) -> str | None:
     return frag
 
 
-def ui_requirements(req: GenerateReq) -> list[Requirement]:
+def ui_requirements(brief: ReaderBrief) -> list[Requirement]:
     """Requirements the tourist set with a visible control (source="ui")."""
     out: list[Requirement] = []
-    for code in req.hard_services:
+    for code in brief.hard_services:
         out.append(Requirement(kind="service", strength="hard", code=code, label=code, source="ui"))
-    for code in req.interests:
+    for code in brief.interests:
         out.append(
             Requirement(kind="interest", strength="soft", code=code, label=code, source="ui")
         )
-    for code in req.avoid:
+    for code in brief.avoid:
         out.append(Requirement(kind="avoid", strength="hard", code=code, label=code, source="ui"))
     return out
 
 
-def ui_used(req: GenerateReq) -> bool:
+def ui_used(brief: ReaderBrief) -> bool:
     """True when an explicit control contributed anything to the request."""
     return bool(
-        req.hard_services
-        or req.interests
-        or req.avoid
-        or req.party_adults is not None
-        or req.party_children is not None
-        or bool(req.party_children_ages)
-        or bool(req.mobility)
-        or req.time_budget_minutes not in (None, 0)
+        brief.hard_services
+        or brief.interests
+        or brief.avoid
+        or brief.party_adults is not None
+        or brief.party_children is not None
+        or bool(brief.party_children_ages)
+        or bool(brief.mobility)
+        or brief.time_budget_minutes not in (None, 0)
     )
 
 
@@ -108,16 +107,16 @@ def _reading_requirements(
     return out, unsupported
 
 
-def _party(req: GenerateReq, reading: AgentReading, query: str) -> PartyComposition:
+def _party(brief: ReaderBrief, reading: AgentReading, query: str) -> PartyComposition:
     """Party composition: explicit values win, ages are never invented."""
-    adults = req.party_adults if req.party_adults is not None else reading.adults
-    children = req.party_children if req.party_children is not None else reading.children
-    if req.party_children_ages:
-        ages = list(req.party_children_ages)
+    adults = brief.party_adults if brief.party_adults is not None else reading.adults
+    children = brief.party_children if brief.party_children is not None else reading.children
+    if brief.party_children_ages:
+        ages = list(brief.party_children_ages)
     else:
         ages = [a for a in reading.children_ages if str(a) in query]
     mobility: list[str] = []
-    for code in list(req.mobility) + list(reading.mobility):
+    for code in list(brief.mobility) + list(reading.mobility):
         if isinstance(code, str) and code and code not in mobility:
             mobility.append(code)
     return PartyComposition(adults=adults, children=children, children_ages=ages, mobility=mobility)
@@ -136,10 +135,10 @@ def _unknowns(reading: AgentReading, unsupported: list[str], mobility: list[str]
 
 
 def _merge(
-    query: str, req: GenerateReq, reading: AgentReading, observed: set[int]
+    query: str, brief: ReaderBrief, reading: AgentReading, observed: set[int]
 ) -> TripRequirements:
     """Build the contract: UI first (it wins), then the agent's reading."""
-    ui_reqs = ui_requirements(req)
+    ui_reqs = ui_requirements(brief)
     requirements = list(ui_reqs)
     claimed = {(r.kind, r.code or r.name) for r in ui_reqs}
 
@@ -151,10 +150,10 @@ def _merge(
         claimed.add(key)
         requirements.append(r)
 
-    party = _party(req, reading, query)
+    party = _party(brief, reading, query)
 
-    if req.time_budget_minutes is not None:
-        budget = req.time_budget_minutes or None
+    if brief.time_budget_minutes is not None:
+        budget = brief.time_budget_minutes or None
     else:
         budget = reading.budget_minutes
     if budget is not None:
@@ -166,20 +165,20 @@ def _merge(
             areas.append(slug.strip())
 
     return TripRequirements(
-        locale=req.locale,
+        locale=brief.locale,
         raw_query=query,
         party=party,
         budget_minutes=budget,
-        costing=req.profile,
-        origin_lat=req.origin.lat if req.origin is not None else None,
-        origin_lon=req.origin.lon if req.origin is not None else None,
+        costing=brief.profile,
+        origin_lat=brief.origin[0] if brief.origin is not None else None,
+        origin_lon=brief.origin[1] if brief.origin is not None else None,
         areas=areas,
         outside_coverage=_outside_names(reading.outside_coverage),
-        result_mode=reading.result_mode or req.result_mode,
-        round_trip=req.round_trip,
+        result_mode=reading.result_mode or brief.result_mode,
+        round_trip=brief.round_trip,
         requirements=requirements,
         unknowns=_unknowns(reading, unsupported, party.mobility),
-        source="mixed" if ui_used(req) else "llm",
+        source="mixed" if ui_used(brief) else "llm",
     )
 
 

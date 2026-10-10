@@ -10,10 +10,10 @@ import logging
 from typing import Any
 
 from agent import model
+from agent.models import ReaderBrief
 from agent.prompts import compose_instructions
 from agent.prompts.notes import _ui_note
 from agent.schema import AgentReading
-from contracts.planner import GenerateReq
 from telemetry import trace
 
 log = logging.getLogger(__name__)
@@ -91,7 +91,7 @@ def _token_usage(usage: Any) -> dict[str, int] | None:
     return {"input": spent_in, "output": spent_out, "total": spent_in + spent_out}
 
 
-def _record_model_call(req: GenerateReq, prompt: str, result: Any) -> None:
+def _record_model_call(brief: ReaderBrief, prompt: str, result: Any) -> None:
     """One observation stands for the whole run; ``requests``/``tool_calls`` say
     how many turns there really were.
     """
@@ -113,7 +113,7 @@ def _record_model_call(req: GenerateReq, prompt: str, result: Any) -> None:
         "interpret · model",
         "ok" if usable else "error",
         input=[
-            {"role": "system", "content": compose_instructions(_ui_note(req))},
+            {"role": "system", "content": compose_instructions(_ui_note(brief))},
             {"role": "user", "content": prompt},
         ],
         output=answer,

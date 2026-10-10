@@ -6,7 +6,7 @@ pressed, and the facts about the request the model cannot read from the text.
 
 from __future__ import annotations
 
-from contracts.planner import GenerateReq
+from agent.models import ReaderBrief
 
 
 def _known_areas_note() -> str:
@@ -25,26 +25,26 @@ def _known_areas_note() -> str:
     return "; ".join(lines)
 
 
-def _ui_note(req: GenerateReq) -> str:
+def _ui_note(brief: ReaderBrief) -> str:
     """Tell the model which controls the user already set — it must not fight them."""
     fixed: list[str] = []
-    if req.party_adults is not None:
-        fixed.append(f"adults={req.party_adults}")
-    if req.party_children is not None:
-        fixed.append(f"children={req.party_children}")
-    if req.party_children_ages:
-        fixed.append(f"children_ages={req.party_children_ages}")
-    if req.mobility:
-        fixed.append(f"mobility={req.mobility}")
-    if req.time_budget_minutes not in (None, 0):
-        fixed.append(f"budget_minutes={req.time_budget_minutes}")
-    if req.hard_services:
-        fixed.append(f"mandatory_services={req.hard_services}")
-    if req.interests:
-        fixed.append(f"interests={req.interests}")
-    if req.avoid:
-        fixed.append(f"avoid={req.avoid}")
-    fixed.append(f"result_mode={req.result_mode}")
+    if brief.party_adults is not None:
+        fixed.append(f"adults={brief.party_adults}")
+    if brief.party_children is not None:
+        fixed.append(f"children={brief.party_children}")
+    if brief.party_children_ages:
+        fixed.append(f"children_ages={brief.party_children_ages}")
+    if brief.mobility:
+        fixed.append(f"mobility={brief.mobility}")
+    if brief.time_budget_minutes not in (None, 0):
+        fixed.append(f"budget_minutes={brief.time_budget_minutes}")
+    if brief.hard_services:
+        fixed.append(f"mandatory_services={brief.hard_services}")
+    if brief.interests:
+        fixed.append(f"interests={brief.interests}")
+    if brief.avoid:
+        fixed.append(f"avoid={brief.avoid}")
+    fixed.append(f"result_mode={brief.result_mode}")
     if not fixed:
         return ""
     return (
@@ -54,19 +54,19 @@ def _ui_note(req: GenerateReq) -> str:
     )
 
 
-def _request_note(req: GenerateReq) -> str:
+def _request_note(brief: ReaderBrief) -> str:
     """Facts the model needs and cannot find in the request text.
 
     These are facts about the request, not asks: the instructions say not to restate them.
     """
-    lines = [f"transport={req.profile or 'unset'}"]
-    if req.origin is not None:
-        lines.append(f"tourist_position={req.origin.lat},{req.origin.lon}")
+    lines = [f"transport={brief.profile or 'unset'}"]
+    if brief.origin is not None:
+        lines.append(f"tourist_position={brief.origin[0]},{brief.origin[1]}")
     else:
         lines.append("tourist_position=unknown")
-    lines.append(f"round_trip={bool(req.round_trip)}")
+    lines.append(f"round_trip={bool(brief.round_trip)}")
 
-    ctx = req.context
+    ctx = brief.context
     if ctx is not None:
         lines.append(f"refinement_instruction={ctx.instruction!r}")
         lines.append(f"revision={ctx.revision}")
@@ -74,7 +74,7 @@ def _request_note(req: GenerateReq) -> str:
             lines.append(f"deleted_stop_ids={ctx.excluded_ids}")
         if ctx.base_points:
             shown = "; ".join(
-                f"{p.id if p.id is not None else '—'}:{p.name}"
+                f"{p.place_id if p.place_id is not None else '—'}:{p.name}"
                 + ("(pinned)" if p.pinned else "")
                 for p in ctx.base_points[:30]
             )

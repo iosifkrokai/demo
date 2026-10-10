@@ -8,6 +8,7 @@ from types import SimpleNamespace
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from agent.models import Requirement, TripRequirements
 from contracts.planner import (
     Candidate,
     CostMatrix,
@@ -18,7 +19,6 @@ from contracts.planner import (
 from core import constants
 from core.errors import UpstreamUnavailable
 from db.store import search as search_mod
-from domain.requirements import Requirement, TripRequirements
 from planner import (
     optimize as optimize_mod,
     pipeline as pipeline_mod,

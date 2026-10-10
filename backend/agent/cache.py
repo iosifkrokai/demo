@@ -13,6 +13,8 @@ from collections import OrderedDict
 from dataclasses import dataclass
 from typing import Any
 
+from agent.models import ReaderBrief
+
 
 def _flag(name: str, default: str = "") -> str:
     return (os.environ.get(name) or default).strip()
@@ -132,7 +134,9 @@ def prompt_hash(instructions: str) -> str:
     return _digest("prompt", instructions)
 
 
-def interpret_key(query: str, req: Any, instructions: str, model: str | None = None) -> str:
+def interpret_key(
+    query: str, brief: ReaderBrief, instructions: str, model: str | None = None
+) -> str:
     """Everything the model is shown, and nothing else.
 
     `model` is part of the key: the reading is that model's output, not this one's.
@@ -142,16 +146,16 @@ def interpret_key(query: str, req: Any, instructions: str, model: str | None = N
         model,
         instructions,
         query,
-        getattr(req, "locale", None),
-        getattr(req, "party_adults", None),
-        getattr(req, "party_children", None),
-        tuple(getattr(req, "party_children_ages", None) or ()),
-        tuple(getattr(req, "mobility", None) or ()),
-        getattr(req, "time_budget_minutes", None) or 0,
-        tuple(getattr(req, "hard_services", None) or ()),
-        tuple(getattr(req, "interests", None) or ()),
-        tuple(getattr(req, "avoid", None) or ()),
-        getattr(req, "result_mode", None),
+        brief.locale,
+        brief.party_adults,
+        brief.party_children,
+        brief.party_children_ages,
+        brief.mobility,
+        brief.time_budget_minutes or 0,
+        brief.hard_services,
+        brief.interests,
+        brief.avoid,
+        brief.result_mode,
     )
 
 

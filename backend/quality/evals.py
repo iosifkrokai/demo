@@ -53,7 +53,7 @@ def run_verdicts() -> dict[str, Any]:
 
     Offline and total: no DB, no model, no network.
     """
-    from domain.requirements import Requirement, TripRequirements
+    from agent.models import Requirement, TripRequirements
     from planner.verify import ServiceAlongEvidence, verify
 
     checks: list[dict[str, Any]] = []
