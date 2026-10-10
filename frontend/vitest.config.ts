@@ -5,15 +5,7 @@ export default mergeConfig(
   viteConfig,
   defineConfig({
     test: {
-      exclude: [
-        'node_modules',
-        'build',
-        'dist',
-        'coverage',
-        'e2e',
-        'playwright-report',
-        'test-results',
-      ],
+      exclude: ['node_modules', 'build', 'dist', 'coverage'],
       globals: true,
       environment: 'jsdom',
       setupFiles: ['./src/test-setup.ts'],
@@ -22,7 +14,6 @@ export default mergeConfig(
         reporter: ['text', 'json', 'html'],
         exclude: [
           'node_modules/',
-          'playwright-report/',
           'src/test-utils.ts',
           '**/*.d.ts',
           '**/*.config.*',

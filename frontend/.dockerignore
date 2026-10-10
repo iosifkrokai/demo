@@ -1,8 +1,6 @@
 node_modules
 build
 coverage
-playwright-report
-test-results
 .idea
 **/.DS_Store
 .env.local
