@@ -90,37 +90,9 @@ def _norm_term(text: str) -> str:
     return " ".join(str(text).lower().replace("ё", "е").split())
 
 
-# The submodule imports sit below the shared helpers they reach back for.
-from agent.tools import (  # noqa: E402
-    areas,
-    places,
-    services,
-)
-from agent.tools.areas import (  # noqa: E402
-    _AREA_FIELDS,
-    MAX_AREAS_PER_CALL,
-    _areas_from_registry,
-    find_areas,
-)
-from agent.tools.places import (  # noqa: E402
-    _FACT_FIELDS,
-    _PLACE_FIELDS,
-    DEFAULT_RADIUS_M,
-    DEFAULT_SEARCH_LIMIT,
-    MAX_FACTS_PER_CALL,
-    MAX_LINKS_PER_PLACE,
-    MAX_PLACES_PER_SEARCH,
-    MAX_RADIUS_M,
-    MIN_RADIUS_M,
-    get_place_facts,
-    search_places,
-)
-from agent.tools.services import (  # noqa: E402
-    MAX_DETOUR_MINUTES,
-    MAX_ROUTE_POINTS,
-    MAX_SERVICES_PER_CALL,
-    services_near_route,
-)
+# The registry needs the submodules; they import the helpers above, so this
+# import has to sit below them.
+from agent.tools import areas, places, services  # noqa: E402
 
 # The registry: what the agent advertises, one line per tool.
 TOOL_REGISTRARS: tuple[Callable[[Any, Callable[[Any, dict], dict]], None], ...] = (
@@ -137,39 +109,3 @@ def register_all(agent: Any, remember: Callable[[Any, dict], dict]) -> None:
         register(agent, remember)
 
 
-# Re-exported so `from agent import tools` keeps the historical tool surface.
-__all__ = [
-    "DEFAULT_RADIUS_M",
-    "DEFAULT_SEARCH_LIMIT",
-    "ERR_AREA_REGISTRY",
-    "ERR_BAD_ARGUMENT",
-    "ERR_DB_UNAVAILABLE",
-    "ERR_EMPTY_QUERY",
-    "ERR_NOT_FOUND",
-    "ERR_NOT_IMPLEMENTED",
-    "MAX_AREAS_PER_CALL",
-    "MAX_DETOUR_MINUTES",
-    "MAX_FACTS_PER_CALL",
-    "MAX_LINKS_PER_PLACE",
-    "MAX_PLACES_PER_SEARCH",
-    "MAX_RADIUS_M",
-    "MAX_ROUTE_POINTS",
-    "MAX_SERVICES_PER_CALL",
-    "MIN_RADIUS_M",
-    "TOOL_REGISTRARS",
-    "_AREA_FIELDS",
-    "_FACT_FIELDS",
-    "_PLACE_FIELDS",
-    "_areas_from_registry",
-    "_clamp",
-    "_envelope",
-    "_fetch",
-    "_norm_term",
-    "_positive_int",
-    "_project",
-    "find_areas",
-    "get_place_facts",
-    "register_all",
-    "search_places",
-    "services_near_route",
-]
