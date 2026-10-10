@@ -40,3 +40,4 @@ cache/research/raw/
 
 # Скриншоты живой проверки UI — артефакты отчётов, не код продукта
 ui/
+.claude/worktrees/
