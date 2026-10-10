@@ -13,11 +13,8 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from core import constants
-from db.store.itineraries import (
-    ItinerariesUnavailable,
-    load_itineraries,
-    resolve_itineraries,
-)
+from core.errors import ItinerariesUnavailable
+from db.store.itineraries import load_itineraries, resolve_itineraries
 from db.store.places import PostgresPlaceRepository
 
 BASE_URL = os.environ.get("SMOKE_BASE_URL", "http://localhost:8080")

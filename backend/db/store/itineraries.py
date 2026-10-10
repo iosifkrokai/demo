@@ -1,41 +1,20 @@
-"""Ready-made routes: a curated itinerary a tourist can open without asking.
+"""Ready-made routes: attaching the stored facts to each curated stop.
 
-The file is a curated dataset, so reading it is `reference`'s job; attaching the
-stored facts to its stops is a read of `places`, so it goes through the place
-repository like every other one.
+The file itself is a reference dataset and is read by `reference.itineraries`;
+what happens here is the read of `places` that fills its stops in, which is what
+a repository is for.
 """
 
 from __future__ import annotations
 
-import json
 import logging
-from pathlib import Path
 from typing import Any
 
-from core.paths import ITINERARIES_JSON
-from db.store.errors import ItinerariesUnavailable
 from db.store.mappers import place_payload
 from db.store.places import PostgresPlaceRepository
+from reference.itineraries import load_itineraries
 
 log = logging.getLogger(__name__)
-
-ITINERARIES_PATH = ITINERARIES_JSON
-
-
-def load_itineraries(path: Path | None = None) -> list[dict[str, Any]]:
-    """Read the curated file.
-
-    A broken file is a deployment bug, raised loudly, never swallowed silently.
-    """
-    target = path or ITINERARIES_PATH
-    try:
-        raw = json.loads(target.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        raise ItinerariesUnavailable(f"{target}: {exc}") from exc
-    items = raw.get("itineraries")
-    if not isinstance(items, list) or not items:
-        raise ItinerariesUnavailable(f"{target}: no itineraries")
-    return items
 
 
 def _split_by_role(payloads: list[dict[str, Any]]) -> tuple[list[dict], list[dict]]:

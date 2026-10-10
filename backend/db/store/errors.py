@@ -23,7 +23,3 @@ class DuplicateSource(RuntimeError):
 
 class TooManyRoutes(RuntimeError):
     """The client is at its cap on saved routes (→ 409)."""
-
-
-class ItinerariesUnavailable(RuntimeError):
-    """The committed itineraries file is missing or malformed."""

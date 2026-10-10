@@ -11,6 +11,7 @@ import uuid
 from fastapi import APIRouter, Request
 
 from api import deps
+from core.errors import ItinerariesUnavailable
 from db.store import itineraries as itineraries_mod
 from db.store.services import DEFAULT_PROFILE, MAX_SERVICES
 from planner.models import ServicesAlongReq
@@ -40,7 +41,7 @@ def itineraries(request: Request) -> dict:
         items, missing = itineraries_mod.resolve_itineraries(
             deps.get_repos(request).places
         )
-    except itineraries_mod.ItinerariesUnavailable as exc:
+    except ItinerariesUnavailable as exc:
         log.error("itineraries unavailable: %s", exc)
         raise deps.http_error(503, "itineraries_unavailable") from exc
     return {"items": items, "missing": missing}
