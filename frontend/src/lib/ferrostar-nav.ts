@@ -81,7 +81,7 @@ const buildLineGeometry = (decoded: number[][]): LineGeometry | null => {
   return total > 0 ? { points, cum, total } : null;
 };
 
-/** Geometry slice from `fromCum` to `toCum` metres along the line, read off the cumulative distances of the same vertices (not straight-line distance from the start: on a curvy walk those two disagree by more than a step's length). */
+/** Slice of the line between `fromCum` and `toCum` metres, read off cumulative distances. */
 const stepGeometry = (
   line: LineGeometry,
   fromCum: number,
@@ -139,7 +139,7 @@ const generateSpokenInstructions = (
 export interface FerrostarRouteResult {
   /** Ferrostar Route ready to pass to FerrostarNavigator. */
   route: Route;
-  /** Ordered list of maneuvers for the UI, with cumulative distance — one entry per `route.steps[i]`, so `maneuvers[i]` describes the step at index `i`. */
+  /** Ordered maneuvers for the UI: `maneuvers[i]` describes `route.steps[i]`. */
   maneuvers: GuideManeuver[];
   /** Map from maneuver key (e.g. "0-1") → step index in `route.steps`. */
   stepKeyToIndex: Map<string, number>;
@@ -375,7 +375,7 @@ export class FerrostarNavigator {
   }
 }
 
-/** Create a navigator for `route` once the WASM core is up, or null if it is not (unavailable runtime, or a session the WASM refused to build) — the caller then falls back to its own geometry engine. */
+/** Create a Ferrostar navigator for `route`, or null when the WASM core is unavailable. */
 export const createFerrostarNavigator = async (
   route: Route
 ): Promise<FerrostarNavigator | null> => {
@@ -395,7 +395,7 @@ type NavigatingTripState = Extract<
   { Navigating: unknown }
 >['Navigating'];
 
-/** Ferrostar's TripState is an externally tagged union (`{ Navigating: {...} }`), so «are we navigating?» is a key check rather than a `.tag` comparison. */
+/** Extract Ferrostar's Navigating state; TripState is tagged by key, not `.tag`. */
 const navigating = (
   state: TripState | null | undefined
 ): NavigatingTripState | null =>
@@ -435,6 +435,6 @@ export const extractVisualInstruction = (
   state: TripState | null
 ): VisualInstruction | null => navigating(state)?.visualInstruction ?? null;
 
-/** The remaining steps from the Navigating state — `remainingSteps[0]` is the step the tourist is walking right now. */
+/** Remaining steps from the Navigating state; `[0]` is the one being walked now. */
 export const extractRemainingSteps = (state: TripState | null): RouteStep[] =>
   navigating(state)?.remainingSteps ?? [];

@@ -203,7 +203,7 @@ export const MapComponent = () => {
   const setGuideVoiceMuted = useCommonStore((s) => s.setGuideVoiceMuted);
   /** Navigator mode: the map keeps the tourist in view until a hand moves it. */
   const [follow, setFollow] = useState(true);
-  /** While the guide runs the map is always north-up-free: it turns with the walk, because a navigator that can be talked out of turning is not one. */
+  /** While the guide runs, the map always turns with the walk (never north-up). */
   const drawRef = useRef<MaplibreTerradrawControl | null>(null);
   const touchStartTimeRef = useRef<number | null>(null);
   const touchLocationRef = useRef<{ x: number; y: number } | null>(null);

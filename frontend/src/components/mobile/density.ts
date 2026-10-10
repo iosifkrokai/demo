@@ -1,4 +1,4 @@
-/** Mobile density tokens — everything that makes a phone-sized screen fit in one file, instead of a `max-md:h-*` scattered through every caller (that sprinkle is what made the panel's own blocks grow until the main action fell out of the sheet). */
+/** Mobile density tokens, kept in one file instead of `max-md:h-*` across callers. */
 import { MOBILE_MAX_WIDTH } from './use-is-mobile';
 
 /** Every token here applies below this width (Tailwind `md` minus one). */

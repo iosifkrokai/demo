@@ -48,7 +48,7 @@ interface CommonState {
   guideVoiceMuted: boolean;
   /** True while the panel is on the «Все точки» tab. */
   placesVisible: boolean;
-  /** Metres to the next turn, published by the guide so the camera can behave like a navigator instead of a viewer: it closes in as the turn comes. null while there is no line, no trusted fix, or nothing to turn into. */
+  /** Metres to the next turn, so the map can close in like a navigator; null with no line. */
   guideTurnDistanceM: number | null;
 }
 

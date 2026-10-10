@@ -39,7 +39,7 @@ const canSpeak = ({
   muted: boolean;
 }) => !muted && quality === 'good' && !offRoute;
 
-/** Accept an announcement whose distance trigger was selected by the navigation engine rather than by this module's legacy distance thresholds. */
+/** Accept an announcement whose distance trigger came from the navigation engine. */
 export const decideTriggeredVoice = (params: {
   instruction: string;
   distanceM: number;

@@ -31,7 +31,7 @@ export const initialLanguage = (): Language => {
     : 'ru';
 };
 
-/** The flat dictionaries the app actually uses: the core area (`ru`/`en`) plus every namespace area, merged by key. */
+/** Flat dictionaries the app uses: core `ru`/`en` merged with every namespace area. */
 export const flatRu = {
   ...ru,
   ...guideArea.ru,

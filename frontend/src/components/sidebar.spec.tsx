@@ -157,7 +157,6 @@ const AGENT_ANSWER = {
   },
 };
 
-/** The ask field. */
 const askField = () =>
   screen.getByRole('textbox', { name: 'что хотите посмотреть' });
 

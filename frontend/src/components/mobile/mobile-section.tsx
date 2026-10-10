@@ -16,7 +16,7 @@ export interface MobileSectionProps {
   children: ReactNode;
 }
 
-/** One filter group in the plan panel: a titled block on desktop, a collapsed row on a phone. */
+/** One filter group: a titled block on desktop, a collapsed row on mobile. */
 export const MobileSection = ({
   id,
   title,

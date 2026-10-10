@@ -1,6 +1,6 @@
 /** Which way the route goes — the course the camera should be looking along. */
 
-/** How far ahead to look. 25 m is roughly five seconds of walking — far enough to ignore the noise of a single shape point, near enough to still be «here». */
+/** How far ahead to look for a course (25 m ≈ five seconds of walking). */
 export const COURSE_LOOKAHEAD_M = 25;
 
 export interface CourseLine {
@@ -35,7 +35,7 @@ const pointAt = (
   return points[points.length - 1] ?? null;
 };
 
-/** Bearing along the route at `alongM`, in degrees clockwise from north, or null when there is no line to read a course from (a route without usable geometry: the map then keeps whatever heading it has). */
+/** Bearing along the route at `alongM` (degrees clockwise from north); null with no line. */
 export const courseAlongLine = (
   line: CourseLine | null,
   alongM: number,

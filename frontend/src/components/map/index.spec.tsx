@@ -1036,7 +1036,7 @@ describe('MapComponent', () => {
     });
   });
   describe('route provenance (spec 002 §7 — one route, one source)', () => {
-    /** The map only reads the geometry, the summary and the provenance fields, so these fixtures carry a deliberately partial Valhalla trip: the single cast inside this helper is preferred over fabricating ten trip fields the assertion never touches. */
+    /** Build a deliberately partial Valhalla trip: only the fields the map reads. */
     const routeFixture = (over: {
       decodedGeometry: number[][];
       summary?: { length: number; time: number };

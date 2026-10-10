@@ -334,7 +334,7 @@ const VISUAL: VisualInstruction = {
 interface NavigatingOverrides {
   deviation?: RouteDeviation;
   progress?: { distanceToNextManeuver?: number; distanceRemaining?: number };
-  /** `undefined` here means «Ferrostar had nothing to say» — a real value, not «leave the default», so these overrides are read by key, not by destructuring. */
+  /** `undefined` means «Ferrostar said nothing» — a real value, so overrides are read by key. */
   spokenInstruction?: SpokenInstruction | undefined;
   visualInstruction?: VisualInstruction | undefined;
   remainingSteps?: RouteStep[];

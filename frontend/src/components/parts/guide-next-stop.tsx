@@ -19,7 +19,7 @@ interface GuideNextStopProps {
   estimateMinutes?: number | null;
   /** When given, the tourist may set their own time at this stop. */
   onVisitMinutesChange?: (minutes: number | null) => void;
-  /** Live distance to the stop; null while the browser has not said where we are — or while the fix is too coarse to turn into a confident number. */
+  /** Live distance to the stop; null with no position fix or one too coarse to trust. */
   distance: number | null;
   /** Travel time to the stop, from the route's own time and length. */
   travelMinutes?: number | null;
@@ -32,7 +32,7 @@ interface GuideNextStopProps {
   compact?: boolean;
 }
 
-/** The one thing the tourist needs right now: where they are going next, how far it is, when they get there, and how to hand it to a maps app. */
+/** Next stop card: where to, how far, when, and how to open it in a maps app. */
 export const GuideNextStop = ({
   number,
   name,

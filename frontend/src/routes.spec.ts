@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { activeTabBeforeLoad } from './routes';
 
-/** The redirect the router throws carries its navigation options, so a test can read back where it was sent without a router or a query client. */
+/** The router's thrown redirect, carrying navigation options a test can read back. */
 interface ThrownRedirect {
   options: {
     to?: string;

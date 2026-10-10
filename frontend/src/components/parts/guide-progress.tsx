@@ -22,7 +22,7 @@ interface GuideProgressProps {
   compact?: boolean;
 }
 
-/** «пройдено 3 из 7» + a slim bar, per DESIGN.md: the number that matters stays big, everything around it stays quiet. */
+/** «пройдено 3 из 7» with a slim progress bar; the count stays prominent. */
 export const GuideProgress = ({
   done,
   total,

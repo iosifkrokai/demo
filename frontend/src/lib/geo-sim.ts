@@ -38,7 +38,7 @@ const state: SimState = {
   timer: null,
 };
 
-/** Metres between two coordinates — the same equirectangular approximation the guide uses for its arrival radius, so the simulation cannot disagree with it. */
+/** Metres between two coordinates, using the guide's own equirectangular approximation. */
 export const metres = (
   aLat: number,
   aLon: number,
@@ -77,7 +77,7 @@ export const isSimulating = (): boolean => state.active;
 
 export const simSpeed = (): number => state.speed;
 
-/** Where the tourist stands before there is a route to walk: the centre of Grodno, the point the map opens on. */
+/** Where the simulated tourist stands before a route: central Grodno. */
 const START_POINT: SimFix = { lat: 53.6778, lon: 23.8295, heading: null };
 
 /** Where the simulated tourist stands right now. */

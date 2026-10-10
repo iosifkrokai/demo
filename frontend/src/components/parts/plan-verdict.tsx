@@ -12,7 +12,7 @@ interface PlanVerdictProps {
   response: AgentRouteResponse | null;
 }
 
-/** Every reason the backend can send, so an unknown future code falls back to the generic label instead of printing a raw dictionary key on screen. */
+/** Known verdict reasons; unknown codes fall back to the generic label, not the raw key. */
 const KNOWN_REASONS: readonly PlanRequirementReason[] = [
   'must_visit_on_route',
   'must_visit_absent',
@@ -43,7 +43,7 @@ const reasonLabel = (
 const requirementName = (item: PlanRequirement): string =>
   item.name || item.code || item.kind;
 
-/** The plan's own verdict, straight from the agent's answer: why the route could not be built, or which part of the request went unmet. */
+/** The agent's verdict: why the route could not be built or which request went unmet. */
 export const PlanVerdict = ({ response }: PlanVerdictProps) => {
   const { t } = useTranslation();
   const status = response?.status;

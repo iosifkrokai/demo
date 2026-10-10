@@ -155,7 +155,7 @@ const stubGeolocation = (
   });
 };
 
-/** A watcher that stays quiet until the test pushes a position — that is how a real phone behaves, and it lets us stand the tourist at an exact distance. */
+/** Geolocation watcher that stays quiet until the test pushes a position. */
 const stubWatchingGeolocation = () => {
   const listeners: Array<(pos: unknown) => void> = [];
   const failures: Array<(err: unknown) => void> = [];

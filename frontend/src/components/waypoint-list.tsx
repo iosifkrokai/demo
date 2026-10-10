@@ -29,7 +29,7 @@ export const plannerVisitKey = (waypoints: Waypoint[]): string =>
 const stopTimeId = (wp: Waypoint): string =>
   wp.placeId != null ? String(wp.placeId) : wp.id;
 
-/** The stops timeline: numbered circles joined by a hairline, the stop's category and name, how long it is worth staying for, and — on hover — remove / pin. */
+/** Stops timeline: numbered circles, category, name, suggested stay, remove/pin on hover. */
 export const WaypointList = ({ onChanged }: Props) => {
   const { t } = useTranslation();
   const waypoints = useDirectionsStore((s) => s.waypoints);
@@ -75,7 +75,7 @@ export const WaypointList = ({ onChanged }: Props) => {
     refetch();
   };
 
-  /** Pin a stop so the next refinement keeps it: `pinned` is what the sidebar sends in `context.base_points`. */
+  /** Pin a stop so refinement keeps it (`pinned` → `context.base_points`). */
   const togglePin = (i: number) => {
     setWaypoint(
       waypoints.map((wp, idx) =>

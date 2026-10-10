@@ -19,7 +19,7 @@ const valueAt = (node: Record<string, unknown>, path: string): string =>
       node
     ) as string;
 
-/** i18next picks a plural form by a suffix appended to the key, and the forms differ by language: Russian needs one/few/many, English one/other. */
+/** i18next appends a plural suffix to keys; the forms differ by language. */
 const PLURAL_SUFFIX = /_(zero|one|two|few|many|other)$/;
 const baseKey = (path: string) => path.replace(PLURAL_SUFFIX, '');
 const isPlural = (path: string) => PLURAL_SUFFIX.test(path);

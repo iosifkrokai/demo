@@ -49,12 +49,12 @@ const activeStopCoordinates = (): [number, number][] =>
     (a) => a.displaylnglat
   );
 
-/** Hand the agent's verified line over to the map, or `null` to clear it (a reset, an undo, a hand-built route). */
+/** Publish the agent's verified line to the map, or `null` to clear it. */
 export function setAgentRoute(route: AgentRoute | null) {
   agentRoute = route ? { ...route, stops: activeStopCoordinates() } : null;
 }
 
-/** The agent line, but only while the stops on screen are still the ones it was verified for. */
+/** The agent line, but only while the on-screen stops match those it was verified for. */
 const verifiedAgentRoute = (
   activeWaypoints: ActiveWaypoint[]
 ): AgentRoute | null => {

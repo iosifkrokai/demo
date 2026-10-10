@@ -193,7 +193,7 @@ const normalizeSummary = (value: unknown): SavedRouteSummary | null => {
   };
 };
 
-/** The list endpoint may answer with a bare array or wrap it; either way only the summary fields survive — anything heavy (a `plan`, a geometry) is dropped here, so no caller can accidentally render what the list never promised. */
+/** Normalize the list answer; drop heavy fields so only summaries survive. */
 export const normalizeRouteList = (body: unknown): SavedRouteSummary[] => {
   const rows: unknown = Array.isArray(body)
     ? body

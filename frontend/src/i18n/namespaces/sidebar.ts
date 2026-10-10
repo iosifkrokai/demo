@@ -283,7 +283,7 @@ export const sidebarArea = {
       plan: {
         geoOverride: 'переопределить, откуда начинается маршрут',
         filtersPrecedence: 'применю фильтры поверх текста запроса — они важнее',
-        /** An example query: the place name stays a real Grodno place, in the alphabet of the interface it is shown in. */
+        /** Example query: a real Grodno place name in the interface's alphabet. */
         queryPlaceholder: 'Каложская церковь, Гродно',
         partyLabel: 'кто идёт',
         adults: 'взрослые',

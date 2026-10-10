@@ -1,4 +1,4 @@
-/** The panel's own controls: the handle on its edge, the grab bar of the mobile sheet and the way out of it. */
+/** The panel's controls: its edge handle, the mobile sheet's grab bar and close button. */
 export interface LocaleArea<T = Record<string, unknown>> {
   ru: T;
   en: T;

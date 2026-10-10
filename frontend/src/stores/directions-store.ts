@@ -15,7 +15,7 @@ export interface Waypoint {
   pinned?: boolean;
 }
 
-/** Id of the waypoint that marks the tourist's own position (the route start the sidebar pins when the browser hands us coordinates). */
+/** Id of the waypoint marking the tourist's own position (the pinned route start). */
 export const ME_WAYPOINT_ID = 'me';
 
 interface HighlightSegment {

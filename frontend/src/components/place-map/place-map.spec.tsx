@@ -17,7 +17,7 @@ interface MarkerProps {
   onDragEnd?: (event: { lngLat: { lat: number; lng: number } }) => void;
 }
 
-/** The map itself needs WebGL; what is asserted here is the contract both pages lean on — a pin per place, coordinates, which pin is draggable, what a drop reports, and that a click travels back with the place id. */
+/** Mock for the WebGL map; asserts a pin per place, drag/drop and click contract. */
 vi.mock('react-map-gl/maplibre', async () => {
   const React = await import('react');
   return {

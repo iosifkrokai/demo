@@ -18,7 +18,6 @@ export interface RouteProgress {
   elapsedMs: number;
 }
 
-/** An id for one attempt. */
 export const newProgressId = (): string =>
   typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
     ? crypto.randomUUID()
@@ -44,7 +43,7 @@ export const asStageCode = (value: unknown): RouteStageCode | null =>
     ? (value as RouteStageCode)
     : null;
 
-/** The current stage, or `null` when the server cannot say (unknown id, or a network that never reached it). */
+/** The route's current stage; `null` when the server cannot say (unknown or unreachable). */
 export const fetchRouteProgress = async (
   progressId: string,
   signal: AbortSignal

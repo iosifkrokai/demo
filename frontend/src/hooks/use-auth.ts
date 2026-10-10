@@ -18,7 +18,7 @@ import type { AccountApiErrorCode, AccountUser, AuthState } from '@/api/types';
 
 export const AUTH_QUERY_KEY = ['auth', 'me'] as const;
 
-/** The session read as a reusable query option, so the router's `beforeLoad` guard and the `useAuth` hook share one cache entry and one request — the gate does not invent a second source of truth about who is signed in. */
+/** Session query option shared by the router guard and `useAuth`, so they share one cache. */
 export const authQueryOptions = queryOptions<AuthState>({
   queryKey: AUTH_QUERY_KEY,
   queryFn: getAuthState,

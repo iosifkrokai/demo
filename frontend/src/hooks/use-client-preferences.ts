@@ -1,4 +1,4 @@
-/** The tourist's preferences, loaded at startup and saved as they change : transport, time budget, party, interests, language and the «мой обычный темп» per category, all prefilled from the server so the guide opens on the tourist's own numbers. */
+/** The tourist's preferences, loaded from the server at startup and saved as they change. */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -44,7 +44,7 @@ export const saveLocalPreferences = (preferences: ClientPreferences): void => {
   } catch {}
 };
 
-/** Drop the local copy (used by «удалить мои данные»,). */
+/** Drop the local copy (used by «удалить мои данные»). */
 export const clearLocalPreferences = (): void => {
   try {
     localStorage.removeItem(CLIENT_PREFERENCES_STORAGE_KEY);

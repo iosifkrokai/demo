@@ -11,7 +11,7 @@ export interface ActiveWaypoint {
   addressindex: number;
 }
 
-/** Result type sent as `result_mode` to POST /routes/generate: `route` is a ready itinerary, `catalogue` a grouped list the tourist picks a route from. */
+/** `result_mode` for /routes/generate: `route` a ready itinerary, `catalogue` grouped. */
 export type ResultMode = 'route' | 'catalogue';
 
 /** How strongly an amenity is wanted. */
@@ -108,7 +108,7 @@ export interface ParsedDirectionsGeometry {
   alternates?: ValhallaRouteResponse[];
   /** Which line is on screen. */
   source?: 'agent' | 'client';
-  /** False when an agent plan exists but carries no usable geometry: the map must say so instead of substituting a client-side line. */
+  /** False when an agent plan has no usable geometry: the map says so, no substitution. */
   hasVerifiedLine?: boolean;
 }
 
@@ -131,7 +131,7 @@ export interface Location {
   original_index: number;
 }
 
-/** One maneuver as the guide UI consumes it: Valhalla's own maneuver `type` (the banner icon is drawn from it — Ferrostar reports written instructions, not type numbers) plus the position of the maneuver along the decoded line, in metres. */
+/** One maneuver for the guide UI: Valhalla `type` (drives the icon) and position in metres. */
 export interface GuideManeuver {
   key: string;
   type: number;
@@ -318,7 +318,7 @@ export interface PlanRequirement {
   place_ids: number[];
 }
 
-/** The agent's own account of the plan: which requirements it honoured, which it could not, and what it did not understand. */
+/** The agent's account of the plan: requirements honoured, missed, or not understood. */
 export interface PlanInterpretation {
   status: RoutePlanStatus;
   requirements: PlanRequirement[];

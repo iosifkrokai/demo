@@ -15,7 +15,7 @@ export type RouteProvenance = 'agent' | 'client';
 /** A route result plus the provenance of the geometry it carries. */
 export interface ProvenancedRoute extends ParsedDirectionsGeometry {
   source: RouteProvenance;
-  /** False when an agent route is on screen but arrived without usable geometry: the line is then deliberately absent instead of being silently replaced by a client-side one. */
+  /** False when an agent route has no usable geometry: the line stays absent. */
   hasVerifiedLine: boolean;
 }
 
@@ -27,7 +27,7 @@ export const routeProvenance = (
   return (data as Partial<ProvenancedRoute>).source ?? 'client';
 };
 
-/** True when the stored result actually has a line to draw: at least two points, and — for an agent route — geometry the backend actually produced. */
+/** True when there is a drawable line: ≥2 points, and for an agent route, backend geometry. */
 export const hasUsableLine = (
   data: ParsedDirectionsGeometry | null | undefined
 ): boolean => {

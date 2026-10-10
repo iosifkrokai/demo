@@ -19,7 +19,7 @@ const ORDER: MobileSnap[] = ['bar', 'peek', 'full'];
 /** Below this the pointer is treated as a tap, so a tap never nudges the sheet. */
 const TAP_SLOP_PX = 4;
 
-/** Past this speed the release is a *flick*: it moves exactly one position however short it was. */
+/** Release faster than this is a flick: it moves exactly one position. */
 const FLICK_PX_PER_MS = 0.5;
 
 /** How long the sheet is allowed to keep travelling after the finger leaves the glass. */
@@ -28,7 +28,7 @@ const PROJECTION_MS = 120;
 /** Past the outermost position the sheet gives ground slowly instead of not at all. */
 const RESISTANCE = 0.3;
 
-/** Thrown this far below the strip and the release closes the panel — the way a sheet is dismissed everywhere else on a phone, where there is no separate close button to find. */
+/** Dragged this far below the strip, the release closes the panel. */
 const DISMISS_RATIO = 0.6;
 
 const viewportHeight = (): number =>
@@ -55,7 +55,7 @@ export const snapPx = (snap: MobileSnap): number => {
 /** The guide strip in pixels — the height the drag starts from while walking. */
 export const guidePx = (): number => 56;
 
-/** The height a drag is allowed to reach, with the pull past the outermost position damped rather than refused: a sheet that stops dead under the finger is the "clumsy" feeling this whole function exists to remove. */
+/** Clamp a drag's height, damping (not refusing) pull past the outermost position. */
 const withResistance = (raw: number): number => {
   const min = snapPx('bar');
   const max = snapPx('full');
@@ -110,13 +110,13 @@ export interface MobileSheetSnap {
 }
 
 export interface MobileSheetSnapOptions {
-  /** The height the sheet is resting at right now, in px — the guide strip while walking, the position's own height otherwise. */
+  /** The sheet's resting height in px: the guide strip while walking, else the position's. */
   restingPx?: number;
   /** A flick below the outermost position closes the panel. */
   onDismiss?: () => void;
 }
 
-/** The mobile panel's position, owned by the shell rather than by the panel's contents: the same content is shown at all three heights, only the geometry changes. */
+/** Mobile panel position state; the content is identical at all three heights. */
 export const useMobileSheetSnap = (
   initial: MobileSnap = 'peek',
   { restingPx, onDismiss }: MobileSheetSnapOptions = {}

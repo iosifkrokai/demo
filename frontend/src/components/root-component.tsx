@@ -3,7 +3,7 @@ import { lazy, Suspense } from 'react';
 
 import { AccountBar } from './account/account-bar';
 
-/** Devtools are opt-in: they used to mount (and open a panel) over the map in every dev run, which reads as a broken overlay for anyone looking at the app. */
+/** Devtools are opt-in, so they never mount over the map unless enabled. */
 const DEVTOOLS_ENABLED =
   import.meta.env.DEV && import.meta.env.VITE_DEVTOOLS === '1';
 

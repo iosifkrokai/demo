@@ -100,7 +100,7 @@ interface GuidePanelProps {
   onReroute?: () => void;
   suggestions?: GuideSuggestion[];
   onAddSuggestion?: (id: string) => void;
-  /** The transport the plan was built for (Valhalla costing): «pedestrian», «bicycle», «auto» — or nothing while it is unknown, which the guide reads as walking. */
+  /** Valhalla costing the plan was built for; absent means unknown and is read as walking. */
   transport?: string | null;
   /** How far the walk has got, reported whenever it changes. */
   onWalked?: (progress: { visited: number; total: number }) => void;
@@ -299,7 +299,7 @@ const meWaypoint = (lat: number, lon: number, t: TFunction): Waypoint => {
 };
 
 /** Mode 2 — the guide: walk the route stop by stop. */
-/** The guide's own honesty about where the position came from: with `?sim=walk` the fix is replayed, and every screen that shows a distance must say so. */
+/** Badge shown when `?sim=walk` replays the fix; screens with distances must show it. */
 const SimulatedBadge = ({ active }: { active: boolean }) => {
   const { t } = useTranslation();
   if (!active) return null;
@@ -441,7 +441,7 @@ export const GuidePanel = ({
     profile: 'pedestrian',
   });
 
-  /** The nearest upcoming service that is close enough ahead on the route, has not been hinted yet, and is not a stop already on the route. */
+  /** Nearest upcoming service that is close ahead, not yet hinted, and not already a stop. */
   const nearbyHint = useMemo<ServiceAlong | null>(() => {
     if (!servicesAlong || servicesAlong.state !== 'ready') return null;
     const upcoming = servicesAlong.items
@@ -689,7 +689,7 @@ export const GuidePanel = ({
       ? Math.max(0, activeManeuver.along - traveled)
       : null;
 
-  /** Hand the turn distance to the map, which uses it as a navigator does: it closes in for the turn and keeps the tourist on screen. */
+  /** Publish the turn distance so the map can close in on the turn like a navigator. */
   const setGuideTurnDistanceM = useCommonStore((s) => s.setGuideTurnDistanceM);
   useEffect(() => {
     if (ferrostarActive) return;

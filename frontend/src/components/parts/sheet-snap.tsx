@@ -13,10 +13,10 @@ export const SHEET_SNAP_CLASS: Record<SheetSnap, string> = {
   full: 'h-[90dvh] md:h-auto',
 };
 
-/** While the guide runs, the map IS the navigator, so the sheet drops to a strip carrying only the grab handle and «выход» (a drag still opens it fully). */
+/** While the guide runs, the sheet drops to a strip with just the handle and «выход». */
 export const GUIDE_SHEET_CLASS = 'h-14 md:hidden';
 
-/** The panel itself: a bottom sheet under 768px (the map stays visible above it) and a resizable column (420px by default) from 768px up. */
+/** Panel layout: bottom sheet below 768px, resizable 420px column at and above. */
 export const PANEL_SHEET_CLASS = [
   'flex flex-col gap-0 overflow-hidden p-0',
   'inset-x-0 bottom-0 top-auto w-full sm:max-w-none',

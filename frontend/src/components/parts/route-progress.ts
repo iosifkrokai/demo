@@ -9,7 +9,7 @@ export const routeStageText = (stage: RouteStage): string =>
 /** After this many seconds the panel may say the wait is a long one. */
 export const LONG_WAIT_SECONDS = 12;
 
-/** The pipeline's own stage, as an i18n key — the server sends codes, so the wording lives with the rest of the translation in both languages. */
+/** Map the server's pipeline stage code to its i18n key. */
 export const routeServerStageKey = (stage: string | null): string | null =>
   stage ? `sidebar.progress.${stage}` : null;
 

@@ -1,7 +1,7 @@
 import { MapPin } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-/** The agent's category taxonomy (backend/agent/constants.py → CATEGORIES) as emoji: a stop's face says what it is before its name does. */
+/** The agent's category taxonomy (CATEGORIES) mapped to emoji. */
 const CATEGORY_EMOJI: Record<string, string> = {
   замок: '🏰',
   костёл: '⛪',

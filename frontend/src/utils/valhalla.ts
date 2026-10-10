@@ -113,10 +113,10 @@ export const buildOptimizedRouteRequest = ({
   return req;
 };
 
-/** Valhalla refuses a request with more than 20 locations (`error_code: 150, "Exceeded max locations: 20"`). */
+/** Valhalla refuses a request with more than 20 locations. */
 export const VALHALLA_MAX_LOCATIONS = 20;
 
-/** Split waypoints into groups of at most `max` locations, each group starting where the previous one ended, so the drawn segments join up without a gap. */
+/** Split waypoints into groups of at most `max`, overlapping by one so segments join. */
 export const chunkWaypoints = (
   waypoints: ActiveWaypoint[],
   max = VALHALLA_MAX_LOCATIONS

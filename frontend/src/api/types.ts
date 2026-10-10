@@ -20,7 +20,7 @@ export interface ClientPreferences {
   updated_at?: string | null;
 }
 
-/** `PUT /clients/me/preferences` is a partial update: only the keys present are written, and an explicit `null` clears a field. */
+/** Partial update for `PUT /clients/me/preferences`: present keys only; `null` clears. */
 export type ClientPreferencesPatch = Partial<{
   transport: Transport | null;
   time_budget_minutes: number | null;
@@ -149,7 +149,7 @@ export type Place = ItineraryStop;
 export interface PlacesAnswer {
   items: Place[];
   total: number;
-  /** True when the agent cut the list at its own cap — a backstop against a runaway query, never a feature. */
+  /** True when the agent cut the list at its own cap (a backstop against a runaway query). */
   capped: boolean;
 }
 

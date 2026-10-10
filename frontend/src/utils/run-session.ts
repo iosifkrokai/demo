@@ -1,6 +1,5 @@
 /** The id of the current guide run («полный прогон»). */
 
-/** An id for one run. */
 const newRunId = (): string =>
   typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
     ? crypto.randomUUID()

@@ -111,16 +111,16 @@ interface ScreenBox {
 
 export interface ServicesLayerProps {
   items: ServiceAlong[];
-  /** Thin the marks down for a phone: how many to show, how far apart they must sit, and the screen boxes they must keep clear. */
+  /** Phone thinning rules: how many marks to show, min spacing, and boxes to avoid. */
   thin?: {
     max: number;
     minGapPx: number;
-    /** Keep the marks off the route's own place names, read from the DOM at the moment of thinning. */
+    /** Keep marks clear of the route's place-name labels (read from the DOM). */
     avoidLabels?: boolean;
   };
 }
 
-/** The marks a phone can actually show: the ones nearest the middle of the map, spaced far enough apart not to sit on top of each other. */
+/** The marks a phone can show: nearest the map centre, spaced apart enough to not overlap. */
 export const visibleServices = (
   items: ServiceAlong[],
   centre: { lat: number; lon: number } | null,

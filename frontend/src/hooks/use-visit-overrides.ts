@@ -26,7 +26,7 @@ interface VisitTimes {
   overrides: VisitOverrides;
 }
 
-/** The tourist's own visit times for one route, kept in `localStorage` next to the walk progress (see `utils/visit-time`). */
+/** Tourist's own visit times for one route, kept in `localStorage` beside walk progress. */
 export const useVisitOverrides = (routeKey: string): VisitOverridesApi => {
   const [times, setTimes] = useState<VisitTimes>(() => ({
     key: routeKey,

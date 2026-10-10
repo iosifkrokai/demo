@@ -1,4 +1,4 @@
-/** A small map of a set of places, shared by the admin «Места» tab and the tourist's «посещённые» page. */
+/** A small map of a set of places, shared by «Места» and «посещённые». */
 
 import { useEffect, useMemo, useRef } from 'react';
 import {

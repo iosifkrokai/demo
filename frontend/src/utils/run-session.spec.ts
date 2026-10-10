@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-/** The run lives in module state, so each case re-imports a fresh copy of it — that is also what a page reload does to a real run. */
+/** The run lives in module state, so each case re-imports a fresh copy. */
 const load = () => import('./run-session');
 
 beforeEach(() => {

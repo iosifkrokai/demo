@@ -19,7 +19,7 @@ import {
 import type { MobileSnap } from './use-mobile-sheet-snap';
 import type { SheetHandleProps } from '@/components/parts/sheet-snap';
 
-/** The mobile panel host: it owns the geometry (three positions, the height the map controls ride above, the strip used while walking) and renders the same panel contents inside it. */
+/** Mobile panel host: owns the sheet geometry and renders the same panel contents. */
 const SHEET_CLASS = [
   'bg-background p-0 gap-0 overflow-hidden rounded-t-3xl border-t border-border shadow-sheet',
   'pb-[env(safe-area-inset-bottom)]',

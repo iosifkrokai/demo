@@ -16,7 +16,7 @@ interface PlacesTabProps {
   onReload?: () => void;
 }
 
-/** Fold ё→е and lower-case, so «костёл»/«костел» match the same way the backend does — the search is a browse aid, not a second, divergent matcher. */
+/** Fold ё→е and lower-case so «костёл»/«костел» match the way the backend does. */
 const fold = (text: string): string =>
   text.trim().toLowerCase().replace(/ё/g, 'е');
 

@@ -1,4 +1,4 @@
-/** The full point catalogue (`GET /places`) — every point in the dataset, for the «все точки» tab. */
+/** The full point catalogue (`GET /places`) for the «все точки» tab. */
 
 import type { PlacesAnswer } from './types';
 

@@ -89,7 +89,7 @@ import { forward_geocode } from '@/utils/nominatim';
 
 const AGENT_URL = (import.meta.env.VITE_AGENT_URL as string | undefined) ?? '';
 
-/** Time presets. 0 = «без ограничения»: no `time_budget_minutes` is sent at all and the agent builds the full route. */
+/** Time-budget presets; 0 («без ограничения») sends no budget and builds the full route. */
 const buildTimeBudgetOptions = (t: TFunction) => [
   { value: 30, label: t('sidebar.budgets.b30') },
   { value: 45, label: t('sidebar.budgets.b45') },
@@ -129,7 +129,7 @@ const buildTransportOptions = (
 /** Panel views — the content a tourist browses. */
 export type PanelView = 'plan' | 'history' | 'itineraries' | 'places';
 
-/** The strip's tabs, in the order the tourist actually works: plan a route, take a ready-made one, look back at history. */
+/** The strip's tabs in the tourist's working order: plan, ready-made, history. */
 const buildViews = (t: TFunction): SegmentedItem<PanelView>[] => [
   {
     value: 'plan',
@@ -238,7 +238,7 @@ const buildInterestOptions = (t: TFunction): FilterOption[] => [
   },
 ];
 
-/** Amenities a walk may need, each with a strength: «обязательно» goes out as a hard service the route must serve, «желательно» as a soft interest. */
+/** Amenity options with strength: «обязательно» hard, «желательно» soft. */
 const buildAmenityOptions = (t: TFunction): FilterOption[] => [
   { code: 'туалет', label: t('sidebar.amenities.toilet') },
   { code: 'кафе', label: t('sidebar.amenities.cafe') },
@@ -327,7 +327,7 @@ const fmtKm = (km: number, t: TFunction) => {
   return t('sidebar.units.km', { value });
 };
 
-/** The planning panel that replaces the upstream RoutePlanner: 1. ask — the query field, time budget, transport; on submit it hits /routes/generate and pushes the agent's ordered points into the directions store (with my own position as the start when known). 2. waypoints — WaypointList (drag/drop, remove, pin). 3. manual add — small Nominatim lookup → append to the list. 4. history — previous routes, restored with their descriptions. */
+/** The planning panel: ask, waypoints, manual add and history tabs. */
 /** Fingerprint of the route as the guide will walk it. */
 const walkKey = (waypoints: readonly Waypoint[]) =>
   guideRouteKey(
@@ -347,7 +347,7 @@ const walkKey = (waypoints: readonly Waypoint[]) =>
       })
   );
 
-/** Why the panel could not say where you are — a code, not a finished sentence, so the line follows the interface language instead of freezing in one. */
+/** Why the panel could not locate you — a code, translated to the interface language. */
 type GeoReason = 'unsupported' | 'failedShort' | 'denied';
 
 export interface SidebarProps {
@@ -532,7 +532,7 @@ export const Sidebar = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mirroredCosting]);
 
-  /** Ask the browser where we are and pin it as the route start: the marker on the map, the first waypoint and the agent's `origin` all come from here. */
+  /** Locate the browser and pin it as the route start (marker, first waypoint, `origin`). */
   const locateMe = useCallback(
     async (silent = false): Promise<{ lat: number; lon: number } | null> => {
       if (!navigator.geolocation) {
@@ -611,7 +611,7 @@ export const Sidebar = ({
     [interests, softAmenities]
   );
 
-  /** One line per condition the tourist actually set — the summary the panel shows so no filter is applied invisibly. */
+  /** One line per filter the tourist set, so no condition is applied invisibly. */
   const filterSummary = useMemo(() => {
     const out: string[] = [];
     if (partyAdults != null)
@@ -653,7 +653,7 @@ export const Sidebar = ({
       return copy;
     });
 
-  /** Open a past route again: the same stops, on the map, with their facts — what the history row promised. */
+  /** Reopen a past route: the same stops on the map with their facts. */
   const restoreFromHistory = (entry: RouteHistoryEntry) => {
     const restored: Waypoint[] = entry.places.map((p, i) => ({
       id: i.toString(),

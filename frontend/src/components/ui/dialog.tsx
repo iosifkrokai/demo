@@ -36,7 +36,7 @@ const DialogClose = React.forwardRef<
 });
 DialogClose.displayName = 'DialogClose';
 
-/** Radix renders `Dialog.Portal` through a `Slot`, which clones each child and injects a ref into it. */
+/** Radix's `Dialog.Portal` clones each child through a `Slot`, injecting a ref. */
 const DialogOverlay = React.forwardRef<
   React.ComponentRef<typeof DialogPrimitive.Overlay>,
   React.ComponentProps<typeof DialogPrimitive.Overlay>

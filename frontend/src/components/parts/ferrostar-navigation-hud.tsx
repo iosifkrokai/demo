@@ -97,11 +97,11 @@ export const FerrostarNavigationHud = ({
   nextPlaceDetails,
 }: FerrostarNavigationHudProps) => {
   const { t } = useTranslation();
-  /** Which stop's place info is open, kept as an id rather than a boolean: a new stop then closes it by construction (`placeDetailsFor === nextStopId` goes false on its own), instead of an effect that has to write state back after the render that changed the stop. */
+  /** Id of the stop whose place info is open; a new stop closes it by construction. */
   const [placeDetailsFor, setPlaceDetailsFor] = useState<string | null>(null);
   const placeDetailsOpen = nextStopId != null && placeDetailsFor === nextStopId;
 
-  /** Skipping a suggestion is reported to the panel, which owns the «skipped» set for the whole guide — the HUD keeps no second copy that could disagree with it after a rerender. */
+  /** Report a skipped suggestion to the panel, which owns the «skipped» set. */
   const dismissSuggestion = (id: string) => {
     if (onSkipSuggestion) onSkipSuggestion(id);
   };

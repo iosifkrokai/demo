@@ -1,4 +1,4 @@
-/** Small shared helpers for the guide and its parts: the walk repeats them in the panel, in the next-stop card and in the stop list, so one wording means one thing everywhere. */
+/** Shared helpers so the guide, next-stop card and stop list word things consistently. */
 
 import i18n from '@/i18n';
 import {

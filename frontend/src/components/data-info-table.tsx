@@ -15,7 +15,7 @@ interface ValhallaStatus {
   buildFinished: Date | null;
 }
 
-/** Splits a Valhalla version string like `3.8.3-1a53e4e` into its semver and (optional) commit short-SHA. */
+/** Split a version string like `3.8.3-1a53e4e` into semver and optional commit short-SHA. */
 const parseVersion = (version: string) => {
   const [semver, ...rest] = version.split('-');
   return { semver: semver || version, commitSha: rest.join('-') || undefined };
@@ -30,7 +30,7 @@ const formatUtc = (date: Date) => {
   );
 };
 
-/** Bottom-of-sidebar key/value table surfacing the served graph's age and the Valhalla version (linking the short-SHA to its commit). */
+/** Sidebar footer table with the served graph's age and Valhalla version. */
 export const DataInfoTable = () => {
   const {
     data: status,

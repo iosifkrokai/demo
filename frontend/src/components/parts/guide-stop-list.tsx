@@ -35,7 +35,7 @@ interface GuideStopListProps {
   defaultOpen?: boolean;
 }
 
-/** The route as a timeline: 52px rows, a hairline between the numbered circles, done rows muted and struck through, the next one picked out in the accent. */
+/** Route as a timeline: numbered circles, done rows struck through, next in accent. */
 export const GuideStopList = ({
   stops,
   visited,
