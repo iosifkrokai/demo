@@ -12,6 +12,7 @@ That is exactly what keeps the curated-category guard honest.
 
 from __future__ import annotations
 
+import contextlib
 import threading
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
@@ -53,18 +54,15 @@ class PostgresRepository:
     def _drop(self) -> None:
         conn, self._conn = self._conn, None
         if conn is not None:
-            try:
+            with contextlib.suppress(Exception):  # pragma: no cover — a broken socket
                 conn.close()
-            except Exception:  # pragma: no cover — closing a broken socket
-                pass
 
     @contextmanager
     def _cursor(self) -> Iterator[Any]:
         """A dict-row cursor, or :class:`StorageUnavailable` on any DB failure."""
         try:
-            with self._lock:
-                with self._connection().cursor(row_factory=dict_row) as cur:
-                    yield cur
+            with self._lock, self._connection().cursor(row_factory=dict_row) as cur:
+                yield cur
         except psycopg.Error as exc:
             self._drop()
             raise StorageUnavailable(str(exc)) from exc

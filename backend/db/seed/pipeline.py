@@ -99,7 +99,8 @@ def apply_dataset(conn, ds: Dataset, records: list[dict]) -> dict:
             src = source_fields(r["source_url"], ds.license)
             cur.execute(
                 """
-                INSERT INTO place_sources (place_id, provider, external_id, url, license, fetched_at)
+                INSERT INTO place_sources (place_id, provider, external_id, url,
+                                          license, fetched_at)
                 SELECT id, %s, %s, %s, %s, now() FROM places WHERE source_url = %s
                 ON CONFLICT (provider, external_id) DO UPDATE
                     SET url = EXCLUDED.url, license = EXCLUDED.license

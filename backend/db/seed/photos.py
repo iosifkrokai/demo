@@ -55,7 +55,9 @@ def _osmium() -> Any:
         return importlib.import_module("osmium")
     except ImportError as exc:  # pragma: no cover - depends on the environment
         raise RuntimeError(
-            "стадия подсказок требует pyosmium (osmium): он не объявлен в pyproject — установите его отдельно (pip install osmium) или запустите стадию resolve по уже собранному osm_photo_hints.json"
+            "стадия подсказок требует pyosmium (osmium): он не объявлен в pyproject — "
+            "установите его отдельно (pip install osmium) или запустите стадию resolve "
+            "по уже собранному osm_photo_hints.json"
         ) from exc
 
 
@@ -82,9 +84,9 @@ def collect_hints(
     wanted: set[str] = {m.group(1) for url in source_urls if (m := _OSM_REF.match(url or ""))}
     print(f"точек с OSM-ссылкой в source_url: {len(wanted)}")
 
-    SimpleHandler = osmium.SimpleHandler
+    base_handler = osmium.SimpleHandler
 
-    class Collector(SimpleHandler):  # type: ignore[misc]
+    class Collector(base_handler):
         """One pass over the extract, keeping only the objects we asked for."""
 
         def __init__(self) -> None:
@@ -511,7 +513,8 @@ def resolve_photos(
     claims = wikidata_claims(sorted(set(qids))) if qids else {}
     with_image = sum(1 for c in claims.values() if c.get("image"))
     print(
-        f"Wikidata ответила по {len(claims)} из {len(set(qids))} объектов, картинка есть у {with_image}"
+        f"Wikidata ответила по {len(claims)} из {len(set(qids))} объектов,"
+        f" картинка есть у {with_image}"
     )
 
     wiki_pairs = [

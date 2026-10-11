@@ -5,6 +5,7 @@ Builds the budget summary against the ACTUAL time, plus trace diagnostics.
 
 from __future__ import annotations
 
+import itertools
 import math
 from typing import Any
 
@@ -29,7 +30,7 @@ def _leg_sum(matrix: list[list[float]], order: list[int]) -> float:
     if len(order) < 2:
         return 0.0
     total = 0.0
-    for a, b in zip(order, order[1:]):
+    for a, b in itertools.pairwise(order):
         total += _leg_s(matrix[a][b])
         if total >= constants.UNREACHABLE_S:
             return float(constants.UNREACHABLE_S)
@@ -105,7 +106,7 @@ def validate(
     matrix = cost.walk_seconds
     visits = cost.visit_minutes
 
-    legs = list(zip(order, order[1:]))
+    legs = list(itertools.pairwise(order))
     if constraints.round_trip and len(order) >= 2:
         legs.append((order[-1], order[0]))
 

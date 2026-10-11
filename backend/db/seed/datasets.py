@@ -50,7 +50,7 @@ def read_pipe_csv(path: Path) -> list[dict]:
     for raw in csv.reader(lines, delimiter="|"):
         if len(raw) != len(COLUMNS):
             raise SystemExit(f"expected {len(COLUMNS)} columns, got {len(raw)}: {raw[:3]}...")
-        rows.append(dict(zip(COLUMNS, raw)))
+        rows.append(dict(zip(COLUMNS, raw, strict=False)))
     return rows
 
 

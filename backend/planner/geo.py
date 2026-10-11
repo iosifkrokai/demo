@@ -46,11 +46,13 @@ def _geo_focus_report(
     if origin is not None:
         anchor = origin
         anchor_name = "GPS"
-        dist = lambda c: _distance_from_origin_m(c, origin)
+        def dist(c):
+            return _distance_from_origin_m(c, origin)
     elif anchor_id is not None and any(c.id == anchor_id for c in candidates):
         anchor = next(c for c in candidates if c.id == anchor_id)
         anchor_name = anchor.name
-        dist = lambda c: _distance_m(c, anchor)
+        def dist(c):
+            return _distance_m(c, anchor)
     else:
         focus_m = constants.GEO_FOCUS_KM * 1000
         anchor = max(
@@ -61,7 +63,8 @@ def _geo_focus_report(
             ),
         )
         anchor_name = anchor.name
-        dist = lambda c: _distance_m(c, anchor)
+        def dist(c):
+            return _distance_m(c, anchor)
     max_m = constants.GEO_FOCUS_KM * 1000
 
     if origin is not None or anchor_id is not None:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import itertools
 import math
 from collections.abc import Collection
 from dataclasses import dataclass
@@ -231,7 +232,7 @@ def walk_cost(order: list[int], matrix: list[list[float]]) -> float:
     if len(order) < 2:
         return 0.0
     total = 0.0
-    for a, b in zip(order, order[1:]):
+    for a, b in itertools.pairwise(order):
         cell = matrix[a][b]
         if math.isnan(cell):
             continue

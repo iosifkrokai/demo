@@ -61,7 +61,8 @@ def read_routes(path: Path | None = None) -> dict[str, Any]:
             "layer": "quality/cases/routes",
             "measured": False,
             "how": "./.venv/bin/python -m quality --replay "
-                   "quality/reports/snapshots/<снимок> --report-dir quality/reports/snapshots/<дата>",
+                   "quality/reports/snapshots/<снимок>"
+                   " --report-dir quality/reports/snapshots/<дата>",
         }
     report = json.loads(path.read_text(encoding="utf-8"))
     overall = report.get("overall") or {}
@@ -163,7 +164,10 @@ def read_evals(path: Path | None = None) -> dict[str, Any]:
         return {
             "layer": "evals",
             "measured": False,
-            "how": "./.venv/bin/python -m quality.evals --with-interpretation --json quality/reports/evals_last.json",
+            "how": (
+                "./.venv/bin/python -m quality.evals --with-interpretation"
+                " --json quality/reports/evals_last.json"
+            ),
         }
     stages = json.loads(path.read_text(encoding="utf-8"))
     out: list[dict[str, Any]] = []
@@ -271,7 +275,11 @@ def known_gaps(routes: dict, golden: dict, evals: dict) -> list[dict[str, Any]]:
             gaps.append({"where": f"evals/{stage['stage']}", **gap})
     for note in (golden.get("failed_cases") or []):
         if note.get("known_gap"):
-            gaps.append({"where": "quality/cases/compliance", "case": note["case"], "why": note.get("why")})
+            gaps.append({
+                "where": "quality/cases/compliance",
+                "case": note["case"],
+                "why": note.get("why"),
+            })
     return gaps
 
 

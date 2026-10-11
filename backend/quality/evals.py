@@ -37,8 +37,8 @@ class Case:
 def _load(name: str) -> list[Case]:
     path = CASES / f"{name}.jsonl"
     out = []
-    for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
-        line = line.strip()
+    for lineno, raw_line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+        line = raw_line.strip()
         if not line:
             continue
         try:
@@ -120,7 +120,11 @@ def _off_line_and_along(
         bx, by = pts[i + 1]
         dx, dy = bx - ax, by - ay
         seg_len = math.hypot(dx, dy)
-        t = 0.0 if seg_len == 0 else max(0.0, min(1.0, ((px - ax) * dx + (py - ay) * dy) / seg_len**2))
+        t = (
+            0.0
+            if seg_len == 0
+            else max(0.0, min(1.0, ((px - ax) * dx + (py - ay) * dy) / seg_len**2))
+        )
         cx, cy = ax + t * dx, ay + t * dy
         dist = math.hypot(px - cx, py - cy)
         along = run + t * seg_len
@@ -220,7 +224,10 @@ def run_services() -> dict[str, Any]:
             checks.append({
                 "case": case.id, "check": "membership_agrees",
                 "ok": not missing and not extra,
-                "detail": f"нет в ответе {sorted(missing)}, лишние {sorted(extra)} (у порога не считаем: {ties})",
+                "detail": (
+                    f"нет в ответе {sorted(missing)}, лишние {sorted(extra)}"
+                    f" (у порога не считаем: {ties})"
+                ),
                 "why": case.why,
             })
 
@@ -246,7 +253,8 @@ def run_services() -> dict[str, Any]:
             checks.append({
                 "case": case.id, "check": "honest_flags", "ok": flags_ok,
                 "detail": f"detour_confirmed={answer.get('detour_confirmed')}, "
-                          f"measured={answer.get('measured')}, not_measured={answer.get('not_measured')}",
+                          f"measured={answer.get('measured')}, "
+                          f"not_measured={answer.get('not_measured')}",
                 "why": case.why,
             })
 
@@ -267,7 +275,10 @@ def run_services() -> dict[str, Any]:
                 ok = len(wider["items"]) >= len(items)
                 checks.append({
                     "case": case.id, "check": "wider_gate_finds_more", "ok": ok,
-                    "detail": f"{len(items)} при {gate:.0f} м → {len(wider['items'])} при {gate * 3:.0f} м",
+                    "detail": (
+                        f"{len(items)} при {gate:.0f} м →"
+                        f" {len(wider['items'])} при {gate * 3:.0f} м"
+                    ),
                     "why": case.why,
                 })
     except StorageUnavailable as exc:

@@ -12,6 +12,8 @@ from fastapi import HTTPException
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+import itertools
+
 from api.routers.routes import route_trace
 from telemetry import trace
 
@@ -330,7 +332,7 @@ def test_a_step_that_took_less_than_a_millisecond_still_keeps_its_place(monkeypa
         "retrieve",
     ], "the export reordered the run"
     assert len(set(starts)) == len(starts), "two steps share a timestamp"
-    assert all(b - a >= 1_000_000 for a, b in zip(starts, starts[1:])), (
+    assert all(b - a >= 1_000_000 for a, b in itertools.pairwise(starts)), (
         "a step was placed less than a millisecond after its predecessor"
     )
     assert all(c["end_ns"] > c["start_ns"] for c in placed)

@@ -140,12 +140,12 @@ def service_name(tags: dict[str, str], category: str) -> str | None:
 
 def _haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     """Metres between two lat/lon points (local copy: imports no seed.* module)."""
-    R = 6371000
+    earth_radius_m = 6371000
     phi1, phi2 = math.radians(lat1), math.radians(lat2)
     dphi = math.radians(lat2 - lat1)
     dlam = math.radians(lon2 - lon1)
     a = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlam / 2) ** 2
-    return R * 2 * math.asin(math.sqrt(a))
+    return earth_radius_m * 2 * math.asin(math.sqrt(a))
 
 
 def is_name_dup(

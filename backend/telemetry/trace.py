@@ -234,7 +234,7 @@ def _export_to_langfuse(trace_id: str) -> None:
                 input=first.facts or None,
                 output=last.facts or None,
             )
-            for span, (span_start_ms, span_end_ms) in zip(trace.spans, schedule):
+            for span, (span_start_ms, span_end_ms) in zip(trace.spans, schedule, strict=False):
                 obs = root.start_observation(**_observation(span))
                 _backdate(obs, span_start_ms * 1_000_000)
                 obs.end(end_time=span_end_ms * 1_000_000)

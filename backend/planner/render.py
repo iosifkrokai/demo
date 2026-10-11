@@ -105,7 +105,9 @@ def _verify_maneuver_fields(maneuvers: list[dict]) -> list[str]:
     return missing_fields
 
 
-def _render_legs(pts: list[tuple[float, float]], costing: str, locale: str) -> tuple[dict, dict, str]:
+def _render_legs(
+    pts: list[tuple[float, float]], costing: str, locale: str
+) -> tuple[dict, dict, str]:
     """Draw every consecutive pair on its own and keep the legs that route.
 
     A leg Valhalla refuses is skipped, so one bad stop costs its two legs only.

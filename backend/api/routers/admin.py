@@ -83,9 +83,8 @@ def admin_patch_user(
     if role is not None and role != target.role:
         if target_id == actor.id:
             return deps.error(409, REASON_SELF_ROLE)
-        if target.role == ROLE_ADMIN and role != ROLE_ADMIN:
-            if repo.count_admins() <= 1:
-                return deps.error(409, REASON_LAST_ADMIN)
+        if target.role == ROLE_ADMIN and role != ROLE_ADMIN and repo.count_admins() <= 1:
+            return deps.error(409, REASON_LAST_ADMIN)
 
     updated = repo.update_user(
         target_id,

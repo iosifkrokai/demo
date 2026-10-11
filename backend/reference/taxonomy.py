@@ -55,7 +55,9 @@ def all_categories() -> tuple[Category, ...]:
 
     for row in rows[1:]:
         if len(row) != len(_COLUMNS):
-            raise ValueError(f"taxonomy row has {len(row)} columns, expected {len(_COLUMNS)}: {row}")
+            raise ValueError(
+                f"taxonomy row has {len(row)} columns, expected {len(_COLUMNS)}: {row}"
+            )
         code, ru, en, role, osm_tags, visit_minutes, aliases_ru, aliases_en = row
         if role not in ("sight", "service"):
             raise ValueError(f"taxonomy role must be sight|service, got {role!r} for {code!r}")
@@ -156,9 +158,12 @@ def resolve_code(term: str, locale: Locale = "ru") -> str | None:
 
     longest: str | None = None
     for form in index:
-        if len(form) >= 4 and form in norm:
-            if longest is None or len(form) > len(longest):
-                longest = form
+        if (
+            len(form) >= 4
+            and form in norm
+            and (longest is None or len(form) > len(longest))
+        ):
+            longest = form
     return index[longest] if longest is not None else None
 
 

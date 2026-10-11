@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import math
 import random
-from itertools import permutations
+from itertools import pairwise, permutations
 from typing import Any
 
 from core import constants
@@ -123,7 +123,7 @@ def _leg_value(cell: float) -> float:
 
 def _route_legs(order: list[int], round_trip: bool) -> list[tuple[int, int]]:
     """The legs of a route, including the return leg for a round trip."""
-    legs = list(zip(order, order[1:]))
+    legs = list(pairwise(order))
     if round_trip and len(order) >= 2:
         legs.append((order[-1], order[0]))
     return legs
@@ -294,7 +294,7 @@ def _brute_open(
         for end in range(n):
             if start == end:
                 continue
-            middle = [i for i in range(n) if i != start and i != end]
+            middle = [i for i in range(n) if i not in (start, end)]
             for perm in permutations(middle):
                 order = [start, *perm, end]
                 total = _order_total(order, matrix, visits, round_trip)
@@ -311,7 +311,7 @@ def _brute_open(
             for end in range(n):
                 if start == end:
                     continue
-                middle = [i for i in range(n) if i != start and i != end]
+                middle = [i for i in range(n) if i not in (start, end)]
                 for perm in permutations(middle):
                     order = [start, *perm, end]
                     total = _order_total(order, matrix, visits, round_trip)
@@ -366,7 +366,7 @@ def _regret_insertion(
         for c in remaining:
             insertion_costs: list[tuple[float, int]] = []
             for pos in range(len(route) + 1):
-                new_route = route[:pos] + [c] + route[pos:]
+                new_route = [*route[:pos], c, *route[pos:]]
                 if _max_leg(new_route, matrix, round_trip) > max_leg_s:
                     continue
                 cost = _order_total(new_route, matrix, visits, round_trip)
@@ -384,7 +384,7 @@ def _regret_insertion(
         if best_choice is None:
             break
         _, chosen, pos = best_choice
-        new_route = route[:pos] + [chosen] + route[pos:]
+        new_route = [*route[:pos], chosen, *route[pos:]]
         if budget_s is not None and _order_total(
             new_route, matrix, visits, round_trip
         ) > budget_s:

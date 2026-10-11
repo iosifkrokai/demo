@@ -55,8 +55,8 @@ def _create_table_body(table: str) -> str:
 
 def _created_columns(table: str) -> set[str]:
     columns: set[str] = set()
-    for line in _create_table_body(table).splitlines():
-        line = line.strip().rstrip(",")
+    for raw_line in _create_table_body(table).splitlines():
+        line = raw_line.strip().rstrip(",")
         if not line or line.startswith("--"):
             continue
         first = line.split()[0]

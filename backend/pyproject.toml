@@ -69,27 +69,34 @@ select = [
     "PL",
 ]
 ignore = [
-    "E501",
-    "B008",
-    "PLR0913",
-    "PLR2004",
-    "N806",
-    "ARG002",
-    "ARG004",
+    # The product speaks Russian: Cyrillic in a string is the point, not a defect.
     "RUF001", "RUF002", "RUF003",
-    "PLC0415",
-    "PLR0911", "PLR0912", "PLR0915", "PLR0917",
-    "N818",
-    "ARG001",
-    "B905", "RUF007",
-    "RUF005", "RUF015", "RUF046", "PLW2901",
-    "SIM102", "SIM105", "SIM108", "SIM117", "PLR1714", "PLC0206",
-    "E731",
+    # FastAPI requires a call in the default (Depends(...)): the framework's idiom.
+    "B008",
+
+    # --- deferred, counted on 2026-10-11 --------------------------------------
+    # These are not "rules we would rather not have"; each is a campaign of its
+    # own, and the count is here so the debt is visible in one place instead of
+    # implied by an absent rule. Removing an entry means doing that campaign.
+    "PLC0415", # 92  imports inside functions — most exist to break a real cycle
+    "PLR2004", # 87  magic values — mostly "a route needs at least two stops"
+    "PLR0913", # 42  too many arguments
+    "PLR0917", # 14  too many positional arguments
+    "ARG001",  # 11  unused function argument: parameters a refactor left behind
+    "N818",    # 9   exception names without an `Error` suffix
+    "PLR0912", # 8   too many branches
+    "PLR0915", # 8   too many statements
+    "PLR0911", # 4   too many return statements
+    "ARG002",  # 3   unused method argument
 ]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = ["E501", "PLR2004", "ARG", "RUF012"]
 "**/__init__.py" = ["F401"]
+# The baseline reproduces the old init.sql statement for statement —
+# its own docstring claims that — so wrapping its lines for style
+# would break the claim it exists to make.
+"db/alembic/versions/*.py" = ["E501"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["agent", "api", "core", "db", "embeddings", "planner", "reference", "telemetry"]

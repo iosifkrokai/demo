@@ -1509,7 +1509,8 @@ def print_table(groups: list[list[RunRecord]]) -> None:
         errs = [r.api_error for r in results if r.api_error]
         print(f"│ {row} │")
         for err in errs:
-            print(f"│ {'':{COL_WIDTH['name']}} │{'':{sum(COL_WIDTH[k] for k in COLS[1:]) + 3 * (len(COLS) - 2)}}│ {err[:70]} │")
+            width = sum(COL_WIDTH[k] for k in COLS[1:]) + 3 * (len(COLS) - 2)
+            print(f"│ {'':{COL_WIDTH['name']}} │{'':{width}}│ {err[:70]} │")
 
     print(f"{'':─^{total_width}}")
     print()
@@ -1798,7 +1799,7 @@ def write_md_report(
     out_dir.mkdir(parents=True, exist_ok=True)
     path = out_dir / "report.md"
     repeat = len(groups[0]) if groups else 0
-    L: list[str] = [
+    lines: list[str] = [
         "# Benchmark Report: Grodno Route Planner",
         "",
         f"**Mode:** `{mode}` · **Generated:** {generated_at}",
@@ -1808,21 +1809,21 @@ def write_md_report(
         "",
     ]
     if snapshot:
-        L += [
+        lines += [
             f"**Snapshot:** `{snapshot.get('dir', '—')}` · "
             f"{snapshot.get('n_rows', 0)} row(s) · "
             f"git `{snapshot.get('git_sha', '—')}`",
             "",
         ]
     if drift_rows:
-        L += [
+        lines += [
             f"> ⚠ {len(drift_rows)} row(s) recomputed to metrics that differ from "
             "the values recorded in the snapshot — the metric code changed since "
             "the run.",
             "",
         ]
 
-    L += [
+    lines += [
         "## Per-case scores (`mean±spread` over repeats)",
         "",
         "| case | S1 pool | S2 \\| S1 | Rec@K | prec | τ | detour km | Δwalk | fit "
@@ -1831,7 +1832,7 @@ def write_md_report(
     ]
     for runs in groups:
         eval_runs = [r.result for r in runs]
-        L.append(
+        lines.append(
             f"| {runs[0].case} | {_ms(eval_runs, 'stage.recall', 2)} | "
             f"{_ms(eval_runs, 'stage.route_recall_given_pool', 2)} | "
             f"{_ms(eval_runs, 'recall_at_k', 2)} | "
@@ -1844,7 +1845,7 @@ def write_md_report(
             f"{sum(1 for r in eval_runs if r.hard_failure)} |"
         )
 
-    L += [
+    lines += [
         "",
         f"## Overall — bootstrap over cases (B={samples}, seed={seed})",
         "",
@@ -1854,12 +1855,12 @@ def write_md_report(
     for path_, _label, dec in CI_METRICS:
         stats = overall.get(path_, {})
         nf = noise.get(path_, {}).get("mean_within_case_spread")
-        L.append(
+        lines.append(
             f"| {stats.get('label', path_)} | {_ci_cell(stats, dec)} | "
             f"{stats.get('n', 0)} | "
             f"{'n/a' if nf is None else f'{nf:.{dec}f}'} |"
         )
-    L += [
+    lines += [
         "",
         f"Reference noise floor: {REFERENCE_NOISE_FLOOR}.",
         "",
@@ -1870,17 +1871,17 @@ def write_md_report(
         "",
     ]
     if not failures["by_kind"]:
-        L.append("- none")
+        lines.append("- none")
     for kind, count in sorted(failures["by_kind"].items()):
         tag = "gated" if kind in GATED_FAILURE_KINDS else "counted, kept in means"
-        L.append(f"- `{kind}`: {count} ({tag})")
+        lines.append(f"- `{kind}`: {count} ({tag})")
     if failures["gated"]:
-        L += ["", "| case | repeat | kind | detail |", "|---|---|---|---|"]
+        lines += ["", "| case | repeat | kind | detail |", "|---|---|---|---|"]
         for row in failures["gated"]:
-            L.append(
+            lines.append(
                 f"| {row['case']} | {row['repeat']} | {row['kind']} | {row['detail']} |"
             )
-    L += [
+    lines += [
         "",
         f"Leg-sanity defects kept in the means: {failures['leg_sanity_defects']}.",
         "",
@@ -1918,7 +1919,7 @@ def write_md_report(
         "which is what makes a metric change reviewable as a diff rather than a claim.",
         "",
     ]
-    path.write_text("\n".join(L), encoding="utf-8")
+    path.write_text("\n".join(lines), encoding="utf-8")
     print(f"  Markdown report → {path}")
     return path
 
@@ -2839,8 +2840,8 @@ def load_golden_snapshot(snapshot_dir: Path) -> tuple[dict, list[dict]]:
     meta: dict = {}
     rows: list[dict] = []
     with path.open(encoding="utf-8") as fh:
-        for line in fh:
-            line = line.strip()
+        for raw_line in fh:
+            line = raw_line.strip()
             if not line:
                 continue
             rec = json.loads(line)
@@ -3050,6 +3051,9 @@ def write_compliance_reports(
         "\n".join(lines) + "\n", encoding="utf-8"
     )
 
+    rate = summary["compliance_rate"]
+    compliance_text = "n/a" if rate is None else format(rate, ".3f")
+
     md = [
         "# Golden-set compliance report",
         "",
@@ -3061,7 +3065,7 @@ def write_compliance_reports(
         "only if RU and EN got the same kind of answer.",
         "",
         f"**Compliance rate: "
-        f"{'n/a' if summary['compliance_rate'] is None else format(summary['compliance_rate'], '.3f')}** "
+        f"{compliance_text}** "
         f"({summary['n_units_passed']}/{summary['n_units']} units)",
         "",
         "| case | locale | verdict | status | reason | detail |",
@@ -3221,15 +3225,15 @@ def emit_golden(args, out: tuple) -> None:
     print(f"  compliance JSONL  → {out_dir / 'compliance.metrics.jsonl'}")
 
     rate = summary["compliance_rate"]
-    if args.min_compliance is not None:
-        if rate is None or rate + 1e-9 < args.min_compliance:
-            print(
-                f"--min-compliance {args.min_compliance}: measured "
-                f"{'n/a' if rate is None else f'{rate:.3f}'}",
-                file=sys.stderr,
-            )
-            sys.exit(1)
-    if args.strict and (summary["n_cases_failed"] or summary["n_parity_passed"] != summary["n_parity_groups"]):
+    if args.min_compliance is not None and (rate is None or rate + 1e-9 < args.min_compliance):
+        print(
+            f"--min-compliance {args.min_compliance}: measured "
+            f"{'n/a' if rate is None else f'{rate:.3f}'}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    parity_incomplete = summary["n_parity_passed"] != summary["n_parity_groups"]
+    if args.strict and (summary["n_cases_failed"] or parity_incomplete):
         print(
             f"--strict: {summary['n_cases_failed']} golden case(s) failed, "
             f"{summary['n_parity_groups'] - summary['n_parity_passed']} parity group(s) failed",

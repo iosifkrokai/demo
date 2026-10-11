@@ -87,18 +87,22 @@ RAION_CENTRES: dict[str, tuple[float, float]] = {
 
 def haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     """Metres between two lat/lon points."""
-    R = 6371000
+    earth_radius_m = 6371000
     phi1, phi2 = math.radians(lat1), math.radians(lat2)
     dphi = math.radians(lat2 - lat1)
     dlam = math.radians(lon2 - lon1)
     a = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlam / 2) ** 2
-    return R * 2 * math.asin(math.sqrt(a))
+    return earth_radius_m * 2 * math.asin(math.sqrt(a))
 
 
 def nominatim_tile(lat: float, lon: float) -> tuple[int, int]:
     """z8 tile coordinates for Nominatim tile cache."""
     x = int((lon + 180) / 360 * 256)
-    y = int((1 - math.log(math.tan(math.radians(lat)) + 1 / math.cos(math.radians(lat))) / math.pi) / 2 * 256)
+    y = int(
+        (1 - math.log(math.tan(math.radians(lat)) + 1 / math.cos(math.radians(lat))) / math.pi)
+        / 2
+        * 256
+    )
     return x, y
 
 
@@ -240,7 +244,10 @@ def fetch_overpass(
 
     for ep in failed_endpoints:
         sys.stderr.write(f"[overpass] FAILED: {ep}\n")
-    sys.stderr.write(f"[overpass] all {len(OVERPASS_ENDPOINTS)} endpoints failed after 4 attempts — exiting\n")
+    sys.stderr.write(
+        f"[overpass] all {len(OVERPASS_ENDPOINTS)} endpoints failed after 4 attempts"
+        " — exiting\n"
+    )
     return None
 
 

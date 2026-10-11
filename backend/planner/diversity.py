@@ -34,17 +34,14 @@ def mmr_select(
     if not has_embs:
         return _fallback_truncate(candidates, n, constraints)
 
-    E = np.array([embs[c.id] for c in candidates], dtype=np.float32)
-    norms = np.linalg.norm(E, axis=1, keepdims=True) + 1e-9
-    E_norm = E / norms
-    sim_matrix = E_norm @ E_norm.T
+    emb = np.array([embs[c.id] for c in candidates], dtype=np.float32)
+    norms = np.linalg.norm(emb, axis=1, keepdims=True) + 1e-9
+    emb_norm = emb / norms
+    sim_matrix = emb_norm @ emb_norm.T
 
     rel = np.array([c.relevance for c in candidates], dtype=np.float32)
     r_min, r_max = float(rel.min()), float(rel.max())
-    if r_max - r_min > 1e-9:
-        rel_norm = (rel - r_min) / (r_max - r_min)
-    else:
-        rel_norm = np.ones_like(rel) * 0.5
+    rel_norm = (rel - r_min) / (r_max - r_min) if r_max - r_min > 1e-09 else np.ones_like(rel) * 0.5
 
     must_ids = set(constraints.must_visit_ids) if constraints else set()
     must_indices: list[int] = []

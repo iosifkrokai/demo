@@ -92,7 +92,7 @@ def retrieve(
     if query_embedding:
         vector_signal = _vector_signal(query_embedding, places, constraints, limit=pool_limit)
 
-    kw_query = " ".join(constraints.must_visit_keywords + [query_text]).strip()
+    kw_query = " ".join([*constraints.must_visit_keywords, query_text]).strip()
     keyword_signal = _keyword_signal(places, kw_query, limit=pool_limit // 2) if kw_query else []
 
     must_signal = [(pid, 0.0) for pid in constraints.must_visit_ids]

@@ -7,6 +7,7 @@ pipe-delimited text in the curated one, and the table still holds both.
 
 from __future__ import annotations
 
+import contextlib
 import dataclasses
 import json
 from collections.abc import Mapping
@@ -61,18 +62,16 @@ def parse_links(raw: str | None) -> list[dict]:
         except json.JSONDecodeError:
             pass
     links: list[dict] = []
-    for item in raw.split("|"):
-        item = item.strip()
+    for chunk in raw.split("|"):
+        item = chunk.strip()
         if not item:
             continue
         if " | " in item:
             title, url = (s.strip() for s in item.split(" | ", 1))
             links.append({"title": title, "url": url})
         else:
-            try:
+            with contextlib.suppress(Exception):
                 links.append(json.loads(item))
-            except Exception:
-                pass
     return links[:4]
 
 
@@ -144,15 +143,15 @@ def route_metrics(
 
     km = (summary or {}).get("length_km")
     if isinstance(km, (int, float)) and not isinstance(km, bool):
-        distance_m = int(round(float(km) * 1000))
+        distance_m = round(float(km) * 1000)
 
     total = (budget or {}).get("total_minutes")
     if isinstance(total, (int, float)) and not isinstance(total, bool):
-        duration_min = int(round(float(total)))
+        duration_min = round(float(total))
     else:
         secs = (summary or {}).get("time_seconds")
         if isinstance(secs, (int, float)) and not isinstance(secs, bool):
-            duration_min = int(round(float(secs) / 60.0))
+            duration_min = round(float(secs) / 60.0)
 
     return {
         "stop_count": int(stop_count),

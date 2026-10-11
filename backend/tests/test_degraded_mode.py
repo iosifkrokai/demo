@@ -405,11 +405,10 @@ class TestLiveRefusal:
     """The deliverable: without a key the pipeline refuses instead of guessing."""
 
     def test_planning_refuses_without_a_key(self, no_key, live_db):
-        with offline():
-            with pytest.raises(InterpretationUnavailable):
-                Pipeline(repos=_repos(live_db)).generate(
-                    GenerateReq(query=QUERY, time_budget_minutes=120)
-                )
+        with offline(), pytest.raises(InterpretationUnavailable):
+            Pipeline(repos=_repos(live_db)).generate(
+                GenerateReq(query=QUERY, time_budget_minutes=120)
+            )
 
     def test_the_vector_signal_is_skipped_without_a_query_vector(self, live_db, monkeypatch):
         """An empty query_embedding is what switches the vector signal off."""

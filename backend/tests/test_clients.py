@@ -78,9 +78,9 @@ class FakeRepo:
         state = self.db[client_id]["prefs"]
         if state is None:
             state = dict.fromkeys(PREFERENCE_COLUMNS)
-        for key in fields:
+        for key, value in fields.items():
             if key in PREFERENCE_COLUMNS:
-                state[key] = fields[key]
+                state[key] = value
         state["updated_at"] = _now()
         self.db[client_id]["prefs"] = state
         return ClientPreferences(**state)
@@ -493,7 +493,7 @@ class TestStore:
         repo, conn = _repo(lambda _s, _p: {"one": {"transport": "auto"}})
         repo.upsert_preferences(uuid.UUID(CLIENT_A), {"transport": "auto"})
         sqls = [s for s, _ in conn.executed]
-        update = [s for s in sqls if "INSERT INTO client_preferences" in s][0]
+        update = next(s for s in sqls if "INSERT INTO client_preferences" in s)
         assert "transport = EXCLUDED.transport" in update
         assert "party_adults = EXCLUDED.party_adults" not in update
 
@@ -501,8 +501,8 @@ class TestStore:
         repo, conn = _repo(lambda _s, _p: {"one": {}})
         repo.upsert_preferences(uuid.UUID(CLIENT_A),
                                 {"visit_minutes_by_category": None})
-        _sql, params = [e for e in conn.executed
-                        if "INSERT INTO client_preferences" in e[0]][0]
+        _sql, params = next(e for e in conn.executed
+                        if "INSERT INTO client_preferences" in e[0])
         assert None in params
         assert not any(isinstance(p, Jsonb) for p in params)
 
@@ -510,8 +510,8 @@ class TestStore:
         repo, conn = _repo(lambda _s, _p: {"one": {}})
         repo.upsert_preferences(uuid.UUID(CLIENT_A),
                                 {"visit_minutes_by_category": {"замок": 90}})
-        _sql, params = [e for e in conn.executed
-                        if "INSERT INTO client_preferences" in e[0]][0]
+        _sql, params = next(e for e in conn.executed
+                        if "INSERT INTO client_preferences" in e[0])
         assert any(isinstance(p, Jsonb) for p in params)
 
     def test_add_route_reports_the_route_id(self):

@@ -35,7 +35,12 @@ def request_with_retry(
                         f"server error: {r.text[:300]}", request=r.request, response=r
                     )
                 return r.json()
-        except (httpx.ConnectError, httpx.ReadTimeout, httpx.WriteTimeout, httpx.HTTPStatusError) as e:
+        except (
+            httpx.ConnectError,
+            httpx.ReadTimeout,
+            httpx.WriteTimeout,
+            httpx.HTTPStatusError,
+        ) as e:
             last_exc = e
             status = getattr(getattr(e, "response", None), "status_code", None)
             if status is not None and 400 <= status < 500 and status != 429:
