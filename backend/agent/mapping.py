@@ -1,11 +1,11 @@
-"""AgentReading -> TripRequirements, including the merge with the UI fields."""
+"""PlanSubmission -> TripRequirements, including the merge with the UI fields."""
 
 from __future__ import annotations
 
 import logging
 
 from agent.models import PartyComposition, ReaderBrief, Requirement, TripRequirements
-from agent.schema import AgentReading
+from agent.schema import PlanSubmission
 from core import constants
 from db.store.registry import Repositories
 
@@ -55,7 +55,7 @@ def ui_used(brief: ReaderBrief) -> bool:
 
 
 def _reading_requirements(
-    reading: AgentReading, query: str, observed: set[int], repos: Repositories | None
+    reading: PlanSubmission, query: str, observed: set[int], repos: Repositories | None
 ) -> tuple[list[Requirement], list[str]]:
     """A territory is not a stop: it is not made into a requirement, and it is not
     an area either.
@@ -113,7 +113,7 @@ def _reading_requirements(
     return out, unsupported
 
 
-def _party(brief: ReaderBrief, reading: AgentReading, query: str) -> PartyComposition:
+def _party(brief: ReaderBrief, reading: PlanSubmission, query: str) -> PartyComposition:
     """Party composition: explicit values win, ages are never invented."""
     adults = brief.party_adults if brief.party_adults is not None else reading.adults
     children = brief.party_children if brief.party_children is not None else reading.children
@@ -128,7 +128,7 @@ def _party(brief: ReaderBrief, reading: AgentReading, query: str) -> PartyCompos
     return PartyComposition(adults=adults, children=children, children_ages=ages, mobility=mobility)
 
 
-def _unknowns(reading: AgentReading, unsupported: list[str], mobility: list[str]) -> list[str]:
+def _unknowns(reading: PlanSubmission, unsupported: list[str], mobility: list[str]) -> list[str]:
     """What the system cannot represent or prove — named, never promised."""
     unknowns = list(reading.unknowns)
     for ask in unsupported:
@@ -143,7 +143,7 @@ def _unknowns(reading: AgentReading, unsupported: list[str], mobility: list[str]
 def _merge(
     query: str,
     brief: ReaderBrief,
-    reading: AgentReading,
+    reading: PlanSubmission,
     observed: set[int],
     repos: Repositories | None,
 ) -> TripRequirements:

@@ -69,9 +69,9 @@ def _mocked_embedder(monkeypatch):
     The real model is a download and an inference — slow, and beside the point:
     what a unit test can hold is the plumbing around it, not its judgement.
     """
-    monkeypatch.setattr("embeddings.query.embed_query", fake_vector)
-    monkeypatch.setattr("embeddings.model.is_available", lambda: True)
-    monkeypatch.setattr("embeddings.model.embed_text", fake_vector)
+    monkeypatch.setattr("db.embeddings.query.embed_query", fake_vector)
+    monkeypatch.setattr("db.embeddings.model.is_available", lambda: True)
+    monkeypatch.setattr("db.embeddings.model.embed_text", fake_vector)
     # `find_places` bound the name at import, so the binding is patched too.
     monkeypatch.setattr("agent.tools.places.embed_query", fake_vector)
     monkeypatch.setattr("agent.tools.places.embeddings_model.is_available", lambda: True)
@@ -93,7 +93,8 @@ class FakeModel:
         return self
 
     def finish(self, **fields: Any) -> FakeModel:
-        self._steps.append(ModelResponse([ToolCallPart("final_result", json.dumps(fields))]))
+        """End the run the way the agent must: by submitting, not by trailing off."""
+        self._steps.append(ModelResponse([ToolCallPart("submit_plan", json.dumps(fields))]))
         return self
 
     def _next(self, _messages: list[Any], _info: AgentInfo) -> ModelResponse:

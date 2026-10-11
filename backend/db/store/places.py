@@ -310,6 +310,7 @@ class PostgresPlaceRepository(PostgresRepository):
         shape: dict[str, Any],
         *,
         categories: Sequence[str] | None = None,
+        service_category_codes: Sequence[str] = (),
         profile: str = DEFAULT_PROFILE,
         max_off_line_m: float | None = None,
         limit: int = MAX_SERVICES,
@@ -319,7 +320,7 @@ class PostgresPlaceRepository(PostgresRepository):
         Never mixes a service into the route's stops; the caller shows it.
         """
         line = route_line(shape)
-        codes = service_codes(categories)
+        codes = service_codes(categories, service_category_codes)
         if not codes:
             return empty_answer(codes, profile, max_off_line_m, reason="no_service_categories")
 

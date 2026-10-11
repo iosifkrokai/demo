@@ -37,7 +37,6 @@ from db.store.places import PostgresPlaceRepository
 from db.store.registry import Repositories
 from db.store.stats import StatsRepository
 from db.store.users import UserRepository
-from planner.pipeline import Pipeline
 
 log = logging.getLogger(__name__)
 
@@ -59,10 +58,10 @@ def require_llm() -> None:
         )
 
 
-def call_planner[T](fn: Callable[..., T], **kwargs: Any) -> T:
-    """Run a planner call and map its failures onto HTTP.
+def guarded[T](fn: Callable[..., T], **kwargs: Any) -> T:
+    """Run a planning call and map its failures onto HTTP.
 
-    AgentError carries the planner's status; any other failure stays a 500.
+    AgentError carries the status the layer chose; any other failure stays a 500.
     """
     try:
         return fn(**kwargs)
@@ -149,11 +148,6 @@ def require_admin(
 
 
 # --- resource accessors -----------------------------------------------------
-
-
-def get_planner(request: Request) -> Pipeline:
-    """The pipeline the lifespan built onto ``app.state.planner``."""
-    return request.app.state.planner
 
 
 def get_repos(request: Request) -> Repositories:

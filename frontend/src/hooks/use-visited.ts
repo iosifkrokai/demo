@@ -3,12 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo } from 'react';
 
-import {
-  listVisited,
-  markVisited,
-  markVisitedBulk,
-  unmarkVisited,
-} from '@/api/account';
+import { listVisited, markVisited, unmarkVisited } from '@/api/account';
 import type { VisitedPlace } from '@/api/types';
 
 export const VISITED_QUERY_KEY = ['visited'] as const;
@@ -56,15 +51,6 @@ export function useToggleVisited() {
   return useMutation<unknown, unknown, ToggleVisitedInput>({
     mutationFn: ({ placeId, visited }) =>
       visited ? unmarkVisited(placeId) : markVisited(placeId),
-    onSettled: () => client.invalidateQueries({ queryKey: VISITED_QUERY_KEY }),
-  });
-}
-
-/** Mark a whole set at once (e.g. every stop of a walked route). */
-export function useMarkVisitedBulk() {
-  const client = useQueryClient();
-  return useMutation<{ marked: number[] }, unknown, number[]>({
-    mutationFn: (placeIds) => markVisitedBulk(placeIds),
     onSettled: () => client.invalidateQueries({ queryKey: VISITED_QUERY_KEY }),
   });
 }

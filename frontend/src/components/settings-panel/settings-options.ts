@@ -1,5 +1,4 @@
 import type { BicycleType, PedestrianType } from '@/components/types';
-import type { Profile } from '@/stores/common-store';
 
 interface NumericSetting {
   name: string;
@@ -863,13 +862,6 @@ export const QUICK_SETTING_PARAMS = [
   'use_ferry',
   'alternates',
 ] as const;
-
-export const HIGHWAY_TOLL_PROFILES = [
-  'car',
-  'truck',
-  'bus',
-  'motorcycle',
-] as const satisfies readonly Profile[];
 
 export const settingsInit = {
   maneuver_penalty: 5,

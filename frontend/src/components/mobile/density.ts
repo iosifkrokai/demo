@@ -7,9 +7,6 @@ export const DENSITY_MAX_WIDTH = MOBILE_MAX_WIDTH;
 /** Smallest side a finger target may have on a phone. */
 export const MIN_TAP_PX = 40;
 
-/** A 44px side is comfortable; the plan keeps it for the controls that matter. */
-export const COMFORT_TAP_PX = 44;
-
 export const DENSITY = {
   /** Panel padding: 16 -> 12. */
   panelX: 'max-md:px-3',

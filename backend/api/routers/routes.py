@@ -1,68 +1,88 @@
 """HTTP surface for planning: generate, reroute and explain.
 
-The routes are thin; the decisions live in ``planner.pipeline.Pipeline``.
+The routes are thin. Everything that decides anything happens in the agent's
+tools; this layer narrows the request, runs the agent, and writes down the answer.
 """
 
 from __future__ import annotations
 
+import logging
+import time
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
 
-from api import deps
-from core.errors import AgentError, NoRoutePossibleError
-from planner.models import ExplainReq, GenerateReq, RerouteReq, RouteResponse
-from planner.response import no_route_response
-from telemetry import progress, trace
+from agent import client
+from api import deps, responses
+from api.models.routes import ExplainReq, GenerateReq, RerouteReq, RouteResponse
+from core import constants
+from core.errors import AgentError, InterpretationUnavailableError, NoRoutePossibleError
+from routing.models import CategoryFacts
+from routing.stops import candidate_of
+
+log = logging.getLogger(__name__)
 
 router = APIRouter(tags=["routes"])
+
+NO_PLAN = "no_plan"
 
 
 @router.post("/routes/generate", response_model=RouteResponse)
 def generate(req: GenerateReq, request: Request) -> RouteResponse:
     """Build a route. With a `progress_id`, the work is reported as it happens."""
     deps.require_llm()
-    progress.begin(req.progress_id)
-    trace.begin(req.progress_id, session_id=req.session_id)
+    started = time.perf_counter()
     try:
-        try:
-            return deps.get_planner(request).generate(req=req)
-        except NoRoutePossibleError as exc:
-            trace.record(
-                "response",
-                input={"query": req.query, "budget_minutes": req.time_budget_minutes},
-                plan_status="infeasible",
-                reason="no_route_possible",
-            )
-            return no_route_response(req, str(exc))
-        except AgentError as exc:
-            trace.record(
-                "response",
-                "error",
-                input={"query": req.query, "budget_minutes": req.time_budget_minutes},
-                plan_status="error",
-                reason=type(exc).__name__,
-                http_status=exc.http_status,
-            )
-            raise HTTPException(status_code=exc.http_status, detail=str(exc)) from exc
-    finally:
-        progress.finish()
-        trace.finish()
+        answer = _plan(req, request)
+    except NoRoutePossibleError as exc:
+        log.info("no route possible: %s", exc)
+        return responses.no_route_response(req, str(exc))
+    except AgentError as exc:
+        raise HTTPException(status_code=exc.http_status, detail=str(exc)) from exc
+    log.info(
+        "plan.ok query_len=%d ms=%d stops=%d status=%s",
+        len(req.query),
+        int((time.perf_counter() - started) * 1000),
+        len(answer.points),
+        answer.status,
+    )
+    return answer
+
+
+def _plan(req: GenerateReq, request: Request) -> RouteResponse:
+    """One agent run, then the code's verdict on what it proposed."""
+    repos = deps.get_repos(request)
+    refinement = bool(req.context and req.context.base_points)
+    outcome = client.plan_with_agent(
+        req.query,
+        responses.reader_brief(req),
+        repos=repos,
+        wall_clock_s=(constants.REFINE_DEADLINE_S if refinement else constants.REQUEST_DEADLINE_S),
+    )
+    if outcome is None:
+        # No plan is not an empty plan: the caller is refused rather than given
+        # a guess at what the tourist meant.
+        raise InterpretationUnavailableError("the request could not be planned")
+
+    facts = CategoryFacts.from_rows(repos.taxonomy.all())
+    return responses.route_response(req, outcome, repos=repos, facts=facts)
 
 
 @router.post("/routes/reroute", response_model=RouteResponse)
 def reroute(req: RerouteReq, request: Request) -> RouteResponse:
+    """Route the points the client already holds. No model, no prompt."""
     deps.require_llm()
-    return deps.call_planner(
-        deps.get_planner(request).reroute, point_ids=req.point_ids, profile=req.profile
-    )
+    return deps.guarded(responses.reroute_response, req=req, repos=deps.get_repos(request))
 
 
 @router.post("/routes/explain")
 def explain(req: ExplainReq, request: Request) -> dict[str, Any]:
+    """A short description of a list of points, written from their own data."""
     deps.require_llm()
-    return {
-        "explanation": deps.call_planner(
-            deps.get_planner(request).explain_route, point_ids=req.point_ids
-        )
-    }
+    repos = deps.get_repos(request)
+    rows = repos.places.get_by_ids(req.point_ids)
+    if len(rows) != len(req.point_ids):
+        raise deps.http_error(404, "unknown_point_ids")
+    facts = CategoryFacts.from_rows(repos.taxonomy.all())
+    candidates = [candidate_of(row, 0.0) for row in rows]
+    return {"explanation": responses.explain_points(candidates, facts)}

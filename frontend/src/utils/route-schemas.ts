@@ -33,8 +33,6 @@ export const searchParamsSchema = z.object({
   lang: languageEnum.optional(),
 });
 
-export type SearchParamsSchema = z.infer<typeof searchParamsSchema>;
-
 export const VALID_TABS = ['directions'] as const;
 export type ValidTab = (typeof VALID_TABS)[number];
 

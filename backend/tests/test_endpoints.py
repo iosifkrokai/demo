@@ -11,7 +11,7 @@ success to assert. The admin endpoints skip unless ``GRODNO_ADMIN_EMAIL`` and
 ``GRODNO_ADMIN_PASSWORD`` name a real administrator. A skip is not a pass.
 
 The shape asserted is the wire model's own: the routes and health models still
-live in ``planner.models`` (mid-refactor), the client and account models in
+live in ``api.models.routes``, the client and account models in
 ``api.models``. Asserting against ``model_fields`` means a renamed field breaks
 here instead of drifting.
 """
@@ -39,7 +39,7 @@ from api.models.accounts import (
     VisitedListOut,
 )
 from api.models.clients import PreferencesOut, RouteCreated, RouteDetail, RouteListItem
-from planner.models import HealthResponse, RouteResponse
+from api.models.routes import HealthResponse, RouteResponse
 
 
 def _carries(payload: dict[str, Any], model: type[BaseModel]) -> None:

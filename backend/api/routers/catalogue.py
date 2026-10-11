@@ -6,16 +6,14 @@ A browse, not a search: no model is involved and nothing is capped by a query.
 from __future__ import annotations
 
 import logging
-import uuid
 from typing import Any
 
 from fastapi import APIRouter, Request
 
 from api import deps
+from api.models.routes import ServicesAlongReq
 from db.store import itineraries as itineraries_mod
 from db.store.services import DEFAULT_PROFILE, MAX_SERVICES
-from planner.models import ServicesAlongReq
-from telemetry import trace
 
 log = logging.getLogger(__name__)
 
@@ -50,30 +48,15 @@ def services_along_route(req: ServicesAlongReq, request: Request) -> dict[str, A
 
     Distance and position are measured; items carry `detour_confirmed: false`.
     """
-    trace.begin(uuid.uuid4().hex, session_id=req.session_id)
+    repos = deps.get_repos(request)
     try:
-        try:
-            answer = deps.get_repos(request).places.services_along(
-                req.shape,
-                categories=req.categories,
-                profile=req.profile or DEFAULT_PROFILE,
-                max_off_line_m=req.max_off_line_m,
-                limit=req.limit or MAX_SERVICES,
-            )
-        except ValueError as exc:
-            trace.record(
-                "services",
-                "error",
-                input={"categories": req.categories, "limit": req.limit},
-                reason=str(exc),
-            )
-            raise deps.http_error(422, str(exc)) from exc
-        trace.record(
-            "services",
-            input={"categories": req.categories, "limit": req.limit},
-            found=len(answer["items"]),
-            capped=answer["capped"],
+        return repos.places.services_along(
+            req.shape,
+            categories=req.categories,
+            service_category_codes=repos.taxonomy.service_codes(),
+            profile=req.profile or DEFAULT_PROFILE,
+            max_off_line_m=req.max_off_line_m,
+            limit=req.limit or MAX_SERVICES,
         )
-        return answer
-    finally:
-        trace.finish()
+    except ValueError as exc:
+        raise deps.http_error(422, str(exc)) from exc

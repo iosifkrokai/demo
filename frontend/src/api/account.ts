@@ -260,15 +260,6 @@ export const markVisited = async (placeId: number): Promise<VisitedPlace> => {
 
 export const unmarkVisited = (placeId: number): Promise<void> =>
   request<void>(`/me/visited/${placeId}`, { method: 'DELETE' });
-
-export const markVisitedBulk = (
-  placeIds: number[]
-): Promise<{ marked: number[] }> =>
-  request<{ marked: number[] }>('/me/visited', {
-    method: 'POST',
-    body: JSON.stringify({ place_ids: placeIds }),
-  });
-
 export const adminListUsers = async (
   params: { q?: string; limit?: number; offset?: number } = {}
 ): Promise<AdminUserList> => {

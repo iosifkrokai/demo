@@ -11,8 +11,6 @@ from __future__ import annotations
 from collections.abc import Iterable, Sequence
 from typing import Any
 
-from reference.taxonomy import all_categories
-
 MAX_OFF_LINE_M: dict[str, float] = {
     "pedestrian": 150.0,
     "bicycle": 250.0,
@@ -45,16 +43,15 @@ def threshold_for(profile: str, max_off_line_m: float | None = None) -> float:
     return MAX_OFF_LINE_M[key]
 
 
-def service_codes(categories: Iterable[str] | None = None) -> list[str]:
-    """The categories that count as services, from the taxonomy alone.
+def service_codes(categories: Iterable[str] | None, known: Sequence[str]) -> list[str]:
+    """The categories that count as services, given the taxonomy's own service list.
 
     Unknown or non-service codes are dropped rather than trusted.
     """
-
-    known = [cat.code for cat in all_categories() if getattr(cat, "role", None) == "service"]
+    allowed = set(known)
     if categories is None:
-        return known
-    return [code for code in categories if code in known]
+        return list(known)
+    return [code for code in categories if code in allowed]
 
 
 def route_line(shape: Any) -> dict[str, Any]:

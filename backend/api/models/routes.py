@@ -1,6 +1,8 @@
-"""Pydantic models for requests and responses.
+"""The wire: what /routes/* accepts and returns.
 
-HTTP-facing models plus internal planner models used by planner.*.
+These shapes belong to the HTTP layer. The pipeline's own currency — a candidate
+stop, a cost matrix, a validated plan — lives in `routing`, and the request body
+is narrowed to a `ReaderBrief` before the agent ever sees it.
 """
 
 from __future__ import annotations
@@ -10,22 +12,32 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field, field_validator
 
 from core import constants
-from routing.models import (
-    Candidate,
-    CostMatrix,
-    EraLiteral,
-    IntentTypeLiteral,
-    LatLon,
-    PartyTypeLiteral,
-    Photo,
-    ResolvedConstraints,
-    SearchScopeLiteral,
-    ValidatedPlan,
-)
+from routing.models import LatLon, Photo
 
-# The four above are re-exported for the planner's transition — the shapes now
-# live in the `routing` leaf, and these names disappear with this module.
-__all__ = ["Candidate", "CostMatrix", "ResolvedConstraints", "ValidatedPlan"]
+TransportLiteral = Literal[
+    "pedestrian",
+    "bicycle",
+    "auto",
+    "car",
+    "truck",
+    "bus",
+    "motor_scooter",
+    "motorcycle",
+]
+# The service lookup also accepts "any" — a service is not a journey.
+TransportOrAnyLiteral = Literal[
+    "pedestrian",
+    "bicycle",
+    "auto",
+    "car",
+    "truck",
+    "bus",
+    "motor_scooter",
+    "motorcycle",
+    "any",
+]
+
+OverallStatus = Literal["ready", "infeasible", "degraded", "pending"]
 
 
 class ContextPoint(BaseModel):
@@ -63,30 +75,6 @@ class RouteChanges(BaseModel):
     added: list[RouteChange] = Field(default_factory=list)
     removed: list[RouteChange] = Field(default_factory=list)
     kept: int = 0
-
-
-TransportLiteral = Literal[
-    "pedestrian",
-    "bicycle",
-    "auto",
-    "car",
-    "truck",
-    "bus",
-    "motor_scooter",
-    "motorcycle",
-]
-# The service lookup also accepts "any" — a service is not a journey.
-TransportOrAnyLiteral = Literal[
-    "pedestrian",
-    "bicycle",
-    "auto",
-    "car",
-    "truck",
-    "bus",
-    "motor_scooter",
-    "motorcycle",
-    "any",
-]
 
 
 class GenerateReq(BaseModel):
@@ -181,9 +169,6 @@ class RequirementSignal(BaseModel):
     place_ids: list[int] = Field(default_factory=list)
 
 
-OverallStatus = Literal["ready", "infeasible", "degraded", "pending"]
-
-
 class Interpretation(BaseModel):
     """What the system understood — one place, before the plan is judged.
 
@@ -235,38 +220,6 @@ class RouteResponse(BaseModel):
     changes: RouteChanges | None = None
     alternatives: list[PlannedAlternative] | None = None
     debug: dict[str, Any] | None = None
-
-
-class PreprocessedQuery(BaseModel):
-    raw: str
-    normalized: str
-    language: str = "ru"
-    is_short: bool = False
-    is_specific: bool = False
-    fingerprint: str = ""
-    n_significant_words: int = 0
-
-
-class IntentDecision(BaseModel):
-    intent_type: IntentTypeLiteral = "discovery"
-    categories_pos: list[str] = []
-    categories_neg: list[str] = []
-    keywords_pos: list[str] = []
-    keywords_neg: list[str] = []
-    named_places: list[str] = []
-    narrative: list[str] = []
-    time_budget_minutes: int | None = None
-    era_hint: EraLiteral = "any"
-    party_type: PartyTypeLiteral = "solo"
-    search_scope: SearchScopeLiteral = "town"
-
-
-class IntentResult(BaseModel):
-    decision: IntentDecision
-    source: Literal["agent", "explicit"] = "agent"
-    confidence: float = 1.0
-    latency_ms: int = 0
-    raw_response: dict[str, Any] | None = None
 
 
 class RerouteReq(BaseModel):

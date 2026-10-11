@@ -55,13 +55,6 @@ export const saveLocalRoutes = (routes: LocalRouteCopy[]): void => {
     localStorage.setItem(LOCAL_ROUTES_STORAGE_KEY, JSON.stringify(routes));
   } catch {}
 };
-
-export const clearLocalRoutes = (): void => {
-  try {
-    localStorage.removeItem(LOCAL_ROUTES_STORAGE_KEY);
-  } catch {}
-};
-
 /** A name the tourist can act on, keyed off the agent's machine code. */
 export const describeClientError = (error: unknown): string => {
   if (error instanceof ClientApiError) {

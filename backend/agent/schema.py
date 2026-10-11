@@ -33,9 +33,16 @@ class AgentRequirement(BaseModel):
     place_id: int | None = None
 
 
-class AgentReading(BaseModel):
-    """Everything the agent is allowed to say about one request."""
+class PlanSubmission(BaseModel):
+    """Everything the agent says, in one shape: what it understood, and what it proposes.
 
+    One shape because the run ends once. Reading and planning are the same
+    decision — a stop can only be chosen once its name has been resolved — and
+    splitting them would let a plan arrive with no statement of what was asked
+    for.
+    """
+
+    # --- what was understood ---
     requirements: list[AgentRequirement] = Field(default_factory=list)
     adults: int | None = Field(default=None, ge=0, le=50)
     children: int | None = Field(default=None, ge=0, le=20)
@@ -46,6 +53,13 @@ class AgentReading(BaseModel):
     unknowns: list[str] = Field(default_factory=list)
     result_mode: Literal["route", "catalogue"] | None = None
     outside_coverage: list[str] = Field(default_factory=list)
+
+    # --- what is proposed ---
+    ordered_ids: list[int] = Field(default_factory=list)
+    narrative: str = ""
+    profile: str = "pedestrian"
+    round_trip: bool = False
+    must_keep_ids: list[int] = Field(default_factory=list)
 
 
 @dataclass

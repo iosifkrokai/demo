@@ -19,12 +19,3 @@ export const formatDuration = (durationInSeconds: number) => {
 
   return formattedParts.join(' ');
 };
-
-export const getDateTimeString = (): string => {
-  const dtNow = new Date();
-  return (
-    [dtNow.getMonth() + 1, dtNow.getDate(), dtNow.getFullYear()].join('/') +
-    '_' +
-    [dtNow.getHours(), dtNow.getMinutes(), dtNow.getSeconds()].join(':')
-  );
-};

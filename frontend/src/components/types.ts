@@ -246,19 +246,6 @@ export interface ValhallaRouteResponse {
   alternates?: ValhallaRouteResponse[];
 }
 
-export interface ValhallaIsochroneResponse extends GeoJSON.FeatureCollection {
-  id: string;
-  warnings?: ValhallaWarning[];
-}
-
-export interface FetchGeocodeObject {
-  inputValue: string;
-  lngLat?: [number, number];
-  index?: number;
-}
-
-export type PossibleTabValues = 'directions' | 'isochrones';
-
 /** One stop of an agent-planned route, as POST /routes/generate returns it. */
 export interface AgentPoint {
   id: number;
@@ -334,13 +321,6 @@ export interface AgentRouteResponse {
   summary?: { length_km?: number | null; time_seconds?: number | null };
   status?: RoutePlanStatus;
   interpretation?: PlanInterpretation;
-}
-
-export interface OptimizedLocation {
-  type: string;
-  lat: number;
-  lon: number;
-  original_index: number;
 }
 
 export interface ValhallaOptimizedRouteResponse {

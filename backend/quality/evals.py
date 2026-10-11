@@ -457,13 +457,26 @@ def run_plan() -> dict[str, Any]:
     return {"stage": "plan", "checks": checks, "base_url": BASE_URL}
 
 
+def _repositories():
+    """The repositories a live stage reads through, skipping when there is none."""
+    from db.store.areas import PostgresAreaRepository
+    from db.store.places import PostgresPlaceRepository
+    from db.store.registry import Repositories
+
+    return Repositories(places=PostgresPlaceRepository(), areas=PostgresAreaRepository())
+
+
 def run_interpretation() -> dict[str, Any]:
     """Did the request get read as it was meant?
 
-    Live, via the product's `build_requirements`; the report records which source answered.
+    Live, through the product's own entry point — the agent is asked to plan, and
+    what it says it understood is what gets graded. The report records the source.
     """
-    from planner.intent import build_requirements
-    from planner.models import GenerateReq
+    from agent import client
+    from api.models.routes import GenerateReq
+    from api.responses import reader_brief
+
+    repos = _repositories()
 
     checks: list[dict[str, Any]] = []
     sources: dict[str, int] = {}
@@ -471,7 +484,8 @@ def run_interpretation() -> dict[str, Any]:
         raw = case.raw
         req = GenerateReq(query=raw["query"], **(raw.get("filters") or {}))
         try:
-            got = build_requirements(raw["query"], req)
+            outcome = client.plan_with_agent(raw["query"], reader_brief(req), repos=repos)
+            got = outcome.requirements if outcome is not None else None
         except Exception as exc:
             checks.append(
                 {
@@ -479,6 +493,18 @@ def run_interpretation() -> dict[str, Any]:
                     "check": "reads_request",
                     "ok": False,
                     "detail": f"{type(exc).__name__}: {exc}",
+                    "why": case.why,
+                }
+            )
+            continue
+
+        if got is None:
+            checks.append(
+                {
+                    "case": case.id,
+                    "check": "reads_request",
+                    "ok": False,
+                    "detail": "агент не вернул чтения",
                     "why": case.why,
                 }
             )

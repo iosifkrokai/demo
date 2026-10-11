@@ -24,26 +24,20 @@ import { metresBetween } from '@/components/parts/guide-format';
 type FerrostarModule = typeof import('@stadiamaps/ferrostar');
 
 let modulePromise: Promise<FerrostarModule> | null = null;
-let loadedModule: FerrostarModule | null = null;
 
 /** Load the WASM core. */
 const loadFerrostar = async (): Promise<FerrostarModule | null> => {
   try {
     modulePromise ??= import('@stadiamaps/ferrostar');
-    loadedModule = await modulePromise;
-    return loadedModule;
+    return await modulePromise;
   } catch (error) {
     console.warn('Could not load Ferrostar WASM.', error);
-    loadedModule = null;
     return null;
   }
 };
 
 /** Resolves when Ferrostar is usable, or with `null` when it never became usable. */
 export const ferrostarReady: Promise<FerrostarModule | null> = loadFerrostar();
-
-/** Is the WASM core already loaded? */
-export const isFerrostarAvailable = (): boolean => loadedModule != null;
 
 interface LatLon {
   lat: number;
@@ -374,20 +368,6 @@ export class FerrostarNavigator {
     this._state = null;
   }
 }
-
-/** Create a Ferrostar navigator for `route`, or null when the WASM core is unavailable. */
-export const createFerrostarNavigator = async (
-  route: Route
-): Promise<FerrostarNavigator | null> => {
-  const mod = await ferrostarReady;
-  if (!mod) return null;
-  try {
-    return new FerrostarNavigator(route, mod);
-  } catch (error) {
-    console.error('Could not create a Ferrostar navigation session.', error);
-    return null;
-  }
-};
 
 /** The payload of the `Navigating` variant, or null for Idle/Complete. */
 type NavigatingTripState = Extract<

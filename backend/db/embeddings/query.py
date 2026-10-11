@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 
 from core import cache
-from embeddings import model
+from db.embeddings import model
 
 log = logging.getLogger(__name__)
 

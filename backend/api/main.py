@@ -1,6 +1,6 @@
 """FastAPI agent: turns free-text Russian queries into pedestrian walking routes.
 
-The HTTP layer is thin; business decisions live in planner.pipeline.Pipeline.
+The HTTP layer is thin; the decisions live in the agent's tools (`agent/tools`).
 The app object lives here because ``uvicorn api.main:app`` and the image's
 ``python -m api.main`` both name it; the routes themselves live under
 ``api.routers``.
@@ -26,14 +26,13 @@ from api.routers import (
     routes as routes_api,
 )
 from core.config import LOGFIRE_TOKEN, settings
+from db.embeddings import model
 from db.store.areas import PostgresAreaRepository
 from db.store.clients import PostgresClientRepository
 from db.store.places import PostgresPlaceRepository
 from db.store.registry import Repositories
 from db.store.stats import PostgresStatsRepository
 from db.store.users import PostgresUserRepository
-from embeddings import model
-from planner.pipeline import Pipeline
 
 logging.basicConfig(
     level=logging.INFO,
@@ -58,10 +57,9 @@ async def lifespan(_: FastAPI):
         clients=PostgresClientRepository(),
     )
     app.state.repos = repos
-    app.state.planner = Pipeline(repos=repos)
     model.embed_text("warmup")
     log.info(
-        "agent ready (embeddings=%s local, interpret=%s, key=%s)",
+        "agent ready (embeddings=%s local, model=%s, key=%s)",
         model.MODEL_NAME,
         llm.model_name(),
         "set" if llm.api_key() else "MISSING",

@@ -29,8 +29,8 @@ from agent.tools import (
     project,
 )
 from core import constants
-from embeddings import model as embeddings_model
-from embeddings.query import embed_query
+from db.embeddings import model as embeddings_model
+from db.embeddings.query import embed_query
 from routing.select import rrf_fuse
 
 MAX_PLACES_PER_FIND = 8

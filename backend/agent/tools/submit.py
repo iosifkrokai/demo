@@ -10,17 +10,16 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic_ai import RunContext
-
-from agent.schema import PlanningDeps
-from agent.tools import ERR_BAD_ARGUMENT, Remember, ToolAnswer, envelope
+from agent.tools import ERR_BAD_ARGUMENT, envelope
 from agent.tools.plan import plan_walk
 from agent.tools.verify import requirements_from, verdicts_of
-from routing.models import LatLon
+from routing.models import LatLon, TripRequirements
 from routing.stops import candidate_of
-from routing.verify import verify, verify_catalogue
+from routing.verify import ServiceAlongEvidence, verify, verify_catalogue
 
 RESULT_MODES = ("route", "catalogue")
+# Enough to prove a service is on the way, not a catalogue of every bench.
+MAX_SERVICES_MEASURED = 24
 
 
 def _problems(verdicts: list[dict[str, Any]]) -> list[dict[str, str]]:
@@ -37,6 +36,32 @@ def _problems(verdicts: list[dict[str, Any]]) -> list[dict[str, str]]:
     ]
 
 
+def _evidence(repos: Any, contract: TripRequirements, shape: Any) -> ServiceAlongEvidence | None:
+    """Measure the services beside the line, for the codes the request named.
+
+    Without this a service requirement can only ever come back `uncertain`, and
+    "кофе по пути" would never be provable.
+    """
+    codes = sorted(
+        {r.code for r in contract.requirements if r.kind in ("service", "interest") and r.code}
+    )
+    if not codes or not shape or repos is None:
+        return None
+    try:
+        answer = repos.places.services_along(
+            shape,
+            categories=codes,
+            service_category_codes=repos.taxonomy.service_codes(),
+            limit=MAX_SERVICES_MEASURED,
+        )
+    except Exception:
+        return ServiceAlongEvidence(measured=False, by_code={})
+    by_code: dict[str, list[dict[str, Any]]] = {}
+    for item in answer.get("items", []):
+        by_code.setdefault(str(item.get("category")), []).append(item)
+    return ServiceAlongEvidence(measured=True, by_code=by_code)
+
+
 def submit_plan(
     ordered_ids: list[int],
     *,
@@ -49,6 +74,7 @@ def submit_plan(
     must_keep_ids: list[int] | None = None,
     locale: str = "ru",
     requirement_specs: list[dict[str, Any]] | None = None,
+    contract: TripRequirements | None = None,
     unknowns: list[str] | None = None,
     narrative: str | None = None,
     result_mode: str = "route",
@@ -69,7 +95,10 @@ def submit_plan(
             message=f"result_mode must be one of {RESULT_MODES}",
         )
 
-    contract = requirements_from(requirement_specs)
+    # The contract the response will render is the one verified here: a second
+    # copy would drift, and the client would show verdicts nobody computed.
+    if contract is None:
+        contract = requirements_from(requirement_specs)
     contract.unknowns = list(unknowns or [])
 
     if result_mode == "catalogue":
@@ -107,7 +136,14 @@ def submit_plan(
         )
 
     stops = [candidate_of(row, 0.0) for row in repos.places.get_by_ids(ordered_ids)]
-    verify(contract, {"route": stops, "trace": {}}, measured.get("shape"), facts=facts)
+    shape = measured.get("shape")
+    verify(
+        contract,
+        {"route": stops, "trace": {}},
+        shape,
+        _evidence(repos, contract, shape),
+        facts=facts,
+    )
     answer = verdicts_of(contract)
 
     return envelope(
@@ -126,44 +162,3 @@ def submit_plan(
         "shape": measured.get("shape"),
         **answer,
     }
-
-
-def register_submit_plan(agent: Any, remember: Remember) -> None:
-    """Advertise ``submit_plan`` to the agent — the terminal call."""
-
-    @agent.tool(name="submit_plan")
-    def _submit_plan(
-        ctx: RunContext[PlanningDeps],
-        ordered_ids: list[int],
-        requirement_specs: list[dict[str, Any]],
-        narrative: str,
-        budget_minutes: int | None = None,
-        profile: str = "pedestrian",
-        round_trip: bool = False,
-        must_keep_ids: list[int] | None = None,
-        unknowns: list[str] | None = None,
-        result_mode: str = "route",
-    ) -> ToolAnswer:
-        """Submit the finished plan. Code re-measures it and returns the verdicts.
-
-        Call this once, at the end. `ok` is true only when code proved every hard
-        requirement satisfied; `problems` names what it could not prove, and the
-        `narrative` you send is kept as your own words, not as the verdict.
-        """
-        answer = submit_plan(
-            ordered_ids,
-            repos=ctx.deps.repos,
-            facts=ctx.deps.facts,
-            budget_minutes=budget_minutes,
-            profile=profile,
-            origin=ctx.deps.origin,
-            round_trip=round_trip,
-            must_keep_ids=must_keep_ids,
-            locale=ctx.deps.locale,
-            requirement_specs=requirement_specs,
-            unknowns=unknowns,
-            narrative=narrative,
-            result_mode=result_mode,
-            deadline_s=ctx.deps.seconds_left(),
-        )
-        return remember(ctx, answer)
