@@ -24,6 +24,7 @@ from agent.prompts import compose_instructions
 from agent.prompts.notes import _ui_note
 from core import cache as interpret_cache, constants
 from core.errors import InterpretationUnavailableError
+from db.store.registry import Repositories
 from planner.models import GenerateReq, IntentDecision, IntentResult
 from telemetry import trace
 
@@ -114,7 +115,10 @@ def _interpret_cache_key(query: str, brief: ReaderBrief) -> tuple[str | None, st
 
 
 def _agent_contract(
-    query: str, brief: ReaderBrief, repos, wall_clock_s: float | None = None
+    query: str,
+    brief: ReaderBrief,
+    repos: Repositories | None,
+    wall_clock_s: float | None = None,
 ) -> TripRequirements | None:
     """The interpretation agent's contract, or None when it cannot be trusted."""
     try:
@@ -244,7 +248,7 @@ def build_requirements(
     query: str,
     req: GenerateReq,
     *,
-    repos: object | None = None,
+    repos: Repositories | None = None,
     wall_clock_s: float | None = None,
 ) -> TripRequirements:
     """Interpret one request into the frozen `TripRequirements` contract.

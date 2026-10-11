@@ -17,7 +17,7 @@ import time as _time
 
 from core import constants
 from db.store.registry import Repositories
-from planner.models import Candidate, GenerateReq, RouteResponse
+from planner.models import Candidate, GenerateReq, RouteContext, RouteResponse
 from telemetry import trace
 
 from .dedupe import norm_name
@@ -26,6 +26,7 @@ from .geo import TRACE_NAMES_MAX
 from .intent import build_requirements, intent_from_requirements
 from .plan_tail import run_plan_tail
 from .refine import (
+    RefinementPlan,
     cap_for_valhalla,
     context_changes,
     interpret_refinement,
@@ -48,7 +49,7 @@ from .verify import overall_status, verify
 log = logging.getLogger(__name__)
 
 
-def refinement_base(repos: Repositories, ctx) -> list[Candidate]:
+def refinement_base(repos: Repositories, ctx: RouteContext) -> list[Candidate]:
     """The previous route's stops, as Candidate objects.
 
     A hand-placed stop (map click, no DB id) is matched to the nearest place.
@@ -82,7 +83,7 @@ def refinement_base(repos: Repositories, ctx) -> list[Candidate]:
     return base
 
 
-def _removals(directive, base: list[Candidate], excluded: set[int]) -> set[int]:
+def _removals(directive: RefinementPlan, base: list[Candidate], excluded: set[int]) -> set[int]:
     """Stop ids the instruction asks to remove, on top of excluded_ids.
 
     Applied for every operation: add-and-remove still drops the removals.
@@ -103,7 +104,9 @@ def _removals(directive, base: list[Candidate], excluded: set[int]) -> set[int]:
     return removed
 
 
-def _additions(repos: Repositories, directive, base: list[Candidate]) -> list[Candidate]:
+def _additions(
+    repos: Repositories, directive: RefinementPlan, base: list[Candidate]
+) -> list[Candidate]:
     """Stops the instruction asks to ADD, taken near the route.
 
     Convenience categories come from the stops' neighbourhood, not a global ranking.

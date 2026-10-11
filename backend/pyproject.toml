@@ -127,7 +127,7 @@ reportUnknownMemberType = "none"
 # Deferred, counted on 2026-10-11, the same way the ruff list above is. Each is
 # a campaign, not a setting:
 reportMissingTypeArgument = "none"      # 200  bare `dict`/`list` in annotations
-reportMissingParameterType = "none"     # 31   parameters with no annotation
+
 
 # Style rather than correctness, and both are used deliberately: a wrapped
 # Russian sentence is implicit concatenation, and a private helper reached from a

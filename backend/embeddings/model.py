@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, Protocol
 
 MODEL_NAME = "intfloat/multilingual-e5-small"
 EMBED_DIM = 384
@@ -102,7 +102,21 @@ def is_available() -> bool:
     return _state.available
 
 
-def embed_missing(places, *, batch: int = DB_BATCH) -> int:
+class PlaceBackfill(Protocol):
+    """What the backfill asks of a place repository — the three methods it uses.
+
+    A protocol rather than the repository itself: this module runs on the CPU and
+    is imported by the seed, so it must not depend on the store.
+    """
+
+    def rows_missing_embedding(self) -> list[tuple[int, str, str | None]]: ...
+
+    def upsert_embedding(self, place_id: int, vector: Sequence[float]) -> None: ...
+
+    def commit(self) -> None: ...
+
+
+def embed_missing(places: PlaceBackfill, *, batch: int = DB_BATCH) -> int:
     """Embed every row with ``embedding IS NULL``; returns how many were written.
 
     Computing the vectors is this module's job; storing them is the repository's,

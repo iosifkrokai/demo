@@ -8,12 +8,14 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from agent.models import TripRequirements
 from core import cache as interpret_cache, constants
 from core.errors import UpstreamUnavailableError
 from planner.models import (
     BudgetInfo,
     Candidate,
     GenerateReq,
+    IntentResult,
     Interpretation,
     LatLon,
     OverallStatus,
@@ -21,9 +23,11 @@ from planner.models import (
     Place,
     PlannedAlternative,
     RequirementSignal,
+    ResolvedConstraints,
     RouteChanges,
     RouteResponse,
     RouteSummary,
+    ValidatedPlan,
 )
 
 from .cost import visit_time_minutes
@@ -35,16 +39,16 @@ log = logging.getLogger(__name__)
 
 def build_response(
     *,
-    intent,
-    constraints,
-    plan,
+    intent: IntentResult,
+    constraints: ResolvedConstraints,
+    plan: ValidatedPlan,
     changes: RouteChanges | None,
     shape: dict,
     walk_s: float,
     length_km: float | None,
     explanation: str,
     costing: str = "pedestrian",
-    requirements=None,
+    requirements: TripRequirements | None = None,
     status: OverallStatus | None = None,
     deadline: dict | None = None,
 ) -> RouteResponse:

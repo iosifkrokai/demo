@@ -5,8 +5,10 @@ Anchor priority: tourist GPS > must-visit/named place > densest cluster.
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from core import constants
-from planner.models import LatLon
+from planner.models import Candidate, LatLon
 
 TRACE_NAMES_MAX = 15
 
@@ -47,13 +49,13 @@ def geo_focus_report(
         anchor = origin
         anchor_name = "GPS"
 
-        def dist(c):
+        def dist(c: Candidate) -> float:
             return _distance_from_origin_m(c, origin)
     elif anchor_id is not None and any(c.id == anchor_id for c in candidates):
         anchor = next(c for c in candidates if c.id == anchor_id)
         anchor_name = anchor.name
 
-        def dist(c):
+        def dist(c: Candidate) -> float:
             return distance_m(c, anchor)
     else:
         focus_m = constants.GEO_FOCUS_KM * 1000
@@ -66,7 +68,7 @@ def geo_focus_report(
         )
         anchor_name = anchor.name
 
-        def dist(c):
+        def dist(c: Candidate) -> float:
             return distance_m(c, anchor)
 
     max_m = constants.GEO_FOCUS_KM * 1000
@@ -86,9 +88,9 @@ def geo_focus_report(
 def _geo_report(
     anchor_name: str,
     max_m: float,
-    candidates: list,
-    keep: list,
-    dist,
+    candidates: list[Candidate],
+    keep: list[Candidate],
+    dist: Callable[[Candidate], float],
 ) -> dict:
     """Which anchor was chosen, how wide the radius ended up, who fell outside.
 
@@ -105,7 +107,7 @@ def _geo_report(
     }
 
 
-def distance_m(a, b) -> float:
+def distance_m(a: Candidate, b: Candidate) -> float:
     """Equirectangular distance in metres (fine at city scale)."""
     return distance_pt_m(a.lat, a.lon, b.lat, b.lon)
 
@@ -120,5 +122,5 @@ def distance_pt_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     return math.hypot(dx, dy)
 
 
-def _distance_from_origin_m(c, origin: LatLon) -> float:
+def _distance_from_origin_m(c: Candidate, origin: LatLon) -> float:
     return distance_pt_m(c.lat, c.lon, origin.lat, origin.lon)

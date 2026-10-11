@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import math
 import random
+from collections.abc import Callable
 from itertools import pairwise, permutations
 from typing import Any
 
@@ -188,7 +189,9 @@ def _worst_leg(
     return worst
 
 
-def _most_saving(removable: list[int], route: list[int], total_of) -> int:
+def _most_saving(
+    removable: list[int], route: list[int], total_of: Callable[[list[int]], float]
+) -> int:
     """The removable stop whose deletion buys the most time."""
     current = total_of(route)
     best_i, best_saving = removable[0], float("-inf")

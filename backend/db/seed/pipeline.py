@@ -7,7 +7,10 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, LiteralString
+
+import psycopg
+from psycopg import sql
 
 from core.paths import GEO_DIR, PHOTOS_DIR
 from reference.geofence import inside_project_area
@@ -32,9 +35,13 @@ def curated_category_is_protected(category_source: str | None) -> bool:
     return (category_source or SOURCE_AUTO) in PROTECTED_CATEGORY_SOURCES
 
 
-def upsert_sql() -> str:
+def upsert_sql() -> LiteralString:
     """INSERT ... ON CONFLICT (source_url) DO UPDATE that respects curation.
-    A protected row keeps its category against automatic writers.
+
+    A protected row keeps its category against automatic writers. The statement is
+    assembled from the column names below and nothing else — no value ever reaches
+    it — so it is a literal by construction, which is what the return type says and
+    what psycopg's `LiteralString` guard exists to check.
     """
     protected = "places.category_source IN ('curated', 'dataset')"
     guarded_cat = (
@@ -82,7 +89,7 @@ def connect(dsn: str):
     return db_connect(dsn, timeout=None)
 
 
-def allow_curated_category_change(conn) -> None:
+def allow_curated_category_change(conn: psycopg.Connection) -> None:
     """Opt this transaction in to the guard trigger.
     ``seed`` is the sanctioned writer and enforces curated priority in its upsert.
     """
@@ -90,15 +97,15 @@ def allow_curated_category_change(conn) -> None:
         cur.execute("SELECT set_config('grodno.allow_curated_category_change', 'on', true)")
 
 
-def apply_dataset(conn, ds: Dataset, records: list[dict]) -> dict:
+def apply_dataset(conn: psycopg.Connection, ds: Dataset, records: list[dict]) -> dict:
     """Upsert one dataset's rows; returns {'inserted', 'updated'}."""
-    sql = upsert_sql()
+    statement = upsert_sql()
     inserted = updated = 0
     with conn.cursor() as cur:
         for r in records:
             cur.execute("SELECT 1 FROM places WHERE source_url = %s", (r["source_url"],))
             was_new = cur.fetchone() is None
-            cur.execute(sql, r)
+            cur.execute(sql.SQL(statement), r)
             src = source_fields(r["source_url"], ds.license)
             cur.execute(
                 """
@@ -117,14 +124,14 @@ def apply_dataset(conn, ds: Dataset, records: list[dict]) -> dict:
     return {"inserted": inserted, "updated": updated}
 
 
-def apply_curated_rows(conn, curated: list[dict]) -> dict:
+def apply_curated_rows(conn: psycopg.Connection, curated: list[dict]) -> dict:
     """Apply the curated CSV by name and mark its rows as curated.
     Sets ``category_source='curated'`` so later auto-classification cannot rewrite them.
     """
     with conn.cursor() as cur:
         cur.execute("SELECT id, name, category, blurb, fun_fact, fun_facts, links FROM places")
-        cols = [d.name for d in cur.description]
-        db_rows = [dict(zip(cols, r, strict=True)) for r in cur.fetchall()]
+        cols = [d.name for d in cur.description or ()]
+        db_rows = [dict(zip(cols, r, strict=True)) for r in cur.fetchall() or []]
 
         matched = updated = 0
         unmatched: list[str] = []
@@ -165,7 +172,7 @@ def apply_curated_rows(conn, curated: list[dict]) -> dict:
         }
 
 
-def load_areas(conn, records: list[dict], geo_dir: Path | None = None) -> int:
+def load_areas(conn: psycopg.Connection, records: list[dict], geo_dir: Path | None = None) -> int:
     """Idempotently load the project-area polygon + one row per district."""
     written = 0
     with conn.cursor() as cur:
@@ -207,28 +214,34 @@ def load_areas(conn, records: list[dict], geo_dir: Path | None = None) -> int:
     return written
 
 
-def gather_db_stats(conn) -> dict:
+def _scalar(cur: Any) -> int:
+    """The single value the cursor holds, or 0 when it holds nothing."""
+    row = cur.fetchone()
+    return int(row[0]) if row else 0
+
+
+def gather_db_stats(conn: psycopg.Connection) -> dict:
     """Post-apply counts: sources/areas/aliases and pending embeddings."""
     stats: dict[str, Any] = {}
     with conn.cursor() as cur:
         cur.execute("SELECT count(*) FROM places")
-        stats["places_total"] = cur.fetchone()[0]
+        stats["places_total"] = _scalar(cur)
         cur.execute("SELECT count(*) FROM places WHERE embedding IS NULL")
-        stats["pending_embeddings"] = cur.fetchone()[0]
+        stats["pending_embeddings"] = _scalar(cur)
         cur.execute("SELECT category_source, count(*) FROM places GROUP BY 1")
-        stats["by_category_source"] = {r[0]: r[1] for r in cur.fetchall()}
+        stats["by_category_source"] = {r[0]: r[1] for r in cur.fetchall() or []}
         cur.execute("SELECT provider, count(*) FROM place_sources GROUP BY 1")
-        stats["place_sources"] = {r[0]: r[1] for r in cur.fetchall()}
+        stats["place_sources"] = {r[0]: r[1] for r in cur.fetchall() or []}
         cur.execute("SELECT locale, count(*) FROM place_aliases GROUP BY 1")
-        stats["place_aliases"] = {r[0]: r[1] for r in cur.fetchall()}
+        stats["place_aliases"] = {r[0]: r[1] for r in cur.fetchall() or []}
         cur.execute("SELECT count(*) FROM areas")
-        stats["areas"] = cur.fetchone()[0]
+        stats["areas"] = _scalar(cur)
         cur.execute("SELECT count(*) FROM places WHERE photo_url IS NOT NULL")
-        stats["with_photo"] = cur.fetchone()[0]
+        stats["with_photo"] = _scalar(cur)
     return stats
 
 
-def apply_photos(conn, photos_dir: Path | None = None) -> int:
+def apply_photos(conn: psycopg.Connection, photos_dir: Path | None = None) -> int:
     """Write the committed ``place_photos.json`` onto ``places`` (no network).
     A missing file yields no photos rather than an error.
     """
@@ -240,7 +253,7 @@ def apply_photos(conn, photos_dir: Path | None = None) -> int:
     return apply_to_db(conn, json.loads(path.read_text(encoding="utf-8")))
 
 
-def prune_foreign(conn, *, apply: bool = False) -> int:
+def prune_foreign(conn: psycopg.Connection, *, apply: bool = False) -> int:
     """Drop places outside the project area; returns the number found (deleted if apply).
     The ingest filters now, so this only cleans older DBs.
     """

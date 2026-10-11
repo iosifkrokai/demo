@@ -9,6 +9,7 @@ import logging
 import time as _time
 from typing import Any
 
+from agent.models import TripRequirements
 from core import constants
 from core.config import openrouter_api_key
 from core.errors import (
@@ -27,6 +28,7 @@ from planner.models import (
     ResolvedConstraints,
     RouteResponse,
     RouteSummary,
+    ValidatedPlan,
 )
 from planner.valhalla.http import ping as valhalla_ping
 from telemetry import progress, trace
@@ -211,7 +213,7 @@ class Pipeline:
         )
         return requirements, intent
 
-    def _step_resolve(self, turn: Turn, requirements, intent):
+    def _step_resolve(self, turn: Turn, requirements: TripRequirements, intent: IntentResult):
         constraints = resolve(
             intent,
             explicit_time_budget=turn.req.time_budget_minutes,
@@ -483,7 +485,7 @@ class Pipeline:
         _candidates, _cost, _route, _info, plan = run_plan_tail(turn, candidates, constraints)
         return plan
 
-    def _step_render(self, turn: Turn, plan) -> dict:
+    def _step_render(self, turn: Turn, plan: ValidatedPlan) -> dict:
         progress.note(progress.STAGE_DRAWING)
         if seconds_left(turn.t0) >= constants.RENDER_MIN_LEFT_S:
             shape, summary = render_tour(
@@ -515,7 +517,7 @@ class Pipeline:
         turn.length_km = length_km
         return shape
 
-    def _step_explain(self, turn: Turn, plan) -> str:
+    def _step_explain(self, turn: Turn, plan: ValidatedPlan) -> str:
         explanation = explain_route(plan.route, plan.trace, turn.walk_s, turn.costing)
         trace.record(
             "explain",
@@ -524,7 +526,9 @@ class Pipeline:
         )
         return explanation
 
-    def _step_verify(self, turn: Turn, plan, requirements) -> OverallStatus:
+    def _step_verify(
+        self, turn: Turn, plan: ValidatedPlan, requirements: TripRequirements
+    ) -> OverallStatus:
         progress.note(progress.STAGE_CHECKING)
         verify(
             requirements,
