@@ -14,6 +14,7 @@ from planner.models import (
     RouteResponse,
     RouteSummary,
 )
+from routing.models import CategoryFacts
 from telemetry import progress, trace
 
 from .response import interpretation, to_places, verdicts
@@ -28,6 +29,7 @@ def catalogue_response(
     intent: Any,
     candidates: list[Candidate],
     t0: float,
+    facts: CategoryFacts,
 ) -> RouteResponse:
     """Answer with the matching places, grouped by town, and no route.
 
@@ -71,7 +73,7 @@ def catalogue_response(
             time_budget_minutes=d.time_budget_minutes,
             source=intent.source,
         ),
-        points=to_places(ordered),
+        points=to_places(ordered, facts),
         shape={},
         summary=RouteSummary(length_km=None, time_seconds=None),
         result_mode="catalogue",

@@ -9,6 +9,7 @@ bridge that ``resolve()`` consumes.
 from __future__ import annotations
 
 import logging as _logging
+from collections.abc import Collection
 
 from agent import client
 from agent.llm import model_name
@@ -35,19 +36,23 @@ from .preprocess import WORD_RE
 log = _logging.getLogger(__name__)
 
 
-def intent_from_requirements(requirements: TripRequirements, query: str) -> IntentResult:
-    """Derive the ``IntentResult`` that ``resolve()`` consumes from a contract."""
+def intent_from_requirements(
+    requirements: TripRequirements, query: str, *, codes: Collection[str]
+) -> IntentResult:
+    """Derive the ``IntentResult`` that ``resolve()`` consumes from a contract.
+
+    ``codes`` are the canonical category codes, handed in as a value: this module
+    is a leaf and does not read the taxonomy from anywhere.
+    """
     cats_pos: list[str] = []
     for code in (
         requirements.interest_codes()
         + requirements.soft_service_codes()
         + requirements.hard_service_codes()
     ):
-        if code and code in constants.CATEGORIES and code not in cats_pos:
+        if code and code in codes and code not in cats_pos:
             cats_pos.append(code)
-    cats_neg = [
-        c for c in requirements.avoid_codes() if c in constants.CATEGORIES and c not in cats_pos
-    ]
+    cats_neg = [c for c in requirements.avoid_codes() if c in codes and c not in cats_pos]
 
     decision = IntentDecision(
         intent_type="vague" if not WORD_RE.search(query) else "discovery",
@@ -84,14 +89,18 @@ def _scope_from_areas(areas: list[str]) -> str:
     return "town"
 
 
-def _interpret_cache_key(query: str, brief: ReaderBrief) -> tuple[str | None, str]:
+def _interpret_cache_key(
+    query: str, brief: ReaderBrief, repos: Repositories | None
+) -> tuple[str | None, str]:
     """None when the agent cannot run at all; the prompt is hashed into the key, so
     editing the instructions invalidates every entry.
     """
     try:
         if not client.available():
             return None, ""
-        instructions = compose_instructions(_ui_note(brief))
+        catalogue = repos.taxonomy.all() if repos is not None else ()
+        territories = repos.areas.list_all() if repos is not None else ()
+        instructions = compose_instructions(catalogue, territories, _ui_note(brief))
         return (
             interpret_cache.interpret_key(
                 query,
@@ -257,7 +266,7 @@ def build_requirements(
     than answered with a guess at what the tourist meant.
     """
     brief = reader_brief(req)
-    cache_key, prompt_hash = _interpret_cache_key(query, brief)
+    cache_key, prompt_hash = _interpret_cache_key(query, brief, repos)
     if cache_key is not None:
         cached = interpret_cache.INTERPRET_CACHE.get(cache_key)
         if cached is not None:

@@ -2,18 +2,20 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+from typing import Any
+
 from agent.prompts.notes import _known_areas_note
-from reference.taxonomy import all_categories
 
 
-def base_rules() -> str:
+def base_rules(categories: Sequence[Any], areas: Sequence[Any]) -> str:
     """The standing instructions, up to (and including) the worked shapes.
 
     The per-request note is appended by :func:`compose_instructions`.
     """
     from agent.runner import MAX_TOOL_CALLS
 
-    catalogue = "; ".join(f"{cat.code} ({cat.ru}/{cat.en}, {cat.role})" for cat in all_categories())
+    catalogue = "; ".join(f"{cat.code} ({cat.ru}/{cat.en}, {cat.role})" for cat in categories)
     return (
         "You interpret a tourist's walking-route request for the Grodno region "
         "(Belarus) into a structured requirement list.\n"
@@ -27,7 +29,7 @@ def base_rules() -> str:
         "Canonical category codes (use ONLY these, never invent one): "
         f"{catalogue}.\n"
         "Known territories (canonical slugs — `find_areas` returns these): "
-        f"{_known_areas_note()}.\n"
+        f"{_known_areas_note(areas)}.\n"
         "Rules:\n"
         "- A requirement is a thing the user asked for, with the verbatim "
         "fragment of their text that says so (copy it exactly).\n"

@@ -17,6 +17,7 @@ from db.store.registry import Repositories
 from planner.models import Candidate, GenerateReq, RouteContext, RouteResponse
 from routing.dedupe import norm_name
 from routing.geo import TRACE_NAMES_MAX
+from routing.models import CategoryFacts
 from telemetry import trace
 
 from .explain import explain as explain_route
@@ -112,12 +113,13 @@ def _additions(
     base_ids = {c.id for c in base}
 
     try:
-        convenience = {c for c in directive.add_categories if c in constants.CONVENIENCE_CATEGORIES}
+        services = set(repos.taxonomy.service_codes())
+        convenience = {c for c in directive.add_categories if c in services}
         if convenience:
             for c in nearby_convenience(repos.places, base, convenience):
                 found[c.id] = c
 
-        sights = {c for c in directive.add_categories if c not in constants.CONVENIENCE_CATEGORIES}
+        sights = {c for c in directive.add_categories if c not in services}
         if sights:
             for c in nearby_convenience(
                 repos.places,
@@ -156,6 +158,7 @@ def generate_refinement(
     instruction = (ctx.instruction or "").strip()
     excluded = set(ctx.excluded_ids or [])
     directive = interpret_refinement(instruction)
+    facts = CategoryFacts.from_rows(repos.taxonomy.all())
 
     removed = _removals(directive, base, excluded)
     kept = [c for c in base if c.id not in removed]
@@ -165,6 +168,7 @@ def generate_refinement(
         route = reorder_stops(
             kept,
             by=directive.reorder_by or "visit_minutes",
+            facts=facts,
             descending=directive.descending,
             origin=req.origin,
         )
@@ -202,7 +206,7 @@ def generate_refinement(
     )
 
     requirements = build_requirements(instruction or req.query, req, repos=repos)
-    intent = intent_from_requirements(requirements, instruction or req.query)
+    intent = intent_from_requirements(requirements, instruction or req.query, codes=facts.codes)
     trace.record(
         "interpret",
         input=instruction or req.query,
@@ -229,7 +233,14 @@ def generate_refinement(
     )
     costing = req.profile or "pedestrian"
 
-    turn = Turn(req=req, t0=t0, costing=costing, tail_mode="refine", plan_info=info)
+    turn = Turn(
+        req=req,
+        t0=t0,
+        costing=costing,
+        tail_mode="refine",
+        plan_info=info,
+        facts=facts,
+    )
     _candidates, _cost, route, _info, plan = run_plan_tail(turn, route, constraints)
     trace.record(
         "validate",
@@ -302,6 +313,7 @@ def generate_refinement(
     )
 
     resp = build_response(
+        facts=turn.facts,
         intent=intent,
         constraints=constraints,
         plan=plan,

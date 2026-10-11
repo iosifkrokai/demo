@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 
 from db.models.area import Area
 from db.store.base import PostgresRepository
@@ -37,3 +38,30 @@ class PostgresAreaRepository(PostgresRepository):
             cur.execute(f"SELECT {AREA_SELECT} FROM areas WHERE code = %s", (code,))
             row = cur.fetchone()
         return area_from_row(row) if row else None
+
+    def list_all(self) -> list[Area]:
+        """Every territory, districts first. Twenty rows — read and fold in Python."""
+        with self._cursor() as cur:
+            cur.execute(f"SELECT {AREA_SELECT} FROM areas ORDER BY kind, code")
+            return [area_from_row(row) for row in cur.fetchall()]
+
+    def resolve(self, term: str | None) -> str | None:
+        """Exact match of a term (code, either name, or alias) to a slug, or None.
+
+        Deliberately exact, not a search: this answers "is this word a territory",
+        and a substring hit would turn a stop into a scope.
+        """
+        needle = _normalise(term)
+        if not needle:
+            return None
+        for area in self.list_all():
+            terms = (area.code, area.name_ru, area.name_en, *area.aliases)
+            if any(_normalise(t) == needle for t in terms if t):
+                return area.code
+        return None
+
+
+def _normalise(term: str | None) -> str:
+    """Lowercase, drop punctuation, collapse whitespace — for exact matching."""
+    squashed = re.sub(r"\s+", " ", re.sub(r"[^\w\s]", " ", (term or "").lower()))
+    return squashed.strip()

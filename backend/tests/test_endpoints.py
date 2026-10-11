@@ -156,30 +156,6 @@ def test_explain_returns_an_explanation(live_stack, api: httpx.Client) -> None:
     assert isinstance(response.json()["explanation"], str)
 
 
-def test_trace_returns_the_spans_of_a_run(live_stack, api: httpx.Client) -> None:
-    live_stack.require("llm")
-    trace_id = uuid.uuid4().hex
-    generated = api.post(
-        "/routes/generate", json={"query": "старый город", "progress_id": trace_id}
-    )
-    assert generated.status_code == 200, generated.text
-    response = api.get(f"/routes/trace/{trace_id}")
-    assert response.status_code == 200, response.text
-    assert isinstance(response.json(), dict)
-
-
-def test_progress_returns_the_stage_snapshot(live_stack, api: httpx.Client) -> None:
-    live_stack.require("llm")
-    progress_id = uuid.uuid4().hex
-    generated = api.post(
-        "/routes/generate", json={"query": "старый город", "progress_id": progress_id}
-    )
-    assert generated.status_code == 200, generated.text
-    response = api.get(f"/routes/progress/{progress_id}")
-    assert response.status_code == 200, response.text
-    assert {"stage", "done", "failed", "elapsed_ms"} <= response.json().keys()
-
-
 # --- catalogue --------------------------------------------------------------
 
 

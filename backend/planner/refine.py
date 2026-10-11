@@ -13,6 +13,7 @@ from db.store.places import PostgresPlaceRepository
 from planner.models import Candidate, LatLon, RouteChange, RouteChanges
 from reference import taxonomy
 from routing.cost import visit_minutes_of
+from routing.models import CategoryFacts
 
 from .resolve import CATEGORY_SYNONYMS, CATEGORY_SYNONYMS_EN
 from .retrieve import candidate_of
@@ -391,6 +392,7 @@ def reorder_stops(
     stops: list[Candidate],
     *,
     by: ReorderBy,
+    facts: CategoryFacts,
     descending: bool = False,
     origin: LatLon | None = None,
     matrix: list[list[float]] | None = None,
@@ -403,7 +405,7 @@ def reorder_stops(
         return list(stops)
 
     if by == "visit_minutes":
-        keyed = [(visit_minutes_of(c), i, c) for i, c in enumerate(stops)]
+        keyed = [(visit_minutes_of(c, facts), i, c) for i, c in enumerate(stops)]
     elif by == "distance":
         dist = _distance_keys(stops, origin=origin, matrix=matrix)
         keyed = [(dist[i], i, c) for i, c in enumerate(stops)]

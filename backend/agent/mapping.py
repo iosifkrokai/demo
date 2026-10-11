@@ -7,8 +7,7 @@ import logging
 from agent.models import PartyComposition, ReaderBrief, Requirement, TripRequirements
 from agent.schema import AgentReading
 from core import constants
-from reference import areas as areas_mod
-from reference.taxonomy import resolve_code
+from db.store.registry import Repositories
 
 log = logging.getLogger(__name__)
 
@@ -56,7 +55,7 @@ def ui_used(brief: ReaderBrief) -> bool:
 
 
 def _reading_requirements(
-    reading: AgentReading, query: str, observed: set[int]
+    reading: AgentReading, query: str, observed: set[int], repos: Repositories | None
 ) -> tuple[list[Requirement], list[str]]:
     """A territory is not a stop: it is not made into a requirement, and it is not
     an area either.
@@ -67,7 +66,11 @@ def _reading_requirements(
     for item in reading.requirements:
         code = None
         if item.kind != "must_visit":
-            code = resolve_code(item.code or item.name or "")
+            code = (
+                repos.taxonomy.resolve_code(item.code or item.name or "")
+                if repos is not None
+                else None
+            )
             if code is None:
                 ask = (item.code or item.name or item.text or item.kind).strip()
                 unsupported.append(ask)
@@ -75,15 +78,17 @@ def _reading_requirements(
         elif not (item.name or "").strip():
             unsupported.append(item.kind)
             continue
-        elif (
-            isinstance(item.place_id, int) and item.place_id in observed
-        ) is False and areas_mod.resolve_area((item.name or "").strip()):
-            log.info(
-                "interpretation: must_visit %r — территория (%s), не остановка",
-                item.name,
-                areas_mod.resolve_area((item.name or "").strip()),
+        elif not (isinstance(item.place_id, int) and item.place_id in observed):
+            territory = (
+                repos.areas.resolve((item.name or "").strip()) if repos is not None else None
             )
-            continue
+            if territory:
+                log.info(
+                    "interpretation: must_visit %r — территория (%s), не остановка",
+                    item.name,
+                    territory,
+                )
+                continue
 
         place_id = None
         if (
@@ -136,14 +141,18 @@ def _unknowns(reading: AgentReading, unsupported: list[str], mobility: list[str]
 
 
 def _merge(
-    query: str, brief: ReaderBrief, reading: AgentReading, observed: set[int]
+    query: str,
+    brief: ReaderBrief,
+    reading: AgentReading,
+    observed: set[int],
+    repos: Repositories | None,
 ) -> TripRequirements:
     """Build the contract: UI first (it wins), then the agent's reading."""
     ui_reqs = ui_requirements(brief)
     requirements = list(ui_reqs)
     claimed = {(r.kind, r.code or r.name) for r in ui_reqs}
 
-    agent_reqs, unsupported = _reading_requirements(reading, query, observed)
+    agent_reqs, unsupported = _reading_requirements(reading, query, observed, repos)
     for r in agent_reqs:
         key = (r.kind, r.code or r.name)
         if key in claimed:

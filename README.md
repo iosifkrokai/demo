@@ -60,7 +60,7 @@ seed read.
 | `VALHALLA_URL` | routing engine address |
 | `AGENT_HOST` / `AGENT_PORT` | bind address |
 | `AGENT_INTERPRET_MODEL` | optional override of the interpretation model (its default is named in `agent/llm.py`) |
-| `LANGFUSE_HOST` / `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` | optional self-hosted tracing (`telemetry/trace.py`); **both keys** are required, and without them tracing is a no-op |
+| `LOGFIRE_TOKEN` | optional; send tracing to Logfire. Without it (the container/CI default) tracing is a **no-op**, not an error |
 | `CACHE_BUST=1` | turn the in-process reading/embedding cache off for this process |
 | `INTERPRET_CACHE_SIZE` / `INTERPRET_CACHE_TTL_S` | bounds of that cache (defaults 128 entries / 30 min) |
 

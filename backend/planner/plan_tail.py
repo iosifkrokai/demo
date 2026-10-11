@@ -39,13 +39,13 @@ def run_plan_tail(
     costing = turn.costing
 
     if turn.tail_mode == "refine":
-        route, cost = refinement_cost(candidates, constraints, costing)
+        route, cost = refinement_cost(candidates, constraints, costing, turn.facts)
         info = turn.plan_info or {}
         plan = validate(route, cost, constraints, info)
         return candidates, cost, route, info, plan
 
     if turn.tail_mode == "reroute":
-        cost = compute_cost_matrix(candidates, constraints, costing=costing)
+        cost = compute_cost_matrix(candidates, constraints, costing, turn.facts)
         if cost.indices != list(range(len(candidates))):
             candidates = [candidates[i] for i in cost.indices]
         route, info = optimize(candidates, cost, constraints, costing=costing)
@@ -54,7 +54,7 @@ def run_plan_tail(
 
     progress.note(progress.STAGE_MEASURING_LEGS)
     before_cost = candidates
-    candidates, cost = build_cost(candidates, constraints, costing)
+    candidates, cost = build_cost(candidates, constraints, costing, turn.facts)
     trace.record(
         "cost",
         input=names(before_cost),
@@ -84,14 +84,14 @@ def run_plan_tail(
     # first on the sights alone, then on the wider pool that includes services.
     retry: dict[str, Any] | None = None
     if len(route) < 2 and len(candidates) > 1:
-        sights = [c for c in candidates if is_sight_stop(c)]
+        sights = [c for c in candidates if is_sight_stop(c, turn.facts)]
         if 2 <= len(sights) < len(candidates):
             log.info(
                 "optimize collapsed to %d stop(s) — retrying on %d sight stop(s)",
                 len(route),
                 len(sights),
             )
-            retry_candidates, retry_cost = build_cost(sights, constraints, costing)
+            retry_candidates, retry_cost = build_cost(sights, constraints, costing, turn.facts)
             retry_route, retry_info = optimize(
                 retry_candidates, retry_cost, constraints, costing=costing
             )
@@ -105,7 +105,9 @@ def run_plan_tail(
                 retry = {"why": "walkable", "pool": names(sights)}
     if len(route) < 2 and len(turn.all_candidates) > len(candidates):
         log.info("optimize: sights alone give %d stop(s) — retrying with services", len(route))
-        retry_candidates, retry_cost = build_cost(turn.all_candidates, constraints, costing)
+        retry_candidates, retry_cost = build_cost(
+            turn.all_candidates, constraints, costing, turn.facts
+        )
         retry_route, retry_info = optimize(
             retry_candidates, retry_cost, constraints, costing=costing
         )

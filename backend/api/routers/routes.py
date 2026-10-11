@@ -1,4 +1,4 @@
-"""HTTP surface for planning: generate, reroute, explain and the telemetry reads.
+"""HTTP surface for planning: generate, reroute and explain.
 
 The routes are thin; the decisions live in ``planner.pipeline.Pipeline``.
 """
@@ -48,30 +48,6 @@ def generate(req: GenerateReq, request: Request) -> RouteResponse:
     finally:
         progress.finish()
         trace.finish()
-
-
-@router.get("/routes/trace/{trace_id}")
-def route_trace(trace_id: str) -> dict[str, Any]:
-    """The structured spans of one run, for a client that wants them raw.
-
-    An unknown id is a 404 with a reason code, not an empty trace.
-    """
-    data = trace.get(trace_id)
-    if data is None:
-        raise deps.http_error(404, "unknown_trace_id")
-    return data
-
-
-@router.get("/routes/progress/{progress_id}")
-def route_progress(progress_id: str) -> dict[str, Any]:
-    """Where the pipeline got to, in stage codes the client localises.
-
-    An unknown id is a 404 with a reason code, not an empty stage.
-    """
-    snapshot = progress.snapshot(progress_id)
-    if snapshot is None:
-        raise deps.http_error(404, "unknown_progress_id")
-    return snapshot
 
 
 @router.post("/routes/reroute", response_model=RouteResponse)

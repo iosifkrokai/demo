@@ -12,6 +12,7 @@ from planner.models import (
     ResolvedConstraints,
     RouteResponse,
 )
+from routing.models import CategoryFacts
 from routing.validate import validate
 from telemetry import trace
 
@@ -41,6 +42,7 @@ def refuse_out_of_coverage(
     constraints: ResolvedConstraints,
     names: list[str],
     t0: float,
+    facts: CategoryFacts,
 ) -> RouteResponse:
     """Answer "not here" instead of planning a route somewhere else.
 
@@ -75,6 +77,7 @@ def refuse_out_of_coverage(
         shape={},
         walk_s=0.0,
         length_km=0.0,
+        facts=facts,
         explanation=(
             "Маршрут не построен: "
             + ", ".join(names)

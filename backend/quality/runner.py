@@ -77,11 +77,14 @@ if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 
 from core import constants as agent_constants  # noqa: E402
-from reference.geofence import inside_project_area  # noqa: E402
+from db.seed.geofence import inside_project_area  # noqa: E402
+from db.seed.taxonomy import all_categories  # noqa: E402
 
+# `quality` is a development tool and is not shipped, so it reads the taxonomy
+# from the dataset the seed projects rather than from the database.
 CANONICAL_CATEGORIES = {
-    canonical.strip().lower().replace("ё", "е"): canonical
-    for canonical in agent_constants.CATEGORIES
+    canonical.code.strip().lower().replace("ё", "е"): canonical.code
+    for canonical in all_categories()
 }
 CANONICAL_CODES_NORM = frozenset(CANONICAL_CATEGORIES)
 

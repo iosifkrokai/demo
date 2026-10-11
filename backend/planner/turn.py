@@ -14,6 +14,7 @@ from typing import Any
 
 from core import constants
 from planner.models import Candidate, GenerateReq
+from routing.models import CategoryFacts
 
 
 @dataclass
@@ -22,6 +23,9 @@ class Turn:
 
     req: GenerateReq
     t0: float
+
+    # The taxonomy as a value: the measurement is handed this, never a repository.
+    facts: CategoryFacts = field(default_factory=CategoryFacts)
 
     region_scope: bool = False
     catalogue: bool = False

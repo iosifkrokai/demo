@@ -10,8 +10,7 @@ from typing import Any
 
 from core import constants
 from core.errors import NoRoutePossibleError, UpstreamUnavailableError
-from reference import taxonomy
-from routing.models import Candidate, CostMatrix, ResolvedConstraints
+from routing.models import Candidate, CategoryFacts, CostMatrix, ResolvedConstraints
 from routing.valhalla.matrix import time_matrix
 from routing.valhalla.snap import snap_locations
 
@@ -46,33 +45,26 @@ MIN_VISIT_MINUTES = 10
 DEFAULT_VISIT_MINUTES = 15
 
 
-def visit_time_minutes(category: str | None) -> int:
+def visit_time_minutes(category: str | None, facts: CategoryFacts) -> int:
     """Estimated minutes to look around a place of a given category."""
-    if not category:
-        return DEFAULT_VISIT_MINUTES
-    try:
-        code = category if category in taxonomy.all_codes() else taxonomy.resolve_code(category)
-        if code is None:
-            return DEFAULT_VISIT_MINUTES
-        return taxonomy.visit_minutes(code)
-    except KeyError:  # pragma: no cover — resolve_code only returns known codes
-        return DEFAULT_VISIT_MINUTES
+    return facts.minutes_for(category) or DEFAULT_VISIT_MINUTES
 
 
-def visit_minutes_of(candidate: Candidate) -> int:
+def visit_minutes_of(candidate: Candidate, facts: CategoryFacts) -> int:
     """The stop's own visit estimate, falling back to its category default.
 
     An estimate from the taxonomy, not a hard constraint.
     """
     if candidate.visit_minutes_db is not None:
         return int(candidate.visit_minutes_db)
-    return visit_time_minutes(candidate.category)
+    return visit_time_minutes(candidate.category, facts)
 
 
 def compute_cost_matrix(
     candidates: list[Candidate],
     constraints: ResolvedConstraints,
-    costing: str = "pedestrian",
+    costing: str,
+    facts: CategoryFacts,
     deadline: float | None = None,
 ) -> CostMatrix:
     """Valhalla sources_to_targets + visit times, with sanity pre-filter."""
@@ -92,7 +84,7 @@ def compute_cost_matrix(
             f"expected {len(candidates)}x{len(candidates)}, got {len(matrix)} rows"
         )
 
-    raw_visits = [c.visit_minutes_db or visit_time_minutes(c.category) for c in candidates]
+    raw_visits = [c.visit_minutes_db or visit_time_minutes(c.category, facts) for c in candidates]
 
     if constraints.time_budget_minutes:
         cap = max(
@@ -251,7 +243,7 @@ def total_seconds(order: list[int], matrix: list[list[float]], visit_minutes: li
     return int(walk_cost(order, matrix)) + visit_cost(order, visit_minutes)
 
 
-def _synthetic_cost(candidates: list[Candidate], costing: str = "pedestrian") -> CostMatrix:
+def _synthetic_cost(candidates: list[Candidate], costing: str, facts: CategoryFacts) -> CostMatrix:
     """A straight-line cost matrix for when Valhalla cannot answer."""
     speed_ms = 1.3 if costing == "pedestrian" else 8.0
     n = len(candidates)
@@ -262,27 +254,30 @@ def _synthetic_cost(candidates: list[Candidate], costing: str = "pedestrian") ->
                 matrix[i][j] = distance_m(candidates[i], candidates[j]) / speed_ms
     return CostMatrix(
         walk_seconds=matrix,
-        visit_minutes=[visit_minutes_of(c) for c in candidates],
+        visit_minutes=[visit_minutes_of(c, facts) for c in candidates],
         indices=list(range(n)),
     )
 
 
 def refinement_cost(
-    route: list[Candidate], constraints: ResolvedConstraints, costing: str
+    route: list[Candidate],
+    constraints: ResolvedConstraints,
+    costing: str,
+    facts: CategoryFacts,
 ) -> tuple[list[Candidate], CostMatrix]:
     """Never raises and never drops a stop the user kept: falls back to straight-line
     legs if the pre-filter would remove one.
     """
     base_ids = {c.id for c in route}
     try:
-        cost = compute_cost_matrix(route, constraints, costing=costing)
+        cost = compute_cost_matrix(route, constraints, costing, facts)
     except (UpstreamUnavailableError, NoRoutePossibleError):
-        return route, _synthetic_cost(route, costing)
+        return route, _synthetic_cost(route, costing, facts)
 
     if cost.indices != list(range(len(route))):
         aligned = [route[i] for i in cost.indices]
         if not base_ids <= {c.id for c in aligned}:
-            return route, _synthetic_cost(route, costing)
+            return route, _synthetic_cost(route, costing, facts)
         route = aligned
         cost = CostMatrix(
             walk_seconds=cost.walk_seconds,
@@ -293,10 +288,13 @@ def refinement_cost(
 
 
 def build_cost(
-    candidates: list[Candidate], constraints: ResolvedConstraints, costing: str
+    candidates: list[Candidate],
+    constraints: ResolvedConstraints,
+    costing: str,
+    facts: CategoryFacts,
 ) -> tuple[list[Candidate], CostMatrix]:
     """Cost matrix, aligned to the candidates, minus what Valhalla cannot reach."""
-    cost = compute_cost_matrix(candidates, constraints, costing=costing)
+    cost = compute_cost_matrix(candidates, constraints, costing, facts)
     if cost.indices != list(range(len(candidates))):
         candidates = [candidates[i] for i in cost.indices]
     candidates, cost = drop_unreachable(candidates, cost)
@@ -307,20 +305,14 @@ def build_cost(
     return candidates, cost
 
 
-def is_service_code(code: str) -> bool:
+def is_service_code(code: str, facts: CategoryFacts) -> bool:
     """True when a taxonomy code is a service (a café, a toilet, a hotel)."""
-    try:
-        return taxonomy.role(code) == "service"
-    except Exception:
-        return False
+    return facts.is_service(code)
 
 
-def is_sight_stop(candidate: Any) -> bool:
+def is_sight_stop(candidate: Any, facts: CategoryFacts) -> bool:
     """True when a candidate is a destination, not a service the user asked for.
 
     Unknown category codes count as sights.
     """
-    try:
-        return taxonomy.role(candidate.category) != "service"
-    except Exception:
-        return True
+    return not facts.is_service(candidate.category)

@@ -9,11 +9,13 @@ import os
 
 
 class Settings:
-    OPENROUTER_API_KEY: str | None = os.environ.get("OPENROUTER_API_KEY") or None
+    LOGFIRE_TOKEN: str | None = os.environ.get("LOGFIRE_TOKEN") or None
 
-    LANGFUSE_HOST: str | None = os.environ.get("LANGFUSE_HOST")
-    LANGFUSE_PUBLIC_KEY: str | None = os.environ.get("LANGFUSE_PUBLIC_KEY")
-    LANGFUSE_SECRET_KEY: str | None = os.environ.get("LANGFUSE_SECRET_KEY")
+    # The interpretation model is reached through one of two providers; both are
+    # read here and chosen in `agent/llm.py`, the only place a provider is named.
+    OPENROUTER_API_KEY: str | None = os.environ.get("OPENROUTER_API_KEY") or None
+    ANTHROPIC_API_KEY: str | None = os.environ.get("ANTHROPIC_API_KEY") or None
+    ANTHROPIC_BASE_URL: str | None = os.environ.get("ANTHROPIC_BASE_URL") or None
 
     HOST: str = os.environ.get("AGENT_HOST", "0.0.0.0")
     PORT: int = int(os.environ.get("AGENT_PORT", "8080"))
@@ -27,6 +29,7 @@ DSN = settings.DSN
 VALHALLA_URL = settings.VALHALLA_URL
 HOST = settings.HOST
 PORT = settings.PORT
+LOGFIRE_TOKEN = settings.LOGFIRE_TOKEN
 
 
 def openrouter_api_key() -> str | None:
@@ -37,8 +40,15 @@ def openrouter_api_key() -> str | None:
     return os.environ.get("OPENROUTER_API_KEY") or settings.OPENROUTER_API_KEY
 
 
-def langfuse_configured() -> bool:
-    """True when both Langfuse keys are present (a host alone is not enough)."""
-    return bool(os.environ.get("LANGFUSE_PUBLIC_KEY") or settings.LANGFUSE_PUBLIC_KEY) and bool(
-        os.environ.get("LANGFUSE_SECRET_KEY") or settings.LANGFUSE_SECRET_KEY
-    )
+def anthropic_api_key() -> str | None:
+    """The Anthropic key (or gateway token) for this process, or None."""
+    return os.environ.get("ANTHROPIC_API_KEY") or settings.ANTHROPIC_API_KEY
+
+
+def anthropic_base_url() -> str | None:
+    """The gateway the Anthropic SDK should talk to, or None for the default.
+
+    Set this when the Anthropic-format endpoint is a proxy rather than
+    api.anthropic.com.
+    """
+    return os.environ.get("ANTHROPIC_BASE_URL") or settings.ANTHROPIC_BASE_URL

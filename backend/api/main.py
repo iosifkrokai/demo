@@ -11,11 +11,12 @@ from __future__ import annotations
 import logging
 from contextlib import asynccontextmanager
 
+import logfire
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from agent.client import DEFAULT_MODEL
+from agent import llm
 from api.routers import (
     accounts as accounts_api,
     admin as admin_api,
@@ -24,7 +25,7 @@ from api.routers import (
     health as health_api,
     routes as routes_api,
 )
-from core.config import openrouter_api_key, settings
+from core.config import LOGFIRE_TOKEN, settings
 from db.store.areas import PostgresAreaRepository
 from db.store.clients import PostgresClientRepository
 from db.store.places import PostgresPlaceRepository
@@ -33,7 +34,6 @@ from db.store.stats import PostgresStatsRepository
 from db.store.users import PostgresUserRepository
 from embeddings import model
 from planner.pipeline import Pipeline
-from telemetry import trace
 
 logging.basicConfig(
     level=logging.INFO,
@@ -42,10 +42,14 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 
-# Re-exported: tests reach the shared planner caller and the two telemetry reads
-# through `api.main`, the module they have always come from.
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    # Observability is wired once here. PydanticAI instruments itself through
+    # Logfire, so every model call and every tool call of the agent loop is
+    # visible without a hand-written span. Containers and CI carry no token, and
+    # send_to_logfire="if-token-present" makes that absence a no-op, not an error.
+    logfire.configure(send_to_logfire="if-token-present", token=LOGFIRE_TOKEN)
+    logfire.instrument_pydantic_ai()
     repos = Repositories(
         places=PostgresPlaceRepository(),
         areas=PostgresAreaRepository(),
@@ -59,17 +63,16 @@ async def lifespan(_: FastAPI):
     log.info(
         "agent ready (embeddings=%s local, interpret=%s, key=%s)",
         model.MODEL_NAME,
-        DEFAULT_MODEL,
-        "set" if openrouter_api_key() else "MISSING",
+        llm.model_name(),
+        "set" if llm.api_key() else "MISSING",
     )
-    if not openrouter_api_key():
+    if not llm.api_key():
         log.warning(
-            "no OPENROUTER_API_KEY — the planner has no reader for a request: "
+            f"no {llm.provider()} key — the planner has no reader for a request: "
             "/routes/generate, /routes/reroute and /routes/explain will refuse "
             "with 503 llm_not_configured. The catalogue endpoints still answer."
         )
     yield
-    trace.shutdown()
     repos.close()
 
 

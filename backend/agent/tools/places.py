@@ -21,7 +21,6 @@ from agent.tools import (
     positive_int,
     project,
 )
-from reference.taxonomy import db_values
 
 MAX_PLACES_PER_SEARCH = 8
 MAX_FACTS_PER_CALL = 1
@@ -58,8 +57,6 @@ def search_places(
     category codes are dropped, never sent to SQL.
     """
     requested = [c for c in (category_codes or []) if c.strip()]
-    db_cats = db_values(requested)
-    dropped = [c for c in requested if c not in db_cats]
 
     want, limit_clamped = clamp(limit, 1, MAX_PLACES_PER_SEARCH, DEFAULT_SEARCH_LIMIT)
     want = int(want)
@@ -73,8 +70,8 @@ def search_places(
     provenance: dict[str, Any] = {
         "source": "places",
         "strategy": "nearby" if near else "keyword",
-        "categories": db_cats,
-        "dropped_codes": dropped,
+        "categories": [],
+        "dropped_codes": requested,
         "result_cap": MAX_PLACES_PER_SEARCH,
         "radius_m": near[2] if near else None,
     }
@@ -89,6 +86,11 @@ def search_places(
         )
 
     def run(store: Any) -> list[dict[str, Any]]:
+        # Unknown category codes are dropped, never sent to SQL.
+        db_cats = store.taxonomy.db_values(requested)
+        provenance["categories"] = db_cats
+        provenance["dropped_codes"] = [c for c in requested if c not in db_cats]
+
         cap = MAX_PLACES_PER_SEARCH if db_cats else want
         if near is not None:
             found = store.places.nearby(near[0], near[1], radius_km=near[2] / 1000.0, limit=cap)

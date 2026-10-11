@@ -11,10 +11,9 @@ dependencies = [
     "psycopg[binary]>=3.2",
     "httpx>=0.27",
     "pydantic>=2.7",
-    "pydantic-ai-slim[openrouter]>=1.0,<2",
+    "pydantic-ai-slim[anthropic,openrouter,logfire]>=1.0,<2",
     "fastembed>=0.9.0",
     "numpy>=1.26",
-    "langfuse>=3.0",
     "alembic>=1.13",
 ]
 
@@ -87,7 +86,7 @@ ignore = [
     # 21 imports left inside functions: five break a real cycle (`agent.runner`
     # and `prompts.rules`, `cost` and `refine`, `pipeline` and `photos`),
     # and the rest defer a stage until it is asked for — the seed's stages,
-    # the optional Langfuse client, fastembed. Twenty-three were hoisted.
+    # the optional tracing client, fastembed. Twenty-three were hoisted.
     "PLC0415",
     "PLR0913", # 42  too many arguments
     "PLR0917", # 14  too many positional arguments

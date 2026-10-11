@@ -6,22 +6,24 @@ pressed, and the facts about the request the model cannot read from the text.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+from typing import Any
+
 from agent.models import ReaderBrief
-from reference import areas as areas_mod
 
 
-def _known_areas_note() -> str:
+def _known_areas_note(areas: Sequence[Any]) -> str:
     """The territories the system already knows, as data for the model.
 
-    The slugs listed here are what `find_areas` resolves to and what `areas` must carry.
+    The codes listed here are what `find_areas` resolves to and what `areas` must carry.
     """
 
     lines = []
-    for slug, entry in sorted(areas_mod.load_areas().items()):
-        kind = entry.get("kind") or "area"
-        name_ru = entry.get("name_ru") or slug
-        name_en = entry.get("name_en") or ""
-        lines.append(f"{slug} ({kind}: {name_ru}" + (f" / {name_en}" if name_en else "") + ")")
+    for area in sorted(areas, key=lambda a: a.code):
+        kind = area.kind or "area"
+        name_ru = area.name_ru or area.code
+        name_en = area.name_en or ""
+        lines.append(f"{area.code} ({kind}: {name_ru}" + (f" / {name_en}" if name_en else "") + ")")
     return "; ".join(lines)
 
 

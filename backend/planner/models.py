@@ -10,7 +10,6 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field, field_validator
 
 from core import constants
-from reference.taxonomy import all_codes
 from routing.models import (
     Candidate,
     CostMatrix,
@@ -27,8 +26,6 @@ from routing.models import (
 # The four above are re-exported for the planner's transition — the shapes now
 # live in the `routing` leaf, and these names disappear with this module.
 __all__ = ["Candidate", "CostMatrix", "ResolvedConstraints", "ValidatedPlan"]
-
-CategoryLiteral = Literal[*all_codes()]
 
 
 class ContextPoint(BaseModel):
@@ -252,8 +249,8 @@ class PreprocessedQuery(BaseModel):
 
 class IntentDecision(BaseModel):
     intent_type: IntentTypeLiteral = "discovery"
-    categories_pos: list[CategoryLiteral] = []  # pyright: ignore[reportInvalidTypeForm]
-    categories_neg: list[CategoryLiteral] = []  # pyright: ignore[reportInvalidTypeForm]
+    categories_pos: list[str] = []
+    categories_neg: list[str] = []
     keywords_pos: list[str] = []
     keywords_neg: list[str] = []
     named_places: list[str] = []

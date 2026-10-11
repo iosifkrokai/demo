@@ -12,6 +12,8 @@ into a thin ``Stop`` and leave this module.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
@@ -27,6 +29,48 @@ class LatLon(BaseModel):
 
     lat: float = Field(ge=44.0, le=62.0)
     lon: float = Field(ge=19.0, le=42.0)
+
+
+@dataclass(frozen=True)
+class CategoryFacts:
+    """What the measurement needs to know about categories — and nothing else.
+
+    The taxonomy lives in the database, but the arithmetic here is a leaf: it is
+    handed this value rather than a repository, so the cost matrix can be computed
+    from coordinates and numbers alone, with no connection in reach.
+    """
+
+    codes: frozenset[str] = field(default_factory=frozenset)
+    visit_minutes: Mapping[str, int] = field(default_factory=dict)
+    roles: Mapping[str, str] = field(default_factory=dict)
+
+    @classmethod
+    def from_rows(cls, categories: Any) -> CategoryFacts:
+        """Build from taxonomy rows (anything with code/ru/visit_minutes/role).
+
+        `places.category` stores the Russian name, not the code, so both surfaces
+        are keyed — a lookup succeeds whichever one the data carries.
+        """
+        codes: set[str] = set()
+        minutes: dict[str, int] = {}
+        roles: dict[str, str] = {}
+        for row in categories:
+            codes.add(row.code)
+            for surface in (row.code, row.ru):
+                minutes[surface] = row.visit_minutes
+                roles[surface] = row.role
+        return cls(codes=frozenset(codes), visit_minutes=minutes, roles=roles)
+
+    def minutes_for(self, category: str | None) -> int | None:
+        """Default visit time for a category, or None when it is unknown."""
+        if not category:
+            return None
+        return self.visit_minutes.get(category)
+
+    def is_service(self, category: str | None) -> bool:
+        if not category:
+            return False
+        return self.roles.get(category) == "service"
 
 
 class Photo(BaseModel):

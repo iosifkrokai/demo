@@ -32,6 +32,7 @@ from planner.models import (
 )
 from routing.cost import visit_time_minutes
 from routing.geo import TRACE_NAMES_MAX
+from routing.models import CategoryFacts
 from routing.render import render
 
 log = logging.getLogger(__name__)
@@ -39,6 +40,7 @@ log = logging.getLogger(__name__)
 
 def build_response(
     *,
+    facts: CategoryFacts,
     intent: IntentResult,
     constraints: ResolvedConstraints,
     plan: ValidatedPlan,
@@ -69,7 +71,7 @@ def build_response(
             time_budget_minutes=d.time_budget_minutes,
             source=intent.source,
         ),
-        points=to_places(plan.route),
+        points=to_places(plan.route, facts),
         shape=shape,
         summary=RouteSummary(length_km=length_km, time_seconds=walk_s),
         changes=changes,
@@ -188,7 +190,7 @@ def verdicts(requirements: Any) -> list[dict[str, Any]]:
     ]
 
 
-def to_places(candidates: list[Candidate]) -> list[Place]:
+def to_places(candidates: list[Candidate], facts: CategoryFacts) -> list[Place]:
     """Candidates → the response points (one mapping, used by every branch)."""
     return [
         Place(
@@ -206,7 +208,7 @@ def to_places(candidates: list[Candidate]) -> list[Place]:
             town=p.town,
             district=p.district,
             photo=p.photo,
-            visit_minutes=p.visit_minutes_db or visit_time_minutes(p.category),
+            visit_minutes=p.visit_minutes_db or visit_time_minutes(p.category, facts),
         )
         for p in candidates
     ]

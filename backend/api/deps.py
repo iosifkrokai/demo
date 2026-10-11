@@ -20,6 +20,7 @@ from typing import Any
 from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse
 
+from agent import llm
 from api.models.accounts import (
     REASON_NOT_ADMIN,
     REASON_NOT_AUTHENTICATED,
@@ -27,7 +28,6 @@ from api.models.accounts import (
     ROLE_ADMIN,
     SESSION_COOKIE,
 )
-from core.config import openrouter_api_key
 from core.errors import AgentError
 from core.passwords import hash_token
 from db.models.user import User
@@ -52,7 +52,7 @@ def require_llm() -> None:
     reader. Answering anyway — with a keyword parse — would silently give the
     tourist a worse route and no way to tell, so the request is refused instead.
     """
-    if not openrouter_api_key():
+    if not llm.api_key():
         raise HTTPException(
             status_code=503,
             detail={"reason": "llm_not_configured"},

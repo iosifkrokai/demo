@@ -1,20 +1,18 @@
-"""Structured trace of one route request, exported to a self-hosted Langfuse.
+"""Structured trace of one route request, held in memory for its lifetime.
 
 Spans record what a step did; an unknown id is ``None``, not an empty trace.
+
+This module survives only as long as `planner/` does — it is the recorder the
+pipeline's steps call, and it will be deleted with them. Observation now belongs
+to Logfire, which instruments the agent loop without any of this.
 """
 
 from __future__ import annotations
 
 import contextvars
-import logging
 import time
-from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Any
-
-from core.config import langfuse_configured
-
-log = logging.getLogger(__name__)
 
 TTL_S = 300.0
 
@@ -45,9 +43,6 @@ class _Trace:
 
 
 _traces: dict[str, _Trace] = {}
-
-_UNSET = object()
-_langfuse_state: dict[str, Any] = {"client": _UNSET}
 
 
 def begin(trace_id: str | None, session_id: str | None = None) -> str | None:
@@ -105,14 +100,10 @@ def record(
 
 
 def finish() -> None:
-    """The request is over: export the spans to Langfuse, then stop tracking.
-
-    The export is best-effort and never raised into the request.
-    """
+    """The request is over: stop tracking it."""
     trace_id = _current.get()
     if not trace_id:
         return
-    _export_to_langfuse(trace_id)
     trace = _traces.get(trace_id)
     if trace is not None:
         trace.updated_at = time.monotonic()
@@ -154,122 +145,3 @@ def _prune() -> None:
     for key, trace in list(_traces.items()):
         if now - trace.updated_at > TTL_S:
             _traces.pop(key, None)
-
-
-_LEVEL = {"ok": "DEFAULT", "skipped": "DEBUG", "error": "ERROR"}
-
-
-def _observation(span: Span) -> dict[str, Any]:
-    """How one span is handed to Langfuse.
-
-    A step becomes a span; a model call becomes a generation.
-    """
-    level = _LEVEL.get(span.status, "DEFAULT")
-    if span.kind == "generation":
-        return {
-            "name": span.name,
-            "as_type": "generation",
-            "input": span.input,
-            "output": span.output,
-            "model": span.model,
-            "usage_details": span.usage,
-            "metadata": span.facts or None,
-            "level": level,
-        }
-    prose = span.output is not None
-    return {
-        "name": span.name,
-        "as_type": "span",
-        "input": span.input,
-        "output": span.output if prose else (span.facts or None),
-        "metadata": (span.facts or None) if prose else None,
-        "level": level,
-    }
-
-
-def _client():
-    if _langfuse_state["client"] is _UNSET:
-        if langfuse_configured():
-            from langfuse import Langfuse
-
-            _langfuse_state["client"] = Langfuse()
-        else:
-            _langfuse_state["client"] = None
-    return _langfuse_state["client"]
-
-
-def _export_to_langfuse(trace_id: str) -> None:
-    """Replay one collected trace into Langfuse, or do nothing.
-
-    Span start/end times are backdated so the UI shows the real durations.
-    """
-    client = _client()
-    if client is None:
-        return
-    trace = _traces.get(trace_id)
-    if trace is None or not trace.spans:
-        return
-    try:
-        first = trace.spans[0]
-        last = trace.spans[-1]
-        start_ms = int(trace.wall_started_at * 1000)
-
-        def abs_ms(offset_s: float) -> int:
-            return start_ms + round((offset_s - trace.started_at) * 1000)
-
-        schedule: list[tuple[int, int]] = []
-        previous_ms = start_ms
-        for span in trace.spans:
-            span_start_ms = max(abs_ms(span.started_at), previous_ms + 1)
-            span_end_ms = max(abs_ms(span.ended_at), span_start_ms + 1)
-            schedule.append((span_start_ms, span_end_ms))
-            previous_ms = span_start_ms
-
-        with _propagation(trace.session_id):
-            root = client.start_observation(
-                name="route",
-                as_type="span",
-                input=first.facts or None,
-                output=last.facts or None,
-            )
-            for span, (span_start_ms, span_end_ms) in zip(trace.spans, schedule, strict=False):
-                obs = root.start_observation(**_observation(span))
-                _backdate(obs, span_start_ms * 1_000_000)
-                obs.end(end_time=span_end_ms * 1_000_000)
-        _backdate(root, start_ms * 1_000_000)
-        root.end(end_time=schedule[-1][1] * 1_000_000)
-    except Exception:
-        log.warning("langfuse export failed for %s", trace_id, exc_info=True)
-
-
-@contextmanager
-def _propagation(session_id: str | None):
-    """Group this trace into a Langfuse session, or a no-op when unnamed."""
-    if not session_id:
-        yield
-        return
-    from langfuse import propagate_attributes
-
-    with propagate_attributes(session_id=session_id):
-        yield
-
-
-def _backdate(obs: Any, start_ns: int) -> None:
-    """Set an observation's start time, which the SDK does not expose publicly.
-
-    Guarded on the attribute name, so an SDK rename degrades to "now".
-    """
-    otel = getattr(obs, "_otel_span", None)
-    if otel is not None and hasattr(otel, "_start_time"):
-        otel._start_time = start_ns
-
-
-def shutdown() -> None:
-    """Flush any queued spans on process exit; a no-op when unconfigured."""
-    client = _langfuse_state["client"]
-    if client is _UNSET or client is None:
-        return
-    try:
-        client.flush()
-    except Exception:
-        log.warning("langfuse shutdown flush failed", exc_info=True)

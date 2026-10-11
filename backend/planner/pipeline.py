@@ -9,9 +9,9 @@ import logging
 import time as _time
 from typing import Any
 
+from agent import llm as llm_mod
 from agent.models import TripRequirements
 from core import constants
-from core.config import openrouter_api_key
 from core.errors import (
     NoCandidatesFoundError,
     UpstreamUnavailableError,
@@ -43,6 +43,7 @@ from routing.geo import (
     geo_focus_report,
     should_skip_geo_focus,
 )
+from routing.models import CategoryFacts
 from routing.render import render
 from routing.valhalla.http import ping as valhalla_ping
 from telemetry import progress, trace
@@ -82,7 +83,11 @@ class Pipeline:
         self.repos = repos
 
     def generate(self, req: GenerateReq) -> RouteResponse:
-        turn = Turn(req=req, t0=_time.perf_counter())
+        turn = Turn(
+            req=req,
+            t0=_time.perf_counter(),
+            facts=CategoryFacts.from_rows(self.repos.taxonomy.all()),
+        )
         trace.record(
             "query",
             input=req.query,
@@ -107,7 +112,7 @@ class Pipeline:
         constraints = self._step_resolve(turn, requirements, intent)
         if turn.refuse:
             return self._refuse_out_of_coverage(
-                req, requirements, intent, constraints, turn.refuse, turn.t0
+                req, requirements, intent, constraints, turn.refuse, turn.t0, turn.facts
             )
 
         candidates = self._step_retrieve(turn, constraints)
@@ -120,7 +125,9 @@ class Pipeline:
                 candidates=len(candidates),
                 names=names(candidates),
             )
-            return self._catalogue_response(req, requirements, intent, candidates, turn.t0)
+            return self._catalogue_response(
+                req, requirements, intent, candidates, turn.t0, turn.facts
+            )
 
         candidates = self._step_geo_focus(turn, candidates, constraints)
         candidates = self._step_diversify(candidates, constraints)
@@ -157,6 +164,7 @@ class Pipeline:
         )
 
         return build_response(
+            facts=turn.facts,
             intent=intent,
             changes=changes,
             constraints=constraints,
@@ -201,7 +209,7 @@ class Pipeline:
         requirements = build_requirements(
             turn.req.query, turn.req, repos=self.repos, wall_clock_s=seconds_left(turn.t0)
         )
-        intent = intent_from_requirements(requirements, turn.req.query)
+        intent = intent_from_requirements(requirements, turn.req.query, codes=turn.facts.codes)
 
         turn.region_scope = intent.decision.search_scope == "region"
         turn.catalogue = requirements.result_mode == "catalogue"
@@ -427,12 +435,12 @@ class Pipeline:
         progress.note(progress.STAGE_SELECTING)
         all_candidates = list(candidates)
         turn.all_candidates = all_candidates
-        sights = [c for c in candidates if is_sight_stop(c)]
+        sights = [c for c in candidates if is_sight_stop(c, turn.facts)]
         widened: list[Any] = []
 
         if len(sights) < 3 and not turn.region_scope:
             sight_categories = [
-                c for c in constraints.optional_categories if not is_service_code(c)
+                c for c in constraints.optional_categories if not is_service_code(c, turn.facts)
             ]
             relaxed = constraints.model_copy(
                 update={
@@ -460,7 +468,7 @@ class Pipeline:
                     len(added),
                 )
                 candidates = drop_excluded(candidates + added, turn.excluded)
-                sights = [c for c in candidates if is_sight_stop(c)]
+                sights = [c for c in candidates if is_sight_stop(c, turn.facts)]
                 widened = added
 
         before_narrowing = candidates
@@ -555,9 +563,10 @@ class Pipeline:
         constraints: ResolvedConstraints,
         names: list[str],
         t0: float,
+        facts: CategoryFacts,
     ) -> RouteResponse:
         """Answer "not here" instead of planning a route somewhere else."""
-        return refuse_out_of_coverage(req, requirements, intent, constraints, names, t0)
+        return refuse_out_of_coverage(req, requirements, intent, constraints, names, t0, facts)
 
     def _catalogue_response(
         self,
@@ -566,9 +575,10 @@ class Pipeline:
         intent: Any,
         candidates: list[Candidate],
         t0: float,
+        facts: CategoryFacts,
     ) -> RouteResponse:
         """Answer with the matching places, grouped by town, and no route."""
-        return catalogue_response(req, requirements, intent, candidates, t0)
+        return catalogue_response(req, requirements, intent, candidates, t0, facts)
 
     def reroute(self, point_ids: list[int], profile: str | None = None) -> RouteResponse:
         """Re-route a chosen list of place IDs."""
@@ -592,6 +602,7 @@ class Pipeline:
             t0=_time.perf_counter(),
             costing=profile or "pedestrian",
             tail_mode="reroute",
+            facts=CategoryFacts.from_rows(self.repos.taxonomy.all()),
         )
         _candidates, _cost, _route, _info, plan = run_plan_tail(turn, candidates, constraints)
 
@@ -604,7 +615,7 @@ class Pipeline:
 
         return RouteResponse(
             parsed=ParsedQuery(source="explicit"),
-            points=to_places(plan.route),
+            points=to_places(plan.route, turn.facts),
             changes=None,
             shape=shape,
             summary=RouteSummary(length_km=length_km, time_seconds=walk_s),
@@ -634,7 +645,7 @@ class Pipeline:
             valhalla_ok = False
 
         embedder_ok = model.is_available()
-        llm_ok = bool(openrouter_api_key())
+        llm_ok = bool(llm_mod.api_key())
 
         return {
             # A missing reader is not "ok": nothing can be planned without one.

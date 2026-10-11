@@ -8,7 +8,6 @@ from pydantic_ai import RunContext
 
 from agent.schema import InterpretDeps
 from agent.tools import ERR_NOT_IMPLEMENTED, Remember, clamp, envelope
-from reference.taxonomy import db_values
 
 MAX_SERVICES_PER_CALL = 5
 MAX_ROUTE_POINTS = 64
@@ -19,12 +18,14 @@ def services_near_route(
     category_codes: list[str] | None = None,
     shape: list[Any] | None = None,
     max_detour_minutes: float | None = None,
+    *,
+    repos: Any = None,
 ) -> dict[str, Any]:
     """NOT IMPLEMENTED — a deliberate gap: it answers ``error="not_implemented"``
     with an empty result set, so the agent treats the service as unproven.
     """
     codes = [c for c in (category_codes or []) if c.strip()]
-    db_cats = db_values(codes)
+    db_cats = repos.taxonomy.db_values(codes) if repos is not None else []
     points = [p for p in (shape or []) if p is not None]
     detour, detour_clamped = clamp(max_detour_minutes, 1, MAX_DETOUR_MINUTES, MAX_DETOUR_MINUTES)
 
@@ -67,4 +68,6 @@ def register_services_near_route(agent: Any, _remember: Remember) -> None:
         max_detour_minutes: float | None = None,
     ) -> dict[str, Any]:
         """Services within a detour of a route shape (NOT implemented — honest gap)."""
-        return _services_near_route(category_codes, shape, max_detour_minutes)
+        return _services_near_route(
+            category_codes, shape, max_detour_minutes, repos=_ctx.deps.repos
+        )

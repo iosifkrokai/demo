@@ -2,64 +2,23 @@
 
 from __future__ import annotations
 
-import logging
 from typing import Any
 
 from pydantic_ai import RunContext
 
 from agent.schema import InterpretDeps
 from agent.tools import (
-    ERR_AREA_REGISTRY,
     ERR_BAD_ARGUMENT,
     Remember,
     ToolAnswer,
     envelope,
     fetch,
-    norm_term,
     project,
 )
-from reference.areas import load_areas, resolve_area
-
-log = logging.getLogger(__name__)
 
 MAX_AREAS_PER_CALL = 8
 
 _AREA_FIELDS = ("code", "name_ru", "name_en", "kind")
-
-
-def _areas_from_registry(term: str, locale: str, limit: int) -> list[dict[str, Any]]:
-    """Canonical area slugs from the versioned registry (``reference/areas.py``)."""
-
-    registry = load_areas()
-    found: list[str] = []
-    slug = resolve_area(term, locale)
-    if slug:
-        found.append(slug)
-    needle = norm_term(term)
-    if needle:
-        for candidate, area in registry.items():
-            if candidate in found:
-                continue
-            terms = [candidate, area.get("name_ru") or "", area.get("name_en") or ""]
-            aliases = area.get("aliases") or {}
-            for loc in ("ru", "en"):
-                terms.extend(aliases.get(loc) or [])
-            if any(needle in norm_term(t) for t in terms if t):
-                found.append(candidate)
-            if len(found) >= limit:
-                break
-    out: list[dict[str, Any]] = []
-    for candidate in found[:limit]:
-        area = registry.get(candidate) or {}
-        out.append(
-            {
-                "code": candidate,
-                "name_ru": area.get("name_ru"),
-                "name_en": area.get("name_en"),
-                "kind": area.get("kind"),
-            }
-        )
-    return out
 
 
 def find_areas(term: str, locale: str = "ru", *, repos: Any = None) -> dict[str, Any]:
@@ -68,7 +27,7 @@ def find_areas(term: str, locale: str = "ru", *, repos: Any = None) -> dict[str,
     A name that matches nothing returns an empty result set — never a guessed radius.
     """
     provenance: dict[str, Any] = {
-        "source": "areas.json",
+        "source": "areas",
         "locale": locale if locale in ("ru", "en") else "ru",
         "result_cap": MAX_AREAS_PER_CALL,
     }
@@ -81,29 +40,11 @@ def find_areas(term: str, locale: str = "ru", *, repos: Any = None) -> dict[str,
             message="term must be a non-empty string",
         )
 
-    try:
-        found = _areas_from_registry(term, provenance["locale"], MAX_AREAS_PER_CALL)
-    except ImportError:
-        provenance["source"] = "areas (db fallback)"
-        rows, error, message = fetch(
-            repos, lambda store: store.areas.search(term, MAX_AREAS_PER_CALL)
-        )
-        if error is not None:
-            return envelope("find_areas", [], provenance, error=error, message=message)
-        results = [project(row, _AREA_FIELDS) for row in (rows or [])[:MAX_AREAS_PER_CALL]]
-        return envelope("find_areas", results, provenance, capped=len(rows or []) > len(results))
-    except Exception as exc:
-        log.warning("find_areas: area registry unusable: %s", exc)
-        return envelope(
-            "find_areas",
-            [],
-            provenance,
-            error=ERR_AREA_REGISTRY,
-            message="area registry is unusable; areas cannot be resolved",
-        )
-
-    results = [project(row, _AREA_FIELDS) for row in found[:MAX_AREAS_PER_CALL]]
-    return envelope("find_areas", results, provenance, capped=len(found) >= MAX_AREAS_PER_CALL)
+    rows, error, message = fetch(repos, lambda store: store.areas.search(term, MAX_AREAS_PER_CALL))
+    if error is not None:
+        return envelope("find_areas", [], provenance, error=error, message=message)
+    results = [project(row, _AREA_FIELDS) for row in (rows or [])[:MAX_AREAS_PER_CALL]]
+    return envelope("find_areas", results, provenance, capped=len(rows or []) > len(results))
 
 
 def register_find_areas(agent: Any, _remember: Remember) -> None:

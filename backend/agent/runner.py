@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
 from typing import Any
 
@@ -10,7 +11,7 @@ import pydantic_ai
 from pydantic_ai import UsageLimits
 from pydantic_ai.settings import ModelSettings
 
-from agent import llm as model_mod, telemetry
+from agent import llm as model_mod
 from agent.models import ReaderBrief
 from agent.prompts import compose_instructions
 from agent.prompts.notes import _request_note, _ui_note
@@ -47,13 +48,23 @@ def _record_model_failure(reason: str, prompt: str = "") -> None:
     )
 
 
-def _build_agent(model: Any, brief: ReaderBrief) -> Any:
+def _catalogue(deps: InterpretDeps) -> Sequence[Any]:
+    """The taxonomy as prompt data, or nothing when there is no database."""
+    return deps.repos.taxonomy.all() if deps.repos is not None else ()
+
+
+def _territories(deps: InterpretDeps) -> Sequence[Any]:
+    """The named territories as prompt data, or nothing when there is no database."""
+    return deps.repos.areas.list_all() if deps.repos is not None else ()
+
+
+def _build_agent(model: Any, brief: ReaderBrief, deps: InterpretDeps) -> Any:
     """Create the PydanticAI agent and register the bounded tool surface."""
     agent = pydantic_ai.Agent(
         model,
         output_type=AgentReading,
         deps_type=InterpretDeps,
-        instructions=compose_instructions(_ui_note(brief)),
+        instructions=compose_instructions(_catalogue(deps), _territories(deps), _ui_note(brief)),
     )
 
     def _remember(ctx: Any, out: dict[str, Any]) -> dict[str, Any]:
@@ -103,7 +114,7 @@ def _run_agent(
     prompt = _build_prompt(query, brief)
 
     def call() -> Any:
-        agent = _build_agent(model, brief)
+        agent = _build_agent(model, brief, deps)
         return agent.run_sync(
             prompt, deps=deps, usage_limits=usage_limits, model_settings=model_settings
         )
@@ -118,7 +129,6 @@ def _run_agent(
     if result is None:
         _record_model_failure("unexpected_output", prompt)
         return None, "unexpected_output"
-    telemetry._record_model_call(brief, prompt, result)
     if not isinstance(getattr(result, "output", None), AgentReading):
         return None, "unexpected_output"
     return result.output, None

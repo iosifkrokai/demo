@@ -10,17 +10,15 @@ import logging
 from typing import TYPE_CHECKING
 
 from agent import llm, mapping, runner
-from agent.llm import DEFAULT_MODEL
 from agent.models import ReaderBrief, TripRequirements
 from agent.schema import InterpretDeps
-from core.config import openrouter_api_key
 
 if TYPE_CHECKING:
     from db.store.registry import Repositories
 
 log = logging.getLogger(__name__)
 
-__all__ = ["DEFAULT_MODEL", "available", "interpret_with_agent"]
+__all__ = ["available", "interpret_with_agent"]
 
 
 def available() -> bool:
@@ -28,7 +26,7 @@ def available() -> bool:
 
     Cheap and offline — it answers "is the agent configured", not "is OpenRouter up".
     """
-    if not openrouter_api_key():
+    if not llm.api_key():
         return False
     return bool(llm.model_name())
 
@@ -61,4 +59,4 @@ def interpret_with_agent(
     if reading is None:
         log.info("agent_interpret: no usable answer (%s) — no reader", failure)
         return None
-    return mapping._merge(query.strip(), brief, reading, deps.observed_ids)
+    return mapping._merge(query.strip(), brief, reading, deps.observed_ids, deps.repos)
