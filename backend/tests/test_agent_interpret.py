@@ -31,7 +31,7 @@ from agent.tools import (
     services as tools_services,
 )
 from core.config import settings
-from core.errors import InterpretationUnavailable
+from core.errors import InterpretationUnavailableError
 from db.models.area import Area
 from db.models.place import Place
 from db.store.mappers import area_from_row, place_from_row
@@ -196,7 +196,7 @@ def test_no_key_returns_none_and_ui_filters_survive(no_key):
     assert ai.interpret_with_agent(QUERY, reader_brief(req)) is None
 
     # No reading, no plan: the request is refused rather than guessed at.
-    with pytest.raises(InterpretationUnavailable):
+    with pytest.raises(InterpretationUnavailableError):
         build_requirements(QUERY, req)
 
 

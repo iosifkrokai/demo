@@ -12,7 +12,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from core.errors import ItinerariesUnavailable
+from core.errors import ItinerariesUnavailableError
 from core.paths import ITINERARIES_JSON
 
 log = logging.getLogger(__name__)
@@ -29,8 +29,8 @@ def load_itineraries(path: Path | None = None) -> list[dict[str, Any]]:
     try:
         raw = json.loads(target.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
-        raise ItinerariesUnavailable(f"{target}: {exc}") from exc
+        raise ItinerariesUnavailableError(f"{target}: {exc}") from exc
     items = raw.get("itineraries")
     if not isinstance(items, list) or not items:
-        raise ItinerariesUnavailable(f"{target}: no itineraries")
+        raise ItinerariesUnavailableError(f"{target}: no itineraries")
     return items

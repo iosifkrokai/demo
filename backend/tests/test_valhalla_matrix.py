@@ -11,7 +11,7 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from core.errors import UpstreamUnavailable
+from core.errors import UpstreamUnavailableError
 from planner.valhalla import constants, http, matrix
 
 
@@ -124,7 +124,7 @@ def test_rectangular_chunking():
 
 
 def test_fallback_on_upstream_error():
-    """If a chunk raises UpstreamUnavailable, the matrix is still complete."""
+    """If a chunk raises UpstreamUnavailableError, the matrix is still complete."""
     sources = _make_pts(12)
     targets = _make_pts(12)
 
@@ -135,7 +135,7 @@ def test_fallback_on_upstream_error():
         url = kwargs.get("url") or (args[1] if len(args) > 1 else "")
 
         if call_count[0] == 1:
-            raise UpstreamUnavailable("simulated 500")
+            raise UpstreamUnavailableError("simulated 500")
 
         if "route" in url:
             return {"trip": {"summary": {"time": 99.0}}}

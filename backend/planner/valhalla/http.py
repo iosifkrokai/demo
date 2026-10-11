@@ -8,7 +8,7 @@ import httpx
 
 from core import constants
 from core.config import settings
-from core.errors import UpstreamUnavailable
+from core.errors import UpstreamUnavailableError
 
 
 def request_with_retry(
@@ -21,7 +21,7 @@ def request_with_retry(
 ) -> dict:
     """GET with bounded retries on transient failures.
 
-    Exhausted retries raise UpstreamUnavailable so main.py can return 503.
+    Exhausted retries raise UpstreamUnavailableError so main.py can return 503.
     """
     if retries is None:
         retries = constants.VALHALLA_MAX_RETRIES
@@ -48,7 +48,7 @@ def request_with_retry(
             if attempt > retries:
                 break
             _time.sleep(0.5 * attempt)
-    raise UpstreamUnavailable(f"valhalla {method} {url} failed after retries: {last_exc}")
+    raise UpstreamUnavailableError(f"valhalla {method} {url} failed after retries: {last_exc}")
 
 
 def ping(timeout: float = 2.0) -> bool:

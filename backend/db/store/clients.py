@@ -2,7 +2,7 @@
 
 One job: persist a client's preferences and saved routes and answer nothing
 else. The connection, the lock and the mapping from a driver error to
-:class:`StorageUnavailable` are the base repository's — this module is only the
+:class:`StorageUnavailableError` are the base repository's — this module is only the
 queries and the shapes they return.
 """
 
@@ -16,7 +16,7 @@ from psycopg.types.json import Jsonb
 from db.models.client import ClientPreferences
 from db.models.route import SavedRoute, SavedRouteSummary
 from db.store.base import ConnectionFactory, PostgresRepository
-from db.store.errors import TooManyRoutes
+from db.store.errors import TooManyRoutesError
 from db.store.mappers import model_from_row, route_metrics
 
 MAX_SAVED_ROUTES = 200
@@ -194,7 +194,7 @@ class PostgresClientRepository(PostgresRepository):
             )
             row = cur.fetchone()
         if row is None:
-            raise TooManyRoutes(self.max_routes)
+            raise TooManyRoutesError(self.max_routes)
         return model_from_row(SavedRoute, row)
 
     def list_routes(self, client_id: uuid.UUID, limit: int = 50) -> list[SavedRouteSummary]:

@@ -8,7 +8,7 @@ from collections.abc import Iterable
 
 from core import constants
 from core.config import settings
-from core.errors import UpstreamUnavailable
+from core.errors import UpstreamUnavailableError
 
 from . import http, snap
 from .constants import _PRECISION, LOCATION_SNAP_RADIUS_M, ROUTE_SNAP_RADII_M
@@ -177,7 +177,7 @@ def route_through(
     for radius in ROUTE_SNAP_RADII_M:
         try:
             body = _route_request(locs, costing, language, timeout, radius)
-        except UpstreamUnavailable as exc:
+        except UpstreamUnavailableError as exc:
             if not _is_route_failure(exc):
                 return RouteResult(
                     status=RouteStatus.SERVICE_UNAVAILABLE,
@@ -196,7 +196,7 @@ def route_through(
             break
         try:
             body = _route_request(subset, costing, language, timeout, ROUTE_SNAP_RADII_M[-1])
-        except UpstreamUnavailable as exc:
+        except UpstreamUnavailableError as exc:
             last_exc = exc
             continue
         logger.warning("route: dropped 1 stop that kept failing, built with %d", len(subset))

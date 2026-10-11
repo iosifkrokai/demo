@@ -1,7 +1,7 @@
 """What every Postgres repository shares: one lazy connection, two cursors.
 
 A repository is handed a connection *factory*, not a connection. Reconnection,
-thread-safety and the mapping from `psycopg.Error` to `StorageUnavailable` live
+thread-safety and the mapping from `psycopg.Error` to `StorageUnavailableError` live
 here, so no caller has to think about them — which is what passing a bare
 connection around used to push onto every layer above.
 
@@ -22,7 +22,7 @@ import psycopg
 from psycopg.rows import dict_row
 
 from db.connection import connect
-from db.store.errors import StorageUnavailable
+from db.store.errors import StorageUnavailableError
 
 ConnectionFactory = Callable[[], psycopg.Connection]
 
@@ -59,13 +59,13 @@ class PostgresRepository:
 
     @contextmanager
     def _cursor(self) -> Generator[Any]:
-        """A dict-row cursor, or :class:`StorageUnavailable` on any DB failure."""
+        """A dict-row cursor, or :class:`StorageUnavailableError` on any DB failure."""
         try:
             with self._lock, self._connection().cursor(row_factory=dict_row) as cur:
                 yield cur
         except psycopg.Error as exc:
             self._drop()
-            raise StorageUnavailable(str(exc)) from exc
+            raise StorageUnavailableError(str(exc)) from exc
 
     @contextmanager
     def _tx_cursor(self) -> Generator[Any]:
@@ -77,7 +77,7 @@ class PostgresRepository:
                     yield cur
         except psycopg.Error as exc:
             self._drop()
-            raise StorageUnavailable(str(exc)) from exc
+            raise StorageUnavailableError(str(exc)) from exc
 
     def commit(self) -> None:
         """Flush the current transaction, if the connection has one.
@@ -91,7 +91,7 @@ class PostgresRepository:
                 conn.commit()
             except psycopg.Error as exc:
                 self._drop()
-                raise StorageUnavailable(str(exc)) from exc
+                raise StorageUnavailableError(str(exc)) from exc
 
     def close(self) -> None:
         with self._lock:

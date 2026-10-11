@@ -23,7 +23,7 @@ from agent.models import (
 from agent.prompts import compose_instructions
 from agent.prompts.notes import _ui_note
 from core import cache as interpret_cache, constants
-from core.errors import InterpretationUnavailable
+from core.errors import InterpretationUnavailableError
 from planner.models import GenerateReq, IntentDecision, IntentResult
 from telemetry import trace
 
@@ -263,7 +263,7 @@ def build_requirements(
 
     contract = _agent_contract(query, brief, repos, wall_clock_s)
     if contract is None:
-        raise InterpretationUnavailable(
+        raise InterpretationUnavailableError(
             "the query could not be read: the interpretation model is unavailable"
         )
 

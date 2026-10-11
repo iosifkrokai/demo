@@ -31,7 +31,7 @@ from api.models.accounts import (
     StatsOut,
     public_user,
 )
-from db.store.errors import DuplicateSource
+from db.store.errors import DuplicateSourceError
 from db.store.mappers import place_payload
 from db.store.places import PostgresPlaceRepository
 from db.store.stats import StatsRepository
@@ -158,7 +158,7 @@ def admin_create_place(
         return err
     try:
         place = places.create_place(body.model_dump(exclude_unset=True))
-    except DuplicateSource:
+    except DuplicateSourceError:
         return deps.error(409, REASON_SOURCE_TAKEN)
     return PlaceItem(**place_payload(place))
 
@@ -180,7 +180,7 @@ def admin_patch_place(
         return deps.error(422, REASON_INVALID_REQUEST)
     try:
         place = places.update_place(place_id, fields)
-    except DuplicateSource:
+    except DuplicateSourceError:
         return deps.error(409, REASON_SOURCE_TAKEN)
     if place is None:
         return deps.error(404, REASON_PLACE_NOT_FOUND)

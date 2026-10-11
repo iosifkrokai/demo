@@ -13,7 +13,7 @@ from collections.abc import Iterator
 
 from core import constants
 from core.config import settings
-from core.errors import UpstreamUnavailable
+from core.errors import UpstreamUnavailableError
 
 from . import http
 from .constants import (
@@ -132,7 +132,7 @@ def _matrix_chunk_resilient(
     for radius in ROUTE_SNAP_RADII_M:
         try:
             return _matrix_chunk(sources, targets, costing, timeout, radius=radius)
-        except UpstreamUnavailable as exc:
+        except UpstreamUnavailableError as exc:
             if _is_distance_limit_error(exc):
                 logger.warning(
                     "matrix chunk hit the 200 km path limit — resolving by distance "
@@ -170,7 +170,7 @@ def _distance_aware_fill(
             try:
                 sub = _matrix_chunk([source], [targets[j] for j in cols], costing, timeout)
                 row_values = [float(v) for v in sub[0]]
-            except UpstreamUnavailable as exc:
+            except UpstreamUnavailableError as exc:
                 if _is_distance_limit_error(exc) and len(cols) > 1:
                     row_values = _isolate_row(
                         source,
@@ -210,7 +210,7 @@ def _isolate_row(
         try:
             sub = _matrix_chunk([source], [targets[j]], costing, timeout)
             row.append(float(sub[0][0]))
-        except UpstreamUnavailable as exc:
+        except UpstreamUnavailableError as exc:
             row.append(unreachable if _is_distance_limit_error(exc) else unknown)
     return row
 
@@ -232,7 +232,7 @@ def _matrix_via_route_resilient(source: dict, target: dict, costing: str, timeou
     for radius in ROUTE_SNAP_RADII_M:
         try:
             return _matrix_via_route(source, target, costing, timeout, radius=radius)
-        except UpstreamUnavailable as exc:
+        except UpstreamUnavailableError as exc:
             if _is_distance_limit_error(exc):
                 return float(constants.UNREACHABLE_S)
             if not _is_route_failure(exc):

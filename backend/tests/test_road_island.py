@@ -9,7 +9,7 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from core import constants
-from core.errors import UpstreamUnavailable
+from core.errors import UpstreamUnavailableError
 from planner import render as render_mod
 from planner.cost import prune_unroutable_stops
 from planner.models import Candidate, CostMatrix
@@ -26,9 +26,9 @@ def _candidate(pid: int, lat: float, lon: float, name: str = "p") -> Candidate:
     return Candidate(id=pid, name=name, category="костёл", lat=lat, lon=lon)
 
 
-def _no_path_error() -> UpstreamUnavailable:
+def _no_path_error() -> UpstreamUnavailableError:
     body = '{"error_code":442,"error":"No path could be found for input"}'
-    return UpstreamUnavailable(
+    return UpstreamUnavailableError(
         f"valhalla GET http://valhalla/route failed after retries: server error: {body}"
     )
 
@@ -136,7 +136,7 @@ def test_render_falls_back_to_legs_when_the_tour_is_refused(monkeypatch):
 def test_no_path_400_is_classified_as_a_route_failure():
     assert _is_route_failure(_no_path_error())
     assert not _is_route_failure(
-        UpstreamUnavailable(
+        UpstreamUnavailableError(
             "valhalla GET /route failed after retries: [Errno 111] Connection refused"
         )
     )

@@ -8,7 +8,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Request
 
 from api import deps
-from core.errors import AgentError, NoRoutePossible
+from core.errors import AgentError, NoRoutePossibleError
 from planner.models import ExplainReq, GenerateReq, RerouteReq, RouteResponse
 from planner.response import no_route_response
 from telemetry import progress, trace
@@ -25,7 +25,7 @@ def generate(req: GenerateReq, request: Request) -> RouteResponse:
     try:
         try:
             return deps.get_planner(request).generate(req=req)
-        except NoRoutePossible as exc:
+        except NoRoutePossibleError as exc:
             trace.record(
                 "response",
                 input={"query": req.query, "budget_minutes": req.time_budget_minutes},

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 
-class ItinerariesUnavailable(RuntimeError):
+class ItinerariesUnavailableError(RuntimeError):
     """The committed itineraries file is missing or malformed.
 
     A deployment bug rather than a request error, which is why it is not an
@@ -17,21 +17,21 @@ class AgentError(Exception):
     http_status: int = 500
 
 
-class NoCandidatesFound(AgentError):
+class NoCandidatesFoundError(AgentError):
     http_status = 404
 
 
-class NoRoutePossible(AgentError):
+class NoRoutePossibleError(AgentError):
     http_status = 422
 
 
-class UpstreamUnavailable(AgentError):
+class UpstreamUnavailableError(AgentError):
     """Valhalla / DB / external is down or timing out."""
 
     http_status = 503
 
 
-class InterpretationUnavailable(AgentError):
+class InterpretationUnavailableError(AgentError):
     """The reading model is not configured, or did not answer."""
 
     http_status = 503

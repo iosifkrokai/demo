@@ -9,7 +9,7 @@ import logging
 from itertools import pairwise
 
 from core import constants
-from core.errors import UpstreamUnavailable
+from core.errors import UpstreamUnavailableError
 from planner.models import Candidate, LatLon
 from planner.valhalla.route import route_through
 from planner.valhalla.types import RouteStatus
@@ -59,7 +59,7 @@ def render(
 
     try:
         result = route_through(locations, costing=costing, language=locale)
-    except UpstreamUnavailable as exc:
+    except UpstreamUnavailableError as exc:
         log.warning("route: /route failed for the whole tour (%s) — trying legs", exc)
         result = None
 
@@ -125,7 +125,7 @@ def _render_legs(
         ]
         try:
             result = route_through(pair, costing=costing, language=locale)
-        except UpstreamUnavailable:
+        except UpstreamUnavailableError:
             continue
 
         if result.status != RouteStatus.USABLE:

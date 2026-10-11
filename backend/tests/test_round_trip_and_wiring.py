@@ -9,7 +9,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from agent.models import Requirement, TripRequirements
 from core import constants
-from core.errors import UpstreamUnavailable
+from core.errors import UpstreamUnavailableError
 from db.store.areas import PostgresAreaRepository
 from db.store.places import PostgresPlaceRepository
 from db.store.registry import Repositories
@@ -156,7 +156,7 @@ def test_the_optional_tour_reorder_is_bounded_and_degrades(monkeypatch):
     def fake(coords, costing="pedestrian", timeout=None, retries=None):
         captured["timeout"] = timeout
         captured["retries"] = retries
-        raise UpstreamUnavailable("the solver will not answer this tour")
+        raise UpstreamUnavailableError("the solver will not answer this tour")
 
     monkeypatch.setattr(optimize_mod, "valhalla_optimized_route", fake)
     route = [_cand(1, "A", "замок"), _cand(2, "B", "музей"), _cand(3, "C", "парк")]

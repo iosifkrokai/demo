@@ -3,7 +3,7 @@
 The three tables are one aggregate — a visit exists because an account does, and
 a session only ever points at one — so they share a repository rather than
 splitting by table. Reads return the row models; a miss is ``None``, a Postgres
-outage is :class:`StorageUnavailable`.
+outage is :class:`StorageUnavailableError`.
 
 The admin CRUD over ``places`` used to live here too, on the strength of nothing
 more than "an admin calls it"; it writes the place table, so it now lives on the
@@ -22,7 +22,7 @@ import psycopg
 from db.models.user import AdminUser, User, VisitedPlace
 from db.store.base import PostgresRepository
 from db.store.columns import USER_COLUMNS, USER_SECRET_SELECT, USER_SELECT
-from db.store.errors import EmailTaken
+from db.store.errors import EmailTakenError
 from db.store.mappers import model_from_row
 
 
@@ -98,7 +98,7 @@ class PostgresUserRepository(PostgresRepository):
         role: str = "user",
         client_id: uuid.UUID | None = None,
     ) -> User:
-        """Insert an account. Raises :class:`EmailTaken` on a duplicate address.
+        """Insert an account. Raises :class:`EmailTakenError` on a duplicate address.
 
         An anonymous client is adopted only when nobody else already owns it.
         """
@@ -135,7 +135,7 @@ class PostgresUserRepository(PostgresRepository):
                 )
                 row = cur.fetchone()
             except psycopg.errors.UniqueViolation as exc:
-                raise EmailTaken(email) from exc
+                raise EmailTakenError(email) from exc
         assert row is not None
         return model_from_row(User, row)
 

@@ -16,7 +16,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from agent.models import Requirement, TripRequirements
 from core import cache
-from core.errors import InterpretationUnavailable
+from core.errors import InterpretationUnavailableError
 from planner import intent
 from planner.models import GenerateReq
 from telemetry import trace
@@ -204,7 +204,7 @@ def test_without_a_cache_key_nothing_is_cached(monkeypatch):
     """No key means no reading at all — and nothing to cache."""
     monkeypatch.setattr(intent, "_interpret_cache_key", lambda query, req: (None, ""))
 
-    with pytest.raises(InterpretationUnavailable):
+    with pytest.raises(InterpretationUnavailableError):
         intent.build_requirements("замки Гродно", _req())
 
     assert cache.INTERPRET_CACHE.stats()["size"] == 0

@@ -11,7 +11,7 @@ import uuid
 
 from core.accounts import normalize_email, password_problem
 from core.passwords import hash_password
-from db.store.errors import EmailTaken
+from db.store.errors import EmailTakenError
 from db.store.users import PostgresUserRepository
 
 
@@ -48,7 +48,7 @@ def create_admin(*, email: str, password: str | None = None, name: str | None = 
                 display_name=(name or "").strip() or None,
                 role="admin",
             )
-        except EmailTaken:
+        except EmailTakenError:
             print(f"email taken: {normalized}", file=sys.stderr)
             return 1
         print(f"admin created: {user.email} ({user.id})")

@@ -16,7 +16,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from agent.models import PartyComposition, Requirement, TripRequirements
 from api.deps import call_planner
 from core.config import settings
-from core.errors import InterpretationUnavailable, UpstreamUnavailable
+from core.errors import InterpretationUnavailableError, UpstreamUnavailableError
 from planner import intent as intent_mod
 from planner.intent import build_requirements, reader_brief
 from planner.models import Candidate, GenerateReq, ValidatedPlan
@@ -65,7 +65,7 @@ def _plan(*stops: Candidate) -> ValidatedPlan:
 
 class TestNoReaderRefuses:
     def test_no_key_refuses_the_request(self, no_key):
-        with pytest.raises(InterpretationUnavailable):
+        with pytest.raises(InterpretationUnavailableError):
             build_requirements(RU, GenerateReq(query=RU, hard_services=["туалет"]))
 
     def test_a_reading_is_tagged_llm(self, fake_llm):
@@ -150,7 +150,7 @@ class TestFailuresDegrade:
             raise RuntimeError("tool search_places failed: db gone")
 
         monkeypatch.setattr(ai, "interpret_with_agent", boom)
-        with pytest.raises(InterpretationUnavailable):
+        with pytest.raises(InterpretationUnavailableError):
             build_requirements(RU, GenerateReq(query=RU, hard_services=["туалет"]))
 
     def test_a_tool_failure_inside_the_agent_returns_no_contract(self, with_key, monkeypatch):
@@ -166,14 +166,14 @@ class TestFailuresDegrade:
 
     def test_a_missing_reading_refuses_the_request(self, with_key, monkeypatch):
         monkeypatch.setattr(intent_mod, "_agent_contract", lambda *a, **k: None)
-        with pytest.raises(InterpretationUnavailable):
+        with pytest.raises(InterpretationUnavailableError):
             build_requirements(RU, GenerateReq(query=RU))
 
     def test_an_upstream_error_is_503_not_500(self):
         """The last-resort net: what escapes the planner is a typed 503."""
 
         def failing(**_kw):
-            raise UpstreamUnavailable("valhalla: /route failed: 502")
+            raise UpstreamUnavailableError("valhalla: /route failed: 502")
 
         with pytest.raises(HTTPException) as exc:
             call_planner(failing)

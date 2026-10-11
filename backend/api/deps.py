@@ -32,7 +32,7 @@ from core.errors import AgentError
 from core.passwords import hash_token
 from db.models.user import User
 from db.store.clients import ClientRepository
-from db.store.errors import StorageUnavailable
+from db.store.errors import StorageUnavailableError
 from db.store.places import PostgresPlaceRepository
 from db.store.registry import Repositories
 from db.store.stats import StatsRepository
@@ -83,7 +83,7 @@ def http_error(status: int, reason: str) -> HTTPException:
 def storage_guarded(fn: Callable[..., Any]) -> Callable[..., Any]:
     """Turn a storage outage into ``503 storage_unavailable``, never a 500.
 
-    Every repository raises the one :class:`db.store.errors.StorageUnavailable`,
+    Every repository raises the one :class:`db.store.errors.StorageUnavailableError`,
     so a single ``except`` catches the whole storage layer — no per-store tuple.
     """
 
@@ -91,7 +91,7 @@ def storage_guarded(fn: Callable[..., Any]) -> Callable[..., Any]:
     def wrapper(*args: Any, **kwargs: Any) -> Any:
         try:
             return fn(*args, **kwargs)
-        except StorageUnavailable as exc:
+        except StorageUnavailableError as exc:
             log.warning("storage unavailable: %s", exc)
             return error(503, REASON_STORAGE_UNAVAILABLE)
 

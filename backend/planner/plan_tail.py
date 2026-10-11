@@ -16,7 +16,7 @@ import logging
 from typing import Any
 
 from core import constants
-from core.errors import NoRoutePossible
+from core.errors import NoRoutePossibleError
 from planner.models import Candidate, ResolvedConstraints
 from telemetry import progress, trace
 
@@ -129,7 +129,7 @@ def run_plan_tail(
             algorithm=info.get("algorithm"),
         )
     if len(route) < 2:
-        raise NoRoutePossible("optimizer could not produce a route with ≥ 2 stops")
+        raise NoRoutePossibleError("optimizer could not produce a route with ≥ 2 stops")
 
     matrix_order = [c.name for c in route]
     if seconds_left(turn.t0) >= constants.VALHALLA_ORDER_MIN_LEFT_S:

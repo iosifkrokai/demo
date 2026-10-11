@@ -38,7 +38,7 @@ from core.passwords import (
     verify_password,
 )
 from db.models.user import User
-from db.store.errors import EmailTaken
+from db.store.errors import EmailTakenError
 from db.store.mappers import place_payload
 from db.store.places import PostgresPlaceRepository
 from db.store.users import UserRepository
@@ -108,7 +108,7 @@ def register(
             role="user",
             client_id=_optional_client_id(request),
         )
-    except EmailTaken:
+    except EmailTakenError:
         return deps.error(409, REASON_EMAIL_TAKEN)
     _start_session(request, response, repo, user)
     return public_user(user)

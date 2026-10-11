@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from core import constants
-from core.errors import NoRoutePossible, UpstreamUnavailable
+from core.errors import NoRoutePossibleError, UpstreamUnavailableError
 from planner.models import Candidate, CostMatrix, ResolvedConstraints
 from planner.valhalla.matrix import time_matrix
 from planner.valhalla.snap import snap_locations
@@ -73,11 +73,11 @@ def compute_cost_matrix(
     coords = snap_locations(coords, costing=costing)
     try:
         matrix = time_matrix(coords, coords, costing=costing, deadline=deadline)
-    except UpstreamUnavailable:
+    except UpstreamUnavailableError:
         raise
 
     if not matrix or len(matrix) != len(candidates):
-        raise UpstreamUnavailable(
+        raise UpstreamUnavailableError(
             f"valhalla time_matrix returned malformed shape: "
             f"expected {len(candidates)}x{len(candidates)}, got {len(matrix)} rows"
         )
@@ -268,7 +268,7 @@ def _refinement_cost(
     base_ids = {c.id for c in route}
     try:
         cost = compute_cost_matrix(route, constraints, costing=costing)
-    except (UpstreamUnavailable, NoRoutePossible):
+    except (UpstreamUnavailableError, NoRoutePossibleError):
         return route, _synthetic_cost(route, costing)
 
     if cost.indices != list(range(len(route))):
@@ -293,7 +293,7 @@ def _build_cost(
         candidates = [candidates[i] for i in cost.indices]
     candidates, cost = drop_unreachable(candidates, cost)
     if len(candidates) < 2:
-        raise NoRoutePossible(
+        raise NoRoutePossibleError(
             "Valhalla не нашла дороги между нашими точками — уточните город или район"
         )
     return candidates, cost

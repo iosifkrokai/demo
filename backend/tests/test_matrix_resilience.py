@@ -10,7 +10,7 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from core import constants
-from core.errors import UpstreamUnavailable
+from core.errors import UpstreamUnavailableError
 from planner.valhalla import http, matrix
 from planner.valhalla.constants import LOCATION_SNAP_RADIUS_M, ROUTE_SNAP_RADII_M
 
@@ -46,7 +46,7 @@ def test_small_matrix_retries_with_a_wider_radius(monkeypatch):
         r = _radius(params)
         radii.append(r)
         if r == LOCATION_SNAP_RADIUS_M:
-            raise UpstreamUnavailable(LABEL_500)
+            raise UpstreamUnavailableError(LABEL_500)
         payload = json.loads(params["json"])
         return _matrix_response(payload["sources"], payload["targets"], r)
 
@@ -65,7 +65,7 @@ def test_matrix_falls_back_to_per_pair_route(monkeypatch):
     def fake(method, url, *, params, timeout):
         calls.append(url.rsplit("/", 1)[-1])
         if url.endswith("/sources_to_targets"):
-            raise UpstreamUnavailable(LABEL_500)
+            raise UpstreamUnavailableError(LABEL_500)
         return {"trip": {"summary": {"time": 120.0}}}
 
     monkeypatch.setattr(http, "request_with_retry", fake)
@@ -79,7 +79,7 @@ def test_matrix_falls_back_to_per_pair_route(monkeypatch):
 
 def test_unroutable_pair_becomes_the_unreachable_sentinel(monkeypatch):
     def fake(method, url, *, params, timeout):
-        raise UpstreamUnavailable(LABEL_500)
+        raise UpstreamUnavailableError(LABEL_500)
 
     monkeypatch.setattr(http, "request_with_retry", fake)
     m = matrix.time_matrix([A, B], [A, B])
@@ -94,7 +94,7 @@ def test_transport_failure_is_unknown_not_unreachable(monkeypatch):
     """
 
     def fake(method, url, *, params, timeout):
-        raise UpstreamUnavailable(
+        raise UpstreamUnavailableError(
             "valhalla GET /sources_to_targets failed after retries: connect timeout"
         )
 

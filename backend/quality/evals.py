@@ -144,7 +144,7 @@ def run_services() -> dict[str, Any]:
     PostGIS vs a haversine reference; points near the gate are not counted as disagreement.
     """
     from db.store import services as services_mod
-    from db.store.errors import StorageUnavailable
+    from db.store.errors import StorageUnavailableError
     from db.store.places import PostgresPlaceRepository
     from reference import taxonomy
 
@@ -324,7 +324,7 @@ def run_services() -> dict[str, Any]:
                         "why": case.why,
                     }
                 )
-    except StorageUnavailable as exc:
+    except StorageUnavailableError as exc:
         return {
             "stage": "services",
             "checks": checks,

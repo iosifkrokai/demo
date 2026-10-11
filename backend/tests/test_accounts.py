@@ -20,7 +20,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from api import main as agent_main
 from core.passwords import hash_password, hash_token, verify_password
 from db.models.user import AdminUser, User, VisitedPlace
-from db.store.errors import DuplicateSource, EmailTaken, StorageUnavailable
+from db.store.errors import DuplicateSourceError, EmailTakenError, StorageUnavailableError
 from db.store.mappers import place_from_row
 
 CLIENT = "33333333-3333-4333-8333-333333333333"
@@ -98,7 +98,7 @@ class FakeRepo:
         self, user_id, *, email, password_hash, display_name=None, role="user", client_id=None
     ):
         if self._by_email(email) is not None:
-            raise EmailTaken(email)
+            raise EmailTakenError(email)
         if client_id is not None and any(r["client_id"] == client_id for r in self.users.values()):
             client_id = None
         now = _now()
@@ -249,7 +249,7 @@ class FakeRepo:
 
     def create_place(self, fields):
         if any(p["source_url"] == fields.get("source_url") for p in self.places.values()):
-            raise DuplicateSource(str(fields.get("source_url")))
+            raise DuplicateSourceError(str(fields.get("source_url")))
         pid = max(self.places, default=0) + 1
         row = _place_row(pid, fields["name"])
         row.update({k: v for k, v in fields.items() if k in row})
@@ -264,7 +264,7 @@ class FakeRepo:
             p["id"] != place_id and p["source_url"] == fields["source_url"]
             for p in self.places.values()
         ):
-            raise DuplicateSource(str(fields["source_url"]))
+            raise DuplicateSourceError(str(fields["source_url"]))
         row.update({k: v for k, v in fields.items() if k in row})
         return place_from_row(row)
 
@@ -286,7 +286,7 @@ class DownRepo:
 
     def __getattr__(self, _name):
         def _boom(*_a, **_kw):
-            raise StorageUnavailable("connection refused")
+            raise StorageUnavailableError("connection refused")
 
         return _boom
 

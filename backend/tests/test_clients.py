@@ -24,7 +24,7 @@ from core.config import settings
 from db.models.client import ClientPreferences
 from db.models.route import SavedRoute, SavedRouteSummary
 from db.store.clients import PREFERENCE_COLUMNS, PostgresClientRepository
-from db.store.errors import StorageUnavailable, TooManyRoutes
+from db.store.errors import StorageUnavailableError, TooManyRoutesError
 from db.store.mappers import route_metrics
 
 CLIENT_A = "11111111-1111-4111-8111-111111111111"
@@ -96,7 +96,7 @@ class FakeRepo:
         self.ensure_client(client_id)
         routes = self.db[client_id]["routes"]
         if len(routes) >= self.max_routes:
-            raise TooManyRoutes(self.max_routes)
+            raise TooManyRoutesError(self.max_routes)
         now = _now()
         route = {
             "id": route_id,
@@ -158,7 +158,7 @@ class DownRepo:
 
     def __getattr__(self, _name):
         def _boom(*_a, **_kw):
-            raise StorageUnavailable("connection refused")
+            raise StorageUnavailableError("connection refused")
 
         return _boom
 
@@ -541,7 +541,7 @@ class TestStore:
 
     def test_add_route_over_the_cap_raises_too_many(self):
         repo, _ = _repo(lambda _s, _p: {"one": None}, max_routes=1)
-        with pytest.raises(TooManyRoutes):
+        with pytest.raises(TooManyRoutesError):
             repo.add_route(uuid.UUID(CLIENT_A), uuid.uuid4(), query="q", plan=PLAN)
 
     def test_list_routes_derives_metrics_without_geometry(self):
@@ -577,7 +577,7 @@ class TestStore:
             raise psycopg.OperationalError("connection refused")
 
         repo, _ = _repo(boom)
-        with pytest.raises(StorageUnavailable):
+        with pytest.raises(StorageUnavailableError):
             repo.ensure_client(uuid.UUID(CLIENT_A))
 
     def test_an_unreachable_database_never_leaks_a_driver_error(self):
@@ -591,7 +591,7 @@ class TestStore:
             lambda: repo.list_routes(uuid.UUID(CLIENT_A), 50),
             lambda: repo.delete_client(uuid.UUID(CLIENT_A)),
         ):
-            with pytest.raises(StorageUnavailable):
+            with pytest.raises(StorageUnavailableError):
                 call()
 
 

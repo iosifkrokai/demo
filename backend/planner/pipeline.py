@@ -12,8 +12,8 @@ from typing import Any
 from core import constants
 from core.config import openrouter_api_key
 from core.errors import (
-    NoCandidatesFound,
-    UpstreamUnavailable,
+    NoCandidatesFoundError,
+    UpstreamUnavailableError,
 )
 from db.store.registry import Repositories
 from embeddings.query import embed_query
@@ -298,7 +298,7 @@ class Pipeline:
             ],
         )
         if not candidates:
-            raise NoCandidatesFound(
+            raise NoCandidatesFoundError(
                 "no candidates matched the query — попробуйте другую формулировку"
             )
 
@@ -350,7 +350,7 @@ class Pipeline:
                 candidates, origin=turn.req.origin, anchor_id=geo_anchor
             )
         if len(candidates) < 2:
-            raise NoCandidatesFound(
+            raise NoCandidatesFoundError(
                 "все кандидаты слишком далеко друг от друга — уточните город или район"
             )
         trace.record(
@@ -394,7 +394,7 @@ class Pipeline:
             dropped=_gone(before_mmr, candidates),
         )
         if len(candidates) < 2:
-            raise NoCandidatesFound(
+            raise NoCandidatesFoundError(
                 f"only {len(candidates)} candidate(s) survived diversity filter"
             )
         return candidates
@@ -570,7 +570,7 @@ class Pipeline:
         rows = self.repos.places.get_by_ids(point_ids)
         if len(rows) != len(point_ids):
             missing = set(point_ids) - {r.id for r in rows}
-            raise NoCandidatesFound(f"unknown point_ids: {sorted(missing)}")
+            raise NoCandidatesFoundError(f"unknown point_ids: {sorted(missing)}")
 
         candidates = [candidate_of(r, 1.0) for r in rows]
         intent = IntentResult(decision=IntentDecision(intent_type="specific"), source="agent")
@@ -592,7 +592,7 @@ class Pipeline:
 
         try:
             shape, summary, _status = render(plan.route, costing=profile or "pedestrian")
-        except UpstreamUnavailable:
+        except UpstreamUnavailableError:
             shape, summary = {}, {}
         walk_s = float((summary or {}).get("time", 0.0)) or plan.walk_seconds
         length_km = (summary or {}).get("length")
@@ -613,7 +613,7 @@ class Pipeline:
         rows = self.repos.places.get_by_ids(point_ids)
         if len(rows) != len(point_ids):
             missing = set(point_ids) - {r.id for r in rows}
-            raise NoCandidatesFound(f"unknown point_ids: {sorted(missing)}")
+            raise NoCandidatesFoundError(f"unknown point_ids: {sorted(missing)}")
 
         cands = [candidate_of(r, 1.0) for r in rows]
         trace = {"algorithm": "direct", "diversity": 1.0, "fits_budget": True}

@@ -27,7 +27,7 @@ from api.models.clients import (
     RoutePatchIn,
 )
 from db.store.clients import MAX_SAVED_ROUTES, ClientRepository
-from db.store.errors import TooManyRoutes
+from db.store.errors import TooManyRoutesError
 
 router = APIRouter(prefix="/clients/me", tags=["clients"])
 
@@ -106,7 +106,7 @@ def create_route(
             name=body.name,
             visit_overrides=body.visit_overrides,
         )
-    except TooManyRoutes:
+    except TooManyRoutesError:
         return deps.error(409, REASON_TOO_MANY_ROUTES)
     return RouteCreated.model_validate(created, from_attributes=True)
 

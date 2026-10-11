@@ -9,7 +9,7 @@ import logging
 from typing import Any
 
 from core import cache as interpret_cache, constants
-from core.errors import UpstreamUnavailable
+from core.errors import UpstreamUnavailableError
 from planner.models import (
     BudgetInfo,
     Candidate,
@@ -228,7 +228,7 @@ def _render_tour(
         if status != "usable":
             log.info("render returned status: %s", status)
         return shape, summary
-    except UpstreamUnavailable as exc:
+    except UpstreamUnavailableError as exc:
         log.warning("render failed (%s) — answering without geometry", exc)
         return {}, {}
 

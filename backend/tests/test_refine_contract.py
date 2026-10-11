@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from api import main as agent_main
-from core.errors import UpstreamUnavailable
+from core.errors import UpstreamUnavailableError
 from db.store.areas import PostgresAreaRepository
 from db.store.mappers import place_from_row
 from db.store.registry import Repositories
@@ -140,12 +140,12 @@ def _patch_offline(monkeypatch, rows=None, nearby=None) -> Repositories:
     monkeypatch.setattr(
         cost_mod,
         "compute_cost_matrix",
-        lambda *_a, **_kw: (_ for _ in ()).throw(UpstreamUnavailable("no valhalla")),
+        lambda *_a, **_kw: (_ for _ in ()).throw(UpstreamUnavailableError("no valhalla")),
     )
     monkeypatch.setattr(
         response_mod,
         "render",
-        lambda *_a, **_kw: (_ for _ in ()).throw(UpstreamUnavailable("no valhalla")),
+        lambda *_a, **_kw: (_ for _ in ()).throw(UpstreamUnavailableError("no valhalla")),
     )
     monkeypatch.setattr(
         pipeline_mod,
@@ -462,7 +462,7 @@ class TestCostFallback:
         monkeypatch.setattr(
             cost_mod,
             "compute_cost_matrix",
-            lambda *_a, **_kw: (_ for _ in ()).throw(UpstreamUnavailable("down")),
+            lambda *_a, **_kw: (_ for _ in ()).throw(UpstreamUnavailableError("down")),
         )
         route, cost = _refinement_cost(cands, constraints=None, costing="pedestrian")  # type: ignore[arg-type]
         assert [c.id for c in route] == [1, 2]

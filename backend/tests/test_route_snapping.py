@@ -10,7 +10,7 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from core.errors import UpstreamUnavailable
+from core.errors import UpstreamUnavailableError
 from planner.valhalla import http, snap, types
 from planner.valhalla.constants import LOCATION_SNAP_RADIUS_M, ROUTE_SNAP_RADII_M
 from planner.valhalla.route import route_through
@@ -81,7 +81,7 @@ def test_snap_failure_retries_with_a_wider_radius(monkeypatch):
         r = _radii_of(params)[0]
         radii_tried.append(r)
         if r == LOCATION_SNAP_RADIUS_M:
-            raise UpstreamUnavailable(SNAP_500)
+            raise UpstreamUnavailableError(SNAP_500)
         return TRIP
 
     monkeypatch.setattr(http, "request_with_retry", fake)
@@ -99,7 +99,7 @@ def test_non_snap_error_is_not_retried(monkeypatch):
         if (locate := _locate_ok(url)) is not None:
             return locate
         calls["n"] += 1
-        raise UpstreamUnavailable("valhalla GET /route failed after retries: connect timeout")
+        raise UpstreamUnavailableError("valhalla GET /route failed after retries: connect timeout")
 
     monkeypatch.setattr(http, "request_with_retry", fake)
     result = route_through([GRODNO, NEW_CASTLE, OLD_TOWN])

@@ -13,7 +13,7 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from core import constants
-from core.errors import ItinerariesUnavailable
+from core.errors import ItinerariesUnavailableError
 from db.store.itineraries import load_itineraries, resolve_itineraries
 from db.store.places import PostgresPlaceRepository
 
@@ -44,12 +44,12 @@ def test_ids_are_unique_and_stops_use_provenance_keys():
 def test_a_broken_file_raises_instead_of_looking_empty(tmp_path):
     broken = tmp_path / "itineraries.json"
     broken.write_text("{not json", encoding="utf-8")
-    with pytest.raises(ItinerariesUnavailable):
+    with pytest.raises(ItinerariesUnavailableError):
         load_itineraries(broken)
 
     empty = tmp_path / "empty.json"
     empty.write_text('{"itineraries": []}', encoding="utf-8")
-    with pytest.raises(ItinerariesUnavailable):
+    with pytest.raises(ItinerariesUnavailableError):
         load_itineraries(empty)
 
 

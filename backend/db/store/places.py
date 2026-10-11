@@ -23,7 +23,7 @@ import psycopg
 from db.models.place import Place
 from db.store.base import PostgresRepository
 from db.store.columns import PLACE_SELECT, PLACE_WRITE_COLUMNS
-from db.store.errors import DuplicateSource
+from db.store.errors import DuplicateSourceError
 from db.store.mappers import place_from_row, place_payload
 from db.store.services import (
     DEFAULT_PROFILE,
@@ -411,7 +411,7 @@ class PostgresPlaceRepository(PostgresRepository):
         return places, total
 
     def create_place(self, fields: dict[str, Any]) -> Place:
-        """Insert a hand-curated point. Raises :class:`DuplicateSource` on a clash.
+        """Insert a hand-curated point. Raises :class:`DuplicateSourceError` on a clash.
 
         A category supplied by an admin is a curated one by definition, so the
         row is stamped `curated` and the trigger protects it from the seed.
@@ -430,7 +430,7 @@ class PostgresPlaceRepository(PostgresRepository):
                     tuple(params),
                 )
             except psycopg.errors.UniqueViolation as exc:
-                raise DuplicateSource(str(fields.get("source_url"))) from exc
+                raise DuplicateSourceError(str(fields.get("source_url"))) from exc
             row = cur.fetchone()
         assert row is not None
         return place_from_row(row)
@@ -458,7 +458,7 @@ class PostgresPlaceRepository(PostgresRepository):
                     tuple(params),
                 )
             except psycopg.errors.UniqueViolation as exc:
-                raise DuplicateSource(str(fields.get("source_url"))) from exc
+                raise DuplicateSourceError(str(fields.get("source_url"))) from exc
             row = cur.fetchone()
         return place_from_row(row) if row is not None else None
 

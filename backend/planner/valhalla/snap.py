@@ -7,7 +7,7 @@ import logging
 
 from core import constants
 from core.config import settings
-from core.errors import UpstreamUnavailable
+from core.errors import UpstreamUnavailableError
 
 from . import http
 from .constants import LOCATE_RADIUS_M, LOCATE_SNAP_RADIUS_M
@@ -31,7 +31,7 @@ def _locate_snap(
             params={"json": json.dumps(payload, separators=(",", ":"))},
             timeout=timeout,
         )
-    except UpstreamUnavailable:
+    except UpstreamUnavailableError:
         return None
     entry = body[0] if isinstance(body, list) and body else None
     edges = (entry or {}).get("edges") or []
@@ -86,7 +86,7 @@ def _snappable(location: dict, costing: str, timeout: float | None) -> bool:
             params={"json": json.dumps(payload, separators=(",", ":"))},
             timeout=timeout or constants.VALHALLA_TIMEOUT_S,
         )
-    except UpstreamUnavailable:
+    except UpstreamUnavailableError:
         return True
     if not body:
         return False

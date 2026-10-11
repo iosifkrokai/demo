@@ -19,7 +19,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from agent.models import TripRequirements
 from core import constants
 from core.config import openrouter_api_key, settings
-from core.errors import InterpretationUnavailable
+from core.errors import InterpretationUnavailableError
 from planner import intent as intent_mod
 from planner.intent import build_requirements
 from planner.models import GenerateReq
@@ -49,12 +49,12 @@ class TestNoReaderRefuses:
     """No reading means no plan — never a keyword guess dressed up as one."""
 
     def test_no_key_refuses_the_request(self, no_key):
-        with pytest.raises(InterpretationUnavailable):
+        with pytest.raises(InterpretationUnavailableError):
             build_requirements(RU_BUG, _req(RU_BUG))
 
     def test_a_missing_reading_refuses_the_request(self, fake_llm, monkeypatch):
         monkeypatch.setattr(intent_mod, "_agent_contract", lambda *a, **k: None)
-        with pytest.raises(InterpretationUnavailable):
+        with pytest.raises(InterpretationUnavailableError):
             build_requirements(RU_BUG, _req(RU_BUG))
 
     def test_a_failed_reading_is_not_replaced_by_a_guess(self, fake_llm, monkeypatch):
@@ -64,7 +64,7 @@ class TestNoReaderRefuses:
             raise RuntimeError("agent: tool search_places failed: db gone")
 
         monkeypatch.setattr(ai, "interpret_with_agent", boom)
-        with pytest.raises(InterpretationUnavailable):
+        with pytest.raises(InterpretationUnavailableError):
             build_requirements(RU_BUG, _req(RU_BUG))
 
 

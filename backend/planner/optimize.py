@@ -9,7 +9,7 @@ from itertools import pairwise, permutations
 from typing import Any
 
 from core import constants
-from core.errors import NoRoutePossible, UpstreamUnavailable
+from core.errors import NoRoutePossibleError, UpstreamUnavailableError
 from planner.models import Candidate, CostMatrix, ResolvedConstraints
 from planner.valhalla.route import optimized_route as valhalla_optimized_route
 
@@ -537,7 +537,7 @@ def _valhalla_order(
         v_order, _, _ = valhalla_optimized_route(
             coords, costing=costing, timeout=timeout, retries=retries
         )
-    except UpstreamUnavailable:
+    except UpstreamUnavailableError:
         return route, info
     if len(v_order) != len(route) or sorted(v_order) != list(range(len(route))):
         return route, info
@@ -570,7 +570,7 @@ def _prune_unroutable(
             ", ".join(c.name for c in pruned),
         )
     if len(route) < 2:
-        raise NoRoutePossible(
+        raise NoRoutePossibleError(
             "Valhalla не нашла дороги между нашими точками — уточните город или район"
         )
     return route, pruned

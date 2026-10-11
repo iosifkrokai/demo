@@ -27,10 +27,10 @@ from agent.models import PartyComposition, Requirement, TripRequirements
 from api import main as agent_main
 from core.config import openrouter_api_key, settings
 from core.errors import (
-    InterpretationUnavailable,
-    NoCandidatesFound,
-    NoRoutePossible,
-    UpstreamUnavailable,
+    InterpretationUnavailableError,
+    NoCandidatesFoundError,
+    NoRoutePossibleError,
+    UpstreamUnavailableError,
 )
 from db.store.areas import PostgresAreaRepository
 from db.store.places import PostgresPlaceRepository
@@ -161,7 +161,7 @@ class TestNoReaderRefuses:
 
     def test_no_key_never_calls_the_model(self, no_key, monkeypatch):
         monkeypatch.setattr(ai_runner, "_run_agent", _explode)
-        with pytest.raises(InterpretationUnavailable):
+        with pytest.raises(InterpretationUnavailableError):
             build_requirements(QUERY, GenerateReq(query=QUERY))
 
     def test_a_failed_reading_is_not_replaced_by_a_guess(self, with_key, monkeypatch):
@@ -169,7 +169,7 @@ class TestNoReaderRefuses:
             raise RuntimeError("agent: upstream failed: 502")
 
         monkeypatch.setattr(ai, "interpret_with_agent", boom)
-        with pytest.raises(InterpretationUnavailable):
+        with pytest.raises(InterpretationUnavailableError):
             build_requirements(QUERY, GenerateReq(query=QUERY))
 
     def test_the_agent_contract_drives_the_reading(self, with_key, monkeypatch):
@@ -332,19 +332,19 @@ class TestHttpRefusal:
 class TestHttpDegraded:
     def test_escaped_upstream_error_is_503_not_500(self, with_key, _restore_planner):
         client = _client_with_planner(
-            _StubPlanner(UpstreamUnavailable("valhalla: /route failed: 502"))
+            _StubPlanner(UpstreamUnavailableError("valhalla: /route failed: 502"))
         )
         r = client.post("/routes/generate", json={"query": QUERY})
         assert r.status_code == 503
         assert "502" in r.json()["detail"]
 
     def test_a_degraded_upstream_is_never_a_bare_500(self, with_key, _restore_planner):
-        client = _client_with_planner(_StubPlanner(UpstreamUnavailable("db: gone")))
+        client = _client_with_planner(_StubPlanner(UpstreamUnavailableError("db: gone")))
         assert client.post("/routes/generate", json={"query": QUERY}).status_code == 503
 
     def test_planner_errors_keep_their_own_status(self, with_key, _restore_planner):
         client = _client_with_planner(
-            _StubPlanner(NoCandidatesFound("no candidates matched the query"))
+            _StubPlanner(NoCandidatesFoundError("no candidates matched the query"))
         )
         r = client.post("/routes/generate", json={"query": QUERY})
         assert r.status_code == 404
@@ -408,7 +408,7 @@ class TestLiveRefusal:
     """The deliverable: without a key the pipeline refuses instead of guessing."""
 
     def test_planning_refuses_without_a_key(self, no_key, live_db):
-        with offline(), pytest.raises(InterpretationUnavailable):
+        with offline(), pytest.raises(InterpretationUnavailableError):
             Pipeline(repos=_repos(live_db)).generate(
                 GenerateReq(query=QUERY, time_budget_minutes=120)
             )
@@ -449,7 +449,7 @@ def test_a_route_that_cannot_be_planned_is_an_answer_not_a_failed_request(with_k
 
     class _Refusing:
         def generate(self, req=None, **kwargs):
-            raise NoRoutePossible("optimizer could not produce a route with ≥ 2 stops")
+            raise NoRoutePossibleError("optimizer could not produce a route with ≥ 2 stops")
 
     client = _client_with_planner(_Refusing())
     r = client.post(
