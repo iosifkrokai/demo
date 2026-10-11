@@ -111,28 +111,30 @@ include = ["agent", "api", "core", "db", "embeddings", "planner", "reference", "
 exclude = [".venv"]
 pythonVersion = "3.12"
 pythonPlatform = "Linux"
-typeCheckingMode = "standard"
+typeCheckingMode = "strict"
 venvPath = "."
 venv = ".venv"
-reportMissingTypeStubs = "warning"
+
+# The libraries this service runs on — psycopg, fastembed, httpx, opentelemetry —
+# ship no type information, so everything they hand back is `Unknown`. These five
+# rules report on that rather than on this code: leaving them on would mean an
+# annotation or a suppression at every call into a dependency, which is the
+# opposite of the point. `reportMissingTypeStubs` states the same fact once.
+reportMissingTypeStubs = "none"
 reportUnknownVariableType = "none"
 reportUnknownArgumentType = "none"
 reportUnknownParameterType = "none"
 reportUnknownLambdaType = "none"
-reportMissingTypeArgument = "none"
-reportUnusedImport = "error"
-reportUnusedClass = "warning"
-reportUnusedFunction = "warning"
-reportUnusedVariable = "warning"
-reportDuplicateImport = "error"
-reportOptionalMemberAccess = "warning"
-reportOptionalIterable = "warning"
-reportOptionalSubscript = "warning"
-reportOptionalCall = "warning"
-reportOptionalOperand = "warning"
-reportOptionalIterator = "warning"
-reportTypedDictNotRequiredAccess = "warning"
-reportPrivateImportUsage = "warning"
-reportSelfClsParameterName = "warning"
+reportUnknownMemberType = "none"
+
+# Deferred, counted on 2026-10-11, the same way the ruff list above is. Each is
+# a campaign, not a setting:
+reportMissingTypeArgument = "none"      # 200  bare `dict`/`list` in annotations
+reportPrivateUsage = "none"             # 55   a private helper imported module-to-module
+reportMissingParameterType = "none"     # 31   parameters with no annotation
+
+# Style rather than correctness, and both are used deliberately: a wrapped
+# Russian sentence is implicit concatenation, and a private helper reached from a
+# sibling module is how this codebase shares helpers inside a package.
 reportImplicitStringConcatenation = "warning"
-reportUndefinedVariable = "error"
+reportUnusedFunction = "warning"

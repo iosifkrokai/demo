@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import contextlib
 import threading
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from typing import Any
 
@@ -58,7 +58,7 @@ class PostgresRepository:
                 conn.close()
 
     @contextmanager
-    def _cursor(self) -> Iterator[Any]:
+    def _cursor(self) -> Generator[Any]:
         """A dict-row cursor, or :class:`StorageUnavailable` on any DB failure."""
         try:
             with self._lock, self._connection().cursor(row_factory=dict_row) as cur:
@@ -68,7 +68,7 @@ class PostgresRepository:
             raise StorageUnavailable(str(exc)) from exc
 
     @contextmanager
-    def _tx_cursor(self) -> Iterator[Any]:
+    def _tx_cursor(self) -> Generator[Any]:
         """A cursor inside an explicit transaction, for `SET LOCAL` and triggers."""
         try:
             with self._lock:

@@ -45,7 +45,7 @@ def interpret_with_agent(
     ``None`` is never a half-filled contract: it means there is no reading at all,
     and the caller refuses the request rather than guessing at the query.
     """
-    if not isinstance(query, str) or not query.strip():
+    if not query.strip():
         return None
     if not available():
         log.info("agent_interpret: agent unavailable (no key/model) — no reader")

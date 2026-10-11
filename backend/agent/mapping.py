@@ -118,7 +118,7 @@ def _party(brief: ReaderBrief, reading: AgentReading, query: str) -> PartyCompos
         ages = [a for a in reading.children_ages if str(a) in query]
     mobility: list[str] = []
     for code in list(brief.mobility) + list(reading.mobility):
-        if isinstance(code, str) and code and code not in mobility:
+        if code and code not in mobility:
             mobility.append(code)
     return PartyComposition(adults=adults, children=children, children_ages=ages, mobility=mobility)
 
@@ -162,7 +162,7 @@ def _merge(
 
     areas: list[str] = []
     for slug in reading.areas:
-        if isinstance(slug, str) and slug.strip() and slug.strip() not in areas:
+        if slug.strip() and slug.strip() not in areas:
             areas.append(slug.strip())
 
     return TripRequirements(
@@ -187,8 +187,6 @@ def _outside_names(raw: list[str]) -> list[str]:
     """Names the model placed outside the region, de-duplicated and trimmed."""
     out: list[str] = []
     for name in raw:
-        if not isinstance(name, str):
-            continue
         cleaned = name.strip()
         if cleaned and cleaned not in out:
             out.append(cleaned)

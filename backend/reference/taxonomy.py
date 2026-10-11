@@ -154,7 +154,7 @@ def _fold_candidates(norm: str) -> list[str]:
     return out
 
 
-def resolve_code(term: str, locale: Locale = "ru") -> str | None:
+def resolve_code(term: str | None, locale: Locale = "ru") -> str | None:
     """Resolve free text to a canonical code, or None when unknown.
 
     Tries exact code/name/alias, ё-normalised match, then plural/substring fold.

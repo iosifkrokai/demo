@@ -479,7 +479,7 @@ def _nearby_convenience(
     found: dict[int, Candidate] = {}
     per_stop: dict[int, int] = {}
     for stop in base:
-        if stop.id is None or per_stop.get(stop.id, 0) >= 2:
+        if per_stop.get(stop.id, 0) >= 2:
             continue
         near = places.nearby(stop.lat, stop.lon, radius_km=radius_m / 1000.0, limit=8)
         for place in near:

@@ -24,7 +24,7 @@ def services_near_route(
     """NOT IMPLEMENTED — a deliberate gap: it answers ``error="not_implemented"``
     with an empty result set, so the agent treats the service as unproven.
     """
-    codes = [c for c in (category_codes or []) if isinstance(c, str) and c.strip()]
+    codes = [c for c in (category_codes or []) if c.strip()]
     db_cats = db_values(codes)
     points = [p for p in (shape or []) if p is not None]
     detour, detour_clamped = _clamp(max_detour_minutes, 1, MAX_DETOUR_MINUTES, MAX_DETOUR_MINUTES)

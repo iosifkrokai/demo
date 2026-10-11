@@ -71,7 +71,7 @@ def find_areas(term: str, locale: str = "ru", *, repos: Any = None) -> dict:
         "locale": locale if locale in ("ru", "en") else "ru",
         "result_cap": MAX_AREAS_PER_CALL,
     }
-    if not isinstance(term, str) or not term.strip():
+    if not term.strip():
         return _envelope(
             "find_areas",
             [],

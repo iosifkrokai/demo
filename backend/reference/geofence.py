@@ -35,7 +35,7 @@ def _bboxes() -> tuple[tuple[float, float, float, float], ...]:
     )
 
 
-def inside_belarus(lat: float, lon: float) -> bool:
+def inside_belarus(lat: float | None, lon: float | None) -> bool:
     """True when the point falls inside the Belarus border polygon."""
     if lat is None or lon is None:
         return False
@@ -47,7 +47,7 @@ def inside_belarus(lat: float, lon: float) -> bool:
     return False
 
 
-def inside_project_area(lat: float, lon: float) -> bool:
+def inside_project_area(lat: float | None, lon: float | None) -> bool:
     """Grodno ADM1, with the previously verified border-POI exceptions.
 
     Delegates to reference.areas.in_project_area, the single shared predicate.

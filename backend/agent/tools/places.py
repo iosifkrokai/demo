@@ -59,7 +59,7 @@ def search_places(
     """The ids are the only handles the agent may put into a requirement; unknown
     category codes are dropped, never sent to SQL.
     """
-    requested = [c for c in (category_codes or []) if isinstance(c, str) and c.strip()]
+    requested = [c for c in (category_codes or []) if c.strip()]
     db_cats = db_values(requested)
     dropped = [c for c in requested if c not in db_cats]
 
@@ -81,7 +81,7 @@ def search_places(
         "radius_m": near[2] if near else None,
     }
 
-    if not isinstance(query, str) or not query.strip():
+    if not query.strip():
         return _envelope(
             "search_places",
             [],
