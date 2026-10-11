@@ -37,10 +37,14 @@ def upsert_sql() -> str:
     A protected row keeps its category against automatic writers.
     """
     protected = "places.category_source IN ('curated', 'dataset')"
-    guarded_cat = (f"CASE WHEN {protected} AND EXCLUDED.category_source = 'auto' "
-                   "THEN places.category ELSE EXCLUDED.category END")
-    guarded_src = (f"CASE WHEN {protected} AND EXCLUDED.category_source = 'auto' "
-                   "THEN places.category_source ELSE EXCLUDED.category_source END")
+    guarded_cat = (
+        f"CASE WHEN {protected} AND EXCLUDED.category_source = 'auto' "
+        "THEN places.category ELSE EXCLUDED.category END"
+    )
+    guarded_src = (
+        f"CASE WHEN {protected} AND EXCLUDED.category_source = 'auto' "
+        "THEN places.category_source ELSE EXCLUDED.category_source END"
+    )
     return f"""
         INSERT INTO places (name, category, category_source, district, town, lat, lon,
                             blurb, fun_fact, fun_facts, opening_hours, ticket_price,
@@ -68,8 +72,7 @@ def source_fields(source_url: str, license: str | None = None) -> dict:
     provider = PROVIDER_BY_PREFIX.get(prefix, prefix or "unknown")
     external_id = rest or source_url
     url = source_url if source_url.startswith("http") else None
-    return {"provider": provider, "external_id": external_id, "url": url,
-            "license": license}
+    return {"provider": provider, "external_id": external_id, "url": url, "license": license}
 
 
 def connect(dsn: str):
@@ -153,8 +156,13 @@ def apply_curated_rows(conn, curated: list[dict]) -> dict:
                 """,
                 (current["id"], row["name"]),
             )
-        return {"rows": len(curated), "matched": matched, "updated": updated,
-                "unmatched": unmatched[:50], "unmatched_count": len(unmatched)}
+        return {
+            "rows": len(curated),
+            "matched": matched,
+            "updated": updated,
+            "unmatched": unmatched[:50],
+            "unmatched_count": len(unmatched),
+        }
 
 
 def load_areas(conn, records: list[dict], geo_dir: Path | None = None) -> int:

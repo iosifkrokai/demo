@@ -61,15 +61,12 @@ def read_routes(path: Path | None = None) -> dict[str, Any]:
             "layer": "quality/cases/routes",
             "measured": False,
             "how": "./.venv/bin/python -m quality --replay "
-                   "quality/reports/snapshots/<снимок>"
-                   " --report-dir quality/reports/snapshots/<дата>",
+            "quality/reports/snapshots/<снимок>"
+            " --report-dir quality/reports/snapshots/<дата>",
         }
     report = json.loads(path.read_text(encoding="utf-8"))
     overall = report.get("overall") or {}
-    want = [
-        m for m in ("recall_at_k", "kendall_tau", "detour_km", "stage.recall")
-        if m in overall
-    ]
+    want = [m for m in ("recall_at_k", "kendall_tau", "detour_km", "stage.recall") if m in overall]
     return {
         "layer": "quality/cases/routes",
         "measured": True,
@@ -108,8 +105,8 @@ def read_golden(path: Path | None = None) -> dict[str, Any]:
         return {
             "layer": "quality/cases/compliance",
             "measured": False,
-            "how": "./.venv/bin/python -m quality --golden --snapshot \"\" "
-                   "(нужен живой стек: приложение + Valhalla + ключ модели)",
+            "how": './.venv/bin/python -m quality --golden --snapshot "" '
+            "(нужен живой стек: приложение + Valhalla + ключ модели)",
         }
     data = json.loads(path.read_text(encoding="utf-8"))
     summary = data.get("summary") or {}
@@ -128,16 +125,14 @@ def read_golden(path: Path | None = None) -> dict[str, Any]:
         first = bad[0]
         checks = first.get("checks") or {}
         bad_checks = [
-            name for name, c in checks.items()
-            if isinstance(c, dict) and c.get("ok") is False
+            name for name, c in checks.items() if isinstance(c, dict) and c.get("ok") is False
         ]
         failed.append(
             {
                 "case": case.get("id"),
                 "why": case.get("query"),
-                "detail": "; ".join(
-                    f"{name}: {checks[name].get('detail')}" for name in bad_checks
-                ) or str(first.get("detail") or first.get("reason") or "кейс не выдержал условий"),
+                "detail": "; ".join(f"{name}: {checks[name].get('detail')}" for name in bad_checks)
+                or str(first.get("detail") or first.get("reason") or "кейс не выдержал условий"),
             }
         )
 
@@ -187,7 +182,8 @@ def read_evals(path: Path | None = None) -> dict[str, Any]:
                 "failures": failures,
                 "gaps": [
                     {"case": c["case"], "why": c["why"]}
-                    for c in stage["checks"] if c.get("known_gap")
+                    for c in stage["checks"]
+                    if c.get("known_gap")
                 ],
             }
         )
@@ -211,8 +207,7 @@ def growth_points(routes: dict, golden: dict, evals: dict) -> list[dict[str, Any
     hard = routes.get("hard_failures") or {}
     for kind, count in (hard.get("by_kind") or {}).items():
         details = [
-            d.get("detail", "") for d in (hard.get("details") or [])
-            if d.get("kind") == kind
+            d.get("detail", "") for d in (hard.get("details") or []) if d.get("kind") == kind
         ]
         points.append(
             {
@@ -227,7 +222,7 @@ def growth_points(routes: dict, golden: dict, evals: dict) -> list[dict[str, Any
             {
                 "what": "геометрия: дефекты самих ног оставлены в средних",
                 "detail": f"дефектных ног: {hard['leg_sanity_defects']} — выкинуть прогон "
-                          f"значило бы спрятать проверку",
+                f"значило бы спрятать проверку",
                 "affects": hard["leg_sanity_defects"],
                 "where": routes.get("source", "quality/cases/routes"),
             }
@@ -249,7 +244,7 @@ def growth_points(routes: dict, golden: dict, evals: dict) -> list[dict[str, Any
                 {
                     "what": f"участок {stage['stage']}: {check}",
                     "detail": f"кейсов затронуто: {count}"
-                              + (f" (участок {stage['skipped']})" if stage.get("skipped") else ""),
+                    + (f" (участок {stage['skipped']})" if stage.get("skipped") else ""),
                     "affects": count,
                     "where": evals.get("source", "evals"),
                 }
@@ -273,13 +268,15 @@ def known_gaps(routes: dict, golden: dict, evals: dict) -> list[dict[str, Any]]:
     for stage in evals.get("stages") or []:
         for gap in stage.get("gaps") or []:
             gaps.append({"where": f"evals/{stage['stage']}", **gap})
-    for note in (golden.get("failed_cases") or []):
+    for note in golden.get("failed_cases") or []:
         if note.get("known_gap"):
-            gaps.append({
-                "where": "quality/cases/compliance",
-                "case": note["case"],
-                "why": note.get("why"),
-            })
+            gaps.append(
+                {
+                    "where": "quality/cases/compliance",
+                    "case": note["case"],
+                    "why": note.get("why"),
+                }
+            )
     return gaps
 
 
@@ -306,7 +303,8 @@ def render(routes: dict, golden: dict, evals: dict) -> str:
         rec = routes["metrics"].get("recall_at_k") or {}
         number = (
             f"Rec@K {rec.get('mean'):.3f} [{rec.get('lo'):.3f}, {rec.get('hi'):.3f}]"
-            if rec.get("mean") is not None else "метрик нет"
+            if rec.get("mean") is not None
+            else "метрик нет"
         )
         out.append(f"{'quality/cases/routes':<21} {number:<38} {routes['taken']}")
         out.append(
@@ -319,8 +317,8 @@ def render(routes: dict, golden: dict, evals: dict) -> str:
         rate = golden.get("compliance")
         number = (
             f"соответствие {rate:.0%} ({golden.get('passed')}/{golden.get('total')})"
-            if isinstance(rate, float) else
-            f"выдержали {golden.get('passed')}/{golden.get('total')}"
+            if isinstance(rate, float)
+            else f"выдержали {golden.get('passed')}/{golden.get('total')}"
         )
         out.append(f"{'quality/cases/compliance':<21} {number:<38} {golden['taken']}")
         out.append(f"{'':<21} {'(выдержал ли запрос конвейер)':<38} {golden.get('mode') or ''}")
@@ -425,13 +423,22 @@ def _run_offline(days: int = 3) -> None:
         out = SNAPSHOTS / datetime.now(UTC).strftime("%Y-%m-%d")
         out.mkdir(parents=True, exist_ok=True)
         subprocess.run(
-            [str(VENV), "-m", "quality", "--replay", str(snapshot.parent),
-             "--report-dir", str(out)],
-            cwd=BACKEND, check=False,
+            [
+                str(VENV),
+                "-m",
+                "quality",
+                "--replay",
+                str(snapshot.parent),
+                "--report-dir",
+                str(out),
+            ],
+            cwd=BACKEND,
+            check=False,
         )
     subprocess.run(
         [str(VENV), "-m", "quality.evals", "--json", "quality/reports/evals_last.json"],
-        cwd=BACKEND, check=False,
+        cwd=BACKEND,
+        check=False,
     )
 
 
@@ -439,7 +446,8 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Одна страница о качестве гида")
     parser.add_argument("--run", action="store_true", help="снять офлайн-слои заново")
     parser.add_argument(
-        "--golden", action="store_true",
+        "--golden",
+        action="store_true",
         help="снять и живой golden (нужен стек и ключ модели; платно)",
     )
     parser.add_argument("--json", type=Path, default=None, help="записать машинный отчёт")
@@ -451,9 +459,18 @@ def main(argv: list[str] | None = None) -> int:
         out_dir = SNAPSHOTS / datetime.now(UTC).strftime("%Y-%m-%d")
         out_dir.mkdir(parents=True, exist_ok=True)
         subprocess.run(
-            [str(VENV), "-m", "quality", "--golden", "--snapshot", "",
-             "--report-dir", str(out_dir)],
-            cwd=BACKEND, check=False,
+            [
+                str(VENV),
+                "-m",
+                "quality",
+                "--golden",
+                "--snapshot",
+                "",
+                "--report-dir",
+                str(out_dir),
+            ],
+            cwd=BACKEND,
+            check=False,
         )
 
     routes, golden, evals = read_routes(), read_golden(), read_evals()
@@ -464,12 +481,15 @@ def main(argv: list[str] | None = None) -> int:
         args.json.write_text(
             json.dumps(
                 {
-                    "routes": routes, "golden": golden, "evals": evals,
+                    "routes": routes,
+                    "golden": golden,
+                    "evals": evals,
                     "growth_points": growth_points(routes, golden, evals),
                     "known_gaps": known_gaps(routes, golden, evals),
                     "not_measured": NOT_MEASURED,
                 },
-                ensure_ascii=False, indent=1,
+                ensure_ascii=False,
+                indent=1,
             ),
             encoding="utf-8",
         )

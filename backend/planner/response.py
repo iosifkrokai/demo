@@ -81,9 +81,7 @@ def build_response(
         explanation=explanation,
         alternatives=offers or None,
         status=status,
-        requirements=(
-            requirements.public_requirements() if requirements is not None else None
-        ),
+        requirements=(requirements.public_requirements() if requirements is not None else None),
         interpretation=_interpretation(requirements, status),
         debug={
             "intent_source": intent.source,
@@ -111,9 +109,7 @@ def no_route_response(req: GenerateReq, detail: str) -> RouteResponse:
     Returns an empty plan with `status="infeasible"` and a machine-readable reason.
     """
     return RouteResponse(
-        parsed=ParsedQuery(
-            time_budget_minutes=req.time_budget_minutes, source="agent"
-        ),
+        parsed=ParsedQuery(time_budget_minutes=req.time_budget_minutes, source="agent"),
         points=[],
         shape={},
         summary=RouteSummary(length_km=None, time_seconds=None),
@@ -237,9 +233,7 @@ def _render_tour(
         return {}, {}
 
 
-def _services_along_evidence(
-    places: Any, requirements: Any, shape: Any
-) -> Any:
+def _services_along_evidence(places: Any, requirements: Any, shape: Any) -> Any:
     """Measure the services beside the line for the codes the requirements name.
 
     Returns None when nothing to measure; ``measured=False`` is a failed query.

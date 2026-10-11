@@ -101,18 +101,18 @@ def test_a_transit_stop_is_a_service_not_a_sight():
 def test_an_unnamed_transit_stop_survives_with_a_placeholder_name():
     """Most OSM bus stops carry no name; dropping them would hide the boarding
     point the tourist asked for."""
-    assert service_name({"highway": "bus_stop", "addr:street": "ул. Советская"}, "остановка транспорта") == (
-        "Остановка (ул. Советская)"
-    )
+    assert service_name(
+        {"highway": "bus_stop", "addr:street": "ул. Советская"}, "остановка транспорта"
+    ) == ("Остановка (ул. Советская)")
     assert service_name({"highway": "bus_stop"}, "остановка транспорта") == "Остановка"
-    assert service_name({"highway": "bus_stop", "name": "Вокзал"}, "остановка транспорта") == "Вокзал"
+    assert (
+        service_name({"highway": "bus_stop", "name": "Вокзал"}, "остановка транспорта") == "Вокзал"
+    )
 
 
 def test_every_district_has_a_centre_and_slonim_is_not_missing():
     areas = json.loads((GEO_DIR / "areas.json").read_text(encoding="utf-8"))["areas"]
-    districts = [
-        a for a in areas if a["kind"] == "district" and a["slug"] != "grodno-district"
-    ]
+    districts = [a for a in areas if a["kind"] == "district" and a["slug"] != "grodno-district"]
     missing = [
         a["name_ru"] for a in districts if not any(name in a["name_ru"] for name in RAION_CENTRES)
     ]

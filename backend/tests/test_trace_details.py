@@ -52,7 +52,7 @@ def test_a_dropped_place_reports_its_own_distance_to_the_anchor():
     assert {c.id for c in keep} == {1, 2}
     assert report["anchor"] == "Мирский замок"
     assert report["radius_km"] == constants.GEO_FOCUS_KM
-    gone, = report["dropped"]
+    (gone,) = report["dropped"]
     assert gone["name"] == "Старый замок Гродно"
     assert gone["km"] > 100
 
@@ -93,9 +93,7 @@ def test_a_gps_anchor_is_named_as_such():
     """`origin` is the tourist's own position; the trace must not call it a place."""
     origin_c = _c(1, "Whatever", lat=53.95, lon=26.47)
     near = _c(2, "Near", lat=53.96, lon=26.48)
-    _, report = _geo_focus_report(
-        [origin_c, near], origin=LatLon(lat=53.95, lon=26.47)
-    )
+    _, report = _geo_focus_report([origin_c, near], origin=LatLon(lat=53.95, lon=26.47))
     assert report["anchor"] == "GPS"
 
 

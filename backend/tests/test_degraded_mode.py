@@ -82,8 +82,15 @@ def offline() -> Iterator[None]:
 
 
 def _c(id: int, relevance: float = 0.5, name: str = "place") -> Candidate:
-    return Candidate(id=id, name=name, category="замок", lat=53.68, lon=23.82,
-                     relevance=relevance, rrf_score=relevance)
+    return Candidate(
+        id=id,
+        name=name,
+        category="замок",
+        lat=53.68,
+        lon=23.82,
+        relevance=relevance,
+        rrf_score=relevance,
+    )
 
 
 def _agent_contract(*, source: str = "llm", codes: tuple[str, ...] = ()) -> TripRequirements:
@@ -138,7 +145,6 @@ def fake_model(monkeypatch):
 
 
 class TestAgentAvailability:
-
     def test_no_key_means_unavailable(self, no_key):
         assert ai.available() is False
 
@@ -161,6 +167,7 @@ class TestNoReaderRefuses:
     def test_a_failed_reading_is_not_replaced_by_a_guess(self, with_key, monkeypatch):
         def boom(*_a, **_kw):
             raise RuntimeError("agent: upstream failed: 502")
+
         monkeypatch.setattr(ai, "interpret_with_agent", boom)
         with pytest.raises(InterpretationUnavailable):
             build_requirements(QUERY, GenerateReq(query=QUERY))
@@ -168,7 +175,8 @@ class TestNoReaderRefuses:
     def test_the_agent_contract_drives_the_reading(self, with_key, monkeypatch):
         """With the agent answering, the IntentResult comes from the contract."""
         monkeypatch.setattr(
-            intent_mod, "_agent_contract",
+            intent_mod,
+            "_agent_contract",
             lambda *a, **k: _agent_contract(codes=("костёл",)),
         )
         tr = build_requirements(QUERY, GenerateReq(query=QUERY))
@@ -179,18 +187,13 @@ class TestNoReaderRefuses:
 
     def test_an_explicit_ui_choice_survives_the_reading(self, with_key, monkeypatch):
         """The model reads the text; the control the tourist pressed must not be lost."""
-        monkeypatch.setattr(
-            intent_mod, "_agent_contract", lambda *a, **k: _agent_contract()
-        )
-        tr = build_requirements(
-            QUERY, GenerateReq(query=QUERY, hard_services=["туалет"])
-        )
+        monkeypatch.setattr(intent_mod, "_agent_contract", lambda *a, **k: _agent_contract())
+        tr = build_requirements(QUERY, GenerateReq(query=QUERY, hard_services=["туалет"]))
         assert "туалет" in tr.hard_service_codes()
         assert tr.source == "mixed"
 
 
 class TestEmbedLocal:
-
     def test_local_vector_is_used(self, fake_model):
         assert _embed_query(QUERY) == [0.1, 0.2, 0.3]
 
@@ -327,7 +330,6 @@ class TestHttpRefusal:
 
 
 class TestHttpDegraded:
-
     def test_escaped_upstream_error_is_503_not_500(self, with_key, _restore_planner):
         client = _client_with_planner(
             _StubPlanner(UpstreamUnavailable("valhalla: /route failed: 502"))
@@ -348,8 +350,7 @@ class TestHttpDegraded:
         assert r.status_code == 404
         assert "no candidates" in r.json()["detail"]
 
-    def test_health_without_a_key_says_so(
-            self, no_key, monkeypatch, fake_model, _restore_planner):
+    def test_health_without_a_key_says_so(self, no_key, monkeypatch, fake_model, _restore_planner):
         body = _client_with_planner(_HealthOnly(monkeypatch)).get("/health").json()
         assert body["embedder"] is True
         assert body["llm"] is False
@@ -358,14 +359,16 @@ class TestHttpDegraded:
         assert body["status"] == "degraded", "no reader is not a healthy planner"
 
     def test_health_flags_are_honest_with_a_key(
-            self, with_key, monkeypatch, fake_model, _restore_planner):
+        self, with_key, monkeypatch, fake_model, _restore_planner
+    ):
         body = _client_with_planner(_HealthOnly(monkeypatch)).get("/health").json()
         assert body["llm"] is True
         assert body["embedder"] is True
         assert body["status"] == "ok"
 
     def test_health_is_degraded_when_the_local_model_cannot_load(
-            self, monkeypatch, _restore_planner):
+        self, monkeypatch, _restore_planner
+    ):
         monkeypatch.setattr(model._state, "model", None, raising=False)
         monkeypatch.setattr(model._state, "available", False, raising=False)
         body = _client_with_planner(_HealthOnly(monkeypatch)).get("/health").json()
@@ -420,14 +423,20 @@ class TestLiveRefusal:
 
         monkeypatch.setattr(retrieve_mod, "_vector_signal", _record)
         constraints = ResolvedConstraints(
-            must_visit_ids=[], area_anchor=None, optional_categories=[],
-            forbidden_categories=[], forbidden_keywords=[], time_budget_minutes=120,
-            bbox=None, era_hint="any", party_type="solo", intent_type="discovery",
-            must_visit_keywords=[], query_keywords=[],
+            must_visit_ids=[],
+            area_anchor=None,
+            optional_categories=[],
+            forbidden_categories=[],
+            forbidden_keywords=[],
+            time_budget_minutes=120,
+            bbox=None,
+            era_hint="any",
+            party_type="solo",
+            intent_type="discovery",
+            must_visit_keywords=[],
+            query_keywords=[],
         )
-        pool = retrieve_mod.retrieve(
-            constraints, [], _repos(live_db).places, query_text=QUERY
-        )
+        pool = retrieve_mod.retrieve(constraints, [], _repos(live_db).places, query_text=QUERY)
         assert calls == []
         assert len(pool) > 0, "keyword + category signals alone must still find places"
 

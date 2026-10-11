@@ -29,9 +29,20 @@ GEOFENCE_PROBLEM = "outside Grodno region"
 DEFAULT_DUP_RADIUS_M = _constants.DUPLICATE_RADIUS_M
 
 COLUMNS = [
-    "name", "category", "district", "town", "lat", "lon", "blurb",
-    "fun_fact", "fun_facts", "opening_hours", "ticket_price",
-    "visit_minutes", "links", "source_url",
+    "name",
+    "category",
+    "district",
+    "town",
+    "lat",
+    "lon",
+    "blurb",
+    "fun_fact",
+    "fun_facts",
+    "opening_hours",
+    "ticket_price",
+    "visit_minutes",
+    "links",
+    "source_url",
 ]
 
 BBOX = {"south": 52.75, "west": 23.35, "north": 54.80, "east": 27.00}
@@ -43,7 +54,8 @@ SERVICE_TAXONOMY = frozenset(c.code for c in taxonomy.all_categories() if c.role
 def read_pipe_csv(path: Path) -> list[dict]:
     """Parse a pipe-delimited CSV whose header may be commented out."""
     lines = [
-        ln for ln in path.read_text(encoding="utf-8").splitlines()
+        ln
+        for ln in path.read_text(encoding="utf-8").splitlines()
         if ln.strip() and not ln.startswith("#")
     ]
     rows: list[dict] = []
@@ -116,19 +128,22 @@ def _normalize_common(row: dict, *, visit_required: bool) -> dict:
 def validate_city_region(row: dict) -> list[str]:
     """city:/region: hand-authored rows — sights, visit_minutes required."""
     return _validate_common(
-        row, taxonomy_codes=SIGHT_TAXONOMY, prefixes=("city:", "region:"), visit_required=True)
+        row, taxonomy_codes=SIGHT_TAXONOMY, prefixes=("city:", "region:"), visit_required=True
+    )
 
 
 def validate_osm_sight(row: dict) -> list[str]:
     """osm: rows — sights, visit_minutes required."""
     return _validate_common(
-        row, taxonomy_codes=SIGHT_TAXONOMY, prefixes=("osm:",), visit_required=True)
+        row, taxonomy_codes=SIGHT_TAXONOMY, prefixes=("osm:",), visit_required=True
+    )
 
 
 def validate_osm_service(row: dict) -> list[str]:
     """osm_poi: rows — everyday services, visit_minutes optional (NULL)."""
     return _validate_common(
-        row, taxonomy_codes=SERVICE_TAXONOMY, prefixes=("osm_poi:",), visit_required=False)
+        row, taxonomy_codes=SERVICE_TAXONOMY, prefixes=("osm_poi:",), visit_required=False
+    )
 
 
 def normalize_city_region(row: dict) -> dict:
@@ -184,31 +199,62 @@ class Dataset:
 def default_datasets() -> list[Dataset]:
     """The four CSV datasets, in apply order (hand-authored, then OSM)."""
     return [
-        Dataset("city", filename="places_grodno_city.csv", prefix="city:",
-                reader=_read_pipe, validator=validate_city_region,
-                normalizer=normalize_city_region, category_source=SOURCE_DATASET,
-                fatal_invalid=True,
-                license="hand-authored (planetabelarus.by derived)"),
-        Dataset("region", filename="places_region.csv", prefix="region:",
-                reader=_read_pipe, validator=validate_city_region,
-                normalizer=normalize_city_region, category_source=SOURCE_DATASET,
-                fatal_invalid=True,
-                license="hand-authored (planetabelarus.by derived)"),
-        Dataset("osm", filename="places_osm_raw.csv", prefix="osm:",
-                reader=_read_pipe, validator=validate_osm_sight,
-                normalizer=normalize_osm_sight, category_source=SOURCE_AUTO,
-                fatal_invalid=False,
-                license="ODbL 1.0 (OpenStreetMap contributors)"),
-        Dataset("poi", filename="places_poi.csv", prefix="osm_poi:",
-                reader=_read_pipe, validator=validate_osm_service,
-                normalizer=normalize_osm_service, category_source=SOURCE_AUTO,
-                fatal_invalid=False, optional=True,
-                license="ODbL 1.0 (OpenStreetMap contributors)"),
+        Dataset(
+            "city",
+            filename="places_grodno_city.csv",
+            prefix="city:",
+            reader=_read_pipe,
+            validator=validate_city_region,
+            normalizer=normalize_city_region,
+            category_source=SOURCE_DATASET,
+            fatal_invalid=True,
+            license="hand-authored (planetabelarus.by derived)",
+        ),
+        Dataset(
+            "region",
+            filename="places_region.csv",
+            prefix="region:",
+            reader=_read_pipe,
+            validator=validate_city_region,
+            normalizer=normalize_city_region,
+            category_source=SOURCE_DATASET,
+            fatal_invalid=True,
+            license="hand-authored (planetabelarus.by derived)",
+        ),
+        Dataset(
+            "osm",
+            filename="places_osm_raw.csv",
+            prefix="osm:",
+            reader=_read_pipe,
+            validator=validate_osm_sight,
+            normalizer=normalize_osm_sight,
+            category_source=SOURCE_AUTO,
+            fatal_invalid=False,
+            license="ODbL 1.0 (OpenStreetMap contributors)",
+        ),
+        Dataset(
+            "poi",
+            filename="places_poi.csv",
+            prefix="osm_poi:",
+            reader=_read_pipe,
+            validator=validate_osm_service,
+            normalizer=normalize_osm_service,
+            category_source=SOURCE_AUTO,
+            fatal_invalid=False,
+            optional=True,
+            license="ODbL 1.0 (OpenStreetMap contributors)",
+        ),
     ]
 
 
 EXPECTED_CURATED_HEADER = [
-    "id", "normalized_name", "category", "blurb", "fun_fact", "fun_facts", "links",
+    "id",
+    "normalized_name",
+    "category",
+    "blurb",
+    "fun_fact",
+    "fun_facts",
+    "links",
 ]
 
 
@@ -219,16 +265,19 @@ def read_curated(path: Path) -> list[dict]:
     if not path.exists():
         return []
     lines = [
-        ln for ln in path.read_text(encoding="utf-8").splitlines()
+        ln
+        for ln in path.read_text(encoding="utf-8").splitlines()
         if ln.strip() and not ln.startswith("#")
     ]
     has_header = bool(lines) and not lines[0].split("|", 1)[0].strip().isdigit()
     if has_header and lines[0].split("|")[:4] != EXPECTED_CURATED_HEADER[:4]:
         raise SystemExit(
-            f"unexpected header {lines[0].split('|')}, expected {EXPECTED_CURATED_HEADER}")
+            f"unexpected header {lines[0].split('|')}, expected {EXPECTED_CURATED_HEADER}"
+        )
 
     reader = csv.DictReader(
-        lines, fieldnames=None if has_header else EXPECTED_CURATED_HEADER, delimiter="|")
+        lines, fieldnames=None if has_header else EXPECTED_CURATED_HEADER, delimiter="|"
+    )
     return [
         {
             "id": int(row["id"]),
@@ -301,13 +350,15 @@ def collect_records(datasets: list[Dataset]) -> dict[str, Any]:
                     geofence += 1
                 else:
                     invalid += 1
-                rejects.append({
-                    "dataset": ds.name,
-                    "name": str(raw.get("name", "")).strip(),
-                    "source_url": str(raw.get("source_url", "")).strip(),
-                    "kind": kind,
-                    "problems": problems,
-                })
+                rejects.append(
+                    {
+                        "dataset": ds.name,
+                        "name": str(raw.get("name", "")).strip(),
+                        "source_url": str(raw.get("source_url", "")).strip(),
+                        "kind": kind,
+                        "problems": problems,
+                    }
+                )
                 if ds.fatal_invalid:
                     fatal = True
                 continue
@@ -316,15 +367,21 @@ def collect_records(datasets: list[Dataset]) -> dict[str, Any]:
             row["_category_source"] = ds.category_source
             records.append(row)
             valid += 1
-        datasets_meta.append({
-            "name": ds.name, "file": ds.filename, "rows": len(raw_rows),
-            "valid": valid, "invalid": invalid, "geofence_rejects": geofence,
-            "category_source": ds.category_source, "license": ds.license,
-            "missing": missing,
-        })
+        datasets_meta.append(
+            {
+                "name": ds.name,
+                "file": ds.filename,
+                "rows": len(raw_rows),
+                "valid": valid,
+                "invalid": invalid,
+                "geofence_rejects": geofence,
+                "category_source": ds.category_source,
+                "license": ds.license,
+                "missing": missing,
+            }
+        )
 
-    return {"records": records, "rejects": rejects,
-            "datasets": datasets_meta, "fatal": fatal}
+    return {"records": records, "rejects": rejects, "datasets": datasets_meta, "fatal": fatal}
 
 
 _CYRILLIC_RE = re.compile(r"[А-Яа-яЁёІіЎў]")
@@ -361,8 +418,7 @@ def haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     phi1, phi2 = math.radians(lat1), math.radians(lat2)
     dphi = math.radians(lat2 - lat1)
     dlam = math.radians(lon2 - lon1)
-    a = (math.sin(dphi / 2) ** 2
-         + math.cos(phi1) * math.cos(phi2) * math.sin(dlam / 2) ** 2)
+    a = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlam / 2) ** 2
     return r * 2 * math.asin(math.sqrt(a))
 
 
@@ -388,18 +444,19 @@ def find_suspected_duplicates(
                 a, b = rows[i], rows[j]
                 d = haversine_m(a["lat"], a["lon"], b["lat"], b["lon"])
                 if d < radius_m:
-                    pairs.append({
-                        "name": key,
-                        "distance_m": round(d, 1),
-                        "a": {"dataset": a["_dataset"], "source_url": a["source_url"]},
-                        "b": {"dataset": b["_dataset"], "source_url": b["source_url"]},
-                    })
+                    pairs.append(
+                        {
+                            "name": key,
+                            "distance_m": round(d, 1),
+                            "a": {"dataset": a["_dataset"], "source_url": a["source_url"]},
+                            "b": {"dataset": b["_dataset"], "source_url": b["source_url"]},
+                        }
+                    )
     return pairs
 
 
 def _share(part: int, total: int) -> dict:
-    return {"count": part, "total": total,
-            "share": round(part / total, 4) if total else None}
+    return {"count": part, "total": total, "share": round(part / total, 4) if total else None}
 
 
 def _counts(values: dict, total: int) -> dict:
@@ -484,9 +541,11 @@ def build_coverage_report(
             "unknown_script_names": _share(unknown, total),
             "explicit_ru_aliases": _share(len(curated or []), total),
             "explicit_en_aliases": _share(0, total),
-            "note": ("name-script proxy; explicit RU aliases come from the curated CSV, "
-                     "EN aliases from place_aliases once a translation source exists "
-                     "(see db.place_aliases after an apply)"),
+            "note": (
+                "name-script proxy; explicit RU aliases come from the curated CSV, "
+                "EN aliases from place_aliases once a translation source exists "
+                "(see db.place_aliases after an apply)"
+            ),
         },
         "geofence_rejects": {
             "count": len(geofence_rejects),

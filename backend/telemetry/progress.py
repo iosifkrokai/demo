@@ -36,6 +36,7 @@ _current: contextvars.ContextVar[str | None] = contextvars.ContextVar(
     "route_progress_id", default=None
 )
 
+
 @dataclass
 class Tracker:
     """One request's progress: where it got to, and since when."""

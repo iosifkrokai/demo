@@ -39,9 +39,7 @@ class PreferencesIn(BaseModel):
         if v is not None:
             for code, minutes in v.items():
                 if minutes < 0:
-                    raise ValueError(
-                        f"visit_minutes_by_category[{code!r}] must be >= 0"
-                    )
+                    raise ValueError(f"visit_minutes_by_category[{code!r}] must be >= 0")
         return v
 
 

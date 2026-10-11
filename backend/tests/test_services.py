@@ -118,9 +118,7 @@ def test_valhalla_profiles_map_onto_walking_thresholds():
     assert services.threshold_for("самокат") == services.MAX_OFF_LINE_M["pedestrian"]
 
 
-@pytest.mark.skipif(
-    os.environ.get("SMOKE_SKIP_LIVE") == "1", reason="live-проверки отключены"
-)
+@pytest.mark.skipif(os.environ.get("SMOKE_SKIP_LIVE") == "1", reason="live-проверки отключены")
 def test_live_services_along_a_real_street_in_grodno():
     """A walk down Советская must find real cafés and toilets beside the line."""
     try:

@@ -41,9 +41,7 @@ def assert_no_unsafe_shapes(calls: list) -> None:
     """Fail if any recorded call has len(sources) >= 6 AND len(targets) >= 7."""
     for call in calls:
         n_src, n_tgt = get_shape_from_call(call)
-        assert not (n_src >= 6 and n_tgt >= 7), (
-            f"Unsafe shape emitted: {n_src}x{n_tgt}"
-        )
+        assert not (n_src >= 6 and n_tgt >= 7), f"Unsafe shape emitted: {n_src}x{n_tgt}"
 
 
 def assert_matrix_correct(
@@ -54,14 +52,10 @@ def assert_matrix_correct(
     """Assert result[i][j] == i*100 + j (the expected value for global indices)."""
     assert len(result) == n_src, f"Wrong row count: {len(result)} != {n_src}"
     for i in range(n_src):
-        assert len(result[i]) == n_tgt, (
-            f"Wrong col count in row {i}: {len(result[i])} != {n_tgt}"
-        )
+        assert len(result[i]) == n_tgt, f"Wrong col count in row {i}: {len(result[i])} != {n_tgt}"
         for j in range(n_tgt):
             expected = float(i * 100 + j)
-            assert result[i][j] == expected, (
-                f"[{i}][{j}] = {result[i][j]}, expected {expected}"
-            )
+            assert result[i][j] == expected, f"[{i}][{j}] = {result[i][j]}, expected {expected}"
 
 
 def _make_pts(n: int) -> list[dict]:
@@ -75,6 +69,7 @@ def test_small_matrix_one_call():
     targets = _make_pts(5)
 
     calls = []
+
     def fake_request(*args, **kwargs):
         calls.append({"args": args, "kwargs": kwargs})
         payload = json.loads(kwargs["params"]["json"])
@@ -94,6 +89,7 @@ def test_12x12_is_chunked():
     targets = _make_pts(12)
 
     calls = []
+
     def fake_request(*args, **kwargs):
         calls.append({"args": args, "kwargs": kwargs})
         payload = json.loads(kwargs["params"]["json"])
@@ -113,6 +109,7 @@ def test_rectangular_chunking():
     targets = _make_pts(8)
 
     calls = []
+
     def fake_request(*args, **kwargs):
         calls.append({"args": args, "kwargs": kwargs})
         payload = json.loads(kwargs["params"]["json"])
@@ -160,6 +157,7 @@ def test_diagonal_zero_for_identical_coordinates():
     targets = list(sources)
 
     calls = []
+
     def fake_request(*args, **kwargs):
         calls.append({"args": args, "kwargs": kwargs})
         payload = json.loads(kwargs["params"]["json"])
@@ -198,6 +196,7 @@ def test_6x7_is_chunked_not_one_call():
     targets = _make_pts(7)
 
     calls = []
+
     def fake_request(*args, **kwargs):
         calls.append({"args": args, "kwargs": kwargs})
         payload = json.loads(kwargs["params"]["json"])

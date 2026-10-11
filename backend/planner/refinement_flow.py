@@ -56,16 +56,10 @@ def refinement_base(repos: Repositories, ctx) -> list[Candidate]:
     base_ids = [p.id for p in ctx.base_points if p.id is not None]
     base_rows = repos.places.get_by_ids(base_ids) if base_ids else []
 
-    manual = [
-        p
-        for p in ctx.base_points
-        if p.id is None and (p.pinned or p.source == "user")
-    ]
+    manual = [p for p in ctx.base_points if p.id is None and (p.pinned or p.source == "user")]
     for point in manual:
         try:
-            near_places = repos.places.nearby(
-                point.lat, point.lon, radius_km=0.06, limit=1
-            )
+            near_places = repos.places.nearby(point.lat, point.lon, radius_km=0.06, limit=1)
         except Exception as exc:
             log.warning("context: hand-placed stop lookup failed: %s", exc)
             continue
@@ -74,7 +68,8 @@ def refinement_base(repos: Repositories, ctx) -> list[Candidate]:
                 base_rows.append(place)
                 log.info(
                     "context: hand-placed stop «%s» matched to «%s»",
-                    point.name, place.name,
+                    point.name,
+                    place.name,
                 )
 
     seen: set[int] = set()
@@ -108,9 +103,7 @@ def _removals(directive, base: list[Candidate], excluded: set[int]) -> set[int]:
     return removed
 
 
-def _additions(
-    repos: Repositories, directive, base: list[Candidate]
-) -> list[Candidate]:
+def _additions(repos: Repositories, directive, base: list[Candidate]) -> list[Candidate]:
     """Stops the instruction asks to ADD, taken near the route.
 
     Convenience categories come from the stops' neighbourhood, not a global ranking.
@@ -119,21 +112,17 @@ def _additions(
     base_ids = {c.id for c in base}
 
     try:
-        convenience = {
-            c for c in directive.add_categories
-            if c in constants.CONVENIENCE_CATEGORIES
-        }
+        convenience = {c for c in directive.add_categories if c in constants.CONVENIENCE_CATEGORIES}
         if convenience:
             for c in _nearby_convenience(repos.places, base, convenience):
                 found[c.id] = c
 
-        sights = {
-            c for c in directive.add_categories
-            if c not in constants.CONVENIENCE_CATEGORIES
-        }
+        sights = {c for c in directive.add_categories if c not in constants.CONVENIENCE_CATEGORIES}
         if sights:
             for c in _nearby_convenience(
-                repos.places, base, sights,
+                repos.places,
+                base,
+                sights,
                 radius_m=constants.CONVENIENCE_RADIUS_M * 4,
                 max_added=constants.CONVENIENCE_MAX_ADDED,
             ):
@@ -296,8 +285,12 @@ def generate_refinement(
     ms = int((_time.perf_counter() - t0) * 1000)
     log.info(
         "pipeline.refine op=%s reason=%s ms=%d base=%d route=%d added=%d",
-        directive.operation, directive.reason_code, ms,
-        len(base), len(route), len(additions),
+        directive.operation,
+        directive.reason_code,
+        ms,
+        len(base),
+        len(route),
+        len(additions),
     )
     trace.record(
         "response",

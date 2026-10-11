@@ -63,9 +63,7 @@ def test_a_name_outside_the_region_makes_the_request_infeasible():
 def test_the_contract_keeps_what_the_tourist_asked_for():
     """Marking is not rewriting: the name stays verbatim, once."""
     reqs = TripRequirements(
-        requirements=[
-            Requirement(kind="must_visit", name=VILNIUS_CATHEDRAL, source="text")
-        ]
+        requirements=[Requirement(kind="must_visit", name=VILNIUS_CATHEDRAL, source="text")]
     )
 
     mark_out_of_coverage(reqs, [VILNIUS_CATHEDRAL, VILNIUS_CATHEDRAL])

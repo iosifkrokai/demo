@@ -59,9 +59,7 @@ def run_verdicts() -> dict[str, Any]:
     checks: list[dict[str, Any]] = []
     for case in _load("verdicts"):
         raw = case.raw
-        reqs = TripRequirements(
-            requirements=[Requirement(**dict(r)) for r in raw["requirements"]]
-        )
+        reqs = TripRequirements(requirements=[Requirement(**dict(r)) for r in raw["requirements"]])
         evidence = None
         if raw.get("evidence") is not None:
             evidence = ServiceAlongEvidence(
@@ -72,8 +70,13 @@ def run_verdicts() -> dict[str, Any]:
             result = verify(reqs, raw["plan"], raw.get("geometry"), evidence)
         except Exception as exc:
             checks.append(
-                {"case": case.id, "check": "verdict", "ok": False,
-                 "detail": f"{type(exc).__name__}: {exc}", "why": case.why}
+                {
+                    "case": case.id,
+                    "check": "verdict",
+                    "ok": False,
+                    "detail": f"{type(exc).__name__}: {exc}",
+                    "why": case.why,
+                }
             )
             continue
 
@@ -155,14 +158,16 @@ def run_services() -> dict[str, Any]:
             shape = raw["shape"]
             line = [(lat, lon) for lon, lat in shape["coordinates"]]
             codes = list(raw["categories"])
-            gate = float(raw.get("gate_m") or services_mod.MAX_OFF_LINE_M[
-                raw.get("profile", "pedestrian")
-            ])
+            gate = float(
+                raw.get("gate_m") or services_mod.MAX_OFF_LINE_M[raw.get("profile", "pedestrian")]
+            )
 
             answer = places.services_along(
-                shape, categories=codes,
+                shape,
+                categories=codes,
                 profile=raw.get("profile", "pedestrian"),
-                max_off_line_m=gate, limit=raw.get("limit", services_mod.MAX_SERVICES),
+                max_off_line_m=gate,
+                limit=raw.get("limit", services_mod.MAX_SERVICES),
             )
             items = answer["items"]
 
@@ -179,57 +184,77 @@ def run_services() -> dict[str, Any]:
                     ref[place.id] = (off, along)
 
             bad_role = [
-                i["category"] for i in items
-                if _role_of(taxonomy, i["category"]) != "service"
+                i["category"] for i in items if _role_of(taxonomy, i["category"]) != "service"
             ]
-            checks.append({
-                "case": case.id, "check": "role_only", "ok": not bad_role,
-                "detail": f"не-услуги в ответе: {bad_role}", "why": case.why,
-            })
+            checks.append(
+                {
+                    "case": case.id,
+                    "check": "role_only",
+                    "ok": not bad_role,
+                    "detail": f"не-услуги в ответе: {bad_role}",
+                    "why": case.why,
+                }
+            )
 
             alongs = [i["along_m"] for i in items]
-            checks.append({
-                "case": case.id, "check": "ordered_along", "ok": alongs == sorted(alongs),
-                "detail": f"along_m = {alongs}", "why": case.why,
-            })
+            checks.append(
+                {
+                    "case": case.id,
+                    "check": "ordered_along",
+                    "ok": alongs == sorted(alongs),
+                    "detail": f"along_m = {alongs}",
+                    "why": case.why,
+                }
+            )
 
             over = [i["off_line_m"] for i in items if i["off_line_m"] > gate + 1]
-            checks.append({
-                "case": case.id, "check": "within_gate", "ok": not over,
-                "detail": f"за порогом {gate} м: {over}", "why": case.why,
-            })
+            checks.append(
+                {
+                    "case": case.id,
+                    "check": "within_gate",
+                    "ok": not over,
+                    "detail": f"за порогом {gate} м: {over}",
+                    "why": case.why,
+                }
+            )
 
             cap = int(raw.get("limit", services_mod.MAX_SERVICES))
-            ref_capped = dict(
-                sorted(ref.items(), key=lambda kv: kv[1][1])[:cap]
-            )
+            ref_capped = dict(sorted(ref.items(), key=lambda kv: kv[1][1])[:cap])
             safe_ref = {
-                pid for pid, (off, _) in ref_capped.items()
+                pid
+                for pid, (off, _) in ref_capped.items()
                 if abs(off - gate) > 5 and gate - off > 5
             }
             safe_got = {
-                i["id"] for i in items
+                i["id"]
+                for i in items
                 if abs(i["off_line_m"] - gate) > 5 and gate - i["off_line_m"] > 5
             }
             ties = len(ref_capped) - len(safe_ref)
-            checks.append({
-                "case": case.id, "check": "cap_matches_limit",
-                "ok": len(items) <= cap,
-                "detail": f"в ответе {len(items)} точек при пределе {cap}",
-                "why": case.why,
-            })
+            checks.append(
+                {
+                    "case": case.id,
+                    "check": "cap_matches_limit",
+                    "ok": len(items) <= cap,
+                    "detail": f"в ответе {len(items)} точек при пределе {cap}",
+                    "why": case.why,
+                }
+            )
             near_gate += ties
             missing = safe_ref - safe_got
             extra = safe_got - safe_ref
-            checks.append({
-                "case": case.id, "check": "membership_agrees",
-                "ok": not missing and not extra,
-                "detail": (
-                    f"нет в ответе {sorted(missing)}, лишние {sorted(extra)}"
-                    f" (у порога не считаем: {ties})"
-                ),
-                "why": case.why,
-            })
+            checks.append(
+                {
+                    "case": case.id,
+                    "check": "membership_agrees",
+                    "ok": not missing and not extra,
+                    "detail": (
+                        f"нет в ответе {sorted(missing)}, лишние {sorted(extra)}"
+                        f" (у порога не считаем: {ties})"
+                    ),
+                    "why": case.why,
+                }
+            )
 
             ref_off = {pid: off for pid, (off, _) in ref.items()}
             worst = 0.0
@@ -239,48 +264,66 @@ def run_services() -> dict[str, Any]:
                     diff = abs(item["off_line_m"] - ref_off[item["id"]])
                     allowance = max(allowance, 0.005 * ref_off[item["id"]] + 2.0)
                     worst = max(worst, diff)
-            checks.append({
-                "case": case.id, "check": "distance_agrees", "ok": worst <= allowance,
-                "detail": f"максимальное расхождение {worst:.2f} м (допуск {allowance:.2f} м)",
-                "why": case.why,
-            })
+            checks.append(
+                {
+                    "case": case.id,
+                    "check": "distance_agrees",
+                    "ok": worst <= allowance,
+                    "detail": f"максимальное расхождение {worst:.2f} м (допуск {allowance:.2f} м)",
+                    "why": case.why,
+                }
+            )
 
             flags_ok = (
                 answer.get("detour_confirmed") is False
                 and answer.get("measured") == "distance_to_line"
                 and answer.get("not_measured") == "detour_walking_time"
             )
-            checks.append({
-                "case": case.id, "check": "honest_flags", "ok": flags_ok,
-                "detail": f"detour_confirmed={answer.get('detour_confirmed')}, "
-                          f"measured={answer.get('measured')}, "
-                          f"not_measured={answer.get('not_measured')}",
-                "why": case.why,
-            })
+            checks.append(
+                {
+                    "case": case.id,
+                    "check": "honest_flags",
+                    "ok": flags_ok,
+                    "detail": f"detour_confirmed={answer.get('detour_confirmed')}, "
+                    f"measured={answer.get('measured')}, "
+                    f"not_measured={answer.get('not_measured')}",
+                    "why": case.why,
+                }
+            )
 
             if len(items) >= int(raw.get("limit", services_mod.MAX_SERVICES)):
-                checks.append({
-                    "case": case.id, "check": "cap_is_declared",
-                    "ok": answer.get("capped") is True,
-                    "detail": f"capped={answer.get('capped')} при {len(items)} точках",
-                    "why": case.why,
-                })
+                checks.append(
+                    {
+                        "case": case.id,
+                        "check": "cap_is_declared",
+                        "ok": answer.get("capped") is True,
+                        "detail": f"capped={answer.get('capped')} при {len(items)} точках",
+                        "why": case.why,
+                    }
+                )
 
             if raw.get("monotonic_with_gate"):
                 cap_here = int(raw.get("limit", services_mod.MAX_SERVICES))
                 wider = places.services_along(
-                    shape, categories=codes, profile=raw["profile"],
-                    max_off_line_m=gate * 3, limit=max(cap_here, cap_here * 3),
+                    shape,
+                    categories=codes,
+                    profile=raw["profile"],
+                    max_off_line_m=gate * 3,
+                    limit=max(cap_here, cap_here * 3),
                 )
                 ok = len(wider["items"]) >= len(items)
-                checks.append({
-                    "case": case.id, "check": "wider_gate_finds_more", "ok": ok,
-                    "detail": (
-                        f"{len(items)} при {gate:.0f} м →"
-                        f" {len(wider['items'])} при {gate * 3:.0f} м"
-                    ),
-                    "why": case.why,
-                })
+                checks.append(
+                    {
+                        "case": case.id,
+                        "check": "wider_gate_finds_more",
+                        "ok": ok,
+                        "detail": (
+                            f"{len(items)} при {gate:.0f} м →"
+                            f" {len(wider['items'])} при {gate * 3:.0f} м"
+                        ),
+                        "why": case.why,
+                    }
+                )
     except StorageUnavailable as exc:
         return {
             "stage": "services",
@@ -315,8 +358,14 @@ def run_plan() -> dict[str, Any]:
 
     def check(name: str, ok: bool, detail: str) -> None:
         checks.append(
-            {"case": case.id, "check": name, "ok": ok, "detail": detail,
-             "why": case.why, "known_gap": False}
+            {
+                "case": case.id,
+                "check": name,
+                "ok": ok,
+                "detail": detail,
+                "why": case.why,
+                "known_gap": False,
+            }
         )
 
     import urllib.error
@@ -361,36 +410,39 @@ def run_plan() -> dict[str, Any]:
                 if _role_of(taxonomy, s.get("category") or "") == "service"
             ]
             check(
-                "stops_are_not_services", not offenders,
-                f"услуги среди остановок: {offenders}" if offenders
+                "stops_are_not_services",
+                not offenders,
+                f"услуги среди остановок: {offenders}"
+                if offenders
                 else f"{len(stops)} остановок, услуги среди них нет",
             )
 
         if raw.get("expect", {}).get("avoid_is_honoured"):
             forbidden = {
-                r.get("code") for r in requirements
-                if r.get("kind") == "avoid" and r.get("code")
+                r.get("code") for r in requirements if r.get("kind") == "avoid" and r.get("code")
             }
             verdicts = [
                 (r.get("code"), r.get("status"), r.get("reason"))
-                for r in requirements if r.get("kind") == "avoid"
+                for r in requirements
+                if r.get("kind") == "avoid"
             ]
             in_plan = [
                 f"{s.get('name')} [{s.get('category')}]"
-                for s in stops if (s.get("category") or "") in forbidden
+                for s in stops
+                if (s.get("category") or "") in forbidden
             ]
-            violated = [
-                code for code, status, _reason in verdicts if status != "satisfied"
-            ]
+            violated = [code for code, status, _reason in verdicts if status != "satisfied"]
             ok = not in_plan and not violated
             detail = (
-                f"запрет в плане: {in_plan}, вердикты: {verdicts}" if not ok
+                f"запрет в плане: {in_plan}, вердикты: {verdicts}"
+                if not ok
                 else f"вердикты: {verdicts}, запрещённого в плане нет"
             )
             check("avoid_is_honoured", ok, detail)
 
         check(
-            "request_is_answered", True,
+            "request_is_answered",
+            True,
             f"статус {payload.get('status')}, остановок {len(stops)}",
         )
 
@@ -414,63 +466,83 @@ def run_interpretation() -> dict[str, Any]:
         try:
             got = build_requirements(raw["query"], req)
         except Exception as exc:
-            checks.append({
-                "case": case.id, "check": "reads_request", "ok": False,
-                "detail": f"{type(exc).__name__}: {exc}", "why": case.why,
-            })
+            checks.append(
+                {
+                    "case": case.id,
+                    "check": "reads_request",
+                    "ok": False,
+                    "detail": f"{type(exc).__name__}: {exc}",
+                    "why": case.why,
+                }
+            )
             continue
 
         source = str(getattr(got, "source", "?"))
         sources[source] = sources.get(source, 0) + 1
-        reading = sorted(
-            (r.kind, r.code or r.name or "-", r.strength) for r in got.requirements
-        )
+        reading = sorted((r.kind, r.code or r.name or "-", r.strength) for r in got.requirements)
 
         ok = False
         for acceptable in raw["acceptable"]:
             if all(
-                any(k == a["kind"] and (a.get("code") is None or c == a["code"])
+                any(
+                    k == a["kind"]
+                    and (a.get("code") is None or c == a["code"])
                     and s == a["strength"]
-                    for k, c, s in reading)
+                    for k, c, s in reading
+                )
                 for a in acceptable
             ):
                 ok = True
                 break
 
-        checks.append({
-            "case": case.id, "check": "reads_request", "ok": ok,
-            "detail": f"источник={source}, прочитано {reading}",
-            "why": case.why,
-        })
+        checks.append(
+            {
+                "case": case.id,
+                "check": "reads_request",
+                "ok": ok,
+                "detail": f"источник={source}, прочитано {reading}",
+                "why": case.why,
+            }
+        )
 
         invented = [
-            r.code for r in got.requirements
-            if r.code and not _code_exists(taxonomy, r.code)
+            r.code for r in got.requirements if r.code and not _code_exists(taxonomy, r.code)
         ]
-        checks.append({
-            "case": case.id, "check": "no_invented_codes", "ok": not invented,
-            "detail": f"выдуманные коды: {invented}", "why": case.why,
-        })
+        checks.append(
+            {
+                "case": case.id,
+                "check": "no_invented_codes",
+                "ok": not invented,
+                "detail": f"выдуманные коды: {invented}",
+                "why": case.why,
+            }
+        )
 
         unplaceable = [
-            (r.name or r.code or "-") for r in got.requirements
+            (r.name or r.code or "-")
+            for r in got.requirements
             if r.kind == "must_visit" and r.place_id is None
         ]
-        checks.append({
-            "case": case.id, "check": "must_visit_is_placeable", "ok": not unplaceable,
-            "detail": f"обязательные места, не привязанные к месту: {unplaceable}",
-            "why": case.why,
-        })
+        checks.append(
+            {
+                "case": case.id,
+                "check": "must_visit_is_placeable",
+                "ok": not unplaceable,
+                "detail": f"обязательные места, не привязанные к месту: {unplaceable}",
+                "why": case.why,
+            }
+        )
 
     for check in checks:
         if not check["ok"] and any(
-            c.raw.get("known_gap") and c.id == check["case"]
-            for c in _load("interpretation")
+            c.raw.get("known_gap") and c.id == check["case"] for c in _load("interpretation")
         ):
             check["known_gap"] = True
 
     return {
-        "stage": "interpretation", "checks": checks, "skipped": None,
+        "stage": "interpretation",
+        "checks": checks,
+        "skipped": None,
         "sources": sources,
     }
 
@@ -527,9 +599,7 @@ def report(results: list[dict[str, Any]]) -> str:
         lines.append(
             f"{'ИТОГО (по весам)':<22} {'':>6} {'':>8}   {weighted_sum / weight_total:>5.0%}"
         )
-        lines.append(
-            "   веса: " + ", ".join(f"{k} {v:.2f}" for k, v in WEIGHTS.items())
-        )
+        lines.append("   веса: " + ", ".join(f"{k} {v:.2f}" for k, v in WEIGHTS.items()))
 
     gaps = [c for res in results for c in res["checks"] if c.get("known_gap")]
     if gaps:
@@ -540,8 +610,7 @@ def report(results: list[dict[str, Any]]) -> str:
             lines.append(f"      {c['why']}")
 
     failures = [
-        c for res in results for c in res["checks"]
-        if not c["ok"] and not c.get("known_gap")
+        c for res in results for c in res["checks"] if not c["ok"] and not c.get("known_gap")
     ]
     lines.append("")
     if failures:
@@ -557,9 +626,7 @@ def report(results: list[dict[str, Any]]) -> str:
             lines.append(f"      зачем: {c['why']}")
     else:
         lines.append("Проваленных проверок нет.")
-        lines.append(
-            "Это значит «поведение совпало с записанным контрактом» — не «продукт хорош»:"
-        )
+        lines.append("Это значит «поведение совпало с записанным контрактом» — не «продукт хорош»:")
         lines.append(
             "   набор кейсов узкий и написан нами, а качество маршрутов меряет benchmarks/."
         )
@@ -571,7 +638,8 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Stage evals for the Grodno guide")
     parser.add_argument("--stage", choices=sorted(STAGES), action="append")
     parser.add_argument(
-        "--with-interpretation", action="store_true",
+        "--with-interpretation",
+        action="store_true",
         help="include the live model stage (costs money, needs a key)",
     )
     parser.add_argument("--json", type=Path, default=None, help="write the raw report")
@@ -586,18 +654,12 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.json:
         args.json.parent.mkdir(parents=True, exist_ok=True)
-        args.json.write_text(
-            json.dumps(results, ensure_ascii=False, indent=1), encoding="utf-8"
-        )
+        args.json.write_text(json.dumps(results, ensure_ascii=False, indent=1), encoding="utf-8")
         print(f"отчёт записан: {args.json}")
 
     return (
         1
-        if any(
-            not c["ok"] and not c.get("known_gap")
-            for res in results
-            for c in res["checks"]
-        )
+        if any(not c["ok"] and not c.get("known_gap") for res in results for c in res["checks"])
         else 0
     )
 

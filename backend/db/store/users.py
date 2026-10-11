@@ -48,9 +48,7 @@ class UserRepository(Protocol):
 
     def touch_login(self, user_id: uuid.UUID) -> None: ...
 
-    def create_session(
-        self, token_hash: str, user_id: uuid.UUID, expires_at: datetime
-    ) -> None: ...
+    def create_session(self, token_hash: str, user_id: uuid.UUID, expires_at: datetime) -> None: ...
 
     def get_session_user(self, token_hash: str) -> User | None: ...
 
@@ -75,13 +73,9 @@ class UserRepository(Protocol):
 
     def list_visited(self, user_id: uuid.UUID) -> list[VisitedPlace]: ...
 
-    def mark_visited(
-        self, user_id: uuid.UUID, place_id: int
-    ) -> VisitedPlace | None: ...
+    def mark_visited(self, user_id: uuid.UUID, place_id: int) -> VisitedPlace | None: ...
 
-    def mark_visited_many(
-        self, user_id: uuid.UUID, place_ids: list[int]
-    ) -> list[int]: ...
+    def mark_visited_many(self, user_id: uuid.UUID, place_ids: list[int]) -> list[int]: ...
 
     def unmark_visited(self, user_id: uuid.UUID, place_id: int) -> bool: ...
 
@@ -118,9 +112,7 @@ class PostgresUserRepository(PostgresRepository):
                     """,
                     (client_id,),
                 )
-                cur.execute(
-                    "SELECT 1 FROM users WHERE client_id = %s", (client_id,)
-                )
+                cur.execute("SELECT 1 FROM users WHERE client_id = %s", (client_id,))
                 if cur.fetchone() is not None:
                     client_id = None
             try:
@@ -159,9 +151,7 @@ class PostgresUserRepository(PostgresRepository):
 
     def get_user(self, user_id: uuid.UUID) -> User | None:
         with self._cursor() as cur:
-            cur.execute(
-                f"SELECT {USER_SELECT} FROM users WHERE id = %s", (user_id,)
-            )
+            cur.execute(f"SELECT {USER_SELECT} FROM users WHERE id = %s", (user_id,))
             row = cur.fetchone()
         return model_from_row(User, row) if row is not None else None
 
@@ -192,13 +182,9 @@ class PostgresUserRepository(PostgresRepository):
 
     def touch_login(self, user_id: uuid.UUID) -> None:
         with self._cursor() as cur:
-            cur.execute(
-                "UPDATE users SET last_login_at = now() WHERE id = %s", (user_id,)
-            )
+            cur.execute("UPDATE users SET last_login_at = now() WHERE id = %s", (user_id,))
 
-    def create_session(
-        self, token_hash: str, user_id: uuid.UUID, expires_at: datetime
-    ) -> None:
+    def create_session(self, token_hash: str, user_id: uuid.UUID, expires_at: datetime) -> None:
         with self._cursor() as cur:
             cur.execute(
                 """
@@ -225,9 +211,7 @@ class PostgresUserRepository(PostgresRepository):
 
     def delete_session(self, token_hash: str) -> None:
         with self._cursor() as cur:
-            cur.execute(
-                "DELETE FROM user_sessions WHERE token_hash = %s", (token_hash,)
-            )
+            cur.execute("DELETE FROM user_sessions WHERE token_hash = %s", (token_hash,))
 
     def list_users(
         self, *, q: str = "", limit: int = 50, offset: int = 0
@@ -251,8 +235,7 @@ class PostgresUserRepository(PostgresRepository):
                 (pattern, pattern, limit, offset),
             )
             rows = [model_from_row(AdminUser, r) for r in cur.fetchall()]
-            cur.execute(f"SELECT count(*) AS n FROM users u WHERE {where}",
-                        (pattern, pattern))
+            cur.execute(f"SELECT count(*) AS n FROM users u WHERE {where}", (pattern, pattern))
             total = int(cur.fetchone()["n"])
         return rows, total
 
@@ -283,8 +266,7 @@ class PostgresUserRepository(PostgresRepository):
         params.append(user_id)
         with self._cursor() as cur:
             cur.execute(
-                f"UPDATE users SET {', '.join(sets)} WHERE id = %s "
-                f"RETURNING {USER_SELECT}",
+                f"UPDATE users SET {', '.join(sets)} WHERE id = %s RETURNING {USER_SELECT}",
                 tuple(params),
             )
             row = cur.fetchone()
@@ -305,9 +287,7 @@ class PostgresUserRepository(PostgresRepository):
             )
             return [model_from_row(VisitedPlace, row) for row in cur.fetchall()]
 
-    def mark_visited(
-        self, user_id: uuid.UUID, place_id: int
-    ) -> VisitedPlace | None:
+    def mark_visited(self, user_id: uuid.UUID, place_id: int) -> VisitedPlace | None:
         """Idempotent mark; ``None`` when the place does not exist."""
         with self._cursor() as cur:
             try:
@@ -326,9 +306,7 @@ class PostgresUserRepository(PostgresRepository):
             row = cur.fetchone()
         return model_from_row(VisitedPlace, row) if row is not None else None
 
-    def mark_visited_many(
-        self, user_id: uuid.UUID, place_ids: list[int]
-    ) -> list[int]:
+    def mark_visited_many(self, user_id: uuid.UUID, place_ids: list[int]) -> list[int]:
         """Mark several places at once; unknown ids are simply skipped."""
         if not place_ids:
             return []

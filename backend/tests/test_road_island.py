@@ -136,7 +136,9 @@ def test_render_falls_back_to_legs_when_the_tour_is_refused(monkeypatch):
 def test_no_path_400_is_classified_as_a_route_failure():
     assert _is_route_failure(_no_path_error())
     assert not _is_route_failure(
-        UpstreamUnavailable("valhalla GET /route failed after retries: [Errno 111] Connection refused")
+        UpstreamUnavailable(
+            "valhalla GET /route failed after retries: [Errno 111] Connection refused"
+        )
     )
 
 
@@ -147,7 +149,10 @@ def test_route_through_drops_the_island_stop_instead_of_raising(monkeypatch):
         payload = json.loads(params["json"])
         locs = payload["locations"]
         routed_sizes.append(len(locs))
-        if any(abs(loc["lat"] - ISLAND[0]) < 1e-4 and abs(loc["lon"] - ISLAND[1]) < 1e-4 for loc in locs):
+        if any(
+            abs(loc["lat"] - ISLAND[0]) < 1e-4 and abs(loc["lon"] - ISLAND[1]) < 1e-4
+            for loc in locs
+        ):
             raise _no_path_error()
         return {
             "trip": {

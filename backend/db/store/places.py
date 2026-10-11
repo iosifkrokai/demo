@@ -169,9 +169,7 @@ class PostgresPlaceRepository(PostgresRepository):
             return []
 
         conditions = " OR ".join(["name ILIKE %s OR name %%> %s"] * len(words))
-        word_sims = [
-            "GREATEST(similarity(name, %s), word_similarity(%s, name))"
-        ] * len(words)
+        word_sims = ["GREATEST(similarity(name, %s), word_similarity(%s, name))"] * len(words)
         order_expr = "(" + ") + (".join(word_sims) + ")"
 
         params: list[Any] = []
@@ -208,8 +206,15 @@ class PostgresPlaceRepository(PostgresRepository):
                 "ORDER BY (lat - %s) * (lat - %s) + (lon - %s) * (lon - %s) "
                 "LIMIT %s",
                 (
-                    lat - dlat, lat + dlat, lon - dlon, lon + dlon,
-                    lat, lat, lon, lon, limit,
+                    lat - dlat,
+                    lat + dlat,
+                    lon - dlon,
+                    lon + dlon,
+                    lat,
+                    lat,
+                    lon,
+                    lon,
+                    limit,
                 ),
             )
             return [place_from_row(row) for row in cur.fetchall()]
@@ -243,9 +248,7 @@ class PostgresPlaceRepository(PostgresRepository):
         params: list[Any] = [qvec, *bbox_params, qvec, limit]
         with self._cursor() as cur:
             cur.execute(sql, params)
-            return [
-                (place_from_row(row), float(row["cosine_dist"])) for row in cur.fetchall()
-            ]
+            return [(place_from_row(row), float(row["cosine_dist"])) for row in cur.fetchall()]
 
     def by_category(self, codes: Sequence[str], limit: int) -> list[Place]:
         """Places in any of these DB category values, in the pool's own order."""
@@ -253,8 +256,7 @@ class PostgresPlaceRepository(PostgresRepository):
             return []
         with self._cursor() as cur:
             cur.execute(
-                f"SELECT {PLACE_SELECT} FROM places "
-                "WHERE category = ANY(%s) LIMIT %s",
+                f"SELECT {PLACE_SELECT} FROM places WHERE category = ANY(%s) LIMIT %s",
                 (list(codes), limit),
             )
             return [place_from_row(row) for row in cur.fetchall()]
@@ -264,14 +266,10 @@ class PostgresPlaceRepository(PostgresRepository):
         if not ids:
             return {}
         with self._cursor() as cur:
-            cur.execute(
-                "SELECT id, category FROM places WHERE id = ANY(%s)", (list(ids),)
-            )
+            cur.execute("SELECT id, category FROM places WHERE id = ANY(%s)", (list(ids),))
             return {row["id"]: row["category"] for row in cur.fetchall()}
 
-    def with_category(
-        self, codes: Iterable[str], *, lat_lon_only: bool = False
-    ) -> list[Place]:
+    def with_category(self, codes: Iterable[str], *, lat_lon_only: bool = False) -> list[Place]:
         """Places in these categories — the quality layer's reference set.
 
         `lat_lon_only` keeps the rows the haversine cross-check needs.
@@ -301,9 +299,7 @@ class PostgresPlaceRepository(PostgresRepository):
             for place_id, raw in cur.fetchall():
                 if isinstance(raw, str):
                     try:
-                        out[place_id] = [
-                            float(x) for x in raw.strip("[]").split(",") if x.strip()
-                        ]
+                        out[place_id] = [float(x) for x in raw.strip("[]").split(",") if x.strip()]
                     except ValueError:
                         continue
                 else:
@@ -329,9 +325,7 @@ class PostgresPlaceRepository(PostgresRepository):
         line = route_line(shape)
         codes = service_codes(categories)
         if not codes:
-            return empty_answer(
-                codes, profile, max_off_line_m, reason="no_service_categories"
-            )
+            return empty_answer(codes, profile, max_off_line_m, reason="no_service_categories")
 
         threshold = threshold_for(profile, max_off_line_m)
         cap = max(1, int(limit))
@@ -343,7 +337,10 @@ class PostgresPlaceRepository(PostgresRepository):
         items = [item_of(row, line_m) for row in rows]
         log.info(
             "services_along: %d of at most %d beside a %.0f m line (%.0f m off-line gate)",
-            len(items), cap, line_m, threshold,
+            len(items),
+            cap,
+            line_m,
+            threshold,
         )
         return {
             "items": items,
@@ -374,8 +371,7 @@ class PostgresPlaceRepository(PostgresRepository):
         """Every row with no vector, oldest first — the backfill's work list."""
         with self._cursor() as cur:
             cur.execute(
-                "SELECT id, name, blurb FROM places "
-                "WHERE embedding IS NULL ORDER BY id",
+                "SELECT id, name, blurb FROM places WHERE embedding IS NULL ORDER BY id",
             )
             return [(row["id"], row["name"], row["blurb"]) for row in cur.fetchall()]
 
@@ -439,9 +435,7 @@ class PostgresPlaceRepository(PostgresRepository):
         assert row is not None
         return place_from_row(row)
 
-    def update_place(
-        self, place_id: int, fields: dict[str, Any]
-    ) -> Place | None:
+    def update_place(self, place_id: int, fields: dict[str, Any]) -> Place | None:
         """Patch a point; ``None`` when the id is unknown.
 
         A category change is an admin decision, so it runs with the
@@ -457,14 +451,10 @@ class PostgresPlaceRepository(PostgresRepository):
         params.append(place_id)
         with self._tx_cursor() as cur:
             if "category" in cols:
-                cur.execute(
-                    "SELECT set_config('grodno.allow_curated_category_change', "
-                    "'on', true)"
-                )
+                cur.execute("SELECT set_config('grodno.allow_curated_category_change', 'on', true)")
             try:
                 cur.execute(
-                    f"UPDATE places SET {', '.join(sets)} WHERE id = %s "
-                    f"RETURNING {PLACE_SELECT}",
+                    f"UPDATE places SET {', '.join(sets)} WHERE id = %s RETURNING {PLACE_SELECT}",
                     tuple(params),
                 )
             except psycopg.errors.UniqueViolation as exc:

@@ -28,9 +28,7 @@ REASON_TEXT: dict[str, str] = {
     REFINEMENT_UNSUPPORTED: (
         "Это изменение маршрута пока не поддерживается — оставили маршрут как есть."
     ),
-    REFINEMENT_UNRECOGNIZED: (
-        "Не поняли, что именно изменить — оставили маршрут как есть."
-    ),
+    REFINEMENT_UNRECOGNIZED: ("Не поняли, что именно изменить — оставили маршрут как есть."),
     REFINEMENT_REORDER_ATTRIBUTE_MISSING: (
         "Не указано, по какому признаку упорядочить остановки — оставили маршрут как есть."
     ),
@@ -94,10 +92,41 @@ _TOKEN_RE = re.compile(r"[0-9a-zа-яё]+", re.IGNORECASE)
 
 _STOPWORDS = frozenset(
     [
-        "и", "в", "во", "на", "с", "со", "по", "для", "от", "до", "из", "за", "у", "к",
-        "о", "об", "это", "тот", "этот", "эти", "пожалуйста", "маршрут", "маршруте",
-        "остановку", "остановки", "точки", "точку", "лишнее", "всё", "все", "все",
-        "всё-таки", "только", "ещё", "еще",
+        "и",
+        "в",
+        "во",
+        "на",
+        "с",
+        "со",
+        "по",
+        "для",
+        "от",
+        "до",
+        "из",
+        "за",
+        "у",
+        "к",
+        "о",
+        "об",
+        "это",
+        "тот",
+        "этот",
+        "эти",
+        "пожалуйста",
+        "маршрут",
+        "маршруте",
+        "остановку",
+        "остановки",
+        "точки",
+        "точку",
+        "лишнее",
+        "всё",
+        "все",
+        "все",
+        "всё-таки",
+        "только",
+        "ещё",
+        "еще",
     ]
 )
 
@@ -175,7 +204,7 @@ def _removed_names(text: str) -> tuple[str, ...]:
     if not _REMOVE_RE.search(norm):
         return ()
     match = _REMOVE_RE.search(norm)
-    tail = norm[match.end():] if match else norm
+    tail = norm[match.end() :] if match else norm
     cats = set(_detected_categories(text))
     out: list[str] = []
     for token in _TOKEN_RE.findall(tail):
@@ -488,11 +517,7 @@ def _context_changes(base: list[Candidate], route: list[Candidate]) -> RouteChan
     base_ids = {c.id for c in base}
     route_ids = {c.id for c in route}
     return RouteChanges(
-        added=[
-            RouteChange(id=c.id, name=c.name)
-            for c in route
-            if c.id not in base_ids
-        ],
+        added=[RouteChange(id=c.id, name=c.name) for c in route if c.id not in base_ids],
         removed=[
             RouteChange(
                 id=c.id,

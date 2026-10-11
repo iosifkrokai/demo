@@ -115,7 +115,7 @@ def embed_missing(places, *, batch: int = DB_BATCH) -> int:
 
     done = 0
     for i in range(0, len(pending), batch):
-        chunk = pending[i:i + batch]
+        chunk = pending[i : i + batch]
         texts = [f"{name}. {blurb or ''}" for _, name, blurb in chunk]
         vectors = embed_documents(texts)
         for (pid, _, _), vec in zip(chunk, vectors, strict=True):

@@ -86,8 +86,9 @@ class TestGeoFocus:
         anchor = _c(1, "Anchor", lat=53.95, lon=26.47, rrf_score=1.0)
         far = _c(2, "Far", lat=54.0, lon=27.0, rrf_score=0.9)
         result = _geo_focus([anchor, far], anchor_id=1)
-        assert [c.id for c in result] == [1], \
+        assert [c.id for c in result] == [1], (
             "isolated anchor: only the anchor survives the fix radius"
+        )
 
     def test_named_anchor_within_radius_exactly_2(self):
         """Exactly 2 candidates within radius: 3x branch returns them both."""

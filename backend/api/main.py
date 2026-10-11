@@ -41,6 +41,7 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
+
 # Re-exported: tests reach the shared planner caller and the two telemetry reads
 # through `api.main`, the module they have always come from.
 @asynccontextmanager
@@ -55,9 +56,12 @@ async def lifespan(_: FastAPI):
     app.state.repos = repos
     app.state.planner = Pipeline(repos=repos)
     model.embed_text("warmup")
-    log.info("agent ready (embeddings=%s local, interpret=%s, key=%s)",
-             model.MODEL_NAME, DEFAULT_MODEL,
-             "set" if openrouter_api_key() else "MISSING")
+    log.info(
+        "agent ready (embeddings=%s local, interpret=%s, key=%s)",
+        model.MODEL_NAME,
+        DEFAULT_MODEL,
+        "set" if openrouter_api_key() else "MISSING",
+    )
     if not openrouter_api_key():
         log.warning(
             "no OPENROUTER_API_KEY — the planner has no reader for a request: "

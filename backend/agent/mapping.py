@@ -80,7 +80,8 @@ def _reading_requirements(
         ) is False and areas_mod.resolve_area((item.name or "").strip()):
             log.info(
                 "interpretation: must_visit %r — территория (%s), не остановка",
-                item.name, areas_mod.resolve_area((item.name or "").strip()),
+                item.name,
+                areas_mod.resolve_area((item.name or "").strip()),
             )
             continue
 

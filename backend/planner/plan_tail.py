@@ -78,10 +78,9 @@ def run_plan_tail(
         route=[c.name for c in route],
         algorithm=info.get("algorithm"),
         iterations=info.get("iterations"),
-        must_missing=[
-            by_id.get(i, str(i))
-            for i in info.get("missing_must_visit_ids") or []
-        ][:_TRACE_NAMES_MAX],
+        must_missing=[by_id.get(i, str(i)) for i in info.get("missing_must_visit_ids") or []][
+            :_TRACE_NAMES_MAX
+        ],
     )
 
     # A route that collapsed to a single stop is retried twice before giving up:
@@ -92,7 +91,8 @@ def run_plan_tail(
         if 2 <= len(sights) < len(candidates):
             log.info(
                 "optimize collapsed to %d stop(s) — retrying on %d sight stop(s)",
-                len(route), len(sights),
+                len(route),
+                len(sights),
             )
             retry_candidates, retry_cost = _build_cost(sights, constraints, costing)
             retry_route, retry_info = optimize(
@@ -100,7 +100,10 @@ def run_plan_tail(
             )
             if len(retry_route) >= 2:
                 candidates, cost, route, info = (
-                    retry_candidates, retry_cost, retry_route, retry_info,
+                    retry_candidates,
+                    retry_cost,
+                    retry_route,
+                    retry_info,
                 )
                 retry = {"why": "walkable", "pool": _names(sights)}
     if len(route) < 2 and len(turn.all_candidates) > len(candidates):
@@ -111,7 +114,10 @@ def run_plan_tail(
         )
         if len(retry_route) >= 2:
             candidates, cost, route, info = (
-                retry_candidates, retry_cost, retry_route, retry_info,
+                retry_candidates,
+                retry_cost,
+                retry_route,
+                retry_info,
             )
             retry = {"why": "services_back", "pool": _names(turn.all_candidates)}
     if retry is not None:
@@ -150,9 +156,7 @@ def run_plan_tail(
     )
 
     planned = len(route)
-    route, prune_report = _prune_unroutable(
-        route, candidates, cost, constraints.must_visit_ids
-    )
+    route, prune_report = _prune_unroutable(route, candidates, cost, constraints.must_visit_ids)
     info = _order_after_prune(info, route, candidates)
     trace.record(
         "prune",

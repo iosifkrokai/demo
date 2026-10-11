@@ -32,9 +32,7 @@ from .preprocess import WORD_RE
 log = _logging.getLogger(__name__)
 
 
-def intent_from_requirements(
-    requirements: TripRequirements, query: str
-) -> IntentResult:
+def intent_from_requirements(requirements: TripRequirements, query: str) -> IntentResult:
     """Derive the ``IntentResult`` that ``resolve()`` consumes from a contract."""
     cats_pos: list[str] = []
     for code in (
@@ -45,8 +43,7 @@ def intent_from_requirements(
         if code and code in constants.CATEGORIES and code not in cats_pos:
             cats_pos.append(code)
     cats_neg = [
-        c for c in requirements.avoid_codes()
-        if c in constants.CATEGORIES and c not in cats_pos
+        c for c in requirements.avoid_codes() if c in constants.CATEGORIES and c not in cats_pos
     ]
 
     decision = IntentDecision(
@@ -76,9 +73,7 @@ def _scope_from_areas(areas: list[str]) -> str:
     from reference import areas as areas_mod
 
     kinds = {
-        entry["kind"]
-        for entry in (areas_mod.area_lookup_by_slug(slug) for slug in areas)
-        if entry
+        entry["kind"] for entry in (areas_mod.area_lookup_by_slug(slug) for slug in areas) if entry
     }
     if "region" in kinds:
         return "region"
@@ -87,9 +82,7 @@ def _scope_from_areas(areas: list[str]) -> str:
     return "town"
 
 
-def _interpret_cache_key(
-    query: str, brief: ReaderBrief
-) -> tuple[str | None, str]:
+def _interpret_cache_key(query: str, brief: ReaderBrief) -> tuple[str | None, str]:
     """None when the agent cannot run at all; the prompt is hashed into the key, so
     editing the instructions invalidates every entry.
     """
@@ -138,9 +131,7 @@ def mark_out_of_coverage(contract: TripRequirements, names: list[str]) -> None:
     from agent.models import REASON_MUST_VISIT_OUTSIDE
 
     by_name = {
-        (r.name or "").strip().lower(): r
-        for r in contract.requirements
-        if r.kind == "must_visit"
+        (r.name or "").strip().lower(): r for r in contract.requirements if r.kind == "must_visit"
     }
     for name in names:
         key = name.strip().lower()
@@ -148,9 +139,7 @@ def mark_out_of_coverage(contract: TripRequirements, names: list[str]) -> None:
             continue
         r = by_name.get(key)
         if r is None:
-            r = Requirement(
-                kind="must_visit", name=name, label=name, text=name, source="text"
-            )
+            r = Requirement(kind="must_visit", name=name, label=name, text=name, source="text")
             contract.requirements.append(r)
             by_name[key] = r
         r.strength = "hard"
@@ -158,9 +147,7 @@ def mark_out_of_coverage(contract: TripRequirements, names: list[str]) -> None:
         r.place_id = None
 
 
-def _finalize_agent_contract(
-    contract: TripRequirements, brief: ReaderBrief
-) -> TripRequirements:
+def _finalize_agent_contract(contract: TripRequirements, brief: ReaderBrief) -> TripRequirements:
     """Top up an agent contract with the facts the request states explicitly.
 
     The model reads the text; the controls the tourist actually pressed must not
@@ -168,12 +155,9 @@ def _finalize_agent_contract(
     """
     ui_reqs = ui_requirements(brief)
     contract.requirements, _ = _merge_requirements(ui_reqs, contract.requirements)
-    ui_positive = {
-        r.code for r in ui_reqs if r.code and r.kind in ("interest", "service")
-    }
+    ui_positive = {r.code for r in ui_reqs if r.code and r.kind in ("interest", "service")}
     contract.requirements = [
-        r for r in contract.requirements
-        if not (r.kind == "avoid" and r.code in ui_positive)
+        r for r in contract.requirements if not (r.kind == "avoid" and r.code in ui_positive)
     ]
 
     if brief.party_children is not None:
@@ -188,10 +172,7 @@ def _finalize_agent_contract(
     if brief.time_budget_minutes is not None:
         contract.budget_minutes = brief.time_budget_minutes or None
 
-    if (
-        "wheelchair" in contract.party.mobility
-        and "wheelchair_accessible" not in contract.unknowns
-    ):
+    if "wheelchair" in contract.party.mobility and "wheelchair_accessible" not in contract.unknowns:
         contract.unknowns.append("wheelchair_accessible")
     if contract.budget_minutes is not None:
         contract.budget_minutes = max(
@@ -260,7 +241,10 @@ def reader_brief(req: GenerateReq) -> ReaderBrief:
 
 
 def build_requirements(
-    query: str, req: GenerateReq, *, repos: object | None = None,
+    query: str,
+    req: GenerateReq,
+    *,
+    repos: object | None = None,
     wall_clock_s: float | None = None,
 ) -> TripRequirements:
     """Interpret one request into the frozen `TripRequirements` contract.
@@ -285,11 +269,10 @@ def build_requirements(
 
     log.info(
         "requirements: agent reading (source=%s, %d requirement(s))",
-        contract.source, len(contract.requirements),
+        contract.source,
+        len(contract.requirements),
     )
     final = _finalize_agent_contract(contract, brief)
     if cache_key is not None:
-        interpret_cache.INTERPRET_CACHE.put(
-            cache_key, final.model_copy(deep=True), prompt_hash
-        )
+        interpret_cache.INTERPRET_CACHE.put(cache_key, final.model_copy(deep=True), prompt_hash)
     return final

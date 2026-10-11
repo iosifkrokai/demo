@@ -38,9 +38,7 @@ def itineraries(request: Request) -> dict:
     `missing` names any stop key that no longer resolves.
     """
     try:
-        items, missing = itineraries_mod.resolve_itineraries(
-            deps.get_repos(request).places
-        )
+        items, missing = itineraries_mod.resolve_itineraries(deps.get_repos(request).places)
     except ItinerariesUnavailable as exc:
         log.error("itineraries unavailable: %s", exc)
         raise deps.http_error(503, "itineraries_unavailable") from exc

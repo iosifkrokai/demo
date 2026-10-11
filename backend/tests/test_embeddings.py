@@ -63,6 +63,7 @@ def test_available_is_true_when_a_model_is_installed(fake):
 
 def test_embedding_dim_matches_the_schema():
     """Drift guard: the model dim and the `vector(N)` columns must agree."""
+
     def dims(sql: str) -> set[int]:
         return {int(n) for n in re.findall(r"vector\(\s*(\d+)\s*\)", sql, re.IGNORECASE)}
 

@@ -42,7 +42,9 @@ from planner.verify import (
 )
 
 
-def _cand(pid: int, name: str, category: str | None, lat: float = 53.68, lon: float = 23.83) -> Candidate:
+def _cand(
+    pid: int, name: str, category: str | None, lat: float = 53.68, lon: float = 23.83
+) -> Candidate:
     return Candidate(id=pid, name=name, category=category, lat=lat, lon=lon)
 
 
@@ -59,9 +61,7 @@ def _reqs(*requirements: Requirement, budget: int | None = None) -> TripRequirem
 
 def test_must_visit_on_route_is_satisfied():
     route = [_cand(7, "Старый замок", "замок"), _cand(8, "Костёл", "костёл")]
-    reqs = _reqs(
-        Requirement(kind="must_visit", strength="hard", name="Старый замок", place_id=7)
-    )
+    reqs = _reqs(Requirement(kind="must_visit", strength="hard", name="Старый замок", place_id=7))
 
     result = verify(reqs, route, _geom())
 
@@ -86,7 +86,9 @@ def test_a_service_beside_the_line_satisfies_the_requirement():
     """«Кофе по пути» — the case that used to be permanently unmet."""
     route = [_cand(1, "Старый замок", "замок")]
     reqs = _reqs(Requirement(kind="service", strength="soft", code="кафе"))
-    measured = ServiceAlongEvidence(True, {"кафе": [{"id": 42, "name": "Ссобойка", "off_line_m": 1}]})
+    measured = ServiceAlongEvidence(
+        True, {"кафе": [{"id": 42, "name": "Ссобойка", "off_line_m": 1}]}
+    )
 
     result = verify(reqs, route, _geom(), measured)
 
@@ -118,7 +120,9 @@ def test_measured_and_nothing_beside_the_line_is_still_unmet():
 def test_measured_but_no_line_is_uncertain_not_satisfied():
     route = [_cand(1, "Старый замок", "замок")]
     reqs = _reqs(Requirement(kind="service", strength="soft", code="кафе"))
-    measured = ServiceAlongEvidence(True, {"кафе": [{"id": 42, "name": "Ссобойка", "off_line_m": 1}]})
+    measured = ServiceAlongEvidence(
+        True, {"кафе": [{"id": 42, "name": "Ссобойка", "off_line_m": 1}]}
+    )
 
     result = verify(reqs, route, None, measured)
 
@@ -129,7 +133,9 @@ def test_measured_but_no_line_is_uncertain_not_satisfied():
 def test_evidence_for_another_category_does_not_satisfy():
     route = [_cand(1, "Старый замок", "замок")]
     reqs = _reqs(Requirement(kind="service", strength="hard", code="туалет"))
-    measured = ServiceAlongEvidence(True, {"кафе": [{"id": 42, "name": "Ссобойка", "off_line_m": 1}]})
+    measured = ServiceAlongEvidence(
+        True, {"кафе": [{"id": 42, "name": "Ссобойка", "off_line_m": 1}]}
+    )
 
     result = verify(reqs, route, _geom(), measured)
 
@@ -168,9 +174,7 @@ def test_verify_accepts_a_validated_plan_object():
         stops_dropped=0,
         trace={},
     )
-    reqs = _reqs(
-        Requirement(kind="must_visit", strength="hard", place_id=7, name="Старый замок")
-    )
+    reqs = _reqs(Requirement(kind="must_visit", strength="hard", place_id=7, name="Старый замок"))
 
     result = verify(reqs, plan, _geom())
 
@@ -253,9 +257,7 @@ def test_avoid_honoured_is_satisfied():
 )
 def test_missing_geometry_is_uncertain_never_satisfied(geometry):
     route = [_cand(7, "Старый замок", "замок")]
-    reqs = _reqs(
-        Requirement(kind="must_visit", strength="hard", place_id=7, name="Старый замок")
-    )
+    reqs = _reqs(Requirement(kind="must_visit", strength="hard", place_id=7, name="Старый замок"))
 
     result = verify(reqs, route, geometry)
 
@@ -333,9 +335,7 @@ def test_prune_never_silently_removes_a_must_visit_stop():
     b = _cand(2, "Каплица на острове", "костёл", lat=53.007, lon=23.917)
     c = _cand(3, "Гродно", "памятник", lat=53.678, lon=23.827)
 
-    kept, report = prune_unroutable_stops(
-        [a, b, c], [a, b, c], _island_cost(), must_visit_ids=[2]
-    )
+    kept, report = prune_unroutable_stops([a, b, c], [a, b, c], _island_cost(), must_visit_ids=[2])
 
     assert [x.id for x in kept] == [1, 2, 3], "mandatory stop must stay on the route"
     assert [p.id for p in report] == [2]
@@ -400,9 +400,7 @@ def test_validate_records_missing_must_visit_as_unmet():
     reqs = _reqs(Requirement(kind="must_visit", strength="hard", place_id=42, name="Форт"))
     info = {"order": [0, 1], "algorithm": "brute_open", "missing_must_visit_ids": [42]}
 
-    plan = validate(
-        route, cost, constraints, info, requirements=reqs, geometry=_geom()
-    )
+    plan = validate(route, cost, constraints, info, requirements=reqs, geometry=_geom())
 
     assert plan.trace["missing_must_visit_ids"] == [42]
     assert reqs.requirements[0].status == "unmet"

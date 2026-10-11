@@ -50,9 +50,7 @@ class FakeLLM:
 
     def model(self) -> FunctionModel:
         def fn(messages, info: AgentInfo) -> ModelResponse:
-            return ModelResponse(
-                [ToolCallPart("final_result", json.dumps(self.payload))]
-            )
+            return ModelResponse([ToolCallPart("final_result", json.dumps(self.payload))])
 
         return FunctionModel(fn, model_name="fake-interpret")
 

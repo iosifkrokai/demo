@@ -107,5 +107,3 @@ def register_all(agent: Any, remember: Callable[[Any, dict], dict]) -> None:
     """Advertise every tool in the registry on ``agent``."""
     for register in TOOL_REGISTRARS:
         register(agent, remember)
-
-

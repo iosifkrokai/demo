@@ -127,9 +127,7 @@ def _live_available() -> bool:
         return False
 
 
-@pytest.mark.skipif(
-    not _live_available(), reason=f"backend not answering at {BASE_URL}"
-)
+@pytest.mark.skipif(not _live_available(), reason=f"backend not answering at {BASE_URL}")
 def test_live_places_returns_the_dataset_with_coordinates():
     with urllib.request.urlopen(f"{BASE_URL}/places", timeout=10) as r:
         assert r.status == 200

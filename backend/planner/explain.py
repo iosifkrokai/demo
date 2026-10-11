@@ -41,9 +41,7 @@ def _area_name(route: list[Candidate]) -> str:
     return "Гродно"
 
 
-def _requirements_section(
-    trace: dict, requirements: TripRequirements | None
-) -> list[str]:
+def _requirements_section(trace: dict, requirements: TripRequirements | None) -> list[str]:
     """The satisfied / unmet / uncertain breakdown, from the verifier.
 
     Prefers the live ``requirements``, else the trace snapshot; [] if none ran.

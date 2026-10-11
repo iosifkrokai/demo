@@ -43,8 +43,11 @@ def catalogue_response(
     towns = sorted({(c.town or "").strip() for c in ordered if (c.town or "").strip()})
     log.info(
         "pipeline.catalogue query_len=%d n=%d towns=%d ms=%d status=%s",
-        len(req.query), len(ordered), len(towns),
-        int((_time.perf_counter() - t0) * 1000), status,
+        len(req.query),
+        len(ordered),
+        len(towns),
+        int((_time.perf_counter() - t0) * 1000),
+        status,
     )
     trace.record(
         "verify",

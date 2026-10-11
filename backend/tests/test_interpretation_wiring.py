@@ -64,7 +64,6 @@ def _plan(*stops: Candidate) -> ValidatedPlan:
 
 
 class TestNoReaderRefuses:
-
     def test_no_key_refuses_the_request(self, no_key):
         with pytest.raises(InterpretationUnavailable):
             build_requirements(RU, GenerateReq(query=RU, hard_services=["туалет"]))
@@ -84,20 +83,21 @@ class TestNoReaderRefuses:
 
 
 class TestUiFilterWins:
-
     def test_model_omitting_a_ui_filter_does_not_lose_it(self, with_key, monkeypatch):
         """The toilet is switched ON in the UI; the model's contract does not
         mention it.  The filter survives — hard, and attributed to the UI."""
         monkeypatch.setattr(
-            intent_mod, "_agent_contract",
+            intent_mod,
+            "_agent_contract",
             lambda *a, **k: _contract(
                 Requirement(kind="interest", strength="soft", code="замок", label="замок")
             ),
         )
         tr = build_requirements(
             RU,
-            GenerateReq(query=RU, hard_services=["туалет"], party_children=1,
-                        time_budget_minutes=45),
+            GenerateReq(
+                query=RU, hard_services=["туалет"], party_children=1, time_budget_minutes=45
+            ),
         )
         svc = [r for r in tr.requirements if r.kind == "service" and r.code == "туалет"]
         assert len(svc) == 1
@@ -111,10 +111,12 @@ class TestUiFilterWins:
         """The model says the toilet is merely optional; the UI says mandatory.
         The UI reading stands and there is exactly one such requirement."""
         monkeypatch.setattr(
-            intent_mod, "_agent_contract",
+            intent_mod,
+            "_agent_contract",
             lambda *a, **k: _contract(
-                Requirement(kind="service", strength="soft", code="туалет",
-                            label="туалет", source="text"),
+                Requirement(
+                    kind="service", strength="soft", code="туалет", label="туалет", source="text"
+                ),
             ),
         )
         tr = build_requirements(RU, GenerateReq(query=RU, hard_services=["туалет"]))
@@ -127,7 +129,8 @@ class TestUiFilterWins:
         """The UI turns «музей» ON; the model wants to avoid it.  A visible
         positive filter is not overridden by the model's reading."""
         monkeypatch.setattr(
-            intent_mod, "_agent_contract",
+            intent_mod,
+            "_agent_contract",
             lambda *a, **k: _contract(
                 Requirement(kind="avoid", strength="hard", code="музей", label="музей")
             ),
@@ -138,7 +141,6 @@ class TestUiFilterWins:
 
 
 class TestFailuresDegrade:
-
     def test_a_tool_failure_refuses_the_request(self, with_key, monkeypatch):
         """A bounded tool blowing up inside the agent costs the reading, and with
         no reading there is no contract: the request is refused, never guessed at."""
@@ -169,6 +171,7 @@ class TestFailuresDegrade:
 
     def test_an_upstream_error_is_503_not_500(self):
         """The last-resort net: what escapes the planner is a typed 503."""
+
         def failing(**_kw):
             raise UpstreamUnavailable("valhalla: /route failed: 502")
 
@@ -179,13 +182,18 @@ class TestFailuresDegrade:
 
 
 class TestVerifierDecides:
-
     def _mandatory_toilet(self) -> TripRequirements:
         """Exactly what the interpretation agent would hand over: a hard,
         model-produced requirement to have a toilet on the route."""
         return _contract(
-            Requirement(kind="service", strength="hard", code="туалет",
-                        label="туалет", text="туалет обязательно", source="text"),
+            Requirement(
+                kind="service",
+                strength="hard",
+                code="туалет",
+                label="туалет",
+                text="туалет обязательно",
+                source="text",
+            ),
         )
 
     def test_a_served_mandatory_requirement_is_verified_satisfied(self):
@@ -202,9 +210,7 @@ class TestVerifierDecides:
         """The model asked for a toilet; the route has none.  The model does not
         get a vote — verify.py marks it unmet and the plan infeasible."""
         tr = self._mandatory_toilet()
-        plan = _plan(
-            Candidate(id=2, name="Кафе", category="кафе", lat=53.681, lon=23.821)
-        )
+        plan = _plan(Candidate(id=2, name="Кафе", category="кафе", lat=53.681, lon=23.821))
         verify(tr, plan, GEOJSON)
         assert tr.requirements[0].status == "unmet"
         assert tr.requirements[0].reason == "hard_service_absent"
@@ -230,8 +236,14 @@ class TestInterpretationBlock:
 
     def _mandatory_toilet(self) -> TripRequirements:
         return _contract(
-            Requirement(kind="service", strength="hard", code="туалет",
-                        label="туалет", text="туалет обязательно", source="text"),
+            Requirement(
+                kind="service",
+                strength="hard",
+                code="туалет",
+                label="туалет",
+                text="туалет обязательно",
+                source="text",
+            ),
             Requirement(kind="interest", strength="soft", code="костёл", label="костёл"),
         )
 
@@ -239,9 +251,7 @@ class TestInterpretationBlock:
         """The owner's live bug: the same query sometimes planned a route with
         no toilet, silently.  The response must say so, with a reason code."""
         tr = self._mandatory_toilet()
-        plan = _plan(
-            Candidate(id=4, name="Фарный костёл", category="костёл", lat=53.68, lon=23.82)
-        )
+        plan = _plan(Candidate(id=4, name="Фарный костёл", category="костёл", lat=53.68, lon=23.82))
         verify(tr, plan, GEOJSON)
         block = _interpretation(tr, overall_status(tr))
 
@@ -273,22 +283,38 @@ class TestInterpretationBlock:
         block = _interpretation(tr, overall_status(tr))
         dumped = block.model_dump()
         assert set(dumped) >= {
-            "source", "locale", "status", "requirements", "unmet", "unknowns",
-            "areas", "budget_minutes", "transport", "result_mode",
+            "source",
+            "locale",
+            "status",
+            "requirements",
+            "unmet",
+            "unknowns",
+            "areas",
+            "budget_minutes",
+            "transport",
+            "result_mode",
         }
         for s in dumped["requirements"]:
             assert set(s) == {
-                "kind", "strength", "code", "name", "origin", "status",
-                "reason", "place_ids",
+                "kind",
+                "strength",
+                "code",
+                "name",
+                "origin",
+                "status",
+                "reason",
+                "place_ids",
             }
 
     def test_provenance_says_ui_or_model_or_parser(self, with_key, monkeypatch):
         """Each chip is attributed: a visible control, the model, or the parser."""
         monkeypatch.setattr(
-            intent_mod, "_agent_contract",
+            intent_mod,
+            "_agent_contract",
             lambda *a, **k: _contract(
-                Requirement(kind="service", strength="hard", code="туалет",
-                            label="туалет", source="text"),
+                Requirement(
+                    kind="service", strength="hard", code="туалет", label="туалет", source="text"
+                ),
                 source="llm",
             ),
         )
@@ -304,8 +330,18 @@ class TestInterpretationBlock:
         from planner.models import RouteResponse
 
         fields = RouteResponse.model_fields
-        for old in ("parsed", "points", "shape", "summary", "budget",
-                    "explanation", "status", "requirements", "costing",
-                    "changes", "debug"):
+        for old in (
+            "parsed",
+            "points",
+            "shape",
+            "summary",
+            "budget",
+            "explanation",
+            "status",
+            "requirements",
+            "costing",
+            "changes",
+            "debug",
+        ):
             assert old in fields
         assert "interpretation" in fields

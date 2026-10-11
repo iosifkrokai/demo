@@ -53,24 +53,46 @@ def optimize(
 
     if n <= 6:
         order, info = _brute_open(
-            candidates, matrix, visits, budget_s, info,
-            costing=costing, round_trip=constraints.round_trip,
+            candidates,
+            matrix,
+            visits,
+            budget_s,
+            info,
+            costing=costing,
+            round_trip=constraints.round_trip,
         )
     elif n <= 12:
         order, info = _regret_insertion(
-            candidates, matrix, visits, budget_s, must_idx, info,
-            costing=costing, round_trip=constraints.round_trip,
+            candidates,
+            matrix,
+            visits,
+            budget_s,
+            must_idx,
+            info,
+            costing=costing,
+            round_trip=constraints.round_trip,
         )
     else:
         order, info = _nn_2opt_multi(
-            candidates, matrix, visits, budget_s, info,
-            costing=costing, round_trip=constraints.round_trip,
+            candidates,
+            matrix,
+            visits,
+            budget_s,
+            info,
+            costing=costing,
+            round_trip=constraints.round_trip,
         )
 
     must_ids = set(constraints.must_visit_ids)
     constrained, dropped = _budget_constrain(
-        candidates, order, matrix, visits, budget_s, must_ids,
-        costing=costing, round_trip=constraints.round_trip,
+        candidates,
+        order,
+        matrix,
+        visits,
+        budget_s,
+        must_ids,
+        costing=costing,
+        round_trip=constraints.round_trip,
     )
     if constrained != list(range(n)):
         new_order = [i for i in constrained if i < len(candidates)]
@@ -100,11 +122,7 @@ def _report_missing_must(
     if not constraints.must_visit_ids:
         return info
     final_ids = {candidates[i].id for i in order if 0 <= i < len(candidates)}
-    missing = [
-        mid
-        for mid in dict.fromkeys(constraints.must_visit_ids)
-        if mid not in final_ids
-    ]
+    missing = [mid for mid in dict.fromkeys(constraints.must_visit_ids) if mid not in final_ids]
     if missing:
         return {**info, "missing_must_visit_ids": missing}
     return info
@@ -173,9 +191,7 @@ def _worst_leg(
     return worst
 
 
-def _most_saving(
-    removable: list[int], route: list[int], total_of
-) -> int:
+def _most_saving(removable: list[int], route: list[int], total_of) -> int:
     """The removable stop whose deletion buys the most time."""
     current = total_of(route)
     best_i, best_saving = removable[0], float("-inf")
@@ -258,9 +274,7 @@ def _max_leg_seconds(budget_s: int | None, costing: str = "pedestrian") -> float
     return min(budget_share_s, km_limit_s)
 
 
-def _max_leg(
-    route: list[int], matrix: list[list[float]], round_trip: bool = False
-) -> float:
+def _max_leg(route: list[int], matrix: list[list[float]], round_trip: bool = False) -> float:
     """Longest single walking leg in a route, in seconds.
 
     A round trip's return leg counts; a NaN ("could not ask") leg is skipped.
@@ -323,12 +337,14 @@ def _brute_open(
         best_route = list(range(n))
         best_total = _order_total(best_route, matrix, visits, round_trip)
 
-    info.update({
-        "algorithm": "brute_open",
-        "order": best_route,
-        "walk_seconds": best_cost,
-        "total_seconds": int(best_total),
-    })
+    info.update(
+        {
+            "algorithm": "brute_open",
+            "order": best_route,
+            "walk_seconds": best_cost,
+            "total_seconds": int(best_total),
+        }
+    )
     return best_route, info
 
 
@@ -375,8 +391,7 @@ def _regret_insertion(
                 continue
             insertion_costs.sort()
             regret = (
-                insertion_costs[1][0] - insertion_costs[0][0]
-                if len(insertion_costs) > 1 else 0
+                insertion_costs[1][0] - insertion_costs[0][0] if len(insertion_costs) > 1 else 0
             )
             if best_choice is None or regret > best_choice[0]:
                 best_choice = (regret, c, insertion_costs[0][1])
@@ -385,9 +400,7 @@ def _regret_insertion(
             break
         _, chosen, pos = best_choice
         new_route = [*route[:pos], chosen, *route[pos:]]
-        if budget_s is not None and _order_total(
-            new_route, matrix, visits, round_trip
-        ) > budget_s:
+        if budget_s is not None and _order_total(new_route, matrix, visits, round_trip) > budget_s:
             remaining.remove(chosen)
             skipped += 1
             continue
@@ -395,14 +408,16 @@ def _regret_insertion(
         remaining.remove(chosen)
         iterations += 1
 
-    info.update({
-        "algorithm": "regret_2",
-        "order": route,
-        "iterations": iterations,
-        "skipped_over_budget": skipped,
-        "walk_seconds": walk_cost(route, matrix),
-        "total_seconds": int(_order_total(route, matrix, visits, round_trip)),
-    })
+    info.update(
+        {
+            "algorithm": "regret_2",
+            "order": route,
+            "iterations": iterations,
+            "skipped_over_budget": skipped,
+            "walk_seconds": walk_cost(route, matrix),
+            "total_seconds": int(_order_total(route, matrix, visits, round_trip)),
+        }
+    )
     return route, info
 
 
@@ -456,12 +471,14 @@ def _nn_2opt_multi(
         best_total = _order_total(best_route, matrix, visits, round_trip)
         best_walk = walk_cost(best_route, matrix)
 
-    info.update({
-        "algorithm": "nn_2opt_multi",
-        "order": best_route,
-        "walk_seconds": best_walk,
-        "total_seconds": int(best_total),
-    })
+    info.update(
+        {
+            "algorithm": "nn_2opt_multi",
+            "order": best_route,
+            "walk_seconds": best_walk,
+            "total_seconds": int(best_total),
+        }
+    )
     return best_route, info
 
 
@@ -500,7 +517,7 @@ def _two_opt(order: list[int], matrix: list[list[float]]) -> list[int]:
                 new = matrix[a][c] + matrix[b][d]
                 if not new + 1e-6 < old:
                     continue
-                candidate = order[:i] + order[i:j + 1][::-1] + order[j + 1:]
+                candidate = order[:i] + order[i : j + 1][::-1] + order[j + 1 :]
                 candidate_cost = walk_cost(candidate, matrix)
                 if candidate_cost + 1e-6 < current:
                     order = candidate
@@ -550,9 +567,7 @@ def _prune_unroutable(
 
     Returns ``(route, report)``; a mandatory stop is never removed but reported.
     """
-    route, pruned = prune_unroutable_stops(
-        route, candidates, cost, must_visit_ids=must_visit_ids
-    )
+    route, pruned = prune_unroutable_stops(route, candidates, cost, must_visit_ids=must_visit_ids)
     if pruned:
         log.warning(
             "pruned %d stop(s) Valhalla cannot reach in this order: %s",
@@ -561,15 +576,12 @@ def _prune_unroutable(
         )
     if len(route) < 2:
         raise NoRoutePossible(
-            "Valhalla не нашла дороги между нашими точками — "
-            "уточните город или район"
+            "Valhalla не нашла дороги между нашими точками — уточните город или район"
         )
     return route, pruned
 
 
-def _order_after_prune(
-    info: dict, route: list[Candidate], candidates: list[Candidate]
-) -> dict:
+def _order_after_prune(info: dict, route: list[Candidate], candidates: list[Candidate]) -> dict:
     """``info["order"]`` holds indices into the cost matrix, so a shortened route
     needs them recomputed.
     """

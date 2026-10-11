@@ -86,4 +86,3 @@ def _fallback_truncate(
         reverse=True,
     )
     return (must + rest)[:n]
-

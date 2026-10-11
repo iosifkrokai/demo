@@ -20,9 +20,7 @@ from .validate import validate
 from .verify import overall_status
 
 
-def _outside_left_unresolved(
-    requirements: Any, constraints: ResolvedConstraints
-) -> list[str]:
+def _outside_left_unresolved(requirements: Any, constraints: ResolvedConstraints) -> list[str]:
     """Names the reading placed outside the region that stayed unresolvable.
 
     A name that resolved to a place inside the region is not a refusal.
@@ -31,8 +29,7 @@ def _outside_left_unresolved(
     if not flagged:
         return []
     resolved = {
-        (n or "").strip().lower()
-        for n in (getattr(constraints, "resolved_names", None) or [])
+        (n or "").strip().lower() for n in (getattr(constraints, "resolved_names", None) or [])
     }
     return [n for n in flagged if (n or "").strip().lower() not in resolved]
 

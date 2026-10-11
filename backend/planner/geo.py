@@ -46,11 +46,13 @@ def _geo_focus_report(
     if origin is not None:
         anchor = origin
         anchor_name = "GPS"
+
         def dist(c):
             return _distance_from_origin_m(c, origin)
     elif anchor_id is not None and any(c.id == anchor_id for c in candidates):
         anchor = next(c for c in candidates if c.id == anchor_id)
         anchor_name = anchor.name
+
         def dist(c):
             return _distance_m(c, anchor)
     else:
@@ -63,8 +65,10 @@ def _geo_focus_report(
             ),
         )
         anchor_name = anchor.name
+
         def dist(c):
             return _distance_m(c, anchor)
+
     max_m = constants.GEO_FOCUS_KM * 1000
 
     if origin is not None or anchor_id is not None:
@@ -73,10 +77,7 @@ def _geo_focus_report(
 
     discovery_max_m = constants.GEO_FOCUS_DISCOVERY_MAX_KM * 1000
     while True:
-        keep = [
-            c for c in candidates
-            if c is anchor or dist(c) <= max_m
-        ]
+        keep = [c for c in candidates if c is anchor or dist(c) <= max_m]
         if len(keep) >= 3 or max_m >= discovery_max_m:
             return keep, _geo_report(anchor_name, max_m, candidates, keep, dist)
         max_m = min(max_m * 2, discovery_max_m)
@@ -99,8 +100,7 @@ def _geo_report(
         "anchor": anchor_name,
         "radius_km": round(max_m / 1000, 1),
         "dropped": [
-            {"name": c.name, "km": round(dist(c) / 1000, 1)}
-            for c in dropped[:_TRACE_NAMES_MAX]
+            {"name": c.name, "km": round(dist(c) / 1000, 1)} for c in dropped[:_TRACE_NAMES_MAX]
         ],
     }
 

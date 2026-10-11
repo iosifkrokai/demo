@@ -50,9 +50,7 @@ def resolve_itineraries(
 
     out: list[dict[str, Any]] = []
     for item in authored:
-        payloads = [
-            place_payload(found[key]) for key in item.get("stops", []) if key in found
-        ]
+        payloads = [place_payload(found[key]) for key in item.get("stops", []) if key in found]
         stops, services = _split_by_role(payloads)
         visit_minutes = sum(s["visit_minutes"] or 0 for s in stops)
         out.append(

@@ -163,19 +163,13 @@ class TripRequirements(BaseModel):
 
     def hard_service_codes(self) -> list[str]:
         """Category codes that MUST appear on the route."""
-        return [
-            r.code for r in self.hard() if r.kind == "service" and r.code
-        ]
+        return [r.code for r in self.hard() if r.kind == "service" and r.code]
 
     def soft_service_codes(self) -> list[str]:
-        return [
-            r.code for r in self.soft() if r.kind == "service" and r.code
-        ]
+        return [r.code for r in self.soft() if r.kind == "service" and r.code]
 
     def must_visit_ids(self) -> list[int]:
-        return [
-            r.place_id for r in self.of_kind("must_visit") if r.place_id is not None
-        ]
+        return [r.place_id for r in self.of_kind("must_visit") if r.place_id is not None]
 
     def must_visit_names(self) -> list[str]:
         return [r.name for r in self.of_kind("must_visit") if r.name]

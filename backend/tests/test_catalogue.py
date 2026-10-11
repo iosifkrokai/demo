@@ -34,8 +34,13 @@ from planner.verify import (
 
 def _cand(pid: int, name: str, category: str, town: str, relevance: float = 1.0) -> Candidate:
     return Candidate(
-        id=pid, name=name, category=category, lat=53.68, lon=23.83,
-        town=town, relevance=relevance,
+        id=pid,
+        name=name,
+        category=category,
+        lat=53.68,
+        lon=23.83,
+        town=town,
+        relevance=relevance,
     )
 
 
@@ -93,15 +98,15 @@ def test_catalogue_of_nothing_is_uncertain_not_unmet():
 
 def _repos() -> Repositories:
     """Empty repositories: the catalogue path answers without ever reading the DB."""
-    return Repositories(
-        places=PostgresPlaceRepository(), areas=PostgresAreaRepository()
-    )
+    return Repositories(places=PostgresPlaceRepository(), areas=PostgresAreaRepository())
 
 
 def _catalogue(candidates: list[Candidate], requirements: TripRequirements):
     pipeline = pipeline_mod.Pipeline(repos=_repos())
     return pipeline._catalogue_response(
-        req=pipeline_mod.GenerateReq(query="все костёлы Гродненской области", result_mode="catalogue"),
+        req=pipeline_mod.GenerateReq(
+            query="все костёлы Гродненской области", result_mode="catalogue"
+        ),
         requirements=requirements,
         intent=IntentResult(decision=IntentDecision(), source="agent"),
         constraints=ResolvedConstraints(),

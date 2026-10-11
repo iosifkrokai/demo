@@ -94,19 +94,24 @@ class FakeRepo:
                 return row
         return None
 
-    def create_user(self, user_id, *, email, password_hash, display_name=None,
-                    role="user", client_id=None):
+    def create_user(
+        self, user_id, *, email, password_hash, display_name=None, role="user", client_id=None
+    ):
         if self._by_email(email) is not None:
             raise EmailTaken(email)
-        if client_id is not None and any(
-            r["client_id"] == client_id for r in self.users.values()
-        ):
+        if client_id is not None and any(r["client_id"] == client_id for r in self.users.values()):
             client_id = None
         now = _now()
         row = {
-            "id": user_id, "email": email, "password_hash": password_hash,
-            "display_name": display_name, "role": role, "client_id": client_id,
-            "created_at": now, "updated_at": now, "last_login_at": None,
+            "id": user_id,
+            "email": email,
+            "password_hash": password_hash,
+            "display_name": display_name,
+            "role": role,
+            "client_id": client_id,
+            "created_at": now,
+            "updated_at": now,
+            "last_login_at": None,
         }
         self.users[user_id] = row
         return User(**self._public(row))
@@ -148,17 +153,20 @@ class FakeRepo:
         rows = [self._public(r) for r in self.users.values()]
         if q:
             needle = q.lower()
-            rows = [r for r in rows
-                    if needle in r["email"].lower()
-                    or needle in (r["display_name"] or "").lower()]
+            rows = [
+                r
+                for r in rows
+                if needle in r["email"].lower() or needle in (r["display_name"] or "").lower()
+            ]
         rows.sort(key=lambda r: r["created_at"], reverse=True)
         total = len(rows)
-        page = rows[offset:offset + limit]
+        page = rows[offset : offset + limit]
         out = [
             AdminUser(
                 **r,
                 saved_routes=self.saved_routes_count.get(r["client_id"], 0)
-                if r["client_id"] else 0,
+                if r["client_id"]
+                else 0,
                 visited=len(self.visited.get(r["id"], {})),
             )
             for r in page
@@ -168,8 +176,7 @@ class FakeRepo:
     def count_admins(self):
         return sum(1 for r in self.users.values() if r["role"] == "admin")
 
-    def update_user(self, user_id, *, role=None, display_name=None,
-                    display_name_set=False):
+    def update_user(self, user_id, *, role=None, display_name=None, display_name_set=False):
         row = self.users.get(user_id)
         if row is None:
             return None
@@ -185,16 +192,14 @@ class FakeRepo:
             return False
         del self.users[user_id]
         self.visited.pop(user_id, None)
-        self.sessions = {k: v for k, v in self.sessions.items()
-                         if v["user_id"] != user_id}
+        self.sessions = {k: v for k, v in self.sessions.items() if v["user_id"] != user_id}
         return True
 
     def list_visited(self, user_id):
         marks = self.visited.get(user_id, {})
         return [
             VisitedPlace(user_id=user_id, place_id=pid, visited_at=at)
-            for pid, at in sorted(marks.items(),
-                                  key=lambda kv: kv[1], reverse=True)
+            for pid, at in sorted(marks.items(), key=lambda kv: kv[1], reverse=True)
         ]
 
     def mark_visited(self, user_id, place_id):
@@ -230,18 +235,20 @@ class FakeRepo:
         rows = list(self.places.values())
         if q:
             needle = q.lower()
-            rows = [r for r in rows if needle in r["name"].lower()
-                    or needle in (r["town"] or "").lower()]
+            rows = [
+                r
+                for r in rows
+                if needle in r["name"].lower() or needle in (r["town"] or "").lower()
+            ]
         if category:
             rows = [r for r in rows if r["category"] == category]
         rows.sort(key=lambda r: r["name"])
         total = len(rows)
-        page = rows[offset:offset + limit]
+        page = rows[offset : offset + limit]
         return [place_from_row(r) for r in page], total
 
     def create_place(self, fields):
-        if any(p["source_url"] == fields.get("source_url")
-               for p in self.places.values()):
+        if any(p["source_url"] == fields.get("source_url") for p in self.places.values()):
             raise DuplicateSource(str(fields.get("source_url")))
         pid = max(self.places, default=0) + 1
         row = _place_row(pid, fields["name"])
@@ -280,6 +287,7 @@ class DownRepo:
     def __getattr__(self, _name):
         def _boom(*_a, **_kw):
             raise StorageUnavailable("connection refused")
+
         return _boom
 
 
@@ -311,8 +319,9 @@ def client(repo):
     return TestClient(agent_main.app, raise_server_exceptions=False)
 
 
-def _register(client, email="tourist@example.com", password=GOOD_PW,
-              display_name=None, headers=None):
+def _register(
+    client, email="tourist@example.com", password=GOOD_PW, display_name=None, headers=None
+):
     body = {"email": email, "password": password}
     if display_name is not None:
         body["display_name"] = display_name
@@ -325,8 +334,9 @@ def _login(client, email="tourist@example.com", password=GOOD_PW):
 
 def _make_admin(repo, email=ADMIN_EMAIL, password=GOOD_PW):
     uid = uuid.uuid4()
-    repo.create_user(uid, email=email, password_hash=hash_password(password),
-                     display_name="Boss", role="admin")
+    repo.create_user(
+        uid, email=email, password_hash=hash_password(password), display_name="Boss", role="admin"
+    )
     return uid
 
 
@@ -338,7 +348,6 @@ def _admin_client(repo, email=ADMIN_EMAIL, password=GOOD_PW):
 
 
 class TestRegister:
-
     def test_creates_a_user_and_signs_it_in(self, client, repo):
         r = _register(client, display_name="Максим")
         assert r.status_code == 201, r.text
@@ -396,7 +405,6 @@ class TestRegister:
 
 
 class TestSession:
-
     def test_login_with_correct_password(self, client):
         _register(client)
         client.post("/auth/logout")
@@ -432,7 +440,6 @@ class TestSession:
 
 
 class TestVisits:
-
     def test_unauthenticated_write_is_401(self, client):
         assert client.put("/me/visited/1").status_code == 401
         assert client.get("/me/visited").status_code == 401
@@ -486,7 +493,6 @@ class TestVisits:
 
 
 class TestAdminAccess:
-
     def test_anonymous_is_401(self, client):
         assert client.get("/admin/users").status_code == 401
         assert client.get("/admin/stats").status_code == 401
@@ -504,7 +510,6 @@ class TestAdminAccess:
 
 
 class TestAdminUsers:
-
     def test_list_carries_the_counts(self, repo):
         admin = _admin_client(repo)
         _register(admin, email="tourist@example.com")
@@ -523,8 +528,7 @@ class TestAdminUsers:
         _register(admin, email="tourist@example.com")
         admin.post("/auth/logout")
         assert _login(admin, ADMIN_EMAIL).status_code == 200
-        tourist_id = next(k for k, v in repo.users.items()
-                          if v["email"] == "tourist@example.com")
+        tourist_id = next(k for k, v in repo.users.items() if v["email"] == "tourist@example.com")
 
         promoted = admin.patch(f"/admin/users/{tourist_id}", json={"role": "admin"})
         assert promoted.status_code == 200, promoted.text
@@ -552,20 +556,19 @@ class TestAdminUsers:
         _register(admin, email="tourist@example.com")
         admin.post("/auth/logout")
         assert _login(admin, ADMIN_EMAIL).status_code == 200
-        uid = next(k for k, v in repo.users.items()
-                   if v["email"] == "tourist@example.com")
+        uid = next(k for k, v in repo.users.items() if v["email"] == "tourist@example.com")
         assert admin.delete(f"/admin/users/{uid}").status_code == 204
         assert admin.get("/admin/users").json()["total"] == 1
 
     def test_unknown_user_is_404(self, repo):
         admin = _admin_client(repo)
-        assert admin.patch(f"/admin/users/{uuid.uuid4()}",
-                           json={"role": "admin"}).status_code == 404
+        assert (
+            admin.patch(f"/admin/users/{uuid.uuid4()}", json={"role": "admin"}).status_code == 404
+        )
         assert admin.delete(f"/admin/users/{uuid.uuid4()}").status_code == 404
 
 
 class TestAdminPlaces:
-
     def test_list_and_search(self, repo):
         admin = _admin_client(repo)
         body = admin.get("/admin/places").json()
@@ -577,16 +580,24 @@ class TestAdminPlaces:
 
     def test_create_edit_delete(self, repo):
         admin = _admin_client(repo)
-        created = admin.post("/admin/places", json={
-            "name": "Кафе у замка", "lat": 53.68, "lon": 23.83,
-            "source_url": "test:new-cafe", "category": "кафе", "town": "Гродно",
-        })
+        created = admin.post(
+            "/admin/places",
+            json={
+                "name": "Кафе у замка",
+                "lat": 53.68,
+                "lon": 23.83,
+                "source_url": "test:new-cafe",
+                "category": "кафе",
+                "town": "Гродно",
+            },
+        )
         assert created.status_code == 201, created.text
         pid = created.json()["place_id"]
         assert created.json()["name"] == "Кафе у замка"
 
-        edited = admin.patch(f"/admin/places/{pid}",
-                             json={"name": "Кафе «У замка»", "visit_minutes": 30})
+        edited = admin.patch(
+            f"/admin/places/{pid}", json={"name": "Кафе «У замка»", "visit_minutes": 30}
+        )
         assert edited.status_code == 200
         assert edited.json()["name"] == "Кафе «У замка»"
         assert edited.json()["visit_minutes"] == 30
@@ -596,10 +607,15 @@ class TestAdminPlaces:
 
     def test_duplicate_source_is_409(self, repo):
         admin = _admin_client(repo)
-        r = admin.post("/admin/places", json={
-            "name": "Дубль", "lat": 1.0, "lon": 2.0,
-            "source_url": "test:place-1",
-        })
+        r = admin.post(
+            "/admin/places",
+            json={
+                "name": "Дубль",
+                "lat": 1.0,
+                "lon": 2.0,
+                "source_url": "test:place-1",
+            },
+        )
         assert r.status_code == 409
         assert r.json() == {"reason": "source_taken"}
 
@@ -611,27 +627,36 @@ class TestAdminPlaces:
 
 
 class TestStorageDown:
-
     @pytest.fixture
     def down(self):
         _install(DownRepo())
         yield TestClient(agent_main.app, raise_server_exceptions=False)
         _uninstall()
 
-    @pytest.mark.parametrize("method,path,body", [
-        ("post", "/auth/register", {"email": "a@b.co", "password": GOOD_PW}),
-        ("post", "/auth/login", {"email": "a@b.co", "password": GOOD_PW}),
-        ("get", "/auth/me", None),
-        ("post", "/auth/logout", None),
-        ("get", "/me/visited", None),
-        ("put", "/me/visited/1", None),
-        ("get", "/admin/users", None),
-        ("get", "/admin/places", None),
-        ("get", "/admin/stats", None),
-        ("post", "/admin/places", {
-            "name": "x", "lat": 1.0, "lon": 2.0, "source_url": "s",
-        }),
-    ])
+    @pytest.mark.parametrize(
+        "method,path,body",
+        [
+            ("post", "/auth/register", {"email": "a@b.co", "password": GOOD_PW}),
+            ("post", "/auth/login", {"email": "a@b.co", "password": GOOD_PW}),
+            ("get", "/auth/me", None),
+            ("post", "/auth/logout", None),
+            ("get", "/me/visited", None),
+            ("put", "/me/visited/1", None),
+            ("get", "/admin/users", None),
+            ("get", "/admin/places", None),
+            ("get", "/admin/stats", None),
+            (
+                "post",
+                "/admin/places",
+                {
+                    "name": "x",
+                    "lat": 1.0,
+                    "lon": 2.0,
+                    "source_url": "s",
+                },
+            ),
+        ],
+    )
     def test_every_endpoint_degrades_to_503(self, down, method, path, body):
         headers = {"Authorization": "Bearer any-token-shape"}
         r = getattr(down, method)(path, headers=headers, **json_body(body))
@@ -644,7 +669,6 @@ def json_body(body):
 
 
 class TestPasswords:
-
     def test_hash_is_salted_and_verifies(self):
         a = hash_password(GOOD_PW)
         b = hash_password(GOOD_PW)
@@ -745,9 +769,7 @@ def test_live_account_visit_and_place_edit():
             pytest.skip("no guarded place in the dataset")
         place_id, old_category, old_source, old_blurb = row
 
-        registered = tc.post(
-            "/auth/register", json={"email": email, "password": GOOD_PW}
-        )
+        registered = tc.post("/auth/register", json={"email": email, "password": GOOD_PW})
         assert registered.status_code == 201, registered.text
         uid = registered.json()["id"]
         assert tc.get("/auth/me").json()["user"]["email"] == email
@@ -781,14 +803,10 @@ def test_live_account_visit_and_place_edit():
         cleanup = psycopg.connect(settings.DSN)
         try:
             with cleanup.cursor() as cur:
-                cur.execute(
-                    "SELECT set_config"
-                    "('grodno.allow_curated_category_change','on',true)"
-                )
+                cur.execute("SELECT set_config('grodno.allow_curated_category_change','on',true)")
                 if place_id is not None:
                     cur.execute(
-                        "UPDATE places SET category=%s, category_source=%s, "
-                        "blurb=%s WHERE id=%s",
+                        "UPDATE places SET category=%s, category_source=%s, blurb=%s WHERE id=%s",
                         (old_category, old_source, old_blurb, place_id),
                     )
                 cur.execute("DELETE FROM users WHERE email=%s", (email,))

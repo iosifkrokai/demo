@@ -130,7 +130,11 @@ def test_wikidata_gives_the_image_and_the_coordinate_together(monkeypatch):
                     "claims": {
                         "P18": [{"mainsnak": {"datavalue": {"value": "File:X.jpg"}}}],
                         "P625": [
-                            {"mainsnak": {"datavalue": {"value": {"latitude": 53.1, "longitude": 24.2}}}}
+                            {
+                                "mainsnak": {
+                                    "datavalue": {"value": {"latitude": 53.1, "longitude": 24.2}}
+                                }
+                            }
                         ],
                     }
                 },
@@ -349,9 +353,7 @@ def _get(path: str):
         return json.load(resp)
 
 
-@pytest.mark.skipif(
-    os.environ.get("SMOKE_SKIP_LIVE") == "1", reason="live-проверки отключены"
-)
+@pytest.mark.skipif(os.environ.get("SMOKE_SKIP_LIVE") == "1", reason="live-проверки отключены")
 def test_live_itineraries_carry_a_credited_photo():
     try:
         payload = _get("/routes/itineraries")

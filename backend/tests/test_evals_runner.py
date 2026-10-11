@@ -31,8 +31,7 @@ def test_a_broken_case_file_is_a_loud_error(tmp_path, monkeypatch):
 def test_a_known_gap_is_reported_but_does_not_fail_the_run():
     checks = [
         {"case": "a", "check": "verdict", "ok": True, "detail": "", "why": ""},
-        {"case": "b", "check": "verdict", "ok": False, "detail": "", "why": "",
-         "known_gap": True},
+        {"case": "b", "check": "verdict", "ok": False, "detail": "", "why": "", "known_gap": True},
     ]
     passed, total = evals._rate(checks)
     assert (passed, total) == (1, 1), "пробел не должен попадать в знаменатель"
@@ -49,7 +48,5 @@ def test_the_offline_stages_pass_here():
     for res in results:
         if res.get("skipped"):
             continue
-        failed = [
-            c for c in res["checks"] if not c["ok"] and not c.get("known_gap")
-        ]
+        failed = [c for c in res["checks"] if not c["ok"] and not c.get("known_gap")]
         assert failed == [], f"{res['stage']}: {json.dumps(failed, ensure_ascii=False)}"

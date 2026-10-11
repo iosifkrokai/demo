@@ -27,8 +27,7 @@ from planner.models import GenerateReq
 RU = "ru"
 
 RU_ACCEPT = (
-    "Погулять по старому Гродно с двумя детьми, "
-    "туалет обязательно, кафе если по пути, на два часа"
+    "Погулять по старому Гродно с двумя детьми, туалет обязательно, кафе если по пути, на два часа"
 )
 RU_BUG = "Погулять по старому Гродно с двумя детьми, туалет по пути, на два часа"
 
@@ -103,7 +102,6 @@ class TestReadingReachesTheContract:
 
 
 class TestBudget:
-
     def test_a_stated_budget_reaches_the_contract(self, fake_llm):
         fake_llm.set(budget_minutes=120)
         assert build_requirements("погулять 2 часа", _req("погулять 2 часа")).budget_minutes == 120
@@ -119,7 +117,6 @@ class TestBudget:
 
 
 class TestExplicitUiWins:
-
     def test_ui_child_count_beats_the_reading(self, fake_llm):
         fake_llm.set(children=2)
         tr = build_requirements(RU_BUG, _req(RU_BUG, party_children=1))
@@ -155,8 +152,12 @@ class TestExplicitUiWins:
         fake_llm.set()
         tr = build_requirements(
             "погулять с детьми",
-            _req("погулять с детьми", party_children=2, party_children_ages=[4, 7],
-                 mobility=["stroller"]),
+            _req(
+                "погулять с детьми",
+                party_children=2,
+                party_children_ages=[4, 7],
+                mobility=["stroller"],
+            ),
         )
         assert tr.party.children_ages == [4, 7]
         assert tr.party.mobility == ["stroller"]
@@ -178,7 +179,6 @@ class TestExplicitUiWins:
 
 
 class TestRobustness:
-
     @pytest.mark.parametrize(
         "query",
         ["???", "ааа", "прогулка", "Walk", "старый город", "без", "туалет"],

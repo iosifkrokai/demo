@@ -446,7 +446,7 @@ def test_the_model_call_carries_the_prompt_it_was_given(fake_run):
         tr = ai.interpret_with_agent(
             QUERY, reader_brief(GenerateReq(query=QUERY, locale="ru")), repos=store
         )
-        call, = _model_spans("job-model")
+        (call,) = _model_spans("job-model")
     finally:
         trace.finish()
 
@@ -477,7 +477,7 @@ def test_an_answer_that_is_not_a_reading_is_recorded_as_an_error():
     trace.begin("job-bad-answer")
     try:
         ai_telemetry._record_model_call(GenerateReq(query=QUERY), "request='...'", Result())
-        call, = _model_spans("job-bad-answer")
+        (call,) = _model_spans("job-bad-answer")
     finally:
         trace.finish()
 
@@ -497,7 +497,9 @@ def test_search_places_caps_results(repos):
     small = tools_places.search_places("замки", category_codes=["замок"], limit=3, repos=repos)
     assert small["count"] == 3 and small["capped"] is False
 
-    mixed = tools_places.search_places("замки", category_codes=["замок", "вертолёт"], limit=2, repos=repos)
+    mixed = tools_places.search_places(
+        "замки", category_codes=["замок", "вертолёт"], limit=2, repos=repos
+    )
     assert mixed["provenance"]["categories"] == ["замок"]
     assert mixed["provenance"]["dropped_codes"] == ["вертолёт"]
 

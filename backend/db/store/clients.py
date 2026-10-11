@@ -36,13 +36,9 @@ _PREFERENCE_SELECT = (
     "interests, language, visit_minutes_by_category, updated_at"
 )
 
-_ROUTE_DETAIL_SELECT = (
-    "id, name, query, plan, visit_overrides, created_at, updated_at"
-)
+_ROUTE_DETAIL_SELECT = "id, name, query, plan, visit_overrides, created_at, updated_at"
 
-_ROUTE_INSERT_SELECT = (
-    "id, client_id, name, query, plan, visit_overrides, created_at, updated_at"
-)
+_ROUTE_INSERT_SELECT = "id, client_id, name, query, plan, visit_overrides, created_at, updated_at"
 
 
 class ClientRepository(Protocol):
@@ -67,13 +63,9 @@ class ClientRepository(Protocol):
         visit_overrides: dict[str, int] | None = None,
     ) -> SavedRoute: ...
 
-    def list_routes(
-        self, client_id: uuid.UUID, limit: int = 50
-    ) -> list[SavedRouteSummary]: ...
+    def list_routes(self, client_id: uuid.UUID, limit: int = 50) -> list[SavedRouteSummary]: ...
 
-    def get_route(
-        self, client_id: uuid.UUID, route_id: uuid.UUID
-    ) -> SavedRoute | None: ...
+    def get_route(self, client_id: uuid.UUID, route_id: uuid.UUID) -> SavedRoute | None: ...
 
     def rename_route(
         self, client_id: uuid.UUID, route_id: uuid.UUID, name: str
@@ -134,16 +126,13 @@ class PostgresClientRepository(PostgresRepository):
         """The stored row, or ``None`` when nothing has been saved yet."""
         with self._cursor() as cur:
             cur.execute(
-                f"SELECT {_PREFERENCE_SELECT} FROM client_preferences "
-                "WHERE client_id = %s",
+                f"SELECT {_PREFERENCE_SELECT} FROM client_preferences WHERE client_id = %s",
                 (client_id,),
             )
             row = cur.fetchone()
         return model_from_row(ClientPreferences, row) if row is not None else None
 
-    def upsert_preferences(
-        self, client_id: uuid.UUID, fields: dict[str, Any]
-    ) -> ClientPreferences:
+    def upsert_preferences(self, client_id: uuid.UUID, fields: dict[str, Any]) -> ClientPreferences:
         """Apply a partial update: only ``fields`` change, ``None`` clears.
 
         Creates the preferences row if this client has none yet.
@@ -208,9 +197,7 @@ class PostgresClientRepository(PostgresRepository):
             raise TooManyRoutes(self.max_routes)
         return model_from_row(SavedRoute, row)
 
-    def list_routes(
-        self, client_id: uuid.UUID, limit: int = 50
-    ) -> list[SavedRouteSummary]:
+    def list_routes(self, client_id: uuid.UUID, limit: int = 50) -> list[SavedRouteSummary]:
         """Newest first, without any heavy geometry.
 
         Only scalars are selected, so a saved polyline never crosses the wire."""
@@ -244,14 +231,11 @@ class PostgresClientRepository(PostgresRepository):
             for row in rows
         ]
 
-    def get_route(
-        self, client_id: uuid.UUID, route_id: uuid.UUID
-    ) -> SavedRoute | None:
+    def get_route(self, client_id: uuid.UUID, route_id: uuid.UUID) -> SavedRoute | None:
         """The full record (plan and visit_overrides included), or ``None``."""
         with self._cursor() as cur:
             cur.execute(
-                f"SELECT {_ROUTE_DETAIL_SELECT} FROM saved_routes "
-                "WHERE id = %s AND client_id = %s",
+                f"SELECT {_ROUTE_DETAIL_SELECT} FROM saved_routes WHERE id = %s AND client_id = %s",
                 (route_id, client_id),
             )
             row = cur.fetchone()

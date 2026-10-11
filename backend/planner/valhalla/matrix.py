@@ -56,16 +56,15 @@ def _same_point(a: dict, b: dict) -> bool:
     return a is b
 
 
-def _matrix_chunk_indices(
-    total: int, chunk_max: int
-) -> Iterator[tuple[int, int]]:
+def _matrix_chunk_indices(total: int, chunk_max: int) -> Iterator[tuple[int, int]]:
     """Yield (start, end) half-open slices that cover `total` items."""
     for start in range(0, total, chunk_max):
         yield start, min(start + chunk_max, total)
 
 
-def _matrix_via_route(source: dict, target: dict, costing: str, timeout: float,
-                      radius: int | None = None) -> float:
+def _matrix_via_route(
+    source: dict, target: dict, costing: str, timeout: float, radius: int | None = None
+) -> float:
     """Fallback: single pair via GET /route."""
     snap = radius or LOCATION_SNAP_RADIUS_M
     payload = {
@@ -164,20 +163,24 @@ def _distance_aware_fill(
     out = [[unreachable] * n_t for _ in range(n_s)]
 
     for i, source in enumerate(sources):
-        near = [
-            j for j in range(n_t)
-            if _pair_metres(source, targets[j]) <= MATRIX_PATH_LIMIT_M
-        ]
+        near = [j for j in range(n_t) if _pair_metres(source, targets[j]) <= MATRIX_PATH_LIMIT_M]
         for start in range(0, len(near), MATRIX_MAX_TARGETS):
-            cols = near[start:start + MATRIX_MAX_TARGETS]
+            cols = near[start : start + MATRIX_MAX_TARGETS]
             row_values: list[float] | None = None
             try:
                 sub = _matrix_chunk([source], [targets[j] for j in cols], costing, timeout)
                 row_values = [float(v) for v in sub[0]]
             except UpstreamUnavailable as exc:
                 if _is_distance_limit_error(exc) and len(cols) > 1:
-                    row_values = _isolate_row(source, targets, cols, costing, timeout,
-                                              unreachable=unreachable, unknown=unknown)
+                    row_values = _isolate_row(
+                        source,
+                        targets,
+                        cols,
+                        costing,
+                        timeout,
+                        unreachable=unreachable,
+                        unknown=unknown,
+                    )
                 else:
                     logger.warning(
                         "matrix row %d could not be asked (%.80s) — left unknown", i, exc
@@ -220,9 +223,7 @@ def _chunks_safe(n_sources: int, n_targets: int) -> bool:
     return n_sources <= MATRIX_MAX_SOURCES and n_targets <= MATRIX_MAX_TARGETS
 
 
-def _matrix_via_route_resilient(
-    source: dict, target: dict, costing: str, timeout: float
-) -> float:
+def _matrix_via_route_resilient(source: dict, target: dict, costing: str, timeout: float) -> float:
     """One pair via /route, widening the snap radius only for a snap failure.
 
     Returns a time, UNREACHABLE_S, or UNKNOWN_S ("we could not ask").
@@ -290,7 +291,8 @@ def _fill_via_route(
         logger.warning(
             "matrix per-pair fallback capped after %d /route calls (%d cells left "
             "unknown) — request degrades instead of hanging",
-            calls, n_src * n_tgt - calls,
+            calls,
+            n_src * n_tgt - calls,
         )
     return result
 
@@ -319,18 +321,12 @@ def time_matrix(
     timeout = timeout or constants.VALHALLA_TIMEOUT_S
 
     if _chunks_safe(n_src, n_tgt):
-        fast_result = _matrix_chunk_resilient(
-            sources, targets, costing, timeout, deadline=deadline
-        )
+        fast_result = _matrix_chunk_resilient(sources, targets, costing, timeout, deadline=deadline)
         _zero_diagonal(fast_result, sources, targets)
         return fast_result
 
-    idx_sources: list[dict] = [
-        {**s, "_src_idx": i} for i, s in enumerate(sources)
-    ]
-    idx_targets: list[dict] = [
-        {**t, "_tgt_idx": j} for j, t in enumerate(targets)
-    ]
+    idx_sources: list[dict] = [{**s, "_src_idx": i} for i, s in enumerate(sources)]
+    idx_targets: list[dict] = [{**t, "_tgt_idx": j} for j, t in enumerate(targets)]
 
     result: list[list[float]] = [[0.0] * n_tgt for _ in range(n_src)]
 

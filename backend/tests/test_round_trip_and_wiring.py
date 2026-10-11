@@ -89,7 +89,10 @@ def test_render_closes_the_tour_when_asked(monkeypatch):
         )
 
     monkeypatch.setattr(render_mod, "route_through", fake_route_through)
-    route = [_cand(1, "A", "замок", lat=53.68, lon=23.83), _cand(2, "B", "музей", lat=53.70, lon=23.85)]
+    route = [
+        _cand(1, "A", "замок", lat=53.68, lon=23.83),
+        _cand(2, "B", "музей", lat=53.70, lon=23.85),
+    ]
 
     render_mod.render(route, round_trip=True)
 

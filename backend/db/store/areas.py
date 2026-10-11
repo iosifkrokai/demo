@@ -36,8 +36,6 @@ class PostgresAreaRepository(PostgresRepository):
     def get_by_code(self, code: str) -> Area | None:
         """One area by its slug, or None."""
         with self._cursor() as cur:
-            cur.execute(
-                f"SELECT {AREA_SELECT} FROM areas WHERE code = %s", (code,)
-            )
+            cur.execute(f"SELECT {AREA_SELECT} FROM areas WHERE code = %s", (code,))
             row = cur.fetchone()
         return area_from_row(row) if row else None

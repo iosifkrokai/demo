@@ -29,6 +29,9 @@ jobs:
       - name: Lint (ruff)
         run: .venv/bin/ruff check .
 
+      - name: Format (ruff)
+        run: .venv/bin/ruff format --check .
+
       - name: Type-check (pyright)
         run: .venv/bin/pyright
 

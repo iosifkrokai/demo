@@ -223,9 +223,7 @@ def _live_available() -> bool:
         return False
 
 
-@pytest.mark.skipif(
-    not _live_available(), reason=f"backend not answering at {BASE_URL}"
-)
+@pytest.mark.skipif(not _live_available(), reason=f"backend not answering at {BASE_URL}")
 def test_live_every_stop_key_in_the_shipped_file_resolves():
     with urllib.request.urlopen(f"{BASE_URL}/routes/itineraries", timeout=10) as r:
         assert r.status == 200
@@ -245,9 +243,7 @@ def test_live_every_stop_key_in_the_shipped_file_resolves():
             assert stop["name"] and stop["lat"] and stop["lon"]
 
 
-@pytest.mark.skipif(
-    not _live_available(), reason=f"backend not answering at {BASE_URL}"
-)
+@pytest.mark.skipif(not _live_available(), reason=f"backend not answering at {BASE_URL}")
 def test_live_no_curated_stop_is_a_service():
     """The dataset invariant behind the user's complaint: a toilet was a stop."""
     with urllib.request.urlopen(f"{BASE_URL}/routes/itineraries", timeout=10) as r:

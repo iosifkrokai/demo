@@ -93,9 +93,7 @@ def search_places(
     def run(store: Any) -> list[dict]:
         fetch = MAX_PLACES_PER_SEARCH if db_cats else want
         if near is not None:
-            found = store.places.nearby(
-                near[0], near[1], radius_km=near[2] / 1000.0, limit=fetch
-            )
+            found = store.places.nearby(near[0], near[1], radius_km=near[2] / 1000.0, limit=fetch)
         else:
             found = store.places.keyword_search(query.strip(), limit=fetch)
         if db_cats:

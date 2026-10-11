@@ -227,10 +227,18 @@ def fetch_overpass(
                 elements = resp.json().get("elements", [])
                 return elements[:limit] if limit else elements
             except Exception as exc:
-                msg = f"[overpass] attempt {attempt+1}/{endpoint}: {exc}"
+                msg = f"[overpass] attempt {attempt + 1}/{endpoint}: {exc}"
                 sys.stderr.write(msg + "\n")
-                if isinstance(exc, (httpx.ConnectError, httpx.ReadTimeout, httpx.WriteTimeout,
-                                    httpx.ConnectTimeout, httpx.RemoteProtocolError)):
+                if isinstance(
+                    exc,
+                    (
+                        httpx.ConnectError,
+                        httpx.ReadTimeout,
+                        httpx.WriteTimeout,
+                        httpx.ConnectTimeout,
+                        httpx.RemoteProtocolError,
+                    ),
+                ):
                     dead.add(endpoint)
                 if attempt == 3 and endpoint not in dead:
                     failed_endpoints.append(f"{endpoint} ({exc})")
@@ -238,15 +246,14 @@ def fetch_overpass(
         if all(ep in dead for ep in OVERPASS_ENDPOINTS):
             break
         if attempt < 3:
-            wait = (2 ** attempt) * 5
+            wait = (2**attempt) * 5
             sys.stderr.write(f"[overpass] retry in {wait}s …\n")
             time.sleep(wait)
 
     for ep in failed_endpoints:
         sys.stderr.write(f"[overpass] FAILED: {ep}\n")
     sys.stderr.write(
-        f"[overpass] all {len(OVERPASS_ENDPOINTS)} endpoints failed after 4 attempts"
-        " — exiting\n"
+        f"[overpass] all {len(OVERPASS_ENDPOINTS)} endpoints failed after 4 attempts — exiting\n"
     )
     return None
 

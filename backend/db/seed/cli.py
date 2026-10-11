@@ -69,20 +69,28 @@ def cmd_apply(args: argparse.Namespace) -> int:
                     from embeddings import model
 
                     # Reuse the seed's own connection: one transaction, one commit.
-                    embedded = model.embed_missing(
-                        PostgresPlaceRepository(connect=lambda: conn)
-                    )
+                    embedded = model.embed_missing(PostgresPlaceRepository(connect=lambda: conn))
                 db_stats = pipeline.gather_db_stats(conn)
-                db_stats.update({"upserted": totals, "areas_written": areas_written,
-                                 "photos_written": photos_written,
-                                 "embedded": embedded, "embeddings_skipped": args.no_embed})
+                db_stats.update(
+                    {
+                        "upserted": totals,
+                        "areas_written": areas_written,
+                        "photos_written": photos_written,
+                        "embedded": embedded,
+                        "embeddings_skipped": args.no_embed,
+                    }
+                )
         except Exception as exc:
             sys.stderr.write(f"[seed] apply failed: {exc}\n")
             return 1
 
     report = build_coverage_report(
-        collected, mode="dry-run" if args.dry_run else "apply",
-        curated=curated, curated_stats=curated_stats, db_stats=db_stats)
+        collected,
+        mode="dry-run" if args.dry_run else "apply",
+        curated=curated,
+        curated_stats=curated_stats,
+        db_stats=db_stats,
+    )
     _print_summary(report)
     if args.report:
         args.report.parent.mkdir(parents=True, exist_ok=True)
@@ -94,21 +102,26 @@ def cmd_apply(args: argparse.Namespace) -> int:
     if collected["fatal"]:
         sys.stderr.write(
             "[seed] fatal: a hand-authored dataset (city/region) has invalid rows — "
-            "fix data/places/*.csv before publishing\n")
+            "fix data/places/*.csv before publishing\n"
+        )
         return 2
     return 0
 
 
 def _print_summary(report: dict) -> None:
     t = report["totals"]
-    print(f"[seed] mode={report['mode']} records={t['records']} "
-          f"geofence_rejects={t['geofence_rejects']} invalid={t['invalid']} "
-          f"duplicates={report['suspected_duplicates']['count']}")
+    print(
+        f"[seed] mode={report['mode']} records={t['records']} "
+        f"geofence_rejects={t['geofence_rejects']} invalid={t['invalid']} "
+        f"duplicates={report['suspected_duplicates']['count']}"
+    )
     for ds in report["datasets"]:
         note = " (absent — run `seed fetch`)" if ds.get("missing") else ""
-        print(f"    {ds['name']:>6}: {ds['valid']:>5} valid / {ds['rows']:>5} rows "
-              f"(geofence {ds['geofence_rejects']}, invalid {ds['invalid']}, "
-              f"category_source={ds['category_source']}){note}")
+        print(
+            f"    {ds['name']:>6}: {ds['valid']:>5} valid / {ds['rows']:>5} rows "
+            f"(geofence {ds['geofence_rejects']}, invalid {ds['invalid']}, "
+            f"category_source={ds['category_source']}){note}"
+        )
     print("  coverage: " + ", ".join(f"{k}={v['share']}" for k, v in report["coverage"].items()))
     if "db" in report:
         print(f"  db: {report['db']}")
@@ -128,16 +141,19 @@ def cmd_fetch(args: argparse.Namespace) -> int:
 
     sources = []
     if args.source in ("osm", "all"):
-        sources.append(("osm", overpass.SIGHT_QUERY, osm_tags.sight_element_to_row,
-                        "places_osm_raw.csv"))
+        sources.append(
+            ("osm", overpass.SIGHT_QUERY, osm_tags.sight_element_to_row, "places_osm_raw.csv")
+        )
     if args.source in ("poi", "all"):
-        sources.append(("poi", overpass.SERVICE_QUERY, osm_tags.service_element_to_row,
-                        "places_poi.csv"))
+        sources.append(
+            ("poi", overpass.SERVICE_QUERY, osm_tags.service_element_to_row, "places_poi.csv")
+        )
 
     for name, template, to_row, filename in sources:
         query = overpass.build_overpass_query(template, bbox)
         elements = overpass.fetch_overpass(
-            query, limit=args.limit, dry_run=mock is not None, mock=mock)
+            query, limit=args.limit, dry_run=mock is not None, mock=mock
+        )
         if elements is None:
             sys.stderr.write(f"[seed] fetch {name}: Overpass returned nothing\n")
             return 1
@@ -187,34 +203,56 @@ def cmd_admin(args: argparse.Namespace) -> int:
 
 
 def _add_apply_flags(p: argparse.ArgumentParser) -> None:
-    p.add_argument("--dry-run", action="store_true",
-                   help="Validate + report only. No DB, no network.")
-    p.add_argument("--data-dir", type=Path, default=PLACES_DIR,
-                   help="Directory holding the CSV datasets (default: backend/data/places).")
-    p.add_argument("--report", type=Path, default=None,
-                   help="Write the machine-readable JSON report to this path.")
+    p.add_argument(
+        "--dry-run", action="store_true", help="Validate + report only. No DB, no network."
+    )
+    p.add_argument(
+        "--data-dir",
+        type=Path,
+        default=PLACES_DIR,
+        help="Directory holding the CSV datasets (default: backend/data/places).",
+    )
+    p.add_argument(
+        "--report",
+        type=Path,
+        default=None,
+        help="Write the machine-readable JSON report to this path.",
+    )
     p.add_argument("--json", action="store_true", help="Print the JSON report to stdout.")
-    p.add_argument("--no-embed", action="store_true",
-                   help="Skip embeddings (local model; still works without it).")
-    p.add_argument("--no-areas", action="store_true",
-                   help="Do not (re)load areas.")
+    p.add_argument(
+        "--no-embed",
+        action="store_true",
+        help="Skip embeddings (local model; still works without it).",
+    )
+    p.add_argument("--no-areas", action="store_true", help="Do not (re)load areas.")
     p.add_argument("--database-url", default=None, help="Override DATABASE_URL.")
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="python -m db.seed",
-        description="One reproducible seed: validate → upsert → embed → report.")
+        description="One reproducible seed: validate → upsert → embed → report.",
+    )
     _add_apply_flags(p)
     sub = p.add_subparsers(dest="command")
 
     f = sub.add_parser("fetch", help="Acquire OSM sights/services from Overpass into CSVs.")
     f.add_argument("--source", choices=["osm", "poi", "all"], default="all")
-    f.add_argument("--bbox", type=float, nargs=4, metavar=("W", "S", "E", "N"), default=None,
-                   help="Bounding box in W S E N order (default: the Grodno voblast).")
+    f.add_argument(
+        "--bbox",
+        type=float,
+        nargs=4,
+        metavar=("W", "S", "E", "N"),
+        default=None,
+        help="Bounding box in W S E N order (default: the Grodno voblast).",
+    )
     f.add_argument("--limit", type=int, default=None, help="Max elements (for testing).")
-    f.add_argument("--input-json", type=Path, default=None,
-                   help="Reuse a saved Overpass response instead of the network.")
+    f.add_argument(
+        "--input-json",
+        type=Path,
+        default=None,
+        help="Reuse a saved Overpass response instead of the network.",
+    )
     f.add_argument("--out-dir", type=Path, default=PLACES_DIR, help="Where to write the CSVs.")
     f.add_argument("--dry-run", action="store_true", help="Fetch but write nothing.")
     f.set_defaults(func=cmd_fetch)
@@ -243,8 +281,9 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
     ad = sub.add_parser("admin", help="Create or promote the first administrator.")
     ad.add_argument("--email", required=True)
-    ad.add_argument("--password", default=None,
-                    help="omitted: read from GRODNO_ADMIN_PASSWORD or prompt")
+    ad.add_argument(
+        "--password", default=None, help="omitted: read from GRODNO_ADMIN_PASSWORD or prompt"
+    )
     ad.add_argument("--name", default=None, help="display name")
     ad.set_defaults(func=cmd_admin)
 
@@ -254,8 +293,13 @@ def build_arg_parser() -> argparse.ArgumentParser:
 def cmd_all(args: argparse.Namespace) -> int:
     """Re-acquire the OSM sources, then apply them."""
     fetch_ns = argparse.Namespace(
-        source=args.source, bbox=args.bbox, limit=None, input_json=args.input_json,
-        out_dir=args.out_dir, dry_run=args.dry_run)
+        source=args.source,
+        bbox=args.bbox,
+        limit=None,
+        input_json=args.input_json,
+        out_dir=args.out_dir,
+        dry_run=args.dry_run,
+    )
     rc = cmd_fetch(fetch_ns)
     if rc != 0:
         return rc

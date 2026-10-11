@@ -51,6 +51,7 @@ REASON_CODE_UNKNOWN = "category_code_unknown"
 REASON_ROUTE_MISSING = "route_missing"
 REASON_GEOMETRY_MISSING = "geometry_missing"
 
+
 class ServiceAlongEvidence(NamedTuple):
     """Three states: nothing supplied keeps the older reading, ``measured=True`` is
     evidence, ``measured=False`` is ``uncertain``, never ``unmet``.
@@ -150,9 +151,7 @@ def geometry_ok(geometry: Any) -> bool:
         return geometry_ok(geometry.get("geometry"))
     if gtype == "FeatureCollection":
         feats = geometry.get("features") or []
-        return any(
-            geometry_ok(f.get("geometry")) for f in feats if isinstance(f, dict)
-        )
+        return any(geometry_ok(f.get("geometry")) for f in feats if isinstance(f, dict))
     if gtype == "Point":
         return False
 
@@ -334,9 +333,7 @@ def _verify_service(
     if not route_present:
         _set(r, "uncertain", [], REASON_ROUTE_MISSING)
         return
-    reason = (
-        REASON_HARD_SERVICE_ABSENT if r.strength == "hard" else REASON_SOFT_SERVICE_ABSENT
-    )
+    reason = REASON_HARD_SERVICE_ABSENT if r.strength == "hard" else REASON_SOFT_SERVICE_ABSENT
     _set(r, "unmet", [], reason)
 
 
@@ -408,9 +405,7 @@ def verify(
         if r.kind == "must_visit":
             _verify_must_visit(r, stops, route_present, unroutable, geom_ok)
         elif r.kind == "service":
-            _verify_service(
-                r, stops, route_present, geom_ok, _evidence_for(r, services_along)
-            )
+            _verify_service(r, stops, route_present, geom_ok, _evidence_for(r, services_along))
         elif r.kind == "interest":
             _verify_interest(r, stops, route_present, geom_ok)
         elif r.kind == "avoid":
@@ -421,9 +416,7 @@ def verify(
     return requirements.requirements
 
 
-def verify_catalogue(
-    requirements: TripRequirements, places: list[Any]
-) -> list[Requirement]:
+def verify_catalogue(requirements: TripRequirements, places: list[Any]) -> list[Requirement]:
     """Check a CATALOGUE (a list of places to choose from) against the request.
 
     Satisfaction reasons are the `*_in_catalogue` codes — no verdict claims "on the route".
@@ -518,9 +511,7 @@ def overall_status(
         return "ready"
 
     hard = requirements.hard()
-    if any(
-        r.status == "unmet" and r.reason in INFEASIBLE_REASONS for r in hard
-    ):
+    if any(r.status == "unmet" and r.reason in INFEASIBLE_REASONS for r in hard):
         return "infeasible"
     if any(r.status in ("unmet", "uncertain") for r in hard):
         return "degraded"

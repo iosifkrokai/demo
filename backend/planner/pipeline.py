@@ -133,14 +133,17 @@ class Pipeline:
         log.info(
             "pipeline.ok query_len=%d ms=%d n_stops=%d walk_s=%.0f budget_min=%s "
             "source=%s status=%s",
-            len(req.query), ms, len(plan.route), turn.walk_s,
-            constraints.time_budget_minutes, intent.source, status,
+            len(req.query),
+            ms,
+            len(plan.route),
+            turn.walk_s,
+            constraints.time_budget_minutes,
+            intent.source,
+            status,
         )
 
         changes = (
-            _context_changes(turn.base_candidates, plan.route)
-            if turn.base_candidates
-            else None
+            _context_changes(turn.base_candidates, plan.route) if turn.base_candidates else None
         )
 
         trace.record(
@@ -256,9 +259,7 @@ class Pipeline:
             turn.refuse = outside_left
         return constraints
 
-    def _step_retrieve(
-        self, turn: Turn, constraints: ResolvedConstraints
-    ) -> list[Candidate]:
+    def _step_retrieve(self, turn: Turn, constraints: ResolvedConstraints) -> list[Candidate]:
         qvec = embed_query(turn.req.query)
         turn.qvec = qvec
         trace.record("embed", input=turn.req.query, embedded=bool(qvec))
@@ -305,9 +306,7 @@ class Pipeline:
 
         return candidates
 
-    def _step_dedupe(
-        self, turn: Turn, candidates: list[Candidate]
-    ) -> list[Candidate]:
+    def _step_dedupe(self, turn: Turn, candidates: list[Candidate]) -> list[Candidate]:
         before_dupes = candidates
         candidates = _drop_duplicates(candidates, constants.DUPLICATE_RADIUS_M)
         duplicates = _gone(before_dupes, candidates)
@@ -341,9 +340,7 @@ class Pipeline:
     ) -> list[Candidate]:
         pool = len(candidates)
         before_geo = candidates
-        skip_geo = should_skip_geo_focus(
-            region_scope=turn.region_scope, origin=turn.req.origin
-        )
+        skip_geo = should_skip_geo_focus(region_scope=turn.region_scope, origin=turn.req.origin)
         geo_report: dict[str, Any] = {"anchor": None, "radius_km": None, "dropped": []}
         if skip_geo:
             log.info("geo_focus skipped: region scope, no tourist position")
@@ -419,7 +416,9 @@ class Pipeline:
         if left < constants.COST_MATRIX_MIN_LEFT_S and len(candidates) > constants.POOL_TRIM_SIZE:
             log.info(
                 "deadline: %.1fs left — trimming %d candidates to %d before the cost matrix",
-                left, len(candidates), constants.POOL_TRIM_SIZE,
+                left,
+                len(candidates),
+                constants.POOL_TRIM_SIZE,
             )
             candidates = sorted(candidates, key=lambda c: c.relevance, reverse=True)
             candidates = candidates[: constants.POOL_TRIM_SIZE]
@@ -455,8 +454,10 @@ class Pipeline:
             added = [c for c in wider if c.id not in have]
             if added:
                 log.info(
-                    "pool: %d sight(s) of %d — widening the search by the words "
-                    "dropped %d more", len(sights), len(candidates), len(added),
+                    "pool: %d sight(s) of %d — widening the search by the words dropped %d more",
+                    len(sights),
+                    len(candidates),
+                    len(added),
                 )
                 candidates = _drop_excluded(candidates + added, turn.excluded)
                 sights = [c for c in candidates if _is_sight_stop(c)]
@@ -466,7 +467,8 @@ class Pipeline:
         if 2 <= len(sights) < len(candidates):
             log.info(
                 "pool: %d sight(s) of %d candidate(s) — services stay on the line",
-                len(sights), len(candidates),
+                len(sights),
+                len(candidates),
             )
             candidates = sights
         elif len(sights) < 2:
@@ -481,9 +483,7 @@ class Pipeline:
             services_off=_gone(before_narrowing, candidates),
         )
 
-        _candidates, _cost, _route, _info, plan = run_plan_tail(
-            turn, candidates, constraints
-        )
+        _candidates, _cost, _route, _info, plan = run_plan_tail(turn, candidates, constraints)
         return plan
 
     def _step_render(self, turn: Turn, plan) -> dict:
@@ -555,9 +555,7 @@ class Pipeline:
         t0: float,
     ) -> RouteResponse:
         """Answer "not here" instead of planning a route somewhere else."""
-        return refuse_out_of_coverage(
-            req, requirements, intent, constraints, names, t0
-        )
+        return refuse_out_of_coverage(req, requirements, intent, constraints, names, t0)
 
     def _catalogue_response(
         self,
@@ -569,9 +567,7 @@ class Pipeline:
         t0: float,
     ) -> RouteResponse:
         """Answer with the matching places, grouped by town, and no route."""
-        return catalogue_response(
-            req, requirements, intent, constraints, candidates, t0
-        )
+        return catalogue_response(req, requirements, intent, constraints, candidates, t0)
 
     def reroute(self, point_ids: list[int], profile: str | None = None) -> RouteResponse:
         """Re-route a chosen list of place IDs."""
@@ -581,9 +577,7 @@ class Pipeline:
             raise NoCandidatesFound(f"unknown point_ids: {sorted(missing)}")
 
         candidates = [candidate_of(r, 1.0) for r in rows]
-        intent = IntentResult(
-            decision=IntentDecision(intent_type="specific"), source="agent"
-        )
+        intent = IntentResult(decision=IntentDecision(intent_type="specific"), source="agent")
         constraints = resolve(
             intent,
             explicit_time_budget=constants.MAX_BUDGET_MIN,
@@ -598,9 +592,7 @@ class Pipeline:
             costing=profile or "pedestrian",
             tail_mode="reroute",
         )
-        _candidates, _cost, _route, _info, plan = run_plan_tail(
-            turn, candidates, constraints
-        )
+        _candidates, _cost, _route, _info, plan = run_plan_tail(turn, candidates, constraints)
 
         try:
             shape, summary, _status = render(plan.route, costing=profile or "pedestrian")

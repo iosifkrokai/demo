@@ -179,8 +179,9 @@ def test_detour_is_zero_when_our_walk_equals_the_reference_walk():
     ref = b.build_reference_walk(stops(0.0, 10.0, 1.0, 11.0))
     ours = [pts[i] for i in ref.order]
 
-    assert b.detour_km(b.walk_distance_km(ours, list(range(len(ours)))),
-                       ref.distance_km) == pytest.approx(0.0, abs=1e-9)
+    assert b.detour_km(
+        b.walk_distance_km(ours, list(range(len(ours)))), ref.distance_km
+    ) == pytest.approx(0.0, abs=1e-9)
 
 
 def test_detour_uses_the_same_measure_on_both_sides():
@@ -214,8 +215,7 @@ def test_ms_renders_mean_plus_minus_spread():
     runs = [_run(kendall_tau=0.5), _run(kendall_tau=None), _run(kendall_tau=1.0)]
     assert b._ms(runs, "kendall_tau", 2) == "0.75±0.25"
     assert b._ms([_run(kendall_tau=0.5)], "kendall_tau", 3) == "0.500±0.000"
-    assert b._ms([_run(kendall_tau=None), _run(kendall_tau=None)],
-                 "kendall_tau", 2) == "n/a"
+    assert b._ms([_run(kendall_tau=None), _run(kendall_tau=None)], "kendall_tau", 2) == "n/a"
 
 
 def test_fit_cell_counts_runs_that_fit():
@@ -228,13 +228,21 @@ def _fake_generate(points, walk_s=1800.0, length_km=None, fits=True):
     def _call(base_url, query, budget_minutes, origin_lat, origin_lon):
         return {
             "points": [
-                {"name": p["name"], "lat": p["lat"], "lon": p["lon"],
-                 "visit_minutes": p.get("visit_minutes")}
+                {
+                    "name": p["name"],
+                    "lat": p["lat"],
+                    "lon": p["lon"],
+                    "visit_minutes": p.get("visit_minutes"),
+                }
                 for p in points
             ],
             "summary": {"time_seconds": walk_s, "length_km": length_km},
-            "budget": {"walk_minutes": int(walk_s / 60), "visit_minutes": 0,
-                       "total_minutes": int(walk_s / 60), "fits": fits},
+            "budget": {
+                "walk_minutes": int(walk_s / 60),
+                "visit_minutes": 0,
+                "total_minutes": int(walk_s / 60),
+                "fits": fits,
+            },
         }
 
     return _call
@@ -248,8 +256,12 @@ def test_evaluate_scores_a_perfect_route_against_the_reference_walk(
     Our route walks the reference stops in the shortest possible order, so it scores 1.0.
     """
     route = b.GoldenRoute(
-        name="synthetic", source="unit test", query_ru="q", budget_minutes=120,
-        stops=stops(0.0, 10.0, 1.0, 11.0), est_walk_minutes=20,
+        name="synthetic",
+        source="unit test",
+        query_ru="q",
+        budget_minutes=120,
+        stops=stops(0.0, 10.0, 1.0, 11.0),
+        est_walk_minutes=20,
     )
     perfect = api_points(["a", "b", "c", "d"], 0.0, 1.0, 10.0, 11.0)
     monkeypatch.setattr(b, "call_generate", _fake_generate(perfect))
@@ -271,8 +283,12 @@ def test_evaluate_reports_n_a_tau_when_too_few_stops_are_shared(
     monkeypatch,
 ):
     route = b.GoldenRoute(
-        name="synthetic", source="unit test", query_ru="q", budget_minutes=120,
-        stops=stops(0.0, 1.0, 2.0, 3.0), est_walk_minutes=10,
+        name="synthetic",
+        source="unit test",
+        query_ru="q",
+        budget_minutes=120,
+        stops=stops(0.0, 1.0, 2.0, 3.0),
+        est_walk_minutes=10,
     )
     ours = api_points(["a", "b"], 0.0, 3.0)
     monkeypatch.setattr(b, "call_generate", _fake_generate(ours))
@@ -288,8 +304,12 @@ def test_evaluate_reports_n_a_tau_when_too_few_stops_are_shared(
 def test_evaluate_detour_grows_with_a_worse_our_order(monkeypatch):
     """detour is monotone in how much we backtrack, and needs no reference."""
     route = b.GoldenRoute(
-        name="synthetic", source="unit test", query_ru="q", budget_minutes=120,
-        stops=stops(0.0, 1.0, 2.0, 3.0), est_walk_minutes=10,
+        name="synthetic",
+        source="unit test",
+        query_ru="q",
+        budget_minutes=120,
+        stops=stops(0.0, 1.0, 2.0, 3.0),
+        est_walk_minutes=10,
     )
     straight = api_points(["a", "b", "c", "d"], 0.0, 1.0, 2.0, 3.0)
     shuffled = [straight[i] for i in (0, 3, 1, 2)]
@@ -308,8 +328,12 @@ def test_evaluate_detour_grows_with_a_worse_our_order(monkeypatch):
 
 def test_evaluate_carries_the_network_length_separately(monkeypatch):
     route = b.GoldenRoute(
-        name="synthetic", source="unit test", query_ru="q", budget_minutes=120,
-        stops=stops(0.0, 1.0, 2.0), est_walk_minutes=10,
+        name="synthetic",
+        source="unit test",
+        query_ru="q",
+        budget_minutes=120,
+        stops=stops(0.0, 1.0, 2.0),
+        est_walk_minutes=10,
     )
     ours = api_points(["a", "b", "c"], 0.0, 1.0, 2.0)
     monkeypatch.setattr(b, "call_generate", _fake_generate(ours, length_km=4.2))
@@ -323,8 +347,12 @@ def test_evaluate_carries_the_network_length_separately(monkeypatch):
 
 def test_evaluate_survives_an_api_error(monkeypatch):
     route = b.GoldenRoute(
-        name="synthetic", source="unit test", query_ru="q", budget_minutes=120,
-        stops=stops(0.0, 1.0), est_walk_minutes=10,
+        name="synthetic",
+        source="unit test",
+        query_ru="q",
+        budget_minutes=120,
+        stops=stops(0.0, 1.0),
+        est_walk_minutes=10,
     )
 
     def _boom(*a, **k):

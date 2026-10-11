@@ -17,9 +17,7 @@ class Settings:
 
     HOST: str = os.environ.get("AGENT_HOST", "0.0.0.0")
     PORT: int = int(os.environ.get("AGENT_PORT", "8080"))
-    DSN: str = os.environ.get(
-        "DATABASE_URL", "postgresql://grodno:grodno@localhost:5432/grodno"
-    )
+    DSN: str = os.environ.get("DATABASE_URL", "postgresql://grodno:grodno@localhost:5432/grodno")
     VALHALLA_URL: str = os.environ.get("VALHALLA_URL", "http://localhost:8002")
 
 
@@ -41,6 +39,6 @@ def openrouter_api_key() -> str | None:
 
 def langfuse_configured() -> bool:
     """True when both Langfuse keys are present (a host alone is not enough)."""
-    return bool(
-        os.environ.get("LANGFUSE_PUBLIC_KEY") or settings.LANGFUSE_PUBLIC_KEY
-    ) and bool(os.environ.get("LANGFUSE_SECRET_KEY") or settings.LANGFUSE_SECRET_KEY)
+    return bool(os.environ.get("LANGFUSE_PUBLIC_KEY") or settings.LANGFUSE_PUBLIC_KEY) and bool(
+        os.environ.get("LANGFUSE_SECRET_KEY") or settings.LANGFUSE_SECRET_KEY
+    )

@@ -24,8 +24,14 @@ from planner.refine import (
 
 def _cand(pid: int, name: str) -> Candidate:
     return Candidate(
-        id=pid, name=name, lat=52.1, lon=23.7, category="кафе",
-        score=1.0, distance_m=None, source="osm",
+        id=pid,
+        name=name,
+        lat=52.1,
+        lon=23.7,
+        category="кафе",
+        score=1.0,
+        distance_m=None,
+        source="osm",
     )
 
 
@@ -35,19 +41,27 @@ def test_request_without_context_still_parses():
 
 
 def test_context_round_trips_from_the_frontend_payload():
-    req = GenerateReq.model_validate({
-        "query": "музеи Гродно",
-        "context": {
-            "instruction": "добавь кофейню и туалет",
-            "revision": 2,
-            "excluded_ids": [17],
-            "base_points": [
-                {"id": 3, "name": "Новый замок", "lat": 53.6766, "lon": 23.8264},
-                {"id": None, "name": "моё местоположение", "lat": 53.66,
-                 "lon": 23.83, "source": "mine", "pinned": True},
-            ],
-        },
-    })
+    req = GenerateReq.model_validate(
+        {
+            "query": "музеи Гродно",
+            "context": {
+                "instruction": "добавь кофейню и туалет",
+                "revision": 2,
+                "excluded_ids": [17],
+                "base_points": [
+                    {"id": 3, "name": "Новый замок", "lat": 53.6766, "lon": 23.8264},
+                    {
+                        "id": None,
+                        "name": "моё местоположение",
+                        "lat": 53.66,
+                        "lon": 23.83,
+                        "source": "mine",
+                        "pinned": True,
+                    },
+                ],
+            },
+        }
+    )
     ctx = req.context
     assert ctx is not None
     assert ctx.instruction == "добавь кофейню и туалет"
@@ -152,10 +166,15 @@ def test_convenience_stops_come_from_the_neighbourhood(monkeypatch):
         def nearby(self, lat, lon, radius_km=12.0, limit=50):
             calls.append((lat, lon, radius_km))
             return [
-                place_from_row({
-                    "id": 50 + len(calls), "name": "Кафе рядом", "category": "кафе",
-                    "lat": lat, "lon": lon,
-                }),
+                place_from_row(
+                    {
+                        "id": 50 + len(calls),
+                        "name": "Кафе рядом",
+                        "category": "кафе",
+                        "lat": lat,
+                        "lon": lon,
+                    }
+                ),
             ]
 
     found = _nearby_convenience(_Places(), base, {"кафе"})
@@ -173,10 +192,12 @@ def test_convenience_search_ignores_categories_nobody_asked_for(monkeypatch):
     class _Places:
         def nearby(self, lat, lon, radius_km=12.0, limit=50):
             return [
-                place_from_row({"id": 60, "name": "Гостиница", "category": "гостиница",
-                                "lat": lat, "lon": lon}),
-                place_from_row({"id": 61, "name": "Туалет", "category": "туалет",
-                                "lat": lat, "lon": lon}),
+                place_from_row(
+                    {"id": 60, "name": "Гостиница", "category": "гостиница", "lat": lat, "lon": lon}
+                ),
+                place_from_row(
+                    {"id": 61, "name": "Туалет", "category": "туалет", "lat": lat, "lon": lon}
+                ),
             ]
 
     found = _nearby_convenience(_Places(), base, {"туалет"})

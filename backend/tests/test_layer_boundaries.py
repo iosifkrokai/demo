@@ -76,11 +76,7 @@ def _python_files(directory: Path) -> list[Path]:
     """Every module under `directory`, excluding caches. Empty if it is absent."""
     if not directory.is_dir():
         return []
-    return sorted(
-        path
-        for path in directory.rglob("*.py")
-        if "__pycache__" not in path.parts
-    )
+    return sorted(path for path in directory.rglob("*.py") if "__pycache__" not in path.parts)
 
 
 def _package_dirs() -> set[str]:
@@ -88,9 +84,7 @@ def _package_dirs() -> set[str]:
     return {
         child.name
         for child in BACKEND.iterdir()
-        if child.is_dir()
-        and not child.name.startswith(".")
-        and any(child.rglob("*.py"))
+        if child.is_dir() and not child.name.startswith(".") and any(child.rglob("*.py"))
     }
 
 
@@ -188,10 +182,7 @@ def test_logic_layers_do_not_speak_sql() -> None:
             lines = _sql_lines(path)
             if lines:
                 offenders[relative] = lines
-    assert not offenders, (
-        "SQL in a logic layer — move it to a repository in db/store: "
-        f"{offenders}"
-    )
+    assert not offenders, f"SQL in a logic layer — move it to a repository in db/store: {offenders}"
 
 
 def test_logic_layers_do_not_import_a_driver() -> None:
@@ -204,9 +195,7 @@ def test_logic_layers_do_not_import_a_driver() -> None:
                 continue
             if _DRIVER.search(path.read_text(encoding="utf-8")):
                 offenders.append(relative)
-    assert not offenders, (
-        f"a logic layer imports psycopg — take a repository instead: {offenders}"
-    )
+    assert not offenders, f"a logic layer imports psycopg — take a repository instead: {offenders}"
 
 
 def test_the_agent_layer_is_a_leaf() -> None:
@@ -268,6 +257,5 @@ def test_dockerfile_copies_every_package() -> None:
     packages, _, _ = _declared_packages()
     expected = packages | _COPIED_AS_IS
     assert copied == expected, (
-        "the Dockerfile does not copy every package: "
-        f"{sorted(copied ^ expected)}"
+        f"the Dockerfile does not copy every package: {sorted(copied ^ expected)}"
     )

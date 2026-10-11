@@ -15,9 +15,7 @@ from db.store.errors import EmailTaken
 from db.store.users import PostgresUserRepository
 
 
-def create_admin(
-    *, email: str, password: str | None = None, name: str | None = None
-) -> int:
+def create_admin(*, email: str, password: str | None = None, name: str | None = None) -> int:
     """Create the admin (or promote an existing account). Returns an exit code."""
     normalized = normalize_email(email)
     if normalized is None:

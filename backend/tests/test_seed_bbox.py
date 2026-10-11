@@ -79,8 +79,9 @@ def test_every_filter_in_the_template_uses_the_same_slot_order():
     """A filter left in a different order would silently drop half the box."""
     template_coords = _filter_coords(SIGHT_QUERY)
     assert len(template_coords) >= 4
-    assert all(c == tuple(f"{{{n}}}" for n in ("south", "west", "north", "east"))
-               for c in template_coords)
+    assert all(
+        c == tuple(f"{{{n}}}" for n in ("south", "west", "north", "east")) for c in template_coords
+    )
 
 
 def test_build_query_rejects_a_swapped_or_inverted_box():
@@ -124,8 +125,7 @@ def test_cli_bbox_flag_is_documented_as_wsen():
 
 def test_cli_bbox_values_flow_into_the_query_unchanged():
     """`--bbox 23.0 52.0 28.0 55.0` builds the SWNE query."""
-    args = build_arg_parser().parse_args(
-        ["fetch", "--bbox", "23.0", "52.0", "28.0", "55.0"])
+    args = build_arg_parser().parse_args(["fetch", "--bbox", "23.0", "52.0", "28.0", "55.0"])
     assert tuple(args.bbox) == BBOX
     for c in _filter_coords(build_overpass_query(SIGHT_QUERY, tuple(args.bbox))):
         assert c == tuple(str(v) for v in OVERPASS_COORDS)

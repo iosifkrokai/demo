@@ -99,9 +99,7 @@ def _record_model_call(brief: ReaderBrief, prompt: str, result: Any) -> None:
     reading = getattr(result, "output", None)
     usable = isinstance(reading, AgentReading)
     answer: Any = (
-        reading.model_dump()
-        if usable
-        else getattr(getattr(result, "response", None), "text", None)
+        reading.model_dump() if usable else getattr(getattr(result, "response", None), "text", None)
     )
     facts: dict[str, Any] = {"cached": False}
     if usage is not None:

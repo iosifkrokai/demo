@@ -22,6 +22,7 @@ SearchScopeLiteral = Literal["town", "district", "region"]
 
 class LatLon(BaseModel):
     """Tourist's current position (device geolocation)."""
+
     lat: float = Field(ge=44.0, le=62.0)
     lon: float = Field(ge=19.0, le=42.0)
 
@@ -64,30 +65,43 @@ class RouteChanges(BaseModel):
 
 
 TransportLiteral = Literal[
-    "pedestrian", "bicycle", "auto", "car", "truck", "bus",
-    "motor_scooter", "motorcycle",
+    "pedestrian",
+    "bicycle",
+    "auto",
+    "car",
+    "truck",
+    "bus",
+    "motor_scooter",
+    "motorcycle",
 ]
 # The service lookup also accepts "any" — a service is not a journey.
 TransportOrAnyLiteral = Literal[
-    "pedestrian", "bicycle", "auto", "car", "truck", "bus",
-    "motor_scooter", "motorcycle", "any",
+    "pedestrian",
+    "bicycle",
+    "auto",
+    "car",
+    "truck",
+    "bus",
+    "motor_scooter",
+    "motorcycle",
+    "any",
 ]
 
 
 class GenerateReq(BaseModel):
     """POST /routes/generate body."""
+
     query: str = Field(min_length=3, max_length=500)
     progress_id: str | None = Field(default=None, max_length=64)
     session_id: str | None = Field(default=None, max_length=128)
-    time_budget_minutes: int | None = Field(
-        default=None, ge=0, le=constants.MAX_BUDGET_MIN
-    )
+    time_budget_minutes: int | None = Field(default=None, ge=0, le=constants.MAX_BUDGET_MIN)
     origin: LatLon | None = None
     profile: TransportLiteral | None = None
     region_bbox: list[float] | None = Field(
         default=None,
         description="[south, west, north, east]. Used as a PostGIS envelope filter.",
-        min_length=4, max_length=4,
+        min_length=4,
+        max_length=4,
     )
     context: RouteContext | None = None
 
@@ -285,6 +299,7 @@ class ResolvedConstraints(BaseModel):
 
 class Candidate(BaseModel):
     """One candidate place with the bits the planner needs."""
+
     id: int
     name: str
     category: str | None
@@ -306,6 +321,7 @@ class Candidate(BaseModel):
 
 class CostMatrix(BaseModel):
     """Walk cost matrix + per-place visit times."""
+
     walk_seconds: list[list[float]] = []
     visit_minutes: list[int] = []
     indices: list[int] = []

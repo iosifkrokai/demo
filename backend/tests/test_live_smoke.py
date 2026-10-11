@@ -80,7 +80,10 @@ def test_smoke_query(query: str, extra: dict):
     assert interp, f"{query!r} carries no `interpretation` block"
     assert interp["source"] in ("llm", "mixed", "explicit")
     assert interp["status"] == body["status"] or interp["status"] in (
-        "ready", "infeasible", "degraded", "pending",
+        "ready",
+        "infeasible",
+        "degraded",
+        "pending",
     )
     assert interp["requirements"], "the chips list must not be empty"
 
@@ -97,16 +100,11 @@ def test_the_mandatory_toilet_is_never_silently_dropped():
     assert status == 200, f"HTTP {status}: {err}"
 
     interp = body["interpretation"]
-    toilet = [
-        r for r in interp["requirements"]
-        if r["kind"] == "service" and r["code"] == "туалет"
-    ]
+    toilet = [r for r in interp["requirements"] if r["kind"] == "service" and r["code"] == "туалет"]
     assert toilet, "the toilet the user stated must appear as a requirement"
 
     on_route = toilet[0]["status"] == "satisfied" and toilet[0]["place_ids"]
-    reported = any(
-        s["kind"] == "service" and s["code"] == "туалет" for s in interp["unmet"]
-    )
+    reported = any(s["kind"] == "service" and s["code"] == "туалет" for s in interp["unmet"])
     assert on_route or reported, (
         "the toilet is neither on the route nor reported in interpretation.unmet"
     )

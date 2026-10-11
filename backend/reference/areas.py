@@ -47,8 +47,7 @@ def load_areas() -> dict[str, dict[str, Any]]:
                 continue
             if key in claimed_by and claimed_by[key] != slug:
                 raise ValueError(
-                    f"areas.json: {key!r} claimed by both {claimed_by[key]!r} "
-                    f"and {slug!r}"
+                    f"areas.json: {key!r} claimed by both {claimed_by[key]!r} and {slug!r}"
                 )
             claimed_by[key] = slug
         areas[slug] = area
@@ -91,9 +90,7 @@ def resolve_area(term: str | None, locale: str | None = None) -> str | None:
     order += [loc for loc in LOCALES if loc not in order]
     for loc in order:
         for slug, area in load_areas().items():
-            if needle == _normalize(slug) or needle == _normalize(
-                area.get(f"name_{loc}", "")
-            ):
+            if needle == _normalize(slug) or needle == _normalize(area.get(f"name_{loc}", "")):
                 return slug
             for alias in area.get("aliases", {}).get(loc, []):
                 if needle == _normalize(alias):
@@ -127,8 +124,7 @@ def in_project_area(lat: float | None, lon: float | None) -> bool:
     if any(point_in_ring(lat, lon, ring) for ring in _grodno_rings()):
         return True
     return any(
-        _within_radius(lat, lon, exc["lat"], exc["lon"], exc["radius_m"])
-        for exc in _exceptions()
+        _within_radius(lat, lon, exc["lat"], exc["lon"], exc["radius_m"]) for exc in _exceptions()
     )
 
 

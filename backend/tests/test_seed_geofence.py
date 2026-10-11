@@ -26,8 +26,13 @@ def test_project_geofence_excludes_other_belarus_voblasts():
 
 def test_osm_ingest_paths_exclude_other_voblasts():
     for _, lat, lon in OTHER_VOBLASTS:
-        element = {"type": "node", "id": 7, "lat": lat, "lon": lon,
-                   "tags": {"name": "Музей", "tourism": "museum"}}
+        element = {
+            "type": "node",
+            "id": 7,
+            "lat": lat,
+            "lon": lon,
+            "tags": {"name": "Музей", "tourism": "museum"},
+        }
         assert sight_element_to_row(element) is None
         element["tags"] = {"name": "Кафе", "amenity": "cafe"}
         assert service_element_to_row(element) is None

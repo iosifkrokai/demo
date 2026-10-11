@@ -22,37 +22,71 @@ from db.seed import (  # noqa: E402
 )
 from tests._schema import baseline_sql  # noqa: E402
 
-HEADER = ("# name|category|district|town|lat|lon|blurb|fun_fact|fun_facts|"
-          "opening_hours|ticket_price|visit_minutes|links|source_url")
+HEADER = (
+    "# name|category|district|town|lat|lon|blurb|fun_fact|fun_facts|"
+    "opening_hours|ticket_price|visit_minutes|links|source_url"
+)
 
 IN_AREA = (53.6791, 23.8216)
 OUT_OF_AREA = (54.6872, 25.2797)
 
 
-def _row(name, category, source_url, lat, lon, *, hours="", price="",
-         visit="90", district="Гродно (город)", town="Гродно",
-         fun_facts="[]", links="[]"):
-    return "|".join([
-        name, category, district, town, f"{lat}", f"{lon}", "blurb", "fact",
-        fun_facts, hours, price, visit, links, source_url,
-    ])
+def _row(
+    name,
+    category,
+    source_url,
+    lat,
+    lon,
+    *,
+    hours="",
+    price="",
+    visit="90",
+    district="Гродно (город)",
+    town="Гродно",
+    fun_facts="[]",
+    links="[]",
+):
+    return "|".join(
+        [
+            name,
+            category,
+            district,
+            town,
+            f"{lat}",
+            f"{lon}",
+            "blurb",
+            "fact",
+            fun_facts,
+            hours,
+            price,
+            visit,
+            links,
+            source_url,
+        ]
+    )
 
 
-def _write_datasets(data_dir: Path, *, city_rows, region_rows, osm_rows,
-                    curated_rows=()):
+def _write_datasets(data_dir: Path, *, city_rows, region_rows, osm_rows, curated_rows=()):
     (data_dir / "places_grodno_city.csv").write_text(
-        "\n".join([HEADER, *city_rows]) + "\n", encoding="utf-8")
+        "\n".join([HEADER, *city_rows]) + "\n", encoding="utf-8"
+    )
     (data_dir / "places_region.csv").write_text(
-        "\n".join([HEADER, *region_rows]) + "\n", encoding="utf-8")
+        "\n".join([HEADER, *region_rows]) + "\n", encoding="utf-8"
+    )
     (data_dir / "places_osm_raw.csv").write_text(
-        "\n".join([HEADER, *osm_rows]) + "\n", encoding="utf-8")
+        "\n".join([HEADER, *osm_rows]) + "\n", encoding="utf-8"
+    )
     if curated_rows:
         (data_dir / "places_curated.csv").write_text(
-            "\n".join([
-                "# id|normalized_name|category|blurb|fun_fact|fun_facts|links",
-                *curated_rows,
-            ]) + "\n",
-            encoding="utf-8")
+            "\n".join(
+                [
+                    "# id|normalized_name|category|blurb|fun_fact|fun_facts|links",
+                    *curated_rows,
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
 
 
 @pytest.fixture()
@@ -61,22 +95,54 @@ def fixture_dir(tmp_path: Path) -> Path:
     _write_datasets(
         tmp_path,
         city_rows=[
-            _row("Старый замок (Гродно)", "замок", "city:old-castle", *IN_AREA,
-                 hours="вт-вс 10:00-18:00", price="7 BYN"),
-            _row("Коложская церковь", "церковь", "city:kolozha",
-                 IN_AREA[0] + 0.0005, IN_AREA[1] + 0.0005),
+            _row(
+                "Старый замок (Гродно)",
+                "замок",
+                "city:old-castle",
+                *IN_AREA,
+                hours="вт-вс 10:00-18:00",
+                price="7 BYN",
+            ),
+            _row(
+                "Коложская церковь",
+                "церковь",
+                "city:kolozha",
+                IN_AREA[0] + 0.0005,
+                IN_AREA[1] + 0.0005,
+            ),
         ],
         region_rows=[
-            _row("Мирский замок", "замок", "region:mir-castle", 53.4513, 26.4729,
-                 district="Кореличский район", hours="круглосуточно", price="16 BYN"),
+            _row(
+                "Мирский замок",
+                "замок",
+                "region:mir-castle",
+                53.4513,
+                26.4729,
+                district="Кореличский район",
+                hours="круглосуточно",
+                price="16 BYN",
+            ),
         ],
         osm_rows=[
-            _row("Лидский замок", "замок", "osm:way/1", 53.8845, 25.2925,
-                 district="Лидский район", town="Лида"),
-            _row("Лидский замок", "замок", "osm:way/2", 53.88451, 25.29251,
-                 district="Лидский район", town="Лида"),
-            _row("Cafe Vilnius", "музей", "osm:node/3", *OUT_OF_AREA,
-                 district="", town=""),
+            _row(
+                "Лидский замок",
+                "замок",
+                "osm:way/1",
+                53.8845,
+                25.2925,
+                district="Лидский район",
+                town="Лида",
+            ),
+            _row(
+                "Лидский замок",
+                "замок",
+                "osm:way/2",
+                53.88451,
+                25.29251,
+                district="Лидский район",
+                town="Лида",
+            ),
+            _row("Cafe Vilnius", "музей", "osm:node/3", *OUT_OF_AREA, district="", town=""),
         ],
         curated_rows=[
             "1|Старый замок|замок|curated blurb|curated fact|[]|[]",
@@ -94,8 +160,7 @@ def test_dry_run_needs_no_db_and_no_network(fixture_dir, tmp_path, monkeypatch):
     monkeypatch.setattr(socket, "create_connection", _explode)
 
     report_path = tmp_path / "report.json"
-    rc = seed_cli.main(["--dry-run", "--data-dir", str(fixture_dir),
-                        "--report", str(report_path)])
+    rc = seed_cli.main(["--dry-run", "--data-dir", str(fixture_dir), "--report", str(report_path)])
 
     assert rc == 0
     report = json.loads(report_path.read_text(encoding="utf-8"))
@@ -107,7 +172,8 @@ def test_dry_run_report_is_stable_across_runs(fixture_dir):
     def _report():
         datasets_ = [d.with_data_dir(fixture_dir) for d in datasets.default_datasets()]
         return datasets.build_coverage_report(
-            datasets.collect_records(datasets_), mode="dry-run", generated_at="fixed")
+            datasets.collect_records(datasets_), mode="dry-run", generated_at="fixed"
+        )
 
     first, second = _report(), _report()
     assert first == second
@@ -163,8 +229,11 @@ def test_coverage_counts_and_shares(fixture_dir):
     collected = datasets.collect_records(datasets_)
     curated = datasets.read_curated(fixture_dir / "places_curated.csv")
     report = datasets.build_coverage_report(
-        collected, mode="dry-run", curated=curated,
-        curated_stats={"rows": len(curated), "applied": False})
+        collected,
+        mode="dry-run",
+        curated=curated,
+        curated_stats={"rows": len(curated), "applied": False},
+    )
 
     assert report["totals"]["records"] == 5
     assert report["totals"]["geofence_rejects"] == 1
@@ -205,17 +274,34 @@ def test_alias_coverage_counts_ru_names(fixture_dir):
 
 def test_report_json_roundtrip(fixture_dir, tmp_path):
     report_path = tmp_path / "r.json"
-    assert seed_cli.main(["--dry-run", "--data-dir", str(fixture_dir),
-                          "--report", str(report_path)]) == 0
+    assert (
+        seed_cli.main(["--dry-run", "--data-dir", str(fixture_dir), "--report", str(report_path)])
+        == 0
+    )
     report = json.loads(report_path.read_text(encoding="utf-8"))
-    for key in ("totals", "by_category", "by_district", "coverage", "aliases",
-                "geofence_rejects", "invalid_rows", "suspected_duplicates", "curated"):
+    for key in (
+        "totals",
+        "by_category",
+        "by_district",
+        "coverage",
+        "aliases",
+        "geofence_rejects",
+        "invalid_rows",
+        "suspected_duplicates",
+        "curated",
+    ):
         assert key in report, key
 
 
-@pytest.mark.parametrize("source,expected", [
-    ("curated", True), ("dataset", True), ("auto", False), (None, False),
-])
+@pytest.mark.parametrize(
+    "source,expected",
+    [
+        ("curated", True),
+        ("dataset", True),
+        ("auto", False),
+        (None, False),
+    ],
+)
 def test_curated_category_is_protected(source, expected):
     assert pipeline.curated_category_is_protected(source) is expected
 

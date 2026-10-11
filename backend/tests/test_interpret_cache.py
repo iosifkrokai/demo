@@ -28,7 +28,6 @@ def _req(**over: Any) -> GenerateReq:
     return GenerateReq(**body)
 
 
-
 def _key(query: str, brief, instructions: str, model: str | None = None) -> str:
     """The interpret key for a brief, built the way `planner.intent` builds it.
 
@@ -50,6 +49,7 @@ def _key(query: str, brief, instructions: str, model: str | None = None) -> str:
         avoid=brief.avoid,
         result_mode=brief.result_mode,
     )
+
 
 def _contract(name: str = "Старый замок") -> TripRequirements:
     return TripRequirements(
@@ -122,9 +122,10 @@ def test_switching_the_model_invalidates_every_entry():
     instructions = "ты читаешь запрос"
     baseline = _key("замки", intent.reader_brief(_req()), instructions, "google/gemini-2.5-pro")
 
-    assert _key(
-        "замки", intent.reader_brief(_req()), instructions, "google/gemini-2.5-flash"
-    ) != baseline
+    assert (
+        _key("замки", intent.reader_brief(_req()), instructions, "google/gemini-2.5-flash")
+        != baseline
+    )
     assert _key("замки", intent.reader_brief(_req()), instructions, None) != baseline
 
 
@@ -201,9 +202,7 @@ def test_the_second_reading_does_not_inherit_the_first_ones_verdicts(monkeypatch
 
 def test_without_a_cache_key_nothing_is_cached(monkeypatch):
     """No key means no reading at all — and nothing to cache."""
-    monkeypatch.setattr(
-        intent, "_interpret_cache_key", lambda query, req: (None, "")
-    )
+    monkeypatch.setattr(intent, "_interpret_cache_key", lambda query, req: (None, ""))
 
     with pytest.raises(InterpretationUnavailable):
         intent.build_requirements("замки Гродно", _req())
@@ -230,7 +229,7 @@ def test_a_cached_reading_says_so_in_the_trace(monkeypatch):
     trace.begin("job-cache")
     try:
         intent.build_requirements("старый город за два часа", _req())
-        span, = trace._traces["job-cache"].spans
+        (span,) = trace._traces["job-cache"].spans
     finally:
         trace.finish()
 

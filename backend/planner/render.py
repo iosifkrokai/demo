@@ -49,7 +49,8 @@ def render(
     if len(locations) > constants.VALHALLA_MAX_LOCATIONS:
         log.info(
             "route: %d locations exceed Valhalla's %d cap — rendering leg by leg",
-            len(locations), constants.VALHALLA_MAX_LOCATIONS,
+            len(locations),
+            constants.VALHALLA_MAX_LOCATIONS,
         )
         shape, summary, leg_status = _render_legs(pts, costing, locale)
         if leg_status == "usable" and shape.get("coordinates"):
@@ -142,7 +143,11 @@ def _render_legs(
         return {}, {}, "no_route_exists"
 
     log.info("route: drew %d of %d legs separately", drawn, len(pts) - 1)
-    return {"type": "LineString", "coordinates": coords}, {
-        "length": length_km,
-        "time": seconds,
-    }, "usable"
+    return (
+        {"type": "LineString", "coordinates": coords},
+        {
+            "length": length_km,
+            "time": seconds,
+        },
+        "usable",
+    )

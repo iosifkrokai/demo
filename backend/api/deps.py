@@ -129,9 +129,7 @@ def session_user(request: Request, repo: UserRepository) -> User | None:
     return repo.get_session_user(hash_token(token))
 
 
-def require_user(
-    request: Request, repo: UserRepository
-) -> tuple[User | None, JSONResponse | None]:
+def require_user(request: Request, repo: UserRepository) -> tuple[User | None, JSONResponse | None]:
     user = session_user(request, repo)
     if user is None:
         return None, error(401, REASON_NOT_AUTHENTICATED)

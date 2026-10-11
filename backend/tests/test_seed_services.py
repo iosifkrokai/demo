@@ -47,14 +47,24 @@ def test_unnamed_toilet_gets_fallback_name():
 
 
 def test_osm_element_to_row_rejects_foreign_point():
-    el = {"type": "node", "id": 1, "lat": 54.6872, "lon": 25.2797,
-          "tags": {"name": "Cafe Vilnius", "amenity": "cafe"}}
+    el = {
+        "type": "node",
+        "id": 1,
+        "lat": 54.6872,
+        "lon": 25.2797,
+        "tags": {"name": "Cafe Vilnius", "amenity": "cafe"},
+    }
     assert service_element_to_row(el) is None
 
 
 def test_osm_element_to_row_accepts_grodno_point():
-    el = {"type": "node", "id": 2, "lat": 53.6772, "lon": 23.8232,
-          "tags": {"name": "Кафе Ласточка", "amenity": "cafe", "addr:city": "Гродно"}}
+    el = {
+        "type": "node",
+        "id": 2,
+        "lat": 53.6772,
+        "lon": 23.8232,
+        "tags": {"name": "Кафе Ласточка", "amenity": "cafe", "addr:city": "Гродно"},
+    }
     row = service_element_to_row(el)
     assert row is not None
     assert row["category"] == "кафе"
@@ -63,17 +73,23 @@ def test_osm_element_to_row_accepts_grodno_point():
 
 def test_osm_element_to_row_accepts_way_with_center_in_grodno():
     """A way element with `center` coords inside Grodno must be accepted."""
-    el = {"type": "way", "id": 12345,
-          "center": {"lat": 53.6772, "lon": 23.8232},
-          "tags": {"name": "Отель Гродно", "tourism": "hotel", "addr:city": "Гродно"}}
+    el = {
+        "type": "way",
+        "id": 12345,
+        "center": {"lat": 53.6772, "lon": 23.8232},
+        "tags": {"name": "Отель Гродно", "tourism": "hotel", "addr:city": "Гродно"},
+    }
     row = service_element_to_row(el)
     assert row is not None
     assert row["category"] == "гостиница"
     assert row["source_url"] == "osm_poi:way/12345"
 
-    vilnius_el = {"type": "way", "id": 12345,
-                  "center": {"lat": 54.6872, "lon": 25.2797},
-                  "tags": {"name": "Отель Гродно", "tourism": "hotel", "addr:city": "Гродно"}}
+    vilnius_el = {
+        "type": "way",
+        "id": 12345,
+        "center": {"lat": 54.6872, "lon": 25.2797},
+        "tags": {"name": "Отель Гродно", "tourism": "hotel", "addr:city": "Гродно"},
+    }
     assert service_element_to_row(vilnius_el) is None
 
 
@@ -105,8 +121,13 @@ def test_fetch_overpass_504_on_one_endpoint_fails_over_to_the_next(monkeypatch):
     failing, serving = OVERPASS_ENDPOINTS[0], OVERPASS_ENDPOINTS[1]
 
     valid_elements = [
-        {"type": "node", "id": 42, "lat": 53.6772, "lon": 23.8232,
-         "tags": {"name": "Кафе Ласточка", "amenity": "cafe"}},
+        {
+            "type": "node",
+            "id": 42,
+            "lat": 53.6772,
+            "lon": 23.8232,
+            "tags": {"name": "Кафе Ласточка", "amenity": "cafe"},
+        },
     ]
 
     class _GatewayTimeoutResp:

@@ -153,9 +153,13 @@ def is_name_dup(
 ) -> bool:
     """True when an existing place shares the exact name within threshold_m."""
     for ex in existing:
-        if ex["name"] == row["name"] and _haversine_m(
-            float(row["lat"]), float(row["lon"]), float(ex["lat"]), float(ex["lon"])
-        ) < threshold_m:
+        if (
+            ex["name"] == row["name"]
+            and _haversine_m(
+                float(row["lat"]), float(row["lon"]), float(ex["lat"]), float(ex["lon"])
+            )
+            < threshold_m
+        ):
             return True
     return False
 

@@ -19,11 +19,15 @@ _DATA_FILE = TAXONOMY_CSV
 _LIST_SEP = "|"
 
 _COLUMNS = (
-    "code", "ru", "en", "role", "osm_tags", "visit_minutes",
-    "aliases_ru", "aliases_en",
+    "code",
+    "ru",
+    "en",
+    "role",
+    "osm_tags",
+    "visit_minutes",
+    "aliases_ru",
+    "aliases_en",
 )
-
-
 
 
 def _split(value: str) -> tuple[str, ...]:
@@ -113,8 +117,26 @@ def _surface_index() -> dict[str, str]:
 
 
 _RU_ENDINGS = (
-    "ами", "ями", "ах", "ях", "ов", "ев", "ей", "ам", "ям",
-    "ой", "ом", "ем", "ы", "и", "а", "я", "у", "ю", "е", "ь",
+    "ами",
+    "ями",
+    "ах",
+    "ях",
+    "ов",
+    "ев",
+    "ей",
+    "ам",
+    "ям",
+    "ой",
+    "ом",
+    "ем",
+    "ы",
+    "и",
+    "а",
+    "я",
+    "у",
+    "ю",
+    "е",
+    "ь",
 )
 _EN_ENDINGS = ("es", "s")
 
@@ -158,11 +180,7 @@ def resolve_code(term: str, locale: Locale = "ru") -> str | None:
 
     longest: str | None = None
     for form in index:
-        if (
-            len(form) >= 4
-            and form in norm
-            and (longest is None or len(form) > len(longest))
-        ):
+        if len(form) >= 4 and form in norm and (longest is None or len(form) > len(longest)):
             longest = form
     return index[longest] if longest is not None else None
 

@@ -47,8 +47,7 @@ _CONSTRAINT = {"PRIMARY", "UNIQUE", "CHECK", "CONSTRAINT", "FOREIGN", "EXCLUDE"}
 def _create_table_body(table: str) -> str:
     """The parenthesised body of the baseline's `CREATE TABLE {table}`."""
     statement = next(
-        s for s in baseline_statements()
-        if re.search(rf"CREATE TABLE IF NOT EXISTS {table}\b", s)
+        s for s in baseline_statements() if re.search(rf"CREATE TABLE IF NOT EXISTS {table}\b", s)
     )
     return statement[statement.index("(") + 1 : statement.rindex(")")]
 
@@ -68,9 +67,7 @@ def _created_columns(table: str) -> set[str]:
 
 def _added_columns(table: str) -> set[str]:
     """Columns added by a later `ALTER TABLE ... ADD COLUMN`, e.g. `category_source`."""
-    pattern = re.compile(
-        rf"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS ([a-z_][a-z0-9_]*)"
-    )
+    pattern = re.compile(rf"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS ([a-z_][a-z0-9_]*)")
     return {match.group(1) for s in baseline_statements() for match in [pattern.search(s)] if match}
 
 

@@ -61,7 +61,9 @@ def test_every_stop_is_located_graded_and_sourced(name: str, case: dict):
     for stop in case["stops"]:
         label = f"{name} :: {stop.get('name')}"
         lat, lon = stop.get("lat"), stop.get("lon")
-        assert isinstance(lat, (int, float)) and isinstance(lon, (int, float)), f"{label}: coordinates"
+        assert isinstance(lat, (int, float)) and isinstance(lon, (int, float)), (
+            f"{label}: coordinates"
+        )
         assert REGION["south"] <= lat <= REGION["north"], f"{label}: lat {lat} outside the region"
         assert REGION["west"] <= lon <= REGION["east"], f"{label}: lon {lon} outside the region"
         assert stop.get("grade") in GRADES, f"{label}: grade {stop.get('grade')!r}"

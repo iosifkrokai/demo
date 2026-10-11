@@ -51,11 +51,7 @@ def visit_time_minutes(category: str | None) -> int:
     if not category:
         return DEFAULT_VISIT_MINUTES
     try:
-        code = (
-            category
-            if category in taxonomy.all_codes()
-            else taxonomy.resolve_code(category)
-        )
+        code = category if category in taxonomy.all_codes() else taxonomy.resolve_code(category)
         if code is None:
             return DEFAULT_VISIT_MINUTES
         return taxonomy.visit_minutes(code)
@@ -129,17 +125,13 @@ def _sub_matrix(cost: CostMatrix, idx: list[int]) -> CostMatrix:
     )
 
 
-def _best_pair(
-    candidates: list[Candidate], cost: CostMatrix
-) -> tuple[list[Candidate], CostMatrix]:
+def _best_pair(candidates: list[Candidate], cost: CostMatrix) -> tuple[list[Candidate], CostMatrix]:
     """The best two surviving candidates when nothing else is reachable."""
     n = len(candidates)
     best: tuple[tuple[int, float], int, int] | None = None
     for i in range(n):
         for j in range(i + 1, n):
-            linked = _usable_link(cost.walk_seconds[i][j]) or _usable_link(
-                cost.walk_seconds[j][i]
-            )
+            linked = _usable_link(cost.walk_seconds[i][j]) or _usable_link(cost.walk_seconds[j][i])
             key = (1 if linked else 0, candidates[i].relevance + candidates[j].relevance)
             if best is None or key > best[0]:
                 best = (key, i, j)
@@ -163,12 +155,8 @@ def drop_unreachable(
     while changed:
         changed = False
         for i in sorted(alive):
-            can_reach = any(
-                j != i and _usable_link(cost.walk_seconds[i][j]) for j in alive
-            )
-            reachable_from = any(
-                j != i and _usable_link(cost.walk_seconds[j][i]) for j in alive
-            )
+            can_reach = any(j != i and _usable_link(cost.walk_seconds[i][j]) for j in alive)
+            reachable_from = any(j != i and _usable_link(cost.walk_seconds[j][i]) for j in alive)
             if not (can_reach and reachable_from):
                 alive.discard(i)
                 changed = True
@@ -249,15 +237,11 @@ def visit_cost(order: list[int], visit_minutes: list[int]) -> int:
     return int(sum(visit_minutes[i] for i in order)) * 60
 
 
-def total_seconds(
-    order: list[int], matrix: list[list[float]], visit_minutes: list[int]
-) -> int:
+def total_seconds(order: list[int], matrix: list[list[float]], visit_minutes: list[int]) -> int:
     return int(walk_cost(order, matrix)) + visit_cost(order, visit_minutes)
 
 
-def _synthetic_cost(
-    candidates: list[Candidate], costing: str = "pedestrian"
-) -> CostMatrix:
+def _synthetic_cost(candidates: list[Candidate], costing: str = "pedestrian") -> CostMatrix:
     """A straight-line cost matrix for when Valhalla cannot answer."""
     from .refine import visit_minutes_of
 
@@ -310,8 +294,7 @@ def _build_cost(
     candidates, cost = drop_unreachable(candidates, cost)
     if len(candidates) < 2:
         raise NoRoutePossible(
-            "Valhalla не нашла дороги между нашими точками — "
-            "уточните город или район"
+            "Valhalla не нашла дороги между нашими точками — уточните город или район"
         )
     return candidates, cost
 

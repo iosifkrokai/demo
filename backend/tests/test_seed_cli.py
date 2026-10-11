@@ -69,18 +69,27 @@ def test_one_guarded_upsert_for_every_dataset():
 def test_fetch_from_input_json_writes_a_versioned_csv(tmp_path):
     overpass_response = {
         "elements": [
-            {"type": "node", "id": 2, "lat": 53.6772, "lon": 23.8232,
-             "tags": {"amenity": "cafe", "name": "Кафе Тест"}},
-            {"type": "node", "id": 3, "lat": 54.6872, "lon": 25.2797,
-             "tags": {"amenity": "cafe", "name": "Vilnius Cafe"}},
+            {
+                "type": "node",
+                "id": 2,
+                "lat": 53.6772,
+                "lon": 23.8232,
+                "tags": {"amenity": "cafe", "name": "Кафе Тест"},
+            },
+            {
+                "type": "node",
+                "id": 3,
+                "lat": 54.6872,
+                "lon": 25.2797,
+                "tags": {"amenity": "cafe", "name": "Vilnius Cafe"},
+            },
         ]
     }
     src = tmp_path / "overpass.json"
     src.write_text(json.dumps(overpass_response), encoding="utf-8")
 
     out_dir = tmp_path / "out"
-    rc = cli.main(["fetch", "--source", "poi", "--input-json", str(src),
-                   "--out-dir", str(out_dir)])
+    rc = cli.main(["fetch", "--source", "poi", "--input-json", str(src), "--out-dir", str(out_dir)])
 
     assert rc == 0
     csv = out_dir / "places_poi.csv"

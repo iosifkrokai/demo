@@ -32,8 +32,16 @@ BENCH_OUT = QUALITY / "reports"
 BENCH_SNAPSHOTS = BENCH_OUT / "snapshots"
 
 STATUSES = frozenset(
-    {"ready", "catalogue", "degraded", "pending", "infeasible", "rejected",
-     "needs_clarification", "error"}
+    {
+        "ready",
+        "catalogue",
+        "degraded",
+        "pending",
+        "infeasible",
+        "rejected",
+        "needs_clarification",
+        "error",
+    }
 )
 
 CHECK_API_ERROR = "api_error"
@@ -281,9 +289,11 @@ class EvaluationResult:
     stops_dropped: int = 0
     n_stops: int = 0
     matches: list[tuple[int | None, int | None]] = field(default_factory=list)
-    stage: StageSplit = field(default_factory=lambda: StageSplit(
-        False, "none", 0, STAGE1_PROXY_RADIUS_M, 0, 0.0, 0, 0.0, 0.0, 0.0, None, 0
-    ))
+    stage: StageSplit = field(
+        default_factory=lambda: StageSplit(
+            False, "none", 0, STAGE1_PROXY_RADIUS_M, 0, 0.0, 0, 0.0, 0.0, 0.0, None, 0
+        )
+    )
     leg: LegSanity = field(default_factory=LegSanity)
     candidate_ids: list[int] = field(default_factory=list)
     candidate_ids_source: str = "none"
@@ -411,8 +421,7 @@ def match_golden_to_ours(
         return [(None, None)] * n
 
     dists: list[list[float]] = [
-        [haversine_km(gs.lat, gs.lon, os.lat, os.lon) for os in our_stops]
-        for gs in golden_stops
+        [haversine_km(gs.lat, gs.lon, os.lat, os.lon) for os in our_stops] for gs in golden_stops
     ]
 
     used_our: set[int] = set()
@@ -441,10 +450,7 @@ MIN_TAU_STOPS = 3
 
 
 def _pairwise_km(points: list[tuple[float, float]]) -> list[list[float]]:
-    return [
-        [haversine_km(a[0], a[1], b[0], b[1]) for b in points]
-        for a in points
-    ]
+    return [[haversine_km(a[0], a[1], b[0], b[1]) for b in points] for a in points]
 
 
 def _nearest_neighbour_order(d: list[list[float]]) -> list[int]:
@@ -502,8 +508,7 @@ def shortest_walk_order(points: list[tuple[float, float]]) -> list[int]:
 def walk_distance_km(points: list[tuple[float, float]], order: list[int]) -> float:
     """Haversine length of walking `points` in `order` (open walk, no return leg)."""
     return sum(
-        haversine_km(*points[order[i]], *points[order[i + 1]])
-        for i in range(len(order) - 1)
+        haversine_km(*points[order[i]], *points[order[i + 1]]) for i in range(len(order) - 1)
     )
 
 
@@ -623,9 +628,7 @@ def _any_within(
     radius_km = radius_m / 1000.0
     out: list[bool] = []
     for gs in targets:
-        out.append(
-            any(haversine_km(gs.lat, gs.lon, lat, lon) <= radius_km for lat, lon in points)
-        )
+        out.append(any(haversine_km(gs.lat, gs.lon, lat, lon) <= radius_km for lat, lon in points))
     return out
 
 
@@ -673,15 +676,10 @@ def stage_split(
     )
 
 
-def result_matches_stop(
-    golden: GoldenRoute, our_stops: list[OurStop], golden_idx: int
-) -> bool:
+def result_matches_stop(golden: GoldenRoute, our_stops: list[OurStop], golden_idx: int) -> bool:
     """Is reference stop `golden_idx` actually in the returned route?"""
     gs = golden.stops[golden_idx]
-    return any(
-        haversine_km(gs.lat, gs.lon, o.lat, o.lon) <= MATCH_RADIUS_KM
-        for o in our_stops
-    )
+    return any(haversine_km(gs.lat, gs.lon, o.lat, o.lon) <= MATCH_RADIUS_KM for o in our_stops)
 
 
 def find_duplicate_stop_pairs(our_stops: list[OurStop]) -> list[dict]:
@@ -697,14 +695,16 @@ def find_duplicate_stop_pairs(our_stops: list[OurStop]) -> list[dict]:
             rule = _duplicate_rule(a.name, b.name, dist_m)
             if rule is None:
                 continue
-            pairs.append({
-                "our_stop_indices": [i, j],
-                "names": [a.name, b.name],
-                "place_ids": [a.place_id, b.place_id],
-                "dist_m": round(dist_m, 1),
-                "name_similarity": round(name_similarity(a.name, b.name), 3),
-                "rule": rule,
-            })
+            pairs.append(
+                {
+                    "our_stop_indices": [i, j],
+                    "names": [a.name, b.name],
+                    "place_ids": [a.place_id, b.place_id],
+                    "dist_m": round(dist_m, 1),
+                    "name_similarity": round(name_similarity(a.name, b.name), 3),
+                    "rule": rule,
+                }
+            )
     return pairs
 
 
@@ -717,10 +717,7 @@ def _duplicate_rule(name_a: str, name_b: str, dist_m: float) -> str | None:
         and dist_m < DUPLICATE_NAME_RADIUS_M
     ):
         return "same_name"
-    if (
-        name_similarity(name_a, name_b) >= DUPLICATE_SIM
-        and dist_m < DUPLICATE_SIM_RADIUS_M
-    ):
+    if name_similarity(name_a, name_b) >= DUPLICATE_SIM and dist_m < DUPLICATE_SIM_RADIUS_M:
         return "same_name_near"
     return None
 
@@ -742,9 +739,11 @@ def leg_sanity(
     raw_leg = trace.get("max_leg_seconds")
     if isinstance(raw_leg, (int, float)) and not isinstance(raw_leg, bool):
         leg.max_leg_seconds = float(raw_leg)
-    leg.unreachable_sentinel = _saturated(leg.max_leg_seconds) or _saturated(
-        trace.get("walk_seconds")
-    ) or _saturated(trace.get("total_seconds"))
+    leg.unreachable_sentinel = (
+        _saturated(leg.max_leg_seconds)
+        or _saturated(trace.get("walk_seconds"))
+        or _saturated(trace.get("total_seconds"))
+    )
     if leg.unreachable_sentinel:
         leg.n_unreachable_legs = 1
 
@@ -837,16 +836,15 @@ def evaluate(golden: GoldenRoute, base_url: str) -> EvaluationResult:
         raw = call_generate(base_url, golden.query_ru, golden.budget_minutes, lat, lon)
     except urllib.error.HTTPError as exc:
         return score_response(
-            golden, None, http_status=exc.code, api_error=_http_error_detail(exc),
+            golden,
+            None,
+            http_status=exc.code,
+            api_error=_http_error_detail(exc),
             latency_s=time.monotonic() - t0,
         )
     except urllib.error.URLError as exc:
-        return score_response(
-            golden, None, api_error=str(exc), latency_s=time.monotonic() - t0
-        )
-    return score_response(
-        golden, raw, latency_s=time.monotonic() - t0
-    )
+        return score_response(golden, None, api_error=str(exc), latency_s=time.monotonic() - t0)
+    return score_response(golden, raw, latency_s=time.monotonic() - t0)
 
 
 def _http_error_detail(exc: urllib.error.HTTPError) -> str:
@@ -912,13 +910,15 @@ def score_response(
 def _our_stops(raw: dict) -> list[OurStop]:
     out: list[OurStop] = []
     for p in raw.get("points") or []:
-        out.append(OurStop(
-            name=p.get("name", ""),
-            lat=float(p.get("lat") or 0.0),
-            lon=float(p.get("lon") or 0.0),
-            visit_minutes=p.get("visit_minutes"),
-            place_id=p.get("id") if isinstance(p.get("id"), int) else None,
-        ))
+        out.append(
+            OurStop(
+                name=p.get("name", ""),
+                lat=float(p.get("lat") or 0.0),
+                lon=float(p.get("lon") or 0.0),
+                visit_minutes=p.get("visit_minutes"),
+                place_id=p.get("id") if isinstance(p.get("id"), int) else None,
+            )
+        )
     return out
 
 
@@ -943,17 +943,13 @@ def _score_reference(result: EvaluationResult) -> None:
     ref = build_reference_walk(golden.stops)
     result.ref_walk_km = ref.distance_km
 
-    ref_shared = [
-        result.matches[gi][1] for gi in ref.order if result.matches[gi][1] is not None
-    ]
+    ref_shared = [result.matches[gi][1] for gi in ref.order if result.matches[gi][1] is not None]
     result.shared_stops = len(ref_shared)
     result.kendall_tau = kendall_tau(ref_shared, sorted(ref_shared))
 
     our_points = [(s.lat, s.lon) for s in result.our_stops]
     result.our_walk_km = (
-        walk_distance_km(our_points, list(range(len(our_points))))
-        if our_points
-        else None
+        walk_distance_km(our_points, list(range(len(our_points)))) if our_points else None
     )
     result.detour_km = detour_km(result.our_walk_km, ref.distance_km)
 
@@ -972,31 +968,35 @@ def _score_budget(result: EvaluationResult, summary: dict, budget_info: dict) ->
 def _leg_failures(leg: LegSanity) -> list[Failure]:
     out: list[Failure] = []
     if leg.unreachable_sentinel:
-        out.append(Failure(
-            kind="unreachable_leg",
-            detail=(
-                f"Valhalla sentinel {UNREACHABLE_S:.0f} in the trace: >= 1 hop is "
-                "not connectable (the matrix is not shipped, so the count is a "
-                "lower bound)"
-            ),
-        ))
+        out.append(
+            Failure(
+                kind="unreachable_leg",
+                detail=(
+                    f"Valhalla sentinel {UNREACHABLE_S:.0f} in the trace: >= 1 hop is "
+                    "not connectable (the matrix is not shipped, so the count is a "
+                    "lower bound)"
+                ),
+            )
+        )
     if leg.geometry_missing:
-        out.append(Failure(
-            kind="geometry_missing", detail="response carried an empty shape"
-        ))
+        out.append(Failure(kind="geometry_missing", detail="response carried an empty shape"))
     if leg.n_duplicate_stops:
         names = "; ".join(
             f"{p['names'][0]} ~ {p['names'][1]} ({p['dist_m']:.0f} m, {p['rule']})"
             for p in leg.duplicate_pairs
         )
-        out.append(Failure(
-            kind="duplicate_stop", detail=f"{leg.n_duplicate_stops} duplicate pair(s): {names}"
-        ))
+        out.append(
+            Failure(
+                kind="duplicate_stop", detail=f"{leg.n_duplicate_stops} duplicate pair(s): {names}"
+            )
+        )
     if leg.over_cap:
-        out.append(Failure(
-            kind="leg_over_cap",
-            detail=f"a leg exceeds MAX_WALK_LEG_KM={MAX_WALK_LEG_KM}",
-        ))
+        out.append(
+            Failure(
+                kind="leg_over_cap",
+                detail=f"a leg exceeds MAX_WALK_LEG_KM={MAX_WALK_LEG_KM}",
+            )
+        )
     return out
 
 
@@ -1017,10 +1017,7 @@ def resample_indices(n: int, samples: int, seed: int) -> list[tuple[int, ...]]:
     cached = _RESAMPLE_CACHE.get(key)
     if cached is None:
         rng = random.Random(seed)
-        cached = [
-            tuple(rng.randrange(n) for _ in range(n))
-            for _ in range(samples)
-        ]
+        cached = [tuple(rng.randrange(n) for _ in range(n)) for _ in range(samples)]
         _RESAMPLE_CACHE[key] = cached
     return cached
 
@@ -1066,8 +1063,7 @@ def paired_bootstrap(
     if n == 1:
         return {"diff": diff, "lo": None, "hi": None, "p": None, "n": 1}
     diffs = [
-        sum(a_values[i] for i in idx) / n - sum(b_values[i] for i in idx) / n
-        for idx in indices
+        sum(a_values[i] for i in idx) / n - sum(b_values[i] for i in idx) / n for idx in indices
     ]
     ordered = sorted(diffs)
     le = sum(1 for d in diffs if d <= 0.0)
@@ -1340,9 +1336,7 @@ def per_case_scores(groups: list[list[RunRecord]]) -> dict[str, dict[str, float 
         if not g:
             continue
         results = [r.result for r in g]
-        out[g[0].case] = {
-            path: case_value(results, path) for path, _label, _d in CI_METRICS
-        }
+        out[g[0].case] = {path: case_value(results, path) for path, _label, _d in CI_METRICS}
     return out
 
 
@@ -1431,10 +1425,7 @@ def _ci_cell(stats: dict, decimals: int = 3) -> str:
         return "n/a"
     if stats.get("n", 0) < 2:
         return f"{stats['mean']:.{decimals}f} (n=1, no CI)"
-    return (
-        f"{stats['mean']:.{decimals}f} "
-        f"[{stats['lo']:.{decimals}f}, {stats['hi']:.{decimals}f}]"
-    )
+    return f"{stats['mean']:.{decimals}f} [{stats['lo']:.{decimals}f}, {stats['hi']:.{decimals}f}]"
 
 
 def _stage2_is_trivial(overall: dict[str, dict]) -> bool:
@@ -1447,8 +1438,19 @@ def _stage2_is_trivial(overall: dict[str, dict]) -> bool:
 
 
 COLS = [
-    "name", "s1", "s2", "recall", "prec", "tau", "detour", "walk_diff", "fit",
-    "dup", "unr", "lat", "hf",
+    "name",
+    "s1",
+    "s2",
+    "recall",
+    "prec",
+    "tau",
+    "detour",
+    "walk_diff",
+    "fit",
+    "dup",
+    "unr",
+    "lat",
+    "hf",
 ]
 
 COL_TITLES = {
@@ -1468,8 +1470,19 @@ COL_TITLES = {
 }
 
 COL_WIDTH = {
-    "name": 30, "s1": 11, "s2": 11, "recall": 12, "prec": 11, "tau": 11,
-    "detour": 13, "walk_diff": 12, "fit": 5, "dup": 5, "unr": 5, "lat": 11, "hf": 4,
+    "name": 30,
+    "s1": 11,
+    "s2": 11,
+    "recall": 12,
+    "prec": 11,
+    "tau": 11,
+    "detour": 13,
+    "walk_diff": 12,
+    "fit": 5,
+    "dup": 5,
+    "unr": 5,
+    "lat": 11,
+    "hf": 4,
 }
 
 COL_PATH = {
@@ -1503,9 +1516,7 @@ def print_table(groups: list[list[RunRecord]]) -> None:
         cells["dup"] = str(sum(r.leg.n_duplicate_stops for r in results))
         cells["unr"] = str(sum(r.leg.n_unreachable_legs for r in results))
         cells["hf"] = str(sum(1 for r in results if r.hard_failure))
-        row = " │ ".join(
-            cells[k].rjust(COL_WIDTH[k]) if k != "name" else name for k in COLS
-        )
+        row = " │ ".join(cells[k].rjust(COL_WIDTH[k]) if k != "name" else name for k in COLS)
         errs = [r.api_error for r in results if r.api_error]
         print(f"│ {row} │")
         for err in errs:
@@ -1514,8 +1525,10 @@ def print_table(groups: list[list[RunRecord]]) -> None:
 
     print(f"{'':─^{total_width}}")
     print()
-    print(f"  S1 pool = stage-1 retrieval proxy (any returned stop within "
-          f"{STAGE1_PROXY_RADIUS_M:.0f} m of a reference stop)")
+    print(
+        f"  S1 pool = stage-1 retrieval proxy (any returned stop within "
+        f"{STAGE1_PROXY_RADIUS_M:.0f} m of a reference stop)"
+    )
     print("  S2 | S1 = stage-2 recall conditional on a stage-1 hit")
     print("  Dup = duplicate-POI pairs, Unr = unreachable hops (UNREACHABLE_S),")
     print(f"  HF = gated hard failures. mean±spread over {repeat} repeat(s).")
@@ -1536,27 +1549,30 @@ def print_ci_table(
         stats = overall.get(path, {})
         nf = noise.get(path, {}).get("mean_within_case_spread")
         cell = _ci_cell(stats, dec)
-        print(f"{stats.get('label', path):<38} {cell:<34} {stats.get('n', 0):>3}"
-              f"  {('n/a' if nf is None else f'{nf:.{dec}f}')}")
+        print(
+            f"{stats.get('label', path):<38} {cell:<34} {stats.get('n', 0):>3}"
+            f"  {('n/a' if nf is None else f'{nf:.{dec}f}')}"
+        )
     print()
-    print(f"  noise floor = mean within-case spread across repeats; reference "
-          f"measurement: {REFERENCE_NOISE_FLOOR}")
+    print(
+        f"  noise floor = mean within-case spread across repeats; reference "
+        f"measurement: {REFERENCE_NOISE_FLOOR}"
+    )
     print(f"  {len(per_case)} case(s) — with n that small the CI is the finding.")
     if _stage2_is_trivial(overall):
-        print("  ⚠ stage-2 recall reads 1.000 BY CONSTRUCTION while the pool "
-              "fallback is the")
-        print("    route's own stops: the route cannot miss a stop stage 1 found. "
-              "It becomes")
-        print("    a measurement only when the API exposes a candidate pool "
-              "larger than the route.")
+        print("  ⚠ stage-2 recall reads 1.000 BY CONSTRUCTION while the pool fallback is the")
+        print("    route's own stops: the route cannot miss a stop stage 1 found. It becomes")
+        print("    a measurement only when the API exposes a candidate pool larger than the route.")
     print()
 
 
 def print_failures(summary: dict, overall: dict | None = None) -> None:
     """Hard failures + leg-sanity defects. Deliberately outside every score."""
     print("─" * 78)
-    print(f"HARD FAILURES (not part of any score above) — {summary['n_failed_runs']}"
-          f" of {summary['total_runs']} run(s) gated out of the means")
+    print(
+        f"HARD FAILURES (not part of any score above) — {summary['n_failed_runs']}"
+        f" of {summary['total_runs']} run(s) gated out of the means"
+    )
     if not summary["by_kind"]:
         print("  none")
     for kind, count in sorted(summary["by_kind"].items()):
@@ -1564,11 +1580,11 @@ def print_failures(summary: dict, overall: dict | None = None) -> None:
         print(f"  {kind:<20} {count:>3}   ({gated})")
     for row in summary["gated"]:
         print(f"    ✗ {row['case']}#{row['repeat']}: {row['detail']}")
-    defects = [
-        d for d in summary["details"] if not d["gated"]
-    ]
-    print(f"  leg-sanity defects kept in the means: {len(defects)} "
-          "(hiding them by dropping the run would defeat the check)")
+    defects = [d for d in summary["details"] if not d["gated"]]
+    print(
+        f"  leg-sanity defects kept in the means: {len(defects)} "
+        "(hiding them by dropping the run would defeat the check)"
+    )
     for row in defects:
         print(f"    ! {row['case']}#{row['repeat']}: {row['detail']}")
     if overall:
@@ -1614,62 +1630,70 @@ def write_json_report(
         eval_runs = [r.result for r in runs]
         r0 = eval_runs[0]
         errs = [r.api_error for r in eval_runs if r.api_error]
-        results.append({
-            "case": runs[0].case,
-            "route": r0.golden.name,
-            "source": r0.golden.source,
-            "query_ru": r0.golden.query_ru,
-            "repeat": len(runs),
-            "recall_at_k": _agg(eval_runs, "recall_at_k"),
-            "precision": _agg(eval_runs, "precision"),
-            "kendall_tau": _agg(eval_runs, "kendall_tau"),
-            "tau_shared_stops": _agg(eval_runs, "shared_stops"),
-            "detour_km": _agg(eval_runs, "detour_km"),
-            "our_walk_km": _agg(eval_runs, "our_walk_km"),
-            "our_walk_km_net": _agg(eval_runs, "our_walk_km_net"),
-            "ref_walk_km": _agg(eval_runs, "ref_walk_km"),
-            "walk_diff_min": _agg(eval_runs, "walk_diff_min"),
-            "budget_fit": _fit_cell(eval_runs),
-            "latency_s": _agg(eval_runs, "latency_s"),
-            "case_scores": per_case.get(runs[0].case, {}),
-            "stage_split": asdict(r0.stage),
-            "leg_sanity": asdict(r0.leg),
-            "failures": [f.as_dict() for f in r0.failures],
-            "api_error": errs[0] if errs else None,
-            "runs": [
-                {
-                    "repeat": rec.repeat,
-                    "ts": rec.ts,
-                    "http_status": rec.result.http_status,
-                    "intent_source": rec.result.intent_source,
-                    "candidate_ids_source": rec.result.candidate_ids_source,
-                    "recall_at_k": round(rec.result.recall_at_k, 4),
-                    "precision": round(rec.result.precision, 4),
-                    "kendall_tau": (
-                        round(rec.result.kendall_tau, 4)
-                        if rec.result.kendall_tau is not None else None
-                    ),
-                    "shared_stops": rec.result.shared_stops,
-                    "stage1_pool_recall": _r(rec.result.stage.recall),
-                    "stage2_recall_given_pool": _r(rec.result.stage.route_recall_given_pool),
-                    "detour_km": _r(rec.result.detour_km),
-                    "our_walk_km": _r(rec.result.our_walk_km),
-                    "ref_walk_km": _r(rec.result.ref_walk_km),
-                    "walk_diff_min": _r(rec.result.walk_diff_min, 2),
-                    "budget_fit": rec.result.budget_fit,
-                    "latency_s": round(rec.result.latency_s, 3),
-                    "hard_failure": rec.result.hard_failure,
-                    "failures": [f.as_dict() for f in rec.result.failures],
-                    "leg_sanity": asdict(rec.result.leg),
-                    "our_stops": [
-                        {"id": s.place_id, "name": s.name, "lat": s.lat, "lon": s.lon,
-                         "visit_minutes": s.visit_minutes}
-                        for s in rec.result.our_stops
-                    ],
-                }
-                for rec in runs
-            ],
-        })
+        results.append(
+            {
+                "case": runs[0].case,
+                "route": r0.golden.name,
+                "source": r0.golden.source,
+                "query_ru": r0.golden.query_ru,
+                "repeat": len(runs),
+                "recall_at_k": _agg(eval_runs, "recall_at_k"),
+                "precision": _agg(eval_runs, "precision"),
+                "kendall_tau": _agg(eval_runs, "kendall_tau"),
+                "tau_shared_stops": _agg(eval_runs, "shared_stops"),
+                "detour_km": _agg(eval_runs, "detour_km"),
+                "our_walk_km": _agg(eval_runs, "our_walk_km"),
+                "our_walk_km_net": _agg(eval_runs, "our_walk_km_net"),
+                "ref_walk_km": _agg(eval_runs, "ref_walk_km"),
+                "walk_diff_min": _agg(eval_runs, "walk_diff_min"),
+                "budget_fit": _fit_cell(eval_runs),
+                "latency_s": _agg(eval_runs, "latency_s"),
+                "case_scores": per_case.get(runs[0].case, {}),
+                "stage_split": asdict(r0.stage),
+                "leg_sanity": asdict(r0.leg),
+                "failures": [f.as_dict() for f in r0.failures],
+                "api_error": errs[0] if errs else None,
+                "runs": [
+                    {
+                        "repeat": rec.repeat,
+                        "ts": rec.ts,
+                        "http_status": rec.result.http_status,
+                        "intent_source": rec.result.intent_source,
+                        "candidate_ids_source": rec.result.candidate_ids_source,
+                        "recall_at_k": round(rec.result.recall_at_k, 4),
+                        "precision": round(rec.result.precision, 4),
+                        "kendall_tau": (
+                            round(rec.result.kendall_tau, 4)
+                            if rec.result.kendall_tau is not None
+                            else None
+                        ),
+                        "shared_stops": rec.result.shared_stops,
+                        "stage1_pool_recall": _r(rec.result.stage.recall),
+                        "stage2_recall_given_pool": _r(rec.result.stage.route_recall_given_pool),
+                        "detour_km": _r(rec.result.detour_km),
+                        "our_walk_km": _r(rec.result.our_walk_km),
+                        "ref_walk_km": _r(rec.result.ref_walk_km),
+                        "walk_diff_min": _r(rec.result.walk_diff_min, 2),
+                        "budget_fit": rec.result.budget_fit,
+                        "latency_s": round(rec.result.latency_s, 3),
+                        "hard_failure": rec.result.hard_failure,
+                        "failures": [f.as_dict() for f in rec.result.failures],
+                        "leg_sanity": asdict(rec.result.leg),
+                        "our_stops": [
+                            {
+                                "id": s.place_id,
+                                "name": s.name,
+                                "lat": s.lat,
+                                "lon": s.lon,
+                                "visit_minutes": s.visit_minutes,
+                            }
+                            for s in rec.result.our_stops
+                        ],
+                    }
+                    for rec in runs
+                ],
+            }
+        )
 
     report = {
         "schema": REPORT_SCHEMA,
@@ -1706,8 +1730,7 @@ def write_json_report(
                 "pool recall. stage-2 recall is conditional on a stage-1 hit."
             ),
             "grades": (
-                f"grade weights {GRADE_WEIGHTS}; an ungraded stop counts as "
-                f"'{DEFAULT_GRADE}'."
+                f"grade weights {GRADE_WEIGHTS}; an ungraded stop counts as '{DEFAULT_GRADE}'."
             ),
             "max_leg_km": (
                 "trace.max_leg_seconds converted at the route's own average speed; "
@@ -1758,25 +1781,37 @@ def write_metrics_jsonl(
     for runs in groups:
         eval_runs = [r.result for r in runs]
         case = runs[0].case
-        lines.append(json.dumps({
-            "case": case,
-            "name": eval_runs[0].golden.name,
-            "n_runs": len(runs),
-            "scores": {
-                path_: _r(case_value(eval_runs, path_), 4) for path_, _l, _d in CI_METRICS
+        lines.append(
+            json.dumps(
+                {
+                    "case": case,
+                    "name": eval_runs[0].golden.name,
+                    "n_runs": len(runs),
+                    "scores": {
+                        path_: _r(case_value(eval_runs, path_), 4) for path_, _l, _d in CI_METRICS
+                    },
+                    "hard_failures": [f.as_dict() for f in eval_runs[0].failures],
+                    "n_duplicate_stops": sum(r.leg.n_duplicate_stops for r in eval_runs),
+                    "n_unreachable_legs": sum(r.leg.n_unreachable_legs for r in eval_runs),
+                },
+                ensure_ascii=False,
+                sort_keys=True,
+            )
+        )
+    lines.append(
+        json.dumps(
+            {
+                "case": "__overall__",
+                "mean_and_ci95": {
+                    path_: _r(overall.get(path_, {}), 4) for path_, _l, _d in CI_METRICS
+                },
+                "n_hard_failure_runs": failures["n_failed_runs"],
+                "n_leg_sanity_defects": failures["leg_sanity_defects"],
             },
-            "hard_failures": [f.as_dict() for f in eval_runs[0].failures],
-            "n_duplicate_stops": sum(r.leg.n_duplicate_stops for r in eval_runs),
-            "n_unreachable_legs": sum(r.leg.n_unreachable_legs for r in eval_runs),
-        }, ensure_ascii=False, sort_keys=True))
-    lines.append(json.dumps({
-        "case": "__overall__",
-        "mean_and_ci95": {
-            path_: _r(overall.get(path_, {}), 4) for path_, _l, _d in CI_METRICS
-        },
-        "n_hard_failure_runs": failures["n_failed_runs"],
-        "n_leg_sanity_defects": failures["leg_sanity_defects"],
-    }, ensure_ascii=False, sort_keys=True))
+            ensure_ascii=False,
+            sort_keys=True,
+        )
+    )
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     print(f"  metrics JSONL → {path}")
     return path
@@ -1878,9 +1913,7 @@ def write_md_report(
     if failures["gated"]:
         lines += ["", "| case | repeat | kind | detail |", "|---|---|---|---|"]
         for row in failures["gated"]:
-            lines.append(
-                f"| {row['case']} | {row['repeat']} | {row['kind']} | {row['detail']} |"
-            )
+            lines.append(f"| {row['case']} | {row['repeat']} | {row['kind']} | {row['detail']} |")
     lines += [
         "",
         f"Leg-sanity defects kept in the means: {failures['leg_sanity_defects']}.",
@@ -1909,8 +1942,9 @@ def write_md_report(
         "> read the other stage-2 numbers (precision, τ, detour, leg sanity), which",
         "> do discriminate.",
         "",
-        "Grades: `" + ", ".join(f"{k}={v}" for k, v in GRADE_WEIGHTS.items()) +
-        f"`, ungraded treated as `{DEFAULT_GRADE}`.",
+        "Grades: `"
+        + ", ".join(f"{k}={v}" for k, v in GRADE_WEIGHTS.items())
+        + f"`, ungraded treated as `{DEFAULT_GRADE}`.",
         "",
         "## Determinism",
         "",
@@ -1940,16 +1974,18 @@ def load_golden_routes(routes_dir: Path) -> list[GoldenRoute]:
             )
             for s in data.get("stops", [])
         ]
-        routes.append(GoldenRoute(
-            name=data["name"],
-            source=data.get("source", ""),
-            query_ru=data["query_ru"],
-            budget_minutes=data.get("budget_minutes", 120),
-            stops=stops,
-            est_walk_minutes=data.get("est_walk_minutes"),
-            path=p,
-            case=p.stem,
-        ))
+        routes.append(
+            GoldenRoute(
+                name=data["name"],
+                source=data.get("source", ""),
+                query_ru=data["query_ru"],
+                budget_minutes=data.get("budget_minutes", 120),
+                stops=stops,
+                est_walk_minutes=data.get("est_walk_minutes"),
+                path=p,
+                case=p.stem,
+            )
+        )
     return routes
 
 
@@ -1959,18 +1995,35 @@ def load_golden_map() -> dict[str, GoldenRoute]:
 
 GOLDEN_REQUIRED_TOP = frozenset({"id", "locale", "query", "filters", "expectations"})
 GOLDEN_OPTIONAL_TOP = frozenset({"parity_group"})
-GOLDEN_FILTER_KEYS = frozenset({
-    "party_children", "hard_services", "interests", "avoid",
-    "time_budget_minutes", "origin", "result_mode",
-})
-GOLDEN_REQUIRED_EXPECTATIONS = frozenset({
-    "must_contain_categories", "must_not_contain_categories", "expected_status",
-    "max_total_minutes", "in_region",
-})
-GOLDEN_OPTIONAL_EXPECTATIONS = frozenset({
-    "must_contain_names", "expected_result_mode", "allow_empty", "min_places",
-    "status_note",
-})
+GOLDEN_FILTER_KEYS = frozenset(
+    {
+        "party_children",
+        "hard_services",
+        "interests",
+        "avoid",
+        "time_budget_minutes",
+        "origin",
+        "result_mode",
+    }
+)
+GOLDEN_REQUIRED_EXPECTATIONS = frozenset(
+    {
+        "must_contain_categories",
+        "must_not_contain_categories",
+        "expected_status",
+        "max_total_minutes",
+        "in_region",
+    }
+)
+GOLDEN_OPTIONAL_EXPECTATIONS = frozenset(
+    {
+        "must_contain_names",
+        "expected_result_mode",
+        "allow_empty",
+        "min_places",
+        "status_note",
+    }
+)
 GOLDEN_EXPECTATION_KEYS = GOLDEN_REQUIRED_EXPECTATIONS | GOLDEN_OPTIONAL_EXPECTATIONS
 
 LOCALES = ("ru", "en")
@@ -2053,8 +2106,7 @@ def validate_golden_case(data, path: Path | None = None) -> list[str]:
             errs.append(f"{where}: missing filters key {key!r}")
         children = filters.get("party_children")
         if children is not None and not (
-            isinstance(children, int) and not isinstance(children, bool)
-            and 0 <= children <= 20
+            isinstance(children, int) and not isinstance(children, bool) and 0 <= children <= 20
         ):
             errs.append(f"{where}: party_children must be null or an int in 0..20")
         for key in ("hard_services", "interests", "avoid"):
@@ -2137,9 +2189,7 @@ def validate_golden_case(data, path: Path | None = None) -> list[str]:
         if mode is not None and mode not in RESULT_MODES:
             errs.append(f"{where}: expectations.expected_result_mode must be {RESULT_MODES}")
         cap = exp.get("max_total_minutes")
-        if cap is not None and not (
-            isinstance(cap, int) and not isinstance(cap, bool) and cap > 0
-        ):
+        if cap is not None and not (isinstance(cap, int) and not isinstance(cap, bool) and cap > 0):
             errs.append(f"{where}: expectations.max_total_minutes must be null or int > 0")
         elif (
             cap is not None
@@ -2273,10 +2323,7 @@ def _status_from_requirements(requirements: list) -> str:
 
     Restated so the benchmark can grade without importing the planner.
     """
-    hard = [
-        r for r in requirements
-        if isinstance(r, dict) and r.get("strength") == "hard"
-    ]
+    hard = [r for r in requirements if isinstance(r, dict) and r.get("strength") == "hard"]
     states = {str(r.get("status")) for r in hard}
     if "unmet" in states:
         return "infeasible"
@@ -2360,9 +2407,7 @@ def response_total_minutes(raw: dict | None, points: list[dict]) -> float | None
         return float(total)
     summary = raw.get("summary") or {}
     walk_s = summary.get("time_seconds")
-    visits = sum(
-        p.get("visit_minutes") or 0 for p in points if _is_num(p.get("visit_minutes"))
-    )
+    visits = sum(p.get("visit_minutes") or 0 for p in points if _is_num(p.get("visit_minutes")))
     if _is_num(walk_s):
         return float(walk_s) / 60.0 + float(visits)
     return None
@@ -2411,13 +2456,9 @@ def evaluate_compliance(
         detail = f"{len(points)} stop(s) returned, at least {min_places} required"
         if not points and allow_empty:
             detail = "empty plan, which this case allows"
-        checks[CHECK_TOO_FEW_PLACES] = (
-            _ok(detail) if len(points) >= min_places else _fail(detail)
-        )
+        checks[CHECK_TOO_FEW_PLACES] = _ok(detail) if len(points) >= min_places else _fail(detail)
     else:
-        checks[CHECK_TOO_FEW_PLACES] = _ok(
-            f"{len(points)} stop(s) returned (>= {min_places})"
-        )
+        checks[CHECK_TOO_FEW_PLACES] = _ok(f"{len(points)} stop(s) returned (>= {min_places})")
 
     seen: set[str] = set()
     for stop in points:
@@ -2450,15 +2491,15 @@ def evaluate_compliance(
         _ok(f"no forbidden category present {_canon_codes(forbidden)}")
         if not present
         else _fail(
-            f"forbidden category(ies) present "
-            f"{[CANONICAL_CATEGORIES.get(c, c) for c in present]}"
+            f"forbidden category(ies) present {[CANONICAL_CATEGORIES.get(c, c) for c in present]}"
         )
     )
 
     names = exp.get("must_contain_names") or []
     if names:
         missing_names = [
-            n for n in names
+            n
+            for n in names
             if not any(_norm_code(n) in _norm_name(p.get("name", "")) for p in points)
         ]
         checks[CHECK_MISSING_NAMED_PLACE] = (
@@ -2478,8 +2519,7 @@ def evaluate_compliance(
                 offenders.append(f"{stop.get('name')!r} has no coordinates")
             elif not inside_project_area(float(lat), float(lon)):
                 offenders.append(
-                    f"{stop.get('name')!r} at {lat:.4f},{lon:.4f} is outside "
-                    "Grodno ADM1"
+                    f"{stop.get('name')!r} at {lat:.4f},{lon:.4f} is outside Grodno ADM1"
                 )
         checks[CHECK_OUT_OF_REGION_POINT] = (
             _ok(f"all {len(points)} point(s) inside Grodno ADM1")
@@ -2497,9 +2537,7 @@ def evaluate_compliance(
                 f"cap {cap} min stated but the response reports no total"
             )
         elif total > cap + 1e-9:
-            checks[CHECK_OVER_BUDGET] = _fail(
-                f"total {total:.1f} min exceeds the {cap} min cap"
-            )
+            checks[CHECK_OVER_BUDGET] = _fail(f"total {total:.1f} min exceeds the {cap} min cap")
         else:
             checks[CHECK_OVER_BUDGET] = _ok(f"total {total:.1f} min <= {cap} min cap")
 
@@ -2611,11 +2649,9 @@ def compliance_summary(
     for verdict in [*case_verdicts, *parity]:
         if not verdict.passed:
             by_reason[verdict.reason] = by_reason.get(verdict.reason, 0) + 1
-    unverified = sorted({
-        f"{v.case_id}:{code}"
-        for v in case_verdicts
-        for code in v.unverified_checks
-    })
+    unverified = sorted(
+        {f"{v.case_id}:{code}" for v in case_verdicts for code in v.unverified_checks}
+    )
     return {
         "n_cases": len(case_verdicts),
         "n_cases_passed": n_passed,
@@ -2741,9 +2777,7 @@ def run_golden(cases: list[GoldenCase], base_url: str, repeat: int) -> list[Gold
             except urllib.error.URLError as exc:
                 err = str(exc)
             latency = time.monotonic() - t0
-            verdict = evaluate_compliance(
-                case, raw, http_status=status, api_error=err
-            )
+            verdict = evaluate_compliance(case, raw, http_status=status, api_error=err)
             run = GoldenRun(
                 case=case,
                 repeat=i + 1,
@@ -2819,9 +2853,7 @@ def write_golden_snapshot(
     snapshot_dir.mkdir(parents=True, exist_ok=True)
     path = snapshot_dir / GOLDEN_SNAPSHOT_FILE
     cases = [run.case for run in runs]
-    header = meta or golden_snapshot_meta(
-        cases, base_url, max((r.repeat for r in runs), default=1)
-    )
+    header = meta or golden_snapshot_meta(cases, base_url, max((r.repeat for r in runs), default=1))
     with path.open("a" if append else "w", encoding="utf-8") as fh:
         fh.write(json.dumps(header, ensure_ascii=False) + "\n")
         for run in runs:
@@ -2875,24 +2907,26 @@ def rescore_golden_rows(
             http_status=row.get("http_status"),
             api_error=row.get("api_error"),
         )
-        out.append(GoldenRun(
-            case=case,
-            repeat=int(row.get("repeat", 1)),
-            request=row.get("request") or {},
-            http_status=row.get("http_status"),
-            api_error=row.get("api_error"),
-            response=row.get("response"),
-            latency_s=float(row.get("latency_s") or 0.0),
-            verdict=verdict,
-            ts=row.get("ts"),
-            git_sha=row.get("git_sha"),
-        ))
+        out.append(
+            GoldenRun(
+                case=case,
+                repeat=int(row.get("repeat", 1)),
+                request=row.get("request") or {},
+                http_status=row.get("http_status"),
+                api_error=row.get("api_error"),
+                response=row.get("response"),
+                latency_s=float(row.get("latency_s") or 0.0),
+                verdict=verdict,
+                ts=row.get("ts"),
+                git_sha=row.get("git_sha"),
+            )
+        )
     return out
 
 
-def golden_verdicts(runs: list[GoldenRun], cases: list[GoldenCase]) -> tuple[
-    dict[str, ComplianceVerdict], list[ComplianceVerdict]
-]:
+def golden_verdicts(
+    runs: list[GoldenRun], cases: list[GoldenCase]
+) -> tuple[dict[str, ComplianceVerdict], list[ComplianceVerdict]]:
     """Per-case verdicts (merged over repeats) + one verdict per parity group."""
     by_case: dict[str, list[GoldenRun]] = {}
     for run in runs:
@@ -3006,8 +3040,11 @@ def write_compliance_reports(
                         "total_minutes": _r(
                             response_total_minutes(
                                 run.response,
-                                [p for p in ((run.response or {}).get("points") or [])
-                                 if isinstance(p, dict)],
+                                [
+                                    p
+                                    for p in ((run.response or {}).get("points") or [])
+                                    if isinstance(p, dict)
+                                ],
                             ),
                             2,
                         ),
@@ -3036,20 +3073,20 @@ def write_compliance_reports(
         )
         for v in summary["cases"]
     ]
-    lines.append(json.dumps(
-        {
-            "case": "__overall__",
-            "compliance_rate": _r(summary["compliance_rate"]),
-            "n_units": summary["n_units"],
-            "n_units_passed": summary["n_units_passed"],
-            "failures_by_reason": summary["failures_by_reason"],
-        },
-        ensure_ascii=False,
-        sort_keys=True,
-    ))
-    (out_dir / "compliance.metrics.jsonl").write_text(
-        "\n".join(lines) + "\n", encoding="utf-8"
+    lines.append(
+        json.dumps(
+            {
+                "case": "__overall__",
+                "compliance_rate": _r(summary["compliance_rate"]),
+                "n_units": summary["n_units"],
+                "n_units_passed": summary["n_units_passed"],
+                "failures_by_reason": summary["failures_by_reason"],
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+        )
     )
+    (out_dir / "compliance.metrics.jsonl").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
     rate = summary["compliance_rate"]
     compliance_text = "n/a" if rate is None else format(rate, ".3f")
@@ -3184,8 +3221,10 @@ def _replay_golden_output(args) -> tuple[list[GoldenRun], list[GoldenCase], Path
     print(f"Golden replay — {snapshot_dir} (offline: no agent, no Valhalla, no clock)")
     cases = load_golden_cases(Path(args.golden_dir) if args.golden_dir else BENCH_GOLDEN)
     meta, rows = load_golden_snapshot(snapshot_dir)
-    print(f"Snapshot: {len(rows)} row(s), cases {meta.get('cases')}, "
-          f"git {meta.get('git_sha')}, taken {meta.get('started_at')}")
+    print(
+        f"Snapshot: {len(rows)} row(s), cases {meta.get('cases')}, "
+        f"git {meta.get('git_sha')}, taken {meta.get('started_at')}"
+    )
     runs = rescore_golden_rows(rows, cases, str(meta.get("base_url") or "http://replay"))
     return (
         runs,
@@ -3254,8 +3293,12 @@ def run_live(
     run_id = _run_id()
     git_sha = _git_sha()
     meta = make_meta(
-        cases=routes, base_url=base_url, repeat=repeat,
-        started_at=started_at, run_id=run_id, git_sha=git_sha,
+        cases=routes,
+        base_url=base_url,
+        repeat=repeat,
+        started_at=started_at,
+        run_id=run_id,
+        git_sha=git_sha,
     )
     rows_path = write_meta(meta, snapshot_dir, append) if snapshot_dir else None
 
@@ -3290,9 +3333,7 @@ def _run_once(route: GoldenRoute, base_url: str, repeat: int, git_sha: str) -> R
     except urllib.error.URLError as exc:
         err = str(exc)
     latency = time.monotonic() - t0
-    result = score_response(
-        route, raw, http_status=status, api_error=err, latency_s=latency
-    )
+    result = score_response(route, raw, http_status=status, api_error=err, latency_s=latency)
     return RunRecord(
         case=route.case,
         case_name=route.name,
@@ -3349,12 +3390,14 @@ def run_replay(snapshot_dir: Path) -> tuple[list[list[RunRecord]], dict, list[di
             and recorded_sha != current_sha
             and not any(d.get("case") == case and "golden" in d.get("note", "") for d in drift)
         ):
-            drift.append({
-                "case": case,
-                "recorded": recorded_sha,
-                "current": current_sha,
-                "note": "golden reference .json changed after the snapshot was taken",
-            })
+            drift.append(
+                {
+                    "case": case,
+                    "recorded": recorded_sha,
+                    "current": current_sha,
+                    "note": "golden reference .json changed after the snapshot was taken",
+                }
+            )
         recorded_metrics = row.get("metrics")
         result = score_response(
             golden,
@@ -3364,11 +3407,13 @@ def run_replay(snapshot_dir: Path) -> tuple[list[list[RunRecord]], dict, list[di
             latency_s=float((recorded_metrics or {}).get("latency_s") or 0.0),
         )
         if recorded_metrics and recorded_metrics != result.metrics_dict():
-            drift.append({
-                "case": case,
-                "repeat": row.get("repeat"),
-                "note": "recomputed metrics differ from the snapshot's metrics",
-            })
+            drift.append(
+                {
+                    "case": case,
+                    "repeat": row.get("repeat"),
+                    "note": "recomputed metrics differ from the snapshot's metrics",
+                }
+            )
         rec = RunRecord(
             case=case,
             case_name=str(row.get("case_name") or golden.name),
@@ -3425,9 +3470,7 @@ def compare_snapshots(dir_a: Path, dir_b: Path, samples: int, seed: int) -> dict
             a_vals.append(va)
             b_vals.append(vb)
         stats = (
-            paired_bootstrap(
-                a_vals, b_vals, resample_indices(len(a_vals), samples, seed)
-            )
+            paired_bootstrap(a_vals, b_vals, resample_indices(len(a_vals), samples, seed))
             if a_vals
             else {"diff": None, "lo": None, "hi": None, "p": None, "n": 0}
         )
@@ -3447,19 +3490,28 @@ def compare_snapshots(dir_a: Path, dir_b: Path, samples: int, seed: int) -> dict
         rows.append(stats)
 
     return {
-        "a": {**_snapshot_info(meta_a, dir_a, sum(len(g) for g in groups_a)),
-              "n_runs": sum(len(g) for g in groups_a),
-              "n_hard_failure_runs": fails_a["n_failed_runs"],
-              "n_leg_sanity_defects": fails_a["leg_sanity_defects"]},
-        "b": {**_snapshot_info(meta_b, dir_b, sum(len(g) for g in groups_b)),
-              "n_runs": sum(len(g) for g in groups_b),
-              "n_hard_failure_runs": fails_b["n_failed_runs"],
-              "n_leg_sanity_defects": fails_b["leg_sanity_defects"]},
+        "a": {
+            **_snapshot_info(meta_a, dir_a, sum(len(g) for g in groups_a)),
+            "n_runs": sum(len(g) for g in groups_a),
+            "n_hard_failure_runs": fails_a["n_failed_runs"],
+            "n_leg_sanity_defects": fails_a["leg_sanity_defects"],
+        },
+        "b": {
+            **_snapshot_info(meta_b, dir_b, sum(len(g) for g in groups_b)),
+            "n_runs": sum(len(g) for g in groups_b),
+            "n_hard_failure_runs": fails_b["n_failed_runs"],
+            "n_leg_sanity_defects": fails_b["leg_sanity_defects"],
+        },
         "shared_cases": shared_cases,
         "only_in_a": only_a,
         "only_in_b": only_b,
-        "bootstrap": {"samples": samples, "seed": seed, "alpha": BOOTSTRAP_ALPHA,
-                      "paired": True, "unit": "case"},
+        "bootstrap": {
+            "samples": samples,
+            "seed": seed,
+            "alpha": BOOTSTRAP_ALPHA,
+            "paired": True,
+            "unit": "case",
+        },
         "reference_noise_floor": REFERENCE_NOISE_FLOOR,
         "metrics": rows,
     }
@@ -3482,19 +3534,26 @@ def print_compare(cmp: dict) -> None:
     print()
     print("═" * 104)
     print("PAIRED BOOTSTRAP — snapshot A vs snapshot B (resampled unit: case)")
-    print(f"  A: {a['dir']}  ({a['n_runs']} runs, git {a.get('git_sha')}, "
-          f"{a.get('started_at')}, hard failures {a['n_hard_failure_runs']})")
-    print(f"  B: {b['dir']}  ({b['n_runs']} runs, git {b.get('git_sha')}, "
-          f"{b.get('started_at')}, hard failures {b['n_hard_failure_runs']})")
-    print(f"  paired over {len(cmp['shared_cases'])} shared case(s): "
-          f"{', '.join(cmp['shared_cases']) or '—'}")
+    print(
+        f"  A: {a['dir']}  ({a['n_runs']} runs, git {a.get('git_sha')}, "
+        f"{a.get('started_at')}, hard failures {a['n_hard_failure_runs']})"
+    )
+    print(
+        f"  B: {b['dir']}  ({b['n_runs']} runs, git {b.get('git_sha')}, "
+        f"{b.get('started_at')}, hard failures {b['n_hard_failure_runs']})"
+    )
+    print(
+        f"  paired over {len(cmp['shared_cases'])} shared case(s): "
+        f"{', '.join(cmp['shared_cases']) or '—'}"
+    )
     if cmp["only_in_a"] or cmp["only_in_b"]:
-        print(f"  ⚠ only in A: {cmp['only_in_a'] or '—'} · only in B: "
-              f"{cmp['only_in_b'] or '—'}")
+        print(f"  ⚠ only in A: {cmp['only_in_a'] or '—'} · only in B: {cmp['only_in_b'] or '—'}")
     print(f"  B={boot['samples']}, seed={boot['seed']}, alpha={boot['alpha']}")
     print("─" * 104)
-    print(f"{'metric':<30} {'n':>2} {'A':>7} {'B':>7} {'A−B':>8}  {'95% CI of Δ':>19} "
-          f"{'p':>9}  {'> noise':>7}  {'noise':>6}")
+    print(
+        f"{'metric':<30} {'n':>2} {'A':>7} {'B':>7} {'A−B':>8}  {'95% CI of Δ':>19} "
+        f"{'p':>9}  {'> noise':>7}  {'noise':>6}"
+    )
     for row in cmp["metrics"]:
         n = row.get("n_paired", 0)
         if row["diff"] is None or n < 2:
@@ -3502,20 +3561,28 @@ def print_compare(cmp: dict) -> None:
             mean_a = "n/a" if row["mean_a"] is None else f"{row['mean_a']:.3f}"
             mean_b = "n/a" if row["mean_b"] is None else f"{row['mean_b']:.3f}"
             diff = "n/a" if row["diff"] is None else f"{row['diff']:+.3f}"
-            print(f"{row['label']:<30} {n:>2} {mean_a:>7} {mean_b:>7} {diff:>8}  "
-                  f"{note:>19} {'n/a':>9}  {'n/a':>7}  {'n/a':>6}")
+            print(
+                f"{row['label']:<30} {n:>2} {mean_a:>7} {mean_b:>7} {diff:>8}  "
+                f"{note:>19} {'n/a':>9}  {'n/a':>7}  {'n/a':>6}"
+            )
             continue
         ci = f"[{row['lo']:+.3f}, {row['hi']:+.3f}]"
         p = f"<= {floor_of_one:.4f}" if row["p"] <= floor_of_one + 1e-12 else f"{row['p']:.4f}"
         nf = "n/a" if row["noise_floor"] is None else f"{row['noise_floor']:.3f}"
-        flag = "n/a" if row["exceeds_noise_floor"] is None else (
-            "yes" if row["exceeds_noise_floor"] else "NO"
+        flag = (
+            "n/a"
+            if row["exceeds_noise_floor"] is None
+            else ("yes" if row["exceeds_noise_floor"] else "NO")
         )
-        print(f"{row['label']:<30} {n:>2} {row['mean_a']:>7.3f} {row['mean_b']:>7.3f} "
-              f"{row['diff']:>+8.3f}  {ci:>19} {p:>9}  {flag:>7}  {nf:>6}")
+        print(
+            f"{row['label']:<30} {n:>2} {row['mean_a']:>7.3f} {row['mean_b']:>7.3f} "
+            f"{row['diff']:>+8.3f}  {ci:>19} {p:>9}  {flag:>7}  {nf:>6}"
+        )
     print("─" * 104)
-    print(f"  n = paired cases the metric is defined on (τ is n/a below "
-          f"{MIN_TAU_STOPS} shared stops, so it pairs on fewer cases).")
+    print(
+        f"  n = paired cases the metric is defined on (τ is n/a below "
+        f"{MIN_TAU_STOPS} shared stops, so it pairs on fewer cases)."
+    )
     print(f"  reference noise floor: {cmp['reference_noise_floor']}")
     print("  a delta smaller than the noise floor is a re-run of the same pipeline,")
     print("  not a change; and a p-value on a handful of cases is a bug detector,")
@@ -3550,7 +3617,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--report-dir",
         default=None,
         help="Directory for report.json / report.md / report.metrics.jsonl "
-             "(default: backend/quality/reports, or the snapshot dir under --replay)",
+        "(default: backend/quality/reports, or the snapshot dir under --replay)",
     )
     parser.add_argument(
         "--repeat",
@@ -3607,7 +3674,7 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=BOOTSTRAP_SEED,
         help=f"Bootstrap RNG seed — fixed so replays are byte-identical "
-             f"(default: {BOOTSTRAP_SEED})",
+        f"(default: {BOOTSTRAP_SEED})",
     )
     parser.add_argument(
         "--golden",
@@ -3696,9 +3763,7 @@ def _live_output(args, routes: list[GoldenRoute]) -> RunOutput:
     print(f"Snapshot: {snapshot_dir}" if snapshot_dir else "Snapshot: off")
     print(f"Reports will be written to: {args.report_dir or BENCH_OUT}")
     preflight_or_exit(args.base_url)
-    groups, meta = run_live(
-        routes, args.base_url, args.repeat, snapshot_dir, args.append
-    )
+    groups, meta = run_live(routes, args.base_url, args.repeat, snapshot_dir, args.append)
     n_rows = sum(len(g) for g in groups)
     return RunOutput(
         mode="live",
@@ -3715,14 +3780,15 @@ def _replay_output(args) -> RunOutput:
     print(f"Replay — {snapshot_dir} (no agent, no Valhalla, offline)")
     groups, meta, drift = run_replay(snapshot_dir)
     n_rows = sum(len(g) for g in groups)
-    print(f"Snapshot: {n_rows} row(s), {len(groups)} case(s), "
-          f"git {meta.get('git_sha')}, taken {meta.get('started_at')}")
+    print(
+        f"Snapshot: {n_rows} row(s), {len(groups)} case(s), "
+        f"git {meta.get('git_sha')}, taken {meta.get('started_at')}"
+    )
     recorded = meta.get("golden_sha256") or {}
     if recorded:
         goldens = load_golden_map()
         drifted = [
-            c for c, sha in recorded.items()
-            if c in goldens and golden_sha256(goldens[c]) != sha
+            c for c, sha in recorded.items() if c in goldens and golden_sha256(goldens[c]) != sha
         ]
         if drifted:
             print(f"  ⚠ reference .json changed since the snapshot for: {drifted}")

@@ -277,7 +277,6 @@ def test_a_step_that_did_not_run_is_exported_as_debug(monkeypatch):
     assert calls[1]["output"] == {"candidates": 24, "before": 24, "trimmed": False}
 
 
-
 class _OtelSpan:
     """The OpenTelemetry span the exporter backdates through."""
 

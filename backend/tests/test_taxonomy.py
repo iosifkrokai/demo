@@ -17,7 +17,6 @@ from reference.taxonomy import (
 
 
 class TestTaxonomyData:
-
     def test_taxonomy_is_not_empty(self):
         assert len(all_categories()) >= 15
         assert len(all_codes()) == len(all_categories())
@@ -51,7 +50,6 @@ class TestTaxonomyData:
 
 
 class TestRoundTrip:
-
     def test_every_code_maps_to_itself_as_a_db_value(self):
         """taxonomy → db_values must round-trip for EVERY code, so each code
         can reach the `category = ANY(%s)` filter."""
@@ -77,7 +75,10 @@ class TestServicesNoLongerEmpty:
     def test_the_code_mapping_is_not_empty(self):
         assert db_values(["туалет"]) == ["туалет"]
         assert db_values(["кафе", "ресторан", "туалет", "гостиница"]) == [
-            "кафе", "ресторан", "туалет", "гостиница",
+            "кафе",
+            "ресторан",
+            "туалет",
+            "гостиница",
         ]
 
     def test_convenience_categories_all_map(self):
@@ -93,7 +94,6 @@ class TestServicesNoLongerEmpty:
 
 
 class TestResolveCode:
-
     @pytest.mark.parametrize(
         "term,expected",
         [
@@ -145,7 +145,6 @@ class TestResolveCode:
 
 
 class TestDbValues:
-
     def test_deduplicates_and_keeps_order(self):
         assert db_values(["кафе", "туалет", "кафе"]) == ["кафе", "туалет"]
 
@@ -162,7 +161,6 @@ class TestDbValues:
 
 
 class TestAccessorsAndConstants:
-
     def test_get(self):
         assert get("кафе") is not None
         assert get("кафе").code == "кафе"

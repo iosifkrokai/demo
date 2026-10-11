@@ -88,8 +88,9 @@ class TestIsTownOrDistrictMatch:
             town="Мир",
             district="Новогрудский район",
         )
-        assert _is_town_or_district_match(place, "Мирскому") is False, \
+        assert _is_town_or_district_match(place, "Мирскому") is False, (
             "Query 'Мирскому' is a substring of name 'Мирский замок' — not a town match"
+        )
 
     def test_town_match_is_true(self):
         place = Place(
@@ -97,8 +98,9 @@ class TestIsTownOrDistrictMatch:
             town="Гродно",
             district="Гродненский район",
         )
-        assert _is_town_or_district_match(place, "Гродно") is True, \
+        assert _is_town_or_district_match(place, "Гродно") is True, (
             "Query 'Гродно' matches town column — town match"
+        )
 
     def test_district_match_is_true(self):
         place = Place(
@@ -106,13 +108,15 @@ class TestIsTownOrDistrictMatch:
             town="Лида",
             district="Лидский район",
         )
-        assert _is_town_or_district_match(place, "Лидский") is True, \
+        assert _is_town_or_district_match(place, "Лидский") is True, (
             "Query 'Лидский' matches district column — district match"
+        )
 
     def test_town_match_case_insensitive(self):
         place = Place(name="Старый замок", town="гродно", district="")
-        assert _is_town_or_district_match(place, "Гродно") is True, \
+        assert _is_town_or_district_match(place, "Гродно") is True, (
             "Town match must be case-insensitive"
+        )
 
 
 class TestResolveNamedPlacesLogic:
@@ -133,14 +137,10 @@ class TestResolveNamedPlacesLogic:
         places = _FakePlaces(name_matches=[(place, 0.5)], keyword_rows=[])
         from planner.resolve import _resolve_named_places
 
-        must_ids, area_anchor, resolved = _resolve_named_places(
-            ["Мирскому"], places
-        )
+        must_ids, area_anchor, resolved = _resolve_named_places(["Мирскому"], places)
 
-        assert must_ids == [38], \
-            "Мирскому (sim=0.5 >= 0.3) -> must_visit_ids"
-        assert area_anchor is None, \
-            "Name match must NOT become area_anchor"
+        assert must_ids == [38], "Мирскому (sim=0.5 >= 0.3) -> must_visit_ids"
+        assert area_anchor is None, "Name match must NOT become area_anchor"
         assert resolved == ["Мирскому"]
 
     def test_name_below_threshold_town_match_goes_to_area_anchor(self):
@@ -158,16 +158,11 @@ class TestResolveNamedPlacesLogic:
         places = _FakePlaces(name_matches=[(place, 0.2)], keyword_rows=[place])
         from planner.resolve import _resolve_named_places
 
-        must_ids, area_anchor, resolved = _resolve_named_places(
-            ["Гродно"], places
-        )
+        must_ids, area_anchor, resolved = _resolve_named_places(["Гродно"], places)
 
-        assert must_ids == [], \
-            "Гродно (name_sim=0.2 < 0.3) -> must_visit_ids must be empty"
-        assert area_anchor == 49, \
-            "Гродно (town match) -> area_anchor"
-        assert resolved == [], \
-            "an area anchor is not a resolved must-visit name"
+        assert must_ids == [], "Гродно (name_sim=0.2 < 0.3) -> must_visit_ids must be empty"
+        assert area_anchor == 49, "Гродно (town match) -> area_anchor"
+        assert resolved == [], "an area anchor is not a resolved must-visit name"
 
 
 class TestCategoryKeywordDetection:
@@ -175,8 +170,7 @@ class TestCategoryKeywordDetection:
 
     def test_detects_zamki(self):
         cats = _detect_category_keywords("Хочу погулять по замкам Гродно")
-        assert "замок" in cats, \
-            "'замкам' should map to 'замок' category"
+        assert "замок" in cats, "'замкам' should map to 'замок' category"
 
     def test_detects_kostyol(self):
         cats = _detect_category_keywords("костёлы центра без музеев")
@@ -210,8 +204,9 @@ class TestCategorySteering:
         result = _category_signal(places, None, ["замок"], limit=10)
         ids = [pid for pid, _ in result]
 
-        assert ids.index(2) < ids.index(1), \
+        assert ids.index(2) < ids.index(1), (
             "замок-category places must outrank костёл when 'замок' is primary"
+        )
 
     def test_rrf_fusion_category_vs_keyword(self):
         """Castle in both keyword+category signals must outrank church (keyword only)."""
@@ -223,8 +218,9 @@ class TestCategorySteering:
         must_signal: list[tuple[int, float]] = []
 
         fused = rrf_fuse([keyword_signal, category_signal, must_signal], k=60)
-        assert fused[castle_id] > fused[church_id], \
+        assert fused[castle_id] > fused[church_id], (
             "Castle in both keyword+category signals must outrank church (keyword only)"
+        )
 
 
 class TestBudgetConstrain:
@@ -234,10 +230,8 @@ class TestBudgetConstrain:
         """13 km at 4 km/h = 117 min per leg — exceeds 25% share of 120 min (30 min).
         The budget_constrain must drop the far stop."""
         candidates = [
-            _c(1, "Мирский замок", 53.9506, 26.4675, "замок",
-               rrf_score=1.0, visit_minutes_db=40),
-            _c(2, "Любчанский замок", 53.85, 26.27, "замок",
-               rrf_score=0.9, visit_minutes_db=40),
+            _c(1, "Мирский замок", 53.9506, 26.4675, "замок", rrf_score=1.0, visit_minutes_db=40),
+            _c(2, "Любчанский замок", 53.85, 26.27, "замок", rrf_score=0.9, visit_minutes_db=40),
         ]
         matrix = [[0.0, 7020.0], [7020.0, 0.0]]
         visits = [40, 40]
@@ -249,18 +243,18 @@ class TestBudgetConstrain:
             candidates, order, matrix, visits, budget_s, must_ids
         )
 
-        assert 1 in constrained, \
+        assert 1 in constrained, (
             "Index 0 (id=1, more relevant, NOT must-visit) — should be evaluated for removal"
-        assert 0 not in constrained or constrained == [1], \
+        )
+        assert 0 not in constrained or constrained == [1], (
             f"Любчанский замок (13 km, 117 min walk) exceeds 120-min budget — must be dropped; got: {constrained}"
+        )
 
     def test_25km_apart_stops_dropped_from_150min_budget(self):
         """25 km at 4 km/h = 375 min -> far above any reasonable budget share."""
         candidates = [
-            _c(38, "Мирский замок", 53.9506, 26.4675, "замок",
-               rrf_score=1.0, visit_minutes_db=40),
-            _c(40, "Любчанский замок", 53.85, 26.27, "замок",
-               rrf_score=0.8, visit_minutes_db=40),
+            _c(38, "Мирский замок", 53.9506, 26.4675, "замок", rrf_score=1.0, visit_minutes_db=40),
+            _c(40, "Любчанский замок", 53.85, 26.27, "замок", rrf_score=0.8, visit_minutes_db=40),
         ]
         matrix = [[0.0, 22500.0], [22500.0, 0.0]]
         visits = [40, 40]
@@ -272,8 +266,9 @@ class TestBudgetConstrain:
             candidates, order, matrix, visits, budget_s, must_ids
         )
 
-        assert 1 not in constrained, \
+        assert 1 not in constrained, (
             "25 km leg (375 min) far exceeds 150-min budget — must be dropped"
+        )
 
 
 class TestMaxLegSeconds:
@@ -282,15 +277,15 @@ class TestMaxLegSeconds:
     def test_120min_budget_caps_at_30min(self):
         """120 min x 25% share = 30 min -> 2 km at 4 km/h."""
         result = _max_leg_seconds(120 * 60)
-        assert result == 30 * 60, \
-            f"120-min budget: 25% = 30 min = 1800 s; got {result}"
+        assert result == 30 * 60, f"120-min budget: 25% = 30 min = 1800 s; got {result}"
 
     def test_480min_budget_caps_at_absolute_5km(self):
         """480 min x 25% = 120 min = 8 km. But absolute cap is 5 km (75 min)."""
         result = _max_leg_seconds(480 * 60)
         expected = (5.0 / 4.0) * 3600
-        assert result == expected, \
+        assert result == expected, (
             f"Absolute cap MAX_WALK_LEG_KM=5 km must dominate long budgets; got {result}s"
+        )
 
     def test_none_budget_uses_absolute_cap(self):
         result = _max_leg_seconds(None)
@@ -323,13 +318,12 @@ class TestAreaName:
 
     def test_single_district_returns_that_district(self):
         route = [
-            _c(1, "Place A", 53.88, 25.29, "замок",
-               town="Лида", district="Лидский район"),
-            _c(2, "Place B", 53.90, 25.31, "костёл",
-               town="Березовка", district="Лидский район"),
+            _c(1, "Place A", 53.88, 25.29, "замок", town="Лида", district="Лидский район"),
+            _c(2, "Place B", 53.90, 25.31, "костёл", town="Березовка", district="Лидский район"),
         ]
-        assert _area_name(route) == "Лидский район", \
+        assert _area_name(route) == "Лидский район", (
             "When towns differ but districts match -> prefer district"
+        )
 
     def test_mixed_towns_returns_first(self):
         route = [
@@ -354,8 +348,7 @@ class TestExplainArea:
         ]
         trace = {"algorithm": "brute_open", "diversity": 0.5, "fits_budget": True}
         text = explain(route, trace, walk_seconds=600)
-        assert "по Мир" in text, \
-            f"Explanation must contain area name 'Мир'; got: {text[:80]}"
+        assert "по Мир" in text, f"Explanation must contain area name 'Мир'; got: {text[:80]}"
 
     def test_grodno_explains_grodno(self):
         route = [
@@ -364,8 +357,7 @@ class TestExplainArea:
         ]
         trace = {"algorithm": "direct", "diversity": 0.5, "fits_budget": True}
         text = explain(route, trace, walk_seconds=300)
-        assert "по Гродно" in text, \
-            f"Explanation must contain 'Гродно'; got: {text[:80]}"
+        assert "по Гродно" in text, f"Explanation must contain 'Гродно'; got: {text[:80]}"
 
     def test_no_hardcoded_grodno_for_mir_route(self):
         route = [
@@ -373,8 +365,9 @@ class TestExplainArea:
         ]
         trace = {"algorithm": "direct", "diversity": 1.0, "fits_budget": True}
         text = explain(route, trace, walk_seconds=0)
-        assert "по Гродно" not in text, \
+        assert "по Гродно" not in text, (
             f"Explanation must NOT hardcode 'Гродно' for a Мир route; got: {text}"
+        )
 
 
 class TestResolveIntegration:
@@ -413,10 +406,10 @@ class TestResolveIntegration:
             places=places,
         )
 
-        assert constraints.must_visit_ids == [], \
+        assert constraints.must_visit_ids == [], (
             "Гродно matched on town only — must_visit_ids must be empty"
-        assert constraints.area_anchor == 49, \
-            "Гродно matched on town -> area_anchor must be set"
+        )
+        assert constraints.area_anchor == 49, "Гродно matched on town -> area_anchor must be set"
 
 
 class TestBudgetRule:

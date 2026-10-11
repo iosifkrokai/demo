@@ -54,11 +54,11 @@ def base_rules() -> str:
         "hours not in the data, a service you could not confirm) goes into "
         "`unknowns`, worded as the user's own ask. Never put a place or a "
         "territory name here just because it has no category code.\n"
-        "- `result_mode`: set \"catalogue\" when the user asks for EVERY one of a "
+        '- `result_mode`: set "catalogue" when the user asks for EVERY one of a '
         "category across a territory («все костёлы Гродненской области», «все "
         "замки области»): that is a list to choose from, not a walk, and a "
         "pedestrian tour over 200 km is not an answer to it. Leave it unset for "
-        "a request about walking between chosen places — the default \"route\" "
+        'a request about walking between chosen places — the default "route" '
         "then stands.\n"
         "- Never decide whether a requirement is satisfied: that is not your job "
         "and there is no field for it.\n"

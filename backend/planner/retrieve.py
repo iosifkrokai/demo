@@ -20,23 +20,47 @@ from planner.models import Candidate, Photo, ResolvedConstraints
 from reference.taxonomy import db_values
 
 CATEGORY_KEYWORD_TO_LLM: dict[str, str] = {
-    "замок": "замок", "замки": "замок", "замка": "замок", "замкам": "замок", "замках": "замок",
-    "замком": "замок", "замку": "замок",
-    "костёл": "костёл", "костёлы": "костёл", "костела": "костёл",
-    "костелах": "костёл", "костел": "костёл",
-    "дворец": "дворец", "дворцы": "дворец", "дворца": "дворец",
-    "дворце": "дворец", "дворцов": "дворец",
-    "музей": "музей", "музеи": "музей", "музея": "музей",
-    "музее": "музей", "музеев": "музей",
-    "памятник": "памятник", "памятники": "памятник", "памятника": "памятник",
-    "парк": "парк", "парки": "парк", "парка": "парк",
-    "парке": "парк", "парков": "парк",
-    "монастырь": "монастырь", "монастыри": "монастырь",
+    "замок": "замок",
+    "замки": "замок",
+    "замка": "замок",
+    "замкам": "замок",
+    "замках": "замок",
+    "замком": "замок",
+    "замку": "замок",
+    "костёл": "костёл",
+    "костёлы": "костёл",
+    "костела": "костёл",
+    "костелах": "костёл",
+    "костел": "костёл",
+    "дворец": "дворец",
+    "дворцы": "дворец",
+    "дворца": "дворец",
+    "дворце": "дворец",
+    "дворцов": "дворец",
+    "музей": "музей",
+    "музеи": "музей",
+    "музея": "музей",
+    "музее": "музей",
+    "музеев": "музей",
+    "памятник": "памятник",
+    "памятники": "памятник",
+    "памятника": "памятник",
+    "парк": "парк",
+    "парки": "парк",
+    "парка": "парк",
+    "парке": "парк",
+    "парков": "парк",
+    "монастырь": "монастырь",
+    "монастыри": "монастырь",
     "монастыря": "монастырь",
-    "церковь": "церковь", "церкви": "церковь",
-    "храм": "храм", "храмы": "храм",
-    "усадьба": "усадьба", "усадьбы": "усадьба",
-    "архитектура": "архитектура", "архитектурный": "архитектура",
+    "церковь": "церковь",
+    "церкви": "церковь",
+    "храм": "храм",
+    "храмы": "храм",
+    "усадьба": "усадьба",
+    "усадьбы": "усадьба",
+    "архитектура": "архитектура",
+    "архитектурный": "архитектура",
     "инфраструктура": "инфраструктура",
     "крепость": "замок",
 }
@@ -83,10 +107,12 @@ def retrieve(
     pool_limit = constants.RETRIEVAL_POOL_SIZE
 
     explicit_cat_kw = _detect_category_keywords(query_text)
-    all_cats: list[str] = list({
-        *(constraints.optional_categories or []),
-        *explicit_cat_kw,
-    })
+    all_cats: list[str] = list(
+        {
+            *(constraints.optional_categories or []),
+            *explicit_cat_kw,
+        }
+    )
 
     vector_signal: list[tuple[int, float]] = []
     if query_embedding:
@@ -104,17 +130,14 @@ def retrieve(
     cat_first_signal: list[tuple[int, float]] = []
     if explicit_cat_kw:
         primary_cat = [explicit_cat_kw[0]]
-        cat_first_signal = _category_signal(
-            places, constraints, primary_cat, limit=pool_limit
-        )
+        cat_first_signal = _category_signal(places, constraints, primary_cat, limit=pool_limit)
 
     near_signal: list[tuple[int, float]] = []
     if near is not None:
         near_signal = _nearby_signal(places, near[0], near[1], limit=pool_limit)
 
     fused = rrf_fuse(
-        [vector_signal, keyword_signal, must_signal, cat_signal, cat_first_signal,
-         near_signal],
+        [vector_signal, keyword_signal, must_signal, cat_signal, cat_first_signal, near_signal],
         k=constants.RRF_K,
     )
 
@@ -199,10 +222,7 @@ def _hydrate(
     ids: list[int],
     scores: dict[int, float],
 ) -> list[Candidate]:
-    return [
-        candidate_of(place, scores.get(place.id or 0, 0.0))
-        for place in places.get_by_ids(ids)
-    ]
+    return [candidate_of(place, scores.get(place.id or 0, 0.0)) for place in places.get_by_ids(ids)]
 
 
 def _photo_model(place: Place) -> Photo | None:

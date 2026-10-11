@@ -171,9 +171,7 @@ class AdminPlacePatch(BaseModel):
         """
         for name in ("lat", "lon"):
             if name in self.model_fields_set and getattr(self, name) is None:
-                raise ValueError(
-                    f"{name} may not be null — omit it to leave it unchanged"
-                )
+                raise ValueError(f"{name} may not be null — omit it to leave it unchanged")
         return self
 
 

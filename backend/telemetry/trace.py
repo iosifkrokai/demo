@@ -18,9 +18,7 @@ log = logging.getLogger(__name__)
 
 TTL_S = 300.0
 
-_current: contextvars.ContextVar[str | None] = contextvars.ContextVar(
-    "trace_id", default=None
-)
+_current: contextvars.ContextVar[str | None] = contextvars.ContextVar("trace_id", default=None)
 
 
 @dataclass
