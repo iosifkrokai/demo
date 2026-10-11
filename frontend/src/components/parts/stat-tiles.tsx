@@ -1,14 +1,16 @@
 import type { ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
+
 import { cn } from '@/lib/utils';
-import { minutesLabel, pointsLabel, stopsLabel } from '@/utils/plural';
 
 /** A counted unit a stat tile can label itself with. */
 export type StatUnit = 'points' | 'stops' | 'minutes';
 
-const UNIT_LABELS: Record<StatUnit, (count: number) => string> = {
-  points: pointsLabel,
-  stops: stopsLabel,
-  minutes: minutesLabel,
+/** Which dictionary key names the unit; the dictionary owns the inflection. */
+const UNIT_KEYS: Record<StatUnit, string> = {
+  points: 'guide.pointNoun',
+  stops: 'guide.stopNoun',
+  minutes: 'guide.minuteNoun',
 };
 
 interface StatTileProps {
@@ -30,8 +32,9 @@ export const StatTile = ({
   unit,
   className,
 }: StatTileProps) => {
+  const { t } = useTranslation();
   const resolvedLabel =
-    unit != null && count != null ? UNIT_LABELS[unit](count) : label;
+    unit != null && count != null ? t(UNIT_KEYS[unit], { count }) : label;
 
   return (
     <div

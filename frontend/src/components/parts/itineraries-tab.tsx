@@ -12,7 +12,6 @@ import { useCommonStore } from '@/stores/common-store';
 import type { Itinerary, ItineraryStop } from '@/api/types';
 import { fmtMin } from './guide-format';
 import { guideModeFor } from './guide-mode';
-import { STOP_FORMS, pluralCountRu } from '@/utils/plural';
 
 interface ItinerariesTabProps {
   /** Show a curated route on the map. */
@@ -118,7 +117,7 @@ export function ItinerariesTab({
                   </span>
                   <span className="inline-flex items-center gap-1">
                     <RouteIcon className="h-3.5 w-3.5" aria-hidden="true" />
-                    {pluralCountRu(itinerary.stop_count, STOP_FORMS)}
+                    {t('guide.stops', { count: itinerary.stop_count })}
                   </span>
                   {itinerary.visit_minutes > 0 && (
                     <span className="inline-flex items-center gap-1">

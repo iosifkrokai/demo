@@ -1,19 +1,11 @@
 /** Shared helpers so the guide, next-stop card and stop list word things consistently. */
 
 import i18n from '@/i18n';
-import { isEnglish } from '@/i18n/format';
-import {
-  decimalRu,
-  formatDistanceRu,
-  pluralCountRu,
-  STOP_FORMS,
-} from '@/utils/plural';
+import { formatNumber } from '@/i18n/format';
 
-export { formatDistanceRu };
-
-/** The decimal separator: a comma in Russian, a dot in English. */
+/** The decimal separator follows the interface: a comma in Russian, a dot in English. */
 const decimal = (value: number, digits = 1) =>
-  isEnglish() ? value.toFixed(digits) : decimalRu(value, digits);
+  formatNumber(value, { maximumFractionDigits: digits, useGrouping: false });
 
 /** «40 мин», «1 ч 10 мин», «2 ч» — how long a stop (or the rest) takes. */
 export const fmtMin = (min: number) => {
@@ -33,11 +25,8 @@ export const fmtDist = (metres: number) =>
     ? i18n.t('guide.km', { value: decimal(metres / 1000) })
     : i18n.t('guide.metres', { value: String(Math.round(metres)) });
 
-/** «3 остановки», «1 остановка», «5 остановок» — a count with its noun. */
-export const fmtStops = (count: number) =>
-  isEnglish()
-    ? i18n.t('guide.stops', { count })
-    : pluralCountRu(count, STOP_FORMS);
+/** «3 остановки», «3 stops» — a count with its noun, inflected by the dictionary. */
+export const fmtStops = (count: number) => i18n.t('guide.stops', { count });
 
 /** The one honest wording for a failed `/routes/generate` request. */
 export const agentErrorMessage = (status: number, reason?: string | null) => {

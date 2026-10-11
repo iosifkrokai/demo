@@ -9,6 +9,7 @@ import { historyArea } from './namespaces/history';
 import { mapArea } from './namespaces/map';
 import { panelArea } from './namespaces/panel';
 import { photoArea } from './namespaces/photo';
+import { placesArea } from './namespaces/places';
 import { sidebarArea } from './namespaces/sidebar';
 import { toastArea } from './namespaces/toast';
 import { ru } from './ru';
@@ -43,6 +44,7 @@ export const flatRu = {
   ...accountArea.ru,
   ...adminArea.ru,
   ...toastArea.ru,
+  ...placesArea.ru,
   ...sidebarArea.ru,
   ...photoArea.ru,
   ...panelArea.ru,
@@ -55,6 +57,7 @@ export const flatEn = {
   ...accountArea.en,
   ...adminArea.en,
   ...toastArea.en,
+  ...placesArea.en,
   ...sidebarArea.en,
   ...photoArea.en,
   ...panelArea.en,

@@ -126,6 +126,15 @@ export const guideArea = {
       stops_one: '{{count}} остановка',
       stops_few: '{{count}} остановки',
       stops_many: '{{count}} остановок',
+      pointNoun_one: 'точка',
+      pointNoun_few: 'точки',
+      pointNoun_many: 'точек',
+      stopNoun_one: 'остановка',
+      stopNoun_few: 'остановки',
+      stopNoun_many: 'остановок',
+      minuteNoun_one: 'минута',
+      minuteNoun_few: 'минуты',
+      minuteNoun_many: 'минут',
 
       agentNotFound:
         'агент не отвечает по этому адресу (404) — похоже, приложение обращается не к тому серверу. Это ошибка настройки, а не «ничего не найдено».',
@@ -256,6 +265,12 @@ export const guideArea = {
       hours_other: '{{count}} hrs',
       stops_one: '{{count}} stop',
       stops_other: '{{count}} stops',
+      pointNoun_one: 'point',
+      pointNoun_other: 'points',
+      stopNoun_one: 'stop',
+      stopNoun_other: 'stops',
+      minuteNoun_one: 'minute',
+      minuteNoun_other: 'minutes',
 
       agentNotFound:
         'the agent does not answer at this address (404) — the app seems to be pointed at the wrong server. That is a configuration error, not “nothing found”.',

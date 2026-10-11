@@ -58,7 +58,7 @@ import { PlacesTab } from './parts/places-tab';
 import { useItineraries } from '@/hooks/use-itineraries';
 import { usePlaces } from '@/hooks/use-places';
 import type { Itinerary } from '@/api/types';
-import { decimalRu } from '@/utils/plural';
+import { formatNumber } from '@/i18n/format';
 import { newProgressId } from '@/api/progress';
 import { currentRunSession, startRunSession } from '@/utils/run-session';
 import { WaypointList } from './waypoint-list';
@@ -321,9 +321,12 @@ const fmtMin = (m: number, t: TFunction) => {
     : hourPart;
 };
 
-/** «1,3 км» — Russian uses a comma as the decimal separator, never a dot. */
+/** «1,3 км» — the decimal separator follows the interface language. */
 const fmtKm = (km: number, t: TFunction) => {
-  const value = km >= 10 ? String(Math.round(km)) : decimalRu(km);
+  const value =
+    km >= 10
+      ? String(Math.round(km))
+      : formatNumber(km, { maximumFractionDigits: 1, useGrouping: false });
   return t('sidebar.units.km', { value });
 };
 

@@ -5,7 +5,6 @@ import { cn } from '@/lib/utils';
 import { useCommonStore } from '@/stores/common-store';
 import type { Place } from '@/api/types';
 import { PlaceIcon } from './place-icon';
-import { POINT_FORMS, pluralCountRu } from '@/utils/plural';
 import { Input } from '@/components/ui/input';
 
 interface PlacesTabProps {
@@ -89,7 +88,7 @@ export function PlacesTab({
   return (
     <div className="flex flex-col gap-2" data-testid="places-tab">
       <p className="text-meta text-muted-foreground">
-        {t('places.intro', { count: pluralCountRu(total, POINT_FORMS) })}
+        {t('places.intro', { count: total })}
       </p>
 
       <div className="relative">
