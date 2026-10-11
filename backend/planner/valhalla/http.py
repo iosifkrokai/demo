@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time as _time
+from http import HTTPStatus
 from typing import Any
 
 import httpx
@@ -31,7 +32,7 @@ def request_with_retry(
         try:
             with httpx.Client(timeout=timeout) as client:
                 r = client.request(method, url, params=params)
-                if r.status_code >= 400:
+                if r.status_code >= HTTPStatus.BAD_REQUEST:
                     raise httpx.HTTPStatusError(
                         f"server error: {r.text[:300]}", request=r.request, response=r
                     )
@@ -44,7 +45,11 @@ def request_with_retry(
         ) as e:
             last_exc = e
             status = getattr(getattr(e, "response", None), "status_code", None)
-            if status is not None and 400 <= status < 500 and status != 429:
+            if (
+                status is not None
+                and HTTPStatus.BAD_REQUEST <= status < HTTPStatus.INTERNAL_SERVER_ERROR
+                and status != HTTPStatus.TOO_MANY_REQUESTS
+            ):
                 break
             if attempt > retries:
                 break

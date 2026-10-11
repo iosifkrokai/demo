@@ -18,6 +18,8 @@ SCRYPT_SALT_BYTES = 16
 SCRYPT_MAXMEM = 64 * 1024 * 1024
 
 _ALGO = "scrypt"
+# algorithm, n, r, p, salt, digest — the stored format, in order.
+_HASH_FIELDS = 6
 
 SESSION_TTL_S = 30 * 24 * 60 * 60
 
@@ -57,7 +59,7 @@ def verify_password(password: str, stored: str | None) -> bool:
     if not stored:
         return False
     parts = stored.split("$")
-    if len(parts) != 6 or parts[0] != _ALGO:
+    if len(parts) != _HASH_FIELDS or parts[0] != _ALGO:
         return False
     try:
         n, r, p = int(parts[1]), int(parts[2]), int(parts[3])

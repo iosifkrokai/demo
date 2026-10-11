@@ -13,6 +13,11 @@ from planner.models import Candidate
 
 from .verify import verify_summary
 
+# Below this spread of MMR diversity, and with enough stops for it to mean
+# something, the walk is worth warning about.
+MONOTONY_DIVERSITY = 0.4
+MIN_STOPS_FOR_MONOTONY = 3
+
 
 def _area_name(route: list[Candidate]) -> str:
     """Derive a human-readable area name from the route's stops.
@@ -122,7 +127,7 @@ def explain(
     parts.extend(_requirements_section(trace, requirements))
 
     div = trace.get("diversity", 1.0)
-    if n >= 3 and div < 0.4:
+    if n >= MIN_STOPS_FOR_MONOTONY and div < MONOTONY_DIVERSITY:
         parts.append("⚠ Места похожи по категориям — маршрут однообразный.")
 
     return "\n".join(parts)

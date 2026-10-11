@@ -79,7 +79,11 @@ ignore = [
     # own, and the count is here so the debt is visible in one place instead of
     # implied by an absent rule. Removing an entry means doing that campaign.
     "PLC0415", # 92  imports inside functions — most exist to break a real cycle
-    "PLR2004", # 87  magic values — mostly "a route needs at least two stops"
+    # 72 comparisons against a small structural count — `len(route) < 2`,
+    # `len(parts) != 6`. A name would restate the number. The ones that meant
+    # something are named: HTTP statuses, the search-strategy thresholds in
+    # `planner/optimize.py`, the diversity thresholds in `explain`/`diversity`.
+    "PLR2004",
     "PLR0913", # 42  too many arguments
     "PLR0917", # 14  too many positional arguments
     "PLR0912", # 8   too many branches

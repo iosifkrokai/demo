@@ -18,6 +18,11 @@ from .cost import prune_unroutable_stops, total_seconds, visit_cost, walk_cost
 
 log = logging.getLogger(__name__)
 
+# Up to this many candidates the exhaustive order is cheap enough; past the
+# second, regret insertion still beats nearest-neighbour on quality.
+BRUTE_FORCE_MAX = 6
+REGRET_INSERTION_MAX = 12
+
 WALK_KMH = 4.0
 _DRIVE_LEG_FALLBACK_S = 4 * 3600
 
@@ -52,7 +57,7 @@ def optimize(
             constraints,
         )
 
-    if n <= 6:
+    if n <= BRUTE_FORCE_MAX:
         order, info = _brute_open(
             candidates,
             matrix,
@@ -61,7 +66,7 @@ def optimize(
             info,
             round_trip=constraints.round_trip,
         )
-    elif n <= 12:
+    elif n <= REGRET_INSERTION_MAX:
         order, info = _regret_insertion(
             candidates,
             matrix,

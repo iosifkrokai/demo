@@ -11,6 +11,9 @@ from core import constants
 from db.store.places import PostgresPlaceRepository
 from planner.models import Candidate, ResolvedConstraints
 
+# Relevance is flat within this much; normalising by it divides by noise.
+_EPSILON = 1e-09
+
 
 def mmr_select(
     candidates: list[Candidate],
@@ -41,7 +44,8 @@ def mmr_select(
 
     rel = np.array([c.relevance for c in candidates], dtype=np.float32)
     r_min, r_max = float(rel.min()), float(rel.max())
-    rel_norm = (rel - r_min) / (r_max - r_min) if r_max - r_min > 1e-09 else np.ones_like(rel) * 0.5
+    spread = r_max - r_min
+    rel_norm = (rel - r_min) / spread if spread > _EPSILON else np.ones_like(rel) * 0.5
 
     must_ids = set(constraints.must_visit_ids) if constraints else set()
     must_indices: list[int] = []

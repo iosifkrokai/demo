@@ -21,6 +21,7 @@ import urllib.error
 import urllib.request
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
+from http import HTTPStatus
 from itertools import pairwise
 from pathlib import Path
 from typing import Any
@@ -871,7 +872,7 @@ def score_response(
     result = EvaluationResult(
         golden=golden, api_error=api_error, latency_s=latency_s, http_status=http_status
     )
-    if api_error is not None or (http_status is not None and http_status >= 400):
+    if api_error is not None or (http_status is not None and http_status >= HTTPStatus.BAD_REQUEST):
         result.failures.append(
             Failure(
                 kind="api_error" if api_error else "http_status",
@@ -2347,9 +2348,9 @@ def derive_status(
 
     `source` records which rung was used; a derived status is never passed off as the API's.
     """
-    if api_error or (http_status is not None and http_status >= 400):
+    if api_error or (http_status is not None and http_status >= HTTPStatus.BAD_REQUEST):
         code = int(http_status or 0)
-        if 400 <= code < 500:
+        if HTTPStatus.BAD_REQUEST <= code < HTTPStatus.INTERNAL_SERVER_ERROR:
             return "rejected", "http_status"
         return "error", "api_error" if api_error else "http_status"
     raw = raw or {}
@@ -2445,7 +2446,7 @@ def evaluate_compliance(
         checks[CHECK_API_ERROR] = _fail(
             api_error or f"the backend failed with HTTP {http_status} — no plan"
         )
-    elif api_error or (http_status is not None and http_status >= 400):
+    elif api_error or (http_status is not None and http_status >= HTTPStatus.BAD_REQUEST):
         checks[CHECK_API_ERROR] = _ok(
             f"the backend refused the request (HTTP {http_status}) — an honest "
             f"refusal, judged by the status check"
