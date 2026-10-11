@@ -48,7 +48,7 @@ logs: ## follow the service logs
 seed: ## apply the committed data (full restore / idempotent refresh)
 	$(SEED)
 
-fetch: ## re-acquire OSM sights/services into backend/data/*.csv
+fetch: ## re-acquire OSM sights/services into backend/db/data/*.csv
 	$(SEED) fetch
 
 photos: ## resolve photo columns from Wikimedia

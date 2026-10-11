@@ -1,6 +1,6 @@
 ---
 name: add-dataset
-description: Add or change place data — new rows, a new source, a corrected category or blurb. Use when editing anything under backend/data/, when a place is wrong, or when adding a dataset.
+description: Add or change place data — new rows, a new source, a corrected category or blurb. Use when editing anything under backend/db/data/, when a place is wrong, or when adding a dataset.
 ---
 
 # Change what is in the database
@@ -9,7 +9,7 @@ The rows come from versioned files, never from hand-written SQL. To change a
 place, change the file and re-seed.
 
 ```
-backend/data/
+backend/db/data/
   places/   places_grodno_city.csv  places_region.csv  places_osm_raw.csv
             places_poi.csv          places_curated.csv
   geo/      areas.json  grodno_border.json  belarus_border*.json
@@ -62,4 +62,4 @@ make test-backend
 
 A fatal validation failure in `places_grodno_city.csv`/`places_region.csv` exits 2
 and loads nothing — the hand-authored sets never half-load. Categories must exist
-in `data/taxonomy.csv`; the tests check that they all do.
+in `backend/db/data/taxonomy.csv`; the tests check that they all do.

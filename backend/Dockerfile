@@ -16,11 +16,11 @@ RUN uv lock && uv sync --no-install-project --no-dev
 COPY agent/ /app/agent/
 COPY api/ /app/api/
 COPY core/ /app/core/
-COPY data/ /app/data/
 COPY db/ /app/db/
 COPY embeddings/ /app/embeddings/
 COPY planner/ /app/planner/
 COPY reference/ /app/reference/
+COPY routing/ /app/routing/
 COPY telemetry/ /app/telemetry/
 RUN uv sync --no-dev
 
@@ -34,7 +34,7 @@ ENV FASTEMBED_CACHE_PATH=/opt/fastembed \
     VALHALLA_URL=http://valhalla:8002
 
 RUN /app/.venv/bin/python -c \
-    "import ml.embeddings as e; e.embed_query('warmup'); print('embedding model baked:', e.MODEL_NAME)"
+    "import embeddings.model as e; e.embed_text('warmup'); print('embedding model baked:', e.MODEL_NAME)"
 
 EXPOSE 8080
 

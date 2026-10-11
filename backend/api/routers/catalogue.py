@@ -12,7 +12,6 @@ from typing import Any
 from fastapi import APIRouter, Request
 
 from api import deps
-from core.errors import ItinerariesUnavailableError
 from db.store import itineraries as itineraries_mod
 from db.store.services import DEFAULT_PROFILE, MAX_SERVICES
 from planner.models import ServicesAlongReq
@@ -38,11 +37,10 @@ def itineraries(request: Request) -> dict[str, Any]:
 
     `missing` names any stop key that no longer resolves.
     """
-    try:
-        items, missing = itineraries_mod.resolve_itineraries(deps.get_repos(request).places)
-    except ItinerariesUnavailableError as exc:
-        log.error("itineraries unavailable: %s", exc)
-        raise deps.http_error(503, "itineraries_unavailable") from exc
+    repos = deps.get_repos(request)
+    items, missing = itineraries_mod.resolve_itineraries(
+        repos.places, repos.taxonomy, repos.itineraries.authored()
+    )
     return {"items": items, "missing": missing}
 
 

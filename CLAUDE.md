@@ -7,11 +7,13 @@ service, a React/Vite frontend served by nginx.
 ## Layout
 
 ```
-backend/     the service — api (HTTP) · agent (LLM) · planner (the pipeline)
-             core · reference · telemetry · embeddings · quality · tests · data
+backend/     the service — api (HTTP) · agent (LLM) · routing (the deterministic
+             math) · core · reference · telemetry · embeddings · quality · tests,
+             and planner/ — the pipeline, being dissolved into agent tools
              db/  — the persistence side: models (rows) · store (repositories)
                     · seed (the projection) · alembic · connection.py
 frontend/    React + Vite + MapLibre, talked to over nginx
+backend/db/data/  the versioned datasets — the seed's input, never the service's
 docker-compose.yml   the whole stack, including the db image (inline)
 ```
 
@@ -20,6 +22,11 @@ nothing imports upward, and `agent` is a leaf — it declares its own input
 (`agent/models.py::ReaderBrief`) rather than reaching for the HTTP body. `agent/`
 is the LLM layer (client, prompts, tools, runner); the one place a provider is
 named is `agent/llm.py`.
+
+`routing/` is the other leaf, below both: the Valhalla client, the cost matrix,
+the optimizer, the budget arithmetic and the requirement verdicts. It imports `core`
+and `db` and never `agent` or `planner`, which is what lets a planning tool do
+arithmetic without either layer reaching for the other.
 
 Each layer declares its own shapes: `db/models/` the rows, `planner/models.py` the
 currency the pipeline speaks, `api/models/` the wire. There is no shared
@@ -58,7 +65,7 @@ pass you should ignore.
 
 ## Things that are not negotiable
 
-- **Data is code.** Datasets are versioned files under `backend/data/`; the database
+- **Data is code.** Datasets are versioned files under `backend/db/data/`; the database
   is a *projection* built by `python -m db.seed`. Never edit rows by hand — change the
   file and re-seed. The schema is owned by Alembic (`backend/db/alembic/`), never by
   hand-written DDL.
@@ -84,7 +91,7 @@ pass you should ignore.
 | File | For |
 |---|---|
 | `README.md` | what it is, endpoints, architecture, troubleshooting |
-| `backend/data/README.md` | the seed contract: dataset schema, natural keys, protection |
+| `backend/db/data/README.md` | the seed contract: dataset schema, natural keys, protection |
 | `backend/quality/README.md` | the three quality layers and how to run them |
 | `frontend/DESIGN.md` | the design system |
 

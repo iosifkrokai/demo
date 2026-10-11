@@ -10,8 +10,10 @@ from dataclasses import dataclass, field
 
 from db.store.areas import PostgresAreaRepository
 from db.store.clients import PostgresClientRepository
+from db.store.itineraries import PostgresItineraryRepository
 from db.store.places import PostgresPlaceRepository
 from db.store.stats import PostgresStatsRepository
+from db.store.taxonomy import PostgresCategoryRepository
 from db.store.users import PostgresUserRepository
 
 
@@ -28,10 +30,20 @@ class Repositories:
 
     places: PostgresPlaceRepository
     areas: PostgresAreaRepository
+    taxonomy: PostgresCategoryRepository = field(default_factory=PostgresCategoryRepository)
+    itineraries: PostgresItineraryRepository = field(default_factory=PostgresItineraryRepository)
     users: PostgresUserRepository = field(default_factory=PostgresUserRepository)
     stats: PostgresStatsRepository = field(default_factory=PostgresStatsRepository)
     clients: PostgresClientRepository = field(default_factory=PostgresClientRepository)
 
     def close(self) -> None:
-        for repo in (self.places, self.areas, self.users, self.stats, self.clients):
+        for repo in (
+            self.places,
+            self.areas,
+            self.taxonomy,
+            self.itineraries,
+            self.users,
+            self.stats,
+            self.clients,
+        ):
             repo.close()

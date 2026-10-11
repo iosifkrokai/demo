@@ -14,6 +14,8 @@ from collections.abc import Mapping
 from typing import Any, TypedDict
 
 from db.models.area import Area
+from db.models.category import Category
+from db.models.itinerary import Itinerary
 from db.models.place import Place
 
 
@@ -36,6 +38,30 @@ def place_from_row(row: Mapping[str, Any]) -> Place:
 def area_from_row(row: Mapping[str, Any]) -> Area:
     """One `areas` row."""
     return model_from_row(Area, row)
+
+
+def category_from_row(row: Mapping[str, Any]) -> Category:
+    """One `categories` row.
+
+    Postgres hands back `TEXT[]` as a list; the model declares tuples, and the
+    taxonomy is compared and hashed by value, so the coercion is done here.
+    """
+    cat = model_from_row(Category, row)
+    return Category(
+        code=cat.code,
+        ru=cat.ru,
+        en=cat.en,
+        role=cat.role,
+        visit_minutes=cat.visit_minutes,
+        osm_tags=tuple(cat.osm_tags),
+        aliases_ru=tuple(cat.aliases_ru),
+        aliases_en=tuple(cat.aliases_en),
+    )
+
+
+def itinerary_from_row(row: Mapping[str, Any]) -> Itinerary:
+    """One `itineraries` row. The stops are fetched separately and attached."""
+    return model_from_row(Itinerary, {**row, "stops": ()})
 
 
 def parse_fun_facts(raw: str | None) -> list[str]:

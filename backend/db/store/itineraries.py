@@ -1,8 +1,9 @@
-"""Ready-made routes: attaching the stored facts to each curated stop.
+"""The curated walks: the `itineraries` tables, and the read of `places` that
+fills each stop in.
 
-The file itself is a reference dataset and is read by `reference.itineraries`;
-what happens here is the read of `places` that fills its stops in, which is what
-a repository is for.
+A stop is stored as the `source_url` the dataset is keyed on, so an itinerary
+keeps pointing at the dataset's identity rather than at a row id a re-seed could
+renumber.
 """
 
 from __future__ import annotations
@@ -10,22 +11,52 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from db.store.mappers import place_payload
+from db.models.itinerary import Itinerary
+from db.store.base import PostgresRepository
+from db.store.columns import ITINERARY_SELECT
+from db.store.mappers import itinerary_from_row, place_payload
 from db.store.places import PostgresPlaceRepository
-from reference import taxonomy
-from reference.itineraries import load_itineraries
+from db.store.taxonomy import PostgresCategoryRepository
 
 log = logging.getLogger(__name__)
 
 
+class PostgresItineraryRepository(PostgresRepository):
+    """The authored walks, in the order the catalogue shows them."""
+
+    def authored(self) -> list[Itinerary]:
+        """Every curated walk with its stop keys attached."""
+        with self._cursor() as cur:
+            cur.execute(f"SELECT {ITINERARY_SELECT} FROM itineraries ORDER BY position, id")
+            walks = [itinerary_from_row(row) for row in cur.fetchall()]
+            cur.execute(
+                "SELECT itinerary_id, source_url FROM itinerary_stops "
+                "ORDER BY itinerary_id, ordinal"
+            )
+            by_id: dict[str, list[str]] = {}
+            for row in cur.fetchall():
+                by_id.setdefault(row["itinerary_id"], []).append(row["source_url"])
+        return [
+            Itinerary(
+                id=walk.id,
+                title=walk.title,
+                blurb=walk.blurb,
+                transport=walk.transport,
+                position=walk.position,
+                stops=tuple(by_id.get(walk.id, ())),
+            )
+            for walk in walks
+        ]
+
+
 def _split_by_role(
     payloads: list[dict[str, Any]],
+    taxonomy: PostgresCategoryRepository,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Partition resolved places into (stops, services) using the taxonomy.
 
     An unknown code counts as a stop, never as a service.
     """
-
     stops: list[dict[str, Any]] = []
     services: list[dict[str, Any]] = []
     for payload in payloads:
@@ -38,29 +69,30 @@ def _split_by_role(
 
 
 def resolve_itineraries(
-    places: PostgresPlaceRepository, items: list[dict[str, Any]] | None = None
+    places: PostgresPlaceRepository,
+    taxonomy: PostgresCategoryRepository,
+    items: list[Itinerary],
 ) -> tuple[list[dict[str, Any]], list[str]]:
     """Attach dataset facts to every stop, in the authored order.
 
     Returns the payloads and keys that did not resolve; services are not stops.
     """
-    authored = items if items is not None else load_itineraries()
-    wanted = [key for item in authored for key in item.get("stops", [])]
+    wanted = [key for item in items for key in item.stops]
     found, missing = places.get_by_source_urls(wanted)
     if missing:
         log.warning("itineraries: %d stop(s) no longer resolve: %s", len(missing), missing)
 
     out: list[dict[str, Any]] = []
-    for item in authored:
-        payloads = [place_payload(found[key]) for key in item.get("stops", []) if key in found]
-        stops, services = _split_by_role(payloads)
+    for item in items:
+        payloads = [place_payload(found[key]) for key in item.stops if key in found]
+        stops, services = _split_by_role(payloads, taxonomy)
         visit_minutes = sum(s["visit_minutes"] or 0 for s in stops)
         out.append(
             {
-                "id": item["id"],
-                "title": item["title"],
-                "blurb": item["blurb"],
-                "transport": item.get("transport") or "pedestrian",
+                "id": item.id,
+                "title": item.title,
+                "blurb": item.blurb,
+                "transport": item.transport,
                 "stop_count": len(stops),
                 "visit_minutes": visit_minutes,
                 "stops": stops,

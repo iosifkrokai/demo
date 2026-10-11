@@ -18,4 +18,6 @@ class Area:
     kind: str = "district"
     source: str | None = None
     license: str | None = None
+    note: str | None = None
+    is_project_area: bool = False
     created_at: datetime | None = None

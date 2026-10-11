@@ -1,6 +1,6 @@
 """Canonical category taxonomy — the single source of category codes.
 
-Every code is defined once in ``backend/data/taxonomy.csv``; this module reads
+Every code is defined once in ``data/taxonomy.csv``; this module reads
 that file and resolves free text (codes, names, aliases, inflections) to a code.
 The row shape itself is :class:`db.models.category.Category`.
 """

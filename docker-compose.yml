@@ -123,7 +123,7 @@ services:
       - .env
     volumes:
       # `fetch` and `photos` write the versioned CSVs back to the checkout.
-      - ./backend/data:/app/data
+      - ./backend/db/data:/app/db/data
     depends_on:
       db:
         condition: service_healthy

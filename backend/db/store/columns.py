@@ -45,10 +45,37 @@ AREA_COLUMNS: tuple[str, ...] = (
     "kind",
     "source",
     "license",
+    "note",
+    "is_project_area",
     "created_at",
 )
 
 AREA_SELECT = ", ".join(AREA_COLUMNS)
+
+# The taxonomy, read whole: it is eighteen rows, and every resolver folds over
+# all of them anyway.
+CATEGORY_COLUMNS: tuple[str, ...] = (
+    "code",
+    "ru",
+    "en",
+    "role",
+    "osm_tags",
+    "visit_minutes",
+    "aliases_ru",
+    "aliases_en",
+)
+
+CATEGORY_SELECT = ", ".join(CATEGORY_COLUMNS)
+
+ITINERARY_COLUMNS: tuple[str, ...] = (
+    "id",
+    "title",
+    "blurb",
+    "transport",
+    "position",
+)
+
+ITINERARY_SELECT = ", ".join(ITINERARY_COLUMNS)
 
 # What a caller may write through the place repository. Everything else is
 # generated (`id`, `geom`), derived (`embedding`, `photo_*`), or owned by the

@@ -5,7 +5,7 @@ description: Load or refresh the place data in Postgres. Use when the database i
 
 # Seed the database
 
-The database is a projection of the committed files under `backend/data/`, built
+The database is a projection of the committed files under `backend/db/data/`, built
 by one command. `apply` never touches the network; only `fetch` does.
 
 ```bash
@@ -31,7 +31,7 @@ JSON, `--no-embed` skips the embedding pass.
 | Command | What it does |
 |---|---|
 | `python -m db.seed` | validate → upsert → embed → report (the normal path) |
-| `python -m db.seed fetch --source osm\|poi\|all` | re-acquire OSM rows over Overpass into `data/places/*.csv` — the only networked step |
+| `python -m db.seed fetch --source osm\|poi\|all` | re-acquire OSM rows over Overpass into `backend/db/backend/db/data/places/*.csv` — the only networked step |
 | `python -m db.seed photos --apply` | resolve photo columns and write them into `places` |
 | `python -m db.seed prune` | list rows outside the project area (add `--apply` to delete) |
 | `python -m db.seed admin --email …` | create or promote the first administrator |
@@ -43,7 +43,7 @@ and run them in the compose `seed` service.
 
 - **`relation "places" does not exist`** — the schema is missing or behind:
   `make migrate` first. Do not create tables by hand.
-- **"no photos on any place"** — the committed `data/photos/place_photos.json` was
+- **"no photos on any place"** — the committed `backend/db/backend/db/data/photos/place_photos.json` was
   not applied; a plain `make seed` applies it. `make photos` re-resolves it from
   Wikimedia, which needs the network.
 - **rows missing after a fetch that looked fine** — the ingest quarantines rows

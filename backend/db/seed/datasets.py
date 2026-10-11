@@ -16,8 +16,9 @@ from typing import Any
 
 from core import constants as _constants
 from core.paths import PLACES_DIR
-from reference import taxonomy
-from reference.geofence import inside_project_area
+
+from . import taxonomy
+from .geofence import inside_project_area
 
 SOURCE_CURATED = "curated"
 SOURCE_DATASET = "dataset"

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "description": "Versioned named areas for the Grodno Guide. Single source for area resolution (RU/EN names + aliases) and for the project-area geofence predicate (agent.areas.in_project_area, re-exported by agent.geofence.inside_project_area). Geometry is referenced from the border files in this directory, never duplicated and never invented: areas whose boundary polygon does not exist in backend/data/ carry geometry=null, and containment for them is unknown (agent.areas.area_contains returns None) — an explicit unknown, never a silent default.",
+  "description": "Versioned named areas for the Grodno Guide. Single source for area resolution (RU/EN names + aliases) and for the project-area geofence predicate (agent.areas.in_project_area, re-exported by agent.geofence.inside_project_area). Geometry is referenced from the border files in this directory, never duplicated and never invented: areas whose boundary polygon does not exist in data/ carry geometry=null, and containment for them is unknown (agent.areas.area_contains returns None) — an explicit unknown, never a silent default.",
   "notes": [
     "District names are taken verbatim from the district column of places_region.csv; English district names are literal translations of the official Russian names.",
     "grodno-oblast geometry is the geoBoundaries ADM1 polygon (grodno_border.json, Creative Commons Attribution 3.0), loaded at runtime from that file.",
@@ -51,7 +51,7 @@
         ]
       },
       "geometry": null,
-      "geometry_note": "No boundary polygon for this area exists in backend/data/. The area is defined for alias anchoring only; geometric containment is unavailable (agent.areas.area_contains returns None), never a silent default.",
+      "geometry_note": "No boundary polygon for this area exists in backend/db/data/. The area is defined for alias anchoring only; geometric containment is unavailable (agent.areas.area_contains returns None), never a silent default.",
       "evidence": "district column value 'Гродно (город)' in places_grodno_city.csv"
     },
     {
@@ -72,7 +72,7 @@
         ]
       },
       "geometry": null,
-      "geometry_note": "No boundary polygon for this area exists in backend/data/. The area is defined for alias anchoring only; geometric containment is unavailable (agent.areas.area_contains returns None), never a silent default. 'старый Гродно' must anchor to a verified area (spec 002 §4.3)."
+      "geometry_note": "No boundary polygon for this area exists in backend/db/data/. The area is defined for alias anchoring only; geometric containment is unavailable (agent.areas.area_contains returns None), never a silent default. 'старый Гродно' must anchor to a verified area (spec 002 §4.3)."
     },
     {
       "slug": "berestovitsa-district",
@@ -89,7 +89,7 @@
         ]
       },
       "geometry": null,
-      "geometry_note": "No boundary polygon for this area exists in backend/data/. The area is defined for alias anchoring only; geometric containment is unavailable (agent.areas.area_contains returns None), never a silent default.",
+      "geometry_note": "No boundary polygon for this area exists in backend/db/data/. The area is defined for alias anchoring only; geometric containment is unavailable (agent.areas.area_contains returns None), never a silent default.",
       "evidence": "district column of places_region.csv"
     },
     {
@@ -109,7 +109,7 @@
         ]
       },
       "geometry": null,
-      "geometry_note": "No boundary polygon for this area exists in backend/data/. The area is defined for alias anchoring only; geometric containment is unavailable (agent.areas.area_contains returns None), never a silent default.",
+      "geometry_note": "No boundary polygon for this area exists in backend/db/data/. The area is defined for alias anchoring only; geometric containment is unavailable (agent.areas.area_contains returns None), never a silent default.",
       "evidence": "district column of places_region.csv"
     },
     {
@@ -127,7 +127,7 @@
         ]
       },
       "geometry": null,
-      "geometry_note": "No boundary polygon for this area exists in backend/data/. The area is defined for alias anchoring only; geometric containment is unavailable (agent.areas.area_contains returns None), never a silent default.",
+      "geometry_note": "No boundary polygon for this area exists in backend/db/data/. The area is defined for alias anchoring only; geometric containment is unavailable (agent.areas.area_contains returns None), never a silent default.",
       "evidence": "district column of places_region.csv"
     },
     {
@@ -145,7 +145,7 @@
         ]
       },
       "geometry": null,
-      "geometry_note": "No boundary polygon for this area exists in backend/data/. The area is defined for alias anchoring only; geometric containment is unavailable (agent.areas.area_contains returns None), never a silent default.",
+      "geometry_note": "No boundary polygon for this area exists in backend/db/data/. The area is defined for alias anchoring only; geometric containment is unavailable (agent.areas.area_contains returns None), never a silent default.",
       "evidence": "district column of places_region.csv"
     },
     {
@@ -163,7 +163,7 @@
         ]
       },
       "geometry": null,
-      "geometry_note": "No boundary polygon for this area exists in backend/data/. The area is defined for alias anchoring only; geometric containment is unavailable (agent.areas.area_contains returns None), never a silent default.",
+      "geometry_note": "No boundary polygon for this area exists in backend/db/data/. The area is defined for alias anchoring only; geometric containment is unavailable (agent.areas.area_contains returns None), never a silent default.",
       "evidence": "district column of places_region.csv"
     },
     {
@@ -181,7 +181,7 @@
         ]
       },
       "geometry": null,
-      "geometry_note": "No boundary polygon for this area exists in backend/data/. The area is defined for alias anchoring only; geometric containment is unavailable (agent.areas.area_contains returns None), never a silent default.",
+      "geometry_note": "No boundary polygon for this area exists in backend/db/data/. The area is defined for alias anchoring only; geometric containment is unavailable (agent.areas.area_contains returns None), never a silent default.",
       "evidence": "district column of places_region.csv"
     },
     {
@@ -199,7 +199,7 @@
         ]
       },
       "geometry": null,
-      "geometry_note": "No boundary polygon for this area exists in backend/data/. The area is defined for alias anchoring only; geometric containment is unavailable (agent.areas.area_contains returns None), never a silent default.",
+      "geometry_note": "No boundary polygon for this area exists in backend/db/data/. The area is defined for alias anchoring only; geometric containment is unavailable (agent.areas.area_contains returns None), never a silent default.",
       "evidence": "district column of places_region.csv"
     },
     {
@@ -217,7 +217,7 @@
         ]
       },
       "geometry": null,
-      "geometry_note": "No boundary polygon for this area exists in backend/data/. The area is defined for alias anchoring only; geometric containment is unavailable (agent.areas.area_contains returns None), never a silent default.",
+      "geometry_note": "No boundary polygon for this area exists in backend/db/data/. The area is defined for alias anchoring only; geometric containment is unavailable (agent.areas.area_contains returns None), never a silent default.",
       "evidence": "district column of places_region.csv"
     },
     {
@@ -235,7 +235,7 @@
         ]
       },
       "geometry": null,
-      "geometry_note": "No boundary polygon for this area exists in backend/data/. The area is defined for alias anchoring only; geometric containment is unavailable (agent.areas.area_contains returns None), never a silent default.",
+      "geometry_note": "No boundary polygon for this area exists in backend/db/data/. The area is defined for alias anchoring only; geometric containment is unavailable (agent.areas.area_contains returns None), never a silent default.",
       "evidence": "district column of places_region.csv"
     },
     {
@@ -253,7 +253,7 @@
         ]
       },
       "geometry": null,
-      "geometry_note": "No boundary polygon for this area exists in backend/data/. The area is defined for alias anchoring only; geometric containment is unavailable (agent.areas.area_contains returns None), never a silent default.",
+      "geometry_note": "No boundary polygon for this area exists in backend/db/data/. The area is defined for alias anchoring only; geometric containment is unavailable (agent.areas.area_contains returns None), never a silent default.",
       "evidence": "district column of places_region.csv"
     },
     {
@@ -271,7 +271,7 @@
         ]
       },
       "geometry": null,
-      "geometry_note": "No boundary polygon for this area exists in backend/data/. The area is defined for alias anchoring only; geometric containment is unavailable (agent.areas.area_contains returns None), never a silent default.",
+      "geometry_note": "No boundary polygon for this area exists in backend/db/data/. The area is defined for alias anchoring only; geometric containment is unavailable (agent.areas.area_contains returns None), never a silent default.",
       "evidence": "district column of places_region.csv"
     },
     {
@@ -289,7 +289,7 @@
         ]
       },
       "geometry": null,
-      "geometry_note": "No boundary polygon for this area exists in backend/data/. The area is defined for alias anchoring only; geometric containment is unavailable (agent.areas.area_contains returns None), never a silent default.",
+      "geometry_note": "No boundary polygon for this area exists in backend/db/data/. The area is defined for alias anchoring only; geometric containment is unavailable (agent.areas.area_contains returns None), never a silent default.",
       "evidence": "district column of places_region.csv"
     },
     {
@@ -307,7 +307,7 @@
         ]
       },
       "geometry": null,
-      "geometry_note": "No boundary polygon for this area exists in backend/data/. The area is defined for alias anchoring only; geometric containment is unavailable (agent.areas.area_contains returns None), never a silent default.",
+      "geometry_note": "No boundary polygon for this area exists in backend/db/data/. The area is defined for alias anchoring only; geometric containment is unavailable (agent.areas.area_contains returns None), never a silent default.",
       "evidence": "district column of places_region.csv"
     },
     {
@@ -325,7 +325,7 @@
         ]
       },
       "geometry": null,
-      "geometry_note": "No boundary polygon for this area exists in backend/data/. The area is defined for alias anchoring only; geometric containment is unavailable (agent.areas.area_contains returns None), never a silent default.",
+      "geometry_note": "No boundary polygon for this area exists in backend/db/data/. The area is defined for alias anchoring only; geometric containment is unavailable (agent.areas.area_contains returns None), never a silent default.",
       "evidence": "district column of places_region.csv"
     },
     {
@@ -343,7 +343,7 @@
         ]
       },
       "geometry": null,
-      "geometry_note": "No boundary polygon for this area exists in backend/data/. The area is defined for alias anchoring only; geometric containment is unavailable (agent.areas.area_contains returns None), never a silent default.",
+      "geometry_note": "No boundary polygon for this area exists in backend/db/data/. The area is defined for alias anchoring only; geometric containment is unavailable (agent.areas.area_contains returns None), never a silent default.",
       "evidence": "district column of places_region.csv"
     },
     {
@@ -361,7 +361,7 @@
         ]
       },
       "geometry": null,
-      "geometry_note": "No boundary polygon for this area exists in backend/data/. The area is defined for alias anchoring only; geometric containment is unavailable (agent.areas.area_contains returns None), never a silent default.",
+      "geometry_note": "No boundary polygon for this area exists in backend/db/data/. The area is defined for alias anchoring only; geometric containment is unavailable (agent.areas.area_contains returns None), never a silent default.",
       "evidence": "district column of places_region.csv"
     },
     {
@@ -379,7 +379,7 @@
         ]
       },
       "geometry": null,
-      "geometry_note": "No boundary polygon for this area exists in backend/data/. The area is defined for alias anchoring only; geometric containment is unavailable (agent.areas.area_contains returns None), never a silent default.",
+      "geometry_note": "No boundary polygon for this area exists in backend/db/data/. The area is defined for alias anchoring only; geometric containment is unavailable (agent.areas.area_contains returns None), never a silent default.",
       "evidence": "district column of places_region.csv"
     }
   ]

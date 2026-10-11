@@ -1,4 +1,4 @@
-# backend/data — datasets and the seed contract
+# data — datasets and the seed contract
 
 Data is code: every dataset is a versioned text file, and the Postgres database is
 a *projection* rebuilt from them by one idempotent command. Layout: `places/`

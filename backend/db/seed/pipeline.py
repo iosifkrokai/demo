@@ -5,7 +5,7 @@ Every dataset upserts through :func:`upsert_sql`, so the curated guard holds.
 from __future__ import annotations
 
 import json
-import re
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any, LiteralString
 
@@ -13,7 +13,6 @@ import psycopg
 from psycopg import sql
 
 from core.paths import GEO_DIR, PHOTOS_DIR
-from reference.geofence import inside_project_area
 
 from .datasets import (
     PROTECTED_CATEGORY_SOURCES,
@@ -21,6 +20,7 @@ from .datasets import (
     Dataset,
     match_place,
 )
+from .geofence import inside_project_area
 
 PROVIDER_BY_PREFIX = {
     "city": "planetabelarus",
@@ -174,46 +174,132 @@ def apply_curated_rows(conn: psycopg.Connection, curated: list[dict[str, Any]]) 
         }
 
 
-def load_areas(
-    conn: psycopg.Connection, records: list[dict[str, Any]], geo_dir: Path | None = None
-) -> int:
-    """Idempotently load the project-area polygon + one row per district."""
+def load_areas(conn: psycopg.Connection, geo_dir: Path | None = None) -> int:
+    """Idempotently write the named-area registry from `areas.json`.
+
+    The registry file is the source, exactly as `taxonomy.csv` is for the
+    categories: every slug, name, alias and note is written here, and the project
+    area additionally carries the polygon from `grodno_border.json`. The project
+    row is keyed by the slug the file marks `is_project_area` (`grodno-oblast`),
+    not a code invented from an English alias.
+    """
+    directory = geo_dir or GEO_DIR
+    document = json.loads((directory / "areas.json").read_text(encoding="utf-8"))
+    border = directory / "grodno_border.json"
+    border_meta = json.loads(border.read_text(encoding="utf-8")) if border.exists() else {}
+    geometry = _border_wkt(border_meta)
+
     written = 0
     with conn.cursor() as cur:
-        border = (geo_dir or GEO_DIR) / "grodno_border.json"
-        if border.exists():
-            meta = json.loads(border.read_text(encoding="utf-8"))
-            rings = meta.get("rings", [])
-            if rings:
-                ring = rings[0]
-                pts = [(float(x), float(y)) for x, y in ring]
-                if pts[0] != pts[-1]:
-                    pts.append(pts[0])
-                wkt = "MULTIPOLYGON(((" + ", ".join(f"{lon} {lat}" for lon, lat in pts) + ")))"
-                cur.execute(
-                    """
-                    INSERT INTO areas (code, name_ru, name_en, aliases, kind, source, license, geom)
-                    VALUES ('grodno-voblast', 'Гродненская область', 'Grodno Region',
-                            ARRAY['Гродненская область', 'Grodno'], 'project-area',
-                            %s, %s, ST_GeogFromText(%s))
-                    ON CONFLICT (code) DO UPDATE
-                        SET geom = EXCLUDED.geom, source = EXCLUDED.source,
-                            license = EXCLUDED.license
-                    """,
-                    (meta.get("source"), meta.get("license"), wkt),
-                )
-                written += 1
-        districts = sorted({r["district"] for r in records if r.get("district")})
-        for district in districts:
-            code = "district:" + re.sub(r"\s+", "-", district.strip().lower())
+        for area in document["areas"]:
+            slug = area["slug"]
+            aliases = [
+                term for locale in ("ru", "en") for term in area.get("aliases", {}).get(locale, [])
+            ]
             cur.execute(
                 """
-                INSERT INTO areas (code, name_ru, kind, source)
-                VALUES (%s, %s, 'district', 'derived:places.district')
-                ON CONFLICT (code) DO NOTHING
+                INSERT INTO areas (code, name_ru, name_en, aliases, kind, source,
+                                   license, note, is_project_area, geom)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s,
+                        CASE WHEN %s IS NULL THEN NULL ELSE ST_GeogFromText(%s) END)
+                ON CONFLICT (code) DO UPDATE
+                    SET name_ru = EXCLUDED.name_ru, name_en = EXCLUDED.name_en,
+                        aliases = EXCLUDED.aliases, kind = EXCLUDED.kind,
+                        source = EXCLUDED.source, license = EXCLUDED.license,
+                        note = EXCLUDED.note, is_project_area = EXCLUDED.is_project_area,
+                        geom = COALESCE(EXCLUDED.geom, areas.geom)
                 """,
-                (code, district),
+                (
+                    slug,
+                    area.get("name_ru") or slug,
+                    area.get("name_en"),
+                    aliases,
+                    area.get("kind") or "district",
+                    border_meta.get("source"),
+                    border_meta.get("license"),
+                    area.get("geometry_note"),
+                    bool(area.get("is_project_area")),
+                    geometry,
+                    geometry,
+                ),
             )
+            written += 1
+    return written
+
+
+def _border_wkt(meta: dict[str, Any]) -> str | None:
+    """The project border as WKT, or None when the file carries no rings."""
+    rings = meta.get("rings") or []
+    if not rings:
+        return None
+    pts = [(float(x), float(y)) for x, y in rings[0]]
+    if pts[0] != pts[-1]:
+        pts.append(pts[0])
+    return "MULTIPOLYGON(((" + ", ".join(f"{lon} {lat}" for lon, lat in pts) + ")))"
+
+
+def load_categories(conn: psycopg.Connection, categories: Iterable[Any]) -> int:
+    """Idempotently write the taxonomy. `code` is the natural key."""
+    written = 0
+    with conn.cursor() as cur:
+        for cat in categories:
+            cur.execute(
+                """
+                INSERT INTO categories (code, ru, en, role, osm_tags, visit_minutes,
+                                        aliases_ru, aliases_en)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (code) DO UPDATE
+                    SET ru = EXCLUDED.ru, en = EXCLUDED.en, role = EXCLUDED.role,
+                        osm_tags = EXCLUDED.osm_tags, visit_minutes = EXCLUDED.visit_minutes,
+                        aliases_ru = EXCLUDED.aliases_ru, aliases_en = EXCLUDED.aliases_en
+                """,
+                (
+                    cat.code,
+                    cat.ru,
+                    cat.en,
+                    cat.role,
+                    list(cat.osm_tags),
+                    cat.visit_minutes,
+                    list(cat.aliases_ru),
+                    list(cat.aliases_en),
+                ),
+            )
+            written += 1
+    return written
+
+
+def load_itineraries(conn: psycopg.Connection, itineraries: Iterable[Any]) -> int:
+    """Idempotently write the curated walks and their named stops.
+
+    `id` is the natural key; the stops are rewritten wholesale, because an
+    itinerary that loses a stop must lose it in the database too.
+    """
+    written = 0
+    with conn.cursor() as cur:
+        for position, item in enumerate(itineraries):
+            cur.execute(
+                """
+                INSERT INTO itineraries (id, title, blurb, transport, position)
+                VALUES (%s, %s, %s, %s, %s)
+                ON CONFLICT (id) DO UPDATE
+                    SET title = EXCLUDED.title, blurb = EXCLUDED.blurb,
+                        transport = EXCLUDED.transport, position = EXCLUDED.position
+                """,
+                (
+                    item["id"],
+                    item.get("title") or item["id"],
+                    item.get("blurb") or "",
+                    item.get("transport") or "pedestrian",
+                    position,
+                ),
+            )
+            cur.execute("DELETE FROM itinerary_stops WHERE itinerary_id = %s", (item["id"],))
+            for ordinal, source_url in enumerate(item.get("stops") or ()):
+                cur.execute(
+                    "INSERT INTO itinerary_stops (itinerary_id, ordinal, source_url) "
+                    "VALUES (%s, %s, %s)",
+                    (item["id"], ordinal, source_url),
+                )
             written += 1
     return written
 

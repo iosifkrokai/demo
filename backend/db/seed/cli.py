@@ -13,7 +13,7 @@ from typing import Any
 
 from core.paths import GEO_DIR, PHOTOS_DIR, PLACES_DIR
 
-from . import datasets as ds_mod
+from . import datasets as ds_mod, itineraries as itineraries_mod, taxonomy as taxonomy_mod
 from .datasets import Dataset, build_coverage_report, collect_records, read_curated
 
 DEFAULT_DSN = "postgresql://grodno:grodno@localhost:5432/grodno"
@@ -60,7 +60,11 @@ def cmd_apply(args: argparse.Namespace) -> int:
                     curated_stats["applied"] = True
                 areas_written = 0
                 if not args.no_areas:
-                    areas_written = pipeline.load_areas(conn, collected["records"], GEO_DIR)
+                    areas_written = pipeline.load_areas(conn, GEO_DIR)
+                categories_written = pipeline.load_categories(conn, taxonomy_mod.all_categories())
+                itineraries_written = pipeline.load_itineraries(
+                    conn, itineraries_mod.load_itineraries()
+                )
                 photos_written = pipeline.apply_photos(conn, PHOTOS_DIR)
                 conn.commit()
 
@@ -76,6 +80,8 @@ def cmd_apply(args: argparse.Namespace) -> int:
                     {
                         "upserted": totals,
                         "areas_written": areas_written,
+                        "categories_written": categories_written,
+                        "itineraries_written": itineraries_written,
                         "photos_written": photos_written,
                         "embedded": embedded,
                         "embeddings_skipped": args.no_embed,
@@ -103,7 +109,7 @@ def cmd_apply(args: argparse.Namespace) -> int:
     if collected["fatal"]:
         sys.stderr.write(
             "[seed] fatal: a hand-authored dataset (city/region) has invalid rows — "
-            "fix data/places/*.csv before publishing\n"
+            "fix backend/db/data/places/*.csv before publishing\n"
         )
         return 2
     return 0
@@ -211,7 +217,7 @@ def _add_apply_flags(p: argparse.ArgumentParser) -> None:
         "--data-dir",
         type=Path,
         default=PLACES_DIR,
-        help="Directory holding the CSV datasets (default: backend/data/places).",
+        help="Directory holding the CSV datasets (default: backend/db/data/places).",
     )
     p.add_argument(
         "--report",
