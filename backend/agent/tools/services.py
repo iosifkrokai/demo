@@ -57,12 +57,12 @@ def services_near_route(
 _services_near_route = services_near_route
 
 
-def register_services_near_route(agent: Any, remember: Callable[[Any, dict], dict]) -> None:
+def register_services_near_route(agent: Any, _remember: Callable[[Any, dict], dict]) -> None:
     """Advertise ``services_near_route`` to the agent."""
 
     @agent.tool
     def services_near_route(
-        ctx: RunContext[InterpretDeps],
+        _ctx: RunContext[InterpretDeps],
         category_codes: list[str] | None = None,
         shape: list | None = None,
         max_detour_minutes: float | None = None,

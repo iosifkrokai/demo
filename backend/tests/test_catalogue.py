@@ -19,7 +19,6 @@ from planner.models import (
     Candidate,
     IntentDecision,
     IntentResult,
-    ResolvedConstraints,
 )
 from planner.verify import (
     REASON_INTEREST_IN_CATALOGUE,
@@ -109,7 +108,6 @@ def _catalogue(candidates: list[Candidate], requirements: TripRequirements):
         ),
         requirements=requirements,
         intent=IntentResult(decision=IntentDecision(), source="agent"),
-        constraints=ResolvedConstraints(),
         candidates=candidates,
         t0=0.0,
     )

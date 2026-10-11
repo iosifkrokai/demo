@@ -262,7 +262,7 @@ def growth_points(routes: dict, golden: dict, evals: dict) -> list[dict[str, Any
     return sorted(points, key=lambda p: -p["affects"])
 
 
-def known_gaps(routes: dict, golden: dict, evals: dict) -> list[dict[str, Any]]:
+def known_gaps(golden: dict, evals: dict) -> list[dict[str, Any]]:
     """Documented gaps: visible, but not counted as a failure."""
     gaps: list[dict[str, Any]] = []
     for stage in evals.get("stages") or []:
@@ -361,7 +361,7 @@ def render(routes: dict, golden: dict, evals: dict) -> str:
         out.append("с записанным контрактом», а не «продукт хорош»: кейсы написаны нами")
         out.append("и узкие, а вкус прогулки не меряет ни один слой.")
 
-    gaps = known_gaps(routes, golden, evals)
+    gaps = known_gaps(golden, evals)
     if gaps:
         out.append("")
         out.append(f"ИЗВЕСТНЫЕ ПРОБЕЛЫ ({len(gaps)}) — видны, но не считаются провалом")
@@ -416,7 +416,7 @@ def render(routes: dict, golden: dict, evals: dict) -> str:
     return "\n".join(out)
 
 
-def _run_offline(days: int = 3) -> None:
+def _run_offline() -> None:
     """Re-run the offline layers: geometry (replay) and the flow stages."""
     snapshot = _latest_under(SNAPSHOTS, "rows.jsonl")
     if snapshot is not None:
@@ -485,7 +485,7 @@ def main(argv: list[str] | None = None) -> int:
                     "golden": golden,
                     "evals": evals,
                     "growth_points": growth_points(routes, golden, evals),
-                    "known_gaps": known_gaps(routes, golden, evals),
+                    "known_gaps": known_gaps(golden, evals),
                     "not_measured": NOT_MEASURED,
                 },
                 ensure_ascii=False,

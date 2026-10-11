@@ -12,7 +12,7 @@ from collections.abc import Iterable
 from functools import lru_cache
 
 from core.paths import TAXONOMY_CSV
-from db.models.category import Category, Locale, Role
+from db.models.category import Category, Role
 
 _DATA_FILE = TAXONOMY_CSV
 
@@ -154,7 +154,7 @@ def _fold_candidates(norm: str) -> list[str]:
     return out
 
 
-def resolve_code(term: str | None, locale: Locale = "ru") -> str | None:
+def resolve_code(term: str | None) -> str | None:
     """Resolve free text to a canonical code, or None when unknown.
 
     Tries exact code/name/alias, ё-normalised match, then plural/substring fold.

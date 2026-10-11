@@ -99,8 +99,8 @@ class Pipeline:
                 )
                 return generate_refinement(req, base, turn.t0, repos=self.repos)
 
-        pre = self._step_preprocess(turn)
-        requirements, intent = self._step_interpret(turn, pre)
+        self._step_preprocess(turn)
+        requirements, intent = self._step_interpret(turn)
         constraints = self._step_resolve(turn, requirements, intent)
         if turn.refuse:
             return self._refuse_out_of_coverage(
@@ -117,16 +117,14 @@ class Pipeline:
                 candidates=len(candidates),
                 names=_names(candidates),
             )
-            return self._catalogue_response(
-                req, requirements, intent, constraints, candidates, turn.t0
-            )
+            return self._catalogue_response(req, requirements, intent, candidates, turn.t0)
 
         candidates = self._step_geo_focus(turn, candidates, constraints)
-        candidates = self._step_diversify(turn, candidates, constraints)
+        candidates = self._step_diversify(candidates, constraints)
         plan = self._step_plan(turn, candidates, constraints)
 
-        shape = self._step_render(turn, plan)
-        explanation = self._step_explain(turn, plan, shape)
+        self._step_render(turn, plan)
+        explanation = self._step_explain(turn, plan)
         status = self._step_verify(turn, plan, requirements)
 
         ms = int((_time.perf_counter() - turn.t0) * 1000)
@@ -195,7 +193,7 @@ class Pipeline:
         )
         return pre
 
-    def _step_interpret(self, turn: Turn, pre):
+    def _step_interpret(self, turn: Turn):
         progress.note(progress.STAGE_INTERPRETING)
         requirements = build_requirements(
             turn.req.query, turn.req, repos=self.repos, wall_clock_s=seconds_left(turn.t0)
@@ -371,7 +369,6 @@ class Pipeline:
 
     def _step_diversify(
         self,
-        turn: Turn,
         candidates: list[Candidate],
         constraints: ResolvedConstraints,
     ) -> list[Candidate]:
@@ -518,7 +515,7 @@ class Pipeline:
         turn.length_km = length_km
         return shape
 
-    def _step_explain(self, turn: Turn, plan, shape: dict) -> str:
+    def _step_explain(self, turn: Turn, plan) -> str:
         explanation = explain_route(plan.route, plan.trace, turn.walk_s, turn.costing)
         trace.record(
             "explain",
@@ -562,12 +559,11 @@ class Pipeline:
         req: GenerateReq,
         requirements: Any,
         intent: Any,
-        constraints: ResolvedConstraints,
         candidates: list[Candidate],
         t0: float,
     ) -> RouteResponse:
         """Answer with the matching places, grouped by town, and no route."""
-        return catalogue_response(req, requirements, intent, constraints, candidates, t0)
+        return catalogue_response(req, requirements, intent, candidates, t0)
 
     def reroute(self, point_ids: list[int], profile: str | None = None) -> RouteResponse:
         """Re-route a chosen list of place IDs."""

@@ -58,7 +58,6 @@ def optimize(
             visits,
             budget_s,
             info,
-            costing=costing,
             round_trip=constraints.round_trip,
         )
     elif n <= 12:
@@ -69,7 +68,6 @@ def optimize(
             budget_s,
             must_idx,
             info,
-            costing=costing,
             round_trip=constraints.round_trip,
         )
     else:
@@ -79,7 +77,6 @@ def optimize(
             visits,
             budget_s,
             info,
-            costing=costing,
             round_trip=constraints.round_trip,
         )
 
@@ -295,7 +292,6 @@ def _brute_open(
     budget_s: int | None,
     info: dict,
     *,
-    costing: str = "pedestrian",
     round_trip: bool = False,
 ) -> tuple[list[int], dict]:
     """Enumerate (start, end) × all permutations of middle, return cheapest."""
@@ -428,7 +424,6 @@ def _nn_2opt_multi(
     budget_s: int | None,
     info: dict,
     *,
-    costing: str = "pedestrian",
     round_trip: bool = False,
 ) -> tuple[list[int], dict]:
     """Nearest-neighbour from K random starts + 2-opt local search.

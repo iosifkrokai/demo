@@ -201,7 +201,7 @@ class TestCategorySteering:
             ]
         )
 
-        result = _category_signal(places, None, ["замок"], limit=10)
+        result = _category_signal(places, ["замок"], limit=10)
         ids = [pid for pid, _ in result]
 
         assert ids.index(2) < ids.index(1), (

@@ -2887,9 +2887,7 @@ def load_golden_snapshot(snapshot_dir: Path) -> tuple[dict, list[dict]]:
     return meta, rows
 
 
-def rescore_golden_rows(
-    rows: list[dict], cases: list[GoldenCase], base_url: str
-) -> list[GoldenRun]:
+def rescore_golden_rows(rows: list[dict], cases: list[GoldenCase]) -> list[GoldenRun]:
     """Recompute every verdict offline: no agent, no Valhalla, no clock."""
     by_id = golden_by_id(cases)
     out: list[GoldenRun] = []
@@ -3225,7 +3223,7 @@ def _replay_golden_output(args) -> tuple[list[GoldenRun], list[GoldenCase], Path
         f"Snapshot: {len(rows)} row(s), cases {meta.get('cases')}, "
         f"git {meta.get('git_sha')}, taken {meta.get('started_at')}"
     )
-    runs = rescore_golden_rows(rows, cases, str(meta.get("base_url") or "http://replay"))
+    runs = rescore_golden_rows(rows, cases)
     return (
         runs,
         cases,

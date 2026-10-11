@@ -966,7 +966,7 @@ def test_a_golden_snapshot_replays_offline_to_the_same_verdicts(tmp_path, golden
 
     meta, rows = b.load_golden_snapshot(snap)
     assert meta["schema"] == b.GOLDEN_SNAPSHOT_SCHEMA and len(rows) == 1
-    replayed = b.rescore_golden_rows(rows, cases, "http://replay")
+    replayed = b.rescore_golden_rows(rows, cases)
     assert len(replayed) == 1
     assert replayed[0].verdict.passed is True
     assert replayed[0].verdict.as_dict() == runs[0].verdict.as_dict()
@@ -979,7 +979,7 @@ def test_golden_replay_reports_drift_when_a_case_disappeared(tmp_path, golden_di
     snap = tmp_path / "snap"
     b.write_golden_snapshot(golden_runs(cases, {"gone": plan([point()])}), snap, "http://x")
     with pytest.raises(SystemExit) as exc:
-        b.rescore_golden_rows(b.load_golden_snapshot(snap)[1], [], "http://x")
+        b.rescore_golden_rows(b.load_golden_snapshot(snap)[1], [])
     assert "gone" in str(exc.value)
 
 

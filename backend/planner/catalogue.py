@@ -11,7 +11,6 @@ from planner.models import (
     Candidate,
     GenerateReq,
     ParsedQuery,
-    ResolvedConstraints,
     RouteResponse,
     RouteSummary,
 )
@@ -27,7 +26,6 @@ def catalogue_response(
     req: GenerateReq,
     requirements: Any,
     intent: Any,
-    constraints: ResolvedConstraints,
     candidates: list[Candidate],
     t0: float,
 ) -> RouteResponse:

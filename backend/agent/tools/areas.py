@@ -105,7 +105,7 @@ def find_areas(term: str, locale: str = "ru", *, repos: Any = None) -> dict:
     return _envelope("find_areas", results, provenance, capped=len(found) >= MAX_AREAS_PER_CALL)
 
 
-def register_find_areas(agent: Any, remember: Callable[[Any, dict], dict]) -> None:
+def register_find_areas(agent: Any, _remember: Callable[[Any, dict], dict]) -> None:
     """Advertise ``find_areas`` to the agent.
 
     The Python name differs from the advertised one on purpose: a nested

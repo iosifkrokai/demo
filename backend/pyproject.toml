@@ -82,12 +82,10 @@ ignore = [
     "PLR2004", # 87  magic values — mostly "a route needs at least two stops"
     "PLR0913", # 42  too many arguments
     "PLR0917", # 14  too many positional arguments
-    "ARG001",  # 11  unused function argument: parameters a refactor left behind
     "N818",    # 9   exception names without an `Error` suffix
     "PLR0912", # 8   too many branches
     "PLR0915", # 8   too many statements
     "PLR0911", # 4   too many return statements
-    "ARG002",  # 3   unused method argument
 ]
 
 [tool.ruff.lint.per-file-ignores]

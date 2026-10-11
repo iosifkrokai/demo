@@ -125,12 +125,12 @@ def retrieve(
 
     cat_signal: list[tuple[int, float]] = []
     if all_cats:
-        cat_signal = _category_signal(places, constraints, all_cats, limit=pool_limit // 2)
+        cat_signal = _category_signal(places, all_cats, limit=pool_limit // 2)
 
     cat_first_signal: list[tuple[int, float]] = []
     if explicit_cat_kw:
         primary_cat = [explicit_cat_kw[0]]
-        cat_first_signal = _category_signal(places, constraints, primary_cat, limit=pool_limit)
+        cat_first_signal = _category_signal(places, primary_cat, limit=pool_limit)
 
     near_signal: list[tuple[int, float]] = []
     if near is not None:
@@ -200,7 +200,6 @@ def _keyword_signal(
 
 def _category_signal(
     places: PostgresPlaceRepository,
-    constraints: ResolvedConstraints,
     categories: list[str],
     limit: int,
 ) -> list[tuple[int, float]]:
