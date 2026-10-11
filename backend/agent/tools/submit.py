@@ -156,6 +156,7 @@ def submit_plan(
         "problems": _problems(answer["verdicts"]),
         "narrative": narrative,
         "walk_minutes": measured["walk_minutes"],
+        "length_km": measured.get("length_km"),
         "visit_minutes": measured["visit_minutes"],
         "total_minutes": measured["total_minutes"],
         "fits_budget": measured["fits_budget"],
