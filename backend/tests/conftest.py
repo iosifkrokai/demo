@@ -1,8 +1,9 @@
-"""Shared fixtures.
+"""The fixtures the three kinds of test share.
 
-The reading cache is emptied before every test so one test cannot leak into
-another. ``fake_llm`` stands in for OpenRouter: the real agent path runs — prompt,
-tools, structured output — against a canned reading, with no network.
+Two autouse fixtures keep every test honest: no test may reach a real model
+provider, and no test may inherit another's cached reading or embedding. The
+rest stand for a piece of the world a test is not allowed to touch: the model
+provider (``fake_model``) and the running stack (``live_stack``).
 """
 
 from __future__ import annotations
@@ -10,8 +11,10 @@ from __future__ import annotations
 import json
 import os
 import sys
+from dataclasses import dataclass
 from typing import Any
 
+import httpx
 import pytest
 from pydantic_ai import models
 from pydantic_ai.messages import ModelResponse, ToolCallPart
@@ -19,18 +22,13 @@ from pydantic_ai.models.function import AgentInfo, FunctionModel
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agent import llm as model
-from core import cache as interpret_cache
+from agent import llm
+from core import cache
 
+BASE_URL = os.environ.get("GRODNO_BASE_URL", "http://localhost:8080")
+HEALTH_TIMEOUT_S = 3.0
 
-@pytest.fixture(autouse=True)
-def _empty_reading_cache():
-    """No test starts with another test's reading in the store."""
-    interpret_cache.INTERPRET_CACHE.clear()
-    interpret_cache.EMBED_CACHE.clear()
-    yield
-    interpret_cache.INTERPRET_CACHE.clear()
-    interpret_cache.EMBED_CACHE.clear()
+CACHES = (cache.INTERPRET_CACHE, cache.EMBED_CACHE)
 
 
 @pytest.fixture(autouse=True)
@@ -39,30 +37,81 @@ def _no_real_model_requests(monkeypatch):
     monkeypatch.setattr(models, "ALLOW_MODEL_REQUESTS", False)
 
 
-class FakeLLM:
-    """The reading every request gets until a test says otherwise."""
+@pytest.fixture(autouse=True)
+def _empty_caches():
+    """No test starts with another test's reading or embedding."""
+    for store in CACHES:
+        store.clear()
+    yield
+    for store in CACHES:
+        store.clear()
+
+
+class FakeModel:
+    """A ``FunctionModel`` a test programs, one turn at a time.
+
+    ``call`` queues a tool call the agent answers from its own tools; ``finish``
+    queues the structured reading that ends the run. The queue is consumed one
+    model turn per agent step, so the order written is the order played.
+    """
 
     def __init__(self) -> None:
-        self.payload: dict[str, Any] = {}
+        self._steps: list[ModelResponse] = []
 
-    def set(self, **fields) -> None:
-        """The fields the model will report, as the AgentReading they map to."""
-        self.payload = fields
+    def call(self, tool: str, /, **args: Any) -> FakeModel:
+        self._steps.append(ModelResponse([ToolCallPart(tool, json.dumps(args))]))
+        return self
 
-    def model(self) -> FunctionModel:
-        def fn(messages, info: AgentInfo) -> ModelResponse:
-            return ModelResponse([ToolCallPart("final_result", json.dumps(self.payload))])
+    def finish(self, **fields: Any) -> FakeModel:
+        self._steps.append(ModelResponse([ToolCallPart("final_result", json.dumps(fields))]))
+        return self
 
-        return FunctionModel(fn, model_name="fake-interpret")
+    def _next(self, _messages: list[Any], _info: AgentInfo) -> ModelResponse:
+        if not self._steps:
+            raise AssertionError("fake_model ran out of scripted steps")
+        return self._steps.pop(0)
+
+    def build(self) -> FunctionModel:
+        return FunctionModel(self._next, model_name="fake-agent")
 
 
 @pytest.fixture
-def fake_llm(monkeypatch) -> FakeLLM:
-    """A key and a model that answer without OpenRouter.
+def fake_model(monkeypatch) -> FakeModel:
+    """Replace the one provider seam with a programmable offline model.
 
-    Patches the one seam ``agent.model`` documents (``make_model``).
+    A key is set as well: ``agent.client.available`` refuses to run without one,
+    so a replay that skipped this would never reach the model at all.
     """
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
-    fake = FakeLLM()
-    monkeypatch.setattr(model, "make_model", fake.model)
+    fake = FakeModel()
+    monkeypatch.setattr(llm, "make_model", fake.build)
     return fake
+
+
+@dataclass(frozen=True)
+class LiveStack:
+    """The running stack: where it is, and what ``/health`` says it can do."""
+
+    url: str
+    health: dict[str, Any]
+
+    def require(self, capability: str) -> None:
+        """Skip the test when the stack cannot serve this capability.
+
+        A skip is not a pass: it says the stack lacks the dependency, not that
+        the endpoint was checked.
+        """
+        if not self.health.get(capability):
+            pytest.skip(f"the stack at {self.url} reports {capability}=false in /health")
+
+
+@pytest.fixture(scope="session")
+def live_stack() -> LiveStack:
+    """The live stack, or skip. ``/health`` is probed once for the whole session."""
+    try:
+        response = httpx.get(f"{BASE_URL}/health", timeout=HEALTH_TIMEOUT_S)
+        response.raise_for_status()
+        health = response.json()
+    except Exception as exc:  # any failure means "not reachable"
+        pytest.skip(f"no live stack at {BASE_URL} ({type(exc).__name__}: {exc})")
+    return LiveStack(url=BASE_URL, health=health)

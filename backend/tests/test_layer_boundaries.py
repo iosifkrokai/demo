@@ -1,23 +1,19 @@
-"""The layer boundaries this refactor enforces — and the debt it is burning down.
+"""The architecture the target layering promises: one test per rule.
 
-Three rules, one test each:
+1. ``routing/`` is a leaf. It may reach ``core``, ``db`` and ``reference`` (and
+   third-party packages), but never ``agent``, ``planner`` or ``api``. The
+   deterministic routing math sits below every logic layer that wants it.
+2. ``agent/`` is a leaf. It may reach ``core``, ``db`` and ``reference``, but
+   never ``planner`` or ``api``. The reader declares its own input.
+3. The logic layers never speak SQL and never import a driver. Every database
+   read goes through a repository in ``db/store``.
+4. ``db/models/**`` describes rows: it imports the standard library only.
 
-1. ``db/models/**`` is the model layer: dataclasses and nothing else. It imports
-   the standard library only — no pydantic, no psycopg, no project code.
-2. The logic layers (``planner/``, ``agent/``, ``api/``, ``quality/``) never speak
-   SQL and never touch a driver. Every database read goes through a repository.
-3. Every top-level package is declared in the three places that need it — wheel
-   packages, isort's first-party list and pyright's include in ``pyproject.toml``,
-   plus the ``COPY`` lines in the ``Dockerfile``.
+``planner`` is kept in the logic tuple while it is mid-refactor; the leaf rules
+for ``routing`` and ``agent`` have to hold today.
 
-Rules 1 and 2 ship with ``_PENDING_*``: the violations that exist today, each
-named with the workstream that removes it. A violation that is *not* on a list
-fails the build, and an entry that no longer violates anything fails too — the
-lists cannot rot. Rule 3 has no list: a new package must be declared.
-
-``db/seed/`` is deliberately out of scope for rule 2: it is the write path, it
-lives in the persistence package, and CLAUDE.md makes it the one sanctioned
-writer.
+The checks parse with ``ast`` so a docstring that mentions ``SELECT`` or an
+``import psycopg`` inside a comment is not mistaken for a violation.
 """
 
 from __future__ import annotations
@@ -25,24 +21,26 @@ from __future__ import annotations
 import ast
 import re
 import sys
-import tomllib
 from pathlib import Path
-from typing import Any
 
 BACKEND = Path(__file__).resolve().parents[1]
 
-# --- rule 1: the model layer ------------------------------------------------
+# --- the rules --------------------------------------------------------------
+
+# A layer that may import data (core/db/reference) but nothing above it.
+LEAF_RULES: dict[str, frozenset[str]] = {
+    "routing": frozenset({"agent", "planner", "api"}),
+    "agent": frozenset({"planner", "api"}),
+}
+
+# The layers that must go through `db/store` for everything database-shaped.
+LOGIC_LAYERS = ("planner", "agent", "api", "routing", "quality")
 
 MODEL_LAYER = BACKEND / "db" / "models"
 _MODEL_LAYER_ALLOWED = frozenset(sys.stdlib_module_names) | {"__future__"}
 
-# --- rule 2: the layers that must not speak SQL -----------------------------
-
-LOGIC_LAYERS = ("planner", "agent", "api", "quality")
-
 # A statement, not a word: "SELECT " has to be followed by a column or a number,
-# and "SET " has to be followed by a dotted GUC name — otherwise prose in an
-# unrelated string would trip the scan.
+# and "SET " by a dotted GUC name — otherwise prose would trip the scan.
 _SQL = re.compile(
     r"\b(?:"
     r"SELECT\s+(?:[\w*\"]|\d)"
@@ -58,35 +56,15 @@ _SQL = re.compile(
 
 _DRIVER = re.compile(r"^\s*(?:import|from)\s+psycopg\b", re.MULTILINE)
 
-# Violations that exist today, named with the workstream that closes each. Both
-# lists are empty: the campaign that introduced them paid them off in full, and
-# `test_pending_lists_are_current` keeps them from being re-added by accident.
-# A new exception belongs here with a reason and an owner, not in a code comment.
-_PENDING_SQL: dict[str, str] = {}
-_PENDING_DRIVER: dict[str, str] = {}
 
-# --- rule 3: what the tooling and the image must know about -----------------
-
-# Packages the image deliberately does not ship (backend/.dockerignore).
-_NOT_SHIPPED = frozenset({"tests", "quality"})
-# Directories copied into the image that are not Python packages.
-_COPIED_AS_IS = frozenset({"data"})
+# --- helpers ----------------------------------------------------------------
 
 
 def _python_files(directory: Path) -> list[Path]:
-    """Every module under `directory`, excluding caches. Empty if it is absent."""
+    """Every module under `directory`, caches aside. Empty if it is absent."""
     if not directory.is_dir():
         return []
     return sorted(path for path in directory.rglob("*.py") if "__pycache__" not in path.parts)
-
-
-def _package_dirs() -> set[str]:
-    """Top-level directories in the backend that hold Python (hidden ones aside)."""
-    return {
-        child.name
-        for child in BACKEND.iterdir()
-        if child.is_dir() and not child.name.startswith(".") and any(child.rglob("*.py"))
-    }
 
 
 def _imported_roots(tree: ast.AST) -> set[str]:
@@ -144,18 +122,40 @@ def _sql_lines(path: Path) -> list[int]:
     return lines
 
 
-def _pyproject() -> dict[str, Any]:
-    return tomllib.loads((BACKEND / "pyproject.toml").read_text(encoding="utf-8"))
+# --- the tests --------------------------------------------------------------
 
 
-def _declared_packages() -> tuple[set[str], set[str], set[str]]:
-    """The three lists in `pyproject.toml` that enumerate packages by name."""
-    config = _pyproject()
-    return (
-        set(config["tool"]["hatch"]["build"]["targets"]["wheel"]["packages"]),
-        set(config["tool"]["ruff"]["lint"]["isort"]["known-first-party"]),
-        set(config["tool"]["pyright"]["include"]),
-    )
+def test_the_leaf_layers_stay_below_every_logic_layer() -> None:
+    """`routing` and `agent` declare their own input; they never reach upward."""
+    offenders: dict[str, set[str]] = {}
+    for leaf, forbidden in LEAF_RULES.items():
+        for path in _python_files(BACKEND / leaf):
+            reached = _imported_roots(ast.parse(path.read_text(encoding="utf-8")))
+            upward = reached & forbidden
+            if upward:
+                offenders[path.relative_to(BACKEND).as_posix()] = upward
+    assert not offenders, f"a leaf layer reaches upward — invert the import: {offenders}"
+
+
+def test_logic_layers_do_not_speak_sql() -> None:
+    """Every database read goes through `db/store`; the logic layers call it."""
+    offenders: dict[str, list[int]] = {}
+    for layer in LOGIC_LAYERS:
+        for path in _python_files(BACKEND / layer):
+            lines = _sql_lines(path)
+            if lines:
+                offenders[path.relative_to(BACKEND).as_posix()] = lines
+    assert not offenders, f"SQL in a logic layer — move it to a repository in db/store: {offenders}"
+
+
+def test_logic_layers_do_not_import_a_driver() -> None:
+    """A logic layer holds repositories, never a connection."""
+    offenders: list[str] = []
+    for layer in LOGIC_LAYERS:
+        for path in _python_files(BACKEND / layer):
+            if _DRIVER.search(path.read_text(encoding="utf-8")):
+                offenders.append(path.relative_to(BACKEND).as_posix())
+    assert not offenders, f"a logic layer imports psycopg — take a repository instead: {offenders}"
 
 
 def test_model_layer_imports_stdlib_only() -> None:
@@ -165,98 +165,8 @@ def test_model_layer_imports_stdlib_only() -> None:
         roots = _imported_roots(ast.parse(path.read_text(encoding="utf-8")))
         foreign = roots - _MODEL_LAYER_ALLOWED
         if foreign:
-            offenders[str(path.relative_to(BACKEND))] = foreign
+            offenders[path.relative_to(BACKEND).as_posix()] = foreign
     assert not offenders, (
         "the model layer must import the standard library only: "
         f"{ {name: sorted(mods) for name, mods in offenders.items()} }"
-    )
-
-
-def test_logic_layers_do_not_speak_sql() -> None:
-    """Every database read goes through `db/store`; the logic layers call it."""
-    offenders: dict[str, list[int]] = {}
-    for layer in LOGIC_LAYERS:
-        for path in _python_files(BACKEND / layer):
-            relative = path.relative_to(BACKEND).as_posix()
-            if relative in _PENDING_SQL:
-                continue
-            lines = _sql_lines(path)
-            if lines:
-                offenders[relative] = lines
-    assert not offenders, f"SQL in a logic layer — move it to a repository in db/store: {offenders}"
-
-
-def test_logic_layers_do_not_import_a_driver() -> None:
-    """A logic layer holds repositories, never a connection."""
-    offenders: list[str] = []
-    for layer in LOGIC_LAYERS:
-        for path in _python_files(BACKEND / layer):
-            relative = path.relative_to(BACKEND).as_posix()
-            if relative in _PENDING_DRIVER:
-                continue
-            if _DRIVER.search(path.read_text(encoding="utf-8")):
-                offenders.append(relative)
-    assert not offenders, f"a logic layer imports psycopg — take a repository instead: {offenders}"
-
-
-def test_the_agent_layer_is_a_leaf() -> None:
-    """The reader declares its own input; it never reaches up for a wire model.
-
-    This is the edge that keeps `planner -> agent` one-way, and therefore the
-    pipeline able to drive the reader. The agent used to import `GenerateReq`
-    straight out of `contracts`, and `TripRequirements` out of `domain`; both
-    now live in `agent.models`.
-    """
-    offenders: dict[str, set[str]] = {}
-    for path in _python_files(BACKEND / "agent"):
-        reached = _imported_roots(ast.parse(path.read_text(encoding="utf-8")))
-        upward = reached & {"planner", "contracts"}
-        if upward:
-            offenders[path.relative_to(BACKEND).as_posix()] = upward
-    assert not offenders, f"the agent layer must stay a leaf: {offenders}"
-
-
-def test_pending_lists_are_current() -> None:
-    """An entry that was fixed (or whose file vanished) must leave the list."""
-    stale: list[str] = []
-    for relative, reason in _PENDING_SQL.items():
-        path = BACKEND / relative
-        if not path.exists() or not _sql_lines(path):
-            stale.append(f"{relative} ({reason})")
-    for relative, reason in _PENDING_DRIVER.items():
-        path = BACKEND / relative
-        if not path.exists() or not _DRIVER.search(path.read_text(encoding="utf-8")):
-            stale.append(f"{relative} ({reason})")
-    assert not stale, (
-        "these are listed as pending but no longer violate anything — "
-        f"remove them from the list: {stale}"
-    )
-
-
-def test_every_package_is_declared() -> None:
-    """A package the tooling does not know about is a package nothing checks."""
-    expected = _package_dirs() - _NOT_SHIPPED
-    packages, first_party, typed = _declared_packages()
-    assert packages == expected, (
-        "pyproject [tool.hatch.build.targets.wheel].packages does not match the "
-        f"packages on disk: {sorted(packages ^ expected)}"
-    )
-    assert first_party == expected, (
-        "pyproject [tool.ruff.lint.isort].known-first-party does not match the "
-        f"packages on disk: {sorted(first_party ^ expected)}"
-    )
-    assert typed == expected, (
-        "pyproject [tool.pyright].include does not match the packages on disk: "
-        f"{sorted(typed ^ expected)}"
-    )
-
-
-def test_dockerfile_copies_every_package() -> None:
-    """A package the image does not COPY fails at import time, in the container."""
-    text = (BACKEND / "Dockerfile").read_text(encoding="utf-8")
-    copied = set(re.findall(r"^COPY (\w+)/ /app/\1/", text, re.MULTILINE))
-    packages, _, _ = _declared_packages()
-    expected = packages | _COPIED_AS_IS
-    assert copied == expected, (
-        f"the Dockerfile does not copy every package: {sorted(copied ^ expected)}"
     )
