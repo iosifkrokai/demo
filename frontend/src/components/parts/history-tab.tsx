@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   ChevronDown,
   CircleCheck,
@@ -9,11 +10,11 @@ import {
   X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { formatDate } from '@/i18n/format';
 import {
   type RouteHistoryEntry,
   type RouteHistoryWalk,
 } from '@/stores/directions-store';
-import { placeCountRu } from '@/utils/plural';
 import { fmtMin } from './guide-format';
 
 interface HistoryTabProps {
@@ -31,11 +32,12 @@ export function HistoryTab({
   onRemove,
   onClear,
 }: HistoryTabProps) {
+  const { t } = useTranslation();
   return (
     <div className="flex flex-col gap-2" data-testid="history-tab">
       <div className="flex items-center justify-between gap-2">
         <p className="flex items-center gap-1.5 text-meta text-muted-foreground">
-          Построенные маршруты
+          {t('history.built')}
           {entries.length > 0 && (
             <span className="rounded-full bg-muted px-1.5 py-0.5 text-badge text-muted-foreground">
               {entries.length}
@@ -47,19 +49,16 @@ export function HistoryTab({
             type="button"
             onClick={onClear}
             className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-meta text-muted-foreground transition-colors hover:bg-muted hover:text-destructive max-md:min-h-11 pointer-coarse:min-h-11"
-            title="очистить историю"
+            title={t('history.clearTitle')}
           >
             <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
-            очистить
+            {t('history.clear')}
           </button>
         )}
       </div>
 
       {entries.length === 0 ? (
-        <p className="text-meta text-muted-foreground">
-          Здесь появятся маршруты, которые вы построите — их можно будет открыть
-          заново вместе с остановками.
-        </p>
+        <p className="text-meta text-muted-foreground">{t('history.empty')}</p>
       ) : (
         <div className="flex flex-col gap-1.5">
           {entries.map((entry) => (
@@ -78,33 +77,39 @@ export function HistoryTab({
 
 /** The day a walk last moved: «27 сентября». */
 const walkDay = (at: number) =>
-  new Date(at).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
+  formatDate(new Date(at), { day: 'numeric', month: 'long' });
 
 /** «пройден» when every stop was visited, otherwise how far it got. */
-const WalkBadge = ({ id, walk }: { id: string; walk: RouteHistoryWalk }) => (
-  <p
-    data-testid={`history-walk-${id}`}
-    className={cn(
-      'mt-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-badge',
-      walk.completed
-        ? 'bg-primary/10 font-semibold text-primary'
-        : 'bg-muted text-muted-foreground'
-    )}
-  >
-    {walk.completed ? (
-      <>
-        <CircleCheck className="h-3 w-3" aria-hidden="true" />
-        пройден
-      </>
-    ) : (
-      <>
-        <Footprints className="h-3 w-3" aria-hidden="true" />
-        пройдено {walk.visited} из {walk.total}
-      </>
-    )}
-    <span className="font-normal opacity-80">· {walkDay(walk.at)}</span>
-  </p>
-);
+const WalkBadge = ({ id, walk }: { id: string; walk: RouteHistoryWalk }) => {
+  const { t } = useTranslation();
+  return (
+    <p
+      data-testid={`history-walk-${id}`}
+      className={cn(
+        'mt-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-badge',
+        walk.completed
+          ? 'bg-primary/10 font-semibold text-primary'
+          : 'bg-muted text-muted-foreground'
+      )}
+    >
+      {walk.completed ? (
+        <>
+          <CircleCheck className="h-3 w-3" aria-hidden="true" />
+          {t('history.walked')}
+        </>
+      ) : (
+        <>
+          <Footprints className="h-3 w-3" aria-hidden="true" />
+          {t('history.walkedPartial', {
+            visited: walk.visited,
+            total: walk.total,
+          })}
+        </>
+      )}
+      <span className="font-normal opacity-80">· {walkDay(walk.at)}</span>
+    </p>
+  );
+};
 
 interface HistoryItemProps {
   entry: RouteHistoryEntry;
@@ -113,6 +118,7 @@ interface HistoryItemProps {
 }
 
 const HistoryItem = ({ entry, onLoad, onRemove }: HistoryItemProps) => {
+  const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
 
   return (
@@ -131,7 +137,9 @@ const HistoryItem = ({ entry, onLoad, onRemove }: HistoryItemProps) => {
         <div className="flex shrink-0 items-center gap-1">
           <span className="flex items-center gap-0.5 text-meta text-muted-foreground">
             <Clock className="h-3.5 w-3.5" aria-hidden="true" />
-            {entry.timeBudget <= 0 ? 'без лимита' : fmtMin(entry.timeBudget)}
+            {entry.timeBudget <= 0
+              ? t('history.unlimited')
+              : fmtMin(entry.timeBudget)}
           </span>
           <button
             type="button"
@@ -140,8 +148,8 @@ const HistoryItem = ({ entry, onLoad, onRemove }: HistoryItemProps) => {
               onRemove();
             }}
             className="flex h-6 w-6 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-destructive max-md:h-11 max-md:w-11 pointer-coarse:h-11 pointer-coarse:w-11"
-            title="удалить"
-            aria-label="удалить из истории"
+            title={t('history.remove')}
+            aria-label={t('history.removeTitle')}
           >
             <X className="h-3.5 w-3.5" aria-hidden="true" />
           </button>
@@ -154,7 +162,7 @@ const HistoryItem = ({ entry, onLoad, onRemove }: HistoryItemProps) => {
         className="mt-1 inline-flex items-center gap-1 text-meta text-muted-foreground transition-colors hover:text-foreground max-md:min-h-11 pointer-coarse:min-h-11"
       >
         <MapPin className="h-3.5 w-3.5" aria-hidden="true" />
-        {placeCountRu(entry.places.length)}
+        {t('history.places', { count: entry.places.length })}
         <ChevronDown
           className={`h-3.5 w-3.5 transition-transform ${
             expanded ? 'rotate-180' : ''

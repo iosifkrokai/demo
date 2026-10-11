@@ -7,6 +7,7 @@ import type {
   PossibleSettings,
   ValhallaRouteResponse,
 } from '@/components/types';
+import i18n from '@/i18n';
 import {
   getValhallaUrl,
   buildDirectionsRequest,
@@ -170,8 +171,8 @@ async function requestRoute(
         costing_options: { auto: {} },
       });
       if (response.ok) {
-        toast.info('Длинный маршрут', {
-          description: 'Показан автомобильный вариант: пешком такое не пройти.',
+        toast.info(i18n.t('toast.longRouteTitle'), {
+          description: i18n.t('toast.longRouteBody'),
           position: 'bottom-center',
           closeButton: true,
         });
@@ -223,9 +224,8 @@ async function fetchDirections() {
   if (agentRoute) {
     const agentResult = buildAgentRoute(agentRoute);
     if (!agentResult.hasVerifiedLine) {
-      toast.warning('Нет проверенной линии', {
-        description:
-          'Агент вернул остановки без геометрии — показываем точки без линии.',
+      toast.warning(i18n.t('toast.noLineTitle'), {
+        description: i18n.t('toast.noLineBody'),
         position: 'bottom-center',
         closeButton: true,
       });
@@ -327,7 +327,7 @@ export function useDirectionsQuery() {
       } catch (error) {
         clearRoutes();
         if (error instanceof Error) {
-          toast.warning('Error', {
+          toast.warning(i18n.t('toast.errorTitle'), {
             description: error.message,
             position: 'bottom-center',
             duration: 5000,
@@ -418,8 +418,8 @@ async function fetchForwardGeocode(
   const addresses = parseGeocodeResponse(response.data);
 
   if (addresses.length === 0) {
-    toast.warning('No addresses', {
-      description: 'Sorry, no addresses can be found.',
+    toast.warning(i18n.t('toast.noAddressesTitle'), {
+      description: i18n.t('toast.noAddressesBody'),
       position: 'bottom-center',
       duration: 5000,
       closeButton: true,

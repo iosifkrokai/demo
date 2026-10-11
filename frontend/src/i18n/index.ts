@@ -10,6 +10,7 @@ import { mapArea } from './namespaces/map';
 import { panelArea } from './namespaces/panel';
 import { photoArea } from './namespaces/photo';
 import { sidebarArea } from './namespaces/sidebar';
+import { toastArea } from './namespaces/toast';
 import { ru } from './ru';
 
 /** Interface language. */
@@ -41,6 +42,7 @@ export const flatRu = {
   ...historyArea.ru,
   ...accountArea.ru,
   ...adminArea.ru,
+  ...toastArea.ru,
   ...sidebarArea.ru,
   ...photoArea.ru,
   ...panelArea.ru,
@@ -52,6 +54,7 @@ export const flatEn = {
   ...historyArea.en,
   ...accountArea.en,
   ...adminArea.en,
+  ...toastArea.en,
   ...sidebarArea.en,
   ...photoArea.en,
   ...panelArea.en,

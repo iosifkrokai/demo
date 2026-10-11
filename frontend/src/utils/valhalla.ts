@@ -8,6 +8,7 @@ import type {
   Settings,
   ValhallaWarning,
 } from '@/components/types';
+import i18n from '@/i18n';
 import { getBaseUrl } from './base-url';
 
 export const getValhallaUrl = () => getBaseUrl();
@@ -215,7 +216,7 @@ export const makeLocations = (waypoints: ActiveWaypoint[]) => {
 export function showValhallaWarnings(warnings?: ValhallaWarning[]) {
   if (!warnings?.length) return;
   for (const warning of warnings) {
-    toast.warning(`Warning (code ${warning.code})`, {
+    toast.warning(i18n.t('toast.warningTitle', { code: warning.code }), {
       description: warning.text,
       position: 'bottom-center',
       duration: 5000,

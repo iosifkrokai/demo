@@ -70,14 +70,6 @@ export const en: Dictionary = {
     stops_few: '{{count}} stops',
     stops_many: '{{count}} stops',
   },
-  history: {
-    empty: 'Nothing yet — routes you build will show up here',
-    walked: 'walked',
-    walkedPartial: '{{visited}} of {{total}} done',
-    restore: 'back on the map',
-    clear: 'Clear history',
-    remove: 'Remove from history',
-  },
   itineraries: {
     loading: 'Loading ready-made routes…',
     loadFailed:

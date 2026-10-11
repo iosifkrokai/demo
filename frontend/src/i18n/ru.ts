@@ -68,14 +68,6 @@ export const ru = {
     stops_few: '{{count}} остановки',
     stops_many: '{{count}} остановок',
   },
-  history: {
-    empty: 'Пока пусто — построенные маршруты появятся здесь',
-    walked: 'пройден',
-    walkedPartial: 'пройдено {{visited}} из {{total}}',
-    restore: 'вернуть на карту',
-    clear: 'Очистить историю',
-    remove: 'Убрать из истории',
-  },
   itineraries: {
     loading: 'Загружаю готовые маршруты…',
     loadFailed:
