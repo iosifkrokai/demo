@@ -3,6 +3,7 @@ import { initReactI18next } from 'react-i18next';
 
 import { en } from './en';
 import { accountArea } from './namespaces/account';
+import { adminArea } from './namespaces/admin';
 import { guideArea } from './namespaces/guide';
 import { historyArea } from './namespaces/history';
 import { mapArea } from './namespaces/map';
@@ -39,6 +40,7 @@ export const flatRu = {
   ...mapArea.ru,
   ...historyArea.ru,
   ...accountArea.ru,
+  ...adminArea.ru,
   ...sidebarArea.ru,
   ...photoArea.ru,
   ...panelArea.ru,
@@ -49,6 +51,7 @@ export const flatEn = {
   ...mapArea.en,
   ...historyArea.en,
   ...accountArea.en,
+  ...adminArea.en,
   ...sidebarArea.en,
   ...photoArea.en,
   ...panelArea.en,

@@ -85,7 +85,8 @@ export function PlacesPanel({ enabled }: { enabled: boolean }) {
   };
 
   const remove = (place: Place) => {
-    if (!window.confirm(`Удалить место «${place.name}»?`)) return;
+    if (!window.confirm(t('admin.places.confirmDelete', { name: place.name })))
+      return;
     deletePlace.mutate(place.place_id, {
       onSuccess: () => {
         if (selectedId === place.place_id) setSelectedId(null);
@@ -111,20 +112,20 @@ export function PlacesPanel({ enabled }: { enabled: boolean }) {
         <div className="flex flex-wrap items-center gap-2">
           <Input
             data-testid="admin-places-search"
-            placeholder="поиск по названию или городу"
+            placeholder={t('admin.places.search')}
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             className="max-w-xs"
           />
           <Input
             data-testid="admin-places-category"
-            placeholder="категория"
+            placeholder={t('admin.places.categoryPlaceholder')}
             value={category}
             onChange={(event) => setCategory(event.target.value)}
             className="max-w-[10rem]"
           />
           <span className="text-meta text-muted-foreground">
-            всего: {places.total}
+            {t('admin.places.total', { count: places.total })}
           </span>
           <Button
             type="button"
@@ -133,7 +134,7 @@ export function PlacesPanel({ enabled }: { enabled: boolean }) {
             data-testid="admin-place-new"
           >
             <Plus className="size-4" aria-hidden="true" />
-            новое место
+            {t('admin.places.newPlace')}
           </Button>
         </div>
 
@@ -151,7 +152,9 @@ export function PlacesPanel({ enabled }: { enabled: boolean }) {
         )}
 
         {places.isLoading && !places.error && (
-          <p className="text-meta text-muted-foreground">загружаю…</p>
+          <p className="text-meta text-muted-foreground">
+            {t('admin.loading')}
+          </p>
         )}
 
         {places.error && (
@@ -169,7 +172,7 @@ export function PlacesPanel({ enabled }: { enabled: boolean }) {
               data-testid="admin-places-retry"
               onClick={() => void places.refetch()}
             >
-              повторить
+              {t('admin.retry')}
             </Button>
           </div>
         )}
@@ -190,7 +193,7 @@ export function PlacesPanel({ enabled }: { enabled: boolean }) {
                 <div className="flex flex-col gap-2">
                   <div className="grid grid-cols-2 gap-2">
                     <label className={fieldLabel}>
-                      название
+                      {t('admin.fields.name')}
                       <Input
                         value={draft.name}
                         onChange={(e) =>
@@ -200,7 +203,7 @@ export function PlacesPanel({ enabled }: { enabled: boolean }) {
                       />
                     </label>
                     <label className={fieldLabel}>
-                      категория
+                      {t('admin.fields.category')}
                       <Input
                         value={draft.category}
                         onChange={(e) =>
@@ -210,7 +213,7 @@ export function PlacesPanel({ enabled }: { enabled: boolean }) {
                       />
                     </label>
                     <label className={fieldLabel}>
-                      город
+                      {t('admin.fields.town')}
                       <Input
                         value={draft.town}
                         onChange={(e) =>
@@ -219,7 +222,7 @@ export function PlacesPanel({ enabled }: { enabled: boolean }) {
                       />
                     </label>
                     <label className={fieldLabel}>
-                      время осмотра, мин
+                      {t('admin.fields.visitMinutes')}
                       <Input
                         type="number"
                         min={0}
@@ -230,7 +233,7 @@ export function PlacesPanel({ enabled }: { enabled: boolean }) {
                       />
                     </label>
                     <label className={fieldLabel}>
-                      широта
+                      {t('admin.fields.lat')}
                       <Input
                         type="number"
                         step="any"
@@ -242,7 +245,7 @@ export function PlacesPanel({ enabled }: { enabled: boolean }) {
                       />
                     </label>
                     <label className={fieldLabel}>
-                      долгота
+                      {t('admin.fields.lon')}
                       <Input
                         type="number"
                         step="any"
@@ -255,7 +258,7 @@ export function PlacesPanel({ enabled }: { enabled: boolean }) {
                     </label>
                   </div>
                   <label className={fieldLabel}>
-                    описание
+                    {t('admin.fields.blurb')}
                     <textarea
                       rows={2}
                       value={draft.blurb}
@@ -267,7 +270,7 @@ export function PlacesPanel({ enabled }: { enabled: boolean }) {
                     />
                   </label>
                   <label className={fieldLabel}>
-                    любопытный факт
+                    {t('admin.fields.funFact')}
                     <Input
                       value={draft.funFact}
                       onChange={(e) =>
@@ -283,7 +286,7 @@ export function PlacesPanel({ enabled }: { enabled: boolean }) {
                       onClick={() => save(place.place_id)}
                       data-testid="admin-place-save"
                     >
-                      сохранить
+                      {t('admin.places.save')}
                     </Button>
                     <Button
                       type="button"
@@ -291,7 +294,7 @@ export function PlacesPanel({ enabled }: { enabled: boolean }) {
                       variant="ghost"
                       onClick={stopEdit}
                     >
-                      отмена
+                      {t('admin.places.cancel')}
                     </Button>
                   </div>
                 </div>
@@ -311,7 +314,9 @@ export function PlacesPanel({ enabled }: { enabled: boolean }) {
                         place.category,
                         place.town,
                         place.visit_minutes != null
-                          ? `${place.visit_minutes} мин`
+                          ? t('admin.places.minutes', {
+                              count: place.visit_minutes,
+                            })
                           : null,
                         `${place.lat.toFixed(5)}, ${place.lon.toFixed(5)}`,
                       ]
@@ -333,7 +338,7 @@ export function PlacesPanel({ enabled }: { enabled: boolean }) {
                       onClick={() => startEdit(place)}
                     >
                       <Pencil className="size-4" aria-hidden="true" />
-                      изменить
+                      {t('admin.places.edit')}
                     </Button>
                     <Button
                       type="button"
@@ -354,7 +359,9 @@ export function PlacesPanel({ enabled }: { enabled: boolean }) {
         </ul>
 
         {!places.isLoading && !places.error && places.items.length === 0 && (
-          <p className="text-meta text-muted-foreground">ничего не найдено</p>
+          <p className="text-meta text-muted-foreground">
+            {t('admin.nothingFound')}
+          </p>
         )}
       </div>
 
@@ -373,7 +380,7 @@ export function PlacesPanel({ enabled }: { enabled: boolean }) {
             data-testid="admin-selected-name"
             className="mt-1.5 truncate text-meta text-muted-foreground"
           >
-            выбрано: {selected.name}
+            {t('admin.places.selected', { name: selected.name })}
           </p>
         )}
       </aside>
@@ -390,6 +397,7 @@ function CreatePlaceForm({
   onSubmit: (input: AdminPlaceInput) => void;
   onCancel: () => void;
 }) {
+  const { t } = useTranslation();
   const [name, setName] = useState('');
   const [lat, setLat] = useState('');
   const [lon, setLon] = useState('');
@@ -416,14 +424,16 @@ function CreatePlaceForm({
       className="flex flex-col gap-2 rounded-2xl border border-dashed border-border bg-card p-3"
     >
       <div className="flex items-center justify-between">
-        <span className="text-meta font-semibold">новое место</span>
+        <span className="text-meta font-semibold">
+          {t('admin.places.newPlace')}
+        </span>
         <Button type="button" size="icon-sm" variant="ghost" onClick={onCancel}>
           <X className="size-4" aria-hidden="true" />
         </Button>
       </div>
       <div className="grid grid-cols-2 gap-2">
         <label className={fieldLabel}>
-          название
+          {t('admin.fields.name')}
           <Input
             required
             value={name}
@@ -431,14 +441,14 @@ function CreatePlaceForm({
           />
         </label>
         <label className={fieldLabel}>
-          категория
+          {t('admin.fields.category')}
           <Input
             value={category}
             onChange={(e) => setCategory(e.target.value)}
           />
         </label>
         <label className={fieldLabel}>
-          широта
+          {t('admin.fields.lat')}
           <Input
             required
             type="number"
@@ -448,7 +458,7 @@ function CreatePlaceForm({
           />
         </label>
         <label className={fieldLabel}>
-          долгота
+          {t('admin.fields.lon')}
           <Input
             required
             type="number"
@@ -458,11 +468,11 @@ function CreatePlaceForm({
           />
         </label>
         <label className={fieldLabel}>
-          город
+          {t('admin.fields.town')}
           <Input value={town} onChange={(e) => setTown(e.target.value)} />
         </label>
         <label className={fieldLabel}>
-          ссылка-источник
+          {t('admin.fields.sourceUrl')}
           <Input
             required
             value={sourceUrl}
@@ -476,7 +486,7 @@ function CreatePlaceForm({
         disabled={busy}
         data-testid="admin-place-create-submit"
       >
-        создать
+        {t('admin.places.create')}
       </Button>
     </form>
   );

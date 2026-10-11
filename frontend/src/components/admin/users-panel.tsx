@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { describeAccountError } from '@/hooks/use-auth';
 import { useDebouncedValue } from '@/hooks/use-debounced-value';
 import { useAdminUsers, useDeleteUser, usePatchUser } from '@/hooks/use-admin';
+import { formatDate } from '@/i18n/format';
 import type { AdminUser, UserRole } from '@/api/types';
 
 /** The users half of the admin panel. */
@@ -17,11 +18,7 @@ const fmtDate = (value: string | null): string => {
   const date = new Date(value);
   return Number.isNaN(date.getTime())
     ? '—'
-    : date.toLocaleDateString('ru-RU', {
-        day: 'numeric',
-        month: 'short',
-        year: 'numeric',
-      });
+    : formatDate(date, { day: 'numeric', month: 'short', year: 'numeric' });
 };
 
 interface UsersPanelProps {
@@ -45,7 +42,8 @@ export function UsersPanel({ enabled, currentUserId }: UsersPanelProps) {
   };
 
   const remove = (user: AdminUser) => {
-    if (!window.confirm(`Удалить аккаунт ${user.email}?`)) return;
+    if (!window.confirm(t('admin.users.confirmDelete', { email: user.email })))
+      return;
     deleteUser.mutate(user.id, {
       onError: (error) => toast.error(t(describeAccountError(error))),
     });
@@ -56,18 +54,18 @@ export function UsersPanel({ enabled, currentUserId }: UsersPanelProps) {
       <div className="flex items-center justify-between gap-2">
         <Input
           data-testid="admin-users-search"
-          placeholder="поиск по почте или имени"
+          placeholder={t('admin.users.search')}
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           className="max-w-xs"
         />
         <span className="text-meta text-muted-foreground">
-          всего: {users.total}
+          {t('admin.users.total', { count: users.total })}
         </span>
       </div>
 
       {users.isLoading && !users.error && (
-        <p className="text-meta text-muted-foreground">загружаю…</p>
+        <p className="text-meta text-muted-foreground">{t('admin.loading')}</p>
       )}
 
       {users.error && (
@@ -85,7 +83,7 @@ export function UsersPanel({ enabled, currentUserId }: UsersPanelProps) {
             data-testid="admin-users-retry"
             onClick={() => void users.refetch()}
           >
-            повторить
+            {t('admin.retry')}
           </Button>
         </div>
       )}
@@ -104,7 +102,7 @@ export function UsersPanel({ enabled, currentUserId }: UsersPanelProps) {
                   {user.display_name || user.email}
                   {isSelf && (
                     <span className="ml-2 text-meta text-muted-foreground">
-                      это вы
+                      {t('admin.users.self')}
                     </span>
                   )}
                 </div>
@@ -112,13 +110,16 @@ export function UsersPanel({ enabled, currentUserId }: UsersPanelProps) {
                   {user.email}
                 </div>
                 <div className="text-meta text-muted-foreground">
-                  посещённых: {user.visited} · маршрутов: {user.saved_routes} ·
-                  вход: {fmtDate(user.last_login_at)}
+                  {t('admin.users.stats', {
+                    visited: user.visited,
+                    routes: user.saved_routes,
+                    login: fmtDate(user.last_login_at),
+                  })}
                 </div>
               </div>
 
               <label className="flex items-center gap-2 text-meta">
-                роль
+                {t('admin.users.role')}
                 <select
                   data-testid={`admin-user-role-${user.id}`}
                   value={user.role}
@@ -128,8 +129,8 @@ export function UsersPanel({ enabled, currentUserId }: UsersPanelProps) {
                   }
                   className="h-9 rounded-xl border border-border bg-background px-2 text-meta outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
-                  <option value="user">пользователь</option>
-                  <option value="admin">админ</option>
+                  <option value="user">{t('admin.users.roleUser')}</option>
+                  <option value="admin">{t('admin.users.roleAdmin')}</option>
                 </select>
               </label>
 
@@ -143,7 +144,7 @@ export function UsersPanel({ enabled, currentUserId }: UsersPanelProps) {
                 className="text-muted-foreground hover:text-destructive"
               >
                 <Trash2 className="size-4" aria-hidden="true" />
-                удалить
+                {t('admin.users.delete')}
               </Button>
             </li>
           );
@@ -151,7 +152,9 @@ export function UsersPanel({ enabled, currentUserId }: UsersPanelProps) {
       </ul>
 
       {!users.isLoading && !users.error && users.items.length === 0 && (
-        <p className="text-meta text-muted-foreground">ничего не найдено</p>
+        <p className="text-meta text-muted-foreground">
+          {t('admin.nothingFound')}
+        </p>
       )}
     </section>
   );

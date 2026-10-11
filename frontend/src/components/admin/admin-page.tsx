@@ -35,7 +35,7 @@ export function AdminPage() {
           className="flex items-center gap-2 text-meta text-muted-foreground"
         >
           <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-          загружаю…
+          {t('admin.loading')}
         </div>
       </main>
     );
@@ -49,13 +49,12 @@ export function AdminPage() {
             className="size-8 text-muted-foreground"
             aria-hidden="true"
           />
-          <h1 className="text-title font-semibold">Админка</h1>
+          <h1 className="text-title font-semibold">{t('admin.title')}</h1>
           <p className="text-meta text-muted-foreground">
-            Раздел доступен только администраторам. Войдите под аккаунтом с
-            правами админа.
+            {t('admin.guestHint')}
           </p>
           <Button asChild>
-            <Link to="/login">Войти</Link>
+            <Link to="/login">{t('account.signIn')}</Link>
           </Button>
         </div>
       </main>
@@ -74,14 +73,14 @@ export function AdminPage() {
             aria-hidden="true"
           />
           <h1 className="text-title font-semibold">
-            Нужны права администратора
+            {t('admin.forbiddenTitle')}
           </h1>
           <p className="text-meta text-muted-foreground">
-            Вы вошли как {user?.email}, но у этого аккаунта роль «пользователь».
+            {t('admin.forbiddenBody', { email: user?.email })}
           </p>
           <Button asChild variant="outline">
             <Link to="/$activeTab" params={{ activeTab: 'directions' }}>
-              к карте
+              {t('admin.backToMap')}
             </Link>
           </Button>
         </div>
@@ -92,21 +91,27 @@ export function AdminPage() {
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-4xl flex-col gap-4 bg-background p-4">
       <header className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-title font-semibold">Админка</h1>
+        <h1 className="text-title font-semibold">{t('admin.title')}</h1>
         <Button asChild size="sm" variant="ghost">
           <Link to="/$activeTab" params={{ activeTab: 'directions' }}>
-            к карте
+            {t('admin.backToMap')}
           </Link>
         </Button>
       </header>
 
       {stats.data && (
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
-          <StatCard label="пользователей" value={stats.data.users} />
-          <StatCard label="админов" value={stats.data.admins} />
-          <StatCard label="мест" value={stats.data.places} />
-          <StatCard label="посещений" value={stats.data.visited} />
-          <StatCard label="маршрутов" value={stats.data.saved_routes} />
+          <StatCard label={t('admin.stats.users')} value={stats.data.users} />
+          <StatCard label={t('admin.stats.admins')} value={stats.data.admins} />
+          <StatCard label={t('admin.stats.places')} value={stats.data.places} />
+          <StatCard
+            label={t('admin.stats.visited')}
+            value={stats.data.visited}
+          />
+          <StatCard
+            label={t('admin.stats.routes')}
+            value={stats.data.saved_routes}
+          />
         </div>
       )}
 
@@ -125,14 +130,14 @@ export function AdminPage() {
             data-testid="admin-stats-retry"
             onClick={() => void stats.refetch()}
           >
-            повторить
+            {t('admin.retry')}
           </Button>
         </div>
       )}
 
       <div
         role="tablist"
-        aria-label="Разделы админки"
+        aria-label={t('admin.tabsLabel')}
         className="flex gap-1 rounded-2xl border border-border bg-card p-1"
       >
         <button
@@ -149,7 +154,7 @@ export function AdminPage() {
               : 'hover:bg-muted'
           }`}
         >
-          Пользователи
+          {t('admin.tabs.users')}
         </button>
         <button
           type="button"
@@ -165,7 +170,7 @@ export function AdminPage() {
               : 'hover:bg-muted'
           }`}
         >
-          Места
+          {t('admin.tabs.places')}
         </button>
       </div>
 
