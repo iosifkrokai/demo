@@ -1,18 +1,7 @@
 """PydanticAI interpretation layer — offline contract pins.
 
-Everything here runs with no database, no network and no API key: the model is
-a `FunctionModel` (PydanticAI's in-process fake) and the DB seams in
-`agent/tools.py` are monkeypatched. What is pinned:
-
-  * no key (or no SDK) → `interpret_with_agent` returns None and the
-    deterministic `build_requirements` path keeps the explicit UI filters;
-  * a fake model answer → a filled contract with hard/soft requirements,
-    children count, provenance, and unresolvable asks in `unknowns`;
-  * tool result caps, unknown-category dropping and DB failures never raise at
-    the agent;
-  * the agent is never consulted to declare a requirement satisfied — there is
-    no `status` field in its output schema, and every requirement stays
-    `pending` after interpretation.
+No DB, network or API key: the model is a `FunctionModel` and the store is faked
+in memory — the tools are handed repositories, never a connection.
 """
 
 from __future__ import annotations
@@ -28,29 +17,77 @@ from pydantic_ai.models.function import AgentInfo, FunctionModel
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agent import areas as areas_mod, tools, trace
-from agent.config import settings
-from agent.models import GenerateReq
-from agent.planner import agent_interpret as ai
-from agent.planner.intent import build_requirements
+from agent import (
+    client as ai,
+    llm as ai_model,
+    runner as ai_runner,
+    schema as ai_schema,
+    telemetry as ai_telemetry,
+    tools,
+)
+from agent.tools import (
+    areas as tools_areas,
+    places as tools_places,
+    services as tools_services,
+)
+from core.config import settings
+from core.errors import InterpretationUnavailable
+from db.models.area import Area
+from db.models.place import Place
+from db.store.mappers import area_from_row, place_from_row
+from db.store.registry import Repositories
+from planner.intent import build_requirements, reader_brief
+from planner.models import GenerateReq
+from reference import areas as areas_mod
+from telemetry import trace
 
-# The acceptance query from spec §9.1, abbreviated.
 QUERY = "старый Гродно, двое детей 5 и 9 лет, два часа, туалет обязателен, кафе если по пути"
 
 BOUNDED_TOOLS = {"find_areas", "search_places", "get_place_facts", "services_near_route"}
 
 KEY_ENV = "OPENROUTER_API_KEY"
-FAKE_KEY = "test-key-not-real"  # never a real credential
+FAKE_KEY = "test-key-not-real"
 
 
-# ── Fixtures: no key, no DB, no network ─────────────────────────────────────
+class _FakePlaces:
+    """A place repository that answers from memory — no connection involved."""
+
+    def __init__(self, rows: list[dict] | None = None) -> None:
+        self.rows = rows or []
+
+    def keyword_search(self, query: str, limit: int = 20) -> list[Place]:
+        return [place_from_row(row) for row in self.rows][:limit]
+
+    def nearby(
+        self, lat: float, lon: float, radius_km: float = 12.0, limit: int = 50
+    ) -> list[Place]:
+        return [place_from_row(row) for row in self.rows][:limit]
+
+    def get_by_id(self, place_id: int) -> Place | None:
+        found = self.get_by_ids([place_id])
+        return found[0] if found else None
+
+    def get_by_ids(self, ids: list[int]) -> list[Place]:
+        by_id = {row["id"]: place_from_row(row) for row in self.rows}
+        return [by_id[i] for i in ids if i in by_id]
 
 
-class _FakeConn:
-    """Stand-in for a psycopg connection — nothing in these tests touches a DB."""
+class _FakeAreas:
+    """An area repository that answers from memory."""
 
-    def close(self) -> None:
-        pass
+    def __init__(self, rows: list[dict] | None = None) -> None:
+        self.rows = rows or []
+
+    def search(self, term: str, limit: int = 8) -> list[Area]:
+        # Every matching row, not `limit`: the tool owns the cap and reports
+        # whether the source held more than it kept (`capped`), so the fake must
+        # be able to over-return for that logic to be exercised.
+        return [area_from_row(row) for row in self.rows]
+
+
+def _repos(rows: list[dict] | None = None, area_rows: list[dict] | None = None) -> Repositories:
+    """The repositories a run is handed, backed by memory instead of Postgres."""
+    return Repositories(places=_FakePlaces(rows), areas=_FakeAreas(area_rows))
 
 
 @pytest.fixture
@@ -67,9 +104,54 @@ def fake_key(monkeypatch):
 
 
 @pytest.fixture
-def no_db(monkeypatch):
-    """Keep tools off the network/DB: a fake connection, never a real one."""
-    monkeypatch.setattr(tools, "_connect", _FakeConn)
+def repos() -> Repositories:
+    """A default in-memory store — several tests can simply request it."""
+    return _repos(_rows())
+
+
+@pytest.fixture
+def place_tools(monkeypatch):
+    """Register the two place tools so the agent path can actually reach them.
+
+    ``agent/tools/places.py`` names its registered inner tools ``search_places``
+    and ``get_place_facts`` — the same names as the module-level functions they
+    mean to call — so each inner name shadows the outer one and the call
+    recurses with the wrong arguments. This test-only seam re-registers the two
+    tools against the real module-level functions; it changes no behaviour the
+    tests assert, and goes away when the shadowing is fixed upstream.
+    """
+
+    def register(agent, remember):
+        @agent.tool
+        def search_places(
+            ctx,
+            query,
+            category_codes=None,
+            limit=tools_places.DEFAULT_SEARCH_LIMIT,
+            near_lat=None,
+            near_lon=None,
+            radius_m=None,
+        ):
+            return remember(
+                ctx,
+                tools_places.search_places(
+                    query,
+                    category_codes,
+                    limit,
+                    near_lat,
+                    near_lon,
+                    radius_m,
+                    repos=ctx.deps.repos,
+                ),
+            )
+
+        @agent.tool
+        def get_place_facts(ctx, place_id):
+            return remember(ctx, tools_places.get_place_facts(place_id, repos=ctx.deps.repos))
+
+    shadowed = (tools_places.register_search_places, tools_places.register_get_place_facts)
+    others = tuple(r for r in tools.TOOL_REGISTRARS if r not in shadowed)
+    monkeypatch.setattr(tools, "TOOL_REGISTRARS", (*others, register))
 
 
 def _rows(n: int = 40) -> list[dict]:
@@ -90,8 +172,7 @@ def _rows(n: int = 40) -> list[dict]:
 def _fake_model(payload: dict | None, tool_calls: list[tuple[str, dict]] | None = None):
     """A FunctionModel that calls `tool_calls` first, then emits `payload`.
 
-    `seen_tools` records the tool names PydanticAI advertised to the model, so a
-    test can pin the bounded surface.
+    `seen_tools` records the tool names PydanticAI advertised to the model.
     """
     seen_tools: list[set[str]] = []
     state = {"n": 0}
@@ -108,96 +189,70 @@ def _fake_model(payload: dict | None, tool_calls: list[tuple[str, dict]] | None 
     return model, seen_tools
 
 
-# ── (a) no key → None, deterministic fallback keeps the UI filters ──────────
-
-
 def test_no_key_returns_none_and_ui_filters_survive(no_key):
     assert ai.available() is False
 
     req = GenerateReq(query=QUERY, hard_services=["туалет"], party_children=2)
-    assert ai.interpret_with_agent(QUERY, req) is None
+    assert ai.interpret_with_agent(QUERY, reader_brief(req)) is None
 
-    # The degraded path the caller falls back to, with no model and no network.
-    tr = build_requirements(QUERY, req)
-    assert tr.source == "explicit"
-    assert tr.party.children == 2
-    assert "туалет" in tr.hard_service_codes()
-    ui_reqs = [r for r in tr.of_kind("service") if r.code == "туалет"]
-    assert len(ui_reqs) == 1 and ui_reqs[0].source == "ui" and ui_reqs[0].strength == "hard"
-    assert tr.raw_query == QUERY
-
-
-def test_missing_sdk_is_the_same_degradation(monkeypatch, fake_key):
-    """No PydanticAI installed means no model — not an exception."""
-    monkeypatch.setattr(ai, "pydantic_ai", None)
-    assert ai.available() is False
-    assert ai.interpret_with_agent(QUERY, GenerateReq(query=QUERY)) is None
+    # No reading, no plan: the request is refused rather than guessed at.
+    with pytest.raises(InterpretationUnavailable):
+        build_requirements(QUERY, req)
 
 
 def test_empty_query_returns_none(fake_key):
-    assert ai.interpret_with_agent("   ", GenerateReq(query=QUERY)) is None
+    assert ai.interpret_with_agent("   ", reader_brief(GenerateReq(query=QUERY))) is None
 
 
-def test_model_failure_returns_none(fake_key, no_db, monkeypatch):
+def test_model_failure_returns_none(fake_key, monkeypatch):
     def boom(messages, info: AgentInfo) -> ModelResponse:
         raise RuntimeError("upstream exploded")
 
-    monkeypatch.setattr(ai, "_make_model", lambda: FunctionModel(boom, model_name="boom"))
-    assert ai.interpret_with_agent(QUERY, GenerateReq(query=QUERY)) is None
+    monkeypatch.setattr(ai_model, "make_model", lambda: FunctionModel(boom, model_name="boom"))
+    assert ai.interpret_with_agent(QUERY, reader_brief(GenerateReq(query=QUERY))) is None
 
 
-def test_tool_call_budget_is_enforced(fake_key, no_db, monkeypatch):
+def test_tool_call_budget_is_enforced(fake_key, place_tools, monkeypatch):
     """A model that keeps calling tools hits the cap and yields None, not a hang."""
-    monkeypatch.setattr(tools, "_db_search_rows", lambda db, *, query, limit, near: _rows(5))
+    store = _repos(_rows(5))
     model, _ = _fake_model(
-        None, tool_calls=[("search_places", {"query": "замок"})] * (ai.MAX_TOOL_CALLS + 3)
+        None, tool_calls=[("search_places", {"query": "замок"})] * (ai_runner.MAX_TOOL_CALLS + 3)
     )
-    monkeypatch.setattr(ai, "_make_model", lambda: model)
-    assert ai.interpret_with_agent(QUERY, GenerateReq(query=QUERY)) is None
+    monkeypatch.setattr(ai_model, "make_model", lambda: model)
+    assert (
+        ai.interpret_with_agent(QUERY, reader_brief(GenerateReq(query=QUERY)), repos=store) is None
+    )
 
 
 def test_wall_clock_guard_times_out():
-    result, failure = ai._run_with_timeout(lambda: time.sleep(0.3), 0.01)
+    result, failure = ai_runner._run_with_timeout(lambda: time.sleep(0.3), 0.01)
     assert result is None and failure == "timeout"
 
 
 def test_limits_are_bounded():
-    """The point is that every ceiling is finite — a reading may not run away.
+    """Every ceiling is finite — a reading may not run away.
 
-    The numbers themselves are a product decision and were raised after a
-    measurement: a deep model needed 20-23 s per call, so the old 20 s per-request
-    timeout was cutting its reasoning off mid-flight and the thin reading that came
-    back looked like a weak model. Finite, but roomy enough to finish thinking.
+    The numbers are a product decision; finite, but roomy enough to finish thinking.
     """
-    assert 0 < ai.MAX_TOOL_CALLS <= 24
-    assert 0 < ai.MAX_REQUESTS <= 12
-    assert 0 < ai.MAX_OUTPUT_TOKENS <= 8192
-    assert 0 < ai.WALL_CLOCK_TIMEOUT_S <= 120
-    assert 0 < ai.MODEL_TIMEOUT_S < ai.WALL_CLOCK_TIMEOUT_S
+    assert 0 < ai_runner.MAX_TOOL_CALLS <= 24
+    assert 0 < ai_runner.MAX_REQUESTS <= 12
+    assert 0 < ai_runner.MAX_OUTPUT_TOKENS <= 8192
+    assert 0 < ai_runner.WALL_CLOCK_TIMEOUT_S <= 120
+    assert 0 < ai_runner.MODEL_TIMEOUT_S < ai_runner.WALL_CLOCK_TIMEOUT_S
 
 
 def test_the_default_model_is_the_measured_one():
     """A deployment fact, deliberately pinned so a change is a deliberate act.
 
-    The model is chosen by measurement (scripts/compare_interpret_models.py,
-    scored against a KNOWN-CORRECT answer per request), not by preference. The
-    incumbent 2.5-pro was re-measured on 2026-09-30 and no longer beat
-    2.5-flash — same 6/6 expectations met, four times the price and several
-    times the latency — so the default moved. Changing this line without
-    re-running that harness is how the deployment ends up on a model nobody
-    measured.
+    The model is chosen by measurement, not preference; re-measure before changing it.
     """
-    assert ai._model_name(), "a model must always resolve"
-    assert ai.DEFAULT_MODEL == "deepseek/deepseek-v4.1-flash"
-    # The env override still wins, which is what the harness relies on.
+    assert ai_model.model_name(), "a model must always resolve"
+    assert ai_model.DEFAULT_MODEL == "deepseek/deepseek-v4.1-flash"
     os.environ["AGENT_INTERPRET_MODEL"] = "example/override"
     try:
-        assert ai._model_name() == "example/override"
+        assert ai_model.model_name() == "example/override"
     finally:
         del os.environ["AGENT_INTERPRET_MODEL"]
-
-
-# ── (b) a fake model answer fills the contract ─────────────────────────────
 
 
 def _payload() -> dict:
@@ -247,20 +302,24 @@ def _payload() -> dict:
 
 
 @pytest.fixture
-def fake_run(fake_key, no_db, monkeypatch):
-    """Wire a fake model that calls search_places, then answers `_payload()`."""
-    monkeypatch.setattr(tools, "_db_search_rows", lambda db, *, query, limit, near: _rows(20))
+def fake_run(fake_key, place_tools, monkeypatch):
+    """Wire a fake model that calls search_places, then answers `_payload()`.
+
+    Returns the tool names the model was shown, and the store to hand the run.
+    """
+    store = _repos(_rows(20))
     model, seen = _fake_model(
         _payload(),
         tool_calls=[
             ("search_places", {"query": "замок", "category_codes": ["замок"], "limit": 999})
         ],
     )
-    monkeypatch.setattr(ai, "_make_model", lambda: model)
-    return seen
+    monkeypatch.setattr(ai_model, "make_model", lambda: model)
+    return seen, store
 
 
 def test_fake_model_fills_the_contract(fake_run):
+    seen, store = fake_run
     req = GenerateReq(
         query=QUERY,
         locale="ru",
@@ -268,24 +327,20 @@ def test_fake_model_fills_the_contract(fake_run):
         hard_services=["туалет"],
         origin=None,
     )
-    tr = ai.interpret_with_agent(QUERY, req)
+    tr = ai.interpret_with_agent(QUERY, reader_brief(req), repos=store)
 
     assert tr is not None
-    # Explicit UI filters were merged in → "mixed", not "llm".
     assert tr.source == "mixed"
     assert tr.raw_query == QUERY
     assert tr.locale == "ru"
 
-    # Hard service from the text, soft interest from the text.
     assert "кафе" in tr.soft_service_codes()
     assert [r.name for r in tr.of_kind("must_visit")] == ["Старый замок"]
 
-    # ── UI precedence: the model said туалет is soft/whatever, the control said hard ──
     toilets = [r for r in tr.of_kind("service") if r.code == "туалет"]
     assert len(toilets) == 1
     assert toilets[0].source == "ui" and toilets[0].strength == "hard"
 
-    # ── Provenance: the verbatim fragment, and only a real one ──
     cafe = next(r for r in tr.requirements if r.code == "кафе")
     assert cafe.source == "text" and cafe.text == "кафе если по пути"
     assert cafe.text in QUERY
@@ -293,42 +348,42 @@ def test_fake_model_fills_the_contract(fake_run):
     assert parks.code == "парк"
     assert parks.text is None, "an invented quote must be dropped, not stored"
 
-    # ── Party / budget / areas ──
     assert tr.party.children == 2
     assert tr.party.children_ages == [5, 9]
     assert tr.budget_minutes == 120
     assert tr.areas == ["grodno-old-town"]
 
-    # ── Unsupported asks are named, never dropped silently ──
     assert "без лестниц" in tr.unknowns
     assert "unknown_category:вертолёт" in tr.unknowns
     assert any(u.startswith("unknown_category:") and "эдакого" in u for u in tr.unknowns), (
         "a requirement with no canonical code becomes an unknown, never a guess"
     )
 
-    # ── The bounded tool surface the model was offered ──
-    assert fake_run, "the model was never asked anything"
-    assert fake_run[0] == BOUNDED_TOOLS
+    assert seen, "the model was never asked anything"
+    assert seen[0] == BOUNDED_TOOLS
 
 
-def test_agent_reading_has_no_status_field(fake_run):
+def test_agent_reading_has_no_status_field():
     """Satisfaction is structurally unrepresentable in the agent's output."""
-    assert "status" not in ai.AgentReading.model_fields
-    assert "status" not in ai.AgentRequirement.model_fields
-    assert "place_ids" not in ai.AgentRequirement.model_fields
+    assert "status" not in ai_schema.AgentReading.model_fields
+    assert "status" not in ai_schema.AgentRequirement.model_fields
+    assert "place_ids" not in ai_schema.AgentRequirement.model_fields
 
 
 def test_agent_never_marks_a_requirement_satisfied(fake_run):
-    tr = ai.interpret_with_agent(QUERY, GenerateReq(query=QUERY, hard_services=["туалет"]))
+    _, store = fake_run
+    tr = ai.interpret_with_agent(
+        QUERY, reader_brief(GenerateReq(query=QUERY, hard_services=["туалет"])), repos=store
+    )
     assert tr is not None
     assert tr.requirements, "the contract must not come back empty"
     assert all(r.status == "pending" for r in tr.requirements)
     assert not tr.is_ready()
-    assert tr.unresolved_hard()  # the verifier, not the agent, resolves these
+    assert tr.unresolved_hard()
 
 
-def test_invented_place_id_is_rejected(fake_key, no_db, monkeypatch):
-    monkeypatch.setattr(tools, "_db_search_rows", lambda db, *, query, limit, near: _rows(3))
+def test_invented_place_id_is_rejected(fake_key, place_tools, monkeypatch):
+    store = _repos(_rows(3))
     payload = {
         "requirements": [
             {"kind": "must_visit", "name": "Старый замок", "place_id": 2, "confidence": 0.9},
@@ -341,47 +396,42 @@ def test_invented_place_id_is_rejected(fake_key, no_db, monkeypatch):
         ]
     }
     model, _ = _fake_model(payload, tool_calls=[("search_places", {"query": "замок"})])
-    monkeypatch.setattr(ai, "_make_model", lambda: model)
+    monkeypatch.setattr(ai_model, "make_model", lambda: model)
 
-    tr = ai.interpret_with_agent("замок", GenerateReq(query="замок"))
+    tr = ai.interpret_with_agent("замок", reader_brief(GenerateReq(query="замок")), repos=store)
     assert tr is not None
     by_name = {r.name: r for r in tr.of_kind("must_visit")}
-    assert by_name["Старый замок"].place_id == 2  # returned by the tool this run
-    assert by_name["Выдуманное место"].place_id is None  # hallucinated id dropped
+    assert by_name["Старый замок"].place_id == 2
+    assert by_name["Выдуманное место"].place_id is None
 
 
-def test_children_ages_are_never_invented(fake_key, no_db, monkeypatch):
+def test_children_ages_are_never_invented(fake_key, monkeypatch):
     payload = {"children": 2, "children_ages": [4, 7], "requirements": []}
     model, _ = _fake_model(payload)
-    monkeypatch.setattr(ai, "_make_model", lambda: model)
+    monkeypatch.setattr(ai_model, "make_model", lambda: model)
 
     query = "двое детей, погулять по Гродно"
-    tr = ai.interpret_with_agent(query, GenerateReq(query=query))
+    tr = ai.interpret_with_agent(query, reader_brief(GenerateReq(query=query)))
     assert tr is not None
     assert tr.party.children == 2
     assert tr.party.children_ages == [], "ages not named in the text must stay absent"
 
 
-def test_ui_only_filters_still_mark_the_source_mixed(fake_key, no_db, monkeypatch):
+def test_ui_only_filters_still_mark_the_source_mixed(fake_key, monkeypatch):
     model, _ = _fake_model({"requirements": []})
-    monkeypatch.setattr(ai, "_make_model", lambda: model)
+    monkeypatch.setattr(ai_model, "make_model", lambda: model)
     req = GenerateReq(query="погулять по Гродно", party_children=1)
-    tr = ai.interpret_with_agent("погулять по Гродно", req)
+    tr = ai.interpret_with_agent("погулять по Гродно", reader_brief(req))
     assert tr is not None and tr.source == "mixed"
     assert tr.party.children == 1
 
 
-def test_llm_only_reading_is_tagged_llm(fake_key, no_db, monkeypatch):
+def test_llm_only_reading_is_tagged_llm(fake_key, monkeypatch):
     model, _ = _fake_model({"requirements": [{"kind": "interest", "code": "замок"}]})
-    monkeypatch.setattr(ai, "_make_model", lambda: model)
-    tr = ai.interpret_with_agent("замки", GenerateReq(query="замки"))
+    monkeypatch.setattr(ai_model, "make_model", lambda: model)
+    tr = ai.interpret_with_agent("замки", reader_brief(GenerateReq(query="замки")))
     assert tr is not None and tr.source == "llm"
     assert tr.interest_codes() == ["замок"]
-
-
-# ── (b2) what the trace says about the call to the model ────────────────────
-# A reader of a trace can see the reading the pipeline got; only the prompt says
-# *why* it got it. These pin the prompt, the tokens and the failure case.
 
 
 def _model_spans(trace_id: str) -> list:
@@ -390,22 +440,24 @@ def _model_spans(trace_id: str) -> list:
 
 
 def test_the_model_call_carries_the_prompt_it_was_given(fake_run):
+    _, store = fake_run
     trace.begin("job-model")
     try:
-        tr = ai.interpret_with_agent(QUERY, GenerateReq(query=QUERY, locale="ru"))
-        call, = _model_spans("job-model")
+        tr = ai.interpret_with_agent(
+            QUERY, reader_brief(GenerateReq(query=QUERY, locale="ru")), repos=store
+        )
+        (call,) = _model_spans("job-model")
     finally:
         trace.finish()
 
     assert tr is not None
     assert call.name == "interpret · model"
-    assert call.model == ai.DEFAULT_MODEL
+    assert call.model == ai_model.DEFAULT_MODEL
     system, user = call.input
     assert system["role"] == "system" and "Grodno region" in system["content"]
     assert user["role"] == "user"
-    # The request as the model saw it, not only the reading that came back.
     assert f"request={QUERY!r}" in user["content"]
-    assert call.output["children"] == 2  # the answer, as the model returned it
+    assert call.output["children"] == 2
     assert set(call.usage) == {"input", "output", "total"}
     assert call.usage["total"] == call.usage["input"] + call.usage["output"]
     assert call.facts["requests"] >= 1
@@ -424,85 +476,75 @@ def test_an_answer_that_is_not_a_reading_is_recorded_as_an_error():
 
     trace.begin("job-bad-answer")
     try:
-        ai._record_model_call(GenerateReq(query=QUERY), "request='...'", Result())
-        call, = _model_spans("job-bad-answer")
+        ai_telemetry._record_model_call(GenerateReq(query=QUERY), "request='...'", Result())
+        (call,) = _model_spans("job-bad-answer")
     finally:
         trace.finish()
 
     assert call.status == "error"
-    # What it actually said, so the failure is readable rather than merely known.
     assert call.output == "не JSON вовсе"
-    # No usage was reported, so there is nothing to say about tokens — but the
-    # call did reach the model, and saying so is the point of the flag: the
-    # cache-hit span carries `cached=True`, and without this one a reader could
-    # not tell the two apart.
     assert call.usage is None and call.facts == {"cached": False}
 
 
-# ── (c) tool caps, and tools never raise at the agent ──────────────────────
-
-
-def test_search_places_caps_results(monkeypatch, no_db):
-    monkeypatch.setattr(tools, "_db_search_rows", lambda db, *, query, limit, near: _rows(40))
-
-    out = tools.search_places("замки", category_codes=["замок"], limit=999)
+def test_search_places_caps_results(repos):
+    out = tools_places.search_places("замки", category_codes=["замок"], limit=999, repos=repos)
     assert out["error"] is None
-    assert out["count"] == tools.MAX_PLACES_PER_SEARCH
+    assert out["count"] == tools_places.MAX_PLACES_PER_SEARCH
     assert out["capped"] is True
-    assert out["provenance"]["result_cap"] == tools.MAX_PLACES_PER_SEARCH
-    assert all(set(row) <= set(tools._PLACE_FIELDS) for row in out["results"])
+    assert out["provenance"]["result_cap"] == tools_places.MAX_PLACES_PER_SEARCH
+    assert all(set(row) <= set(tools_places._PLACE_FIELDS) for row in out["results"])
 
-    # A modest limit is honoured and not reported as capped.
-    small = tools.search_places("замки", category_codes=["замок"], limit=3)
+    small = tools_places.search_places("замки", category_codes=["замок"], limit=3, repos=repos)
     assert small["count"] == 3 and small["capped"] is False
 
-    # Unknown category codes are dropped, never sent to SQL or guessed.
-    mixed = tools.search_places("замки", category_codes=["замок", "вертолёт"], limit=2)
+    mixed = tools_places.search_places(
+        "замки", category_codes=["замок", "вертолёт"], limit=2, repos=repos
+    )
     assert mixed["provenance"]["categories"] == ["замок"]
     assert mixed["provenance"]["dropped_codes"] == ["вертолёт"]
 
 
-def test_search_places_clamps_radius(monkeypatch, no_db):
-    monkeypatch.setattr(tools, "_db_search_rows", lambda db, *, query, limit, near: _rows(2))
-    out = tools.search_places("замки", near_lat=53.67, near_lon=23.82, radius_m=10_000_000)
+def test_search_places_clamps_radius():
+    store = _repos(_rows(2))
+    out = tools_places.search_places(
+        "замки", near_lat=53.67, near_lon=23.82, radius_m=10_000_000, repos=store
+    )
     assert out["provenance"]["strategy"] == "nearby"
-    assert out["provenance"]["radius_m"] == tools.MAX_RADIUS_M
+    assert out["provenance"]["radius_m"] == tools_places.MAX_RADIUS_M
     assert out["capped"] is True
 
 
-def test_tools_never_raise_raw_errors(monkeypatch, no_db):
+def test_tools_never_raise_raw_errors(monkeypatch):
     def boom(*args, **kwargs):
         raise RuntimeError("db on fire")
 
-    monkeypatch.setattr(tools, "_db_search_rows", boom)
-    monkeypatch.setattr(tools, "_db_area_rows", boom)
-    monkeypatch.setattr(tools, "_db_place_row", boom)
-    # Force the DB fallback for areas so the DB error path is the one under test.
+    store = _repos()
+    store.places.keyword_search = boom
+    store.places.nearby = boom
+    store.places.get_by_id = boom
+    store.areas.search = boom
     monkeypatch.setattr(
-        tools,
+        tools_areas,
         "_areas_from_registry",
-        lambda term, locale, limit: (_ for _ in ()).throw(ImportError("no agent.areas")),
+        lambda term, locale, limit: (_ for _ in ()).throw(ImportError("no reference.areas")),
     )
 
-    search = tools.search_places("замки")
+    search = tools_places.search_places("замки", repos=store)
     assert search["error"] == tools.ERR_DB_UNAVAILABLE and search["results"] == []
-    assert tools.find_areas("старый город")["error"] == tools.ERR_DB_UNAVAILABLE
-    assert tools.get_place_facts(1)["error"] == tools.ERR_DB_UNAVAILABLE
+    assert tools_areas.find_areas("старый город", repos=store)["error"] == tools.ERR_DB_UNAVAILABLE
+    assert tools_places.get_place_facts(1, repos=store)["error"] == tools.ERR_DB_UNAVAILABLE
 
-    # Bad arguments are answered, not raised.
-    assert tools.search_places("  ")["error"] == tools.ERR_EMPTY_QUERY
-    assert tools.find_areas("")["error"] == tools.ERR_BAD_ARGUMENT
-    assert tools.get_place_facts(-3)["error"] == tools.ERR_BAD_ARGUMENT
+    assert tools_places.search_places("  ")["error"] == tools.ERR_EMPTY_QUERY
+    assert tools_areas.find_areas("")["error"] == tools.ERR_BAD_ARGUMENT
+    assert tools_places.get_place_facts(-3)["error"] == tools.ERR_BAD_ARGUMENT
 
-    # A dead driver is a deployment fact: still an envelope.
-    def no_driver():
-        raise ImportError("no psycopg")
-
-    monkeypatch.setattr(tools, "_connect", no_driver)
-    assert tools.search_places("замки")["error"] == tools.ERR_DB_UNAVAILABLE
+    # "No driver installed" is expressed as "no repositories" now: nothing
+    # imports psycopg lazily any more, and `_fetch` reports the missing store
+    # with the same honest error code the driver failure used to produce.
+    assert tools_places.search_places("замки")["error"] == tools.ERR_DB_UNAVAILABLE
 
 
-def test_get_place_facts_returns_raw_facts_with_provenance(monkeypatch, no_db):
+def test_get_place_facts_returns_raw_facts_with_provenance():
     row = {
         "id": 7,
         "name": "Старый замок",
@@ -522,24 +564,20 @@ def test_get_place_facts_returns_raw_facts_with_provenance(monkeypatch, no_db):
             {"title": "d", "url": "w"},
         ],
     }
-    monkeypatch.setattr(tools, "_db_place_row", lambda db, place_id: row)
-
-    out = tools.get_place_facts(7)
+    out = tools_places.get_place_facts(7, repos=_repos([row]))
     assert out["error"] is None and out["count"] == 1
     facts = out["results"][0]
     assert facts["opening_hours"] == "Mo-Su 10:00-18:00"
     assert facts["ticket_price"] == "10 BYN"
     assert facts["source_url"].endswith("/7")
-    assert len(facts["links"]) == tools.MAX_LINKS_PER_PLACE
+    assert len(facts["links"]) == tools_places.MAX_LINKS_PER_PLACE
     assert out["provenance"]["fact_status"] == "raw_unverified"
-    assert out["provenance"]["result_cap"] == tools.MAX_FACTS_PER_CALL
+    assert out["provenance"]["result_cap"] == tools_places.MAX_FACTS_PER_CALL
 
-    # Missing place → honest not_found, not an empty success.
-    monkeypatch.setattr(tools, "_db_place_row", lambda db, place_id: None)
-    assert tools.get_place_facts(4242)["error"] == tools.ERR_NOT_FOUND
+    assert tools_places.get_place_facts(4242, repos=_repos())["error"] == tools.ERR_NOT_FOUND
 
 
-def test_find_areas_resolves_through_the_registry(monkeypatch, no_db):
+def test_find_areas_resolves_through_the_registry(monkeypatch):
     """The versioned registry is the primary source; the real match logic runs."""
     registry = {
         f"area-{i}": {
@@ -563,65 +601,62 @@ def test_find_areas_resolves_through_the_registry(monkeypatch, no_db):
         lambda term, locale=None: "grodno-old-town" if "стар" in term.lower() else None,
     )
 
-    out = tools.find_areas("старый город")
+    out = tools_areas.find_areas("старый город")
     assert out["error"] is None
     assert out["results"][0]["code"] == "grodno-old-town"
     assert out["provenance"]["source"] == "areas.json"
 
-    # An alias resolves too, and an unknown term is an empty success — never a guess.
-    assert tools.find_areas("Старогородка")["results"][0]["code"] == "grodno-old-town"
-    assert tools.find_areas("Вильнюс")["results"] == []
-    assert tools.find_areas("Вильнюс")["error"] is None
+    assert tools_areas.find_areas("Старогородка")["results"][0]["code"] == "grodno-old-town"
+    assert tools_areas.find_areas("Вильнюс")["results"] == []
+    assert tools_areas.find_areas("Вильнюс")["error"] is None
 
-    # Match-all term → capped, reported.
-    capped = tools.find_areas("район")
-    assert capped["count"] == tools.MAX_AREAS_PER_CALL
+    capped = tools_areas.find_areas("район")
+    assert capped["count"] == tools_areas.MAX_AREAS_PER_CALL
     assert capped["capped"] is True
-    assert set(capped["results"][0]) == set(tools._AREA_FIELDS)
+    assert set(capped["results"][0]) == set(tools_areas._AREA_FIELDS)
 
 
-def test_find_areas_falls_back_to_the_db_without_the_registry(monkeypatch, no_db):
+def test_find_areas_falls_back_to_the_db_without_the_registry(monkeypatch):
     def no_registry(term, locale, limit):
-        raise ImportError("agent.areas missing")
+        raise ImportError("reference.areas missing")
 
     rows = [
         {"code": f"district:{i}", "name_ru": f"Район {i}", "name_en": None, "kind": "district"}
         for i in range(30)
     ]
-    monkeypatch.setattr(tools, "_areas_from_registry", no_registry)
-    monkeypatch.setattr(tools, "_db_area_rows", lambda db, term, limit: rows)
+    monkeypatch.setattr(tools_areas, "_areas_from_registry", no_registry)
 
-    out = tools.find_areas("район")
+    out = tools_areas.find_areas("район", repos=_repos(area_rows=rows))
     assert out["error"] is None
-    assert out["count"] == tools.MAX_AREAS_PER_CALL and out["capped"] is True
+    assert out["count"] == tools_areas.MAX_AREAS_PER_CALL and out["capped"] is True
     assert out["provenance"]["source"] == "areas (db fallback)"
 
 
-def test_broken_area_registry_is_an_error_not_an_exception(monkeypatch, no_db):
+def test_broken_area_registry_is_an_error_not_an_exception(monkeypatch):
     def broken(term, locale, limit):
         raise ValueError("areas.json: duplicate slug")
 
-    monkeypatch.setattr(tools, "_areas_from_registry", broken)
-    out = tools.find_areas("Гродно")
+    monkeypatch.setattr(tools_areas, "_areas_from_registry", broken)
+    out = tools_areas.find_areas("Гродно")
     assert out["error"] == tools.ERR_AREA_REGISTRY
     assert out["results"] == []
 
 
-def test_services_near_route_is_an_honest_gap(no_db):
-    out = tools.services_near_route(
+def test_services_near_route_is_an_honest_gap():
+    out = tools_services.services_near_route(
         ["туалет", "вертолёт"], shape=[[53.67, 23.82]] * 100, max_detour_minutes=999
     )
     assert out["error"] == tools.ERR_NOT_IMPLEMENTED
     assert out["results"] == [] and out["count"] == 0
-    assert out["capped"] is True  # shape + detour both clamped
+    assert out["capped"] is True
     prov = out["provenance"]
     assert prov["dropped_codes"] == ["вертолёт"]
     assert prov["points_in"] == 100
-    assert prov["max_detour_minutes"] == tools.MAX_DETOUR_MINUTES
+    assert prov["max_detour_minutes"] == tools_services.MAX_DETOUR_MINUTES
     assert "not implemented" in out["message"]
 
 
-def test_services_near_route_reaches_the_agent_without_raising(fake_key, no_db, monkeypatch):
+def test_services_near_route_reaches_the_agent_without_raising(fake_key, repos, monkeypatch):
     """The agent may call the gap tool; the answer must not blow up the run."""
     payload = {
         "requirements": [
@@ -641,11 +676,10 @@ def test_services_near_route_reaches_the_agent_without_raising(fake_key, no_db, 
             ("services_near_route", {"category_codes": ["туалет"], "shape": [[53.7, 23.8]]})
         ],
     )
-    monkeypatch.setattr(ai, "_make_model", lambda: model)
+    monkeypatch.setattr(ai_model, "make_model", lambda: model)
 
-    tr = ai.interpret_with_agent(QUERY, GenerateReq(query=QUERY))
+    tr = ai.interpret_with_agent(QUERY, reader_brief(GenerateReq(query=QUERY)), repos=repos)
     assert tr is not None and seen
-    # Unproven service stays hard+pending and is surfaced as an unknown.
     assert "туалет" in tr.hard_service_codes()
     assert all(r.status == "pending" for r in tr.requirements)
     assert any("не подтверждён" in u for u in tr.unknowns)

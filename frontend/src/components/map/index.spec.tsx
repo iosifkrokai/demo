@@ -11,8 +11,6 @@ import userEvent from '@testing-library/user-event';
 import { MapComponent } from './index';
 import type { ParsedDirectionsGeometry } from '@/components/types';
 
-// The account bar and the card's «посещено» toggle (spec 005) have their own
-// specs; here they are anonymous mocks so the map tests need no QueryClient.
 vi.mock('@/hooks/use-auth', () => ({
   useAuth: () => ({
     user: null,
@@ -53,15 +51,9 @@ const mockSetGuideVoiceMuted = vi.hoisted(() =>
   })
 );
 
-const mockQueryRenderedFeatures = vi.hoisted(() =>
-  vi.fn(() => [] as unknown[])
-);
-const mockGetLayer = vi.hoisted(() => vi.fn((): unknown => true));
 const mockGetMap = vi.hoisted(() =>
   vi.fn(() => ({
     getCanvas: vi.fn(() => ({ style: { cursor: '' } })),
-    queryRenderedFeatures: mockQueryRenderedFeatures,
-    getLayer: mockGetLayer,
     on: vi.fn(),
     off: vi.fn(),
   }))
@@ -97,19 +89,28 @@ vi.mock('react-map-gl/maplibre', async () => {
           longitude?: number;
           latitude?: number;
           zoom?: number;
+          initialViewState?: {
+            longitude?: number;
+            latitude?: number;
+            zoom?: number;
+          };
+          onMove?: unknown;
           attributionControl?: boolean | { compact?: boolean };
         },
         ref: React.Ref<typeof mockMapRef>
       ) => {
-        // Set up the ref to return our mock map
         React.useImperativeHandle(ref, () => mockMapRef);
 
         return (
           <div
             data-testid="map"
-            data-longitude={props.longitude}
-            data-latitude={props.latitude}
-            data-zoom={props.zoom}
+            data-longitude={
+              props.initialViewState?.longitude ?? props.longitude
+            }
+            data-latitude={props.initialViewState?.latitude ?? props.latitude}
+            data-zoom={props.initialViewState?.zoom ?? props.zoom}
+            data-initial-view-state={props.initialViewState ? 'true' : 'false'}
+            data-on-move={props.onMove ? 'true' : 'false'}
             data-attribution-control={JSON.stringify(props.attributionControl)}
             onClick={() => {
               onClick?.({
@@ -143,9 +144,6 @@ vi.mock('react-map-gl/maplibre', async () => {
         );
       }
     ),
-    // `onClick` is forwarded so a test can tap a marker the way the tourist
-    // does. Dropping it made every marker inert, which is exactly the
-    // interaction the place card hangs off.
     Marker: vi.fn(({ children, longitude, latitude, onClick }) => (
       <div
         data-testid="marker"
@@ -180,12 +178,7 @@ vi.mock('react-map-gl/maplibre', async () => {
   };
 });
 
-const mockUseParams = vi.hoisted(() =>
-  vi.fn(() => ({ activeTab: 'directions' }))
-);
-
 vi.mock('@tanstack/react-router', () => ({
-  useParams: mockUseParams,
   useSearch: vi.fn(() => ({ profile: 'bicycle', style: undefined })),
   useNavigate: vi.fn(() => vi.fn()),
 }));
@@ -220,13 +213,9 @@ vi.mock('@/stores/common-store', () => ({
   }),
 }));
 
-// The map reads waypoints, place details and the stored route result from the
-// directions store; a test swaps the whole state through `mockDirectionsState`.
 const mockDirectionsState = vi.hoisted(() => ({
   current: {
     waypoints: [] as unknown[],
-    // Typed through the contract so a case can install an agent or client route
-    // with its provenance fields (spec 002).
     results: {
       data: null as
         | import('@/components/types').ParsedDirectionsGeometry
@@ -246,30 +235,12 @@ vi.mock('@/stores/directions-store', () => ({
   ),
 }));
 
-vi.mock('@/stores/isochrones-store', () => ({
-  useIsochronesStore: vi.fn((selector) => {
-    const state = {
-      geocodeResults: [],
-    };
-    return selector(state);
-  }),
-}));
-
 vi.mock('@/hooks/use-directions-queries', () => ({
   useDirectionsQuery: vi.fn(() => ({
     refetch: vi.fn(),
   })),
   useSetWaypointFromCoords: vi.fn(() => ({
     setWaypointFromCoords: vi.fn().mockResolvedValue([]),
-  })),
-}));
-
-vi.mock('@/hooks/use-isochrones-queries', () => ({
-  useIsochronesQuery: vi.fn(() => ({
-    refetch: vi.fn(),
-  })),
-  useReverseGeocodeIsochrones: vi.fn(() => ({
-    reverseGeocode: vi.fn().mockResolvedValue([]),
   })),
 }));
 
@@ -282,16 +253,6 @@ vi.mock('@/hooks/use-places', () => ({
     error: null,
     reload: vi.fn(),
   })),
-}));
-
-vi.mock('./map-style-control', () => ({
-  MapStyleControl: vi.fn(() => (
-    <div data-testid="map-style-control">Style Control</div>
-  )),
-}));
-
-vi.mock('./draw-control', () => ({
-  DrawControl: vi.fn(() => <div data-testid="draw-control">Draw Control</div>),
 }));
 
 vi.mock('./parts/route-lines', async () => {
@@ -307,18 +268,6 @@ vi.mock('./parts/route-lines', async () => {
 vi.mock('./parts/highlight-segment', () => ({
   HighlightSegment: vi.fn(() => (
     <div data-testid="highlight-segment">Highlight</div>
-  )),
-}));
-
-vi.mock('./parts/isochrone-polygons', () => ({
-  IsochronePolygons: vi.fn(() => (
-    <div data-testid="isochrone-polygons">Isochrone</div>
-  )),
-}));
-
-vi.mock('./parts/isochrone-locations', () => ({
-  IsochroneLocations: vi.fn(() => (
-    <div data-testid="isochrone-locations">Locations</div>
   )),
 }));
 
@@ -348,26 +297,10 @@ vi.mock('./parts/tool-button', () => ({
   ),
 }));
 
-vi.mock('./parts/map-info-popup', () => ({
-  MapInfoPopup: vi.fn(({ onClose }) => (
-    <div data-testid="map-info-popup">
-      <button onClick={onClose}>Close</button>
-    </div>
-  )),
-}));
-
 vi.mock('./parts/map-context-menu', () => ({
   MapContextMenu: vi.fn(({ onAddWaypoint }) => (
     <div data-testid="map-context-menu">
       <button onClick={() => onAddWaypoint(0)}>Add Waypoint</button>
-    </div>
-  )),
-}));
-
-vi.mock('./parts/tiles-info-popup', () => ({
-  TilesInfoPopup: vi.fn(({ onClose }) => (
-    <div data-testid="tiles-info-popup">
-      <button onClick={onClose}>Close Tiles Popup</button>
     </div>
   )),
 }));
@@ -415,10 +348,6 @@ describe('MapComponent', () => {
   });
 
   afterEach(() => {
-    // `cleanup()` explicitly: vitest runs here without `globals: true`, so
-    // Testing Library's automatic afterEach never registers, and this file's
-    // markers and popups would otherwise be left in the document shared by the
-    // rest of the worker.
     cleanup();
     vi.restoreAllMocks();
   });
@@ -432,17 +361,10 @@ describe('MapComponent', () => {
     expect(screen.getByTestId('map')).toBeInTheDocument();
     expect(screen.getByTestId('map')).toHaveAttribute(
       'data-attribution-control',
-      JSON.stringify({ compact: false })
+      'false'
     );
   });
 
-  // The four controls that used to sit in the map's top-right corner are gone.
-  // They were chrome borrowed from a route planner — zoom, geolocate, a polygon
-  // excluder, a style switcher — and the owner read them as a second, native row
-  // of buttons competing with the panel's own controls in the same corner. The
-  // map keeps gestures (pinch, scroll, drag) and the panel keeps its own «use my
-  // location», so nothing became unreachable. This test keeps the corner empty:
-  // one of them quietly coming back is the regression to catch.
   it('держит верхний правый угол карты без кнопок', () => {
     render(<MapComponent />);
 
@@ -466,19 +388,6 @@ describe('MapComponent', () => {
     expect(screen.getByTestId('highlight-segment')).toBeInTheDocument();
   });
 
-  it('should render isochrone polygons component', () => {
-    render(<MapComponent />);
-    expect(screen.getByTestId('isochrone-polygons')).toBeInTheDocument();
-  });
-
-  it('should render isochrone locations component', () => {
-    render(<MapComponent />);
-    expect(screen.getByTestId('isochrone-locations')).toBeInTheDocument();
-  });
-
-  // The panel's handle lives on the panel's own edge — the line the resize grip
-  // sits on — not in a corner of the map. It says what it does out loud only to
-  // a screen reader; visually it is a chevron pointing the way the panel moves.
   it('держит ручку панели на её собственном крае', () => {
     render(<MapComponent />);
 
@@ -491,11 +400,6 @@ describe('MapComponent', () => {
     expect(handle.className).toContain('--panel-width');
   });
 
-  // On a phone the panel is a sheet across the bottom, so it has no vertical
-  // left edge for an edge-handle to stand on — and the clamped position parked
-  // it in the middle of the map as a floating tab. The way in and out there is
-  // the sheet's own grab bar plus a flick down to dismiss (MobileShell); this
-  // test pins that the desktop control stays off a phone.
   it('на телефоне ручка панели не рисуется: у шторки нет левого края', () => {
     render(<MapComponent />);
 
@@ -504,20 +408,9 @@ describe('MapComponent', () => {
     expect(handle.className).toContain('md:flex');
   });
 
-  // The upstream map put four more controls on the canvas: an elevation
-  // profile overlay (HeightGraph + its hover marker, fed by a Valhalla /height
-  // request), an "Open on osm.org" button, and Isochrones/Tiles shortcuts that
-  // jumped to the three-panel RoutePlanner. This fork replaced that planner
-  // with the tourist Sidebar — one planning panel, no tab strip — and dropped
-  // the map chrome that only made sense with it. Nothing renders
-  // HeightGraph/HeightgraphHoverMarker any more, and the two remaining tabs
-  // have no panel to open, so the map keeps a single shortcut to the live
-  // Directions panel. This test pins that contract.
   it('should render no map controls beyond the Directions panel shortcut', () => {
     render(<MapComponent />);
 
-    // The panel's handle is the only entry point the map keeps, and it is not
-    // in this corner: it is on the panel's edge (see the test above).
     expect(screen.queryByTestId('heightgraph-toggle')).not.toBeInTheDocument();
     expect(
       screen.queryByTestId('heightgraph-hover-marker')
@@ -528,11 +421,6 @@ describe('MapComponent', () => {
   });
 
   it('держит ручку панели на месте в обоих состояниях', () => {
-    // The pill it replaced disappeared once the panel was open, which is why the
-    // header needed a second control to close it. A toggle stays put and means
-    // the same thing either way — that is the point of tying it to the panel's
-    // edge rather than to the map's corner. jsdom answers every media query with
-    // `matches: false`, so the wide case is stated explicitly.
     const original = window.matchMedia;
     window.matchMedia = ((query: string) => ({
       matches: true,
@@ -573,8 +461,6 @@ describe('MapComponent', () => {
     vi.mocked(router.useNavigate).mockReturnValue(mockNavigate);
     const user = userEvent.setup();
 
-    // Open: the handle closes it and does not lead anywhere — closing is the
-    // whole action, and wandering to the directions tab would be a side effect.
     mockCommonState.directionsPanelOpen = true;
     render(<MapComponent />);
     await user.click(screen.getByTestId('panel-toggle'));
@@ -583,7 +469,6 @@ describe('MapComponent', () => {
 
     cleanup();
 
-    // Closed: the handle opens it and brings the panel's own tab into view.
     mockToggleDirections.mockClear();
     mockCommonState.directionsPanelOpen = false;
     try {
@@ -597,12 +482,6 @@ describe('MapComponent', () => {
       mockCommonState.directionsPanelOpen = true;
     }
   });
-
-  // ── Reading about a point ────────────────────────────────────────────────
-  //
-  // One place has exactly one reader on screen: the popup by the pin on a wide
-  // screen, the card at the bottom of the map on a phone. Rendering both would
-  // put the same text about the same point on the display twice.
 
   const withAPlace = (placeId: number) => {
     mockDirectionsState.current.placeDetails = {
@@ -633,13 +512,6 @@ describe('MapComponent', () => {
     ];
   };
 
-  // The owner read «по пути: 12 мест» on a phone as noise to get past: it began
-  // as a 176x130 card over the map and was already down to one line by the time
-  // it was removed. On a phone the map now carries nothing but the map.
-  //
-  // What stays is the marks themselves — `/routes/services` still runs and a
-  // café still opens its own card when tapped. Only the chrome about them went.
-  // The alternative was marks that could not be reached at all.
   it('на телефоне не показывает ничего о местах рядом, но сами метки рисует', async () => {
     const original = window.matchMedia;
     window.matchMedia = ((query: string) => ({
@@ -657,7 +529,6 @@ describe('MapComponent', () => {
       render(<MapComponent />);
       const isPhone = () => window.matchMedia('(max-width: 767px)').matches;
 
-      // No count block, no card, no button to reveal anything.
       expect(
         screen.queryByTestId('mobile-services-chip')
       ).not.toBeInTheDocument();
@@ -669,11 +540,6 @@ describe('MapComponent', () => {
     }
   });
 
-  // The «по пути: 12 мест» block is gone from EVERY screen, the wide one too:
-  // it sat above the guide's own compass, and the count it printed is not lost —
-  // `/routes/services` still runs and the marks still say their distance and
-  // hours when tapped. What remains is the bare button that turns the marks on,
-  // which is what it was before the card grew around it.
   it('не рисует сводку «по пути» ни на телефоне, ни на десктопе', async () => {
     render(<MapComponent />);
 
@@ -699,8 +565,6 @@ describe('MapComponent', () => {
   });
 
   it('оставляет кнопку меток: без неё они недостижимы', async () => {
-    // The card is gone, but the marks it used to reveal still need a door.
-    // It rides with the route, so the test has to have one.
     mockDirectionsState.current.results.data = {
       legs: [],
       summary: { length: 1000, time: 600 },
@@ -733,10 +597,6 @@ describe('MapComponent', () => {
   });
 
   it('на телефоне о месте читает карточка у нижнего края карты', async () => {
-    // A 340px popup anchored to a pin is 87 % of a 390px screen, sits wherever
-    // the pin happens to be — often under the map's own controls — and is read
-    // with a thumb over its bottom. Every phone map app puts the place card on
-    // the bottom of the map instead, and so does this one.
     const original = window.matchMedia;
     window.matchMedia = ((query: string) => ({
       matches: query.includes('767'),
@@ -759,7 +619,6 @@ describe('MapComponent', () => {
       const card = screen.getByTestId('mobile-place-card');
       expect(card).toHaveTextContent('Старый замок');
       expect(card).toHaveTextContent('Дошла лишь одна башня.');
-      // And not the popup as well.
       expect(screen.queryByTestId('popup')).not.toBeInTheDocument();
     } finally {
       window.matchMedia = original;
@@ -773,8 +632,6 @@ describe('MapComponent', () => {
 
     await user.click(screen.getByTestId('marker'));
 
-    // The tapped point's caption is being read on purpose, so it opts out of
-    // the 6s auto-hide; nothing else on the map changes.
     expect(screen.getByTestId('place-marker-label')).toHaveAttribute(
       'data-active',
       'true'
@@ -787,13 +644,10 @@ describe('MapComponent', () => {
 
     fireEvent.click(screen.getByTestId('map'));
 
-    // advance timers past the click delay (200ms)
     await act(async () => {
       await vi.advanceTimersByTimeAsync(250);
     });
 
-    // The tourist view only clears the selection: the coordinate /
-    // "Valhalla location JSON" popup is a developer tool (tiles tab).
     expect(screen.queryByTestId('map-info-popup')).not.toBeInTheDocument();
 
     vi.useRealTimers();
@@ -817,6 +671,14 @@ describe('MapComponent', () => {
     expect(map).toHaveAttribute('data-longitude', '13.4');
     expect(map).toHaveAttribute('data-latitude', '52.5');
     expect(map).toHaveAttribute('data-zoom', '10');
+  });
+
+  it('drives the camera uncontrolled, without a per-frame state update', () => {
+    render(<MapComponent />);
+    const map = screen.getByTestId('map');
+
+    expect(map).toHaveAttribute('data-initial-view-state', 'true');
+    expect(map).toHaveAttribute('data-on-move', 'false');
   });
 
   it('should close context popup when clicking on map again', async () => {
@@ -847,8 +709,6 @@ describe('MapComponent', () => {
     });
     expect(screen.queryByTestId('map-info-popup')).not.toBeInTheDocument();
 
-    // a second click stays clean as well — no popup flash, and no fake timer
-    // left behind for the next test
     fireEvent.click(map);
     await act(async () => {
       await vi.advanceTimersByTimeAsync(250);
@@ -858,12 +718,6 @@ describe('MapComponent', () => {
     vi.useRealTimers();
   });
 
-  // The map's own GeolocateControl is gone with the rest of the corner. The
-  // tourist still has geolocation — the panel's «use my location» races the
-  // browser's answer against its own timer and reports failure inside the panel
-  // (see the sidebar specs) — so no user-facing feedback was lost with the
-  // control, and the toasts it used to raise are gone with it.
-
   describe('double-click and double-tap behavior', () => {
     it('should not show popup on double-click (zoom only)', async () => {
       vi.useFakeTimers();
@@ -871,16 +725,13 @@ describe('MapComponent', () => {
 
       const map = screen.getByTestId('map');
 
-      // simulate double-click: click followed quickly by dblclick
       fireEvent.click(map);
       fireEvent.doubleClick(map);
 
-      // advance timers past the click delay
       await act(async () => {
         await vi.advanceTimersByTimeAsync(250);
       });
 
-      // popup should not appear because double-click cancelled it
       expect(screen.queryByTestId('map-info-popup')).not.toBeInTheDocument();
 
       vi.useRealTimers();
@@ -892,26 +743,20 @@ describe('MapComponent', () => {
 
       const map = screen.getByTestId('map');
 
-      // first click starts the timer
       fireEvent.click(map);
 
-      // popup should not be visible yet
       expect(screen.queryByTestId('map-info-popup')).not.toBeInTheDocument();
 
-      // advance only 100ms (less than 200ms delay)
       await act(async () => {
         await vi.advanceTimersByTimeAsync(100);
       });
 
-      // double-click cancels the pending popup
       fireEvent.doubleClick(map);
 
-      // advance past the original delay
       await act(async () => {
         await vi.advanceTimersByTimeAsync(200);
       });
 
-      // popup should still not appear
       expect(screen.queryByTestId('map-info-popup')).not.toBeInTheDocument();
 
       vi.useRealTimers();
@@ -923,30 +768,24 @@ describe('MapComponent', () => {
 
       const map = screen.getByTestId('map');
 
-      // create a mock touch event with single finger
       const createTouchEvent = () => ({
         touches: [{ identifier: 0, target: map }],
       });
 
-      // first tap
       fireEvent.touchStart(map, createTouchEvent());
       fireEvent.click(map);
 
-      // popup should not be visible yet
       expect(screen.queryByTestId('map-info-popup')).not.toBeInTheDocument();
 
-      // second tap within 300ms threshold (simulating double-tap)
       await act(async () => {
         await vi.advanceTimersByTimeAsync(100);
       });
       fireEvent.touchStart(map, createTouchEvent());
 
-      // advance past the click delay
       await act(async () => {
         await vi.advanceTimersByTimeAsync(250);
       });
 
-      // popup should not appear because double-tap cancelled it
       expect(screen.queryByTestId('map-info-popup')).not.toBeInTheDocument();
 
       vi.useRealTimers();
@@ -958,16 +797,13 @@ describe('MapComponent', () => {
 
       const map = screen.getByTestId('map');
 
-      // first single-finger tap starts click timer
       fireEvent.touchStart(map, {
         touches: [{ identifier: 0, target: map }],
       });
       fireEvent.click(map);
 
-      // popup should not be visible yet
       expect(screen.queryByTestId('map-info-popup')).not.toBeInTheDocument();
 
-      // multi-finger touch (pinch gesture) should cancel pending popup
       await act(async () => {
         await vi.advanceTimersByTimeAsync(50);
       });
@@ -978,12 +814,10 @@ describe('MapComponent', () => {
         ],
       });
 
-      // advance past the click delay
       await act(async () => {
         await vi.advanceTimersByTimeAsync(250);
       });
 
-      // popup should not appear because multi-touch cancelled it
       expect(screen.queryByTestId('map-info-popup')).not.toBeInTheDocument();
 
       vi.useRealTimers();
@@ -995,19 +829,15 @@ describe('MapComponent', () => {
 
       const map = screen.getByTestId('map');
 
-      // first tap
       fireEvent.touchStart(map, {
         touches: [{ identifier: 0, target: map }],
       });
       fireEvent.click(map);
 
-      // wait longer than double-tap threshold (300ms) + click delay (200ms)
       await act(async () => {
         await vi.advanceTimersByTimeAsync(250);
       });
 
-      // no second tap occurred: the tourist view stays clean (the coordinate
-      // popup only exists for the tiles tab)
       expect(screen.queryByTestId('map-info-popup')).not.toBeInTheDocument();
 
       vi.useRealTimers();
@@ -1015,9 +845,6 @@ describe('MapComponent', () => {
   });
 
   describe('map orientation (the map always turns with the walk)', () => {
-    // The mock store holds `mockCommonState` at module level; individual tests
-    // flip its `guiding` / `guideFix` fields so the helpers reuse the same
-    // pattern as the rest of the suite.
     const withGuiding = () => {
       mockCommonState.guiding = true;
       mockCommonState.guideFix = { lng: 23.8, lat: 53.9, heading: 90 };
@@ -1041,8 +868,6 @@ describe('MapComponent', () => {
       withGuiding();
       render(<MapComponent />);
 
-      // The compass button is gone: while walking there is nothing to choose
-      // between — the map turns with the route or it is not a navigator.
       expect(screen.queryByTestId('guide-orientation')).not.toBeInTheDocument();
     });
 
@@ -1105,7 +930,6 @@ describe('MapComponent', () => {
 
     it('easeTo ведёт карту по курсу маршрута', () => {
       withGuiding();
-      // The route's own course wins over the device's heading.
       mockCommonState.guideFix = {
         lng: 23.8,
         lat: 53.9,
@@ -1135,12 +959,7 @@ describe('MapComponent', () => {
     });
   });
   describe('route provenance (spec 002 §7 — one route, one source)', () => {
-    /**
-     * The map only reads the geometry, the summary and the provenance fields, so
-     * these fixtures carry a deliberately partial Valhalla trip: the single cast
-     * inside this helper is preferred over fabricating ten trip fields the
-     * assertion never touches.
-     */
+    /** Build a deliberately partial Valhalla trip: only the fields the map reads. */
     const routeFixture = (over: {
       decodedGeometry: number[][];
       summary?: { length: number; time: number };
@@ -1200,10 +1019,6 @@ describe('MapComponent', () => {
 
       render(<MapComponent />);
 
-      // A line this app drew itself is the ordinary case, and the owner read the
-      // badge saying so as noise to scroll past. Only the two cases that carry
-      // information speak: where a verified line came from, and an agent plan
-      // whose line is missing.
       expect(screen.queryByTestId('route-provenance')).not.toBeInTheDocument();
     });
 
@@ -1283,203 +1098,7 @@ describe('MapComponent', () => {
       expect(screen.getByLabelText('Старт')).toBeInTheDocument();
       expect(screen.getByLabelText('Точка 1')).toBeInTheDocument();
       expect(screen.getByLabelText('Точка 2')).toBeInTheDocument();
-      // The route start never takes a stop number.
       expect(screen.queryByLabelText('Точка 3')).not.toBeInTheDocument();
-    });
-  });
-
-  describe('tiles tab behavior', () => {
-    beforeEach(() => {
-      mockUseParams.mockReturnValue({ activeTab: 'tiles' });
-      mockQueryRenderedFeatures.mockClear();
-      mockGetLayer.mockClear();
-    });
-
-    afterEach(() => {
-      mockUseParams.mockReturnValue({ activeTab: 'directions' });
-    });
-
-    it('should show tiles info popup when clicking on tiles with features', async () => {
-      vi.useFakeTimers();
-      mockGetLayer.mockReturnValue(true);
-      mockQueryRenderedFeatures.mockReturnValue([
-        {
-          type: 'Feature',
-          sourceLayer: 'edges',
-          properties: { id: '123', speed: 50 },
-          geometry: {
-            type: 'LineString',
-            coordinates: [
-              [0, 0],
-              [1, 1],
-            ],
-          },
-          layer: { id: 'valhalla-edges' },
-        },
-      ]);
-
-      render(<MapComponent />);
-
-      fireEvent.click(screen.getByTestId('map'));
-
-      // advance timers past the click delay
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(250);
-      });
-
-      expect(screen.getByTestId('tiles-info-popup')).toBeInTheDocument();
-
-      vi.useRealTimers();
-    });
-
-    it('should not show tiles info popup when no features are found', async () => {
-      vi.useFakeTimers();
-      mockGetLayer.mockReturnValue(true);
-      mockQueryRenderedFeatures.mockReturnValue([]);
-
-      render(<MapComponent />);
-
-      fireEvent.click(screen.getByTestId('map'));
-
-      // advance timers past the click delay
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(250);
-      });
-
-      expect(screen.queryByTestId('tiles-info-popup')).not.toBeInTheDocument();
-
-      vi.useRealTimers();
-    });
-
-    it('should not query features when valhalla layers do not exist', async () => {
-      vi.useFakeTimers();
-      mockGetLayer.mockReturnValue(undefined);
-
-      render(<MapComponent />);
-
-      fireEvent.click(screen.getByTestId('map'));
-
-      // advance timers past the click delay
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(250);
-      });
-
-      expect(mockQueryRenderedFeatures).not.toHaveBeenCalled();
-      expect(screen.queryByTestId('tiles-info-popup')).not.toBeInTheDocument();
-
-      vi.useRealTimers();
-    });
-
-    it('should only query available layers when some layers exist', async () => {
-      vi.useFakeTimers();
-      // Only edges layer exists, nodes layer does not
-      mockGetLayer.mockImplementation((layerId?: string) =>
-        layerId === 'valhalla-edges' ? { id: 'valhalla-edges' } : undefined
-      );
-      mockQueryRenderedFeatures.mockReturnValue([
-        {
-          type: 'Feature',
-          sourceLayer: 'edges',
-          properties: { id: '123' },
-          geometry: {
-            type: 'LineString',
-            coordinates: [
-              [0, 0],
-              [1, 1],
-            ],
-          },
-          layer: { id: 'valhalla-edges' },
-        },
-      ]);
-
-      render(<MapComponent />);
-
-      fireEvent.click(screen.getByTestId('map'));
-
-      // advance timers past the click delay
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(250);
-      });
-
-      expect(mockQueryRenderedFeatures).toHaveBeenCalledWith(
-        { x: 100, y: 100 },
-        { layers: ['valhalla-edges'] }
-      );
-
-      vi.useRealTimers();
-    });
-
-    it('should close tiles info popup when close button is clicked', async () => {
-      vi.useFakeTimers();
-      mockGetLayer.mockReturnValue(true);
-      mockQueryRenderedFeatures.mockReturnValue([
-        {
-          type: 'Feature',
-          sourceLayer: 'edges',
-          properties: { id: '123' },
-          geometry: {
-            type: 'LineString',
-            coordinates: [
-              [0, 0],
-              [1, 1],
-            ],
-          },
-          layer: { id: 'valhalla-edges' },
-        },
-      ]);
-
-      render(<MapComponent />);
-
-      fireEvent.click(screen.getByTestId('map'));
-
-      // advance timers past the click delay
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(250);
-      });
-
-      expect(screen.getByTestId('tiles-info-popup')).toBeInTheDocument();
-
-      vi.useRealTimers();
-
-      const user = userEvent.setup();
-      await user.click(
-        screen.getByRole('button', { name: 'Close Tiles Popup' })
-      );
-
-      await waitFor(() => {
-        expect(
-          screen.queryByTestId('tiles-info-popup')
-        ).not.toBeInTheDocument();
-      });
-    });
-
-    it('should not show context menu on right click in tiles tab', () => {
-      render(<MapComponent />);
-
-      fireEvent.contextMenu(screen.getByTestId('map'));
-
-      // Context menu should not appear in tiles tab
-      expect(screen.queryByTestId('map-context-menu')).not.toBeInTheDocument();
-    });
-
-    it('should not show info popup on click in tiles tab', async () => {
-      vi.useFakeTimers();
-      mockGetLayer.mockReturnValue(undefined);
-      mockQueryRenderedFeatures.mockReturnValue([]);
-
-      render(<MapComponent />);
-
-      fireEvent.click(screen.getByTestId('map'));
-
-      // advance timers past the click delay
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(250);
-      });
-
-      // should not show info popup (only tiles popup behavior)
-      expect(screen.queryByTestId('map-info-popup')).not.toBeInTheDocument();
-
-      vi.useRealTimers();
     });
   });
 });

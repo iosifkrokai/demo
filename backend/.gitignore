@@ -1,0 +1,17 @@
+# deps
+.venv/
+
+# python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.python-version
+
+# caches
+.pytest_cache/
+.ruff_cache/
+.pyright/
+.mypy_cache/
+
+# generated
+quality/reports/

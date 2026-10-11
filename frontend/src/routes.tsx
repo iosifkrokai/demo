@@ -27,20 +27,11 @@ export const rootRoute = createRootRoute({ component: RootComponent });
 
 const TanStackQueryProviderContext = TanStackQueryProvider.getContext();
 
-/**
- * The mandatory-login gate (spec 005 §5): without a session there is no app.
- *
- * It reads the *same* `authQueryOptions` entry `useAuth` uses, so the gate and the
- * UI can never disagree about who is signed in. The visitor is sent to `/login`
- * with the path they asked for, so signing in returns them to it.
- */
+/** The mandatory-login gate: without a session there is no app. */
 const requireAuth = async (args: {
   context: unknown;
   location: { pathname: string; searchStr: string; hash: string };
 }): Promise<void> => {
-  // `context` is not statically typed at route-definition time (the router's
-  // `Register` is declared at the bottom of this file), so it is read defensively.
-  // «Unknown» fails closed: an unverifiable session is treated as no session.
   const queryClient = (args.context as { queryClient?: QueryClient })
     .queryClient;
   const authenticated = queryClient
@@ -75,6 +66,35 @@ export const indexRoute = createRoute({
   },
 });
 
+/** The tab/profile half of the `/$activeTab` gate. */
+export const activeTabBeforeLoad = ({
+  params,
+  search,
+}: {
+  params: { activeTab: string };
+  search: { profile?: string };
+}): void => {
+  if (!isValidTab(params.activeTab)) {
+    throw redirect({
+      to: '/$activeTab',
+      params: { activeTab: 'directions' },
+      search: {
+        profile: defaultProfile,
+      },
+    });
+  }
+  if (!search.profile) {
+    throw redirect({
+      to: '/$activeTab',
+      params: { activeTab: params.activeTab },
+      search: {
+        ...search,
+        profile: defaultProfile,
+      },
+    });
+  }
+};
+
 const activeTabRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/$activeTab',
@@ -93,33 +113,12 @@ const activeTabRoute = createRoute({
       ]),
     ],
   },
-  beforeLoad: async ({ context, location, params, search }) => {
-    // Login first: an anonymous visitor is not asked to pick a tab.
-    await requireAuth({ context, location });
-    if (!isValidTab(params.activeTab)) {
-      throw redirect({
-        to: '/$activeTab',
-        params: { activeTab: 'directions' },
-        search: {
-          profile: defaultProfile,
-        },
-      });
-    }
-    if (!search.profile) {
-      throw redirect({
-        to: '/$activeTab',
-        params: { activeTab: params.activeTab },
-        search: {
-          ...search,
-          profile: defaultProfile,
-        },
-      });
-    }
+  beforeLoad: async (args) => {
+    await requireAuth(args);
+    activeTabBeforeLoad(args);
   },
 });
 
-// Account pages (spec 005). `/login` and `/register` are the only public routes;
-// everything else is behind `requireAuth`.
 const loginRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/login',

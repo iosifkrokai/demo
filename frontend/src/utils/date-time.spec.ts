@@ -39,11 +39,8 @@ describe('formatDuration', () => {
   it('should handle large durations', () => {
     expect(formatDuration(604800)).toBe('7d');
     expect(formatDuration(2629746)).toBe('30d 10h 29m 6s');
-    expect(formatDuration(1000000)).toBe('11d 13h 46m 40s'); // ~11.57 days
-    expect(formatDuration(10000000)).toBe('25d 17h 46m 40s'); // ~115.7 days
-
-    // Note: date-fns intervalToDuration has limitations with extremely large numbers
-    // Values beyond ~31M seconds may not format correctly due to library limitations
+    expect(formatDuration(1000000)).toBe('11d 13h 46m 40s');
+    expect(formatDuration(10000000)).toBe('25d 17h 46m 40s');
   });
 
   it('should format mixed durations correctly', () => {
@@ -73,7 +70,6 @@ describe('formatDuration', () => {
   });
 
   it('should handle fractional seconds (should be truncated)', () => {
-    // The function expects whole seconds, but let's test edge cases
     expect(formatDuration(1.5)).toBe('1s');
     expect(formatDuration(59.9)).toBe('59s');
     expect(formatDuration(60.1)).toBe('1m');

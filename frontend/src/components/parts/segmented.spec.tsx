@@ -15,10 +15,7 @@ const VIEWS: SegmentedItem<'plan' | 'history' | 'itineraries'>[] = [
   { value: 'itineraries', label: 'Готовые маршруты', short: 'Готовые' },
 ];
 
-/**
- * Lucide icons carry no text, so they cannot prove they stay out of the
- * accessible name. This one shouts, and a screen reader must still not hear it.
- */
+/** Lucide icons carry no text, so they cannot prove they stay out of the accessible name. */
 const SHOUTING_ICON = ((props: SVGProps<SVGSVGElement>) => (
   <svg {...props}>
     <text>ИКОНКА</text>
@@ -36,7 +33,6 @@ describe('Segmented', () => {
       />
     );
 
-    // the pill is short, but the name a screen reader announces is not
     const plan = screen.getByRole('radio', { name: 'Планирование' });
     expect(plan).toHaveTextContent(/^План$/);
     expect(plan).toHaveAttribute('aria-label', 'Планирование');
@@ -44,7 +40,6 @@ describe('Segmented', () => {
       screen.getByRole('radio', { name: 'Готовые маршруты' })
     ).toHaveTextContent(/^Готовые$/);
 
-    // the shortened text must not become the name on its own
     expect(screen.queryByRole('radio', { name: 'План' })).toBeNull();
     expect(screen.queryByRole('radio', { name: 'Готовые' })).toBeNull();
   });
@@ -136,7 +131,6 @@ describe('Segmented', () => {
       />
     );
 
-    // the icon is decoration: present in the DOM, absent from every name
     expect(container.querySelectorAll('svg')).toHaveLength(2);
     container.querySelectorAll('svg').forEach((icon) => {
       expect(icon).toHaveAttribute('aria-hidden', 'true');

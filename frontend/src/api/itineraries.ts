@@ -1,12 +1,4 @@
-/**
- * Ready-made routes (`GET /routes/itineraries`).
- *
- * One request, same-origin like every other agent call (the dev Vite proxy and
- * the production nginx both forward `/routes/*`). No model is involved on the
- * agent side, so this cannot be slow in the way a plan request can — and when
- * it does fail, the panel says so instead of showing an empty list, which would
- * read as «у нас нет готовых маршрутов».
- */
+/** Ready-made routes (`GET /routes/itineraries`). */
 
 import type { ItineraryList } from './types';
 
@@ -34,7 +26,6 @@ export async function fetchItineraries(
       signal,
     });
   } catch (error) {
-    // The request never reached the agent — a different failure from a refusal.
     throw new ItinerariesError(
       error instanceof Error ? error.message : 'network',
       null

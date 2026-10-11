@@ -62,7 +62,6 @@ describe('guideModeFor', () => {
     expect(guideModeFor('pedestrian').verb).toBe('walk');
     expect(guideModeFor('bicycle').label).toBe('by bike');
     expect(guideModeFor('auto').arrivalHint).toBe('park by the stop');
-    // The number of modes does not change with the language.
     expect(defaultTravelMode().id).toBe('foot');
   });
 });

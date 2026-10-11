@@ -1,20 +1,4 @@
-"""Trace is a fact about the pipeline, told in spans — Langfuse-style.
-
-`progress` says how far a request has got; `trace` says what happened at each
-node, for the debug graph that lights the pipeline up against a real run. These
-tests pin the same honesty rules as `test_progress.py`:
-
-* a span records what a step *did* — the branch, the counts — never what it
-  might do;
-* an unknown id is «нет такого запуска», not an empty trace;
-* spans are contiguous (each starts where the previous ended), so one run is an
-  unbroken timeline;
-* with no id nothing is tracked and nothing changes (benchmarks, golden
-  harness, CLI);
-* a model call is a *generation*, not a step, and carries the prompt the model
-  was actually given — a trace that shows the conclusion without the question
-  cannot explain the conclusion.
-"""
+"""Trace is a fact about the pipeline, told in spans — Langfuse-style."""
 
 from __future__ import annotations
 
@@ -28,8 +12,10 @@ from fastapi import HTTPException
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agent import trace
-from agent.main import route_trace
+import itertools
+
+from api.routers.routes import route_trace
+from telemetry import trace
 
 
 @pytest.fixture(autouse=True)
@@ -62,7 +48,6 @@ def test_spans_are_contiguous_so_one_run_is_one_timeline():
     assert data is not None
     first, second = data["spans"]
     assert first["started_ms"] == 0
-    # The second span starts exactly where the first ended — no invented gaps.
     assert second["started_ms"] == first["started_ms"] + first["duration_ms"]
 
 
@@ -88,7 +73,7 @@ def test_a_trace_is_dropped_once_it_is_stale():
     tracked = trace._traces["job-3"]
     tracked.updated_at = time.monotonic() - trace.TTL_S - 1
 
-    trace.begin("job-4")  # starting a request prunes what has gone stale
+    trace.begin("job-4")
 
     assert trace.get("job-3") is None
     assert trace.get("job-4") is not None
@@ -101,9 +86,6 @@ def test_elapsed_ms_is_monotonic_and_non_negative():
     assert data is not None
     assert data["elapsed_ms"] >= 0
     assert data["spans"][0]["duration_ms"] >= 0
-
-
-# ── the guide run («полный прогон») ─────────────────────────────────────────
 
 
 def test_the_run_id_is_carried_and_reported():
@@ -169,9 +151,6 @@ def test_export_without_a_run_id_opens_no_session(monkeypatch):
     assert seen == [None]
 
 
-# ── what Langfuse is actually handed ────────────────────────────────────────
-
-
 class _RecordingObs:
     """A span that remembers how it was created, the way Langfuse would."""
 
@@ -228,9 +207,6 @@ def test_a_model_call_keeps_its_model_tokens_and_answer(monkeypatch):
     assert span["model"] == "deepseek/deepseek-v4.1-flash"
     assert span["usage"] == {"input": 1200, "output": 80, "total": 1280}
     assert span["facts"] == {"requests": 2, "tool_calls": 1}
-    # The prompt and the answer are deliberately NOT in the step list: several
-    # kilobytes of conversation belong in Langfuse's own generation panel, not
-    # in a timeline a client polls for every step.
     assert "input" not in span
     assert "output" not in span
 
@@ -258,7 +234,6 @@ def test_export_hands_a_model_call_over_as_a_generation(monkeypatch):
     assert call["output"] == {"requirements": []}
     assert call["model"] == "deepseek/deepseek-v4.1-flash"
     assert call["usage_details"] == {"input": 3, "output": 1, "total": 4}
-    # The step's own numbers are still there, beside the conversation.
     assert call["metadata"] == {"requests": 1}
 
 
@@ -289,7 +264,6 @@ def test_a_step_that_produced_text_reports_it_and_keeps_its_numbers(monkeypatch)
         {"asked": "туалет", "status": "unmet", "reason": "hard_service_absent"}
     ]
     assert verdict["metadata"] == {"plan_status": "degraded"}
-    # The span's own status stays the step's fate, not the plan's verdict.
     assert verdict["level"] == "DEFAULT"
 
 
@@ -301,7 +275,6 @@ def test_a_step_that_did_not_run_is_exported_as_debug(monkeypatch):
 
     assert calls[1]["level"] == "DEBUG"
     assert calls[1]["output"] == {"candidates": 24, "before": 24, "trimmed": False}
-
 
 
 class _OtelSpan:
@@ -339,14 +312,7 @@ class _TimedClient:
 
 
 def test_a_step_that_took_less_than_a_millisecond_still_keeps_its_place(monkeypatch):
-    """Langfuse stores milliseconds; a microsecond step must not fall behind.
-
-    ``query`` and ``preprocess`` finish inside the same millisecond as the
-    thirteen-second model call they precede, and with equal timestamps the UI
-    was free to draw ``preprocess`` *after* the answer it helped produce. The
-    exporter walks the spans in recorded order and nudges each past the one
-    before it, so the order a reader sees is the order that happened.
-    """
+    """Langfuse stores milliseconds; a microsecond step must not fall behind."""
     client = _TimedClient()
     monkeypatch.setattr(trace, "_client", lambda: client)
     monkeypatch.setattr(trace, "_propagation", _no_propagation)
@@ -365,8 +331,7 @@ def test_a_step_that_took_less_than_a_millisecond_still_keeps_its_place(monkeypa
         "retrieve",
     ], "the export reordered the run"
     assert len(set(starts)) == len(starts), "two steps share a timestamp"
-    assert all(b - a >= 1_000_000 for a, b in zip(starts, starts[1:])), (
+    assert all(b - a >= 1_000_000 for a, b in itertools.pairwise(starts)), (
         "a step was placed less than a millisecond after its predecessor"
     )
-    # Every span still ends after it starts, so the timeline stays drawable.
     assert all(c["end_ns"] > c["start_ns"] for c in placed)

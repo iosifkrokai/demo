@@ -108,12 +108,12 @@ describe('route-schemas', () => {
       expect(isValidTab('directions')).toBe(true);
     });
 
-    it('should return true for isochrones', () => {
-      expect(isValidTab('isochrones')).toBe(true);
+    it('should return false for isochrones', () => {
+      expect(isValidTab('isochrones')).toBe(false);
     });
 
-    it('should return true for tiles', () => {
-      expect(isValidTab('tiles')).toBe(true);
+    it('should return false for tiles', () => {
+      expect(isValidTab('tiles')).toBe(false);
     });
 
     it('should return false for invalid tab names', () => {

@@ -1,14 +1,4 @@
-"""The full point catalogue: `GET /places` and the payload it serves.
-
-Two layers on purpose:
-
-  * offline — a fake connection pins the contract: a place is described by the
-    same payload a ready-made route uses, the browse order is stable, and the
-    count is honest;
-  * live — over HTTP against the running backend, skipped when :8080 is not
-    answering, because the property that matters is that the endpoint really
-    returns the dataset with coordinates on every row.
-"""
+"""The full point catalogue: `GET /places` and the payload it serves."""
 
 from __future__ import annotations
 
@@ -22,7 +12,8 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agent.places import list_places, place_payload
+from db.store.mappers import place_from_row, place_payload
+from db.store.places import PostgresPlaceRepository
 
 BASE_URL = os.environ.get("SMOKE_BASE_URL", "http://localhost:8080")
 
@@ -46,11 +37,16 @@ class _FakeCursor:
 
 
 class _FakeConn:
+    closed = False
+
     def __init__(self, rows: list[dict]) -> None:
         self.rows = rows
 
     def cursor(self, row_factory=None) -> _FakeCursor:
         return _FakeCursor(self.rows)
+
+    def close(self) -> None:
+        self.closed = True
 
 
 def _row(**over: object) -> dict:
@@ -81,18 +77,20 @@ def _row(**over: object) -> dict:
 
 def test_place_payload_carries_the_facts_a_card_prints():
     payload = place_payload(
-        _row(
-            id=10,
-            source_url="osm:old-castle",
-            name="Старый замок (Гродно)",
-            category="замок",
-            town="Гродно",
-            lat=53.6791,
-            lon=23.8216,
-            visit_minutes=90,
-            opening_hours="вт–вс 10:00–18:00",
-            blurb="Блиц",
-            fun_fact="Факт",
+        place_from_row(
+            _row(
+                id=10,
+                source_url="osm:old-castle",
+                name="Старый замок (Гродно)",
+                category="замок",
+                town="Гродно",
+                lat=53.6791,
+                lon=23.8216,
+                visit_minutes=90,
+                opening_hours="вт–вс 10:00–18:00",
+                blurb="Блиц",
+                fun_fact="Факт",
+            )
         )
     )
     assert payload["place_id"] == 10
@@ -101,7 +99,6 @@ def test_place_payload_carries_the_facts_a_card_prints():
     assert payload["lat"] == 53.6791 and payload["lon"] == 23.8216
     assert payload["visit_minutes"] == 90
     assert payload["opening_hours"] == "вт–вс 10:00–18:00"
-    # The JSON-holding columns are parsed, not passed through raw.
     assert payload["fun_facts"] == []
     assert payload["links"] == []
 
@@ -113,11 +110,10 @@ def test_list_places_returns_every_row_with_a_stable_shape():
             _row(id=2, category="костёл", name="Б", town="Лида"),
         ]
     )
-    answer = list_places(conn)
+    answer = PostgresPlaceRepository(connect=lambda: conn).catalog()
 
     assert answer["total"] == 2
     assert answer["capped"] is False
-    # The browse order is the SQL's own; the payload only re-describes each row.
     assert [item["place_id"] for item in answer["items"]] == [1, 2]
     for item in answer["items"]:
         assert item["name"] and item["lat"] and item["lon"]
@@ -131,9 +127,7 @@ def _live_available() -> bool:
         return False
 
 
-@pytest.mark.skipif(
-    not _live_available(), reason=f"backend not answering at {BASE_URL}"
-)
+@pytest.mark.skipif(not _live_available(), reason=f"backend not answering at {BASE_URL}")
 def test_live_places_returns_the_dataset_with_coordinates():
     with urllib.request.urlopen(f"{BASE_URL}/places", timeout=10) as r:
         assert r.status == 200

@@ -5,21 +5,11 @@ import type { ExpressionSpecification } from 'maplibre-gl';
 
 import type { Place } from '@/api/types';
 
-/**
- * The full catalogue on the map — every point in the dataset, at once.
- *
- * Drawn as a GeoJSON circle layer, not as a `<Marker>` per point: the dataset is
- * ~2.5k rows and 2.5k DOM markers would stall the map. Circles are coloured by
- * category so a church cluster and a café cluster read apart before any click.
- *
- * This component is presentational: it draws, it does not handle clicks. The
- * map's own click handler reads the `places-points` layer and opens the place
- * card (see `map/index.tsx`), exactly as it does for the route line.
- */
+/** The full catalogue on the map — every point in the dataset, at once. */
 
 export const PLACES_POINTS_LAYER_ID = 'places-points';
 
-/** Category → colour. Unknown categories fall back to the muted slate. */
+/** Category → colour. */
 const CATEGORY_COLORS: Record<string, string> = {
   замок: '#d97706',
   дворец: '#d97706',
@@ -50,8 +40,6 @@ const colorExpression = (): ExpressionSpecification => {
     stops.push(category, color);
   }
   stops.push(FALLBACK_COLOR);
-  // The array is a maplibre expression but built dynamically, so its literal
-  // tuple shape is not inferable; the cast is the whole of the ceremony.
   return stops as unknown as ExpressionSpecification;
 };
 

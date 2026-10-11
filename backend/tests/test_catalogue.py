@@ -1,17 +1,6 @@
 """The catalogue: «что показать: каталог» is a list, not a route.
 
-The selector was in the panel and the field in the schema, but nothing branched on
-it — so a catalogue request returned an ordinary walking route. These tests pin the
-implemented contract:
-
-  * the answer carries the matching places and NO geometry (there is no line to
-    draw, and inventing one would be a claim nobody made);
-  * it is not confined to one walkable cluster and not trimmed by a time budget —
-    that is exactly what a catalogue is for;
-  * verification is membership-only, with `*_in_catalogue` reason codes: no chip
-    may say «на маршруте» when no route exists.
-
-No network, no DB.
+A catalogue request carries places and no geometry; verification is membership-only.
 """
 
 from __future__ import annotations
@@ -21,10 +10,18 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agent.models import Candidate, ResolvedConstraints
-from agent.planner import pipeline as pipeline_mod
-from agent.planner.intent import fallback_intent
-from agent.planner.verify import (
+from agent.models import Requirement, TripRequirements
+from db.store.areas import PostgresAreaRepository
+from db.store.places import PostgresPlaceRepository
+from db.store.registry import Repositories
+from planner import pipeline as pipeline_mod
+from planner.models import (
+    Candidate,
+    IntentDecision,
+    IntentResult,
+    ResolvedConstraints,
+)
+from planner.verify import (
     REASON_INTEREST_IN_CATALOGUE,
     REASON_MUST_VISIT_ABSENT,
     REASON_MUST_VISIT_IN_CATALOGUE,
@@ -33,21 +30,23 @@ from agent.planner.verify import (
     overall_status,
     verify_catalogue,
 )
-from agent.requirements import Requirement, TripRequirements
 
 
 def _cand(pid: int, name: str, category: str, town: str, relevance: float = 1.0) -> Candidate:
     return Candidate(
-        id=pid, name=name, category=category, lat=53.68, lon=23.83,
-        town=town, relevance=relevance,
+        id=pid,
+        name=name,
+        category=category,
+        lat=53.68,
+        lon=23.83,
+        town=town,
+        relevance=relevance,
     )
 
 
 def _reqs(*requirements: Requirement) -> TripRequirements:
     return TripRequirements(requirements=list(requirements))
 
-
-# ── the verifier ────────────────────────────────────────────────────────────
 
 def test_catalogue_satisfies_a_must_visit_by_membership():
     places = [_cand(7, "Старый замок", "замок", "Гродно")]
@@ -97,14 +96,19 @@ def test_catalogue_of_nothing_is_uncertain_not_unmet():
     assert result[0].reason == REASON_ROUTE_MISSING
 
 
-# ── the response ────────────────────────────────────────────────────────────
+def _repos() -> Repositories:
+    """Empty repositories: the catalogue path answers without ever reading the DB."""
+    return Repositories(places=PostgresPlaceRepository(), areas=PostgresAreaRepository())
+
 
 def _catalogue(candidates: list[Candidate], requirements: TripRequirements):
-    pipeline = pipeline_mod.Pipeline(db=object())
+    pipeline = pipeline_mod.Pipeline(repos=_repos())
     return pipeline._catalogue_response(
-        req=pipeline_mod.GenerateReq(query="все костёлы Гродненской области", result_mode="catalogue"),
+        req=pipeline_mod.GenerateReq(
+            query="все костёлы Гродненской области", result_mode="catalogue"
+        ),
         requirements=requirements,
-        intent=fallback_intent("все костёлы Гродненской области"),
+        intent=IntentResult(decision=IntentDecision(), source="agent"),
         constraints=ResolvedConstraints(),
         candidates=candidates,
         t0=0.0,
@@ -124,10 +128,6 @@ def test_catalogue_response_has_places_and_no_geometry():
     assert response.shape == {}, "a catalogue has no line to draw"
     assert response.budget is None
     assert response.summary.time_seconds is None and response.summary.length_km is None
-    # The mode is stated at the TOP level, not only in debug: the client (and the
-    # golden runner's result_mode check) reads it from the response itself, and an
-    # empty `shape` cannot stand in for it — that also happens on a route whose
-    # geometry Valhalla failed to build.
     assert response.result_mode == "catalogue"
     assert response.debug["result_mode"] == "catalogue"
     assert response.debug["towns"] == ["Гродно", "Лида"]
@@ -137,7 +137,7 @@ def test_catalogue_response_has_places_and_no_geometry():
 
 def test_a_plain_route_is_the_default_mode_so_old_clients_see_no_change():
     """Only a catalogue opts in; every other answer keeps saying "route"."""
-    from agent.models import RouteResponse
+    from planner.models import RouteResponse
 
     assert RouteResponse.model_fields["result_mode"].default == "route"
 

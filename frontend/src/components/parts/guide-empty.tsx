@@ -1,10 +1,7 @@
 import { MapPinned } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
-/**
- * Nothing to walk yet. DESIGN.md: an empty panel is never blank — it gets a
- * muted icon and one line saying where the route comes from.
- */
+/** Nothing to walk yet. */
 export const GuideEmpty = () => {
   const { t } = useTranslation();
 

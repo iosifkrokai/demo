@@ -1,10 +1,4 @@
-/**
- * The editable fields of a place, as the admin panel edits them (spec 005 §3).
- *
- * Kept apart from the panel so the mapping «form strings → PATCH body» is a pure,
- * testable function: the coordinate fields in particular are easy to get wrong
- * (an empty box must mean «do not move», never 0°N 0°E).
- */
+/** The editable fields of a place, as the admin panel edits them. */
 
 import type { AdminPlaceInput, Place } from '@/api/types';
 
@@ -51,10 +45,6 @@ export const toPlacePatch = (fields: EditableFields): AdminPlaceInput => {
     visit_minutes: num(fields.visitMinutes),
   };
 
-  // Coordinates are **omitted** when blank, never sent as `null`: the handler
-  // builds the UPDATE from `model_dump(exclude_unset=True)`, so a present key
-  // writes the column — `null` would wipe/`NOT NULL`-fail the point, while an
-  // absent key leaves it exactly where it was.
   const lat = num(fields.lat);
   const lon = num(fields.lon);
   if (lat !== null) patch.lat = lat;

@@ -113,18 +113,10 @@ export const buildOptimizedRouteRequest = ({
   return req;
 };
 
-/**
- * Valhalla refuses a request with more than 20 locations
- * (`error_code: 150, "Exceeded max locations: 20"`). The agent may legitimately
- * hand us more stops than that (a region-wide list), so the line has to be drawn
- * as several chained requests instead of one.
- */
+/** Valhalla refuses a request with more than 20 locations. */
 export const VALHALLA_MAX_LOCATIONS = 20;
 
-/**
- * Split waypoints into groups of at most `max` locations, each group starting
- * where the previous one ended, so the drawn segments join up without a gap.
- */
+/** Split waypoints into groups of at most `max`, overlapping by one so segments join. */
 export const chunkWaypoints = (
   waypoints: ActiveWaypoint[],
   max = VALHALLA_MAX_LOCATIONS
@@ -133,7 +125,7 @@ export const chunkWaypoints = (
     return waypoints.length > 0 ? [waypoints] : [];
   }
   const chunks: ActiveWaypoint[][] = [];
-  const step = max - 1; // the shared endpoint is the next chunk's start
+  const step = max - 1;
   for (let start = 0; start < waypoints.length - 1; start += step) {
     chunks.push(
       waypoints.slice(start, Math.min(start + max, waypoints.length))
@@ -203,11 +195,6 @@ export const makeContours = ({
   return contours;
 };
 
-// Snap allowance (metres) sent to Valhalla for every waypoint. Without it the
-// implicit radius is 0, and any waypoint that is not exactly on a graph edge —
-// a castle centroid, a church set back from the street — makes the whole /route
-// call fail with {"error_code":499,"error":"Could not find candidate edge used
-// for destination label"}: points get drawn, no route line appears.
 export const WAYPOINT_SNAP_RADIUS_M = 500;
 
 export const makeLocations = (waypoints: ActiveWaypoint[]) => {

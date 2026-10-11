@@ -12,7 +12,6 @@ import userEvent from '@testing-library/user-event';
 const mockStoreState = vi.hoisted(() => ({
   waypoints: [] as Record<string, unknown>[],
   placeDetails: {} as Record<string, unknown>,
-  // The guide (W6) reads its line from here; the real store defaults to this.
   results: { data: null, show: {} } as {
     data: unknown;
     show: Record<string, boolean>;
@@ -36,7 +35,6 @@ const mockStoreState = vi.hoisted(() => ({
 const mockSetWaypoint = mockStoreState.setWaypoint;
 const mockRefetch = vi.hoisted(() => vi.fn());
 const mockGetState = vi.hoisted(() =>
-  // Loose return type: individual tests swap in different store shapes.
   vi.fn((): Record<string, unknown> => mockStoreState)
 );
 const mockNavigate = vi.hoisted(() => vi.fn());
@@ -46,9 +44,6 @@ vi.mock('@/hooks/use-directions-queries', () => ({
   useDirectionsQuery: () => ({ refetch: mockRefetch }),
 }));
 
-// The panel fetches the authored itineraries through react-query. This spec is
-// about the panel, so the hook is mocked like the directions one — which also
-// lets a test assert that opening a ready-made route makes no request at all.
 const mockItineraries = vi.hoisted(() => ({
   items: [] as unknown[],
   missing: [] as string[],
@@ -162,10 +157,6 @@ const AGENT_ANSWER = {
   },
 };
 
-/**
- * The ask field. Its placeholder is part of the empty state's contract, so the
- * empty-state test asserts it; the queries go through the stable label instead.
- */
 const askField = () =>
   screen.getByRole('textbox', { name: 'что хотите посмотреть' });
 
@@ -184,13 +175,7 @@ const agentFetch = () => {
   return { fetchMock, sentBodies, body: (i: number) => sentBodies[i] ?? {} };
 };
 
-/**
- * The panel also asks `GET /routes/progress/{id}` while a request is in flight.
- * These specs are about the plan request, so the poll is answered right here —
- * «the server does not know this id», which is exactly what a spec without a
- * pipeline should say — and never reaches the mock under test. Call counts and
- * recorded bodies therefore stay about plans, as every assertion here expects.
- */
+/** The panel also asks `GET /routes/progress/{id}` while a request is in flight. */
 const stubAgentFetch = (
   mock: (url: string, init: RequestInit) => Promise<unknown>
 ) => {
@@ -209,29 +194,21 @@ const stubAgentFetch = (
 describe('Sidebar', () => {
   beforeEach(() => {
     vi.unstubAllGlobals();
-    // The panel now reads `waypoints` to decide whether the field is planning or
-    // refining, so a route left behind by an earlier test would silently change
-    // which chips the next one sees. Start every test with no route.
     mockStoreState.waypoints = [];
     vi.stubGlobal('navigator', {
       ...navigator,
       geolocation: { getCurrentPosition: mockGetCurrentPosition },
     });
-    // Call history outlives a test (restoreAllMocks does not clear it), and a
-    // «did not ask for the position» assertion must start from zero.
     mockGetCurrentPosition.mockClear();
     mockGetCurrentPosition.mockImplementation((ok: (p: unknown) => void) => {
       ok({ coords: { latitude: 53.7, longitude: 23.8 } });
     });
-    // A fresh store per test: the panel reads it through the same selectors the
-    // real one uses, and a test that swapped the shape must not leak it.
     mockStoreState.waypoints = [];
     mockStoreState.placeDetails = {};
     mockStoreState.results = { data: null, show: {} };
     mockStoreState.refinementLog = [];
     mockStoreState.routeSnapshots = [];
     mockStoreState.excludedPlaceIds = [];
-    // Writing the waypoints back into the double is what makes a reset visible.
     mockStoreState.setWaypoint.mockImplementation(
       (next: Record<string, unknown>[]) => {
         mockStoreState.waypoints = next;
@@ -241,16 +218,12 @@ describe('Sidebar', () => {
   });
 
   afterEach(() => {
-    // A worker shares one jsdom document between its files: unmount by hand.
     cleanup();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
 
   it('pins the tourist’s position as the route start from one tap', async () => {
-    // The panel asks for nothing on open: an attempt fired without a gesture is
-    // not answered, and the panel used to declare «не удалось определить»
-    // before the tourist had asked for anything. One tap does the whole job.
     render(<Sidebar />);
 
     await waitFor(() => {
@@ -287,9 +260,9 @@ describe('Sidebar', () => {
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
     const body = JSON.parse(String(fetchMock.mock.calls[0]![1].body));
-    expect(body.profile).toBe('auto'); // car → Valhalla's "auto"
+    expect(body.profile).toBe('auto');
     expect(body.origin).toEqual({ lat: 53.7, lon: 23.8 });
-    expect(body.time_budget_minutes).toBeUndefined(); // "без ограничения"
+    expect(body.time_budget_minutes).toBeUndefined();
   });
 
   it('sends no transport at all when the tourist did not pick one', async () => {
@@ -308,7 +281,6 @@ describe('Sidebar', () => {
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
     const body = JSON.parse(String(fetchMock.mock.calls[0]![1].body));
-    // «как удобно» is not a constraint: the agent picks the costing itself
     expect(body.profile).toBeUndefined();
   });
 
@@ -327,7 +299,6 @@ describe('Sidebar', () => {
     await user.click(buildButton());
 
     await waitFor(() => expect(mockResetSettings).toHaveBeenCalledWith('car'));
-    // the URL profile follows, so the line the webapp draws uses "auto" too
     await waitFor(() => expect(mockNavigate).toHaveBeenCalled());
     const search = mockNavigate.mock.calls.at(-1)![0].search({});
     expect(search.profile).toBe('car');
@@ -350,7 +321,6 @@ describe('Sidebar', () => {
     await user.type(askField(), 'замки Гродно');
     await user.click(buildButton());
 
-    // geolocation is a nice-to-have: a refusal must not block the plan
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
     const body = JSON.parse(String(fetchMock.mock.calls[0]![1].body));
     expect(body.origin).toBeUndefined();
@@ -358,7 +328,6 @@ describe('Sidebar', () => {
   });
 
   it('re-plans the route when the transport changes', async () => {
-    // the agent planned on foot, so picking "машина" is a real change
     // eslint-disable-next-line @typescript-eslint/no-unused-vars -- the test reads calls[i][1]
     const fetchMock = vi.fn(async (_url: string, _init: RequestInit) => ({
       ok: true,
@@ -373,8 +342,6 @@ describe('Sidebar', () => {
     await user.click(buildButton());
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
 
-    // switching the transport must not leave the walking plan (and its travel
-    // time) on screen: the same query is re-planned for the new costing
     await user.click(screen.getByTestId('transport-car'));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
@@ -401,7 +368,7 @@ describe('Sidebar', () => {
       expect(mockSetWaypoint.mock.calls.length).toBeGreaterThanOrEqual(2)
     );
     const planned = mockSetWaypoint.mock.calls.at(-1)?.[0];
-    expect(planned).toHaveLength(3); // my position + 2 stops
+    expect(planned).toHaveLength(3);
     expect(planned[0].id).toBe('me');
     expect(planned[1].userInput).toBe('Старый замок');
     expect(planned[1].placeId).toBe(11);
@@ -422,8 +389,6 @@ describe('Sidebar', () => {
     await user.click(buildButton());
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
 
-    // From here the route exists: a second submit is a refinement and must
-    // carry the stops, the pinned flags and the hand-deleted ids.
     const snapshot = vi.fn();
     mockGetState.mockReturnValue({
       waypoints: [
@@ -462,9 +427,9 @@ describe('Sidebar', () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
 
     const body = JSON.parse(sentBodies[1]!);
-    expect(snapshot).toHaveBeenCalled(); // snapshot before the rebuild
+    expect(snapshot).toHaveBeenCalled();
     expect(body.context.instruction).toBe('добавь кофейню и туалет');
-    expect(body.context.revision).toBe(2); // log length + 1
+    expect(body.context.revision).toBe(2);
     expect(body.context.excluded_ids).toEqual([17]);
     expect(
       body.context.base_points.map((p: { source: string }) => p.source)
@@ -476,16 +441,13 @@ describe('Sidebar', () => {
     const user = userEvent.setup({ delay: null });
     render(<Sidebar />);
 
-    // Walking is not a section of the panel any more, so it is not in the strip.
     expect(screen.queryByTestId('mode-guide')).toBeNull();
     expect(screen.queryByTestId('mode-plan')).toBeInTheDocument();
     expect(screen.queryByTestId('mode-history')).toBeInTheDocument();
     expect(screen.queryByTestId('mode-itineraries')).toBeInTheDocument();
-    // Nothing to walk yet: the action is not offered before there is a route.
     expect(screen.queryByTestId('guide-enter')).toBeNull();
     expect(screen.queryByTestId('guide-panel')).toBeNull();
 
-    // Two stops — a route worth walking.
     mockStoreState.waypoints = [
       {
         id: 'me',
@@ -533,7 +495,6 @@ describe('Sidebar', () => {
       await user.click(screen.getByTestId('guide-enter'));
 
       expect(screen.getByTestId('guide-panel')).toBeInTheDocument();
-      // Guide mode takes the panel over: read nothing past the tabs, walk.
       expect(screen.queryByTestId('mode-plan')).toBeNull();
       expect(screen.queryByTestId('mode-history')).toBeNull();
       expect(screen.queryByTestId('guide-enter')).toBeNull();
@@ -543,7 +504,6 @@ describe('Sidebar', () => {
 
       await user.click(screen.getByTestId('guide-exit-hud'));
       expect(screen.queryByTestId('guide-panel')).toBeNull();
-      // …and back to where the tourist was, with the route still in hand.
       expect(screen.getByTestId('mode-plan')).toBeInTheDocument();
       expect(buildButton()).toBeInTheDocument();
       expect(screen.getByTestId('guide-enter')).toBeInTheDocument();
@@ -552,14 +512,9 @@ describe('Sidebar', () => {
     }
   });
 
-  // ── The redesign (DESIGN.md phases 1–2) ────────────────────────────────────
-
   it('держит шапку без крестика: панель закрывает её же ручка', () => {
     render(<Sidebar />);
 
-    // The panel is opened *and closed* by one handle on the map's left edge
-    // (panel-toggle), so a second, ✕-shaped control in the header would be a
-    // second way to say the same thing — and could fall out of step with it.
     expect(
       screen.queryByRole('button', { name: 'закрыть панель' })
     ).not.toBeInTheDocument();
@@ -573,12 +528,9 @@ describe('Sidebar', () => {
     expect(
       screen.getByText(/Здесь появятся остановки маршрута/i)
     ).toBeInTheDocument();
-    // the ask field says what to type (DESIGN.md)
     expect(
       screen.getByPlaceholderText('Что хотите посмотреть?')
     ).toBeInTheDocument();
-    // The chips are whole questions, not filter names: what is on them is what
-    // the agent receives, so each one has to read as something a tourist says.
     for (const [id, said] of [
       ['old-town', 'Старый город за два часа пешком'],
       ['castles-churches', 'Замки и костёлы Гродно'],
@@ -588,23 +540,15 @@ describe('Sidebar', () => {
     ] as const) {
       expect(screen.getByTestId(`hint-${id}`)).toHaveTextContent(said);
     }
-    // nothing typed yet → nothing to build
     expect(buildButton()).toBeDisabled();
   });
 
   it('keeps the main action in a footer outside the scroll area', () => {
-    // Measured at 390x844 before this: the hint chips wrapped into five 44px
-    // lines, the panel's content grew to 612px inside a 380px sheet, the body
-    // was squeezed to 36px and the sticky footer was pushed clean out of the
-    // sheet — «Построить» was not on the screen at all. The invariant that
-    // broke is structural: the action must be a sibling of the scrolling body,
-    // in the sheet's own flex column, not inside the part that scrolls.
     render(<Sidebar />);
 
     const action = buildButton();
     expect(action.closest('footer')).not.toBeNull();
     expect(action.closest('.slim-scroll')).toBeNull();
-    // and the examples stay in the panel, just as one row on a phone
     const hints = screen.getByTestId('hint-old-town').parentElement;
     expect(hints?.getAttribute('role')).toBe('group');
     expect(hints?.querySelectorAll('button').length).toBe(5);
@@ -613,8 +557,6 @@ describe('Sidebar', () => {
   });
 
   it('once a route exists the chips edit it instead of starting a new one', () => {
-    // A route with one real stop: planning is over, so the same field now asks
-    // a different question and must not re-offer the starting questions.
     mockStoreState.waypoints = [
       {
         id: 'me',
@@ -653,8 +595,6 @@ describe('Sidebar', () => {
     ] as const) {
       expect(screen.getByTestId(`hint-${id}`)).toHaveTextContent(said);
     }
-    // The starting questions are gone: next to a finished route they read as
-    // «начать заново», which is the opposite of what the field now does.
     expect(screen.queryByTestId('hint-old-town')).not.toBeInTheDocument();
     expect(
       screen.getByPlaceholderText('Что уточнить? «добавь кофейню»')
@@ -670,13 +610,11 @@ describe('Sidebar', () => {
     render(<Sidebar />);
 
     await user.click(screen.getByTestId('hint-old-town'));
-    // the chip only fills the field — the tourist still decides when to go
     expect(askField()).toHaveValue('Старый город за два часа пешком');
     expect(fetchMock).not.toHaveBeenCalled();
 
     await user.type(askField(), '{Enter}');
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
-    // And what the agent gets is the sentence on the chip, word for word.
     expect(body(0).query).toBe('Старый город за два часа пешком');
   });
 
@@ -703,7 +641,6 @@ describe('Sidebar', () => {
     const user = userEvent.setup({ delay: null });
     render(<Sidebar />);
 
-    // pick a budget and change your mind: the field is absent, not 0
     await user.click(screen.getByRole('button', { name: '2 ч' }));
     await user.click(screen.getByRole('button', { name: 'без ограничения' }));
     expect(
@@ -727,16 +664,12 @@ describe('Sidebar', () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
 
     const tile = (label: string) => screen.getByText(label).parentElement;
-    // The count tile inflects its own noun: 2 → «2 точки», never «2 точек».
     expect(tile('точки')).toHaveTextContent('2');
-    // …and distances use the Russian decimal comma.
     expect(tile('длина')).toHaveTextContent('1,5 км');
     expect(tile('мин в пути')).toHaveTextContent('15');
-    // budget.* on the line under the tiles
     expect(screen.getByText(/в пути ~15 мин/)).toBeInTheDocument();
     expect(screen.getByText(/осмотр ~1 ч 10 мин/)).toBeInTheDocument();
     expect(screen.getByText('без лимита')).toBeInTheDocument();
-    // the ask field becomes the refinement input — one field, not two
     expect(askField()).toHaveAttribute(
       'placeholder',
       'Что уточнить? «добавь кофейню»'
@@ -763,7 +696,6 @@ describe('Sidebar', () => {
 
     expect(await screen.findByTestId('stops-skeleton')).toBeInTheDocument();
     expect(screen.getByTestId('summary-skeleton')).toBeInTheDocument();
-    // the main action says it is working, and cannot be pressed twice
     expect(
       screen.getByRole('button', { name: /Строю маршрут/i })
     ).toBeDisabled();
@@ -776,7 +708,6 @@ describe('Sidebar', () => {
 
   it('announces route-building progress politely and errors as alerts', async () => {
     let fail: (reason?: unknown) => void = () => undefined;
-    // No parameters on purpose: the test only needs the pending promise it can reject.
     const fetchMock = vi.fn(
       () =>
         new Promise((_resolve, reject) => {
@@ -791,19 +722,15 @@ describe('Sidebar', () => {
     await user.type(askField(), 'замки Гродно');
     await user.click(buildButton());
 
-    // The polite announcement is the real, observable stage now — not a bare
-    // «Строю маршрут…» that leaves the tourist with no idea what is happening.
     const announcement = await screen.findByTestId('route-progress');
     expect(announcement).toHaveAttribute('aria-live', 'polite');
     expect(announcement).toHaveTextContent(
       'отправил запрос — жду план от агента'
     );
     expect(announcement).toHaveTextContent(/\d+ с/);
-    // …and a real cancel, so a 23-second wait is not a trap.
     expect(
       within(announcement).getByTestId('route-cancel')
     ).toBeInTheDocument();
-    // No invented stage: the client cannot see inside the request.
     expect(announcement.textContent).not.toMatch(/проверя|анализ|требован/i);
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
@@ -814,8 +741,6 @@ describe('Sidebar', () => {
   });
 
   it('говорит стадию словами конвейера, когда он её называет', async () => {
-    // The pipeline reports its own stages; the panel must prefer them over its
-    // own (honest but vaguer) «отправил запрос», and it must never blend the two.
     const fetchMock = vi.fn(async (url: string) => {
       if (String(url).includes('/routes/progress/')) {
         return {
@@ -829,7 +754,6 @@ describe('Sidebar', () => {
           }),
         };
       }
-      // The plan request itself never answers: the stage is what is under test.
       return new Promise(() => undefined);
     });
     vi.stubGlobal('fetch', fetchMock);
@@ -908,7 +832,6 @@ describe('Sidebar', () => {
     expect(screen.getByTestId('excluded-chip')).toHaveTextContent(
       'убрано вручную: 2'
     );
-    // nothing was refined yet, so there is nothing to roll back
     expect(
       screen.getByRole('button', { name: /отменить уточнение/i })
     ).toBeDisabled();
@@ -918,7 +841,6 @@ describe('Sidebar', () => {
 
     await user.click(screen.getByRole('button', { name: /новый маршрут/i }));
     expect(mockStoreState.resetRoute).toHaveBeenCalled();
-    // the route is emptied: no agent stop is left on it any more
     expect(
       mockStoreState.waypoints.filter((wp) => wp.placeId != null)
     ).toHaveLength(0);
@@ -948,7 +870,6 @@ describe('Sidebar', () => {
     await user.click(buildButton());
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
 
-    // Route still lands: warning is non-blocking, no fabricated toilet stop.
     expect(
       await screen.findByTestId('toilet-missing-warning')
     ).toHaveTextContent(
@@ -962,7 +883,7 @@ describe('Sidebar', () => {
       placeId?: number;
       userInput?: string;
     }>;
-    expect(planned).toHaveLength(3); // me + 2 agent stops, no invented toilet
+    expect(planned).toHaveLength(3);
     expect(planned?.map((w) => w.userInput)).toEqual([
       'Моё местоположение',
       'Старый замок',
@@ -1006,8 +927,6 @@ describe('Sidebar', () => {
   });
 
   it('does not warn about missing toilets for a generic sightseeing query', async () => {
-    // AGENT_ANSWER stops are замок/дворец — no туалет category — but the ask
-    // never mentioned toilet/санузел, so the warning must stay dark.
     const { fetchMock } = agentFetch();
 
     const user = userEvent.setup({ delay: null });
@@ -1025,8 +944,6 @@ describe('Sidebar', () => {
   });
 
   it('shows the error alert, not the toilet warning, when generate fails', async () => {
-    // Boundary: a toilet ask must not leak the amber "missing toilet" status
-    // when /routes/generate itself fails — only the normal error alert.
     const fetchMock = vi.fn(async () => ({
       ok: false,
       status: 503,
@@ -1049,8 +966,6 @@ describe('Sidebar', () => {
     expect(screen.queryByText(/В базе не нашлось туалетов/i)).toBeNull();
   });
 
-  // ── Advanced filters (spec 002, W5) ────────────────────────────────────────
-
   /** The advanced block is behind «ещё фильтры» — open it the way a user does. */
   const openAdvanced = async (user: ReturnType<typeof userEvent.setup>) => {
     const toggle = screen.getByTestId('more-filters');
@@ -1064,7 +979,6 @@ describe('Sidebar', () => {
     const user = userEvent.setup({ delay: null });
     render(<Sidebar />);
 
-    // Progressive disclosure: time and transport are visible, the rest is not.
     expect(screen.getByRole('button', { name: '2 ч' })).toBeInTheDocument();
     expect(screen.getByTestId('transport-car')).toBeInTheDocument();
     expect(screen.queryByTestId('advanced-filters')).toBeNull();
@@ -1079,7 +993,6 @@ describe('Sidebar', () => {
       'aria-expanded',
       'true'
     );
-    // the new controls live inside it
     expect(screen.getByTestId('party-children-inc')).toBeInTheDocument();
     expect(screen.getByTestId('amenity-туалет-hard')).toBeInTheDocument();
     expect(screen.getByTestId('result-mode-catalogue')).toBeInTheDocument();
@@ -1095,7 +1008,6 @@ describe('Sidebar', () => {
     await user.click(buildButton());
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
 
-    // "send nothing when not chosen" — as with time and transport.
     for (const field of [
       'party_adults',
       'party_children',
@@ -1119,12 +1031,10 @@ describe('Sidebar', () => {
     render(<Sidebar />);
 
     await openAdvanced(user);
-    // 2 adults, 1 child, ages named by hand (never inferred)
     await user.click(screen.getByTestId('party-adults-inc'));
     await user.click(screen.getByTestId('party-adults-inc'));
     await user.click(screen.getByTestId('party-children-inc'));
     await user.type(screen.getByTestId('children-ages'), '4, 7');
-    // туалет обязателен, кафе желательно, интерес — замки
     await user.click(screen.getByTestId('amenity-туалет-hard'));
     await user.click(screen.getByTestId('amenity-кафе-soft'));
     await user.click(screen.getByTestId('interest-замок'));
@@ -1140,7 +1050,6 @@ describe('Sidebar', () => {
     expect(body(0).party_children).toBe(1);
     expect(body(0).party_children_ages).toEqual([4, 7]);
     expect(body(0).hard_services).toEqual(['туалет']);
-    // a soft amenity joins the interests it is: one list to the agent
     expect(body(0).interests).toEqual(['замок', 'кафе']);
     expect(body(0).avoid).toEqual(['кладбище']);
     expect(body(0).result_mode).toBe('catalogue');
@@ -1161,7 +1070,6 @@ describe('Sidebar', () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
 
     const body = sentBodies[0]!;
-    // код из двух слов должен дойти одним элементом, не разбитым по пробелу
     expect(body.hard_services).toContain('остановка транспорта');
     expect(body.hard_services).not.toContain('остановка');
     expect(body.hard_services).not.toContain('транспорта');
@@ -1175,15 +1083,11 @@ describe('Sidebar', () => {
 
     await openAdvanced(user);
 
-    // «всё религиозное» is a label for four real categories — the agent gets the
-    // codes themselves, because the data has no parent category to send. The
-    // chip is chosen only when every code it stands for is.
     const group = () => screen.getByTestId('interest-религиозное');
     expect(group()).toHaveAttribute('aria-pressed', 'false');
 
     await user.click(group());
     expect(group()).toHaveAttribute('aria-pressed', 'true');
-    // …and the single chips it covers read as chosen too: one state, two views.
     expect(screen.getByTestId('interest-костёл')).toHaveAttribute(
       'aria-pressed',
       'true'
@@ -1199,7 +1103,6 @@ describe('Sidebar', () => {
       'монастырь',
     ]);
 
-    // Clicking the group again clears the whole thing, never half of it.
     await user.click(group());
     expect(group()).toHaveAttribute('aria-pressed', 'false');
     expect(screen.getByTestId('interest-костёл')).toHaveAttribute(
@@ -1217,7 +1120,6 @@ describe('Sidebar', () => {
     await openAdvanced(user);
     await user.click(screen.getByTestId('party-children-inc'));
     expect(screen.getByTestId('party-children-value')).toHaveTextContent('1');
-    // stepping below one clears the count: "not said" is not "0 children"
     await user.click(screen.getByTestId('party-children-dec'));
     expect(screen.getByTestId('party-children-value')).toHaveTextContent('—');
 
@@ -1231,21 +1133,18 @@ describe('Sidebar', () => {
     const user = userEvent.setup({ delay: null });
     render(<Sidebar />);
 
-    // nothing chosen yet → no summary to show
     expect(screen.queryByTestId('filters-summary')).toBeNull();
 
     await openAdvanced(user);
     await user.click(screen.getByTestId('amenity-туалет-hard'));
     await user.click(screen.getByTestId('result-mode-catalogue'));
-    await user.click(screen.getByTestId('more-filters')); // close again
+    await user.click(screen.getByTestId('more-filters'));
     expect(screen.queryByTestId('advanced-filters')).toBeNull();
 
-    // the summary stays visible with the panel closed
     const summary = screen.getByTestId('filters-summary');
     expect(summary).toHaveTextContent('обязательно: туалет');
     expect(summary).toHaveTextContent('каталог мест');
 
-    // a conflict with the typed request is shown, not silently resolved
     await user.type(askField(), 'замки без туалета');
     expect(screen.getByTestId('filters-precedence')).toHaveTextContent(
       /поверх текста запроса/
@@ -1273,7 +1172,6 @@ describe('Sidebar', () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
     expect(JSON.parse(sentBodies[0]!).hard_services).toEqual(['туалет']);
 
-    // From here the route exists: the second submit is a refinement.
     mockGetState.mockReturnValue({
       waypoints: [
         {
@@ -1311,7 +1209,6 @@ describe('Sidebar', () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
 
     const body = JSON.parse(sentBodies[1]!);
-    // the refinement carries the route context AND the surviving filters
     expect(body.context).toBeDefined();
     expect(body.party_children).toBe(1);
     expect(body.hard_services).toEqual(['туалет']);
@@ -1327,7 +1224,6 @@ describe('Sidebar', () => {
     await openAdvanced(user);
     await user.click(screen.getByTestId('amenity-туалет-hard'));
 
-    // the text never mentions a toilet — the explicit filter does
     await user.type(askField(), 'замки Гродно');
     await user.click(buildButton());
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
@@ -1339,8 +1235,6 @@ describe('Sidebar', () => {
     );
   });
 });
-
-// ── Felt-quality pass: reachability, touch, focus order, honest counts ──────
 
 /** Focusable elements in DOM order — that is exactly the tab order. */
 const tabOrder = (root: HTMLElement): HTMLElement[] =>
@@ -1356,8 +1250,6 @@ describe('Sidebar — felt quality', () => {
       ok({ coords: { latitude: 53.7, longitude: 23.8 } });
     });
     mockStoreState.routeHistory = [];
-    // Same reason as in the first block: a route from an earlier test would turn
-    // the field into refinement mode and swap the chips under this test.
     mockStoreState.waypoints = [];
     mockStoreState.setWaypoint.mockImplementation(
       (next: Record<string, unknown>[]) => {
@@ -1371,8 +1263,6 @@ describe('Sidebar — felt quality', () => {
     render(<Sidebar />);
 
     const handle = screen.getByTestId('panel-resize-handle');
-    // Ширина живёт в CSS-переменной, а её читает класс панели только с md —
-    // мобильная шторка остаётся во всю ширину экрана.
     const panelAt = () => document.querySelector('[style*="--panel-width"]');
     expect(handle).toHaveAttribute('aria-valuenow', '420');
     expect(panelAt()?.getAttribute('style')).toContain('--panel-width: 420px');
@@ -1388,23 +1278,16 @@ describe('Sidebar — felt quality', () => {
   it('делает поле запроса первым таб-стопом панели', () => {
     render(<Sidebar />);
 
-    // Nothing precedes the question: no close button, no title control.
     expect(tabOrder(screen.getByRole('dialog'))[0]).toBe(askField());
   });
 
   it('держит плотность телефона: ничто тоньше 40px, вкладки и чипы — 40', () => {
-    // Порог изменён по замеру (спека 004, §3): на телефоне табло и чипы — 40px,
-    // а не 44: 44-е чипы переносились по одному в строку и съедали половину
-    // листа, выдавливая главное действие из панели. Минимум для пальца 40,
-    // ниже — нельзя; тач-указатели вне телефона (планшеты) остаются 44.
     render(<Sidebar />);
 
     for (const id of ['mode-plan', 'mode-itineraries']) {
       const tabs = screen.getByTestId(id);
       expect(tabs.className).toMatch(/max-md:h-10/);
       expect(tabs.className).toMatch(/pointer-coarse:h-11/);
-      // Телефон перекрывает pointer-coarse явно: иначе на телефоне совпадают
-      // оба условия и решает порядок CSS, а не замысел.
       expect(tabs.className).toMatch(/pointer-coarse:max-md:h-10/);
     }
     for (const id of [
@@ -1419,7 +1302,6 @@ describe('Sidebar — felt quality', () => {
       expect(chip.className).toMatch(/pointer-coarse:max-md:h-10/);
     }
     expect(askField().className).toMatch(/max-md:min-h-10/);
-    // …and coarse pointers (tablets, touch laptops) get the fuller target
     expect(screen.getByTestId('mode-plan').className).toMatch(
       /pointer-coarse:h-11/
     );
@@ -1429,8 +1311,6 @@ describe('Sidebar — felt quality', () => {
   });
 
   it('даёт переключателю языка полноценную мишень на телефоне', () => {
-    // Замер до правки: RU/EN были 33x36 — ниже порога пальца, при том что это
-    // единственный контрол языка в шапке.
     render(<Sidebar />);
 
     const ru = screen.getByTestId('language-ru');
@@ -1439,10 +1319,6 @@ describe('Sidebar — felt quality', () => {
   });
 
   it('называет группы фильтров и на десктопе, и на телефоне', async () => {
-    // Найденный дефект: мобильные строки-секции заменили заголовки групп, и на
-    // десктопе «Участники / Удобства / Интересы / Избегать / Тип результата»
-    // исчезли — панель стала безымянной стеной полей. Группа обязана быть
-    // названа в обоих режимах: заголовок для десктопа, строка для телефона.
     const user = userEvent.setup({ delay: null });
     render(<Sidebar />);
 
@@ -1467,7 +1343,6 @@ describe('Sidebar — felt quality', () => {
     render(<Sidebar />);
 
     await user.click(screen.getByTestId('more-filters'));
-    // Ничего не выбрано — счётчика нет: «0» не сообщает ничего.
     expect(screen.queryByTestId('section-count-interests')).toBeNull();
 
     await user.click(screen.getByTestId('section-toggle-interests'));
@@ -1476,7 +1351,6 @@ describe('Sidebar — felt quality', () => {
       '1'
     );
 
-    // Свёрнутая строка по-прежнему говорит, что внутри что-то есть.
     await user.click(screen.getByTestId('section-toggle-interests'));
     expect(screen.getByTestId('section-count-interests')).toHaveTextContent(
       '1'
@@ -1546,8 +1420,6 @@ describe('Sidebar — felt quality', () => {
 
     render(<Sidebar />);
 
-    // History has its own tab now, so the row is not on screen until it is
-    // opened — that is the point of the tab, not a regression.
     await userEvent
       .setup({ delay: null })
       .click(screen.getByTestId('mode-history'));
@@ -1560,22 +1432,18 @@ describe('Sidebar — felt quality', () => {
     render(<Sidebar />);
     const user = userEvent.setup({ delay: null });
 
-    // Planner: the ask field is the view's own content.
     expect(askField()).toBeInTheDocument();
 
     await user.click(screen.getByTestId('mode-history'));
     expect(screen.getByTestId('history-tab')).toBeInTheDocument();
-    // The planner's own controls are gone, not merely scrolled away.
     expect(
       screen.queryByRole('textbox', { name: 'что хотите посмотреть' })
     ).toBeNull();
-    // Nothing to build from this view, so the build action is not offered.
     expect(
       screen.queryByRole('button', { name: /подобрать маршрут/i })
     ).toBeNull();
 
     await user.click(screen.getByTestId('mode-itineraries'));
-    // An empty authored list is stated as empty, not dressed up as a route.
     expect(screen.getByTestId('itineraries-empty')).toBeInTheDocument();
 
     await user.click(screen.getByTestId('mode-plan'));
@@ -1630,7 +1498,6 @@ describe('Sidebar — felt quality', () => {
       },
     ];
 
-    // Any request at all in this test is a request the tab should not make.
     const fetchMock = vi.fn();
     stubAgentFetch(fetchMock);
 
@@ -1641,7 +1508,6 @@ describe('Sidebar — felt quality', () => {
       await user.click(screen.getByTestId('mode-itineraries'));
       await user.click(screen.getByTestId('itinerary-open-old-town-castles'));
 
-      // The stops are handed to the map as waypoints…
       await waitFor(() => expect(mockSetWaypoint).toHaveBeenCalled());
       const waypoints = mockSetWaypoint.mock.calls.at(-1)![0] as Array<{
         userInput: string;
@@ -1652,12 +1518,8 @@ describe('Sidebar — felt quality', () => {
         'Новый замок',
       ]);
       expect(waypoints.map((w) => w.placeId)).toEqual([1, 2]);
-      // …the router is asked to draw them…
       expect(mockRefetch).toHaveBeenCalled();
-      // …and the model is never asked: this tab exists to avoid that request.
       expect(fetchMock).not.toHaveBeenCalled();
-      // A ready-made route is still a route someone may walk, so it lands in the
-      // history with its own stop key — that is what a finished walk marks.
       const entry = mockStoreState.addToHistory.mock.calls.at(-1)![0] as {
         query: string;
         routeKey: string;
@@ -1666,7 +1528,6 @@ describe('Sidebar — felt quality', () => {
       expect(entry.query).toBe('Два замка и Советская');
       expect(entry.routeKey).toContain('@');
       expect(entry.places).toHaveLength(2);
-      // Back on the planner, where the route can be refined as usual.
       expect(askField()).toBeInTheDocument();
     } finally {
       mockItineraries.items = [];

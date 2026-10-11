@@ -1,8 +1,31 @@
+# The whole product in one `docker compose up -d`: db + valhalla + agent + frontend.
+#
+# The agent runs on the compose network (it reaches `db:5432` and `valhalla:8002`
+# by service name); the frontend's nginx proxies to `agent:8080`. On a host whose
+# Docker bridge filters container→container traffic, override with
+# docker-compose.host.yml (see README §9).
+#
+# Seeding is a profile-gated one-shot so `up -d` never seeds by itself:
+#   docker compose --profile seed run --rm seed          # full restore / refresh
+#   docker compose --profile seed run --rm seed fetch     # re-acquire OSM first
+
 services:
   db:
     build:
       context: ./backend
-      dockerfile: db/Dockerfile
+      dockerfile_inline: |
+        FROM pgvector/pgvector:pg16
+        RUN apt-get update && apt-get install -y --no-install-recommends \
+              ca-certificates curl gnupg lsb-release \
+            && install -d /etc/apt/keyrings \
+            && curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+                 | gpg --dearmor -o /etc/apt/keyrings/postgresql.gpg \
+            && . /etc/os-release \
+            && echo "deb [signed-by=/etc/apt/keyrings/postgresql.gpg] http://apt.postgresql.org/pub/repos/apt $${VERSION_CODENAME}-pgdg main" \
+                 > /etc/apt/sources.list.d/pgdg.list \
+            && apt-get update \
+            && apt-get install -y --no-install-recommends postgresql-16-postgis-3 \
+            && rm -rf /var/lib/apt/lists/*
     container_name: grodno-db
     environment:
       POSTGRES_USER: grodno
@@ -10,17 +33,12 @@ services:
       POSTGRES_DB: grodno
     ports: ["5432:5432"]
     volumes:
-      - ./backend/db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
       - pgdata:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U grodno -d grodno"]
       interval: 5s
       timeout: 5s
       retries: 20
-    # Without this the database was the one service that could stay dead: the
-    # Docker daemon here kills containers with exit 255 from time to time, and
-    # the other three came back while Postgres did not — taking the agent, which
-    # waits for 5432, into a restart loop with it.
     restart: unless-stopped
 
   valhalla:
@@ -40,6 +58,29 @@ services:
       retries: 30
       start_period: 30s
 
+  agent:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: grodno-agent
+    # environment: wins over env_file, so the DSN/URL point at the compose
+    # services even though .env carries the localhost values for host runs.
+    environment:
+      DATABASE_URL: "postgresql://${POSTGRES_USER:-grodno}:${POSTGRES_PASSWORD:-grodno}@db:5432/${POSTGRES_DB:-grodno}"
+      VALHALLA_URL: "http://valhalla:8002"
+      AGENT_HOST: "0.0.0.0"
+      AGENT_PORT: "8080"
+    env_file:
+      - .env
+    ports:
+      - "8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+      valhalla:
+        condition: service_healthy
+    restart: unless-stopped
+
   frontend:
     build:
       context: ./frontend
@@ -54,58 +95,39 @@ services:
         VITE_CLIENT_ID: "${VITE_CLIENT_ID:-}"
     container_name: grodno-frontend
     environment:
-      SKIP_PREFLIGHT_CHECK: "true"
       # Rendered into nginx.conf at container start (nginx templates + envsubst).
-      # 172.17.0.1 = the Docker host: the agent runs there via uvicorn, and on
-      # some hosts container→container traffic on the compose bridge is blocked,
-      # so Valhalla is reached through its published port too.
-      # host.docker.internal = the Docker host on Linux, macOS and Windows
-      # (the extra_hosts mapping below provides it on Linux). On a host where
-      # container→container traffic is allowed, override with agent:8080 / valhalla:8002.
-      AGENT_UPSTREAM: "${AGENT_UPSTREAM:-host.docker.internal:8080}"
-      VALHALLA_UPSTREAM: "${VALHALLA_UPSTREAM:-host.docker.internal:8002}"
+      AGENT_UPSTREAM: "${AGENT_UPSTREAM:-agent:8080}"
+      VALHALLA_UPSTREAM: "${VALHALLA_UPSTREAM:-valhalla:8002}"
     ports:
       - "80:80"
     depends_on:
-      - valhalla
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+      agent:
+        condition: service_healthy
+      valhalla:
+        condition: service_healthy
     volumes:
       - ./frontend/nginx.conf:/etc/nginx/templates/default.conf.template:ro
     restart: unless-stopped
 
-  agent:
+  # One-shot seeding. Not started by `up -d`; run explicitly:
+  #   docker compose --profile seed run --rm seed [fetch|photos|prune]
+  seed:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: grodno-agent
-    # Host networking on purpose. In this sandbox containers cannot reach each
-    # other over the compose network: measured from inside grodno-agent, DNS
-    # resolved `db` to 172.18.0.4 and `valhalla` to 172.18.0.2, yet psycopg
-    # timed out after 8.4s and http://valhalla:8002 never answered — the agent
-    # hung in startup («Waiting for application startup»), never bound :8080 and
-    # the panel showed 502 for a reason that had nothing to do with the app. On
-    # the host's network the agent reaches the same localhost:5432 and
-    # localhost:8002 the host process uses (they are published ports), while the
-    # frontend still finds it on host.docker.internal:8080 (AGENT_UPSTREAM).
-    network_mode: host
-    # The single project env file — the same one the frontend and local runs use.
+    profiles: ["seed"]
+    container_name: grodno-seed
+    environment:
+      DATABASE_URL: "postgresql://${POSTGRES_USER:-grodno}:${POSTGRES_PASSWORD:-grodno}@db:5432/${POSTGRES_DB:-grodno}"
     env_file:
       - .env
-    environment:
-      AGENT_HOST: "0.0.0.0"
-      AGENT_PORT: "8080"
-    # Run the venv's python, not `uv run`: the image already synced its
-    # dependencies at build time, and `uv run` re-resolves them at every start —
-    # which needs PyPI and leaves the container in a restart loop the moment the
-    # network or DNS is down (`failed to lookup address information`). The agent
-    # then answers nothing and the panel shows 502 for a reason that has nothing
-    # to do with the app.
-    command: ["/app/.venv/bin/python", "-m", "agent.main"]
+    volumes:
+      # `fetch` and `photos` write the versioned CSVs back to the checkout.
+      - ./backend/data:/app/data
     depends_on:
-      - db
-      - valhalla
-    restart: unless-stopped
+      db:
+        condition: service_healthy
+    command: ["/app/.venv/bin/python", "-m", "db.seed"]
 
 volumes:
   pgdata:

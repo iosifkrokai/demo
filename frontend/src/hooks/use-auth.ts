@@ -1,14 +1,4 @@
-/**
- * The signed-in account (spec 005 §3–§4).
- *
- * `useAuth` is the single source of truth for «кто сейчас вошёл»: it reads
- * `GET /auth/me` and every mutation writes the result straight back into the same
- * query cache, so the account bar, the admin gate and the visited toggle all
- * agree without prop-drilling a user object.
- *
- * Anonymous is a first-class state, not an error: the agent answers
- * `{authenticated: false}` and this hook returns exactly that.
- */
+/** The signed-in account. */
 
 import {
   queryOptions,
@@ -28,17 +18,11 @@ import type { AccountApiErrorCode, AccountUser, AuthState } from '@/api/types';
 
 export const AUTH_QUERY_KEY = ['auth', 'me'] as const;
 
-/**
- * The session read as a reusable query option, so the router's `beforeLoad` guard
- * (spec 005 §5) and the `useAuth` hook share one cache entry and one request —
- * the gate does not invent a second source of truth about who is signed in.
- */
+/** Session query option shared by the router guard and `useAuth`, so they share one cache. */
 export const authQueryOptions = queryOptions<AuthState>({
   queryKey: AUTH_QUERY_KEY,
   queryFn: getAuthState,
   staleTime: 5 * 60 * 1000,
-  // A refused or unreachable probe must not block navigation on retries;
-  // «anonymous» is the safe default the guard acts on.
   retry: false,
 });
 
@@ -82,8 +66,6 @@ export function useAuth(): AuthApi {
     queryKey: AUTH_QUERY_KEY,
     queryFn: getAuthState,
     staleTime: 5 * 60 * 1000,
-    // A refused or unreachable probe must not spam retries: anonymous is a fine
-    // fallback for the three seconds it takes the user to press «войти».
     retry: false,
   });
 
@@ -110,7 +92,6 @@ function useSessionMutation<TInput>(
         authenticated: true,
         user,
       });
-      // A new identity changes what «мои» means everywhere.
       void client.invalidateQueries({ queryKey: ['visited'] });
       void client.invalidateQueries({ queryKey: ['admin'] });
     },
@@ -125,8 +106,6 @@ export function useLogout() {
   const client = useQueryClient();
   return useMutation<void, unknown, void>({
     mutationFn: logoutAccount,
-    // Even if the request fails, the browser's cookie is the user's to drop; the
-    // honest cache state after «выйти» is anonymous.
     onSettled: () => {
       client.setQueryData<AuthState>(AUTH_QUERY_KEY, ANONYMOUS);
       client.removeQueries({ queryKey: ['visited'] });

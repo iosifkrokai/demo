@@ -1,12 +1,4 @@
-/**
- * «Отметить посещённым» — the one control that writes to the tourist's visited
- * registry (spec 005 §3).
- *
- * It is deliberately honest about the anonymous case: without a session there is
- * nowhere to save, so instead of a button that fails, the card says «войдите,
- * чтобы отмечать» and links nowhere else. A signed-in tourist gets a real
- * toggle; the server side is idempotent, so pressing it twice is safe.
- */
+/** «Отметить посещённым» — the one control that writes to the tourist's visited registry. */
 
 import { Check, MapPinPlus } from 'lucide-react';
 import { toast } from 'sonner';

@@ -14,14 +14,10 @@ import { useCommonStore } from '@/stores/common-store';
 import { VisitTimeEditor } from './parts/visit-time-editor';
 
 interface Props {
-  onChanged: () => void; // called after any local mutation that needs a route refetch
+  onChanged: () => void;
 }
 
-/**
- * Which route the visit times belong to. Built from the set of stops, not their
- * order, so dragging a row around does not throw the tourist's numbers away;
- * a route rebuilt from other places gets its own saved times.
- */
+/** Which route the visit times belong to. */
 export const plannerVisitKey = (waypoints: Waypoint[]): string =>
   `planner:${waypoints
     .filter((wp) => wp.id !== ME_WAYPOINT_ID)
@@ -33,16 +29,7 @@ export const plannerVisitKey = (waypoints: Waypoint[]): string =>
 const stopTimeId = (wp: Waypoint): string =>
   wp.placeId != null ? String(wp.placeId) : wp.id;
 
-/**
- * The stops timeline: numbered circles joined by a hairline, the stop's category
- * and name, how long it is worth staying for, and — on hover — remove / pin.
- *
- * Reordering is drag (HTML5 native) with the arrow keys on the drag handle as
- * the keyboard equivalent, so nothing is mouse-only.
- *
- * Reads from useDirectionsStore; mutates via setWaypoint / doRemoveWaypoint and
- * asks the parent to refetch the route.
- */
+/** Stops timeline: numbered circles, category, name, suggested stay, remove/pin on hover. */
 export const WaypointList = ({ onChanged }: Props) => {
   const { t } = useTranslation();
   const waypoints = useDirectionsStore((s) => s.waypoints);
@@ -81,8 +68,6 @@ export const WaypointList = ({ onChanged }: Props) => {
   };
 
   const remove = (i: number) => {
-    // A stop deleted by hand is remembered: a later refinement («добавь ещё
-    // кофейню») must not quietly put the same place back on the route.
     const placeId = waypoints[i]?.placeId;
     doRemoveWaypoint({ index: i });
     if (placeId != null) excludeStops({ placeIds: [placeId] });
@@ -90,11 +75,7 @@ export const WaypointList = ({ onChanged }: Props) => {
     refetch();
   };
 
-  /**
-   * Pin a stop so the next refinement keeps it: `pinned` is what the sidebar
-   * sends in `context.base_points`. Only the flag changes — the line on the map
-   * does not, so there is nothing to refetch.
-   */
+  /** Pin a stop so refinement keeps it (`pinned` → `context.base_points`). */
   const togglePin = (i: number) => {
     setWaypoint(
       waypoints.map((wp, idx) =>
@@ -117,8 +98,6 @@ export const WaypointList = ({ onChanged }: Props) => {
   return (
     <ol className="flex flex-col">
       {waypoints.map((wp, i) => {
-        // "my location" is the start, not a stop: it takes no number, so the
-        // tourist's stops stay numbered 1..N exactly as on the map.
         const isMe = wp.id === ME_WAYPOINT_ID;
         const stopNumber =
           waypoints.slice(0, i).filter((w) => w.id !== ME_WAYPOINT_ID).length +
@@ -130,8 +109,6 @@ export const WaypointList = ({ onChanged }: Props) => {
         const name = nameOf(wp);
         const details =
           wp.placeId != null ? placeDetails[wp.placeId] : undefined;
-        // The dataset's estimate is only a hint: the editor shows it with a
-        // «≈», and the tourist's own number takes over the moment they set it.
         const timeId = stopTimeId(wp);
         const estimate = details?.visitMinutes ?? null;
         const effective = effectiveMinutesFor(timeId, estimate);
@@ -159,16 +136,6 @@ export const WaypointList = ({ onChanged }: Props) => {
             }}
             className={cn(
               'group flex min-h-[52px] flex-wrap items-center gap-2 gap-y-1.5 rounded-xl px-1.5 transition-colors hover:bg-muted',
-              // A phone cannot fit six controls — grip, number, icon, name,
-              // visit time, pin, remove — so `flex-wrap` broke the row across
-              // up to four lines and the tail dropped below: measured on
-              // 390x844 a row came out 152px tall instead of 52px, which is the
-              // «text stretches down» report, and six stops needed 539px of a
-              // 760px sheet. On a phone the row is a grid of one line instead:
-              // the category emoji is dropped (the stop number already orders
-              // the route) and the name truncates rather than wrapping, so what
-              // is left fits and every control keeps its own column. From md up
-              // it stays the single flex row it has always been.
               'max-md:grid max-md:grid-cols-[2.5rem_1.25rem_minmax(0,1fr)_auto_auto] max-md:gap-x-1.5 max-md:flex-nowrap',
               isDragging && 'opacity-40',
               isDragTarget && 'bg-muted ring-1 ring-primary/40'
@@ -192,7 +159,6 @@ export const WaypointList = ({ onChanged }: Props) => {
               <GripVertical className="h-4 w-4" aria-hidden="true" />
             </button>
 
-            {/* The number column carries the 1px timeline rule between rows. */}
             <div className="relative flex w-6 shrink-0 self-stretch items-center justify-center max-md:col-start-2 max-md:row-start-1 max-md:w-5 max-md:self-center">
               {!isLast && (
                 <span
@@ -216,16 +182,8 @@ export const WaypointList = ({ onChanged }: Props) => {
               )}
             </div>
 
-            <PlaceIcon
-              category={details?.category}
-              // Dropped on a phone: as its own grid cell it stole a column from
-              // a name that has ~150px, and the stop number already says where
-              // the stop is in the route. The emoji is decorative anyway.
-              className="max-md:hidden"
-            />
+            <PlaceIcon category={details?.category} className="max-md:hidden" />
 
-            {/* Tapping the name looks at the place on the map: picking a stop
-                in the panel and then hunting for it on the map was the gap. */}
             <button
               type="button"
               onClick={() => {
@@ -236,18 +194,6 @@ export const WaypointList = ({ onChanged }: Props) => {
                   selected?.sourcelnglat ?? selected?.displaylnglat;
                 if (lngLat) focusOn(lngLat[0], lngLat[1]);
               }}
-              // The name is a button whose text is only 22px tall inside a 52px
-              // row, so a finger has to land on the letters themselves — and the
-              // whole point of the name being a button is to look at the place
-              // on the map. On a phone the button therefore fills the row's
-              // height (`self-stretch`) with the line centred in it, which makes
-              // the target the full 52px. Truncation keeps it on one line, so
-              // the taller button does not make the row taller.
-              //
-              // An earlier attempt used a pseudo-element stretched by `inset-y-0`;
-              // that resolves against the *button's* box, not the row's, so it
-              // widened the target by 4px sideways and left the height at 22px —
-              // measured, and the comment claimed otherwise.
               className="min-w-0 flex-1 break-words text-left text-body transition-colors hover:text-primary max-md:col-start-3 max-md:row-start-1 max-md:flex-none max-md:self-stretch max-md:truncate max-md:break-normal max-md:flex max-md:items-center max-md:py-0"
               title={name}
               data-testid={`focus-place-${wp.id}`}
@@ -265,7 +211,6 @@ export const WaypointList = ({ onChanged }: Props) => {
               />
             )}
 
-            {/* Always reachable on touch (no hover), revealed on hover on desktop. */}
             <div className="flex shrink-0 items-center gap-0.5 transition-opacity max-md:col-start-5 max-md:row-start-1 max-md:self-center max-md:gap-0 md:opacity-0 md:group-focus-within:opacity-100 md:group-hover:opacity-100">
               <button
                 type="button"

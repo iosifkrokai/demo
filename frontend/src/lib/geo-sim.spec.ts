@@ -45,7 +45,6 @@ describe('readSimOptions', () => {
     expect(readSimOptions('?sim=walk&sim-speed=abc').speed).toBe(1);
     expect(readSimOptions('?sim=walk&sim-speed=-4').speed).toBe(1);
     expect(readSimOptions('?sim=walk&sim-speed=0').speed).toBe(1);
-    // A runaway multiplier would make the walk untestable rather than fast.
     expect(readSimOptions('?sim=walk&sim-speed=9999').speed).toBe(200);
   });
 });
@@ -83,8 +82,6 @@ describe('the walk', () => {
     const at = () => currentFix()!;
     const before = metres(at().lat, at().lon, START[0], START[1]);
 
-    // 20 × 1.4 m/s = 28 m a tick; the leg is ~1.1 km, so 45 ticks is the whole
-    // walk and then some — the last ones must not wander past the final stop.
     for (let i = 0; i < 60; i += 1) tick();
 
     const end = at();
@@ -92,17 +89,11 @@ describe('the walk', () => {
     expect(metres(end.lat, end.lon, START[0], START[1])).toBeGreaterThan(
       before
     );
-    // Every tick reached the subscriber: the panel would have seen a tourist
-    // standing still otherwise.
     expect(seen.length).toBeGreaterThanOrEqual(58);
     expect(seen[seen.length - 1]!.lat).toBeCloseTo(end.lat, 6);
   });
 
   it('стоит в центре Гродно, пока маршрута ещё нет', () => {
-    // Панель спрашивает позицию до того, как появится маршрут, и берёт из неё
-    // точку старта запроса. Молчание тут однажды стоило целого прогона:
-    // бэкенд отвечал «нет маршрута с ≥ 2 остановками», и проводник был
-    // недостижим.
     installGeoSim('?sim=walk');
 
     const fix = currentFix();
@@ -113,8 +104,6 @@ describe('the walk', () => {
   });
 
   it('стоит на месте, пока маршрута нет', () => {
-    // Положение уже отдаётся (панель берёт из него точку старта запроса), но
-    // турист по нему не идёт: пока нет маршрута, двигаться некуда.
     installGeoSim('?sim=walk');
     const onFix = vi.fn();
     window.navigator.geolocation.watchPosition(onFix);

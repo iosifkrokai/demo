@@ -3,8 +3,6 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { PlaceCardPopup } from './place-card-popup';
 import type { PlaceDetails } from '@/stores/directions-store';
 
-// The «посещено» toggle (spec 005) has its own spec; mocked so a layout test needs
-// no QueryClient, and anonymous, which is what the hint renders for.
 vi.mock('@/hooks/use-auth', () => ({
   useAuth: () => ({
     user: null,

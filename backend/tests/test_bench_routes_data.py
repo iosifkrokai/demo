@@ -1,10 +1,6 @@
 """Schema and provenance checks for the route-benchmark reference set.
 
-The benchmark is only as honest as its reference walks: a case with no source, or with a
-coordinate that does not exist in our DB, silently turns every quality number into noise. These
-tests pin the shape, the provenance fields, the region and the DB cross-check.
-
-Run: backend/.venv/bin/python -m pytest -q tests/test_bench_routes_data.py
+A case with no source or a coordinate absent from our DB turns every number into noise.
 """
 
 from __future__ import annotations
@@ -14,10 +10,8 @@ from pathlib import Path
 
 import pytest
 
-ROUTES_DIR = Path(__file__).resolve().parents[1] / "benchmarks" / "routes"
+ROUTES_DIR = Path(__file__).resolve().parents[1] / "quality" / "cases" / "routes"
 
-# The three walks that predate the benchmark_meta convention. They are grandfathered
-# deliberately: anything new must carry provenance.
 LEGACY = {"grodno_old_town.json", "mir.json", "novogrudok.json"}
 
 REGION = {"south": 52.75, "west": 23.35, "north": 54.80, "east": 27.00}
@@ -67,7 +61,9 @@ def test_every_stop_is_located_graded_and_sourced(name: str, case: dict):
     for stop in case["stops"]:
         label = f"{name} :: {stop.get('name')}"
         lat, lon = stop.get("lat"), stop.get("lon")
-        assert isinstance(lat, (int, float)) and isinstance(lon, (int, float)), f"{label}: coordinates"
+        assert isinstance(lat, (int, float)) and isinstance(lon, (int, float)), (
+            f"{label}: coordinates"
+        )
         assert REGION["south"] <= lat <= REGION["north"], f"{label}: lat {lat} outside the region"
         assert REGION["west"] <= lon <= REGION["east"], f"{label}: lon {lon} outside the region"
         assert stop.get("grade") in GRADES, f"{label}: grade {stop.get('grade')!r}"
@@ -92,7 +88,7 @@ def test_place_ids_exist_in_the_database_when_it_is_reachable():
     try:
         import psycopg
 
-        from agent.config import settings
+        from core.config import settings
 
         with psycopg.connect(settings.DSN, connect_timeout=3) as conn:
             found = {
@@ -109,12 +105,15 @@ def test_place_ids_exist_in_the_database_when_it_is_reachable():
 
 
 def test_coordinates_agree_with_the_database_rows():
-    """A stop with a place_id must sit on that row (within 250 m), unless the case says otherwise."""
+    """A stop with a place_id must sit on that row (within 250 m).
+
+    Cases that say otherwise in their own notes are exempt.
+    """
     checked = skipped = 0
     try:
         import psycopg
 
-        from agent.config import settings
+        from core.config import settings
 
         conn = psycopg.connect(settings.DSN, connect_timeout=3)
     except Exception as exc:
@@ -125,8 +124,6 @@ def test_coordinates_agree_with_the_database_rows():
             case_note = case.get("coords_note") or ""
             for stop in case["stops"]:
                 pid = stop.get("place_id")
-                # A stop whose coordinate deliberately comes from the OSM object instead of the
-                # (wrong) curated DB row is exempt — the case documents it.
                 stop_note = stop.get("note") or ""
                 if "OSM-объект" in stop_note or (case_note and stop["name"] in case_note):
                     skipped += 1

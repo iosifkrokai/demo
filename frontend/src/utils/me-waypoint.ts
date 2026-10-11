@@ -6,13 +6,7 @@ interface LngLat {
   1: number;
 }
 
-/**
- * The tourist's own position as waypoint 0.
- *
- * Shared by the two entry points that can learn the position — the panel's own
- * button and the map's locate control — so both fill the same waypoint rather
- * than each keeping its own copy of "where I am".
- */
+/** The tourist's own position as waypoint 0. */
 export const meWaypoint = (
   lat: number,
   lon: number,

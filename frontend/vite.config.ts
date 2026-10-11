@@ -14,7 +14,6 @@ function getBaseUrl() {
   };
   if (!homepage) return '/';
 
-  // If it's a full URL, extract just the pathname
   if (homepage.startsWith('http')) {
     const url = new URL(homepage);
     return url.pathname === '/' ? '/' : url.pathname.replace(/\/$/, '') + '/';

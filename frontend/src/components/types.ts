@@ -11,18 +11,10 @@ export interface ActiveWaypoint {
   addressindex: number;
 }
 
-/**
- * Result type sent as `result_mode` to POST /routes/generate (spec 002):
- * `route` is a ready itinerary, `catalogue` a grouped list the tourist picks
- * a route from.
- */
+/** `result_mode` for /routes/generate: `route` a ready itinerary, `catalogue` grouped. */
 export type ResultMode = 'route' | 'catalogue';
 
-/**
- * How strongly an amenity is wanted. `hard` amenities go out as
- * `hard_services` (the route must serve them or report the requirement unmet);
- * `soft` ones join `interests` and are offered only if they fit the route.
- */
+/** How strongly an amenity is wanted. */
 export type AmenityStrength = 'hard' | 'soft';
 
 export type ActiveWaypoints = ActiveWaypoint[];
@@ -114,17 +106,9 @@ export interface ParsedDirectionsGeometry {
   id: string;
   decodedGeometry: number[][];
   alternates?: ValhallaRouteResponse[];
-  /**
-   * Which line is on screen (spec 002 — one route source). `agent` means the
-   * geometry came from the verified backend plan; `client` means this app asked
-   * Valhalla itself, which only happens for a hand-built route. Set by
-   * `use-directions-queries`, read by the map's provenance chip.
-   */
+  /** Which line is on screen. */
   source?: 'agent' | 'client';
-  /**
-   * False when an agent plan exists but carries no usable geometry: the map
-   * must say so instead of substituting a client-side line.
-   */
+  /** False when an agent plan has no usable geometry: the map says so, no substitution. */
   hasVerifiedLine?: boolean;
 }
 
@@ -147,11 +131,7 @@ export interface Location {
   original_index: number;
 }
 
-/**
- * One maneuver as the guide UI consumes it: Valhalla's own maneuver `type` (the
- * banner icon is drawn from it — Ferrostar reports written instructions, not type
- * numbers) plus the position of the maneuver along the decoded line, in metres.
- */
+/** One maneuver for the guide UI: Valhalla `type` (drives the icon) and position in metres. */
 export interface GuideManeuver {
   key: string;
   type: number;
@@ -309,11 +289,7 @@ export interface AgentBudget {
 /** What the planner managed with the request — or that it is still working. */
 export type RoutePlanStatus = 'ready' | 'degraded' | 'infeasible' | 'pending';
 
-/**
- * Why a requirement went unmet. The codes are the backend's own; each has a
- * label under `sidebar.status.reason.*` so the panel can say the reason in the
- * interface language instead of printing a code.
- */
+/** Why a requirement went unmet. */
 export type PlanRequirementReason =
   | 'must_visit_on_route'
   | 'must_visit_absent'
@@ -342,11 +318,7 @@ export interface PlanRequirement {
   place_ids: number[];
 }
 
-/**
- * The agent's own account of the plan: which requirements it honoured, which
- * it could not, and what it did not understand. The panel shows this verbatim
- * (names included) — guessing would be a second, worse answer.
- */
+/** The agent's account of the plan: requirements honoured, missed, or not understood. */
 export interface PlanInterpretation {
   status: RoutePlanStatus;
   requirements: PlanRequirement[];
@@ -354,11 +326,7 @@ export interface PlanInterpretation {
   unknowns: string[];
 }
 
-/**
- * POST /routes/generate — either a ready plan or the honest reason there is
- * none. `status`/`interpretation` travel with every answer; the client reads
- * them so the panel can say what went wrong instead of showing an empty route.
- */
+/** POST /routes/generate — either a ready plan or the honest reason there is none. */
 export interface AgentRouteResponse {
   points?: AgentPoint[];
   budget?: AgentBudget;

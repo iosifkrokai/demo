@@ -81,7 +81,6 @@ describe('convertDDToDMS', () => {
   });
 
   it('should handle floating point precision issues', () => {
-    // Test cases that might be affected by floating point precision
     expect(convertDDToDMS(45.123456789123)).toBe('45° 7\' 24"');
     expect(convertDDToDMS(23.456789012345)).toBe('23° 27\' 24"');
   });
@@ -92,8 +91,6 @@ describe('convertDDToDMS', () => {
   });
 
   it('should demonstrate the rounding behavior at degree boundaries', () => {
-    // Values very close to full degrees get rounded to 0 minutes/seconds
-    // due to the +1e-4 rounding in the implementation
     expect(convertDDToDMS(45.9999)).toBe('45° 0\' 0"');
     expect(convertDDToDMS(359.9999)).toBe('359° 0\' 0"');
     expect(convertDDToDMS(-359.9999)).toBe('-359° 0\' 0"');

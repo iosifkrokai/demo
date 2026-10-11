@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { describeAccountError } from '@/hooks/use-auth';
+import { useDebouncedValue } from '@/hooks/use-debounced-value';
 import {
   useAdminPlaces,
   useCreatePlace,
@@ -22,17 +23,7 @@ import {
   type EditableFields,
 } from './place-fields';
 
-/**
- * The places half of the admin panel (spec 005 §3).
- *
- * List and map are two windows on the same page, side by side and always both
- * visible: clicking a row points the map at it, clicking a pin highlights its
- * row. «изменить» makes that pin draggable — dragging rewrites the coordinate
- * fields, and «сохранить» PATCHes them like any other field.
- *
- * Editing a place changes the same row the map, the «все точки» tab and the
- * planner read; there is no separate admin copy.
- */
+/** The places half of the admin panel. */
 
 const fieldLabel = 'flex flex-col gap-1 text-meta font-medium';
 
@@ -47,7 +38,9 @@ const finiteOr = (raw: string, fallback: number): number => {
 export function PlacesPanel({ enabled }: { enabled: boolean }) {
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('');
-  const places = useAdminPlaces(enabled, query, category);
+  const debouncedQuery = useDebouncedValue(query);
+  const debouncedCategory = useDebouncedValue(category);
+  const places = useAdminPlaces(enabled, debouncedQuery, debouncedCategory);
   const updatePlace = useUpdatePlace();
   const deletePlace = useDeletePlace();
   const createPlace = useCreatePlace();
@@ -60,7 +53,6 @@ export function PlacesPanel({ enabled }: { enabled: boolean }) {
   const editing = editingId != null && draft != null;
   const selected = places.items.find((p) => p.place_id === selectedId) ?? null;
 
-  // A pin clicked on the map is off-screen in a long list more often than not.
   useEffect(() => {
     if (selectedId == null) return;
     document
@@ -156,8 +148,28 @@ export function PlacesPanel({ enabled }: { enabled: boolean }) {
           />
         )}
 
-        {places.isLoading && (
+        {places.isLoading && !places.error && (
           <p className="text-meta text-muted-foreground">загружаю…</p>
+        )}
+
+        {places.error && (
+          <div
+            data-testid="admin-places-error"
+            className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-destructive/40 bg-card px-3 py-2"
+          >
+            <span className="text-meta text-muted-foreground">
+              {describeAccountError(places.error)}
+            </span>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              data-testid="admin-places-retry"
+              onClick={() => void places.refetch()}
+            >
+              повторить
+            </Button>
+          </div>
         )}
 
         <ul className="flex flex-col gap-2">
@@ -283,9 +295,6 @@ export function PlacesPanel({ enabled }: { enabled: boolean }) {
                 </div>
               ) : (
                 <div className="flex items-start justify-between gap-2">
-                  {/* The name is the list's half of the two-way link: clicking it
-                      points the map at this place. A real button, so it is also
-                      reachable by keyboard. */}
                   <button
                     type="button"
                     onClick={() => setSelectedId(place.place_id)}
@@ -342,7 +351,7 @@ export function PlacesPanel({ enabled }: { enabled: boolean }) {
           ))}
         </ul>
 
-        {!places.isLoading && places.items.length === 0 && (
+        {!places.isLoading && !places.error && places.items.length === 0 && (
           <p className="text-meta text-muted-foreground">ничего не найдено</p>
         )}
       </div>

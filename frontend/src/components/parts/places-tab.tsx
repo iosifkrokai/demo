@@ -16,20 +16,11 @@ interface PlacesTabProps {
   onReload?: () => void;
 }
 
-/** Fold ё→е and lower-case, so «костёл»/«костел» match the same way the backend
- * does — the search is a browse aid, not a second, divergent matcher. */
+/** Fold ё→е and lower-case so «костёл»/«костел» match the way the backend does. */
 const fold = (text: string): string =>
   text.trim().toLowerCase().replace(/ё/g, 'е');
 
-/**
- * «Все точки» — the whole catalogue, browsable.
- *
- * The map already draws every point; this tab is the list beside it. It is
- * grouped by category and collapsible, because the dataset is ~2.5k rows and a
- * flat list is a wall. A row only flies the map to the point (`focusOn`) — the
- * card opens from the map marker itself, so the list and the map stay one screen
- * rather than two competing popups.
- */
+/** «Все точки» — the whole catalogue, browsable. */
 export function PlacesTab({
   places,
   total,

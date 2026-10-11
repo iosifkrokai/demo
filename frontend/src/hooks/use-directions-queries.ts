@@ -29,17 +29,6 @@ import { router } from '@/routes';
 const getActiveWaypoints = (waypoints: Waypoint[]): ActiveWaypoint[] =>
   waypoints.flatMap((wp) => wp.geocodeResults.filter((r) => r.selected));
 
-// ── Agent route hand-over (spec 002 §7: one route, one source) ──────────────
-//
-// The backend answers POST /routes/generate with the plan it verified: ordered
-// `points`, a GeoJSON `shape` and the `summary` of exactly that line. Before
-// this, the map threw that geometry away and asked Valhalla for a second one —
-// which can disagree with the stops the backend verified.
-//
-// Whoever performs the request hands the verified line over here (the sidebar
-// does, right after /routes/generate: `setAgentRoute({ shape, summary, costing })`).
-// The map then draws that line and nothing else.
-
 export interface AgentRoute {
   /** `shape` from the agent: `{ type: 'LineString', coordinates: [[lat, lon], …] }`. */
   shape?: { type?: string; coordinates?: number[][] } | null;
@@ -60,15 +49,12 @@ const activeStopCoordinates = (): [number, number][] =>
     (a) => a.displaylnglat
   );
 
-/**
- * Hand the agent's verified line over to the map, or `null` to clear it (a
- * reset, an undo, a hand-built route).
- */
+/** Publish the agent's verified line to the map, or `null` to clear it. */
 export function setAgentRoute(route: AgentRoute | null) {
   agentRoute = route ? { ...route, stops: activeStopCoordinates() } : null;
 }
 
-/** The agent line, but only while the stops on screen are still the ones it was verified for. */
+/** The agent line, but only while the on-screen stops match those it was verified for. */
 const verifiedAgentRoute = (
   activeWaypoints: ActiveWaypoint[]
 ): AgentRoute | null => {
@@ -102,18 +88,13 @@ const boundsOf = (coordinates: number[][]) => {
   return bounds;
 };
 
-/**
- * The agent's verified line as a route result. `hasVerifiedLine` is false when
- * the agent could not draw one — the stops still show, the line does not, and
- * nothing is substituted for it.
- */
+/** The agent's verified line as a route result. */
 function buildAgentRoute(route: AgentRoute): ProvenancedRoute {
   const decodedGeometry = agentCoordinates(route);
   const hasGeometry = decodedGeometry.length > 1;
 
   return {
     id: 'agent_route',
-    // The agent answers with one ordered line, not alternatives.
     trip: {
       locations: [],
       legs: [],
@@ -123,8 +104,6 @@ function buildAgentRoute(route: AgentRoute): ProvenancedRoute {
         has_toll: false,
         has_highway: false,
         has_ferry: false,
-        // The summary of the line that is on screen, in the units the rest of
-        // the app expects: kilometres and seconds.
         length: route.summary?.length_km ?? 0,
         time: route.summary?.time_seconds ?? 0,
         cost: 0,
@@ -182,11 +161,6 @@ async function requestRoute(
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
 
-    // A plan across a whole region is tens of stops and hundreds of kilometres:
-    // walking costing refuses it ("Path distance exceeds the max distance limit",
-    // error 154) and the stops would sit on the map with no line. When the route
-    // is simply too long for the current profile, draw it for a car instead of
-    // showing nothing.
     const tooLongForProfile = errorData.error_code === 154;
     const isDriving = valhallaRequest.json.costing === 'auto';
     if (tooLongForProfile && !isDriving) {
@@ -209,7 +183,6 @@ async function requestRoute(
       let errorMsg =
         retried.error || errorData.error || 'Could not fetch resource';
 
-      // Append context for route-specific error
       if (retried.error_code === 154) {
         errorMsg += ` for route.`;
       }
@@ -220,11 +193,9 @@ async function requestRoute(
 
   const data: ValhallaRouteResponse = await response.json();
 
-  // Parse geometry for main route
   (data as ParsedDirectionsGeometry).decodedGeometry =
     parseDirectionsGeometry(data);
 
-  // Parse geometry for alternates
   data.alternates?.forEach((alternate, i) => {
     if (alternate) {
       (data.alternates![i] as ParsedDirectionsGeometry).decodedGeometry =
@@ -237,16 +208,7 @@ async function requestRoute(
   return data as ParsedDirectionsGeometry;
 }
 
-/**
- * Draw the route for an arbitrary number of stops. Valhalla caps a single
- * request at 20 locations, so a longer list (a region-wide plan from the agent)
- * is fetched as chained chunks and merged into one response — otherwise the
- * stops would appear on the map with no line between them.
- *
- * That chunking is a client-side concern and applies to routes the tourist
- * builds by hand. An agent route is not re-routed here at all: the line the
- * backend verified is the line that gets drawn.
- */
+/** Draw the route for an arbitrary number of stops. */
 async function fetchDirections() {
   const waypoints = useDirectionsStore.getState().waypoints;
   const profile = router.state.location.search.profile;
@@ -257,9 +219,6 @@ async function fetchDirections() {
     return null;
   }
 
-  // The verified agent line wins, whenever one was handed over for exactly
-  // these stops. No second geometry, no second costing, no disagreement with
-  // the plan the backend checked.
   const agentRoute = verifiedAgentRoute(activeWaypoints);
   if (agentRoute) {
     const agentResult = buildAgentRoute(agentRoute);
@@ -278,8 +237,6 @@ async function fetchDirections() {
   const currentProfile = (profile || 'bicycle') as Profile;
   const chunks = chunkWaypoints(activeWaypoints);
 
-  // One merged response with the first chunk's metadata: everything downstream
-  // (route features, summary strip, zoom-to-route) keeps working unchanged.
   const mergeParts = (parts: ParsedDirectionsGeometry[]) => {
     const legs: { shape: string }[] = [];
     const decodedGeometry: number[][] = [];
@@ -291,8 +248,6 @@ async function fetchDirections() {
       length += part.trip.summary.length;
       time += part.trip.summary.time;
     }
-    // The merged summary is the sum of the legs that were actually fetched, so
-    // it describes the line on screen — including any leg Valhalla refused.
     return {
       ...parts[0],
       trip: {
@@ -319,11 +274,6 @@ async function fetchDirections() {
         )
       );
     } catch (error) {
-      // A single stop can sit on an edge island — a fort in a field, a gated
-      // courtyard — and Valhalla then answers 499 ("Could not find candidate
-      // edge used for destination label") for the WHOLE request, so the map
-      // loses the line entirely. Walking the stops pairwise keeps every leg
-      // that does route; the unreachable one simply leaves a gap.
       const legs: ParsedDirectionsGeometry[] = [];
       for (let i = 0; i < activeWaypoints.length - 1; i++) {
         try {
@@ -336,9 +286,7 @@ async function fetchDirections() {
               language
             )
           );
-        } catch {
-          // unreachable on foot: skip this leg, keep the rest of the route
-        }
+        } catch {}
       }
       if (!legs.length) throw error;
       return mergeParts(legs);
@@ -371,8 +319,6 @@ export function useDirectionsQuery() {
         const data = await fetchDirections();
         if (data) {
           receiveRouteResults({ data });
-          // Nothing to fit the bounds to when the agent route carries no line:
-          // leave the map where the tourist put it, with the stops on it.
           if (hasUsableLine(data)) {
             zoomTo(data.decodedGeometry);
           }
@@ -416,7 +362,6 @@ export function useSetWaypointFromCoords() {
     index: number,
     options?: { isPermalink?: boolean }
   ) => {
-    // For permalink loading, add waypoint if needed
     if (options?.isPermalink) {
       const waypointCount = useDirectionsStore.getState().waypoints.length;
       const missingWaypoints = index + 1 - waypointCount;
@@ -426,7 +371,6 @@ export function useSetWaypointFromCoords() {
       }
     }
 
-    // Set placeholder immediately
     updatePlaceholderAddressAtIndex(index, lng, lat);
 
     const lngLat: [number, number] = [lng, lat];

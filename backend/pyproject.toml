@@ -1,9 +1,3 @@
-# ─────────────────────────────────────────────────────────────────────────────
-# pyproject.toml — single source of truth for the agent project.
-# Replaces requirements.txt + a separate dev-requirements file.
-# Use `uv sync` to install everything; `uv sync --no-dev` for prod-only.
-# ─────────────────────────────────────────────────────────────────────────────
-
 [project]
 name = "grodno-agent"
 version = "0.2.0"
@@ -11,228 +5,136 @@ description = "Free-text → pedestrian walking route planner for Grodno"
 requires-python = ">=3.12,<3.13"
 license = { text = "MIT" }
 
-# ── Runtime dependencies ──
-# Listed in dependency order: web framework, db, http, ML, types.
 dependencies = [
-    # Web framework
     "fastapi>=0.110",
-    "uvicorn>=0.27",                # base — extras are dev-only
-    # Database
-    "psycopg[binary]>=3.2",         # [binary] ships libpq for the Docker image
-    # HTTP client
+    "uvicorn>=0.27",
+    "psycopg[binary]>=3.2",
     "httpx>=0.27",
-    # Validation
     "pydantic>=2.7",
-    # Agent framework — bounded tool-using interpretation layer (spec 002 §4.2).
-    # slim + the openrouter extra (the provider is built on the openai SDK);
-    # nothing else is pulled in. Without it the agent path degrades to the
-    # deterministic reading instead of failing, so the pin can be conservative.
     "pydantic-ai-slim[openrouter]>=1.0,<2",
-    # ML — embeddings + cross-encoder rerank
-    "numpy>=1.26",                  # MMR diversity step
-    # Observability — traces into a self-hosted Langfuse (see docker-compose.yml
-    # `observability` profile). Optional: when no key is configured the exporter
-    # is a no-op and the agent still answers.
+    "fastembed>=0.9.0",
+    "numpy>=1.26",
     "langfuse>=3.0",
-]
-
-[project.optional-dependencies]
-# Scripts in scripts/ — separate from runtime because the agent container
-# doesn't need bs4/requests, but the one-shot ingest pipeline does.
-scripts = [
-    "requests>=2.31",
-    "beautifulsoup4>=4.12",
+    "alembic>=1.13",
 ]
 
 [project.urls]
 Repository = "https://github.com/kioharu/grodno-agent"
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Build system
-# ─────────────────────────────────────────────────────────────────────────────
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["agent"]
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Dev dependencies — `uv sync` installs these by default.
-# `uv sync --no-dev` (or `uv sync --no-group dev`) skips them.
-# ─────────────────────────────────────────────────────────────────────────────
+packages = ["agent", "api", "core", "db", "embeddings", "planner", "reference", "telemetry"]
 
 [dependency-groups]
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
-    "httpx>=0.27",                  # TestClient
+    "httpx>=0.27",
     "ruff>=0.6",
     "pyright>=1.1",
-    # The suite imports the one-shot scripts (e.g. tests/test_seed_geofence.py
-    # imports scripts/parse_places.py), and those need the `scripts` extra. A
-    # plain `uv sync` must be able to collect the whole suite, so the extra's
-    # runtime deps belong here too.
-    "requests>=2.31",
-    "beautifulsoup4>=4.12",
 ]
 
-# ─────────────────────────────────────────────────────────────────────────────
-# uv — constraints on transitive dependencies
-# ─────────────────────────────────────────────────────────────────────────────
-
 [tool.uv]
-# genai-prices 0.1.0 started reporting `output_reasoning_tokens`, a field
-# pydantic-ai 1.107's RequestUsage does not accept. Its extract() builds the
-# usage object as RequestUsage(**extracted), so the extra field raised on every
-# provider candidate — and pydantic-ai swallows that per candidate and returns
-# an empty usage. Every model call then reported 0 tokens, which is worse than
-# no number at all: the trace claims the call was free. 0.0.73 is the newest
-# release that reports only what pydantic-ai understands. Revisit when the
-# pydantic-ai pin moves to 2.x, where RequestUsage accepts the field.
 constraint-dependencies = ["genai-prices<0.1"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Ruff — linting + formatting
-# ─────────────────────────────────────────────────────────────────────────────
 
 [tool.ruff]
 target-version = "py312"
 line-length = 100
 extend-exclude = [
     ".venv",
-    ".legacy_backup",
-    "web-app",
-    "scripts/_legacy",
     "build",
     "dist",
 ]
 
 [tool.ruff.lint]
-# Strict-but-pragmatic rule set. Warns on real bugs, ignores stylistic noise.
 select = [
-    "E",      # pycodestyle errors
-    "W",      # pycodestyle warnings
-    "F",      # pyflakes — unused imports/vars, undefined names
-    "I",      # isort — import ordering
-    "B",      # bugbear — common pitfalls
-    "C4",     # flake8-comprehensions
-    "UP",     # pyupgrade — modern syntax
-    "SIM",    # flake8-simplify
-    "PIE",    # flake8-pie
-    "RUF",    # ruff-specific lints
-    "N",      # pep8-naming
-    "ARG",    # unused arguments
-    "PL",     # pylint — useful subset
+    "E",
+    "W",
+    "F",
+    "I",
+    "B",
+    "C4",
+    "UP",
+    "SIM",
+    "PIE",
+    "RUF",
+    "N",
+    "ARG",
+    "PL",
 ]
 ignore = [
-    "E501",   # line length — handled by formatter
-    "B008",   # function call in default argument (FastAPI Depends pattern)
-    "PLR0913",# too many arguments — pipeline.py needs them
-    "PLR2004",# magic values — used in routing heuristics
-    "N806",   # mixedCase variable in function — fine for math
-    "ARG002", # unused method argument — common in protocols
-    "ARG004", # unused static method argument
-    # The product's own language is Russian: every Cyrillic «у»/«о»/«е»/«к»
-    # that resembles a Latin letter trips the ambiguous-unicode rules. A Russian
-    # string is *supposed* to contain Cyrillic, so these are noise, not findings
-    # (they were 324 of 574 "errors" on a clean tree).
+    # The product speaks Russian: Cyrillic in a string is the point, not a defect.
     "RUF001", "RUF002", "RUF003",
-    # Local imports are deliberate: the interpretation SDK (pydantic_ai) is
-    # imported only when a reading is actually attempted, and tests import the
-    # symbol under test next to its use.
-    "PLC0415",
-    # ── Deliberate style, not defects ──────────────────────────────────────
-    # Complexity thresholds: the planner's stages are dense by nature
-    # (pipeline / optimize / bench_routes) and splitting them for a line count
-    # would not make them easier to follow.
-    "PLR0911", "PLR0912", "PLR0915", "PLR0917",
-    # Domain exception names read better without an "Error" suffix
-    # (StorageUnavailable, TooManyRoutes).
-    "N818",
-    # Unused arguments in protocols, fakes and fixed-signature callbacks.
-    "ARG001",
-    # zip(strict=) / pairwise preferences: the lengths are equal by construction
-    # at these call sites, so the explicit flag is ceremony rather than a check.
-    "B905", "RUF007",
-    # Micro-style preferences this project does not enforce: list concatenation
-    # vs unpacking, int() on an already-int value, next() vs [0], reusing a loop
-    # variable name, merging/normalising small if/with/try blocks.
-    "RUF005", "RUF015", "RUF046", "PLW2901",
-    "SIM102", "SIM105", "SIM108", "SIM117", "PLR1714", "PLC0206",
-    # A lambda assigned to a local name is the clearest form for the tiny
-    # distance predicates in pipeline._geo_focus.
-    "E731",
+    # FastAPI requires a call in the default (Depends(...)): the framework's idiom.
+    "B008",
+
+    # --- deferred, counted on 2026-10-11 --------------------------------------
+    # These are not "rules we would rather not have"; each is a campaign of its
+    # own, and the count is here so the debt is visible in one place instead of
+    # implied by an absent rule. Removing an entry means doing that campaign.
+    "PLC0415", # 92  imports inside functions — most exist to break a real cycle
+    "PLR2004", # 87  magic values — mostly "a route needs at least two stops"
+    "PLR0913", # 42  too many arguments
+    "PLR0917", # 14  too many positional arguments
+    "ARG001",  # 11  unused function argument: parameters a refactor left behind
+    "N818",    # 9   exception names without an `Error` suffix
+    "PLR0912", # 8   too many branches
+    "PLR0915", # 8   too many statements
+    "PLR0911", # 4   too many return statements
+    "ARG002",  # 3   unused method argument
 ]
 
 [tool.ruff.lint.per-file-ignores]
-# Tests can have long lines, magic numbers, unused fixtures, mutable test
-# doubles and dictionary walks written for readability.
 "tests/**/*.py" = ["E501", "PLR2004", "ARG", "RUF012"]
-"scripts/**/*.py" = ["E501"]
-# __init__.py often has unused re-exports.
 "**/__init__.py" = ["F401"]
+# The baseline reproduces the old init.sql statement for statement —
+# its own docstring claims that — so wrapping its lines for style
+# would break the claim it exists to make.
+"db/alembic/versions/*.py" = ["E501"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["agent"]
+known-first-party = ["agent", "api", "core", "db", "embeddings", "planner", "reference", "telemetry"]
 combine-as-imports = true
 
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Pyright — strict-ish type checking.
-# ─────────────────────────────────────────────────────────────────────────────
-
 [tool.pyright]
-include = ["agent"]
-exclude = [
-    ".venv",
-    ".legacy_backup",
-    "web-app",
-    "scripts",
-]
+include = ["agent", "api", "core", "db", "embeddings", "planner", "reference", "telemetry"]
+exclude = [".venv"]
 pythonVersion = "3.12"
 pythonPlatform = "Linux"
-
-# Strict-but-not-paranoid. Catches real bugs without screaming about every
-# psycopg Connection or Pydantic v2 quirk.
-typeCheckingMode = "standard"
-# Point pyright at the project's own interpreter: without this it cannot resolve
-# psycopg / pydantic / fastapi and reports them as missing imports, which reads
-# as 30+ errors that are not about the code at all.
+typeCheckingMode = "strict"
 venvPath = "."
 venv = ".venv"
-reportMissingTypeStubs = "warning"
+
+# The libraries this service runs on — psycopg, fastembed, httpx, opentelemetry —
+# ship no type information, so everything they hand back is `Unknown`. These five
+# rules report on that rather than on this code: leaving them on would mean an
+# annotation or a suppression at every call into a dependency, which is the
+# opposite of the point. `reportMissingTypeStubs` states the same fact once.
+reportMissingTypeStubs = "none"
 reportUnknownVariableType = "none"
 reportUnknownArgumentType = "none"
 reportUnknownParameterType = "none"
 reportUnknownLambdaType = "none"
-reportMissingTypeArgument = "none"   # Generic aliases in psycopg/fastapi
+reportUnknownMemberType = "none"
 
-# Strict things we DO want flagged.
-reportUnusedImport = "error"
-reportUnusedClass = "warning"
-reportUnusedFunction = "warning"
-reportUnusedVariable = "warning"
-reportDuplicateImport = "error"
-reportOptionalMemberAccess = "warning"
-reportOptionalIterable = "warning"
-reportOptionalSubscript = "warning"
-reportOptionalCall = "warning"
-reportOptionalOperand = "warning"
-reportOptionalIterator = "warning"
-reportTypedDictNotRequiredAccess = "warning"
-reportPrivateImportUsage = "warning"
-reportSelfClsParameterName = "warning"
+# Deferred, counted on 2026-10-11, the same way the ruff list above is. Each is
+# a campaign, not a setting:
+reportMissingTypeArgument = "none"      # 200  bare `dict`/`list` in annotations
+reportPrivateUsage = "none"             # 55   a private helper imported module-to-module
+reportMissingParameterType = "none"     # 31   parameters with no annotation
+
+# Style rather than correctness, and both are used deliberately: a wrapped
+# Russian sentence is implicit concatenation, and a private helper reached from a
+# sibling module is how this codebase shares helpers inside a package.
 reportImplicitStringConcatenation = "warning"
-reportUndefinedVariable = "error"
-
-# Per-file overrides: scripts and __init__.py are noisy.
-[tool.pyright.executionEnvironments]
-# Default: strict-ish
+reportUnusedFunction = "warning"

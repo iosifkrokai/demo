@@ -13,10 +13,6 @@ export const mapArea = {
       planRoute: 'Планировать маршрут',
       panelToggle: 'открыть или закрыть панель маршрута',
       panelOpen: 'панель маршрута открыта',
-      // The place card, on both surfaces: the popup by the pin on a wide screen
-      // and the card at the bottom of the map on a phone. The headings used to
-      // be Russian-only strings baked into the popup, which meant an
-      // English-language tourist read «Ещё факты» on an otherwise English card.
       placeClose: 'Закрыть',
       placeMore: 'Ещё о месте',
       placeLess: 'Свернуть',
@@ -30,11 +26,6 @@ export const mapArea = {
       followMe: 'следить за мной',
       following: 'слежу за вами',
       servicesToggle: 'что рядом по пути',
-      // What the guide knows about the places beside the route, said plainly
-      // when one is tapped: how far off the line it is, whether its hours are
-      // known at all, and that the walk to reach it has not been worked out.
-      // The count that used to live here moved out with the summary card; the
-      // guide is never asked to *count* things, only to place them.
       serviceOffLine: '{{metres}} м в сторону от маршрута',
       serviceHoursUnknown: 'часы неизвестны',
       serviceNoDetour: 'время на заход не рассчитано',
@@ -64,11 +55,6 @@ export const mapArea = {
       followMe: 'follow me',
       following: 'following you',
       servicesToggle: "what's along the way",
-      // What the guide knows about the places beside the route, said plainly
-      // when one is tapped: how far off the line it is, whether its hours are
-      // known at all, and that the walk to reach it has not been worked out.
-      // The count that used to live here moved out with the summary card; the
-      // guide is never asked to *count* things, only to place them.
       serviceOffLine: '{{metres}} m off the route',
       serviceHoursUnknown: 'hours unknown',
       serviceNoDetour: 'time to reach it is not computed',

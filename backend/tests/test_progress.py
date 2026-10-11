@@ -1,16 +1,4 @@
-"""Progress is a fact about the pipeline, told in codes.
-
-The panel used to have two sentences for a request that takes half a minute,
-because those were all the client could observe from outside. Rotating invented
-captions was the tempting fix and the wrong one; the pipeline reports its real
-stages instead. These tests pin the three rules that make it honest:
-
-* a stage is recorded when the pipeline *reaches* it, never predicted;
-* an unknown id is «не знаю», not an empty stage — the client must be able to
-  tell the difference and fall back to what it observes itself;
-* with no id (benchmarks, the golden harness, the CLI) nothing is tracked and
-  nothing changes.
-"""
+"""Progress is a fact about the pipeline, told in codes."""
 
 from __future__ import annotations
 
@@ -23,9 +11,9 @@ from fastapi import HTTPException
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agent import progress
-from agent.main import route_progress
-from agent.models import GenerateReq
+from api.routers.routes import route_progress
+from planner.models import GenerateReq
+from telemetry import progress
 
 
 @pytest.fixture(autouse=True)
@@ -62,8 +50,6 @@ def test_an_unknown_id_is_unknown_not_an_empty_stage():
     with pytest.raises(HTTPException) as raised:
         route_progress("never-started")
     assert raised.value.status_code == 404
-    # A reason code, because the client must be able to tell «не знаю, где мы»
-    # from «мы на этапе поиска» — the same rule as every other refusal here.
     assert raised.value.detail == {"reason": "unknown_progress_id"}
 
 
@@ -78,7 +64,6 @@ def test_the_endpoint_reports_what_the_pipeline_recorded():
 
 def test_without_an_id_nothing_is_tracked_and_nothing_breaks():
     assert progress.begin(None) is None
-    # Every stage note the pipeline makes still runs; none of them may raise.
     for stage in progress.ORDER:
         progress.note(stage)
     progress.finish()
@@ -100,7 +85,7 @@ def test_a_tracker_is_dropped_once_it_is_stale():
     tracker = progress._trackers["job-5"]
     tracker.updated_at = time.monotonic() - progress.TTL_S - 1
 
-    progress.begin("job-6")  # starting a request prunes what has gone stale
+    progress.begin("job-6")
 
     assert progress.snapshot("job-5") is None
     assert progress.snapshot("job-6") is not None

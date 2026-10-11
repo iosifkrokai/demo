@@ -1,23 +1,6 @@
-"""Freeze-and-replay harness for scripts/bench_routes.py.
+"""Freeze-and-replay harness for quality/runner.py.
 
-No network and no agent: every response is hand-built, so each expected number
-is derivable by hand and the whole file runs offline in CI.
-
-What is pinned here:
-
-  * --snapshot writes one JSONL row per (case, repeat) carrying the exact
-    request body, the candidate ids and the raw response;
-  * --replay recomputes every metric from those rows with ZERO calls to the
-    agent, and two replays of one snapshot are BYTE-IDENTICAL — the property
-    that turns "the metric moved" into something reviewable as a diff;
-  * the stage-1 / stage-2 split: the API does not expose the candidate pool, so
-    stage-1 is a documented proximity proxy and the report says so;
-  * the 2026-09-24 duplicate-POI pair (745 m apart, two names, one building)
-    surfaces as a leg-sanity failure instead of quietly inflating a score;
-  * unreachable hops are read off the UNREACHABLE_S sentinel, and gated hard
-    failures are never averaged into a quality score;
-  * bootstrap CI and the paired bootstrap behave on hand-checkable inputs, and
-    the noise floor is the within-case spread across repeats.
+No network or agent: responses are hand-built, so every number derives by hand.
 """
 
 from __future__ import annotations
@@ -32,14 +15,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import pytest
 
-from scripts import bench_routes as b
+from quality import runner as b
 
-# --------------------------------------------------------------------------
-# fixtures / builders
-# --------------------------------------------------------------------------
-
-# Degrees of longitude per km at the equator, from the same spherical radius
-# haversine_km() uses, so pt(x) is exactly x km from pt(y).
 KM_PER_DEG_LON = 2 * math.pi * b._R / 360.0
 
 
@@ -55,13 +32,18 @@ def km_east(lat: float, lon: float) -> float:
 
 def golden_stops(*east_km: float, grade: str | None = None) -> list[b.GoldenStop]:
     return [
-        b.GoldenStop(f"g{i}", lat, lon, 10, grade)
-        for i, (lat, lon) in enumerate(map(pt, east_km))
+        b.GoldenStop(f"g{i}", lat, lon, 10, grade) for i, (lat, lon) in enumerate(map(pt, east_km))
     ]
 
 
-def make_golden(name: str = "synthetic", stops=None, *, path: Path | None = None,
-                case: str = "synthetic", budget: int = 120) -> b.GoldenRoute:
+def make_golden(
+    name: str = "synthetic",
+    stops=None,
+    *,
+    path: Path | None = None,
+    case: str = "synthetic",
+    budget: int = 120,
+) -> b.GoldenRoute:
     return b.GoldenRoute(
         name=name,
         source="unit test",
@@ -84,10 +66,7 @@ def point(name: str, east_km: float, pid: int | None = None) -> dict:
 
 def cover_points(golden: b.GoldenRoute, pid: int = 1) -> list[dict]:
     """One returned stop on every reference stop — recall 1.0 by construction."""
-    return [
-        point(f"ours{i}", km_east(s.lat, s.lon), pid + i)
-        for i, s in enumerate(golden.stops)
-    ]
+    return [point(f"ours{i}", km_east(s.lat, s.lon), pid + i) for i, s in enumerate(golden.stops)]
 
 
 def api_response(
@@ -120,7 +99,9 @@ def api_response(
         "costing": "pedestrian",
         "debug": {
             "intent_source": intent_source,
-            "trace": trace if trace is not None else {
+            "trace": trace
+            if trace is not None
+            else {
                 "algorithm": "2opt",
                 "max_leg_seconds": 600.0,
                 "walk_seconds": int(walk_s),
@@ -147,13 +128,22 @@ def run_of(golden: b.GoldenRoute, response: dict, repeat: int = 1, **kw) -> b.Ru
     )
 
 
-def write_snapshot(directory: Path, groups: list[list[b.RunRecord]], *,
-                   base_url: str = "http://localhost:8080", repeat: int = 1) -> Path:
+def write_snapshot(
+    directory: Path,
+    groups: list[list[b.RunRecord]],
+    *,
+    base_url: str = "http://localhost:8080",
+    repeat: int = 1,
+) -> Path:
     """The same path main() takes: a meta line, then one line per (case, repeat)."""
     cases = [g[0].result.golden for g in groups if g]
     meta = b.make_meta(
-        cases=cases, base_url=base_url, repeat=repeat,
-        started_at="2026-09-26T00:00:00+00:00", run_id="unit-1", git_sha="deadbee",
+        cases=cases,
+        base_url=base_url,
+        repeat=repeat,
+        started_at="2026-09-26T00:00:00+00:00",
+        run_id="unit-1",
+        git_sha="deadbee",
     )
     path = b.write_meta(meta, directory, append=False)
     for runs in groups:
@@ -162,9 +152,8 @@ def write_snapshot(directory: Path, groups: list[list[b.RunRecord]], *,
     return path
 
 
-def golden_file(directory: Path, case: str, name: str, stops: list[dict],
-                **extra) -> Path:
-    """Write a benchmarks/routes/<case>.json the loader accepts."""
+def golden_file(directory: Path, case: str, name: str, stops: list[dict], **extra) -> Path:
+    """Write a quality/cases/routes/<case>.json the loader accepts."""
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / f"{case}.json"
     payload = {
@@ -192,15 +181,25 @@ def stop_dict(name: str, east_km: float, grade: str | None = None) -> dict:
 def routes_dir(tmp_path: Path, monkeypatch) -> Path:
     """Point the harness at synthetic reference files (never the committed ones)."""
     d = tmp_path / "routes"
-    golden_file(d, "alpha", "Alpha walk", [
-        stop_dict("A", 0.0, "must-see"),
-        stop_dict("B", 1.0, "nice-to-have"),
-        stop_dict("C", 2.0, "must-see"),
-    ])
-    golden_file(d, "beta", "Beta walk", [
-        stop_dict("D", 0.0),
-        stop_dict("E", 1.5),
-    ])
+    golden_file(
+        d,
+        "alpha",
+        "Alpha walk",
+        [
+            stop_dict("A", 0.0, "must-see"),
+            stop_dict("B", 1.0, "nice-to-have"),
+            stop_dict("C", 2.0, "must-see"),
+        ],
+    )
+    golden_file(
+        d,
+        "beta",
+        "Beta walk",
+        [
+            stop_dict("D", 0.0),
+            stop_dict("E", 1.5),
+        ],
+    )
     monkeypatch.setattr(b, "BENCH_ROUTES", d)
     return d
 
@@ -211,17 +210,10 @@ def run_cli(argv: list[str], monkeypatch, capsys) -> str:
     return capsys.readouterr().out
 
 
-# --------------------------------------------------------------------------
-# stage-1 pool probe: the API does not expose the pool, and we say so
-# --------------------------------------------------------------------------
-
-
 def test_response_does_not_expose_the_stage1_pool():
     """The honesty premise of the whole split, asserted on a realistic response.
 
-    `retrieve()`'s candidate list never reaches the response: debug carries
-    intent_source, constraints and the validate trace. So stage-1 has to be a
-    proxy, and the report must not pretend otherwise.
+    `retrieve()`'s candidate list never reaches the response, so stage-1 must be a proxy.
     """
     golden = make_golden()
     raw = api_response([point("a", 0.0, 11), point("b", 1.0, 12), point("c", 2.0, 13)])
@@ -230,7 +222,6 @@ def test_response_does_not_expose_the_stage1_pool():
     assert b.probe_stage1_pool(raw) is None
     assert result.stage.pool_exposed is False
     assert result.stage.pool_source == "route_points"
-    # The fallback is the returned stops, in walking order, with their ids.
     assert result.candidate_ids == [11, 12, 13]
     assert result.candidate_ids_source == "route_points"
 
@@ -238,8 +229,7 @@ def test_response_does_not_expose_the_stage1_pool():
 def test_pool_probe_would_pick_up_a_pool_if_the_api_ever_exposed_one():
     """Forward compatibility: a pool with coordinates is scored directly.
 
-    The returned route deliberately contains none of the reference stops, so the
-    only way to see a non-zero stage-1 recall is that the pool was used.
+    The route contains no reference stops, so a non-zero recall proves the pool was used.
     """
     golden = make_golden(stops=golden_stops(0.0, 1.0, 2.0))
     raw = api_response([point("far", 50.0, 11)])
@@ -258,8 +248,6 @@ def test_pool_probe_would_pick_up_a_pool_if_the_api_ever_exposed_one():
     assert result.stage.pool_exposed is True
     assert result.stage.pool_source == "stage1_pool"
     assert result.stage.pool_size == 3
-    # Stage 1 sees all three; the route itself has none of them, so stage 2 (and
-    # recall@K) correctly does not.
     assert result.stage.n_covered == 3
     assert result.stage.route_recall_given_pool == pytest.approx(0.0)
     assert result.recall_at_k == pytest.approx(0.0)
@@ -270,20 +258,13 @@ def test_pool_probe_rejects_ids_without_coordinates_as_unscoreable():
     raw["debug"]["candidate_ids"] = [1, 2, 3]
     found = b.probe_stage1_pool(raw)
     assert found is not None and found["ids"] == [1, 2, 3]
-    assert found["points"] is None  # ids alone cannot be scored offline
-
-
-# --------------------------------------------------------------------------
-# stage-1 vs stage-2
-# --------------------------------------------------------------------------
+    assert found["points"] is None
 
 
 def test_stage1_proxy_uses_a_tighter_radius_than_recall_at_k():
     """The 750 m matcher over-merges; the pool proxy must not inherit that.
 
-    Reference stops 0.0 and 1.0 km east. The route returns one stop on the
-    first and one 300 m from the second: inside MATCH_RADIUS_KM (750 m), so
-    recall@K counts it; outside the 250 m pool proxy, so stage 1 does not.
+    A stop inside 750 m counts for recall@K but not for the 250 m stage-1 proxy.
     """
     golden = make_golden(stops=golden_stops(0.0, 1.0))
     raw = api_response([point("x", 0.0), point("y", 0.7)])
@@ -298,31 +279,24 @@ def test_stage1_proxy_uses_a_tighter_radius_than_recall_at_k():
 def test_stage2_recall_is_conditional_on_a_stage1_hit():
     """stage-2 is the retrieval quality GIVEN, not the whole reference.
 
-    With a real pool (injected below), the pool contains a stop the route did
-    not take: stage 1 is 1.0 and stage 2 is 0.0, which is the separation the
-    whole split exists for.
+    A pool stop the route did not take gives stage 1 = 1.0 and stage 2 = 0.0.
     """
     golden = make_golden(stops=golden_stops(0.0, 1.0))
     raw = api_response([point("a", 0.0, 11), point("b", 0.02, 12)])
     raw["debug"]["trace"]["candidates"] = [
-        {"id": 11, "name": "a", "lat": lat, "lon": lon}
-        for lat, lon in (pt(0.0), pt(0.02), pt(1.0))  # 1.0 km is in the pool only
+        {"id": 11, "name": "a", "lat": lat, "lon": lon} for lat, lon in (pt(0.0), pt(0.02), pt(1.0))
     ]
     result = b.score_response(golden, raw)
 
-    assert result.stage.n_covered == 2              # both reference stops in the pool
+    assert result.stage.n_covered == 2
     assert result.stage.route_recall_given_pool == pytest.approx(0.5)
-    assert result.recall_at_k == pytest.approx(0.5)  # the route only took one
+    assert result.recall_at_k == pytest.approx(0.5)
 
 
 def test_stage2_recall_is_trivially_one_under_the_route_points_fallback():
     """An honest limitation of the proxy, pinned as a test.
 
-    Falling back to the returned stops means the pool proxy is a subset of the
-    route, so "given a stage-1 hit, did the route take it?" is always yes and
-    stage-2 recall is 1.0. That is exactly why the report calls the number a
-    proxy and why the probe exists: the real number only appears when the API
-    exposes a pool that is larger than the route.
+    The fallback pool is a subset of the route, so stage-2 recall is always 1.0.
     """
     golden = make_golden(stops=golden_stops(0.0, 1.0))
     raw = api_response([point("a", 0.0, 11)])
@@ -350,13 +324,13 @@ def test_ungraded_reference_stops_count_as_must_see():
 
 
 def test_weighted_stage1_recall_respects_grades():
-    # Two must-sees (3 each) and one nice-to-have (1). We cover the nice-to-have
-    # and one must-see: 4 of 7 weighted, 2 of 3 unweighted.
-    golden = make_golden(stops=[
-        b.GoldenStop("a", *pt(0.0), 10, "must-see"),
-        b.GoldenStop("b", *pt(1.0), 10, "must-see"),
-        b.GoldenStop("c", *pt(2.0), 10, "nice-to-have"),
-    ])
+    golden = make_golden(
+        stops=[
+            b.GoldenStop("a", *pt(0.0), 10, "must-see"),
+            b.GoldenStop("b", *pt(1.0), 10, "must-see"),
+            b.GoldenStop("c", *pt(2.0), 10, "nice-to-have"),
+        ]
+    )
     result = b.score_response(golden, api_response([point("x", 1.0), point("y", 2.0)]))
     assert result.stage.recall == pytest.approx(2 / 3)
     assert result.stage.recall_weighted == pytest.approx(4 / 7)
@@ -367,19 +341,10 @@ def test_loader_reads_grade_from_the_reference_file(routes_dir):
     by_case = {r.case: r for r in routes}
     assert by_case["alpha"].stops[0].grade == "must-see"
     assert by_case["alpha"].stops[1].grade == "nice-to-have"
-    # beta carries no grades at all: ungraded, and therefore must-see weighted.
     assert all(s.grade is None for s in by_case["beta"].stops)
     assert by_case["beta"].total_weight == pytest.approx(6.0)
 
 
-# --------------------------------------------------------------------------
-# leg sanity + hard failures
-# --------------------------------------------------------------------------
-
-# The pair the 2026-09-24 report found inside one Grodno route: the same
-# building, two database rows, 745 m apart, names that are each other's
-# reordering. Neither of the agent's own dedup rules (150 m any name, 500 m
-# identical name) fires on it, which is why it reached the user.
 DUP_NAME_A = "Костёл Обретения Святого Креста и монастырь бернардинцев"
 DUP_NAME_B = "Монастырь бернардинцев и костёл Обретения Креста"
 DUP_LAT_A, DUP_LON_A = 53.67481, 23.830602
@@ -403,16 +368,16 @@ def test_the_historical_duplicate_pair_is_a_leg_sanity_failure():
 
 def test_duplicate_pair_surfaces_in_the_metrics_and_the_failure_list():
     golden = make_golden()
-    raw = api_response([
-        {"name": DUP_NAME_A, "lat": DUP_LAT_A, "lon": DUP_LON_A, "visit_minutes": 20},
-        {"name": DUP_NAME_B, "lat": DUP_LAT_B, "lon": DUP_LON_B, "visit_minutes": 35},
-    ])
+    raw = api_response(
+        [
+            {"name": DUP_NAME_A, "lat": DUP_LAT_A, "lon": DUP_LON_A, "visit_minutes": 20},
+            {"name": DUP_NAME_B, "lat": DUP_LAT_B, "lon": DUP_LON_B, "visit_minutes": 35},
+        ]
+    )
     result = b.score_response(golden, raw)
 
     assert result.leg.n_duplicate_stops == 1
     assert "duplicate_stop" in result.failure_kinds
-    # A duplicate POI is a defect, not a broken request: it stays in the means
-    # (hiding it by dropping the run would defeat the check) but is reported.
     dup = next(f for f in result.failures if f.kind == "duplicate_stop")
     assert dup.gated is False
     assert result.hard_failure is False
@@ -422,15 +387,12 @@ def test_duplicate_rules_including_the_plain_coincident_one():
     def stops(a_lat, a_lon, b_lat, b_lon, *, na="Костёл", nb="Музей"):
         return [b.OurStop(na, a_lat, a_lon), b.OurStop(nb, b_lat, b_lon)]
 
-    # 100 m apart, unrelated names → still the same physical place.
     pair = b.find_duplicate_stop_pairs(stops(53.0, 23.0, 53.0009, 23.0))
     assert pair[0]["rule"] == "coincident"
-    # Same normalised name, 300 m apart → the agent's name rule.
     pair = b.find_duplicate_stop_pairs(
         stops(53.0, 23.0, 53.0027, 23.0, na="Костёл Святого", nb="костёл святого")
     )
     assert pair[0]["rule"] == "same_name"
-    # Two genuinely different POIs 4 km apart → no finding.
     assert b.find_duplicate_stop_pairs(stops(53.0, 23.0, 53.036, 23.0)) == []
 
 
@@ -451,14 +413,13 @@ def test_unreachable_sentinel_is_read_and_gates_the_run():
     assert result.leg.n_unreachable_legs == 1
     assert "unreachable_leg" in result.failure_kinds
     assert result.hard_failure is True
-    assert result.leg.n_unreachable_legs >= 1  # documented as a lower bound
+    assert result.leg.n_unreachable_legs >= 1
 
 
 def test_a_zero_stop_route_is_a_hard_failure():
     result = b.score_response(make_golden(), api_response([]))
     assert result.failure_kinds == ["zero_stops"]
     assert result.hard_failure is True
-    # Never averaged into quality: no valid value survives for the mean.
     assert b._attr([result], "recall_at_k") == []
 
 
@@ -489,15 +450,16 @@ def test_missing_geometry_is_a_hard_failure():
 
 def test_leg_over_cap_is_counted_but_not_gated():
     golden = make_golden()
-    # 6 km of geometry covered in 10 minutes = 36 km/h, so the trace's own
-    # 12-minute longest leg is 7.2 km — over MAX_WALK_LEG_KM. The straight line
-    # between the two stops is 1 km, so the lower bound does NOT fire: the check
-    # reads the router's number, not a guess.
     raw = api_response(
         [point("a", 0.0, 1), point("b", 1.0, 2)],
-        walk_s=600.0, length_km=6.0,
-        trace={"algorithm": "2opt", "max_leg_seconds": 720.0,
-               "walk_seconds": 600.0, "total_seconds": 3000.0},
+        walk_s=600.0,
+        length_km=6.0,
+        trace={
+            "algorithm": "2opt",
+            "max_leg_seconds": 720.0,
+            "walk_seconds": 600.0,
+            "total_seconds": 3000.0,
+        },
     )
     result = b.score_response(golden, raw)
     assert result.leg.max_leg_km == pytest.approx(7.2, abs=0.01)
@@ -512,8 +474,7 @@ def test_gated_failures_are_excluded_from_the_quality_means():
     good = b.score_response(golden, api_response(cover_points(golden)))
     bad = b.score_response(golden, None, http_status=422, api_error="nope")
     assert good.recall_at_k == pytest.approx(1.0)
-    assert bad.recall_at_k == pytest.approx(0.0)  # the run's raw value...
-    # ...but it is not a quality data point and never reaches a mean.
+    assert bad.recall_at_k == pytest.approx(0.0)
     assert b._attr([good, bad], "recall_at_k") == [pytest.approx(1.0)]
     assert b._ms([good, bad], "recall_at_k", 3) == "1.000±0.000"
 
@@ -522,21 +483,20 @@ def test_failure_counts_are_reported_separate_from_the_scores(tmp_path, routes_d
     golden = b.load_golden_routes(routes_dir)[0]
     groups = [
         [run_of(golden, api_response([point("a", 0.0, 1), point("b", 1.0, 2)]))],
-        [b.RunRecord(
-            case=golden.case, case_name=golden.name, repeat=1,
-            result=b.score_response(golden, None, http_status=422, api_error="boom"),
-        )],
+        [
+            b.RunRecord(
+                case=golden.case,
+                case_name=golden.name,
+                repeat=1,
+                result=b.score_response(golden, None, http_status=422, api_error="boom"),
+            )
+        ],
     ]
     summary = b.failure_summary(groups)
     assert summary["total_runs"] == 2
     assert summary["n_failed_runs"] == 1
     assert summary["by_kind"] == {"api_error": 1}
     assert summary["gated"][0]["case"] == golden.case
-
-
-# --------------------------------------------------------------------------
-# snapshot → replay
-# --------------------------------------------------------------------------
 
 
 def test_snapshot_row_carries_request_ids_response_and_metrics(tmp_path):
@@ -549,25 +509,35 @@ def test_snapshot_row_carries_request_ids_response_and_metrics(tmp_path):
     assert meta["record"] == "meta" and meta["repeat"] == 1
     assert row["record"] == "row" and row["case"] == "synthetic" and row["repeat"] == 1
     assert row["request"] == {
-        "query": "q", "time_budget_minutes": 120, "origin": {"lat": 0.0, "lon": 0.0},
+        "query": "q",
+        "time_budget_minutes": 120,
+        "origin": {"lat": 0.0, "lon": 0.0},
     }
     assert row["candidate_ids"] == [11, 12, 13]
     assert row["candidate_ids_source"] == "route_points"
-    assert row["response"] == raw          # raw response, untouched
+    assert row["response"] == raw
     assert row["metrics"]["recall_at_k"] == pytest.approx(1.0)
     assert row["http_status"] is None
 
 
 def test_snapshot_is_one_row_per_case_and_repeat(tmp_path, routes_dir):
     routes = b.load_golden_routes(routes_dir)
-    groups = [[run_of(r, api_response([point("a", 0.0, 1), point("b", 1.0, 2)]),
-                      repeat=i + 1) for i in range(2)] for r in routes]
+    groups = [
+        [
+            run_of(r, api_response([point("a", 0.0, 1), point("b", 1.0, 2)]), repeat=i + 1)
+            for i in range(2)
+        ]
+        for r in routes
+    ]
     path = write_snapshot(tmp_path / "snap", groups, repeat=2)
 
     lines = [json.loads(x) for x in path.read_text(encoding="utf-8").splitlines()]
     assert len(lines) == 1 + 2 * len(routes)
     assert {(r["case"], r["repeat"]) for r in lines[1:]} == {
-        ("alpha", 1), ("alpha", 2), ("beta", 1), ("beta", 2),
+        ("alpha", 1),
+        ("alpha", 2),
+        ("beta", 1),
+        ("beta", 2),
     }
 
 
@@ -587,7 +557,7 @@ def test_replay_recomputes_every_metric_without_touching_the_agent(
     replayed, meta, drift = b.run_replay(tmp_path / "snap")
 
     assert meta["git_sha"] == "deadbee"
-    assert drift == []  # recomputed == recorded, so the metric code has not moved
+    assert drift == []
     assert len(replayed) == 1 and len(replayed[0]) == 1
     live = groups[0][0].result
     again = replayed[0][0].result
@@ -600,16 +570,20 @@ def test_replay_recomputes_every_metric_without_touching_the_agent(
 def test_replay_is_byte_identical_across_runs(tmp_path, routes_dir, monkeypatch, capsys):
     """The property the whole harness rests on: same snapshot ⇒ same bytes.
 
-    Two replays of one snapshot into one output directory: the stdout and every
-    written file have to be identical down to the byte. Any clock read, any
-    unseeded RNG, any dict-ordering dependence in the report would break it.
+    Two replays into one directory must match down to the byte in stdout and files.
     """
     routes = b.load_golden_routes(routes_dir)
     groups = [
         [
-            run_of(r, api_response(
-                cover_points(r), length_km=3.4, walk_s=2400.0,
-            ), repeat=i + 1)
+            run_of(
+                r,
+                api_response(
+                    cover_points(r),
+                    length_km=3.4,
+                    walk_s=2400.0,
+                ),
+                repeat=i + 1,
+            )
             for i in range(2)
         ]
         for r in routes
@@ -626,7 +600,7 @@ def test_replay_is_byte_identical_across_runs(tmp_path, routes_dir, monkeypatch,
     assert stdout1 == stdout2
     assert set(first) == {"report.json", "report.md", "report.metrics.jsonl"}
     assert first == second
-    assert all(first.values())  # and nothing was written empty
+    assert all(first.values())
 
 
 def test_replay_into_two_separate_directories_matches_file_for_file(
@@ -635,14 +609,22 @@ def test_replay_into_two_separate_directories_matches_file_for_file(
     routes = b.load_golden_routes(routes_dir)
     write_snapshot(
         tmp_path / "snap",
-        [[run_of(r, api_response(cover_points(r)), repeat=i + 1) for i in range(2)]
-         for r in routes],
+        [
+            [run_of(r, api_response(cover_points(r)), repeat=i + 1) for i in range(2)]
+            for r in routes
+        ],
         repeat=2,
     )
-    run_cli(["--replay", str(tmp_path / "snap"), "--report-dir", str(tmp_path / "a")],
-            monkeypatch, capsys)
-    run_cli(["--replay", str(tmp_path / "snap"), "--report-dir", str(tmp_path / "b")],
-            monkeypatch, capsys)
+    run_cli(
+        ["--replay", str(tmp_path / "snap"), "--report-dir", str(tmp_path / "a")],
+        monkeypatch,
+        capsys,
+    )
+    run_cli(
+        ["--replay", str(tmp_path / "snap"), "--report-dir", str(tmp_path / "b")],
+        monkeypatch,
+        capsys,
+    )
     for name in ("report.json", "report.md", "report.metrics.jsonl"):
         a = (tmp_path / "a" / name).read_bytes()
         b_ = (tmp_path / "b" / name).read_bytes()
@@ -659,8 +641,9 @@ def test_replay_reports_drift_when_the_metric_code_moved(tmp_path, routes_dir):
     )
     lines = [json.loads(x) for x in path.read_text(encoding="utf-8").splitlines()]
     lines[1]["metrics"]["recall_at_k"] = 0.5
-    path.write_text("\n".join(json.dumps(x, ensure_ascii=False) for x in lines) + "\n",
-                    encoding="utf-8")
+    path.write_text(
+        "\n".join(json.dumps(x, ensure_ascii=False) for x in lines) + "\n", encoding="utf-8"
+    )
 
     _groups, _meta, drift = b.run_replay(tmp_path / "snap")
     assert any("differ from the snapshot" in d["note"] for d in drift)
@@ -672,8 +655,6 @@ def test_replay_flags_a_reference_file_that_changed(tmp_path, routes_dir):
         tmp_path / "snap",
         [[run_of(routes[0], api_response([point("a", 0.0, 1), point("b", 1.0, 2)]))]],
     )
-    # Somebody edits the golden after the run: rescoring is then a different
-    # measurement, so it must be announced.
     payload = json.loads((routes_dir / "alpha.json").read_text(encoding="utf-8"))
     payload["stops"][0]["name"] = "A renamed"
     (routes_dir / "alpha.json").write_text(
@@ -707,18 +688,16 @@ def test_a_replay_written_into_its_own_snapshot_dir_does_not_poison_the_next_one
 ):
     """Regression: the default replay output dir IS the snapshot dir.
 
-    The first replay drops report.metrics.jsonl next to rows.jsonl, and that
-    file also carries `case` keys (including "__overall__"). A loader that
-    globbed every *.jsonl would feed the first report back in as the second
-    run's input — and the byte-identity check would then be comparing a report
-    against itself.
+    A globbing loader would feed the first report back in as the second run's input.
     """
     routes = b.load_golden_routes(routes_dir)
     snap = tmp_path / "snap"
     write_snapshot(
         snap,
-        [[run_of(r, api_response(cover_points(r)), repeat=i + 1) for i in range(2)]
-         for r in routes],
+        [
+            [run_of(r, api_response(cover_points(r)), repeat=i + 1) for i in range(2)]
+            for r in routes
+        ],
         repeat=2,
     )
 
@@ -732,37 +711,26 @@ def test_a_replay_written_into_its_own_snapshot_dir_does_not_poison_the_next_one
 
     assert stdout1 == stdout2
     assert first == second
-    # 2 cases x 2 repeats, read back every time — not 5 records once the
-    # previous run's report is in the directory.
     assert "4 row(s), 2 case(s)" in stdout2
 
 
-# --------------------------------------------------------------------------
-# bootstrap statistics
-# --------------------------------------------------------------------------
-
-
 def test_percentile_is_nearest_rank_and_clamped():
-    vals = [float(i) for i in range(101)]  # 0..100
+    vals = [float(i) for i in range(101)]
     assert b.percentile(vals, 0.0) == 0.0
     assert b.percentile(vals, 1.0) == 100.0
     assert b.percentile(vals, 0.5) == 50.0
-    assert b.percentile([], 0.5) != b.percentile([], 0.5)  # NaN, not a number
+    assert b.percentile([], 0.5) != b.percentile([], 0.5)
 
 
 def test_bootstrap_ci_on_hand_checkable_inputs():
     idx = b.resample_indices(2, 2000, 1)
-    # n = 2, values 0 and 1: every resample mean is 0, 0.5 or 1, so the 2.5/97.5
-    # percentiles are 0 and 1 while the point estimate is 0.5.
     stats = b.bootstrap_ci([0.0, 1.0], idx)
     assert stats["mean"] == pytest.approx(0.5)
     assert stats["lo"] == pytest.approx(0.0)
     assert stats["hi"] == pytest.approx(1.0)
     assert stats["n"] == 2
-    # A constant has no sampling spread at all.
     flat = b.bootstrap_ci([0.7, 0.7, 0.7], b.resample_indices(3, 500, 1))
     assert (flat["lo"], flat["hi"]) == (pytest.approx(0.7), pytest.approx(0.7))
-    # One case cannot support an interval.
     single = b.bootstrap_ci([0.4], b.resample_indices(1, 10, 1))
     assert (single["lo"], single["hi"], single["n"]) == (0.4, 0.4, 1)
     assert b.bootstrap_ci([], idx)["mean"] is None
@@ -772,8 +740,8 @@ def test_bootstrap_is_reproducible_from_its_seed():
     a = b.resample_indices(5, 1000, 7)
     b_ = b.resample_indices(5, 1000, 7)
     c = b.resample_indices(5, 1000, 8)
-    assert a == b_          # same seed → same resamples
-    assert a != c          # different seed → different resamples
+    assert a == b_
+    assert a != c
     values = [0.1, 0.9, 0.4, 0.55, 0.2]
     assert b.bootstrap_ci(values, a) == b.bootstrap_ci(values, b_)
 
@@ -781,36 +749,34 @@ def test_bootstrap_is_reproducible_from_its_seed():
 def test_default_bootstrap_is_ten_thousand_samples():
     assert b.BOOTSTRAP_SAMPLES == 10_000
     assert b.BOOTSTRAP_ALPHA == 0.05
-    assert b.BOOTSTRAP_SEED == 20260926  # pinned, or replays would not match
+    assert b.BOOTSTRAP_SEED == 20260926
 
 
 def test_overall_stats_and_noise_floor_use_cases_not_runs(routes_dir):
     routes = b.load_golden_routes(routes_dir)
     groups = []
     for r in routes:
-        groups.append([
-            run_of(r, api_response(cover_points(r)), repeat=1),
-            run_of(r, api_response([point("a", 50.0)]), repeat=2),
-        ])
+        groups.append(
+            [
+                run_of(r, api_response(cover_points(r)), repeat=1),
+                run_of(r, api_response([point("a", 50.0)]), repeat=2),
+            ]
+        )
     per_case = b.per_case_scores(groups)
     assert set(per_case) == {"alpha", "beta"}
-    # alpha: 3 stops -> (1.0 + 0.0) / 2 = 0.5. beta: 2 stops -> (1.0 + 0.0) / 2.
     assert per_case["alpha"]["recall_at_k"] == pytest.approx(0.5)
     assert per_case["beta"]["recall_at_k"] == pytest.approx(0.5)
 
     overall = b.overall_stats(per_case, samples=2000)
-    assert overall["recall_at_k"]["n"] == 2            # two cases, four runs
+    assert overall["recall_at_k"]["n"] == 2
     assert overall["recall_at_k"]["mean"] == pytest.approx(0.5)
     assert overall["recall_at_k"]["lo"] == pytest.approx(0.5)
     assert overall["recall_at_k"]["hi"] == pytest.approx(0.5)
 
     noise = b.noise_floor(groups)
-    # Both cases: 1.0 then 0.0 → half-range 0.5 each, so the mean spread is 0.5;
-    # the sample std of two values 1.0 apart is 1/sqrt(2).
     assert noise["recall_at_k"]["mean_within_case_spread"] == pytest.approx(0.5)
     assert noise["recall_at_k"]["mean_within_case_std"] == pytest.approx(1 / math.sqrt(2))
     assert noise["recall_at_k"]["n_cases_with_repeats"] == 2
-    # One repeat per case: there is no within-case spread to measure.
     single = b.noise_floor([[g[0]] for g in groups])
     assert single["recall_at_k"]["mean_within_case_spread"] is None
 
@@ -818,11 +784,6 @@ def test_overall_stats_and_noise_floor_use_cases_not_runs(routes_dir):
 def test_noise_floor_matches_the_reference_measurement_it_is_compared_to():
     assert "0.711" in b.REFERENCE_NOISE_FLOOR
     assert "0.150" in b.REFERENCE_NOISE_FLOOR
-
-
-# --------------------------------------------------------------------------
-# paired bootstrap / --compare
-# --------------------------------------------------------------------------
 
 
 def test_paired_bootstrap_on_identical_snapshots_is_exactly_zero():
@@ -843,7 +804,7 @@ def test_paired_bootstrap_on_a_uniform_shift_is_maximally_significant():
     stats = b.paired_bootstrap(a, b_, idx)
     assert stats["diff"] == pytest.approx(0.2)
     assert (stats["lo"], stats["hi"]) == (pytest.approx(0.2), pytest.approx(0.2))
-    assert stats["p"] == pytest.approx(1 / 2000)  # floored at one resample
+    assert stats["p"] == pytest.approx(1 / 2000)
 
 
 def test_paired_bootstrap_cannot_distinguish_a_delta_below_the_noise_floor():
@@ -860,21 +821,18 @@ def test_paired_bootstrap_cannot_distinguish_a_delta_below_the_noise_floor():
 def test_paired_bootstrap_edges():
     assert b.paired_bootstrap([], [], [])["diff"] is None
     assert b.paired_bootstrap([1.0], [0.5, 0.5], b.resample_indices(2, 10, 1))["diff"] is None
-    # One paired case: the difference is real, the interval is not. A degenerate
-    # CI would exclude 0 and sit next to p = 1.0, which reads as significance.
     one = b.paired_bootstrap([1.0], [0.5], b.resample_indices(1, 10, 1))
     assert one["diff"] == pytest.approx(0.5)
     assert one["n"] == 1
     assert one["lo"] is None and one["hi"] is None and one["p"] is None
 
 
-def _snapshot_with(tmp_path: Path, name: str, per_case_recalls: dict[str, list[float]],
-                  routes_dir: Path) -> Path:
+def _snapshot_with(
+    tmp_path: Path, name: str, per_case_recalls: dict[str, list[float]], routes_dir: Path
+) -> Path:
     """A snapshot dir whose cases actually reach the requested recall values.
 
-    recall 1.0 → the route stops on every reference stop; 0.0 → the route stops
-    50 km away. The recall therefore comes out of the scoring path on replay,
-    not out of an override that a replay would discard.
+    recall 1.0 → the route stops on every reference stop; 0.0 → 50 km away.
     """
     goldens = {r.case: r for r in b.load_golden_routes(routes_dir)}
     groups = []
@@ -891,10 +849,8 @@ def _snapshot_with(tmp_path: Path, name: str, per_case_recalls: dict[str, list[f
 
 
 def test_compare_reports_a_paired_difference_with_a_p_value(tmp_path, routes_dir):
-    good = _snapshot_with(tmp_path, "good", {"alpha": [1.0, 1.0], "beta": [1.0, 1.0]},
-                          routes_dir)
-    bad = _snapshot_with(tmp_path, "bad", {"alpha": [0.0, 0.0], "beta": [0.0, 0.0]},
-                        routes_dir)
+    good = _snapshot_with(tmp_path, "good", {"alpha": [1.0, 1.0], "beta": [1.0, 1.0]}, routes_dir)
+    bad = _snapshot_with(tmp_path, "bad", {"alpha": [0.0, 0.0], "beta": [0.0, 0.0]}, routes_dir)
     cmp = b.compare_snapshots(good, bad, samples=2000, seed=5)
 
     assert cmp["shared_cases"] == ["alpha", "beta"]
@@ -902,17 +858,15 @@ def test_compare_reports_a_paired_difference_with_a_p_value(tmp_path, routes_dir
     assert row["mean_a"] == pytest.approx(1.0)
     assert row["mean_b"] == pytest.approx(0.0)
     assert row["diff"] == pytest.approx(1.0)
-    assert row["lo"] > 0.0                      # the CI excludes 0
+    assert row["lo"] > 0.0
     assert row["p"] <= 1 / 2000
-    assert row["exceeds_noise_floor"] is True   # and it clears the noise floor
-    # Both snapshots' hard-failure counts travel with the comparison.
+    assert row["exceeds_noise_floor"] is True
     assert cmp["a"]["n_hard_failure_runs"] == 0
     assert cmp["a"]["n_leg_sanity_defects"] == 0
 
 
 def test_compare_of_a_snapshot_with_itself_is_exactly_null(tmp_path, routes_dir):
-    snap = _snapshot_with(tmp_path, "a", {"alpha": [1.0, 0.5], "beta": [0.0, 1.0]},
-                          routes_dir)
+    snap = _snapshot_with(tmp_path, "a", {"alpha": [1.0, 0.5], "beta": [0.0, 1.0]}, routes_dir)
     cmp = b.compare_snapshots(snap, snap, samples=1000, seed=5)
     seen_null_ci = False
     for row in cmp["metrics"]:
@@ -920,13 +874,11 @@ def test_compare_of_a_snapshot_with_itself_is_exactly_null(tmp_path, routes_dir)
             continue
         assert row["diff"] == pytest.approx(0.0)
         if row["n_paired"] < 2:
-            # A metric that only one case defines (τ below MIN_TAU_STOPS) gets a
-            # difference and no interval.
             assert row["p"] is None and row["lo"] is None
             seen_null_ci = True
         else:
             assert row["p"] == pytest.approx(1.0)
-    assert seen_null_ci  # τ is defined on one case only here
+    assert seen_null_ci
 
 
 def test_compare_pairs_only_the_cases_both_snapshots_cover(tmp_path, routes_dir):
@@ -935,15 +887,15 @@ def test_compare_pairs_only_the_cases_both_snapshots_cover(tmp_path, routes_dir)
     bdir.mkdir()
     (bdir / "rows.jsonl").write_text(
         "\n".join(
-            line for line in (a / "rows.jsonl").read_text(encoding="utf-8").splitlines()
+            line
+            for line in (a / "rows.jsonl").read_text(encoding="utf-8").splitlines()
             if '"case": "beta"' not in line
-        ) + "\n",
+        )
+        + "\n",
         encoding="utf-8",
     )
     cmp = b.compare_snapshots(a, bdir, samples=500, seed=5)
     assert cmp["shared_cases"] == ["alpha"]
-    # b has no beta rows at all, so beta is reported as one-sided rather than
-    # silently dropped from the pairing.
     assert cmp["only_in_a"] == ["beta"]
     assert cmp["only_in_b"] == []
 
@@ -952,9 +904,17 @@ def test_compare_cli_writes_a_report(tmp_path, routes_dir, monkeypatch, capsys):
     a = _snapshot_with(tmp_path, "a", {"alpha": [1.0], "beta": [1.0]}, routes_dir)
     bdir = _snapshot_with(tmp_path, "b", {"alpha": [0.0], "beta": [0.0]}, routes_dir)
     out = run_cli(
-        ["--compare", str(a), str(bdir), "--report-dir", str(tmp_path / "out"),
-         "--bootstrap", "500"],
-        monkeypatch, capsys,
+        [
+            "--compare",
+            str(a),
+            str(bdir),
+            "--report-dir",
+            str(tmp_path / "out"),
+            "--bootstrap",
+            "500",
+        ],
+        monkeypatch,
+        capsys,
     )
     assert "PAIRED BOOTSTRAP" in out
     assert "Rec@K" in out
@@ -963,31 +923,47 @@ def test_compare_cli_writes_a_report(tmp_path, routes_dir, monkeypatch, capsys):
     assert len(saved["metrics"]) == len(b.COMPARE_METRICS)
 
 
-# --------------------------------------------------------------------------
-# report content: the honesty claims, pinned
-# --------------------------------------------------------------------------
-
-
 def test_report_states_that_the_pool_is_a_proxy_and_keeps_failures_outside(
     tmp_path, routes_dir, monkeypatch, capsys
 ):
     routes = b.load_golden_routes(routes_dir)
     groups = [
-        [run_of(routes[0], api_response([
-            {"name": DUP_NAME_A, "lat": DUP_LAT_A, "lon": DUP_LON_A, "visit_minutes": 20},
-            {"name": DUP_NAME_B, "lat": DUP_LAT_B, "lon": DUP_LON_B, "visit_minutes": 35},
-        ]))],
-        [b.RunRecord(
-            case="beta", case_name="Beta walk", repeat=1,
-            result=b.score_response(routes[1], None, http_status=500, api_error="boom"),
-        )],
+        [
+            run_of(
+                routes[0],
+                api_response(
+                    [
+                        {
+                            "name": DUP_NAME_A,
+                            "lat": DUP_LAT_A,
+                            "lon": DUP_LON_A,
+                            "visit_minutes": 20,
+                        },
+                        {
+                            "name": DUP_NAME_B,
+                            "lat": DUP_LAT_B,
+                            "lon": DUP_LON_B,
+                            "visit_minutes": 35,
+                        },
+                    ]
+                ),
+            )
+        ],
+        [
+            b.RunRecord(
+                case="beta",
+                case_name="Beta walk",
+                repeat=1,
+                result=b.score_response(routes[1], None, http_status=500, api_error="boom"),
+            )
+        ],
     ]
     snap = tmp_path / "snap"
     write_snapshot(snap, groups)
-    out = run_cli(["--replay", str(snap), "--report-dir", str(tmp_path / "out")],
-                  monkeypatch, capsys)
+    out = run_cli(
+        ["--replay", str(snap), "--report-dir", str(tmp_path / "out")], monkeypatch, capsys
+    )
 
-    # The stage-split caveat is in the machine-readable notes, not just prose.
     report = json.loads((tmp_path / "out" / "report.json").read_text(encoding="utf-8"))
     notes = report["metric_notes"]
     assert "does not expose the pre-rerank candidate pool" in notes["stage_split"]
@@ -995,18 +971,12 @@ def test_report_states_that_the_pool_is_a_proxy_and_keeps_failures_outside(
     assert "gated kinds" in notes["hard_failures"]
     assert report["hard_failures"]["n_failed_runs"] == 1
     assert report["hard_failures"]["leg_sanity_defects"] == 1
-    # The duplicate is in the per-run numbers, and it is not silently averaged
-    # out of existence: the run is still scored.
     alpha = next(r for r in report["results"] if r["case"] == "alpha")
     assert alpha["leg_sanity"]["n_duplicate_stops"] == 1
     assert alpha["runs"][0]["hard_failure"] is False
-    # Both counts are printed in the hard-failure block, outside the CI table.
     assert "HARD FAILURES (not part of any score above)" in out
     assert "leg-sanity defects kept in the means" in out
-    # The noise floor reference number is on the page, not only in the JSON.
-    assert b.REFERENCE_NOISE_FLOOR in (tmp_path / "out" / "report.md").read_text(
-        encoding="utf-8"
-    )
+    assert b.REFERENCE_NOISE_FLOOR in (tmp_path / "out" / "report.md").read_text(encoding="utf-8")
 
 
 def test_metrics_jsonl_is_one_line_per_case_plus_an_overall_line(
@@ -1016,13 +986,13 @@ def test_metrics_jsonl_is_one_line_per_case_plus_an_overall_line(
     groups = [[run_of(r, api_response(cover_points(r)))] for r in routes]
     snap = tmp_path / "snap"
     write_snapshot(snap, groups)
-    run_cli(["--replay", str(snap), "--report-dir", str(tmp_path / "out")],
-            monkeypatch, capsys)
+    run_cli(["--replay", str(snap), "--report-dir", str(tmp_path / "out")], monkeypatch, capsys)
 
     lines = [
         json.loads(x)
         for x in (tmp_path / "out" / "report.metrics.jsonl")
-        .read_text(encoding="utf-8").splitlines()
+        .read_text(encoding="utf-8")
+        .splitlines()
     ]
     assert [line["case"] for line in lines] == ["alpha", "beta", "__overall__"]
     assert lines[0]["scores"]["recall_at_k"] == pytest.approx(1.0)
@@ -1030,20 +1000,24 @@ def test_metrics_jsonl_is_one_line_per_case_plus_an_overall_line(
     assert lines[-1]["n_hard_failure_runs"] == 0
 
 
-def test_strict_turns_a_hard_failure_into_a_nonzero_exit(
-    tmp_path, routes_dir, monkeypatch, capsys
-):
+def test_strict_turns_a_hard_failure_into_a_nonzero_exit(tmp_path, routes_dir, monkeypatch, capsys):
     routes = b.load_golden_routes(routes_dir)
-    groups = [[b.RunRecord(
-        case="alpha", case_name="Alpha walk", repeat=1,
-        result=b.score_response(routes[0], None, http_status=422, api_error="boom"),
-    )]]
+    groups = [
+        [
+            b.RunRecord(
+                case="alpha",
+                case_name="Alpha walk",
+                repeat=1,
+                result=b.score_response(routes[0], None, http_status=422, api_error="boom"),
+            )
+        ]
+    ]
     snap = tmp_path / "snap"
     write_snapshot(snap, groups)
     argv = ["bench_routes.py", "--replay", str(snap), "--report-dir", str(tmp_path / "o")]
 
     monkeypatch.setattr(sys, "argv", argv)
-    b.main()  # without --strict a hard failure is reported, not fatal
+    b.main()
     capsys.readouterr()
 
     monkeypatch.setattr(sys, "argv", [*argv, "--strict"])
@@ -1060,11 +1034,6 @@ def test_case_filter_rejects_an_unknown_case(routes_dir, monkeypatch, capsys):
     capsys.readouterr()
 
 
-# --------------------------------------------------------------------------
-# the harness stays honest about the reference walk (regression guard)
-# --------------------------------------------------------------------------
-
-
 def test_reference_walk_is_unchanged_by_the_harness_rewrite():
     """The corrected shared-subset tau + Held-Karp reference must not regress."""
     ref = b.build_reference_walk(golden_stops(0.0, 10.0, 1.0, 11.0))
@@ -1077,9 +1046,7 @@ def test_reference_walk_is_unchanged_by_the_harness_rewrite():
 def test_evaluate_still_works_through_call_generate(monkeypatch):
     """The live single-run entry point keeps its old monkeypatch surface."""
     golden = make_golden()
-    monkeypatch.setattr(
-        b, "call_generate", lambda *a, **k: api_response(cover_points(golden))
-    )
+    monkeypatch.setattr(b, "call_generate", lambda *a, **k: api_response(cover_points(golden)))
     result = b.evaluate(golden, "http://unused")
     assert result.api_error is None
     assert result.recall_at_k == pytest.approx(1.0)

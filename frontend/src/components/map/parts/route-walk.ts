@@ -1,17 +1,4 @@
-/**
- * Cutting the drawn route at the tourist.
- *
- * A navigator does not draw the whole route behind you: the part already walked
- * fades and the line in front stays. This is the arithmetic for that — find
- * where the tourist sits along the line, and return the two halves — kept apart
- * from the map layer so it can be reasoned about (and tested) on its own.
- *
- * The line is a list of coordinates with no distances attached, so distances are
- * measured here. Projection onto a segment is planar: at the scale of a city
- * block (tens of metres, a few kilometres at most) the error is far below the
- * width of the stroke, and the alternative — metres of spherical trigonometry —
- * would buy nothing a tourist could see.
- */
+/** Cutting the drawn route at the tourist. */
 
 export interface LonLat {
   lat: number;
@@ -42,14 +29,7 @@ export interface WalkSplit {
   total: number;
 }
 
-/**
- * Where the tourist is along the line, and the two halves at that point.
- *
- * `null` when there is nothing to split: a degenerate line, or a position so far
- * from the route that the nearest point is meaningless — a walker in another
- * city would otherwise see the route cut at its own start and think they had
- * walked it.
- */
+/** Where the tourist is along the line, and the two halves at that point. */
 export const splitAtPosition = (
   coords: LineCoords,
   position: LonLat,
@@ -70,8 +50,6 @@ export const splitAtPosition = (
     const bLonLat: LonLat = { lat: b[1], lon: b[0] };
     const segment = metresBetween(aLonLat, bLonLat);
 
-    // Project onto the segment in degree space: the two axes are scaled the same
-    // way here, so the parameter transfers to metres without further care.
     const dLon = b[0] - a[0];
     const dLat = b[1] - a[1];
     const span = dLon * dLon + dLat * dLat;
@@ -94,10 +72,6 @@ export const splitAtPosition = (
 
   if (bestDistance > maxDistanceM) return null;
 
-  // Both halves meet exactly at the tourist. The position is added to a half
-  // only when it is not already the vertex that half ends (or starts) on, so a
-  // walker standing on a corner does not get that corner twice — which is what
-  // drew a zero-length stub of line under the dot.
   const atVertex = (point: LineCoords[number], vertex: LineCoords[number]) =>
     metresBetween(
       { lat: point[1], lon: point[0] },

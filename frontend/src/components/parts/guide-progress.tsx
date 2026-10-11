@@ -18,27 +18,11 @@ interface GuideProgressProps {
   remainingMinutes?: number | null;
   /** «пройдено» on foot, «проехано» by bike or car. */
   mode?: GuideTravelMode;
-  /**
-   * The navigator's shape: «пройдено 1 из 3 · 787 м» + the bar, on one row.
-   *
-   * Not a smaller version of the same three rows — the same three rows. The full
-   * card measured 97px on a phone and its two secondary lines said the same thing
-   * as the line row below them. Compact drops the standalone «including travel»
-   * line and folds the distance into the heading; every number it reported is
-   * still reported.
-   */
+  /** The navigator's shape: «пройдено 1 из 3 · 787 м» + the bar, on one row. */
   compact?: boolean;
 }
 
-/**
- * «пройдено 3 из 7» + a slim bar, per DESIGN.md: the number that matters
- * stays big, everything around it stays quiet.
- *
- * With a route line the bar tracks the metres actually travelled (done part vs
- * remaining) instead of the stop count, and says so in words underneath —
- * stops are a coarse ruler, the line is the real one. The words follow the
- * transport: nothing is «пройдено» from the driver's seat.
- */
+/** «пройдено 3 из 7» with a slim progress bar; the count stays prominent. */
 export const GuideProgress = ({
   done,
   total,

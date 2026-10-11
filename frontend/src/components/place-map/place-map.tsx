@@ -1,16 +1,4 @@
-/**
- * A small map of a set of places, shared by the admin «Места» tab and the
- * tourist's «посещённые» page (spec 005 §3).
- *
- * One implementation on purpose: the two pages must not drift apart about which
- * point is where — the same reason the place card body is shared. It is
- * deliberately *not* the app map (`components/map`): that one owns layers, the
- * planner, the guide and half the stores, none of which belong on these pages.
- *
- * A click travels both ways: a row highlights its pin, a pin reports the place
- * so the caller can highlight its row. With `editingId` set, that pin becomes
- * draggable and a drop reports the new coordinates.
- */
+/** A small map of a set of places, shared by «Места» and «посещённые». */
 
 import { useEffect, useMemo, useRef } from 'react';
 import {
@@ -84,7 +72,6 @@ export function PlaceMap({
   const mapRef = useRef<MapRef | null>(null);
   const bounds = useMemo(() => boundsOf(places), [places]);
 
-  // Frame whatever is currently on the page — a filter change re-frames the map.
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !bounds) return;
@@ -96,8 +83,6 @@ export function PlaceMap({
     map.fitBounds(bounds, { padding: 48, maxZoom: ZOOM_FIT_MAX, duration: 0 });
   }, [bounds]);
 
-  // Picking a row centres its pin. Keyed on the id, so dragging (same id) does
-  // not yank the map out from under the finger.
   useEffect(() => {
     const map = mapRef.current;
     if (!map || selectedId == null || editingId != null) return;
@@ -130,6 +115,7 @@ export function PlaceMap({
         mapStyle={DEFAULT_MAP_STYLE}
         style={{ width: '100%', height: '100%' }}
         attributionControl={false}
+        cooperativeGestures
       >
         <NavigationControl position="top-right" showCompass={false} />
         {places.map((place) => {

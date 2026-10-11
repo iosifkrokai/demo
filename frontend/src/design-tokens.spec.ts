@@ -3,12 +3,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
-/**
- * The design tokens are a contract (DESIGN.md). This locks the one measurable
- * rule a test can hold: every text-on-token pair the UI actually uses must pass
- * WCAG AA (4.5:1). The primary CTA — white on `--primary` — sat at 3.52:1 with
- * #ff385c and was the only failing pair in the audit.
- */
+/** The design tokens are a contract (DESIGN.md). */
 const css = readFileSync(
   path.resolve(path.dirname(fileURLToPath(import.meta.url)), 'index.css'),
   'utf8'
@@ -58,8 +53,6 @@ describe.each([':root', '.dark'] as const)('design tokens (%s)', (block) => {
   });
 
   it('keeps secondary text on the page background at least at AA large', () => {
-    // muted-foreground is 12px helper copy; AA large (3:1) is the floor it must
-    // never drop below, and today it comfortably beats 4.5:1.
     expect(
       contrast(token('--muted-foreground', block), token('--background', block))
     ).toBeGreaterThanOrEqual(4.5);

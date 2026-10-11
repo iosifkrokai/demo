@@ -1,16 +1,6 @@
-"""Accounts, roles, visits and the admin surface (spec 005) — server side.
+"""Accounts, roles, visits and the admin surface — server side.
 
-No API key, no DB and no network: every endpoint test drives a fake repository
-injected as ``app.state.accounts_repository``. What is pinned here, per the
-accept criteria in ``docs/specs/005-accounts-visits-admin/spec.md`` §7:
-
-  * register/login/logout/me behave; ``/auth/me`` is honest when anonymous;
-  * the password never leaves the server and the DB holds a hash, not plaintext;
-  * ``admin`` reaches ``/admin/*``, ``user`` gets 403, nobody gets 500;
-  * a visited place round-trips, is idempotent, and a walk can mark a batch;
-  * the system can never be left with no administrator, and self-harm is refused;
-  * the anonymous ``X-Client-Id`` is adopted on register;
-  * a down store is 503 storage_unavailable everywhere, never a 500.
+No API key, DB or network: tests inject a fake repository into ``app.state``.
 """
 
 from __future__ import annotations
@@ -23,15 +13,15 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from fastapi.testclient import TestClient
 
+from tests._schema import baseline_sql
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agent import main as agent_main
-from agent.accounts_store import (
-    DuplicateSource,
-    EmailTaken,
-    StorageUnavailable,
-)
-from agent.passwords import hash_password, hash_token, verify_password
+from api import main as agent_main
+from core.passwords import hash_password, hash_token, verify_password
+from db.models.user import AdminUser, User, VisitedPlace
+from db.store.errors import DuplicateSource, EmailTaken, StorageUnavailable
+from db.store.mappers import place_from_row
 
 CLIENT = "33333333-3333-4333-8333-333333333333"
 
@@ -43,10 +33,6 @@ GOOD_PW = "correct-horse-42"
 def _now() -> datetime:
     return datetime.now(UTC)
 
-
-# ============================================================================
-# Fakes
-# ============================================================================
 
 def _place_row(
     pid: int,
@@ -84,7 +70,7 @@ def _place_row(
 
 
 class FakeRepo:
-    """In-memory AccountRepository with the same contract as the Postgres one."""
+    """In-memory account and place repository with the Postgres contract."""
 
     def __init__(self) -> None:
         self.users: dict[uuid.UUID, dict] = {}
@@ -97,7 +83,6 @@ class FakeRepo:
             3: _place_row(3, "Фарный костёл", category="костёл"),
         }
 
-    # ── helpers ──
     @staticmethod
     def _public(row: dict) -> dict:
         return {k: v for k, v in row.items() if k != "password_hash"}
@@ -109,31 +94,35 @@ class FakeRepo:
                 return row
         return None
 
-    # ── users ──
-    def create_user(self, user_id, *, email, password_hash, display_name=None,
-                    role="user", client_id=None):
+    def create_user(
+        self, user_id, *, email, password_hash, display_name=None, role="user", client_id=None
+    ):
         if self._by_email(email) is not None:
             raise EmailTaken(email)
-        if client_id is not None and any(
-            r["client_id"] == client_id for r in self.users.values()
-        ):
+        if client_id is not None and any(r["client_id"] == client_id for r in self.users.values()):
             client_id = None
         now = _now()
         row = {
-            "id": user_id, "email": email, "password_hash": password_hash,
-            "display_name": display_name, "role": role, "client_id": client_id,
-            "created_at": now, "updated_at": now, "last_login_at": None,
+            "id": user_id,
+            "email": email,
+            "password_hash": password_hash,
+            "display_name": display_name,
+            "role": role,
+            "client_id": client_id,
+            "created_at": now,
+            "updated_at": now,
+            "last_login_at": None,
         }
         self.users[user_id] = row
-        return self._public(row)
+        return User(**self._public(row))
 
     def get_user_by_email(self, email):
         row = self._by_email(email)
-        return dict(row) if row is not None else None
+        return User(**row) if row is not None else None
 
     def get_user(self, user_id):
         row = self.users.get(user_id)
-        return self._public(row) if row is not None else None
+        return User(**self._public(row)) if row is not None else None
 
     def link_client(self, user_id, client_id):
         row = self.users.get(user_id)
@@ -148,7 +137,6 @@ class FakeRepo:
         if user_id in self.users:
             self.users[user_id]["last_login_at"] = _now()
 
-    # ── sessions ──
     def create_session(self, token_hash, user_id, expires_at):
         self.sessions[token_hash] = {"user_id": user_id, "expires_at": expires_at}
 
@@ -161,22 +149,26 @@ class FakeRepo:
     def delete_session(self, token_hash):
         self.sessions.pop(token_hash, None)
 
-    # ── admin: users ──
     def list_users(self, *, q="", limit=50, offset=0):
         rows = [self._public(r) for r in self.users.values()]
         if q:
             needle = q.lower()
-            rows = [r for r in rows
-                    if needle in r["email"].lower()
-                    or needle in (r["display_name"] or "").lower()]
+            rows = [
+                r
+                for r in rows
+                if needle in r["email"].lower() or needle in (r["display_name"] or "").lower()
+            ]
         rows.sort(key=lambda r: r["created_at"], reverse=True)
         total = len(rows)
-        page = rows[offset:offset + limit]
+        page = rows[offset : offset + limit]
         out = [
-            {**r,
-             "saved_routes": self.saved_routes_count.get(r["client_id"], 0)
-             if r["client_id"] else 0,
-             "visited": len(self.visited.get(r["id"], {}))}
+            AdminUser(
+                **r,
+                saved_routes=self.saved_routes_count.get(r["client_id"], 0)
+                if r["client_id"]
+                else 0,
+                visited=len(self.visited.get(r["id"], {})),
+            )
             for r in page
         ]
         return out, total
@@ -184,8 +176,7 @@ class FakeRepo:
     def count_admins(self):
         return sum(1 for r in self.users.values() if r["role"] == "admin")
 
-    def update_user(self, user_id, *, role=None, display_name=None,
-                    display_name_set=False):
+    def update_user(self, user_id, *, role=None, display_name=None, display_name_set=False):
         row = self.users.get(user_id)
         if row is None:
             return None
@@ -194,27 +185,22 @@ class FakeRepo:
         if display_name_set:
             row["display_name"] = display_name
         row["updated_at"] = _now()
-        return self._public(row)
+        return User(**self._public(row))
 
     def delete_user(self, user_id):
         if user_id not in self.users:
             return False
         del self.users[user_id]
         self.visited.pop(user_id, None)
-        self.sessions = {k: v for k, v in self.sessions.items()
-                         if v["user_id"] != user_id}
+        self.sessions = {k: v for k, v in self.sessions.items() if v["user_id"] != user_id}
         return True
 
-    # ── visits ──
     def list_visited(self, user_id):
         marks = self.visited.get(user_id, {})
-        rows = []
-        for pid, at in sorted(marks.items(),
-                              key=lambda kv: kv[1], reverse=True):
-            row = dict(self.places[pid])
-            row["visited_at"] = at
-            rows.append(row)
-        return rows
+        return [
+            VisitedPlace(user_id=user_id, place_id=pid, visited_at=at)
+            for pid, at in sorted(marks.items(), key=lambda kv: kv[1], reverse=True)
+        ]
 
     def mark_visited(self, user_id, place_id):
         if place_id not in self.places:
@@ -222,7 +208,7 @@ class FakeRepo:
         marks = self.visited.setdefault(user_id, {})
         at = marks.get(place_id, _now())
         marks[place_id] = at
-        return {"place_id": place_id, "visited_at": at}
+        return VisitedPlace(user_id=user_id, place_id=place_id, visited_at=at)
 
     def mark_visited_many(self, user_id, place_ids):
         marks = self.visited.setdefault(user_id, {})
@@ -236,32 +222,39 @@ class FakeRepo:
     def unmark_visited(self, user_id, place_id):
         return self.visited.get(user_id, {}).pop(place_id, None) is not None
 
-    # ── admin: places ──
-    def list_places(self, *, q="", category="", limit=50, offset=0):
+    # --- places: the admin CRUD and the visited payloads --------------------
+
+    def get_by_id(self, place_id):
+        row = self.places.get(place_id)
+        return place_from_row(row) if row is not None else None
+
+    def get_by_ids(self, ids):
+        return [place_from_row(self.places[pid]) for pid in ids if pid in self.places]
+
+    def list_places_paged(self, *, q="", category="", limit=50, offset=0):
         rows = list(self.places.values())
         if q:
             needle = q.lower()
-            rows = [r for r in rows if needle in r["name"].lower()
-                    or needle in (r["town"] or "").lower()]
+            rows = [
+                r
+                for r in rows
+                if needle in r["name"].lower() or needle in (r["town"] or "").lower()
+            ]
         if category:
             rows = [r for r in rows if r["category"] == category]
         rows.sort(key=lambda r: r["name"])
         total = len(rows)
-        return [dict(r) for r in rows[offset:offset + limit]], total
-
-    def get_place(self, place_id):
-        row = self.places.get(place_id)
-        return dict(row) if row is not None else None
+        page = rows[offset : offset + limit]
+        return [place_from_row(r) for r in page], total
 
     def create_place(self, fields):
-        if any(p["source_url"] == fields.get("source_url")
-               for p in self.places.values()):
+        if any(p["source_url"] == fields.get("source_url") for p in self.places.values()):
             raise DuplicateSource(str(fields.get("source_url")))
         pid = max(self.places, default=0) + 1
         row = _place_row(pid, fields["name"])
         row.update({k: v for k, v in fields.items() if k in row})
         self.places[pid] = row
-        return dict(row)
+        return place_from_row(row)
 
     def update_place(self, place_id, fields):
         row = self.places.get(place_id)
@@ -273,7 +266,7 @@ class FakeRepo:
         ):
             raise DuplicateSource(str(fields["source_url"]))
         row.update({k: v for k, v in fields.items() if k in row})
-        return dict(row)
+        return place_from_row(row)
 
     def delete_place(self, place_id):
         return self.places.pop(place_id, None) is not None
@@ -294,20 +287,31 @@ class DownRepo:
     def __getattr__(self, _name):
         def _boom(*_a, **_kw):
             raise StorageUnavailable("connection refused")
+
         return _boom
 
 
-# ============================================================================
-# Fixtures + helpers
-# ============================================================================
+_REPO_ATTRS = ("users_repository", "stats_repository", "places_repository")
+
+
+def _install(repo) -> None:
+    """Point every accessor the account and admin routers use at one repository."""
+    for attr in _REPO_ATTRS:
+        setattr(agent_main.app.state, attr, repo)
+
+
+def _uninstall() -> None:
+    for attr in _REPO_ATTRS:
+        if hasattr(agent_main.app.state, attr):
+            delattr(agent_main.app.state, attr)
+
 
 @pytest.fixture
 def repo():
     fake = FakeRepo()
-    agent_main.app.state.accounts_repository = fake
+    _install(fake)
     yield fake
-    if hasattr(agent_main.app.state, "accounts_repository"):
-        delattr(agent_main.app.state, "accounts_repository")
+    _uninstall()
 
 
 @pytest.fixture
@@ -315,8 +319,9 @@ def client(repo):
     return TestClient(agent_main.app, raise_server_exceptions=False)
 
 
-def _register(client, email="tourist@example.com", password=GOOD_PW,
-              display_name=None, headers=None):
+def _register(
+    client, email="tourist@example.com", password=GOOD_PW, display_name=None, headers=None
+):
     body = {"email": email, "password": password}
     if display_name is not None:
         body["display_name"] = display_name
@@ -329,8 +334,9 @@ def _login(client, email="tourist@example.com", password=GOOD_PW):
 
 def _make_admin(repo, email=ADMIN_EMAIL, password=GOOD_PW):
     uid = uuid.uuid4()
-    repo.create_user(uid, email=email, password_hash=hash_password(password),
-                     display_name="Boss", role="admin")
+    repo.create_user(
+        uid, email=email, password_hash=hash_password(password), display_name="Boss", role="admin"
+    )
     return uid
 
 
@@ -341,12 +347,7 @@ def _admin_client(repo, email=ADMIN_EMAIL, password=GOOD_PW):
     return tc
 
 
-# ============================================================================
-# Registration
-# ============================================================================
-
 class TestRegister:
-
     def test_creates_a_user_and_signs_it_in(self, client, repo):
         r = _register(client, display_name="Максим")
         assert r.status_code == 201, r.text
@@ -354,7 +355,6 @@ class TestRegister:
         assert body["email"] == "tourist@example.com"
         assert body["role"] == "user"
         assert body["display_name"] == "Максим"
-        # The session cookie came back, and /auth/me agrees.
         assert "grodno_session" in client.cookies
         me = client.get("/auth/me").json()
         assert me["authenticated"] is True
@@ -364,7 +364,6 @@ class TestRegister:
         body = _register(client).json()
         assert "password_hash" not in body
         assert "password" not in body
-        # ... and neither does /auth/me or the admin list.
         assert "password_hash" not in client.get("/auth/me").json()["user"]
 
     def test_stores_a_hash_not_the_plaintext(self, client, repo):
@@ -405,12 +404,7 @@ class TestRegister:
         assert next(iter(repo.users.values()))["client_id"] is None
 
 
-# ============================================================================
-# Login / logout / me
-# ============================================================================
-
 class TestSession:
-
     def test_login_with_correct_password(self, client):
         _register(client)
         client.post("/auth/logout")
@@ -440,18 +434,12 @@ class TestSession:
 
     def test_an_expired_session_is_not_a_session(self, client, repo):
         _register(client)
-        # Age the stored session out from under the browser.
         for sess in repo.sessions.values():
             sess["expires_at"] = _now() - timedelta(seconds=1)
         assert client.get("/auth/me").json()["authenticated"] is False
 
 
-# ============================================================================
-# Visits
-# ============================================================================
-
 class TestVisits:
-
     def test_unauthenticated_write_is_401(self, client):
         assert client.put("/me/visited/1").status_code == 401
         assert client.get("/me/visited").status_code == 401
@@ -504,12 +492,7 @@ class TestVisits:
         assert client.get("/me/visited").json()["count"] == 0
 
 
-# ============================================================================
-# Admin — access control
-# ============================================================================
-
 class TestAdminAccess:
-
     def test_anonymous_is_401(self, client):
         assert client.get("/admin/users").status_code == 401
         assert client.get("/admin/stats").status_code == 401
@@ -526,18 +509,13 @@ class TestAdminAccess:
         assert admin.get("/admin/stats").status_code == 200
 
 
-# ============================================================================
-# Admin — users
-# ============================================================================
-
 class TestAdminUsers:
-
     def test_list_carries_the_counts(self, repo):
         admin = _admin_client(repo)
         _register(admin, email="tourist@example.com")
         admin.put("/me/visited/1")
         admin.post("/auth/logout")
-        assert _login(admin, ADMIN_EMAIL).status_code == 200  # back as the admin
+        assert _login(admin, ADMIN_EMAIL).status_code == 200
 
         body = admin.get("/admin/users").json()
         assert body["total"] == 2
@@ -550,8 +528,7 @@ class TestAdminUsers:
         _register(admin, email="tourist@example.com")
         admin.post("/auth/logout")
         assert _login(admin, ADMIN_EMAIL).status_code == 200
-        tourist_id = next(k for k, v in repo.users.items()
-                          if v["email"] == "tourist@example.com")
+        tourist_id = next(k for k, v in repo.users.items() if v["email"] == "tourist@example.com")
 
         promoted = admin.patch(f"/admin/users/{tourist_id}", json={"role": "admin"})
         assert promoted.status_code == 200, promoted.text
@@ -564,7 +541,6 @@ class TestAdminUsers:
         admin = _admin_client(repo)
         admin_id = next(iter(repo.users))
         r = admin.patch(f"/admin/users/{admin_id}", json={"role": "user"})
-        # It is both self-role and last-admin; either guard may fire first.
         assert r.status_code == 409
         assert r.json()["reason"] in {"self_role", "last_admin"}
 
@@ -580,24 +556,19 @@ class TestAdminUsers:
         _register(admin, email="tourist@example.com")
         admin.post("/auth/logout")
         assert _login(admin, ADMIN_EMAIL).status_code == 200
-        uid = next(k for k, v in repo.users.items()
-                   if v["email"] == "tourist@example.com")
+        uid = next(k for k, v in repo.users.items() if v["email"] == "tourist@example.com")
         assert admin.delete(f"/admin/users/{uid}").status_code == 204
         assert admin.get("/admin/users").json()["total"] == 1
 
     def test_unknown_user_is_404(self, repo):
         admin = _admin_client(repo)
-        assert admin.patch(f"/admin/users/{uuid.uuid4()}",
-                           json={"role": "admin"}).status_code == 404
+        assert (
+            admin.patch(f"/admin/users/{uuid.uuid4()}", json={"role": "admin"}).status_code == 404
+        )
         assert admin.delete(f"/admin/users/{uuid.uuid4()}").status_code == 404
 
 
-# ============================================================================
-# Admin — places
-# ============================================================================
-
 class TestAdminPlaces:
-
     def test_list_and_search(self, repo):
         admin = _admin_client(repo)
         body = admin.get("/admin/places").json()
@@ -609,16 +580,24 @@ class TestAdminPlaces:
 
     def test_create_edit_delete(self, repo):
         admin = _admin_client(repo)
-        created = admin.post("/admin/places", json={
-            "name": "Кафе у замка", "lat": 53.68, "lon": 23.83,
-            "source_url": "test:new-cafe", "category": "кафе", "town": "Гродно",
-        })
+        created = admin.post(
+            "/admin/places",
+            json={
+                "name": "Кафе у замка",
+                "lat": 53.68,
+                "lon": 23.83,
+                "source_url": "test:new-cafe",
+                "category": "кафе",
+                "town": "Гродно",
+            },
+        )
         assert created.status_code == 201, created.text
         pid = created.json()["place_id"]
         assert created.json()["name"] == "Кафе у замка"
 
-        edited = admin.patch(f"/admin/places/{pid}",
-                             json={"name": "Кафе «У замка»", "visit_minutes": 30})
+        edited = admin.patch(
+            f"/admin/places/{pid}", json={"name": "Кафе «У замка»", "visit_minutes": 30}
+        )
         assert edited.status_code == 200
         assert edited.json()["name"] == "Кафе «У замка»"
         assert edited.json()["visit_minutes"] == 30
@@ -628,10 +607,15 @@ class TestAdminPlaces:
 
     def test_duplicate_source_is_409(self, repo):
         admin = _admin_client(repo)
-        r = admin.post("/admin/places", json={
-            "name": "Дубль", "lat": 1.0, "lon": 2.0,
-            "source_url": "test:place-1",
-        })
+        r = admin.post(
+            "/admin/places",
+            json={
+                "name": "Дубль",
+                "lat": 1.0,
+                "lon": 2.0,
+                "source_url": "test:place-1",
+            },
+        )
         assert r.status_code == 409
         assert r.json() == {"reason": "source_taken"}
 
@@ -642,36 +626,38 @@ class TestAdminPlaces:
         assert r.json() == {"reason": "invalid_request"}
 
 
-# ============================================================================
-# Storage down — 503 storage_unavailable everywhere, never a 500
-# ============================================================================
-
 class TestStorageDown:
-
     @pytest.fixture
     def down(self):
-        agent_main.app.state.accounts_repository = DownRepo()
+        _install(DownRepo())
         yield TestClient(agent_main.app, raise_server_exceptions=False)
-        del agent_main.app.state.accounts_repository
+        _uninstall()
 
-    @pytest.mark.parametrize("method,path,body", [
-        ("post", "/auth/register", {"email": "a@b.co", "password": GOOD_PW}),
-        ("post", "/auth/login", {"email": "a@b.co", "password": GOOD_PW}),
-        ("get", "/auth/me", None),
-        ("post", "/auth/logout", None),
-        ("get", "/me/visited", None),
-        ("put", "/me/visited/1", None),
-        ("get", "/admin/users", None),
-        ("get", "/admin/places", None),
-        ("get", "/admin/stats", None),
-        ("post", "/admin/places", {
-            "name": "x", "lat": 1.0, "lon": 2.0, "source_url": "s",
-        }),
-    ])
+    @pytest.mark.parametrize(
+        "method,path,body",
+        [
+            ("post", "/auth/register", {"email": "a@b.co", "password": GOOD_PW}),
+            ("post", "/auth/login", {"email": "a@b.co", "password": GOOD_PW}),
+            ("get", "/auth/me", None),
+            ("post", "/auth/logout", None),
+            ("get", "/me/visited", None),
+            ("put", "/me/visited/1", None),
+            ("get", "/admin/users", None),
+            ("get", "/admin/places", None),
+            ("get", "/admin/stats", None),
+            (
+                "post",
+                "/admin/places",
+                {
+                    "name": "x",
+                    "lat": 1.0,
+                    "lon": 2.0,
+                    "source_url": "s",
+                },
+            ),
+        ],
+    )
     def test_every_endpoint_degrades_to_503(self, down, method, path, body):
-        # A token is required for the storage layer to be *reached* at all: with
-        # no session the auth gate answers 401 before any query runs. Sending one
-        # makes the failure a genuine «the store is down».
         headers = {"Authorization": "Bearer any-token-shape"}
         r = getattr(down, method)(path, headers=headers, **json_body(body))
         assert r.status_code == 503, r.text
@@ -682,16 +668,11 @@ def json_body(body):
     return {"json": body} if body is not None else {}
 
 
-# ============================================================================
-# Password hashing
-# ============================================================================
-
 class TestPasswords:
-
     def test_hash_is_salted_and_verifies(self):
         a = hash_password(GOOD_PW)
         b = hash_password(GOOD_PW)
-        assert a != b  # a fresh salt each time
+        assert a != b
         assert verify_password(GOOD_PW, a)
         assert not verify_password("wrong", a)
 
@@ -710,13 +691,11 @@ class TestPasswords:
 def test_place_patch_forbids_null_coordinates():
     """Omitting a coordinate means «leave it»; an explicit null is a client bug.
 
-    `lat`/`lon` are NOT NULL, and the handler writes every key present in the
-    body — so a null would be a 500 from the database, not a no-op. The model
-    turns it into a clean 422 instead.
+    `lat`/`lon` are NOT NULL, so a null would be a 500; the model turns it into a 422.
     """
     from pydantic import ValidationError
 
-    from agent.accounts_models import AdminPlacePatch
+    from api.models.accounts import AdminPlacePatch
 
     omitted = AdminPlacePatch(name="Старый замок")
     assert omitted.lat is None
@@ -730,18 +709,13 @@ def test_place_patch_forbids_null_coordinates():
             AdminPlacePatch(**bad)
 
 
-# ============================================================================
-# The real thing: live Postgres, skipped when unreachable
-# ============================================================================
-
 BACKEND = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-MIGRATION = os.path.join(BACKEND, "db", "migrations", "0008_accounts_visits.sql")
 
 
 def _db_up() -> bool:
     import psycopg
 
-    from agent.config import settings
+    from core.config import settings
 
     try:
         psycopg.connect(settings.DSN, connect_timeout=3).close()
@@ -751,41 +725,39 @@ def _db_up() -> bool:
 
 
 def _apply_migration(conn) -> None:
-    """Apply 0008 as one multi-statement call (idempotent, safe to re-run)."""
-    with open(MIGRATION, encoding="utf-8") as fh:
-        conn.execute(fh.read())
+    """Apply the schema baseline in one multi-statement call (idempotent)."""
+    conn.execute(baseline_sql())
 
 
 def test_live_account_visit_and_place_edit():
     """Register, a durable visit and an admin edit against the real database.
 
-    This is the half the fake cannot prove: the ``citext`` email index, the
-    ``ON CONFLICT`` visit upsert, the session join that keeps a role change
-    visible without re-login, and — the sharp edge — the curated-category trigger
-    *not* reverting an admin write (the ``SET LOCAL`` opt-in in ``update_place``).
-
-    Skips when Postgres is not reachable, like ``test_clients.py``.
+    The half the fake cannot prove: the citext index, the visit upsert, the category guard.
     """
     if not _db_up():
         pytest.skip("live DB not reachable")
 
     import psycopg
 
-    from agent.accounts_store import PostgresAccountRepository
-    from agent.config import settings
+    from core.config import settings
+    from db.store.places import PostgresPlaceRepository
+    from db.store.stats import PostgresStatsRepository
+    from db.store.users import PostgresUserRepository
 
     admin = psycopg.connect(settings.DSN, autocommit=True)
-    _apply_migration(admin)  # idempotent: safe to re-apply
+    _apply_migration(admin)
 
-    repo = PostgresAccountRepository()
-    agent_main.app.state.accounts_repository = repo
+    users = PostgresUserRepository()
+    places = PostgresPlaceRepository()
+    stats = PostgresStatsRepository()
+    agent_main.app.state.users_repository = users
+    agent_main.app.state.places_repository = places
+    agent_main.app.state.stats_repository = stats
     tc = TestClient(agent_main.app, raise_server_exceptions=False)
     email = f"live-{uuid.uuid4().hex[:10]}@example.com"
     place_id: int | None = None
     old_category = old_source = old_blurb = None
     try:
-        # A guarded place: curated/dataset rows own their category, so the guard
-        # is the thing that must be told to let this write through.
         with admin.cursor() as cur:
             cur.execute(
                 "SELECT id, category, category_source, blurb FROM places "
@@ -797,19 +769,15 @@ def test_live_account_visit_and_place_edit():
             pytest.skip("no guarded place in the dataset")
         place_id, old_category, old_source, old_blurb = row
 
-        registered = tc.post(
-            "/auth/register", json={"email": email, "password": GOOD_PW}
-        )
+        registered = tc.post("/auth/register", json={"email": email, "password": GOOD_PW})
         assert registered.status_code == 201, registered.text
         uid = registered.json()["id"]
         assert tc.get("/auth/me").json()["user"]["email"] == email
 
-        # a durable visit, idempotent
         assert tc.put(f"/me/visited/{place_id}").status_code == 200
         assert tc.put(f"/me/visited/{place_id}").status_code == 200
         assert tc.get("/me/visited").json()["count"] == 1
 
-        # a plain user is refused; the role change reaches the same session
         assert tc.get("/admin/stats").status_code == 403
         with admin.cursor() as cur:
             cur.execute("UPDATE users SET role='admin' WHERE id=%s", (uid,))
@@ -829,23 +797,16 @@ def test_live_account_visit_and_place_edit():
             )
             got = cur.fetchone()
         assert got is not None
-        assert got[0] == "live-test-category"  # the guard did not revert it
+        assert got[0] == "live-test-category"
         assert got[1] == "curated"
     finally:
-        # Restore inside one transaction: the row is 'curated' now, so putting the
-        # original category back needs the guard's opt-in too. A non-autocommit
-        # connection gives `set_config(..., true)` a transaction to live in.
         cleanup = psycopg.connect(settings.DSN)
         try:
             with cleanup.cursor() as cur:
-                cur.execute(
-                    "SELECT set_config"
-                    "('grodno.allow_curated_category_change','on',true)"
-                )
+                cur.execute("SELECT set_config('grodno.allow_curated_category_change','on',true)")
                 if place_id is not None:
                     cur.execute(
-                        "UPDATE places SET category=%s, category_source=%s, "
-                        "blurb=%s WHERE id=%s",
+                        "UPDATE places SET category=%s, category_source=%s, blurb=%s WHERE id=%s",
                         (old_category, old_source, old_blurb, place_id),
                     )
                 cur.execute("DELETE FROM users WHERE email=%s", (email,))
@@ -853,6 +814,7 @@ def test_live_account_visit_and_place_edit():
         finally:
             cleanup.close()
         admin.close()
-        repo.close()
-        if hasattr(agent_main.app.state, "accounts_repository"):
-            delattr(agent_main.app.state, "accounts_repository")
+        users.close()
+        places.close()
+        stats.close()
+        _uninstall()

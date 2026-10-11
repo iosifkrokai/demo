@@ -1,16 +1,11 @@
-/**
- * The admin panel's data layer (spec 005 §3).
- *
- * Every hook is gated on `enabled`, which callers set to `auth.isAdmin`: a plain
- * user must never fire an `/admin/*` request just to be told 403 — the panel is
- * simply not reachable for them.
- *
- * Writes invalidate the catalogue (`['places']`) as well as the admin lists: an
- * edited place is the same row the map and the «все точки» tab show, so a stale
- * catalogue would print the old blurb.
- */
+/** The admin panel's data layer. */
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
 
 import {
   adminCreatePlace,
@@ -51,12 +46,14 @@ export function useAdminUsers(enabled: boolean, q = '') {
     queryFn: () => adminListUsers({ q, limit: 100 }),
     enabled,
     retry: false,
+    placeholderData: keepPreviousData,
   });
   return {
     items: query.data?.items ?? [],
     total: query.data?.total ?? 0,
     isLoading: query.isLoading,
     error: query.error,
+    refetch: query.refetch,
   };
 }
 
@@ -66,12 +63,14 @@ export function useAdminPlaces(enabled: boolean, q = '', category = '') {
     queryFn: () => adminListPlaces({ q, category, limit: 100 }),
     enabled,
     retry: false,
+    placeholderData: keepPreviousData,
   });
   return {
     items: query.data?.items ?? [],
     total: query.data?.total ?? 0,
     isLoading: query.isLoading,
     error: query.error,
+    refetch: query.refetch,
   };
 }
 

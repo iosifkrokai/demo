@@ -1,12 +1,6 @@
 import type { Dictionary } from './ru';
 
-/**
- * English strings.
- *
- * Typed as `Dictionary`, so a key added to the Russian source of truth is a
- * compile error here until it is translated — the UI cannot silently fall back
- * to Russian mid-screen.
- */
+/** English strings. */
 export const en: Dictionary = {
   panel: {
     resize: 'resize the panel',
@@ -35,15 +29,12 @@ export const en: Dictionary = {
     placeholder: 'What would you like to see?',
     label: 'What would you like to see',
     chips: {
-      // A chip *is* the query — it goes to the agent as written.
       oldTown: 'Old town in two hours on foot',
       castlesChurches: 'Castles and churches of Grodno',
       food: 'Where to eat in the centre, on a budget',
       evening: 'An evening walk along Sovetskaya',
       withChildren: 'With children: parks and castles',
     },
-    // Offered only once a route exists: instructions that change it, not fresh
-    // requests. The pair must stay in step with the Russian chips.
     chipsRefine: {
       addCafe: 'add a café on the way',
       removeMuseum: 'take the museum out',

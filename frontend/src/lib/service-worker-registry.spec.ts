@@ -1,39 +1,10 @@
-/**
- * Tests for service-worker-registry.ts
- *
- * Covered:
- *  - register() skips in DEV mode
- *  - register() handles unsupported browsers gracefully
- *  - unregister() is safe when no registration exists
- *  - Pure helper logic: matchNoCache (exposed via sw-registry.ts re-exports)
- *
- * Not covered (requires a browser/service-worker environment):
- *  - Actual navigator.serviceWorker.register() call
- *  - SW lifecycle events (install, activate, fetch)
- *  - Update flow (updatefound, applyPendingUpdate)
- *  - NetworkOffline/NetworkFirst strategies
- *  - Cache population and eviction
- */
+/** Tests for service-worker-registry.ts */
 
 import { describe, expect, it } from 'vitest';
 
-// ── Test helpers ──────────────────────────────────────────────────────────────
+/** Re-exports of the pure functions from sw.js so they can be tested here. */
 
-/**
- * Re-exports of the pure functions from sw.js so they can be tested here.
- * The SW itself lives in public/sw.js and is not part of the Vite bundle,
- * but these helpers are tested directly.
- *
- * If the SW ever moves to src/ (via vite-plugin-pwa), this re-export
- * disappears and the test imports directly.
- */
-
-// ── matchNoCache ─────────────────────────────────────────────────────────────
-
-/**
- * Whether a request URL matches any no-cache prefix.
- * Returns the matching prefix for debugging, or null.
- */
+/** Whether a request URL matches any no-cache prefix. */
 function matchNoCache(url: string, prefixes: string[]): string | null {
   const pathname = url.startsWith('http')
     ? (() => {
@@ -54,7 +25,6 @@ function matchNoCache(url: string, prefixes: string[]): string | null {
 }
 
 const NO_CACHE_PREFIXES = [
-  // More-specific prefixes first; order matters when one prefix is a prefix of another
   '/routes/generate',
   '/routes',
   '/route',
@@ -119,13 +89,9 @@ describe('matchNoCache', () => {
   });
 });
 
-// ── Cache strategy ───────────────────────────────────────────────────────────
-
 type Strategy = 'skip' | 'shell' | 'static';
 
-/**
- * Determines the cache strategy for a given request.
- */
+/** Determines the cache strategy for a given request. */
 function getStrategy(url: string, noCachePrefixes: string[]): Strategy {
   const pathname = (() => {
     try {
@@ -143,13 +109,10 @@ function getStrategy(url: string, noCachePrefixes: string[]): Strategy {
     }
   }
 
-  // In a real Request object we'd check request.mode === 'navigate', but here
-  // we use URL conventions: the HTML entry point (root path) → shell strategy
   if (pathname === '/' || pathname.endsWith('index.html')) {
     return 'shell';
   }
 
-  // Static assets by extension
   if (/\.(js|css|woff2?|ttf|otf|png|svg|ico|webp|json)$/.test(pathname)) {
     return 'static';
   }
@@ -199,16 +162,8 @@ describe('getStrategy', () => {
   });
 });
 
-// ── register() in DEV mode ───────────────────────────────────────────────────
-
 describe('register (DEV mode guard)', () => {
   it('skips registration in dev mode without touching navigator', () => {
-    // register() reads import.meta.env.DEV first and returns early.
-    // Without a browser/service-worker polyfill we cannot call it directly,
-    // but we can assert the guard: in vitest environment DEV is false
-    // (tests run with VITE_ENV=test), so the real guard path is verified
-    // by the integration test in a production build.
-    // Here we assert that import.meta.env.DEV exists (typed in vite-env.d.ts).
     expect(typeof import.meta.env.DEV).toBe('boolean');
   });
 });

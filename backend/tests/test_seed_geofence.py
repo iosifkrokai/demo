@@ -5,18 +5,16 @@ from pathlib import Path
 
 BACKEND = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BACKEND))
-sys.path.insert(0, str(BACKEND / "scripts"))
 
-import ingest_osm  # noqa: E402
-import ingest_poi  # noqa: E402
-import load_osm  # noqa: E402
-import parse_places  # noqa: E402
-import seed_region  # noqa: E402
+from core.paths import PLACES_DIR  # noqa: E402
+from db.seed.datasets import (  # noqa: E402
+    read_pipe_csv,
+    validate_city_region,
+    validate_osm_sight,
+)
+from db.seed.osm_tags import service_element_to_row, sight_element_to_row  # noqa: E402
+from reference.geofence import inside_project_area  # noqa: E402
 
-from agent.geofence import inside_project_area  # noqa: E402
-
-# Both locations are in Belarus and inside the generous ingest bbox, but
-# belong to Brest/Minsk voblasts rather than Grodno.
 OTHER_VOBLASTS = [("Барановичи", 53.1307, 26.0139), ("Вилейка", 54.4903, 26.9107)]
 
 
@@ -28,31 +26,31 @@ def test_project_geofence_excludes_other_belarus_voblasts():
 
 def test_osm_ingest_paths_exclude_other_voblasts():
     for _, lat, lon in OTHER_VOBLASTS:
-        element = {"type": "node", "id": 7, "lat": lat, "lon": lon,
-                   "tags": {"name": "Музей", "tourism": "museum"}}
-        assert ingest_osm.osm_element_to_row(element) is None
+        element = {
+            "type": "node",
+            "id": 7,
+            "lat": lat,
+            "lon": lon,
+            "tags": {"name": "Музей", "tourism": "museum"},
+        }
+        assert sight_element_to_row(element) is None
         element["tags"] = {"name": "Кафе", "amenity": "cafe"}
-        assert ingest_poi.osm_element_to_row(element) is None
+        assert service_element_to_row(element) is None
 
 
 def test_csv_loaders_reject_other_voblasts_and_nonfinite_coordinates():
-    city = seed_region.normalize(seed_region.read_rows(BACKEND / "data" / "places_grodno_city.csv")[0])
-    osm = load_osm.read_csv(BACKEND / "data" / "places_osm_raw.csv")[0]
+    city = read_pipe_csv(PLACES_DIR / "places_grodno_city.csv")[0]
+    osm = read_pipe_csv(PLACES_DIR / "places_osm_raw.csv")[0]
     for _, lat, lon in OTHER_VOBLASTS:
-        assert seed_region.validate(dict(city, lat=lat, lon=lon))
-        assert load_osm.validate(dict(osm, lat=str(lat), lon=str(lon)))
-    assert seed_region.validate(dict(city, lat=float("nan")))
-    assert load_osm.validate(dict(osm, lat="nan"))
-
-
-def test_scraper_rejects_other_voblasts():
-    html = '<h1 class="publications">Музей</h1><script>const initialCenter = [26.0139, 53.1307];</script>'
-    assert parse_places.parse_detail("https://planetabelarus.by/sights/museum/", html) is None
+        assert validate_city_region(dict(city, lat=lat, lon=lon))
+        assert validate_osm_sight(dict(osm, lat=str(lat), lon=str(lon)))
+    assert validate_city_region(dict(city, lat=float("nan")))
+    assert validate_osm_sight(dict(osm, lat="nan"))
 
 
 def test_curated_seed_records_validate_clean():
-    for path, _prefix in seed_region.DATASETS:
-        for raw in seed_region.read_rows(path):
-            row = seed_region.normalize(raw)
-            problems = seed_region.validate(row)
-            assert not problems, f"{path.name}: {row['name']}: {'; '.join(problems)}"
+    for name in ("places_grodno_city.csv", "places_region.csv"):
+        path = PLACES_DIR / name
+        for raw in read_pipe_csv(path):
+            problems = validate_city_region(raw)
+            assert not problems, f"{path.name}: {raw['name']}: {'; '.join(problems)}"

@@ -24,7 +24,6 @@ describe('DeleteMyData', () => {
 
     render(<DeleteMyData onDelete={onDelete} />);
 
-    // The first click only opens the consequence; nothing is deleted yet.
     fireEvent.click(screen.getByTestId('delete-my-data-start'));
     expect(onDelete).not.toHaveBeenCalled();
     expect(screen.getByText(/Отменить нельзя/)).toBeInTheDocument();

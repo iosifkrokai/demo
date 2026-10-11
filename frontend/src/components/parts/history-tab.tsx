@@ -24,13 +24,7 @@ interface HistoryTabProps {
   onClear: () => void;
 }
 
-/**
- * «История» — its own tab rather than a section at the bottom of the planner.
- *
- * It used to sit under the planner's own controls, which made it look like part
- * of building the next route and pushed it below the fold on a phone. The list
- * itself is unchanged: the same rows, each one restorable with its stops.
- */
+/** «История» — its own tab rather than a section at the bottom of the planner. */
 export function HistoryTab({
   entries,
   onRestore,
@@ -82,12 +76,7 @@ export function HistoryTab({
   );
 }
 
-/**
- * The day a walk last moved: «27 сентября».
- *
- * Only the day, formatted here rather than in a date library: the history shows
- * it next to a state («пройден»), and the exact time of day was never asked for.
- */
+/** The day a walk last moved: «27 сентября». */
 const walkDay = (at: number) =>
   new Date(at).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
 
@@ -158,8 +147,6 @@ const HistoryItem = ({ entry, onLoad, onRemove }: HistoryItemProps) => {
           </button>
         </div>
       </div>
-      {/* A route you actually walked is a different thing from one you only
-          planned, so the state is visible without expanding the row. */}
       {entry.walk && <WalkBadge id={entry.id} walk={entry.walk} />}
       <button
         type="button"

@@ -1,20 +1,6 @@
-"""The anonymous client entity (spec 003) — server side.
+"""The anonymous client entity — server side.
 
-No API key, no DB and no network: every endpoint test drives a fake repository
-injected as ``app.state.clients_repository``, and the storage-layer tests drive
-a fake psycopg connection.  The one integration test hits the live Postgres and
-skips cleanly when it is not reachable.
-
-What is pinned here, per the accept criteria:
-  * a request with no X-Client-Id still works (reads return the empty state,
-    writes answer 503 storage_unavailable);
-  * PUT preferences updates only the sent fields, and an explicit null clears
-    one;
-  * POST then GET returns a byte-identical plan;
-  * the list excludes heavy geometry but carries stop_count/distance_m/duration_min;
-  * PATCH renames;
-  * DELETE /clients/me cascades routes and preferences away;
-  * a down store is 503 storage_unavailable everywhere, never a 500.
+No API key, DB or network: tests inject a fake repository into ``app.state``.
 """
 
 from __future__ import annotations
@@ -29,29 +15,25 @@ import pytest
 from fastapi.testclient import TestClient
 from psycopg.types.json import Jsonb
 
+from tests._schema import baseline_sql
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agent import main as agent_main
-from agent.clients_models import route_metrics
-from agent.clients_store import (
-    PREFERENCE_COLUMNS,
-    PostgresClientRepository,
-    StorageUnavailable,
-    TooManyRoutes,
-)
-from agent.config import settings
+from api import main as agent_main
+from core.config import settings
+from db.models.client import ClientPreferences
+from db.models.route import SavedRoute, SavedRouteSummary
+from db.store.clients import PREFERENCE_COLUMNS, PostgresClientRepository
+from db.store.errors import StorageUnavailable, TooManyRoutes
+from db.store.mappers import route_metrics
 
 CLIENT_A = "11111111-1111-4111-8111-111111111111"
 CLIENT_B = "22222222-2222-4222-8222-222222222222"
 
 BACKEND = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-MIGRATION = os.path.join(BACKEND, "db", "migrations", "0005_clients.sql")
 
 HEADERS = {"X-Client-Id": CLIENT_A}
 
-# A plan shaped like what POST /routes/generate answers (RouteResponse): points,
-# a heavy geometry blob, summary and budget.  The list must never return the
-# geometry; the detail must return the whole thing unchanged.
 PLAN = {
     "points": [
         {"id": 1, "name": "Старый замок", "lat": 53.6771, "lon": 23.8290},
@@ -69,16 +51,10 @@ def _now() -> datetime:
     return datetime.now(UTC)
 
 
-# ============================================================================
-# Fakes
-# ============================================================================
-
 class FakeRepo:
     """In-memory ClientRepository with real cascade semantics.
 
-    Deliberately mimics the store's contract: a client with no saved
-    preferences answers ``None`` (not an empty dict), and deleting a client
-    takes its preferences and routes with it.
+    No saved preferences answers ``None``; deleting a client takes its data with it.
     """
 
     def __init__(self, max_routes: int = 200) -> None:
@@ -91,63 +67,81 @@ class FakeRepo:
     def delete_client(self, client_id: uuid.UUID) -> bool:
         return self.db.pop(client_id, None) is not None
 
-    def get_preferences(self, client_id: uuid.UUID) -> dict | None:
-        return self.db.get(client_id, {}).get("prefs")
+    def get_preferences(self, client_id: uuid.UUID) -> ClientPreferences | None:
+        state = self.db.get(client_id, {}).get("prefs")
+        return ClientPreferences(**state) if state is not None else None
 
-    def upsert_preferences(self, client_id: uuid.UUID, fields: dict) -> dict:
+    def upsert_preferences(self, client_id: uuid.UUID, fields: dict) -> ClientPreferences:
         self.ensure_client(client_id)
         state = self.db[client_id]["prefs"]
         if state is None:
             state = dict.fromkeys(PREFERENCE_COLUMNS)
-        for key in fields:
+        for key, value in fields.items():
             if key in PREFERENCE_COLUMNS:
-                state[key] = fields[key]
+                state[key] = value
         state["updated_at"] = _now()
         self.db[client_id]["prefs"] = state
-        return dict(state)
+        return ClientPreferences(**state)
 
-    def add_route(self, client_id: uuid.UUID, route_id: uuid.UUID, *,
-                  query: str, plan: dict, name: str | None = None,
-                  visit_overrides: dict | None = None) -> dict:
+    def add_route(
+        self,
+        client_id: uuid.UUID,
+        route_id: uuid.UUID,
+        *,
+        query: str,
+        plan: dict,
+        name: str | None = None,
+        visit_overrides: dict | None = None,
+    ) -> SavedRoute:
         self.ensure_client(client_id)
         routes = self.db[client_id]["routes"]
         if len(routes) >= self.max_routes:
             raise TooManyRoutes(self.max_routes)
         now = _now()
-        routes.append({
-            "id": route_id, "name": name, "query": query, "plan": plan,
+        route = {
+            "id": route_id,
+            "client_id": client_id,
+            "name": name,
+            "query": query,
+            "plan": plan,
             "visit_overrides": visit_overrides,
-            "created_at": now, "updated_at": now,
-        })
-        return {"id": route_id, "created_at": now}
+            "created_at": now,
+            "updated_at": now,
+        }
+        routes.append(route)
+        return SavedRoute(**route)
 
-    def list_routes(self, client_id: uuid.UUID, limit: int = 50) -> list[dict]:
+    def list_routes(self, client_id: uuid.UUID, limit: int = 50) -> list[SavedRouteSummary]:
         routes = self.db.get(client_id, {}).get("routes", [])
         out = []
         for r in sorted(routes, key=lambda r: r["created_at"], reverse=True)[:limit]:
             points = r["plan"].get("points") if isinstance(r["plan"], dict) else None
             count = len(points) if isinstance(points, list) else 0
-            out.append({
-                "id": r["id"], "name": r["name"], "query": r["query"],
-                "created_at": r["created_at"],
-                **route_metrics(count, r["plan"].get("summary"),
-                                r["plan"].get("budget")),
-            })
+            out.append(
+                SavedRouteSummary(
+                    id=r["id"],
+                    name=r["name"],
+                    query=r["query"],
+                    created_at=r["created_at"],
+                    **route_metrics(count, r["plan"].get("summary"), r["plan"].get("budget")),
+                )
+            )
         return out
 
-    def get_route(self, client_id: uuid.UUID, route_id: uuid.UUID) -> dict | None:
+    def get_route(self, client_id: uuid.UUID, route_id: uuid.UUID) -> SavedRoute | None:
         for r in self.db.get(client_id, {}).get("routes", []):
             if r["id"] == route_id:
-                return dict(r)
+                return SavedRoute(**r)
         return None
 
-    def rename_route(self, client_id: uuid.UUID, route_id: uuid.UUID,
-                     name: str) -> dict | None:
+    def rename_route(
+        self, client_id: uuid.UUID, route_id: uuid.UUID, name: str
+    ) -> SavedRoute | None:
         for r in self.db.get(client_id, {}).get("routes", []):
             if r["id"] == route_id:
                 r["name"] = name
                 r["updated_at"] = _now()
-                return dict(r)
+                return SavedRoute(**r)
         return None
 
     def delete_route(self, client_id: uuid.UUID, route_id: uuid.UUID) -> bool:
@@ -165,6 +159,7 @@ class DownRepo:
     def __getattr__(self, _name):
         def _boom(*_a, **_kw):
             raise StorageUnavailable("connection refused")
+
         return _boom
 
 
@@ -181,9 +176,15 @@ def _client_with(repo) -> TestClient:
     return TestClient(agent_main.app, raise_server_exceptions=False)
 
 
-def _save_route(client, *, plan=PLAN, query="замки Гродно",
-                name="Мои замки", visit_overrides=VISIT_OVERRIDES,
-                headers=HEADERS):
+def _save_route(
+    client,
+    *,
+    plan=PLAN,
+    query="замки Гродно",
+    name="Мои замки",
+    visit_overrides=VISIT_OVERRIDES,
+    headers=HEADERS,
+):
     body = {"query": query, "plan": plan}
     if name is not None:
         body["name"] = name
@@ -192,21 +193,23 @@ def _save_route(client, *, plan=PLAN, query="замки Гродно",
     return client.post("/clients/me/routes", json=body, headers=headers)
 
 
-# ============================================================================
-# No X-Client-Id at all — work, but honestly without saving
-# ============================================================================
-
 class TestNoClientId:
-
     def test_get_preferences_is_the_empty_state(self, client):
         r = client.get("/clients/me/preferences")
         assert r.status_code == 200, r.text
         body = r.json()
-        assert all(body[k] is None for k in (
-            "transport", "time_budget_minutes", "party_adults",
-            "party_children", "interests", "language",
-            "visit_minutes_by_category",
-        ))
+        assert all(
+            body[k] is None
+            for k in (
+                "transport",
+                "time_budget_minutes",
+                "party_adults",
+                "party_children",
+                "interests",
+                "language",
+                "visit_minutes_by_category",
+            )
+        )
 
     def test_list_routes_is_empty(self, client):
         r = client.get("/clients/me/routes")
@@ -217,19 +220,21 @@ class TestNoClientId:
         assert r.status_code == 404
         assert r.json() == {"reason": "route_not_found"}
 
-    @pytest.mark.parametrize("method,path,body", [
-        ("put", "/clients/me/preferences", {"transport": "auto"}),
-        ("post", "/clients/me/routes", {"query": "замки", "plan": PLAN}),
-        ("delete", "/clients/me", None),
-    ])
+    @pytest.mark.parametrize(
+        "method,path,body",
+        [
+            ("put", "/clients/me/preferences", {"transport": "auto"}),
+            ("post", "/clients/me/routes", {"query": "замки", "plan": PLAN}),
+            ("delete", "/clients/me", None),
+        ],
+    )
     def test_writes_report_storage_unavailable(self, client, method, path, body):
         r = getattr(client, method)(path, **({"json": body} if body else {}))
         assert r.status_code == 503
         assert r.json() == {"reason": "storage_unavailable"}
 
     def test_a_malformed_id_is_a_different_error(self, client):
-        r = client.get("/clients/me/preferences",
-                       headers={"X-Client-Id": "not-a-uuid"})
+        r = client.get("/clients/me/preferences", headers={"X-Client-Id": "not-a-uuid"})
         assert r.status_code == 400
         assert r.json() == {"reason": "invalid_client_id"}
 
@@ -238,88 +243,84 @@ class TestNoClientId:
         assert r.status_code == 200
 
 
-# ============================================================================
-# Preferences — partial update, explicit null clears
-# ============================================================================
-
 class TestPreferences:
-
     def test_get_before_anything_is_saved_is_null(self, client):
         r = client.get("/clients/me/preferences", headers=HEADERS)
         assert r.status_code == 200
         assert r.json()["transport"] is None
 
     def test_put_updates_only_the_sent_fields(self, client):
-        r = client.put("/clients/me/preferences", headers=HEADERS,
-                       json={"transport": "auto", "party_adults": 2})
+        r = client.put(
+            "/clients/me/preferences",
+            headers=HEADERS,
+            json={"transport": "auto", "party_adults": 2},
+        )
         assert r.status_code == 200, r.text
         body = r.json()
         assert body["transport"] == "auto"
         assert body["party_adults"] == 2
-        # Everything not sent stays unset — never an invented default.
         assert body["party_children"] is None
         assert body["time_budget_minutes"] is None
         assert body["interests"] is None
 
     def test_put_merges_across_calls(self, client):
-        client.put("/clients/me/preferences", headers=HEADERS,
-                   json={"transport": "bicycle", "language": "en"})
-        body = client.put("/clients/me/preferences", headers=HEADERS,
-                          json={"time_budget_minutes": 180}).json()
-        assert body["transport"] == "bicycle"      # untouched by the 2nd call
+        client.put(
+            "/clients/me/preferences",
+            headers=HEADERS,
+            json={"transport": "bicycle", "language": "en"},
+        )
+        body = client.put(
+            "/clients/me/preferences", headers=HEADERS, json={"time_budget_minutes": 180}
+        ).json()
+        assert body["transport"] == "bicycle"
         assert body["language"] == "en"
         assert body["time_budget_minutes"] == 180
 
     def test_null_explicitly_clears_a_field(self, client):
-        client.put("/clients/me/preferences", headers=HEADERS,
-                   json={"transport": "auto", "party_adults": 3})
-        body = client.put("/clients/me/preferences", headers=HEADERS,
-                          json={"party_adults": None}).json()
+        client.put(
+            "/clients/me/preferences",
+            headers=HEADERS,
+            json={"transport": "auto", "party_adults": 3},
+        )
+        body = client.put(
+            "/clients/me/preferences", headers=HEADERS, json={"party_adults": None}
+        ).json()
         assert body["party_adults"] is None
-        assert body["transport"] == "auto"          # the clear touched one field
+        assert body["transport"] == "auto"
 
     def test_interests_and_pace_round_trip(self, client):
         pace = {"замок": 90, "музей": 40}
-        body = client.put("/clients/me/preferences", headers=HEADERS,
-                          json={"interests": ["замок", "костёл"],
-                                "visit_minutes_by_category": pace}).json()
+        body = client.put(
+            "/clients/me/preferences",
+            headers=HEADERS,
+            json={"interests": ["замок", "костёл"], "visit_minutes_by_category": pace},
+        ).json()
         assert body["interests"] == ["замок", "костёл"]
         assert body["visit_minutes_by_category"] == pace
         again = client.get("/clients/me/preferences", headers=HEADERS).json()
         assert again["visit_minutes_by_category"] == pace
 
     def test_empty_put_changes_nothing(self, client):
-        client.put("/clients/me/preferences", headers=HEADERS,
-                   json={"language": "ru"})
-        body = client.put("/clients/me/preferences", headers=HEADERS,
-                          json={}).json()
+        client.put("/clients/me/preferences", headers=HEADERS, json={"language": "ru"})
+        body = client.put("/clients/me/preferences", headers=HEADERS, json={}).json()
         assert body["language"] == "ru"
 
     def test_preferences_are_per_client(self, client):
-        client.put("/clients/me/preferences", headers=HEADERS,
-                   json={"transport": "auto"})
-        other = client.get("/clients/me/preferences",
-                           headers={"X-Client-Id": CLIENT_B}).json()
+        client.put("/clients/me/preferences", headers=HEADERS, json={"transport": "auto"})
+        other = client.get("/clients/me/preferences", headers={"X-Client-Id": CLIENT_B}).json()
         assert other["transport"] is None
 
 
-# ============================================================================
-# Routes — save verbatim, read back byte-identical
-# ============================================================================
-
 class TestRoutes:
-
     def test_post_then_get_returns_the_plan_unchanged(self, client):
         r = _save_route(client)
         assert r.status_code == 201, r.text
         created = r.json()
         assert "id" in created and "created_at" in created
 
-        detail = client.get(f"/clients/me/routes/{created['id']}",
-                            headers=HEADERS)
+        detail = client.get(f"/clients/me/routes/{created['id']}", headers=HEADERS)
         assert detail.status_code == 200, detail.text
         body = detail.json()
-        # The whole point: byte-identical, geometry included.
         assert body["plan"] == PLAN
         assert body["query"] == "замки Гродно"
         assert body["name"] == "Мои замки"
@@ -330,8 +331,8 @@ class TestRoutes:
         a = _save_route(client, name=None, visit_overrides=None).json()
         detail = client.get(f"/clients/me/routes/{a['id']}", headers=HEADERS).json()
         import json
-        assert json.dumps(detail["plan"], sort_keys=True) == \
-            json.dumps(PLAN, sort_keys=True)
+
+        assert json.dumps(detail["plan"], sort_keys=True) == json.dumps(PLAN, sort_keys=True)
         assert detail["name"] is None
         assert detail["visit_overrides"] is None
 
@@ -342,22 +343,19 @@ class TestRoutes:
         items = r.json()
         assert len(items) == 1
         item = items[0]
-        # Heavy geometry is NOT in the list payload.
         assert "plan" not in item
         assert "shape" not in item
         assert "points" not in item
-        # But the numbers the list UI needs are.
         assert item["stop_count"] == len(PLAN["points"]) == 2
-        assert item["distance_m"] == 1500          # 1.5 km
-        assert item["duration_min"] == 90          # budget.total_minutes
+        assert item["distance_m"] == 1500
+        assert item["duration_min"] == 90
         assert item["query"] == "замки Гродно"
         assert item["name"] == "Мои замки"
 
     def test_list_is_newest_first(self, client):
         first = _save_route(client, name="first").json()
         second = _save_route(client, name="second").json()
-        ids = [i["id"] for i in client.get("/clients/me/routes",
-                                           headers=HEADERS).json()]
+        ids = [i["id"] for i in client.get("/clients/me/routes", headers=HEADERS).json()]
         assert ids == [second["id"], first["id"]]
 
     def test_list_respects_limit(self, client):
@@ -373,33 +371,29 @@ class TestRoutes:
 
     def test_a_route_is_invisible_to_another_client(self, client):
         rid = _save_route(client).json()["id"]
-        r = client.get(f"/clients/me/routes/{rid}",
-                       headers={"X-Client-Id": CLIENT_B})
+        r = client.get(f"/clients/me/routes/{rid}", headers={"X-Client-Id": CLIENT_B})
         assert r.status_code == 404
 
     def test_patch_renames(self, client):
         rid = _save_route(client).json()["id"]
-        r = client.patch(f"/clients/me/routes/{rid}", headers=HEADERS,
-                         json={"name": "Переименованный"})
+        r = client.patch(
+            f"/clients/me/routes/{rid}", headers=HEADERS, json={"name": "Переименованный"}
+        )
         assert r.status_code == 200, r.text
         assert r.json()["name"] == "Переименованный"
-        # The rename did not touch the plan.
         assert r.json()["plan"] == PLAN
         listed = client.get("/clients/me/routes", headers=HEADERS).json()
         assert listed[0]["name"] == "Переименованный"
 
     def test_patch_unknown_route_is_route_not_found(self, client):
-        r = client.patch(f"/clients/me/routes/{uuid.uuid4()}", headers=HEADERS,
-                         json={"name": "x"})
+        r = client.patch(f"/clients/me/routes/{uuid.uuid4()}", headers=HEADERS, json={"name": "x"})
         assert r.status_code == 404
         assert r.json() == {"reason": "route_not_found"}
 
     def test_delete_route_is_204_then_not_found(self, client):
         rid = _save_route(client).json()["id"]
-        assert client.delete(f"/clients/me/routes/{rid}",
-                             headers=HEADERS).status_code == 204
-        assert client.delete(f"/clients/me/routes/{rid}",
-                             headers=HEADERS).status_code == 404
+        assert client.delete(f"/clients/me/routes/{rid}", headers=HEADERS).status_code == 204
+        assert client.delete(f"/clients/me/routes/{rid}", headers=HEADERS).status_code == 404
         assert client.get("/clients/me/routes", headers=HEADERS).json() == []
 
     def test_too_many_routes_is_a_machine_code(self):
@@ -414,61 +408,45 @@ class TestRoutes:
             del agent_main.app.state.clients_repository
 
 
-# ============================================================================
-# DELETE /clients/me — cascades
-# ============================================================================
-
 class TestDeleteClient:
-
     def test_delete_removes_routes_and_preferences(self, client):
-        client.put("/clients/me/preferences", headers=HEADERS,
-                   json={"transport": "auto"})
+        client.put("/clients/me/preferences", headers=HEADERS, json={"transport": "auto"})
         rid = _save_route(client).json()["id"]
         assert client.delete("/clients/me", headers=HEADERS).status_code == 204
-        # The client is gone: routes with it, preferences with it.
         assert client.get("/clients/me/routes", headers=HEADERS).json() == []
-        assert client.get(f"/clients/me/routes/{rid}",
-                          headers=HEADERS).status_code == 404
-        assert client.get("/clients/me/preferences",
-                          headers=HEADERS).json()["transport"] is None
+        assert client.get(f"/clients/me/routes/{rid}", headers=HEADERS).status_code == 404
+        assert client.get("/clients/me/preferences", headers=HEADERS).json()["transport"] is None
 
     def test_delete_is_idempotent(self, client):
         assert client.delete("/clients/me", headers=HEADERS).status_code == 204
         assert client.delete("/clients/me", headers=HEADERS).status_code == 204
 
 
-# ============================================================================
-# Storage down — 503 storage_unavailable everywhere, never a 500
-# ============================================================================
-
 class TestStorageDown:
-
     @pytest.fixture
     def down(self):
         agent_main.app.state.clients_repository = DownRepo()
         yield TestClient(agent_main.app, raise_server_exceptions=False)
         del agent_main.app.state.clients_repository
 
-    @pytest.mark.parametrize("method,path,body", [
-        ("get", "/clients/me/preferences", None),
-        ("put", "/clients/me/preferences", {"transport": "auto"}),
-        ("post", "/clients/me/routes", {"query": "замки", "plan": PLAN}),
-        ("get", "/clients/me/routes", None),
-        ("get", f"/clients/me/routes/{CLIENT_A}", None),
-        ("patch", f"/clients/me/routes/{CLIENT_A}", {"name": "x"}),
-        ("delete", f"/clients/me/routes/{CLIENT_A}", None),
-        ("delete", "/clients/me", None),
-    ])
+    @pytest.mark.parametrize(
+        "method,path,body",
+        [
+            ("get", "/clients/me/preferences", None),
+            ("put", "/clients/me/preferences", {"transport": "auto"}),
+            ("post", "/clients/me/routes", {"query": "замки", "plan": PLAN}),
+            ("get", "/clients/me/routes", None),
+            ("get", f"/clients/me/routes/{CLIENT_A}", None),
+            ("patch", f"/clients/me/routes/{CLIENT_A}", {"name": "x"}),
+            ("delete", f"/clients/me/routes/{CLIENT_A}", None),
+            ("delete", "/clients/me", None),
+        ],
+    )
     def test_every_endpoint_degrades_to_503(self, down, method, path, body):
-        r = getattr(down, method)(path, headers=HEADERS,
-                                  **({"json": body} if body else {}))
+        r = getattr(down, method)(path, headers=HEADERS, **({"json": body} if body else {}))
         assert r.status_code == 503, r.text
         assert r.json() == {"reason": "storage_unavailable"}
 
-
-# ============================================================================
-# The storage layer itself
-# ============================================================================
 
 class FakeCursor:
     def __init__(self, conn):
@@ -516,7 +494,6 @@ def _repo(handler=None, **kw):
 
 
 class TestStore:
-
     def test_ensure_client_is_an_upsert(self):
         repo, conn = _repo()
         repo.ensure_client(uuid.UUID(CLIENT_A))
@@ -533,38 +510,34 @@ class TestStore:
         row = dict.fromkeys(PREFERENCE_COLUMNS)
         row["transport"] = "auto"
         repo, _ = _repo(lambda _s, _p: {"one": row})
-        assert repo.get_preferences(uuid.UUID(CLIENT_A))["transport"] == "auto"
+        assert repo.get_preferences(uuid.UUID(CLIENT_A)).transport == "auto"
 
     def test_upsert_touches_only_the_sent_columns(self):
         repo, conn = _repo(lambda _s, _p: {"one": {"transport": "auto"}})
         repo.upsert_preferences(uuid.UUID(CLIENT_A), {"transport": "auto"})
         sqls = [s for s, _ in conn.executed]
-        update = [s for s in sqls if "INSERT INTO client_preferences" in s][0]
+        update = next(s for s in sqls if "INSERT INTO client_preferences" in s)
         assert "transport = EXCLUDED.transport" in update
         assert "party_adults = EXCLUDED.party_adults" not in update
 
     def test_a_null_cleared_jsonb_is_sql_null_not_json_null(self):
         repo, conn = _repo(lambda _s, _p: {"one": {}})
-        repo.upsert_preferences(uuid.UUID(CLIENT_A),
-                                {"visit_minutes_by_category": None})
-        _sql, params = [e for e in conn.executed
-                        if "INSERT INTO client_preferences" in e[0]][0]
+        repo.upsert_preferences(uuid.UUID(CLIENT_A), {"visit_minutes_by_category": None})
+        _sql, params = next(e for e in conn.executed if "INSERT INTO client_preferences" in e[0])
         assert None in params
         assert not any(isinstance(p, Jsonb) for p in params)
 
     def test_a_real_jsonb_is_adapted(self):
         repo, conn = _repo(lambda _s, _p: {"one": {}})
-        repo.upsert_preferences(uuid.UUID(CLIENT_A),
-                                {"visit_minutes_by_category": {"замок": 90}})
-        _sql, params = [e for e in conn.executed
-                        if "INSERT INTO client_preferences" in e[0]][0]
+        repo.upsert_preferences(uuid.UUID(CLIENT_A), {"visit_minutes_by_category": {"замок": 90}})
+        _sql, params = next(e for e in conn.executed if "INSERT INTO client_preferences" in e[0])
         assert any(isinstance(p, Jsonb) for p in params)
 
     def test_add_route_reports_the_route_id(self):
         rid = uuid.uuid4()
         repo, _ = _repo(lambda _s, _p: {"one": {"id": rid, "created_at": _now()}})
         out = repo.add_route(uuid.UUID(CLIENT_A), rid, query="q", plan=PLAN)
-        assert out["id"] == rid
+        assert out.id == rid
 
     def test_add_route_over_the_cap_raises_too_many(self):
         repo, _ = _repo(lambda _s, _p: {"one": None}, max_routes=1)
@@ -573,14 +546,24 @@ class TestStore:
 
     def test_list_routes_derives_metrics_without_geometry(self):
         rid = uuid.uuid4()
-        repo, conn = _repo(lambda _s, _p: {"all": [{
-            "id": rid, "name": None, "query": "q", "created_at": _now(),
-            "stop_count": 2, "summary": PLAN["summary"], "budget": PLAN["budget"],
-        }]})
+        repo, conn = _repo(
+            lambda _s, _p: {
+                "all": [
+                    {
+                        "id": rid,
+                        "name": None,
+                        "query": "q",
+                        "created_at": _now(),
+                        "stop_count": 2,
+                        "summary": PLAN["summary"],
+                        "budget": PLAN["budget"],
+                    }
+                ]
+            }
+        )
         items = repo.list_routes(uuid.UUID(CLIENT_A), 50)
-        assert items[0]["distance_m"] == 1500
-        assert items[0]["duration_min"] == 90
-        # The query asks for scalars, never the plan blob.
+        assert items[0].distance_m == 1500
+        assert items[0].duration_min == 90
         select = conn.executed[-1][0]
         assert "plan->'points'" in select
         assert "plan->'shape'" not in select
@@ -592,6 +575,7 @@ class TestStore:
     def test_a_driver_error_becomes_storage_unavailable(self):
         def boom(_sql, _params):
             raise psycopg.OperationalError("connection refused")
+
         repo, _ = _repo(boom)
         with pytest.raises(StorageUnavailable):
             repo.ensure_client(uuid.UUID(CLIENT_A))
@@ -599,6 +583,7 @@ class TestStore:
     def test_an_unreachable_database_never_leaks_a_driver_error(self):
         def refuse():
             raise psycopg.OperationalError("could not connect")
+
         repo = PostgresClientRepository(connect=refuse)
         for call in (
             lambda: repo.ensure_client(uuid.UUID(CLIENT_A)),
@@ -610,12 +595,7 @@ class TestStore:
                 call()
 
 
-# ============================================================================
-# route_metrics — the derivation the list leans on
-# ============================================================================
-
 class TestRouteMetrics:
-
     def test_distance_from_length_km(self):
         assert route_metrics(3, {"length_km": 2.5}, None)["distance_m"] == 2500
 
@@ -631,10 +611,6 @@ class TestRouteMetrics:
         assert m == {"stop_count": 0, "distance_m": None, "duration_min": None}
 
 
-# ============================================================================
-# The real thing: live Postgres, skipped when unreachable
-# ============================================================================
-
 def _db_up() -> bool:
     try:
         psycopg.connect(settings.DSN, connect_timeout=3).close()
@@ -644,9 +620,8 @@ def _db_up() -> bool:
 
 
 def _apply_migration(conn) -> None:
-    """Apply 0005 as one multi-statement call (idempotent, safe to re-run)."""
-    with open(MIGRATION, encoding="utf-8") as fh:
-        conn.execute(fh.read())
+    """Apply the schema baseline in one multi-statement call (idempotent)."""
+    conn.execute(baseline_sql())
 
 
 def test_live_round_trip_and_cascade():
@@ -667,18 +642,21 @@ def test_live_round_trip_and_cascade():
         tc = TestClient(agent_main.app, raise_server_exceptions=False)
         headers = {"X-Client-Id": str(client_id)}
 
-        # preferences: partial then clear
-        assert tc.put("/clients/me/preferences", headers=headers,
-                      json={"transport": "auto", "party_adults": 2}).json()[
-            "transport"] == "auto"
-        cleared = tc.put("/clients/me/preferences", headers=headers,
-                         json={"party_adults": None}).json()
+        assert (
+            tc.put(
+                "/clients/me/preferences",
+                headers=headers,
+                json={"transport": "auto", "party_adults": 2},
+            ).json()["transport"]
+            == "auto"
+        )
+        cleared = tc.put(
+            "/clients/me/preferences", headers=headers, json={"party_adults": None}
+        ).json()
         assert cleared["party_adults"] is None and cleared["transport"] == "auto"
 
-        # route: save, read back byte-identical, list without geometry
         created = _save_route(tc, headers=headers).json()
-        detail = tc.get(f"/clients/me/routes/{created['id']}",
-                        headers=headers).json()
+        detail = tc.get(f"/clients/me/routes/{created['id']}", headers=headers).json()
         assert detail["plan"] == PLAN
         assert detail["visit_overrides"] == VISIT_OVERRIDES
         item = tc.get("/clients/me/routes", headers=headers).json()[0]
@@ -687,18 +665,16 @@ def test_live_round_trip_and_cascade():
         assert item["duration_min"] == 90
         assert "plan" not in item
 
-        # rename
-        renamed = tc.patch(f"/clients/me/routes/{created['id']}",
-                           headers=headers, json={"name": "Новое имя"}).json()
+        renamed = tc.patch(
+            f"/clients/me/routes/{created['id']}", headers=headers, json={"name": "Новое имя"}
+        ).json()
         assert renamed["name"] == "Новое имя"
 
-        # delete the client → cascade proves itself in the DB
         assert tc.delete("/clients/me", headers=headers).status_code == 204
         with admin.cursor() as cur:
             cur.execute("SELECT count(*) FROM clients WHERE id = %s", (client_id,))
             assert cur.fetchone()[0] == 0
-            cur.execute("SELECT count(*) FROM saved_routes WHERE client_id = %s",
-                        (client_id,))
+            cur.execute("SELECT count(*) FROM saved_routes WHERE client_id = %s", (client_id,))
             assert cur.fetchone()[0] == 0
             cur.execute(
                 "SELECT count(*) FROM client_preferences WHERE client_id = %s",

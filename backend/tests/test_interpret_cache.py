@@ -1,16 +1,5 @@
 """The reading is cached; the verdicts, the measurements and the geometry are not.
 
-A reading is a function of the text, the visible UI filters and the prompt — the
-things that go into the key — so two requests may share one model call only when
-the model would have been asked exactly the same question. Everything else about
-a request is an answer about the world (the database, Valhalla) and is never
-cached: a stale verdict in the panel would be a lie, a stale reading is at worst
-a question asked twice.
-
-The dangerous part is not the lookup but the sharing: `TripRequirements` is
-mutated downstream by resolve() and the verifier, so a stored object handed out
-directly would make the next request inherit this one's place ids and verdicts.
-
 No network, no DB: the agent is replaced by a fixed contract.
 """
 
@@ -25,16 +14,41 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agent import trace
-from agent.models import GenerateReq
-from agent.planner import intent, interpret_cache as cache
-from agent.requirements import Requirement, TripRequirements
+from agent.models import Requirement, TripRequirements
+from core import cache
+from core.errors import InterpretationUnavailable
+from planner import intent
+from planner.models import GenerateReq
+from telemetry import trace
 
 
 def _req(**over: Any) -> GenerateReq:
     body: dict[str, Any] = {"query": "старый город за два часа", "locale": "ru"}
     body.update(over)
     return GenerateReq(**body)
+
+
+def _key(query: str, brief, instructions: str, model: str | None = None) -> str:
+    """The interpret key for a brief, built the way `planner.intent` builds it.
+
+    The cache takes values, not a request object — that is what lets it sit below
+    both layers — so the mapping lives where the brief is made, and here.
+    """
+    return cache.interpret_key(
+        query,
+        instructions,
+        model,
+        locale=brief.locale,
+        party_adults=brief.party_adults,
+        party_children=brief.party_children,
+        party_children_ages=brief.party_children_ages,
+        mobility=brief.mobility,
+        time_budget_minutes=brief.time_budget_minutes,
+        hard_services=brief.hard_services,
+        interests=brief.interests,
+        avoid=brief.avoid,
+        result_mode=brief.result_mode,
+    )
 
 
 def _contract(name: str = "Старый замок") -> TripRequirements:
@@ -56,19 +70,17 @@ def clean_cache(monkeypatch):
     cache.INTERPRET_CACHE.clear()
 
 
-# ── the key ──────────────────────────────────────────────────────────────────
-
 def test_the_same_question_gets_the_same_key():
     instructions = "ты читаешь запрос"
-    assert cache.interpret_key("замки", _req(), instructions) == cache.interpret_key(
-        "замки", _req(), instructions
+    assert _key("замки", intent.reader_brief(_req()), instructions) == _key(
+        "замки", intent.reader_brief(_req()), instructions
     )
 
 
 def test_a_changed_ui_filter_is_a_different_question():
     """The panel's controls go into the prompt, so they must go into the key."""
     instructions = "ты читаешь запрос"
-    base = cache.interpret_key("замки", _req(), instructions)
+    base = _key("замки", intent.reader_brief(_req()), instructions)
 
     for changed in (
         _req(interests=["кафе"]),
@@ -81,7 +93,7 @@ def test_a_changed_ui_filter_is_a_different_question():
         _req(result_mode="catalogue"),
         _req(locale="en"),
     ):
-        assert cache.interpret_key(changed.query, changed, instructions) != base
+        assert _key(changed.query, intent.reader_brief(changed), instructions) != base
 
 
 def test_the_travel_profile_is_not_part_of_the_question():
@@ -90,14 +102,14 @@ def test_the_travel_profile_is_not_part_of_the_question():
     walk = _req(profile="pedestrian")
     drive = _req(profile="car")
 
-    assert cache.interpret_key(walk.query, walk, instructions) == cache.interpret_key(
-        drive.query, drive, instructions
+    assert _key(walk.query, intent.reader_brief(walk), instructions) == _key(
+        drive.query, intent.reader_brief(drive), instructions
     )
 
 
 def test_editing_the_prompt_invalidates_every_entry():
-    before = cache.interpret_key("замки", _req(), "один промпт")
-    after = cache.interpret_key("замки", _req(), "другой промпт")
+    before = _key("замки", intent.reader_brief(_req()), "один промпт")
+    after = _key("замки", intent.reader_brief(_req()), "другой промпт")
 
     assert before != after
 
@@ -105,20 +117,17 @@ def test_editing_the_prompt_invalidates_every_entry():
 def test_switching_the_model_invalidates_every_entry():
     """A reading is the MODEL's output, so a different model is a different answer.
 
-    Without the model in the key, a process that switched models kept answering
-    from the previous model's readings — cheap to miss, expensive to believe:
-    it makes every "we measured the new model" claim false.
+    Without the model in the key, "we measured the new model" claims become false.
     """
     instructions = "ты читаешь запрос"
-    baseline = cache.interpret_key("замки", _req(), instructions, "google/gemini-2.5-pro")
+    baseline = _key("замки", intent.reader_brief(_req()), instructions, "google/gemini-2.5-pro")
 
-    assert cache.interpret_key(
-        "замки", _req(), instructions, "google/gemini-2.5-flash"
-    ) != baseline
-    assert cache.interpret_key("замки", _req(), instructions, None) != baseline
+    assert (
+        _key("замки", intent.reader_brief(_req()), instructions, "google/gemini-2.5-flash")
+        != baseline
+    )
+    assert _key("замки", intent.reader_brief(_req()), instructions, None) != baseline
 
-
-# ── the store ────────────────────────────────────────────────────────────────
 
 def test_an_expired_reading_is_not_returned():
     store = cache.TtlLru(maxsize=4, ttl_s=1)
@@ -135,7 +144,7 @@ def test_the_store_stays_bounded():
         store.put(key, _contract(key))
 
     assert store.stats()["size"] == 2
-    assert store.get("a") is None  # the oldest went first
+    assert store.get("a") is None
     assert store.get("c") is not None
 
 
@@ -161,15 +170,10 @@ def test_stats_are_countable_not_claimed():
     assert (stats["hits"], stats["misses"], stats["hit_rate"]) == (2, 1, 0.667)
 
 
-# ── the part that would bite: shared state ───────────────────────────────────
-
 def test_the_second_reading_does_not_inherit_the_first_ones_verdicts(monkeypatch):
     """A cached contract must be handed out as a copy.
 
-    Downstream the contract is mutated: place ids are attached, statuses are
-    written by the verifier. If the stored object were returned as-is, the next
-    request would start with the previous request's answers already in it — and
-    would report them as its own.
+    Downstream it is mutated: place ids attached, statuses written by the verifier.
     """
     calls = {"n": 0}
 
@@ -185,7 +189,6 @@ def test_the_second_reading_does_not_inherit_the_first_ones_verdicts(monkeypatch
     )
 
     first = intent.build_requirements("старый город за два часа", _req())
-    # What the pipeline does to it right after the reading.
     first.requirements[0].place_id = 777
     first.requirements[0].status = "satisfied"
 
@@ -194,16 +197,15 @@ def test_the_second_reading_does_not_inherit_the_first_ones_verdicts(monkeypatch
     assert calls["n"] == 1, "второй запрос должен был обойтись без модели"
     assert second.requirements[0].place_id is None
     assert second.requirements[0].status == "pending"
-    assert first.requirements[0].place_id == 777  # the caller keeps its own
+    assert first.requirements[0].place_id == 777
 
 
-def test_without_an_agent_nothing_is_cached(monkeypatch):
-    """The deterministic parse is milliseconds of regex; caching it is pointless."""
-    monkeypatch.setattr(
-        intent, "_interpret_cache_key", lambda query, req: (None, "")
-    )
+def test_without_a_cache_key_nothing_is_cached(monkeypatch):
+    """No key means no reading at all — and nothing to cache."""
+    monkeypatch.setattr(intent, "_interpret_cache_key", lambda query, req: (None, ""))
 
-    intent.build_requirements("замки Гродно", _req())
+    with pytest.raises(InterpretationUnavailable):
+        intent.build_requirements("замки Гродно", _req())
 
     assert cache.INTERPRET_CACHE.stats()["size"] == 0
 
@@ -211,8 +213,7 @@ def test_without_an_agent_nothing_is_cached(monkeypatch):
 def test_a_cached_reading_says_so_in_the_trace(monkeypatch):
     """No model call happened, and the trace must not leave that to guesswork.
 
-    A hit that records nothing looks exactly like a call nobody recorded — the
-    one reading of the trace that is wrong.
+    A hit that records nothing looks exactly like a call nobody recorded.
     """
 
     def fake_agent(query, req, db, wall_clock_s=None):
@@ -223,15 +224,15 @@ def test_a_cached_reading_says_so_in_the_trace(monkeypatch):
         intent, "_interpret_cache_key", lambda query, req: ("trace-key", "prompt-hash")
     )
 
-    intent.build_requirements("старый город за два часа", _req())  # fills the cache, untraced
+    intent.build_requirements("старый город за два часа", _req())
 
     trace.begin("job-cache")
     try:
         intent.build_requirements("старый город за два часа", _req())
-        span, = trace._traces["job-cache"].spans
+        (span,) = trace._traces["job-cache"].spans
     finally:
         trace.finish()
 
     assert span.name == "interpret · model"
-    assert span.status == "skipped"  # the step did not run; it is not an error
+    assert span.status == "skipped"
     assert span.facts == {"cached": True}

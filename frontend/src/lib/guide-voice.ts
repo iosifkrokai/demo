@@ -1,28 +1,4 @@
-/**
- * Pure decision logic for when and what the guide should say aloud.
- *
- * Speech is driven by distance thresholds along the route line. The same
- * maneuver is never announced twice on the same threshold; a new maneuver
- * cancels any in-progress speech first.
- *
- * Thresholds are tuned for pedestrian walking on short urban legs
- * (between two stops is often 60–120 m). The classic 300/100 m split
- * is too wide: the next maneuver may be 80 m away, and 300 m would be the
- * end of the leg, not the beginning.
- *
- * Selected values:
- * - 80 m  — «далеко»: significant intersection or turn, enough time to prepare.
- * - 30 m  — «близко»: tight turn or alley, the window where Google maps says
- *              «сверните». 30 m is still reachable at walking pace in < 4 s.
- * - 10 m  — «очень близко»: the last verbal cue before the turn; on a 40 m leg
- *            it fires instead of 30 m, which is correct.
- * - 0 m   — «прибытие»: the tourist reached the destination (no more maneuvers).
- *
- * The module stays *pure* about language: it decides *which* threshold fired
- * and hands back the maneuver's own instruction (already in the route's
- * language, straight from Valhalla). The human phrase is assembled by the
- * panel through i18next — this module never hard-codes a sentence.
- */
+/** Pure decision logic for when and what the guide should say aloud. */
 
 export type FixQuality = 'unavailable' | 'waiting' | 'stale' | 'poor' | 'good';
 
@@ -63,10 +39,7 @@ const canSpeak = ({
   muted: boolean;
 }) => !muted && quality === 'good' && !offRoute;
 
-/**
- * Accept an announcement whose distance trigger was selected by the navigation
- * engine rather than by this module's legacy distance thresholds.
- */
+/** Accept an announcement whose distance trigger came from the navigation engine. */
 export const decideTriggeredVoice = (params: {
   instruction: string;
   distanceM: number;
@@ -81,12 +54,7 @@ export const decideTriggeredVoice = (params: {
   return { type: 'announce', distanceM, instruction };
 };
 
-/**
- * Distance bands at which a maneuver is announced.  Sorted ascending so that
- * `0` is checked first (most urgent) and the loop returns the *smallest*
- * threshold the distance satisfies — when the tourist is 30 m away the
- * 30 m band fires, not 80 m.
- */
+/** Distance bands at which a maneuver is announced. */
 export const VOICE_THRESHOLDS_M = [0, 10, 30, 80] as const;
 
 /** One of the distance bands above, as a type. */
@@ -113,13 +81,7 @@ export const markSpoken = (
   return next;
 };
 
-/**
- * Decide what (if anything) the guide should say right now.
- *
- * Returns `VoiceDecision` — data, not a sentence — so the caller can phrase it
- * in the interface language and attach metadata (distance) without
- * re-computing anything.
- */
+/** Decide what (if anything) the guide should say right now. */
 export const decideVoice = (params: {
   maneuver: VoiceManeuver | null;
   /** Distance in metres from the tourist's frozen position to the maneuver. */
@@ -135,10 +97,6 @@ export const decideVoice = (params: {
 }): VoiceDecision => {
   const { maneuver, distanceM, spoken } = params;
 
-  // Always silence when:
-  // - muted in the UI
-  // - GPS cannot be trusted
-  // - the tourist has left the route (the panel is already showing re-plan)
   if (!canSpeak(params)) {
     return { type: 'silent' };
   }
@@ -151,8 +109,6 @@ export const decideVoice = (params: {
     return { type: 'silent' };
   }
 
-  // Find the first threshold this maneuver has not yet crossed.
-  // VOICE_THRESHOLDS_M is sorted ascending.
   for (const threshold of VOICE_THRESHOLDS_M) {
     const alreadySpoken = spoken.get(maneuver.key)?.has(threshold) ?? false;
     if (distanceM <= threshold && !alreadySpoken) {
@@ -160,8 +116,6 @@ export const decideVoice = (params: {
         type: 'announce',
         threshold,
         instruction: maneuver.instruction,
-        // The 0 m band is the arrival: Valhalla's final instruction is often
-        // empty there, so the panel falls back to its own «прибыли» phrase.
         arrival: threshold === 0,
       };
     }
@@ -178,8 +132,6 @@ export const isNewManeuver = (
   if (prev === null || next === null) return true;
   return prev.key !== next.key;
 };
-
-// ── SpeechSynthesis wrapper ────────────────────────────────────────────────────
 
 /** The real browser type, used only as a return type. */
 type SpeechSynthesisInstance = typeof window extends {
@@ -198,16 +150,7 @@ export const isSpeechAvailable = (): boolean => {
   return getSpeech() != null;
 };
 
-/**
- * Speak `text` in the given language.
- * Cancels any in-progress speech first so the new utterance is immediate,
- * never queued.
- *
- * A real `SpeechSynthesisUtterance` is required: `speechSynthesis.speak()` in a
- * browser throws `TypeError` on anything else. Where the constructor does not
- * exist (a bare test environment, an engine without Web Speech) this is a
- * silent no-op rather than a crash inside the guide's effect.
- */
+/** Speak `text` in the given language. */
 export const speak = (text: string, lang: string = 'ru-RU'): void => {
   const ss = getSpeech();
   if (!ss) return;

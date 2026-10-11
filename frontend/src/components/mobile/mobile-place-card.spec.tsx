@@ -5,8 +5,6 @@ import type { PlaceDetails } from '@/stores/directions-store';
 
 import { MobilePlaceCard } from './mobile-place-card';
 
-// The «посещено» toggle (spec 005) has its own spec; mocked so a layout test needs
-// no QueryClient, and anonymous, which is what the hint renders for.
 vi.mock('@/hooks/use-auth', () => ({
   useAuth: () => ({
     user: null,
@@ -33,8 +31,6 @@ const details = (overrides: Partial<PlaceDetails> = {}): PlaceDetails => ({
   ...overrides,
 });
 
-// jsdom shares one document across the files of a worker: without this, the
-// card this spec leaves behind answers the next spec's queries.
 afterEach(cleanup);
 
 describe('MobilePlaceCard', () => {
@@ -48,10 +44,6 @@ describe('MobilePlaceCard', () => {
   });
 
   it('stands on the bottom of the map, above the panel sheet', () => {
-    // A card that follows the pin inherits the pin's screen position: it moves
-    // when the map is panned, can land under the map's own controls, and has to
-    // be fought with by the pan handler to stay put. Docking it on the same
-    // `--sheet-h` every floating control rides on gives it neither problem.
     render(<MobilePlaceCard details={details()} onClose={() => {}} />);
 
     expect(screen.getByTestId('mobile-place-card').className).toContain(
@@ -60,7 +52,6 @@ describe('MobilePlaceCard', () => {
   });
 
   it('cannot grow over the map it is describing', () => {
-    // Three extra facts and four links must not be able to swallow the map.
     render(
       <MobilePlaceCard
         details={details({
@@ -71,15 +62,12 @@ describe('MobilePlaceCard', () => {
       />
     );
 
-    // The bounds are on the card itself, inside the full-width wrapper.
     const card = screen.getByTestId('mobile-place-card').firstElementChild!;
     expect(card.className).toContain('max-h-');
     expect(card.className).toContain('overflow-y-auto');
   });
 
   it('is never on a wide screen', () => {
-    // The desktop reader is the popup by the pin; two cards for one point would
-    // put the same text on screen twice.
     render(<MobilePlaceCard details={details()} onClose={() => {}} />);
     expect(screen.getByTestId('mobile-place-card').className).toContain(
       'md:hidden'
@@ -87,8 +75,6 @@ describe('MobilePlaceCard', () => {
   });
 
   it('does not eat taps meant for the map around it', () => {
-    // The wrapper covers the full width, so without pointer-events-none the
-    // strip above the card would be a strip of dead map.
     render(<MobilePlaceCard details={details()} onClose={() => {}} />);
     expect(screen.getByTestId('mobile-place-card').className).toContain(
       'pointer-events-none'

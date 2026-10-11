@@ -1,15 +1,4 @@
-/**
- * Where the route request got to (`GET /routes/progress/{id}`).
- *
- * The panel used to have two sentences for a request that takes half a minute,
- * because those were all the client could observe. The pipeline now reports its
- * own stages — but in **codes**, never in prose: the backend does not speak one
- * language, so localising them is the client's job (same rule as reason codes).
- *
- * A 404 is not an error to shout about: it means the server does not know this
- * id (a restart, a TTL, a second worker). The caller then falls back to what it
- * can observe itself, never to an invented stage.
- */
+/** Where the route request got to (`GET /routes/progress/{id}`). */
 
 /** The stages the pipeline reports, in the order it reaches them. */
 export type RouteStageCode =
@@ -29,11 +18,6 @@ export interface RouteProgress {
   elapsedMs: number;
 }
 
-/**
- * An id for one attempt. `crypto.randomUUID` needs a secure context; the demo
- * also runs over plain http on a LAN, where it is missing — the fallback keeps
- * the id unique per attempt without pretending to be a UUID.
- */
 export const newProgressId = (): string =>
   typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
     ? crypto.randomUUID()
@@ -59,11 +43,7 @@ export const asStageCode = (value: unknown): RouteStageCode | null =>
     ? (value as RouteStageCode)
     : null;
 
-/**
- * The current stage, or `null` when the server cannot say (unknown id, or a
- * network that never reached it). `null` is information too, and the caller has
- * a truthful sentence to show in that case.
- */
+/** The route's current stage; `null` when the server cannot say (unknown or unreachable). */
 export const fetchRouteProgress = async (
   progressId: string,
   signal: AbortSignal

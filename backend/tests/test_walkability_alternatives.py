@@ -1,15 +1,4 @@
-"""When the plan outgrows the chosen profile, the answer must say so and offer a way.
-
-Measured on the live stack: «все костёлы Гродненской области» with no anchor came
-back as 49 stops, 211.7 km and 17 hours of walking under `pedestrian` — an honest
-answer nobody can walk. The response keeps the plan (the request really did ask for
-the region; a silently trimmed dozen would lie about it) and adds machine-readable
-offers, plus one sentence for the tourist.
-
-These tests pin the boundaries, the reason codes and — importantly — what is NOT
-offered: a costing the deployment cannot route (no transit tiles are loaded, so
-`bus` would be a promise Valhalla refuses) must never be suggested.
-"""
+"""When the plan outgrows the chosen profile, the answer must say so and offer a way."""
 
 from __future__ import annotations
 
@@ -18,8 +7,8 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agent import constants
-from agent.planner.pipeline import alternatives_for, alternatives_sentence
+from core import constants
+from planner.response import alternatives_for, alternatives_sentence
 
 
 def _costings(offers) -> list[str]:
@@ -71,12 +60,7 @@ def test_a_motorised_plan_offers_nothing() -> None:
 
 
 def test_transit_is_never_offered_as_a_costing_we_cannot_route() -> None:
-    """A suggestion the client would submit back must be one Valhalla can serve.
-
-    No transit tiles are loaded in this deployment, so `bus` would come back as a
-    refusal — the very breakage the offers exist to prevent. Public transport is
-    said in the sentence instead, where it is advice, not a request we must honour.
-    """
+    """A suggestion the client would submit back must be one Valhalla can serve."""
     offers = alternatives_for(costing="pedestrian", walk_s=17 * 3600, length_km=211.7)
     assert "bus" not in _costings(offers)
     sentence = alternatives_sentence(offers, 17 * 3600)

@@ -1,14 +1,6 @@
 """The stage-eval runner itself: it must not lie about its own results.
 
-Pins three things that make the numbers trustworthy:
-
-  * a case file with a broken line is a loud error, not a silently skipped case
-    (a case that disappears lowers the denominator and raises the score);
-  * a documented gap (`known_gap`) is reported but neither counted as a failure
-    nor turned into a non-zero exit code — the gate and the printed rate must
-    agree;
-  * the offline stages actually run here and pass, so a change that breaks the
-    verifier or the along-the-line measurement is caught by `pytest tests -q`.
+A broken case file is loud, and a documented gap is reported but never fails.
 """
 
 from __future__ import annotations
@@ -19,7 +11,7 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from evals import run as evals
+from quality import evals
 
 
 def test_a_broken_case_file_is_a_loud_error(tmp_path, monkeypatch):
@@ -39,8 +31,7 @@ def test_a_broken_case_file_is_a_loud_error(tmp_path, monkeypatch):
 def test_a_known_gap_is_reported_but_does_not_fail_the_run():
     checks = [
         {"case": "a", "check": "verdict", "ok": True, "detail": "", "why": ""},
-        {"case": "b", "check": "verdict", "ok": False, "detail": "", "why": "",
-         "known_gap": True},
+        {"case": "b", "check": "verdict", "ok": False, "detail": "", "why": "", "known_gap": True},
     ]
     passed, total = evals._rate(checks)
     assert (passed, total) == (1, 1), "пробел не должен попадать в знаменатель"
@@ -56,8 +47,6 @@ def test_the_offline_stages_pass_here():
     results = [evals.run_verdicts(), evals.run_services()]
     for res in results:
         if res.get("skipped"):
-            continue  # без базы участок пропускается, а не «проходит»
-        failed = [
-            c for c in res["checks"] if not c["ok"] and not c.get("known_gap")
-        ]
+            continue
+        failed = [c for c in res["checks"] if not c["ok"] and not c.get("known_gap")]
         assert failed == [], f"{res['stage']}: {json.dumps(failed, ensure_ascii=False)}"

@@ -98,7 +98,6 @@ describe('useClientPreferences', () => {
       await new Promise((resolve) => setTimeout(resolve, 40));
     });
 
-    // The UI moved at once, and the local copy already has it.
     expect(result.current.preferences.party_adults).toBe(3);
     expect(localStorage.getItem(CLIENT_PREFERENCES_STORAGE_KEY)).toContain(
       '"party_adults":3'
@@ -134,7 +133,6 @@ describe('useClientPreferences', () => {
     });
 
     expect(result.current.savingUnavailable).toBe(true);
-    // The change is not lost: it lives in this browser.
     expect(result.current.preferences.time_budget_minutes).toBe(90);
     expect(localStorage.getItem(CLIENT_PREFERENCES_STORAGE_KEY)).toContain(
       '"time_budget_minutes":90'

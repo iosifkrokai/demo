@@ -27,7 +27,6 @@ describe('useVisitOverrides', () => {
     expect(first.result.current.overrides).toEqual({ '1': 50 });
     expect(readStored()).toEqual({ route: 'route-a', overrides: { '1': 50 } });
 
-    // A fresh mount is a page reload: the number is read back from storage.
     first.unmount();
     const second = renderHook(() => useVisitOverrides('route-a'));
 

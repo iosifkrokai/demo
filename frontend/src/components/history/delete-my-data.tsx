@@ -1,11 +1,4 @@
-/**
- * «удалить мои данные» (spec 003 §5).
- *
- * Deletes the client on the server — routes and preferences go with it — and
- * the local copies here. It is a deliberate two-step: a quiet link that opens
- * the consequence in plain words, then a confirm. The result is reported
- * honestly: a server that could not be reached is not called a deletion.
- */
+/** «удалить мои данные». */
 
 import { Trash2 } from 'lucide-react';
 import { useState } from 'react';

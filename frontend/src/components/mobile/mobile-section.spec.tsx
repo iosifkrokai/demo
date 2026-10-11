@@ -7,13 +7,6 @@ import { MobileSection } from './mobile-section';
 describe('MobileSection', () => {
   beforeEach(cleanup);
 
-  // ── Desktop (jsdom 1024px, max-md DOES NOT apply) ────────────────────────────
-
-  // At 1024px jsdom: max-md (max-width: 1023px) does not match.
-  // Toggle: class "hidden max-md:flex" — `hidden` hides it; `max-md:flex` never
-  // activates (the prefix does not match). Body open: no max-md:hidden class.
-  // Content is always in the DOM; RTL queries it regardless of CSS visibility.
-
   it('toggle is hidden on desktop (hidden overrides max-md:flex)', () => {
     render(
       <MobileSection id="test" title="Test group" defaultOpen={true}>
@@ -22,10 +15,6 @@ describe('MobileSection', () => {
     );
 
     const toggle = screen.getByTestId('section-toggle-test');
-    // max-md:flex activates only on ≤767px; on ≥1024px `hidden` wins.
-    // (RTL cannot reliably test CSS visibility in jsdom at the breakpoint edge,
-    // so we verify the class composition instead — the toggle has both classes,
-    // hidden wins on desktop.)
     expect(toggle).toHaveClass('hidden');
     expect(toggle).toHaveClass('max-md:flex');
 
@@ -41,18 +30,10 @@ describe('MobileSection', () => {
       </MobileSection>
     );
 
-    // At 1024px max-md does not apply: the body's max-md:hidden class (added
-    // because open=false) has no effect. Content is in DOM and visible.
     const body = screen.getByTestId('section-body-test2');
-    expect(body).toHaveClass('max-md:hidden'); // class is there (open=false)
-    // ...but it does not apply on desktop, so content is visible
+    expect(body).toHaveClass('max-md:hidden');
     expect(screen.getByTestId('inner2')).toBeInTheDocument();
   });
-
-  // ── Mobile (≤767px): toggle visible, body hidden by default ─────────────────
-
-  // At 1024px max-md applies, so the toggle IS visible and the body IS hidden.
-  // We test the class logic rather than a real viewport — those are the mechanism.
 
   it('closed section: body has max-md:hidden', () => {
     render(
@@ -64,8 +45,6 @@ describe('MobileSection', () => {
     const toggle = screen.getByTestId('section-toggle-amenities');
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
 
-    // max-md:hidden is applied — on a ≤767px viewport the body is invisible.
-    // (RTL queries the DOM regardless of CSS, so we check the class, not DOM presence.)
     const body = screen.getByTestId('section-body-amenities');
     expect(body).toHaveClass('max-md:hidden');
   });
@@ -97,8 +76,6 @@ describe('MobileSection', () => {
       </MobileSection>
     );
 
-    // defaultOpen=true → open starts true on desktop; on phone the button
-    // is visible and the body is not hidden.
     const toggle = screen.getByTestId('section-toggle-avoid');
     await user.click(toggle);
 
@@ -107,8 +84,6 @@ describe('MobileSection', () => {
       'max-md:hidden'
     );
   });
-
-  // ── aria-controls / aria-expanded ────────────────────────────────────────
 
   it('aria-controls points to the body id', () => {
     render(
@@ -140,8 +115,6 @@ describe('MobileSection', () => {
     await user.click(toggle);
     expect(toggle).toHaveAttribute('aria-expanded', 'true');
   });
-
-  // ── Summary / counter ─────────────────────────────────────────────────────
 
   it('shows the summary text when provided', () => {
     render(
@@ -184,12 +157,9 @@ describe('MobileSection', () => {
 
     const toggle = screen.getByTestId('section-toggle-avoid2');
     expect(toggle).toBeVisible();
-    // The count span is inside the visible toggle button
     const count = screen.getByTestId('section-count-avoid2');
     expect(count).toBeVisible();
   });
-
-  // ── defaultOpen ───────────────────────────────────────────────────────────
 
   it('defaultOpen=true shows the body immediately on mobile', () => {
     render(
@@ -198,7 +168,6 @@ describe('MobileSection', () => {
       </MobileSection>
     );
 
-    // Button is visible (mobile) but aria-expanded is true → body not hidden
     const toggle = screen.getByTestId('section-toggle-result');
     expect(toggle).toBeVisible();
     expect(toggle).toHaveAttribute('aria-expanded', 'true');

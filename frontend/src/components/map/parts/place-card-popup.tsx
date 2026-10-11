@@ -12,16 +12,7 @@ interface PlaceCardPopupProps {
   onClose: () => void;
 }
 
-/**
- * Card shown next to a route marker on a wide screen.
- * Shows: name, category, visit time, blurb, multiple fun facts, and links.
- *
- * A phone does not use this one: a 340px popup anchored to a pin, floating over
- * the map in the middle of a walk, is the hardest thing on the screen to read
- * and the easiest to lose. There it is a card standing on the bottom of the map
- * instead — see `mobile/mobile-place-card.tsx`. The content itself is shared
- * (PlaceCardBody), so the two cannot say different things about one point.
- */
+/** Card shown next to a route marker on a wide screen. */
 export function PlaceCardPopup({
   lng,
   lat,

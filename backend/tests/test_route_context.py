@@ -1,9 +1,4 @@
-"""Phase 0 of the two-mode UI: the refinement contract (RouteContext).
-
-The frontend sends the route it already has plus the delta instruction; the
-backend must accept it, ignore it safely on a first turn, and never resurrect a
-stop the user deleted by hand.
-"""
+"""The refinement contract (RouteContext): accept the route plus the delta instruction."""
 
 from __future__ import annotations
 
@@ -15,9 +10,10 @@ from pydantic import ValidationError
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agent import constants
-from agent.models import Candidate, GenerateReq, LatLon, RouteContext
-from agent.planner.pipeline import (
+from core import constants
+from db.store.mappers import place_from_row
+from planner.models import Candidate, GenerateReq, LatLon, RouteContext
+from planner.refine import (
     _cap_for_valhalla,
     _context_changes,
     _drop_excluded,
@@ -28,8 +24,14 @@ from agent.planner.pipeline import (
 
 def _cand(pid: int, name: str) -> Candidate:
     return Candidate(
-        id=pid, name=name, lat=52.1, lon=23.7, category="кафе",
-        score=1.0, distance_m=None, source="osm",
+        id=pid,
+        name=name,
+        lat=52.1,
+        lon=23.7,
+        category="кафе",
+        score=1.0,
+        distance_m=None,
+        source="osm",
     )
 
 
@@ -39,19 +41,27 @@ def test_request_without_context_still_parses():
 
 
 def test_context_round_trips_from_the_frontend_payload():
-    req = GenerateReq.model_validate({
-        "query": "музеи Гродно",
-        "context": {
-            "instruction": "добавь кофейню и туалет",
-            "revision": 2,
-            "excluded_ids": [17],
-            "base_points": [
-                {"id": 3, "name": "Новый замок", "lat": 53.6766, "lon": 23.8264},
-                {"id": None, "name": "моё местоположение", "lat": 53.66,
-                 "lon": 23.83, "source": "mine", "pinned": True},
-            ],
-        },
-    })
+    req = GenerateReq.model_validate(
+        {
+            "query": "музеи Гродно",
+            "context": {
+                "instruction": "добавь кофейню и туалет",
+                "revision": 2,
+                "excluded_ids": [17],
+                "base_points": [
+                    {"id": 3, "name": "Новый замок", "lat": 53.6766, "lon": 23.8264},
+                    {
+                        "id": None,
+                        "name": "моё местоположение",
+                        "lat": 53.66,
+                        "lon": 23.83,
+                        "source": "mine",
+                        "pinned": True,
+                    },
+                ],
+            },
+        }
+    )
     ctx = req.context
     assert ctx is not None
     assert ctx.instruction == "добавь кофейню и туалет"
@@ -86,7 +96,7 @@ def test_base_stops_come_back_after_every_trim():
         {"id": 2, "name": "Новый замок", "category": "дворец", "lat": 53.67, "lon": 23.82},
     ]
 
-    merged, base = _with_base_points(pool, rows, set())
+    merged, base = _with_base_points(pool, [place_from_row(r) for r in rows], set())
 
     assert [c.id for c in merged] == [7, 1, 2]
     assert [c.name for c in base] == ["Старый замок", "Новый замок"]
@@ -97,7 +107,7 @@ def test_base_stop_the_user_deleted_is_not_resurrected():
     pool = [_cand(7, "Кафе Немо")]
     rows = [{"id": 1, "name": "Форт №16", "category": "инфраструктура", "lat": 53.6, "lon": 23.8}]
 
-    merged, base = _with_base_points(pool, rows, {1})
+    merged, base = _with_base_points(pool, [place_from_row(r) for r in rows], {1})
 
     assert [c.id for c in merged] == [7]
     assert base == []
@@ -107,7 +117,7 @@ def test_base_stop_already_in_the_pool_is_not_duplicated():
     pool = [_cand(1, "Старый замок")]
     rows = [{"id": 1, "name": "Старый замок", "category": "замок", "lat": 53.67, "lon": 23.82}]
 
-    merged, base = _with_base_points(pool, rows, set())
+    merged, base = _with_base_points(pool, [place_from_row(r) for r in rows], set())
 
     assert [c.id for c in merged] == [1]
     assert len(base) == 1
@@ -135,7 +145,7 @@ def test_valhalla_pool_keeps_base_stops_and_stays_under_20():
 
     assert len(capped) == 20
     ids = [c.id for c in capped]
-    assert all(b.id in ids for b in base)          # the route the user has survives
+    assert all(b.id in ids for b in base)
     assert ids[:12] == [b.id for b in base]
 
 
@@ -150,18 +160,25 @@ def test_convenience_stops_come_from_the_neighbourhood(monkeypatch):
     base = [_cand(1, "монастырь"), _cand(2, "храм")]
     calls: list[tuple[float, float, float]] = []
 
-    def fake_nearby(db, lat, lon, radius_km=12.0, limit=50):
-        calls.append((lat, lon, radius_km))
-        return [
-            {"id": 50 + len(calls), "name": "Кафе рядом", "category": "кафе",
-             "lat": lat, "lon": lon},
-        ]
+    class _Places:
+        """Stands in for the place repository: the neighbourhood, invented."""
 
-    monkeypatch.setattr("agent.planner.pipeline.nearby_places", fake_nearby)
+        def nearby(self, lat, lon, radius_km=12.0, limit=50):
+            calls.append((lat, lon, radius_km))
+            return [
+                place_from_row(
+                    {
+                        "id": 50 + len(calls),
+                        "name": "Кафе рядом",
+                        "category": "кафе",
+                        "lat": lat,
+                        "lon": lon,
+                    }
+                ),
+            ]
 
-    found = _nearby_convenience(None, base, {"кафе"})
+    found = _nearby_convenience(_Places(), base, {"кафе"})
 
-    # one lookup per stop, each with the small convenience radius
     assert calls == [
         (base[0].lat, base[0].lon, constants.CONVENIENCE_RADIUS_M / 1000.0),
         (base[1].lat, base[1].lon, constants.CONVENIENCE_RADIUS_M / 1000.0),
@@ -172,14 +189,17 @@ def test_convenience_stops_come_from_the_neighbourhood(monkeypatch):
 def test_convenience_search_ignores_categories_nobody_asked_for(monkeypatch):
     base = [_cand(1, "монастырь")]
 
-    def fake_nearby(db, lat, lon, radius_km=12.0, limit=50):
-        return [
-            {"id": 60, "name": "Гостиница", "category": "гостиница", "lat": lat, "lon": lon},
-            {"id": 61, "name": "Туалет", "category": "туалет", "lat": lat, "lon": lon},
-        ]
+    class _Places:
+        def nearby(self, lat, lon, radius_km=12.0, limit=50):
+            return [
+                place_from_row(
+                    {"id": 60, "name": "Гостиница", "category": "гостиница", "lat": lat, "lon": lon}
+                ),
+                place_from_row(
+                    {"id": 61, "name": "Туалет", "category": "туалет", "lat": lat, "lon": lon}
+                ),
+            ]
 
-    monkeypatch.setattr("agent.planner.pipeline.nearby_places", fake_nearby)
-
-    found = _nearby_convenience(None, base, {"туалет"})
+    found = _nearby_convenience(_Places(), base, {"туалет"})
 
     assert [c.name for c in found] == ["Туалет"]

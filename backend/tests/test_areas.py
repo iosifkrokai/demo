@@ -1,6 +1,5 @@
 """Areas: one registry, one predicate, honest about missing geometry.
 
-Covers data/areas.json and agent/areas.py (with agent.geofence delegation).
 No network — polygons are the committed border files in backend/data/.
 """
 
@@ -14,17 +13,17 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agent import areas
-from agent.areas import (
+from core.paths import GEO_DIR, PLACES_DIR
+from reference import areas
+from reference.areas import (
     area_contains,
     area_lookup_by_slug,
     in_project_area,
     load_areas,
     resolve_area,
 )
-from agent.geofence import inside_belarus, inside_project_area
+from reference.geofence import inside_belarus, inside_project_area
 
-# Known landmarks from the committed data and previous geofence tests.
 CITY = ("Гродно (центр)", 53.6772, 23.8232)
 OBLAST_OUTSIDE_CITY = ("Новогрудок", 53.5941, 25.8249)
 FOREIGN = [
@@ -36,9 +35,6 @@ FOREIGN = [
     ("Барановичи", 53.1307, 26.0139),
     ("Вилейка", 54.4903, 26.9107),
 ]
-
-
-# ── registry integrity ─────────────────────────────────────────────────────
 
 
 def _document() -> dict:
@@ -90,9 +86,6 @@ def test_duplicate_alias_across_areas_is_rejected(monkeypatch):
         areas.load_areas()
 
 
-# ── honesty of the geometry data ───────────────────────────────────────────
-
-
 def test_every_geometry_is_derivable_from_backend_data():
     """Geometry exists only where backend/data/ actually holds a border file;
     everything else is an explicit null, never invented coordinates."""
@@ -101,14 +94,14 @@ def test_every_geometry_is_derivable_from_backend_data():
     without_geometry = [a for a in doc["areas"] if not a.get("geometry")]
     assert [a["slug"] for a in with_geometry] == [areas.PROJECT_AREA_SLUG]
     for area in with_geometry:
-        source = areas.DATA_DIR / area["geometry"]["source"]
+        source = GEO_DIR / area["geometry"]["source"]
         assert source.exists(), source
         meta = json.loads(source.read_text(encoding="utf-8"))
         assert area["geometry"]["ring_count"] == len(meta["rings"])
         assert area["geometry"]["point_count"] == sum(len(r) for r in meta["rings"])
         assert area["geometry"]["license"]
         assert area["geometry"]["attribution"]
-    assert without_geometry  # the geometry-less set is non-empty and documented
+    assert without_geometry
     for area in without_geometry:
         assert area["geometry"] is None
         assert area["geometry_note"]
@@ -117,7 +110,7 @@ def test_every_geometry_is_derivable_from_backend_data():
 def test_district_areas_match_places_region_csv():
     """District areas are sourced from the CSV's district column verbatim —
     no district invented, none missed."""
-    lines = (areas.DATA_DIR / "places_region.csv").read_text(encoding="utf-8").splitlines()
+    lines = (PLACES_DIR / "places_region.csv").read_text(encoding="utf-8").splitlines()
     header = next(line for line in lines if line.startswith("# name|"))
     di = header.lstrip("# ").split("|").index("district")
     rows = (line.split("|") for line in lines if line and not line.startswith("#"))
@@ -126,9 +119,6 @@ def test_district_areas_match_places_region_csv():
     assert len(district_slugs) == len(districts)
     for name in districts:
         assert resolve_area(name, "ru") in district_slugs, name
-
-
-# ── resolve_area ───────────────────────────────────────────────────────────
 
 
 def test_resolve_ru_and_en_aliases():
@@ -178,9 +168,6 @@ def test_resolve_unknown_term_returns_none():
         assert resolve_area(term, locale) is None, (term, locale)
 
 
-# ── area_contains ──────────────────────────────────────────────────────────
-
-
 def test_area_contains_grodno_oblast():
     assert area_contains("grodno-oblast", CITY[1], CITY[2]) is True
     assert area_contains("grodno-oblast", OBLAST_OUTSIDE_CITY[1], OBLAST_OUTSIDE_CITY[2]) is True
@@ -189,9 +176,8 @@ def test_area_contains_grodno_oblast():
 
 
 def test_area_contains_without_geometry_is_none_not_false():
-    """groдno-city / grodno-old-town / districts have no boundary polygon in
-    backend/data/: containment is unknown (None), never a silent False that
-    would quietly filter out real places."""
+    """grodno-city / grodno-old-town / districts have no boundary polygon in
+    backend/data/: containment is unknown (None), never a silent False."""
     assert area_contains("grodno-city", CITY[1], CITY[2]) is None
     assert area_contains("grodno-old-town", CITY[1], CITY[2]) is None
     assert area_contains("lida-district", 53.8833, 25.2997) is None
@@ -204,18 +190,11 @@ def test_area_contains_unknown_slug_or_missing_coordinates():
     assert area_contains("grodno-oblast", CITY[1], None) is None
 
 
-# ── in_project_area: the one shared predicate ──────────────────────────────
-
-
 def test_point_inside_grodno_city_is_inside_project_area():
-    # No city boundary polygon exists in backend/data/, so containment is
-    # asserted at the project-area level: the predicate must not over-reject
-    # the very city the areas are anchored to.
     assert in_project_area(CITY[1], CITY[2]) is True
 
 
 def test_point_inside_oblast_outside_city_is_inside_project_area():
-    # ~100 km from Grodno: inside the oblast, outside any city boundary.
     assert in_project_area(OBLAST_OUTSIDE_CITY[1], OBLAST_OUTSIDE_CITY[2]) is True
 
 
@@ -231,23 +210,19 @@ def test_none_coordinates_are_rejected():
 
 
 def test_documented_boundary_exception_behaves_exactly_as_data_says():
-    """belarus_border_keep.json documents POIs that ARE in Belarus but fall
-    outside the 10m-simplified country polygon; they are treated as inside the
-    project area. The predicate must agree with the documented data."""
+    """belarus_border_keep.json documents Belarus POIs outside the simplified polygon;
+    they are treated as inside, and the predicate must agree with the data."""
     area = area_lookup_by_slug("grodno-oblast")
     by_name = {exc["name"]: exc for exc in area["exceptions"]}
     vor = by_name["Костёл Пресвятой Троицы (Вороново)"]
     assert (vor["lat"], vor["lon"]) == (54.1330, 25.0660)
     assert vor["radius_m"] == 300.0
     assert vor["source"] == "belarus_border_keep.json"
-    assert inside_belarus(vor["lat"], vor["lon"]) is False  # outside the polygon
-    assert in_project_area(vor["lat"], vor["lon"]) is True  # kept as inside
+    assert inside_belarus(vor["lat"], vor["lon"]) is False
+    assert in_project_area(vor["lat"], vor["lon"]) is True
     for exc in area["exceptions"]:
         assert inside_belarus(exc["lat"], exc["lon"]) is False, exc["name"]
         assert in_project_area(exc["lat"], exc["lon"]) is True, exc["name"]
-
-
-# ── area_lookup_by_slug ────────────────────────────────────────────────────
 
 
 def test_area_lookup_by_slug_resolves_geometry_and_exceptions():
@@ -268,9 +243,6 @@ def test_area_lookup_by_slug_for_geometry_less_area():
     assert area_lookup_by_slug(None) is None
 
 
-# ── geofence delegation: one predicate, not a copy ─────────────────────────
-
-
 def test_geofence_delegates_to_the_single_areas_predicate():
     points = [CITY, OBLAST_OUTSIDE_CITY, *FOREIGN]
     for name, lat, lon in points:
@@ -278,7 +250,7 @@ def test_geofence_delegates_to_the_single_areas_predicate():
 
 
 def test_delegation_is_live(monkeypatch):
-    """agent.geofence.inside_project_area must track agent.areas.in_project_area
+    """reference.geofence.inside_project_area must track reference.areas.in_project_area
     at call time — proving a single shared predicate, not a second copy."""
     monkeypatch.setattr(areas, "in_project_area", lambda lat, lon: True)
     assert inside_project_area(0.0, 0.0) is True

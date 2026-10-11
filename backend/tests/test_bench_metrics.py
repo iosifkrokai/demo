@@ -1,19 +1,6 @@
-"""Metric arithmetic for scripts/bench_routes.py.
+"""Metric arithmetic for quality/runner.py.
 
-No network and no agent: every case is either made-up coordinates or a
-monkeypatched `call_generate`, so each expected number can be derived by hand.
-
-What is pinned here:
-
-  * the reference walk is the *shortest* order over the reference stops, not the
-    order the stops appear in the .json file — that Wikivoyage section order is
-    47-68% longer than the shortest order over the same stops, which is what
-    made a good route score -0.333;
-  * tau-b is computed over the shared subset only, and is n/a below MIN_TAU_STOPS
-    shared stops instead of collapsing to a fake 0.0;
-  * detour_km = our walk length - the reference walk length, measured the same
-    way on both sides;
-  * --repeat aggregation prints mean ± half-range.
+No network and no agent: every case is made-up coordinates or a monkeypatched call.
 """
 
 from __future__ import annotations
@@ -27,16 +14,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import pytest
 
-from scripts import bench_routes as b
+from quality import runner as b
 
-# --------------------------------------------------------------------------
-# geometry helpers
-# --------------------------------------------------------------------------
-
-# Degrees of longitude per km at the equator, derived from the same spherical
-# radius haversine_km() uses, so pt(x) is exactly x km from pt(y) and the
-# expected numbers below are readable. Points sit on the equator because that is
-# where a longitude difference maps 1:1 onto distance.
 KM_PER_DEG_LON = 2 * math.pi * b._R / 360.0
 
 
@@ -62,23 +41,12 @@ def api_points(names: list[str], *east_km: float) -> list[dict]:
     ]
 
 
-# --------------------------------------------------------------------------
-# the reference walk: shortest order, not the .json order
-# --------------------------------------------------------------------------
-
-
 def test_reference_walk_is_the_shortest_order_not_the_file_order():
-    # West->east-ish file order 0, 10, 1, 11 km: walking the file order as-is
-    # is 10 + 9 + 10 = 29 km. The shortest open walk is 0 -> 1 -> 10 -> 11 km
-    # = 1 + 9 + 1 = 11 km.
     ref = b.build_reference_walk(stops(0.0, 10.0, 1.0, 11.0))
 
-    # Indices are positions in `stops(0.0, 10.0, 1.0, 11.0)`, so the shortest
-    # walk 0km -> 1km -> 10km -> 11km is the index sequence (0, 2, 1, 3).
     assert ref.order == [0, 2, 1, 3]
     assert ref.distance_km == pytest.approx(11.0, abs=1e-6)
     assert ref.article_distance_km == pytest.approx(29.0, abs=1e-6)
-    # The exact point of the fix: the old metric's reference was 2.6x longer.
     assert ref.article_distance_km > ref.distance_km
 
 
@@ -98,18 +66,14 @@ def test_reference_walk_on_the_committed_mir_stops():
             b.GoldenStop("Mir Trinity church", 53.4498, 26.4680),
         ]
     )
-    # Optimal order is synagogue -> castle -> church; the .json order is not.
     assert ref.order == [1, 0, 2]
     assert ref.order != [0, 1, 2]
     assert ref.article_distance_km == pytest.approx(1.252, abs=0.002)
     assert ref.distance_km == pytest.approx(0.795, abs=0.002)
-    # +57% — the penalty the old tau was charging good routes for.
     assert ref.article_distance_km / ref.distance_km == pytest.approx(1.575, abs=0.01)
 
 
 def test_shortest_walk_order_is_deterministic_and_tie_broken():
-    # A 0, 1, 2, 3 km line: the only optimal open walks are (0,1,2,3) and its
-    # reverse, so the lexicographic tie-break must always pick the former.
     pts = [pt(0.0), pt(1.0), pt(2.0), pt(3.0)]
     first = b.shortest_walk_order(pts)
     assert first == [0, 1, 2, 3]
@@ -124,16 +88,9 @@ def test_shortest_walk_order_handles_degenerate_sizes():
 
 
 def test_shortest_walk_order_falls_back_above_the_exact_dp_limit():
-    # Past REF_WALK_EXACT_MAX_STOPS the exact DP is skipped; the result must
-    # still be a valid permutation of every stop rather than a 2**n table.
     n = b.REF_WALK_EXACT_MAX_STOPS + 1
     order = b.shortest_walk_order([pt(float(i)) for i in range(n)])
     assert sorted(order) == list(range(n))
-
-
-# --------------------------------------------------------------------------
-# tau-b over the shared subset
-# --------------------------------------------------------------------------
 
 
 def test_tau_identical_order_is_plus_one():
@@ -145,25 +102,18 @@ def test_tau_fully_reversed_order_is_minus_one():
 
 
 def test_tau_two_inversions_of_three_is_minus_one_third():
-    # 3 shared stops, 2 inversions -> 1 concordant pair, 2 discordant.
-    # (P - Q) / 3 = (1 - 2) / 3 = -0.333..., which is exactly the number the
-    # old metric printed for a route that was merely walking the stops well.
     assert b.kendall_tau([4, 7, 9], [7, 9, 4]) == pytest.approx(-1.0 / 3.0)
 
 
 def test_tau_one_inversion_of_three_is_plus_one_third():
-    # The mirror image: a single transposition costs one concordant pair only.
     assert b.kendall_tau([4, 7, 9], [7, 4, 9]) == pytest.approx(1.0 / 3.0)
 
 
 def test_tau_four_stops_one_rotation_is_zero():
-    # Reference 10,20,30,40 vs ours 20,30,40,10: 3 concordant, 3 discordant.
     assert b.kendall_tau([10, 20, 30, 40], [20, 30, 40, 10]) == pytest.approx(0.0)
 
 
 def test_tau_four_stops_known_fraction():
-    # Reference 10,20,30,40 vs ours 20,30,10,40: 4 concordant, 2 discordant
-    # -> (4 - 2) / 6 = 1/3.
     assert b.kendall_tau([10, 20, 30, 40], [20, 30, 10, 40]) == pytest.approx(1.0 / 3.0)
 
 
@@ -171,17 +121,13 @@ def test_tau_is_symmetric():
     a = [30, 10, 40, 20]
     c = [20, 40, 10, 30]
     assert b.kendall_tau(a, c) == pytest.approx(b.kendall_tau(c, a))
-    assert b.kendall_tau(a, c) == pytest.approx(-1.0)   # c is a's reversal
+    assert b.kendall_tau(a, c) == pytest.approx(-1.0)
 
 
 def test_tau_uses_only_the_shared_subset():
-    # Reference walk order and our order disagree almost everywhere, but the
-    # three stops present in both are walked in the same relative order. Stops
-    # present on only one side must be inert, not counted as mis-orderings.
     tau_all_shared = b.kendall_tau([1, 2, 3], [1, 2, 3])
     assert tau_all_shared == pytest.approx(1.0)
 
-    # Same three ids, reached through longer sequences that contain extra ids.
     ref_order = [9, 1, 8, 2, 7, 3]
     our_order = [8, 3, 9, 1, 7, 2]
     only_shared_ref = [i for i in ref_order if i in (1, 2, 3)]
@@ -192,14 +138,11 @@ def test_tau_uses_only_the_shared_subset():
 
 
 def test_tau_is_na_below_the_minimum_shared_stops():
-    # Below 3 shared stops there is at most one pair, so tau is pinned to
-    # {-1, +1}: it must be reported as n/a, never as a number.
     assert b.MIN_TAU_STOPS == 3
-    assert b.kendall_tau([4, 7], [4, 7]) is None          # same order
-    assert b.kendall_tau([4, 7], [7, 4]) is None          # swapped
-    assert b.kendall_tau([4], [4]) is None                # one stop
-    assert b.kendall_tau([], []) is None                  # nothing
-    # One shared id out of many on each side.
+    assert b.kendall_tau([4, 7], [4, 7]) is None
+    assert b.kendall_tau([4, 7], [7, 4]) is None
+    assert b.kendall_tau([4], [4]) is None
+    assert b.kendall_tau([], []) is None
     assert b.kendall_tau([1, 2, 3, 4], [1, 90, 80]) is None
 
 
@@ -210,14 +153,9 @@ def test_tau_is_defined_exactly_at_the_minimum():
     assert b.kendall_tau(ids, [3, 2, 1]) == pytest.approx(-1.0)
 
 
-# --------------------------------------------------------------------------
-# detour_km
-# --------------------------------------------------------------------------
-
-
 def test_detour_is_our_length_minus_the_reference_length():
-    assert b.detour_km(2.5, 1.0) == pytest.approx(1.5)    # we walked further
-    assert b.detour_km(1.0, 2.5) == pytest.approx(-1.5)   # we walked tighter
+    assert b.detour_km(2.5, 1.0) == pytest.approx(1.5)
+    assert b.detour_km(1.0, 2.5) == pytest.approx(-1.5)
     assert b.detour_km(1.234, 1.234) == pytest.approx(0.0)
 
 
@@ -228,8 +166,6 @@ def test_detour_is_none_when_either_side_is_unknown():
 
 
 def test_detour_from_two_explicit_walks():
-    # Reference walks 0 -> 1 -> 2 km (2 km). We walk 0 -> 2 -> 1 km (3 km):
-    # one extra km, because we cross the middle segment twice.
     ref_km = b.walk_distance_km([pt(0.0), pt(1.0), pt(2.0)], [0, 1, 2])
     our_km = b.walk_distance_km([pt(0.0), pt(2.0), pt(1.0)], [0, 1, 2])
 
@@ -241,37 +177,28 @@ def test_detour_from_two_explicit_walks():
 def test_detour_is_zero_when_our_walk_equals_the_reference_walk():
     pts = [pt(0.0), pt(10.0), pt(1.0), pt(11.0)]
     ref = b.build_reference_walk(stops(0.0, 10.0, 1.0, 11.0))
-    # We reproduce the reference walk exactly, in the reference order.
     ours = [pts[i] for i in ref.order]
 
-    assert b.detour_km(b.walk_distance_km(ours, list(range(len(ours)))),
-                       ref.distance_km) == pytest.approx(0.0, abs=1e-9)
+    assert b.detour_km(
+        b.walk_distance_km(ours, list(range(len(ours)))), ref.distance_km
+    ) == pytest.approx(0.0, abs=1e-9)
 
 
 def test_detour_uses_the_same_measure_on_both_sides():
     """Network length is reported, but never mixed into the detour delta.
 
-    Our route's Valhalla network distance has no offline counterpart for the
-    reference walk, so subtracting it from a haversine reference would bake in
-    the street-circuity factor. detour_km therefore only ever sees haversine
-    lengths, and the network figure is carried separately.
+    Our Valhalla network distance has no offline counterpart, so detour is haversine.
     """
     ref = b.build_reference_walk(stops(0.0, 10.0, 1.0, 11.0))
     assert b.detour_km(11.0, ref.distance_km) == pytest.approx(0.0, abs=1e-9)
-    # An extra 1.4x circuity on our side must not leak into the metric.
     assert b.detour_km(11.0 * 1.4, ref.distance_km) == pytest.approx(4.4, abs=1e-6)
-
-
-# --------------------------------------------------------------------------
-# --repeat aggregation
-# --------------------------------------------------------------------------
 
 
 def test_spread_is_the_half_range():
     assert b._spread([]) is None
     assert b._spread([2.0]) == pytest.approx(0.0)
     assert b._spread([1.0, 1.0, 1.0]) == pytest.approx(0.0)
-    assert b._spread([1.0, 2.0, 3.0]) == pytest.approx(1.0)   # (3 - 1) / 2
+    assert b._spread([1.0, 2.0, 3.0]) == pytest.approx(1.0)
     assert b._spread([5.0, 5.0, 1.0]) == pytest.approx(2.0)
 
 
@@ -286,11 +213,9 @@ def _run(**kw):
 
 def test_ms_renders_mean_plus_minus_spread():
     runs = [_run(kendall_tau=0.5), _run(kendall_tau=None), _run(kendall_tau=1.0)]
-    # The n/a run is skipped, not counted as 0.0: mean 0.75, spread 0.25.
     assert b._ms(runs, "kendall_tau", 2) == "0.75±0.25"
     assert b._ms([_run(kendall_tau=0.5)], "kendall_tau", 3) == "0.500±0.000"
-    assert b._ms([_run(kendall_tau=None), _run(kendall_tau=None)],
-                 "kendall_tau", 2) == "n/a"
+    assert b._ms([_run(kendall_tau=None), _run(kendall_tau=None)], "kendall_tau", 2) == "n/a"
 
 
 def test_fit_cell_counts_runs_that_fit():
@@ -299,22 +224,25 @@ def test_fit_cell_counts_runs_that_fit():
     assert b._fit_cell([_run(budget_fit=True)]) == "1/1"
 
 
-# --------------------------------------------------------------------------
-# end-to-end evaluate() with a stubbed API (still no network, no agent)
-# --------------------------------------------------------------------------
-
-
 def _fake_generate(points, walk_s=1800.0, length_km=None, fits=True):
     def _call(base_url, query, budget_minutes, origin_lat, origin_lon):
         return {
             "points": [
-                {"name": p["name"], "lat": p["lat"], "lon": p["lon"],
-                 "visit_minutes": p.get("visit_minutes")}
+                {
+                    "name": p["name"],
+                    "lat": p["lat"],
+                    "lon": p["lon"],
+                    "visit_minutes": p.get("visit_minutes"),
+                }
                 for p in points
             ],
             "summary": {"time_seconds": walk_s, "length_km": length_km},
-            "budget": {"walk_minutes": int(walk_s / 60), "visit_minutes": 0,
-                       "total_minutes": int(walk_s / 60), "fits": fits},
+            "budget": {
+                "walk_minutes": int(walk_s / 60),
+                "visit_minutes": 0,
+                "total_minutes": int(walk_s / 60),
+                "fits": fits,
+            },
         }
 
     return _call
@@ -325,15 +253,16 @@ def test_evaluate_scores_a_perfect_route_against_the_reference_walk(
 ):
     """The regression this whole change exists for.
 
-    Our route walks the reference stops in the shortest possible order. Under
-    the old metric (tau vs the .json order) that is a minority order and scores
-    poorly; against the reference walk it must be a perfect 1.0 with no detour.
+    Our route walks the reference stops in the shortest possible order, so it scores 1.0.
     """
     route = b.GoldenRoute(
-        name="synthetic", source="unit test", query_ru="q", budget_minutes=120,
-        stops=stops(0.0, 10.0, 1.0, 11.0), est_walk_minutes=20,
+        name="synthetic",
+        source="unit test",
+        query_ru="q",
+        budget_minutes=120,
+        stops=stops(0.0, 10.0, 1.0, 11.0),
+        est_walk_minutes=20,
     )
-    # Reference walk order is [0, 1, 2, 3] == the coordinates 0, 1, 10, 11 km.
     perfect = api_points(["a", "b", "c", "d"], 0.0, 1.0, 10.0, 11.0)
     monkeypatch.setattr(b, "call_generate", _fake_generate(perfect))
 
@@ -347,17 +276,19 @@ def test_evaluate_scores_a_perfect_route_against_the_reference_walk(
     assert r.recall_at_k == pytest.approx(1.0)
     assert r.precision == pytest.approx(1.0)
     assert r.budget_fit is True
-    # walk_diff_min is unchanged: our walk time minus est_walk_minutes.
     assert r.walk_diff_min == pytest.approx(30.0 - 20.0)
 
 
 def test_evaluate_reports_n_a_tau_when_too_few_stops_are_shared(
     monkeypatch,
 ):
-    # Four reference stops, we match only two of them: tau is n/a, not 0.0.
     route = b.GoldenRoute(
-        name="synthetic", source="unit test", query_ru="q", budget_minutes=120,
-        stops=stops(0.0, 1.0, 2.0, 3.0), est_walk_minutes=10,
+        name="synthetic",
+        source="unit test",
+        query_ru="q",
+        budget_minutes=120,
+        stops=stops(0.0, 1.0, 2.0, 3.0),
+        est_walk_minutes=10,
     )
     ours = api_points(["a", "b"], 0.0, 3.0)
     monkeypatch.setattr(b, "call_generate", _fake_generate(ours))
@@ -366,7 +297,6 @@ def test_evaluate_reports_n_a_tau_when_too_few_stops_are_shared(
 
     assert r.shared_stops == 2
     assert r.kendall_tau is None
-    # recall / precision still work on 2 of 4 reference stops.
     assert r.recall_at_k == pytest.approx(0.5)
     assert r.precision == pytest.approx(1.0)
 
@@ -374,8 +304,12 @@ def test_evaluate_reports_n_a_tau_when_too_few_stops_are_shared(
 def test_evaluate_detour_grows_with_a_worse_our_order(monkeypatch):
     """detour is monotone in how much we backtrack, and needs no reference."""
     route = b.GoldenRoute(
-        name="synthetic", source="unit test", query_ru="q", budget_minutes=120,
-        stops=stops(0.0, 1.0, 2.0, 3.0), est_walk_minutes=10,
+        name="synthetic",
+        source="unit test",
+        query_ru="q",
+        budget_minutes=120,
+        stops=stops(0.0, 1.0, 2.0, 3.0),
+        est_walk_minutes=10,
     )
     straight = api_points(["a", "b", "c", "d"], 0.0, 1.0, 2.0, 3.0)
     shuffled = [straight[i] for i in (0, 3, 1, 2)]
@@ -389,30 +323,36 @@ def test_evaluate_detour_grows_with_a_worse_our_order(monkeypatch):
     assert bad.detour_km > good.detour_km
     assert good.kendall_tau == pytest.approx(1.0)
     assert bad.kendall_tau is not None and bad.kendall_tau < 1.0
-    # Both still cover every reference stop, so recall is unaffected by order.
     assert good.recall_at_k == bad.recall_at_k == pytest.approx(1.0)
 
 
 def test_evaluate_carries_the_network_length_separately(monkeypatch):
     route = b.GoldenRoute(
-        name="synthetic", source="unit test", query_ru="q", budget_minutes=120,
-        stops=stops(0.0, 1.0, 2.0), est_walk_minutes=10,
+        name="synthetic",
+        source="unit test",
+        query_ru="q",
+        budget_minutes=120,
+        stops=stops(0.0, 1.0, 2.0),
+        est_walk_minutes=10,
     )
     ours = api_points(["a", "b", "c"], 0.0, 1.0, 2.0)
     monkeypatch.setattr(b, "call_generate", _fake_generate(ours, length_km=4.2))
 
     r = b.evaluate(route, "http://unused")
 
-    assert r.our_walk_km == pytest.approx(2.0, abs=1e-6)   # haversine
-    assert r.our_walk_km_net == pytest.approx(4.2)          # Valhalla
-    # The detour is haversine-vs-haversine, so the 2.2x circuity is not in it.
+    assert r.our_walk_km == pytest.approx(2.0, abs=1e-6)
+    assert r.our_walk_km_net == pytest.approx(4.2)
     assert r.detour_km == pytest.approx(0.0, abs=1e-6)
 
 
 def test_evaluate_survives_an_api_error(monkeypatch):
     route = b.GoldenRoute(
-        name="synthetic", source="unit test", query_ru="q", budget_minutes=120,
-        stops=stops(0.0, 1.0), est_walk_minutes=10,
+        name="synthetic",
+        source="unit test",
+        query_ru="q",
+        budget_minutes=120,
+        stops=stops(0.0, 1.0),
+        est_walk_minutes=10,
     )
 
     def _boom(*a, **k):

@@ -43,8 +43,6 @@ describe('SavedRoutesList', () => {
   });
 
   it('never renders geometry it did not receive', () => {
-    // The list endpoint promises no plan at all; even if one were attached, the
-    // component only ever reads the summary fields.
     const route = {
       ...item(),
       plan: { shape: { coordinates: [[53.68, 23.83]] } },

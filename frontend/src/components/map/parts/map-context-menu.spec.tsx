@@ -12,9 +12,7 @@ vi.mock('@/stores/directions-store', () => ({
 }));
 
 const defaultProps = {
-  activeTab: 'directions',
   onAddWaypoint: vi.fn(),
-  onAddIsoWaypoint: vi.fn(),
   popupLocation: { lng: 10.5, lat: 50.5 },
 };
 
@@ -111,47 +109,6 @@ describe('MapContextMenu', () => {
         placeholder: popupLocation,
       });
       expect(onAddWaypoint).toHaveBeenCalledWith(2);
-    });
-  });
-
-  describe('isochrones tab', () => {
-    it('should render "Set center here" button', () => {
-      render(<MapContextMenu {...defaultProps} activeTab="isochrones" />);
-
-      expect(
-        screen.getByRole('button', { name: 'Set center here' })
-      ).toBeInTheDocument();
-    });
-
-    it('should not render directions buttons', () => {
-      render(<MapContextMenu {...defaultProps} activeTab="isochrones" />);
-
-      expect(
-        screen.queryByRole('button', { name: 'Directions from here' })
-      ).not.toBeInTheDocument();
-      expect(
-        screen.queryByRole('button', { name: 'Add as via point' })
-      ).not.toBeInTheDocument();
-      expect(
-        screen.queryByRole('button', { name: 'Directions to here' })
-      ).not.toBeInTheDocument();
-    });
-
-    it('should call onAddIsoWaypoint when "Set center here" is clicked', async () => {
-      const user = userEvent.setup();
-      const onAddIsoWaypoint = vi.fn();
-
-      render(
-        <MapContextMenu
-          {...defaultProps}
-          activeTab="isochrones"
-          onAddIsoWaypoint={onAddIsoWaypoint}
-        />
-      );
-
-      await user.click(screen.getByRole('button', { name: 'Set center here' }));
-
-      expect(onAddIsoWaypoint).toHaveBeenCalled();
     });
   });
 });

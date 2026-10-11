@@ -1,6 +1,6 @@
 """Country geofence: the bbox ingest must not leak Vilnius/Poland POIs.
 
-No network — the border polygon is the committed data/belarus_border.json.
+No network — the border polygon is the committed data/geo/belarus_border.json.
 """
 
 from __future__ import annotations
@@ -10,8 +10,8 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agent import areas
-from agent.geofence import inside_belarus, inside_project_area
+from reference import areas
+from reference.geofence import inside_belarus, inside_project_area
 
 INSIDE = [
     ("Гродно", 53.6772, 23.8232),
@@ -45,7 +45,7 @@ def test_foreign_landmarks_are_outside():
 
 def test_border_keep_list_covers_verified_belarusian_pois():
     """The 10m polygon shaves a few Belarusian POIs off the border; they are kept
-    explicitly after Nominatim verification (data/belarus_border_keep.json)."""
+    explicitly after Nominatim verification (data/geo/belarus_border_keep.json)."""
     kept = [
         ("Костёл Пресвятой Троицы (Вороново)", 54.1330, 25.0660),
         ("Старый мост (разрушен)", 53.9114, 23.6292),
@@ -62,7 +62,7 @@ def test_project_area_still_rejects_foreign_points():
 
 
 def test_project_area_predicate_is_delegated_to_areas_module():
-    """inside_project_area must be agent.areas.in_project_area's single shared
+    """inside_project_area must be reference.areas.in_project_area's single shared
     predicate (one implementation for import and query), not a second copy."""
     for name, lat, lon in INSIDE:
         assert inside_project_area(lat, lon) == areas.in_project_area(lat, lon), name

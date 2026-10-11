@@ -1,23 +1,4 @@
-"""The route-refinement contract.
-
-A refinement instruction is either honoured or honestly refused — never
-silently replaced with a different route, never a crash.  These tests pin the
-three requirements:
-
-1. A refinement KEEPS the base route's stops unless the instruction explicitly
-   adds, removes or excludes something.  (Bug: it used to plan a fresh
-   region-wide route and throw the previous stops away.)
-2. REORDERING the existing stops by an attribute: visit time (visit_minutes,
-   each stop's own data) and distance from the route start.
-3. An operation the planner cannot perform is refused with a machine reason
-   code plus a short human text, and the previous route is returned intact.
-
-Plus the 422 path: a refinement context with 3 base_points must survive into
-the refinement instead of failing with
-``{"detail": "optimizer could not produce a route with ≥ 2 stops"}``.
-
-No API key, no DB and no network: the DB lookups and Valhalla calls are fakes.
-"""
+"""The route-refinement contract: honoured or honestly refused, never a crash."""
 
 from __future__ import annotations
 
@@ -29,17 +10,21 @@ from fastapi.testclient import TestClient
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agent import main as agent_main
-from agent.config import settings
-from agent.errors import UpstreamUnavailable
-from agent.models import Candidate, GenerateReq, LatLon
-from agent.planner import pipeline as pipeline_mod, resolve as resolve_mod
-from agent.planner.pipeline import (
-    Pipeline,
-    _refinement_cost,
-    _synthetic_cost,
+from api import main as agent_main
+from core.errors import UpstreamUnavailable
+from db.store.areas import PostgresAreaRepository
+from db.store.mappers import place_from_row
+from db.store.registry import Repositories
+from planner import (
+    cost as cost_mod,
+    pipeline as pipeline_mod,
+    plan_tail as plan_tail_mod,
+    response as response_mod,
 )
-from agent.planner.refine import (
+from planner.cost import _refinement_cost, _synthetic_cost
+from planner.models import Candidate, GenerateReq, LatLon
+from planner.pipeline import Pipeline
+from planner.refine import (
     REFINEMENT_REORDER_ATTRIBUTE_MISSING,
     REFINEMENT_UNRECOGNIZED,
     REFINEMENT_UNSUPPORTED,
@@ -49,12 +34,16 @@ from agent.planner.refine import (
     visit_minutes_of,
 )
 
-# ── Fakes: no key, no DB, no Valhalla ───────────────────────────────────────
 
 @pytest.fixture
-def no_key(monkeypatch):
-    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
-    monkeypatch.setattr(settings, "OPENROUTER_API_KEY", None)
+def reading(fake_llm):
+    """A model reading so a refinement turn can reach the contract.
+
+    Reading the free text is the model's job; an empty reading is enough here —
+    these tests exercise the refinement operation, not the interpreter.
+    """
+    fake_llm.set()
+    return fake_llm
 
 
 def _cand(
@@ -66,7 +55,11 @@ def _cand(
     visit: int | None = None,
 ) -> Candidate:
     return Candidate(
-        id=pid, name=name, category=category, lat=lat, lon=lon,
+        id=pid,
+        name=name,
+        category=category,
+        lat=lat,
+        lon=lon,
         visit_minutes_db=visit,
     )
 
@@ -80,7 +73,11 @@ def _row(
     visit: int | None = None,
 ) -> dict:
     return {
-        "id": pid, "name": name, "category": category, "lat": lat, "lon": lon,
+        "id": pid,
+        "name": name,
+        "category": category,
+        "lat": lat,
+        "lon": lon,
         "visit_minutes": visit,
     }
 
@@ -92,59 +89,94 @@ BASE_ROWS = [
 ]
 
 
-def _patch_offline(monkeypatch, rows=None, nearby=None):
-    """Wire the refinement path to fakes: no DB, no Valhalla, no retrieval."""
-    rows = BASE_ROWS if rows is None else rows
-    by_id = {r["id"]: r for r in rows}
-    monkeypatch.setattr(
-        pipeline_mod, "fetch_points_by_ids",
-        lambda db, ids: [by_id[i] for i in ids if i in by_id],
+class _FakePlaceRepo:
+    """An in-memory stand-in for :class:`PostgresPlaceRepository`.
+
+    The refinement path used to reach module-level helpers
+    (``fetch_points_by_ids``, ``nearby_places``) that no longer exist; the
+    repository is the one seam now, so this answers those reads from memory.
+    """
+
+    def __init__(self, rows=None, nearby=None):
+        self._by_id = {r["id"]: place_from_row(r) for r in (rows or [])}
+        self._nearby = [place_from_row(r) for r in (nearby or [])]
+
+    def get_by_id(self, place_id):
+        return self._by_id.get(place_id)
+
+    def get_by_ids(self, ids):
+        return [self._by_id[i] for i in ids if i in self._by_id]
+
+    def nearby(self, lat, lon, radius_km=12.0, limit=50):
+        return list(self._nearby)[:limit]
+
+    def name_match(self, query, limit=5):
+        needle = query.strip().lower()
+        hits = [(p, 1.0) for p in self._by_id.values() if needle in p.name.lower()]
+        return hits[:limit]
+
+    def keyword_search(self, query, limit=20):
+        needle = query.strip().lower()
+        return [p for p in self._by_id.values() if needle in p.name.lower()][:limit]
+
+    def category_of(self, ids):
+        return {i: self._by_id[i].category for i in ids if i in self._by_id}
+
+
+def _fake_repos(rows=None, nearby=None) -> Repositories:
+    """Repositories wired to a fixed set of rows — no DB connection at all."""
+    return Repositories(
+        places=_FakePlaceRepo(rows=BASE_ROWS if rows is None else rows, nearby=nearby),
+        areas=PostgresAreaRepository(),
     )
+
+
+def _patch_offline(monkeypatch, rows=None, nearby=None) -> Repositories:
+    """Wire the refinement path to fakes: no DB, no Valhalla, no retrieval.
+
+    Returns the repositories to hand the ``Pipeline``; the module seams that
+    remain (cost and geometry) are patched so the turn never leaves the process.
+    """
     monkeypatch.setattr(
-        pipeline_mod, "nearby_places",
-        lambda db, lat, lon, radius_km=12.0, limit=50: list(nearby or []),
-    )
-    monkeypatch.setattr(
-        pipeline_mod, "compute_cost_matrix",
+        cost_mod,
+        "compute_cost_matrix",
         lambda *_a, **_kw: (_ for _ in ()).throw(UpstreamUnavailable("no valhalla")),
     )
     monkeypatch.setattr(
-        pipeline_mod, "render",
+        response_mod,
+        "render",
         lambda *_a, **_kw: (_ for _ in ()).throw(UpstreamUnavailable("no valhalla")),
     )
     monkeypatch.setattr(
-        pipeline_mod, "retrieve",
+        pipeline_mod,
+        "retrieve",
         lambda *_a, **_kw: (_ for _ in ()).throw(
             AssertionError("a refinement must not run region-wide retrieval")
         ),
     )
     monkeypatch.setattr(
-        pipeline_mod, "optimize",
+        plan_tail_mod,
+        "optimize",
         lambda *_a, **_kw: (_ for _ in ()).throw(
             AssertionError("a refinement must not re-plan the trip")
         ),
     )
-    # resolve() must not reach the (fake) DB for named places either.
-    monkeypatch.setattr(
-        resolve_mod, "_name_match_search", lambda db, name, limit=5: []
-    )
-    monkeypatch.setattr(
-        resolve_mod, "_keyword_search", lambda db, q, limit=5: []
-    )
+    return _fake_repos(rows=rows, nearby=nearby)
 
 
-class _FakeDB:
-    """Only ever reached through monkeypatched helpers."""
-
-
-def _refine(monkeypatch, instruction, base_ids=(1, 12, 7),
-            excluded=None, origin=None, query="Гродно, замки, 2 часа"):
-    _patch_offline(monkeypatch, rows=[r for r in BASE_ROWS if r["id"] in base_ids])
+def _refine(
+    monkeypatch,
+    instruction,
+    base_ids=(1, 12, 7),
+    excluded=None,
+    origin=None,
+    query="Гродно, замки, 2 часа",
+):
+    repos = _patch_offline(monkeypatch, rows=[r for r in BASE_ROWS if r["id"] in base_ids])
     ctx: dict = {
         "revision": 3,
         "base_points": [
-            {"id": i, "name": f"stop {i}", "lat": 53.678, "lon": 23.828}
-            for i in base_ids
+            {"id": i, "name": f"stop {i}", "lat": 53.678, "lon": 23.828} for i in base_ids
         ],
     }
     if instruction is not None:
@@ -155,15 +187,10 @@ def _refine(monkeypatch, instruction, base_ids=(1, 12, 7),
     if origin is not None:
         body["origin"] = origin
     req = GenerateReq.model_validate(body)
-    return Pipeline(db=_FakeDB()).generate(req)  # type: ignore[arg-type]
+    return Pipeline(repos=repos).generate(req)
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# 1. Interpret the instruction into one typed operation
-# ─────────────────────────────────────────────────────────────────────────────
 
 class TestInterpretRefinement:
-
     def test_empty_instruction_is_a_keep_noop(self):
         assert interpret_refinement(None).operation == "none"
         assert interpret_refinement("   ").operation == "none"
@@ -204,7 +231,6 @@ class TestInterpretRefinement:
         assert plan.operation == "add"
         assert plan.add_categories == ("кафе",)
         assert plan.exclude_categories == ("музей",)
-        # A category named for exclusion is never also an addition.
         assert "музей" not in plan.add_categories
 
     def test_excluded_category_is_never_added(self):
@@ -221,7 +247,9 @@ class TestInterpretRefinement:
     def test_reorder_longest_first(self):
         plan = interpret_refinement("сначала самые длинные")
         assert (plan.operation, plan.reorder_by, plan.descending) == (
-            "reorder", "visit_minutes", True,
+            "reorder",
+            "visit_minutes",
+            True,
         )
 
     def test_reorder_by_distance(self):
@@ -230,8 +258,12 @@ class TestInterpretRefinement:
         assert plan.reorder_by == "distance"
 
     def test_unsupported_mutation_is_refused_with_a_code(self):
-        for text in ["сделай маршрут короче", "построй другой маршрут",
-                     "оптимизируй маршрут", "переведи на английский"]:
+        for text in [
+            "сделай маршрут короче",
+            "построй другой маршрут",
+            "оптимизируй маршрут",
+            "переведи на английский",
+        ]:
             plan = interpret_refinement(text)
             assert plan.operation == "unsupported", text
             assert plan.reason_code is not None
@@ -249,12 +281,7 @@ class TestInterpretRefinement:
         assert plan.reason_code == REFINEMENT_UNRECOGNIZED
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# 2. Reorder the existing stops by an attribute
-# ─────────────────────────────────────────────────────────────────────────────
-
 class TestReorder:
-
     STOPS = [
         _cand(1, "Замок", "замок", 53.60, 23.80, 90),
         _cand(2, "Кафе", "кафе", 53.61, 23.81, 10),
@@ -271,7 +298,6 @@ class TestReorder:
 
     def test_visit_minutes_from_the_stop_own_data(self):
         assert visit_minutes_of(_cand(1, "X", "замок", visit=123)) == 123
-        # No stored value → the taxonomy estimate, never a crash.
         assert visit_minutes_of(_cand(1, "X", "замок")) == 40
 
     def test_reorder_keeps_every_stop(self):
@@ -279,12 +305,11 @@ class TestReorder:
         assert sorted(c.id for c in out) == [1, 2, 3]
 
     def test_by_distance_from_the_origin(self):
-        origin = LatLon(lat=53.621, lon=23.821)  # nearest to the museum
+        origin = LatLon(lat=53.621, lon=23.821)
         out = reorder_stops(self.STOPS, by="distance", origin=origin)
         assert [c.name for c in out] == ["Музей", "Кафе", "Замок"]
 
     def test_by_distance_uses_the_road_matrix_when_supplied(self):
-        # start is stop 0; matrix says stop 2 is closest, then stop 1.
         matrix = [
             [0.0, 500.0, 100.0],
             [0.0, 0.0, 0.0],
@@ -299,109 +324,92 @@ class TestReorder:
 
 
 class TestExcludedCategory:
-
     def test_matches_canonical_code(self):
         assert is_excluded_category(_cand(1, "X", "музей"), ("музей",))
         assert not is_excluded_category(_cand(1, "X", "замок"), ("музей",))
 
     def test_matches_a_verbose_category_string(self):
-        assert is_excluded_category(
-            _cand(1, "X", "католический костёл"), ("костёл",)
-        )
+        assert is_excluded_category(_cand(1, "X", "католический костёл"), ("костёл",))
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# 3. The pipeline honours or honestly refuses — never a fresh route, never 422
-# ─────────────────────────────────────────────────────────────────────────────
 
 class TestRefinementKeepsTheBaseRoute:
-
-    def test_no_instruction_keeps_the_previous_route(self, no_key, monkeypatch):
+    def test_no_instruction_keeps_the_previous_route(self, reading, monkeypatch):
         resp = _refine(monkeypatch, None)
         assert [p.id for p in resp.points] == [1, 12, 7]
         assert resp.debug["refinement"]["operation"] == "none"
         assert resp.changes.kept == 3
         assert resp.changes.added == []
 
-    def test_three_base_points_do_not_422(self, no_key, monkeypatch):
+    def test_three_base_points_do_not_422(self, reading, monkeypatch):
         """The exact bug: 3 base_points + a refinement used to answer
         HTTP 422 'optimizer could not produce a route with ≥ 2 stops'."""
-        for instruction in [None, "сделай маршрут короче",
-                            "отсортируй по времени посещения"]:
+        for instruction in [None, "сделай маршрут короче", "отсортируй по времени посещения"]:
             resp = _refine(monkeypatch, instruction)
             assert len(resp.points) == 3, instruction
             assert {p.id for p in resp.points} == {1, 12, 7}
 
-    def test_reorder_by_visit_time_changes_the_order_only(
-        self, no_key, monkeypatch
-    ):
+    def test_reorder_by_visit_time_changes_the_order_only(self, reading, monkeypatch):
         resp = _refine(monkeypatch, "отсортируй по времени посещения")
-        assert [p.id for p in resp.points] == [12, 7, 1]  # 45, 45, 90
+        assert [p.id for p in resp.points] == [12, 7, 1]
         assert resp.debug["refinement"]["reorder_by"] == "visit_minutes"
 
-    def test_reorder_longest_first(self, no_key, monkeypatch):
+    def test_reorder_longest_first(self, reading, monkeypatch):
         resp = _refine(monkeypatch, "сначала самые длинные")
-        assert [p.id for p in resp.points] == [1, 12, 7]  # 90, 45, 45
+        assert [p.id for p in resp.points] == [1, 12, 7]
 
-    def test_reorder_by_distance_from_origin(self, no_key, monkeypatch):
-        origin = LatLon(lat=53.6785, lon=23.8266)  # nearest the museum
+    def test_reorder_by_distance_from_origin(self, reading, monkeypatch):
+        origin = LatLon(lat=53.6785, lon=23.8266)
         resp = _refine(monkeypatch, "по расстоянию от старта", origin=origin)
         assert resp.points[0].id == 12
         assert resp.debug["refinement"]["reorder_by"] == "distance"
 
-    def test_exclude_category_removes_matching_stops(self, no_key, monkeypatch):
+    def test_exclude_category_removes_matching_stops(self, reading, monkeypatch):
         resp = _refine(monkeypatch, "без музеев")
         assert [p.id for p in resp.points] == [1, 7]
         assert [c.name for c in resp.changes.removed] == ["Музей истории города Гродно"]
         assert resp.debug["refinement"]["exclude_categories"] == ["музей"]
 
-    def test_excluded_ids_never_come_back(self, no_key, monkeypatch):
+    def test_excluded_ids_never_come_back(self, reading, monkeypatch):
         resp = _refine(monkeypatch, None, excluded=[12])
         assert 12 not in {p.id for p in resp.points}
         assert resp.changes.kept == 2
 
-    def test_add_pulls_cafes_by_the_route_and_keeps_the_base(
-        self, no_key, monkeypatch
-    ):
+    def test_add_pulls_cafes_by_the_route_and_keeps_the_base(self, reading, monkeypatch):
         cafe = _row(500, "Кафе рядом", "кафе", 53.6785, 23.8285, 40)
-        _patch_offline(monkeypatch, nearby=[cafe])
+        repos = _patch_offline(monkeypatch, nearby=[cafe])
         ctx = {
             "revision": 1,
             "instruction": "добавь кофейню и туалет",
             "base_points": [
-                {"id": i, "name": f"stop {i}", "lat": 53.678, "lon": 23.828}
-                for i in (1, 12, 7)
+                {"id": i, "name": f"stop {i}", "lat": 53.678, "lon": 23.828} for i in (1, 12, 7)
             ],
         }
-        resp = Pipeline(db=_FakeDB()).generate(  # type: ignore[arg-type]
+        resp = Pipeline(repos=repos).generate(
             GenerateReq.model_validate({"query": "Гродно, замки", "context": ctx})
         )
         ids = [p.id for p in resp.points]
-        assert ids[:3] == [1, 12, 7]  # the base route survives, in order
+        assert ids[:3] == [1, 12, 7]
         assert 500 in ids
         assert [c.name for c in resp.changes.added] == ["Кафе рядом"]
 
-    def test_unsupported_leaves_the_route_intact_with_a_reason_code(
-        self, no_key, monkeypatch
-    ):
+    def test_unsupported_leaves_the_route_intact_with_a_reason_code(self, reading, monkeypatch):
         resp = _refine(monkeypatch, "сделай маршрут короче")
         assert [p.id for p in resp.points] == [1, 12, 7]
         refine = resp.debug["refinement"]
         assert refine["operation"] == "unsupported"
         assert refine["supported"] is False
         assert refine["reason_code"] == REFINEMENT_UNSUPPORTED
-        assert refine["detail"]  # short human text
+        assert refine["detail"]
         assert resp.explanation == refine["detail"]
         assert resp.changes.added == []
         assert resp.changes.removed == []
 
 
 class TestRefinementOverHttp:
-
     @pytest.fixture
-    def client(self, no_key, monkeypatch, _restore_planner):
-        _patch_offline(monkeypatch)
-        planner = Pipeline(db=_FakeDB())  # type: ignore[arg-type]
+    def client(self, reading, monkeypatch, _restore_planner):
+        repos = _patch_offline(monkeypatch)
+        planner = Pipeline(repos=repos)
         agent_main.app.state.planner = planner
         return TestClient(agent_main.app, raise_server_exceptions=False)
 
@@ -412,8 +420,7 @@ class TestRefinementOverHttp:
                 "revision": 1,
                 "instruction": "отсортируй по времени посещения",
                 "base_points": [
-                    {"id": i, "name": f"stop {i}", "lat": 53.678, "lon": 23.828}
-                    for i in (1, 12, 7)
+                    {"id": i, "name": f"stop {i}", "lat": 53.678, "lon": 23.828} for i in (1, 12, 7)
                 ],
             },
         }
@@ -430,8 +437,7 @@ class TestRefinementOverHttp:
                 "revision": 2,
                 "instruction": "сделай маршрут короче",
                 "base_points": [
-                    {"id": i, "name": f"stop {i}", "lat": 53.678, "lon": 23.828}
-                    for i in (1, 12, 7)
+                    {"id": i, "name": f"stop {i}", "lat": 53.678, "lon": 23.828} for i in (1, 12, 7)
                 ],
             },
         }
@@ -442,12 +448,7 @@ class TestRefinementOverHttp:
         assert data["debug"]["refinement"]["reason_code"] == REFINEMENT_UNSUPPORTED
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Cost fallback: the base points survive even when Valhalla cannot answer
-# ─────────────────────────────────────────────────────────────────────────────
-
 class TestCostFallback:
-
     def test_synthetic_cost_has_no_unreachable_cells(self):
         cands = [_cand(1, "A", "замок"), _cand(2, "B", "кафе", 53.70, 23.85)]
         cost = _synthetic_cost(cands)
@@ -459,7 +460,8 @@ class TestCostFallback:
     def test_refinement_cost_never_drops_a_base_stop(self, monkeypatch):
         cands = [_cand(1, "A"), _cand(2, "B", lat=53.70, lon=23.85)]
         monkeypatch.setattr(
-            pipeline_mod, "compute_cost_matrix",
+            cost_mod,
+            "compute_cost_matrix",
             lambda *_a, **_kw: (_ for _ in ()).throw(UpstreamUnavailable("down")),
         )
         route, cost = _refinement_cost(cands, constraints=None, costing="pedestrian")  # type: ignore[arg-type]

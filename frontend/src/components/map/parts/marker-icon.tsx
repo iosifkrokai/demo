@@ -1,38 +1,13 @@
 import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '@/lib/utils';
 
-/**
- * Marker colours — one meaning, one colour.
- *
- * Colour encodes exactly one thing: the marker's **role in the walk**.
- *
- *   start  — the first stop of the plan
- *   via    — every stop in between (the default)
- *   finish — the last stop of the plan
- *
- * `me` (the tourist's own position) and `iso` (an isochrone centre) are not
- * stops in the walk, so they sit deliberately outside the scheme: they are
- * never applied to a numbered stop, which is what keeps the scheme single.
- *
- * The three role colours come from the design tokens, and that is the point:
- *  - `finish` is the accent (`--primary` #ff385c), the same colour as the route
- *    line, so the goal reads as part of the route;
- *  - `start` is ink (`--foreground` #222222), the strongest neutral;
- *  - `via` is quiet grey (`--muted-foreground` #717171) — the middle is not news;
- *  - there is no red: `--destructive` red means "error" in this design system
- *    and must never mean "this is the last stop".
- *
- * The bootstrap-era names (green / grey / red / blue / purple) survive as
- * aliases so existing call sites keep compiling; new code should use the role
- * names, or ask `markerColorForStop()` for one.
- */
+/** Marker colours — one meaning, one colour. */
 export type MarkerColor =
   | 'start'
   | 'via'
   | 'finish'
   | 'me'
   | 'iso'
-  // Aliases kept for the map layer's existing call sites.
   | 'green'
   | 'grey'
   | 'red'
@@ -65,10 +40,7 @@ const markerIconVariants = cva('relative cursor-pointer w-[35px] h-[45px]', {
   },
 });
 
-/**
- * The role colour for the stop at `index` of `total` numbered stops.
- * One rule, one place: the map layer should not re-derive it.
- */
+/** The role colour for the stop at `index` of `total` numbered stops. */
 export const markerColorForStop = (
   index: number,
   total: number

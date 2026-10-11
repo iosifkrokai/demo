@@ -7,13 +7,7 @@ import { cn } from '@/lib/utils';
 /** What the button shows: the switch itself has to be readable in any language. */
 const SHORT: Record<Language, string> = { ru: 'RU', en: 'EN' };
 
-/**
- * The interface-language switch.
- *
- * Two buttons rather than a dropdown: there are two languages, and both names
- * are always visible — a tourist looking for English should not have to open a
- * menu that is written in Russian.
- */
+/** The interface-language switch. */
 export const LanguageSwitcher = ({ className }: { className?: string }) => {
   const { t, i18n } = useTranslation();
   const current: Language = i18n.language === 'en' ? 'en' : 'ru';
@@ -35,8 +29,6 @@ export const LanguageSwitcher = ({ className }: { className?: string }) => {
           lang={lng}
           data-testid={`language-${lng}`}
           aria-pressed={current === lng}
-          // The visible label is «RU»/«EN» — short on purpose, but a screen
-          // reader should hear the language's own name, not two letters.
           aria-label={t(`language.${lng}`)}
           title={t(`language.${lng}`)}
           onClick={() => setLanguage(lng)}

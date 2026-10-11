@@ -1,5 +1,5 @@
 import { Link } from '@tanstack/react-router';
-import { MapPinned, Plus, Trash2 } from 'lucide-react';
+import { Loader2, MapPinned, Plus, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 
 import { PlaceMap } from '@/components/place-map/place-map';
@@ -9,16 +9,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { usePlaces } from '@/hooks/use-places';
 import { useToggleVisited, useVisited } from '@/hooks/use-visited';
 
-/**
- * «Мои посещённые места» (spec 005 §3).
- *
- * Two halves, honestly split: what is already marked (the durable registry), and
- * a search over the catalogue to add more. The marked half is shown twice on
- * purpose — as a list with dates, and on a map, because «где я уже был» is a
- * question about places, and a list answers a different one. The map is the same
- * shared `PlaceMap` the admin uses, so a point cannot sit in one place on one
- * page and another place on the other.
- */
+/** «Мои посещённые места». */
 
 const fmtDate = (value: string | null): string | null => {
   if (!value) return null;
@@ -47,7 +38,6 @@ export function VisitedPage() {
     [visited.items]
   );
 
-  // A pin clicked on the map may be far down a long list.
   useEffect(() => {
     if (selectedId == null) return;
     document
@@ -68,7 +58,19 @@ export function VisitedPage() {
       .slice(0, 30);
   }, [places.places, query, visitedIds]);
 
-  if (isLoading) return null;
+  if (isLoading) {
+    return (
+      <main className="flex min-h-dvh items-center justify-center bg-background p-4">
+        <div
+          data-testid="visited-loading"
+          className="flex items-center gap-2 text-meta text-muted-foreground"
+        >
+          <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+          загружаю…
+        </div>
+      </main>
+    );
+  }
 
   if (!authenticated) {
     return (
@@ -130,7 +132,6 @@ export function VisitedPage() {
                         : 'border-border'
                     }`}
                   >
-                    {/* The name is the list's half of the link with the map. */}
                     <button
                       type="button"
                       onClick={() => setSelectedId(place.place_id)}

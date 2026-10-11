@@ -820,8 +820,6 @@ export const generalize = {
   },
 };
 
-// Valhalla supported language options for turn-by-turn navigation instructions
-// Reference: https://valhalla.github.io/valhalla/api/turn-by-turn/api-reference/#supported-language-tags
 export const languageOptions = [
   { key: 'bg-BG', text: 'Bulgarian (Bulgaria)', value: 'bg-BG' },
   { key: 'ca-ES', text: 'Catalan (Spain)', value: 'ca-ES' },
@@ -859,9 +857,6 @@ export type DirectionsLanguage = (typeof languageOptions)[number]['value'];
 export const DEFAULT_DIRECTIONS_LANGUAGE: DirectionsLanguage = 'en-US';
 export const DIRECTIONS_LANGUAGE_STORAGE_KEY = 'directions_language';
 
-// Settings surfaced in the QuickSettings (left sidebar) panel rather than the
-// advanced (right) panel. Keep this list in sync with what QuickSettings renders
-// — settings-panel.tsx reads it to skip these in the advanced view.
 export const QUICK_SETTING_PARAMS = [
   'use_highways',
   'use_tolls',
@@ -869,9 +864,6 @@ export const QUICK_SETTING_PARAMS = [
   'alternates',
 ] as const;
 
-// Profiles where use_highways / use_tolls are meaningful costing options.
-// Pedestrian, bicycle, motor_scooter ignore them, so the QuickSettings panel
-// only renders those two controls when the active profile is in this list.
 export const HIGHWAY_TOLL_PROFILES = [
   'car',
   'truck',
@@ -950,10 +942,6 @@ export const settingsInitTruckOverride = {
   height: 4.11,
 };
 
-// `turnPenaltyCost` and `maneuverPenalty` below are two sliders bound to the same
-// `maneuver_penalty` key. A profile must therefore carry exactly one of them: the
-// last control written wins, so a profile listing both shows two sliders that
-// move each other and fight over one store key.
 const gateSettings = [gateCost, gatePenalty] as const;
 const maneuverSettings = [maneuverPenalty] as const;
 const borderSettings = [countryCrossingCost, countryCrossingPenalty] as const;
@@ -982,10 +970,6 @@ const commonVehicleProfileBoolean = [
   ignoreHierarchies,
 ] as const;
 
-// The turn-penalty control is spelled out per profile instead of shared: it goes
-// in the *general* settings of the profiles whose profile settings do not already
-// bind `maneuver_penalty` (car, bus, bicycle), and stays out of the ones that do
-// (truck, motorcycle, motor_scooter). See `gateSettings` above.
 const commonGeneralNumeric = [
   useHighways,
   ...tollSettings,

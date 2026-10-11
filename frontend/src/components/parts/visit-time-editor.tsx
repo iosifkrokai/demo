@@ -25,18 +25,7 @@ interface VisitTimeEditorProps {
 /** Common visit lengths, so nobody taps «+» eight times for two hours. */
 const PRESETS = [15, 30, 45, 60, 90, 120];
 
-/**
- * «≈ 40 мин» with the tourist's own number one tap away.
- *
- * The estimate is a hint from the dataset, never a claim about this person's
- * visit: the UI says «≈», and the moment they pick their own time that number
- * decides every total that depends on visit length. Resetting hands the
- * estimate back.
- *
- * The controls live in a popover rather than unfolding inside the row: an
- * expanding inline group pushed the stop's name and the hint text around, so
- * the row moved under the finger that was trying to tap it.
- */
+/** «≈ 40 мин» with the tourist's own number one tap away. */
 export const VisitTimeEditor = ({
   estimate,
   value,
@@ -65,9 +54,6 @@ export const VisitTimeEditor = ({
     'text-meta text-muted-foreground transition-colors hover:bg-muted hover:text-foreground',
     'data-[state=open]:border-ring data-[state=open]:text-foreground',
     compact && 'px-1.5',
-    // In a list row on a phone the chip gets its own column now, so it keeps
-    // its pill — but 40px tall, because it is a button the tourist taps, and a
-    // 20px one is under the finger floor. Desktop is unchanged.
     compact && 'max-md:h-10'
   );
 
@@ -98,9 +84,6 @@ export const VisitTimeEditor = ({
       </PopoverTrigger>
 
       <PopoverContent
-        // Anchored to the row that was tapped and kept on screen: with the
-        // default bottom placement a row near the edge made the panel flip to
-        // the middle of the screen, nowhere near the finger that opened it.
         side="top"
         align="center"
         sideOffset={8}
@@ -129,7 +112,6 @@ export const VisitTimeEditor = ({
           )}
         </div>
 
-        {/* − [число] + : the number sits between the two keys that change it. */}
         <div className="mt-2 flex items-center justify-between gap-2">
           <button
             type="button"
