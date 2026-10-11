@@ -73,10 +73,10 @@ pass you should ignore.
   add a writer, go through `db.seed.pipeline.upsert_sql`.
 - **`verify` is deterministic.** Whether a route satisfies the request is decided by
   code re-reading the final route — never by asking the model again.
-- **An account sits beside the anonymous client, never replaces it.** The
-  `X-Client-Id` client is what a browser has before anyone signs in, and a
-  signing-in account adopts it; the session is an HttpOnly cookie
-  (`grodno_session`) and only `sha256(token)` is stored.
+- **The session is the only identity.** Every surface is account-scoped — an
+  anonymous visitor is sent to `/login` — and the session is an HttpOnly cookie
+  (`grodno_session`) of which only `sha256(token)` is stored. There is no
+  anonymous client.
 - **Reading a query needs the model.** Without `OPENROUTER_API_KEY` the planning
   endpoints answer `503 llm_not_configured` rather than guessing; retrieval is
   unaffected (embeddings are local, 384-d, ONNX).

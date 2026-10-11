@@ -80,7 +80,7 @@ Changing a value in `core/constants.py` is a code-review decision: edit → test
 ```
 Browser → nginx :80 (frontend container)
   │
-  ├─ /routes/*, /clients/, /places, ^/(auth|me|admin)/   → proxy → agent :8080
+  ├─ /routes/*, /places, ^/(auth|me|admin)/              → proxy → agent :8080
   │                           │
   │               api.main → planner.Pipeline
   │                           │
@@ -139,7 +139,7 @@ curl -sX POST localhost:8080/routes/generate -H 'content-type: application/json'
 **"relation 'places' does not exist", or the seed failing on a fresh volume.** The
 schema is owned by Alembic, not a container startup script: `backend/db/alembic/`
 holds one baseline revision creating the complete schema (places, aliases, sources,
-areas, clients, saved routes, users/sessions/visited, the curated-category guard).
+areas, users/sessions/visited, the curated-category guard).
 Apply it with `make migrate`.
 
 **`503 (valhalla ... sources_to_targets failed after retries)`.** Valhalla 3.5.1
