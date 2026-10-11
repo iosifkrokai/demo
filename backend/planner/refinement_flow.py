@@ -20,26 +20,26 @@ from db.store.registry import Repositories
 from planner.models import Candidate, GenerateReq, RouteResponse
 from telemetry import trace
 
-from .dedupe import _norm_name
+from .dedupe import norm_name
 from .explain import explain as explain_route
-from .geo import _TRACE_NAMES_MAX
+from .geo import TRACE_NAMES_MAX
 from .intent import build_requirements, intent_from_requirements
 from .plan_tail import run_plan_tail
 from .refine import (
-    _cap_for_valhalla,
-    _context_changes,
-    _nearby_convenience,
+    cap_for_valhalla,
+    context_changes,
     interpret_refinement,
     is_excluded_category,
+    nearby_convenience,
     reason_text,
     reorder_stops,
 )
 from .resolve import resolve
 from .response import (
-    _render_tour,
-    _services_along_evidence,
-    _verdicts,
     build_response,
+    render_tour,
+    services_along_evidence,
+    verdicts,
 )
 from .retrieve import candidate_of
 from .turn import Turn
@@ -94,11 +94,11 @@ def _removals(directive, base: list[Candidate], excluded: set[int]) -> set[int]:
             removed.add(stop.id)
 
     for name in directive.remove_names:
-        norm = _norm_name(name)
+        norm = norm_name(name)
         if not norm:
             continue
         for stop in base:
-            if norm in _norm_name(stop.name):
+            if norm in norm_name(stop.name):
                 removed.add(stop.id)
     return removed
 
@@ -114,12 +114,12 @@ def _additions(repos: Repositories, directive, base: list[Candidate]) -> list[Ca
     try:
         convenience = {c for c in directive.add_categories if c in constants.CONVENIENCE_CATEGORIES}
         if convenience:
-            for c in _nearby_convenience(repos.places, base, convenience):
+            for c in nearby_convenience(repos.places, base, convenience):
                 found[c.id] = c
 
         sights = {c for c in directive.add_categories if c not in constants.CONVENIENCE_CATEGORIES}
         if sights:
-            for c in _nearby_convenience(
+            for c in nearby_convenience(
                 repos.places,
                 base,
                 sights,
@@ -173,7 +173,7 @@ def generate_refinement(
         additions = _additions(repos, directive, kept)
         have = {c.id for c in kept}
         route = list(kept) + [c for c in additions if c.id not in have]
-        route = _cap_for_valhalla(route, kept)
+        route = cap_for_valhalla(route, kept)
         algorithm = "refinement_add"
     else:
         route = list(kept)
@@ -188,7 +188,7 @@ def generate_refinement(
         "refinement · op",
         input={
             "instruction": instruction,
-            "base": [c.name for c in base][:_TRACE_NAMES_MAX],
+            "base": [c.name for c in base][:TRACE_NAMES_MAX],
             "excluded_ids": sorted(excluded)[:10],
         },
         operation=directive.operation,
@@ -240,7 +240,7 @@ def generate_refinement(
         budget_seconds=plan.trace.get("budget_seconds"),
         max_leg_seconds=plan.trace.get("max_leg_seconds"),
     )
-    shape, summary = _render_tour(
+    shape, summary = render_tour(
         route,
         costing=costing,
         origin=req.origin,
@@ -255,14 +255,14 @@ def generate_refinement(
         requirements,
         plan,
         shape,
-        _services_along_evidence(repos.places, requirements, shape),
+        services_along_evidence(repos.places, requirements, shape),
     )
     status = overall_status(requirements)
     trace.record(
         "verify",
         input=[r.code or r.text for r in requirements.requirements][:10],
         plan_status=status,
-        output=_verdicts(requirements),
+        output=verdicts(requirements),
     )
 
     walk_s = float(summary.get("time", 0.0)) if summary else 0.0
@@ -280,7 +280,7 @@ def generate_refinement(
         output=explanation,
     )
 
-    changes = _context_changes(base, route)
+    changes = context_changes(base, route)
 
     ms = int((_time.perf_counter() - t0) * 1000)
     log.info(

@@ -14,7 +14,7 @@ from agent.models import (
 )
 from planner.intent import mark_out_of_coverage
 from planner.models import Candidate, ResolvedConstraints
-from planner.pipeline import _outside_left_unresolved
+from planner.pipeline import outside_left_unresolved
 from planner.resolve import _same_name
 from planner.verify import (
     INFEASIBLE_REASONS,
@@ -96,21 +96,21 @@ def test_a_flagged_name_that_did_resolve_in_region_is_not_a_refusal():
     reqs = TripRequirements(outside_coverage=["Старый замок"])
     constraints = ResolvedConstraints(resolved_names=["Старый замок"])
 
-    assert _outside_left_unresolved(reqs, constraints) == []
+    assert outside_left_unresolved(reqs, constraints) == []
 
 
 def test_an_unresolvable_flagged_name_is_a_refusal():
     reqs = TripRequirements(outside_coverage=[VILNIUS_CATHEDRAL, "Вильнюс"])
     constraints = ResolvedConstraints(resolved_names=[])
 
-    assert _outside_left_unresolved(reqs, constraints) == [
+    assert outside_left_unresolved(reqs, constraints) == [
         VILNIUS_CATHEDRAL,
         "Вильнюс",
     ]
 
 
 def test_nothing_flagged_means_no_question_at_all():
-    assert _outside_left_unresolved(TripRequirements(), ResolvedConstraints()) == []
+    assert outside_left_unresolved(TripRequirements(), ResolvedConstraints()) == []
 
 
 def test_strict_matching_takes_the_same_name_and_nothing_else():

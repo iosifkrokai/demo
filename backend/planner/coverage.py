@@ -15,12 +15,12 @@ from planner.models import (
 from telemetry import trace
 
 from .intent import mark_out_of_coverage
-from .response import _verdicts, build_response
+from .response import build_response, verdicts
 from .validate import validate
 from .verify import overall_status
 
 
-def _outside_left_unresolved(requirements: Any, constraints: ResolvedConstraints) -> list[str]:
+def outside_left_unresolved(requirements: Any, constraints: ResolvedConstraints) -> list[str]:
     """Names the reading placed outside the region that stayed unresolvable.
 
     A name that resolved to a place inside the region is not a refusal.
@@ -59,7 +59,7 @@ def refuse_out_of_coverage(
         "verify",
         input=[r.code or r.text for r in requirements.requirements][:10],
         plan_status=status,
-        output=_verdicts(requirements),
+        output=verdicts(requirements),
     )
     trace.record(
         "response",

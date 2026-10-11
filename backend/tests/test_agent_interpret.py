@@ -539,7 +539,7 @@ def test_tools_never_raise_raw_errors(monkeypatch):
     assert tools_places.get_place_facts(-3)["error"] == tools.ERR_BAD_ARGUMENT
 
     # "No driver installed" is expressed as "no repositories" now: nothing
-    # imports psycopg lazily any more, and `_fetch` reports the missing store
+    # imports psycopg lazily any more, and `fetch` reports the missing store
     # with the same honest error code the driver failure used to produce.
     assert tools_places.search_places("замки")["error"] == tools.ERR_DB_UNAVAILABLE
 

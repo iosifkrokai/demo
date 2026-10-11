@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-_PRECISION = 1e6
+PRECISION = 1e6
 
 LOCATION_SNAP_RADIUS_M = 100
 

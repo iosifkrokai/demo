@@ -521,7 +521,7 @@ def _two_opt(order: list[int], matrix: list[list[float]]) -> list[int]:
     return order
 
 
-def _valhalla_order(
+def valhalla_order(
     route: list[Candidate],
     info: dict,
     *,
@@ -552,7 +552,7 @@ def _valhalla_order(
     )
 
 
-def _prune_unroutable(
+def prune_unroutable(
     route: list[Candidate],
     candidates: list[Candidate],
     cost: CostMatrix,
@@ -576,7 +576,7 @@ def _prune_unroutable(
     return route, pruned
 
 
-def _order_after_prune(info: dict, route: list[Candidate], candidates: list[Candidate]) -> dict:
+def order_after_prune(info: dict, route: list[Candidate], candidates: list[Candidate]) -> dict:
     """``info["order"]`` holds indices into the cost matrix, so a shortened route
     needs them recomputed.
     """

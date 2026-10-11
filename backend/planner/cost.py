@@ -15,7 +15,7 @@ from planner.valhalla.matrix import time_matrix
 from planner.valhalla.snap import snap_locations
 from reference import taxonomy
 
-from .geo import _distance_m
+from .geo import distance_m
 
 REASON_UNROUTABLE_LEG = "unroutable_leg"
 REASON_MUST_VISIT_UNROUTABLE = "must_visit_unroutable"
@@ -251,7 +251,7 @@ def _synthetic_cost(candidates: list[Candidate], costing: str = "pedestrian") ->
     for i in range(n):
         for j in range(n):
             if i != j:
-                matrix[i][j] = _distance_m(candidates[i], candidates[j]) / speed_ms
+                matrix[i][j] = distance_m(candidates[i], candidates[j]) / speed_ms
     return CostMatrix(
         walk_seconds=matrix,
         visit_minutes=[visit_minutes_of(c) for c in candidates],
@@ -259,7 +259,7 @@ def _synthetic_cost(candidates: list[Candidate], costing: str = "pedestrian") ->
     )
 
 
-def _refinement_cost(
+def refinement_cost(
     route: list[Candidate], constraints: ResolvedConstraints, costing: str
 ) -> tuple[list[Candidate], CostMatrix]:
     """Never raises and never drops a stop the user kept: falls back to straight-line
@@ -284,7 +284,7 @@ def _refinement_cost(
     return route, cost
 
 
-def _build_cost(
+def build_cost(
     candidates: list[Candidate], constraints: ResolvedConstraints, costing: str
 ) -> tuple[list[Candidate], CostMatrix]:
     """Cost matrix, aligned to the candidates, minus what Valhalla cannot reach."""
@@ -299,7 +299,7 @@ def _build_cost(
     return candidates, cost
 
 
-def _is_service_code(code: str) -> bool:
+def is_service_code(code: str) -> bool:
     """True when a taxonomy code is a service (a café, a toilet, a hotel)."""
     try:
         return taxonomy.role(code) == "service"
@@ -307,7 +307,7 @@ def _is_service_code(code: str) -> bool:
         return False
 
 
-def _is_sight_stop(candidate: Any) -> bool:
+def is_sight_stop(candidate: Any) -> bool:
     """True when a candidate is a destination, not a service the user asked for.
 
     Unknown category codes count as sights.

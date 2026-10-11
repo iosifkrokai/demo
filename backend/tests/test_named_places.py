@@ -10,7 +10,7 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from planner.models import Candidate, LatLon
-from planner.pipeline import _geo_focus, should_skip_geo_focus
+from planner.pipeline import geo_focus, should_skip_geo_focus
 
 
 def test_region_scope_may_keep_its_spread_without_a_position():
@@ -49,21 +49,21 @@ class TestGeoFocus:
         c1 = _c(1, "A", lat=53.9, lon=26.5, rrf_score=1.0)
         c2 = _c(2, "B", lat=54.0, lon=27.0, rrf_score=0.9)
         origin = LatLon(lat=53.9, lon=26.5)
-        result = _geo_focus([c1, c2], origin=origin, anchor_id=2)
+        result = geo_focus([c1, c2], origin=origin, anchor_id=2)
         assert result[0].id == 1
 
     def test_named_anchor_wins_over_top_rrf(self):
         """When no origin, named anchor (anchor_id) wins over top-RRF."""
         c_anchor = _c(5, "Anchor", lat=53.95, lon=26.55, rrf_score=0.5)
         c_top = _c(6, "TopRRF", lat=53.90, lon=26.50, rrf_score=1.0)
-        result = _geo_focus([c_anchor, c_top], anchor_id=5)
+        result = geo_focus([c_anchor, c_top], anchor_id=5)
         assert result[0].id == 5
 
     def test_top_rrf_anchors_without_origin_or_anchor(self):
         """Without origin or anchor_id, highest RRF score is used as anchor."""
         c_low = _c(3, "Low", lat=53.9, lon=26.5, rrf_score=0.1)
         c_high = _c(4, "High", lat=53.8, lon=26.6, rrf_score=0.9)
-        result = _geo_focus([c_low, c_high])
+        result = geo_focus([c_low, c_high])
         assert len(result) == 2
         ids = {c.id for c in result}
         assert ids == {3, 4}
@@ -74,7 +74,7 @@ class TestGeoFocus:
         nearby = _c(39, "Костёл Николая (Мир)", lat=53.948, lon=26.470, rrf_score=0.8)
         far_away = _c(49, "Старый замок Гродно", lat=53.6693, lon=23.8301, rrf_score=0.6)
 
-        result = _geo_focus([anchor, nearby, far_away], anchor_id=38)
+        result = geo_focus([anchor, nearby, far_away], anchor_id=38)
         ids = {c.id for c in result}
         assert 38 in ids
         assert 39 in ids
@@ -85,7 +85,7 @@ class TestGeoFocus:
         inflated to pad the pool; the pipeline reports the miss instead."""
         anchor = _c(1, "Anchor", lat=53.95, lon=26.47, rrf_score=1.0)
         far = _c(2, "Far", lat=54.0, lon=27.0, rrf_score=0.9)
-        result = _geo_focus([anchor, far], anchor_id=1)
+        result = geo_focus([anchor, far], anchor_id=1)
         assert [c.id for c in result] == [1], (
             "isolated anchor: only the anchor survives the fix radius"
         )
@@ -96,7 +96,7 @@ class TestGeoFocus:
         near1 = _c(2, "Near1", lat=53.96, lon=26.48, rrf_score=0.9)
         far = _c(3, "Far", lat=54.1, lon=27.0, rrf_score=0.8)
 
-        result = _geo_focus([anchor, near1, far], anchor_id=1)
+        result = geo_focus([anchor, near1, far], anchor_id=1)
         ids = {c.id for c in result}
         assert ids == {1, 2}
 
@@ -106,13 +106,13 @@ class TestGeoFocus:
         c12 = _c(2, "At7km", lat=53.95, lon=26.58, rrf_score=0.9)
         c20 = _c(3, "At18km", lat=53.95, lon=26.75, rrf_score=0.8)
 
-        result = _geo_focus([anchor_c, c12, c20])
+        result = geo_focus([anchor_c, c12, c20])
         ids = {c.id for c in result}
         assert ids == {1, 2, 3}
 
     def test_empty_candidates_returns_empty(self):
-        assert _geo_focus([]) == []
-        assert _geo_focus([], anchor_id=1) == []
+        assert geo_focus([]) == []
+        assert geo_focus([], anchor_id=1) == []
 
 
 if __name__ == "__main__":

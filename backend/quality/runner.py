@@ -385,10 +385,10 @@ def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     return 2 * _R * math.asin(math.sqrt(a))
 
 
-def _norm_name(name: str) -> str:
+def norm_name(name: str) -> str:
     """Lowercase, drop parentheticals and punctuation — the agent's own rule.
 
-    Mirrors planner/pipeline.py::_norm_name, so both consider the same names identical.
+    Mirrors planner/pipeline.py::norm_name, so both consider the same names identical.
     """
     n = re.sub(r"\([^)]*\)", " ", (name or "").lower())
     n = re.sub(r"[^0-9a-zа-яё]+", " ", n)
@@ -397,8 +397,8 @@ def _norm_name(name: str) -> str:
 
 def name_similarity(a: str, b: str) -> float:
     """Jaccard similarity of the normalised token sets of two POI names."""
-    ta = set(_norm_name(a).split())
-    tb = set(_norm_name(b).split())
+    ta = set(norm_name(a).split())
+    tb = set(norm_name(b).split())
     if not ta or not tb:
         return 0.0
     return len(ta & tb) / len(ta | tb)
@@ -712,8 +712,8 @@ def _duplicate_rule(name_a: str, name_b: str, dist_m: float) -> str | None:
     if dist_m < DUPLICATE_RADIUS_M:
         return "coincident"
     if (
-        _norm_name(name_a)
-        and _norm_name(name_a) == _norm_name(name_b)
+        norm_name(name_a)
+        and norm_name(name_a) == norm_name(name_b)
         and dist_m < DUPLICATE_NAME_RADIUS_M
     ):
         return "same_name"
@@ -2363,7 +2363,7 @@ def derive_status(
 
 def codes_in_name(name: str) -> set[str]:
     """Canonical category codes occurring as a word in a POI name."""
-    tokens = {t.replace("ё", "е") for t in _norm_name(name).split()}
+    tokens = {t.replace("ё", "е") for t in norm_name(name).split()}
     return {code for code in CANONICAL_CODES_NORM if code in tokens}
 
 
@@ -2500,7 +2500,7 @@ def evaluate_compliance(
         missing_names = [
             n
             for n in names
-            if not any(_norm_code(n) in _norm_name(p.get("name", "")) for p in points)
+            if not any(_norm_code(n) in norm_name(p.get("name", "")) for p in points)
         ]
         checks[CHECK_MISSING_NAMED_PLACE] = (
             _ok(f"every named place is on the plan {names}")

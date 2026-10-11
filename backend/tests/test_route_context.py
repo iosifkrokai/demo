@@ -14,11 +14,11 @@ from core import constants
 from db.store.mappers import place_from_row
 from planner.models import Candidate, GenerateReq, LatLon, RouteContext
 from planner.refine import (
-    _cap_for_valhalla,
-    _context_changes,
-    _drop_excluded,
-    _nearby_convenience,
     _with_base_points,
+    cap_for_valhalla,
+    context_changes,
+    drop_excluded,
+    nearby_convenience,
 )
 
 
@@ -78,13 +78,13 @@ def test_context_point_needs_coordinates():
 
 def test_excluded_stops_do_not_come_back():
     pool = [_cand(1, "Форт №16"), _cand(2, "Кафе Немо"), _cand(3, "Туалет")]
-    kept = _drop_excluded(pool, {1})
+    kept = drop_excluded(pool, {1})
     assert [c.name for c in kept] == ["Кафе Немо", "Туалет"]
 
 
 def test_exclusion_is_a_no_op_when_nothing_was_deleted():
     pool = [_cand(1, "Новый замок"), _cand(2, "Старый замок")]
-    assert len(_drop_excluded(pool, set())) == 2
+    assert len(drop_excluded(pool, set())) == 2
 
 
 def test_base_stops_come_back_after_every_trim():
@@ -127,7 +127,7 @@ def test_changes_report_what_the_refinement_did():
     base = [_cand(1, "Старый замок"), _cand(2, "Музей быта")]
     route = [_cand(1, "Старый замок"), _cand(9, "Туалет")]
 
-    changes = _context_changes(base, route)
+    changes = context_changes(base, route)
 
     assert [c.name for c in changes.added] == ["Туалет"]
     assert [c.name for c in changes.removed] == ["Музей быта"]
@@ -141,7 +141,7 @@ def test_valhalla_pool_keeps_base_stops_and_stays_under_20():
     base = [_cand(i, f"монастырь {i}") for i in range(1, 13)]
     extras = [_cand(100 + i, f"кафе {i}") for i in range(30)]
 
-    capped = _cap_for_valhalla(base + extras, base)
+    capped = cap_for_valhalla(base + extras, base)
 
     assert len(capped) == 20
     ids = [c.id for c in capped]
@@ -151,7 +151,7 @@ def test_valhalla_pool_keeps_base_stops_and_stays_under_20():
 
 def test_pool_is_left_alone_when_it_already_fits():
     pool = [_cand(1, "монастырь"), _cand(2, "кафе")]
-    assert len(_cap_for_valhalla(pool, pool)) == 2
+    assert len(cap_for_valhalla(pool, pool)) == 2
 
 
 def test_convenience_stops_come_from_the_neighbourhood(monkeypatch):
@@ -177,7 +177,7 @@ def test_convenience_stops_come_from_the_neighbourhood(monkeypatch):
                 ),
             ]
 
-    found = _nearby_convenience(_Places(), base, {"кафе"})
+    found = nearby_convenience(_Places(), base, {"кафе"})
 
     assert calls == [
         (base[0].lat, base[0].lon, constants.CONVENIENCE_RADIUS_M / 1000.0),
@@ -200,6 +200,6 @@ def test_convenience_search_ignores_categories_nobody_asked_for(monkeypatch):
                 ),
             ]
 
-    found = _nearby_convenience(_Places(), base, {"туалет"})
+    found = nearby_convenience(_Places(), base, {"туалет"})
 
     assert [c.name for c in found] == ["Туалет"]

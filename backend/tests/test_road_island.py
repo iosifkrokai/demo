@@ -14,7 +14,7 @@ from planner import render as render_mod
 from planner.cost import prune_unroutable_stops
 from planner.models import Candidate, CostMatrix
 from planner.valhalla import http, matrix, snap, types
-from planner.valhalla.matrix import _is_route_failure
+from planner.valhalla.matrix import is_route_failure
 from planner.valhalla.route import route_through
 
 ISLAND = (53.007611, 23.917041)
@@ -134,8 +134,8 @@ def test_render_falls_back_to_legs_when_the_tour_is_refused(monkeypatch):
 
 
 def test_no_path_400_is_classified_as_a_route_failure():
-    assert _is_route_failure(_no_path_error())
-    assert not _is_route_failure(
+    assert is_route_failure(_no_path_error())
+    assert not is_route_failure(
         UpstreamUnavailableError(
             "valhalla GET /route failed after retries: [Errno 111] Connection refused"
         )

@@ -235,7 +235,7 @@ def _matrix_via_route_resilient(source: dict, target: dict, costing: str, timeou
         except UpstreamUnavailableError as exc:
             if _is_distance_limit_error(exc):
                 return float(constants.UNREACHABLE_S)
-            if not _is_route_failure(exc):
+            if not is_route_failure(exc):
                 logger.warning(
                     "pair (%s,%s) -> (%s,%s) could not be asked (%s) — left unknown",
                     source.get("lat"),
@@ -349,7 +349,7 @@ def time_matrix(
     return result
 
 
-def _is_route_failure(exc: Exception) -> bool:
+def is_route_failure(exc: Exception) -> bool:
     """True when the tour itself is the problem, not the Valhalla connection.
 
     Transport failures match neither marker and must keep bubbling up as 503.

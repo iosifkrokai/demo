@@ -8,7 +8,7 @@ from typing import Any
 from pydantic_ai import RunContext
 
 from agent.schema import InterpretDeps
-from agent.tools import ERR_NOT_IMPLEMENTED, _clamp, _envelope
+from agent.tools import ERR_NOT_IMPLEMENTED, clamp, envelope
 from reference.taxonomy import db_values
 
 MAX_SERVICES_PER_CALL = 5
@@ -27,7 +27,7 @@ def services_near_route(
     codes = [c for c in (category_codes or []) if c.strip()]
     db_cats = db_values(codes)
     points = [p for p in (shape or []) if p is not None]
-    detour, detour_clamped = _clamp(max_detour_minutes, 1, MAX_DETOUR_MINUTES, MAX_DETOUR_MINUTES)
+    detour, detour_clamped = clamp(max_detour_minutes, 1, MAX_DETOUR_MINUTES, MAX_DETOUR_MINUTES)
 
     provenance: dict[str, Any] = {
         "source": "places+valhalla",
@@ -41,7 +41,7 @@ def services_near_route(
         "detour_clamped": detour_clamped,
     }
 
-    return _envelope(
+    return envelope(
         "services_near_route",
         [],
         provenance,

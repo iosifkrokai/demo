@@ -27,7 +27,7 @@ from planner.models import (
 )
 
 from .cost import visit_time_minutes
-from .geo import _TRACE_NAMES_MAX
+from .geo import TRACE_NAMES_MAX
 from .render import render
 
 log = logging.getLogger(__name__)
@@ -65,7 +65,7 @@ def build_response(
             time_budget_minutes=d.time_budget_minutes,
             source=intent.source,
         ),
-        points=_to_places(plan.route),
+        points=to_places(plan.route),
         shape=shape,
         summary=RouteSummary(length_km=length_km, time_seconds=walk_s),
         changes=changes,
@@ -82,7 +82,7 @@ def build_response(
         alternatives=offers or None,
         status=status,
         requirements=(requirements.public_requirements() if requirements is not None else None),
-        interpretation=_interpretation(requirements, status),
+        interpretation=interpretation(requirements, status),
         debug={
             "intent_source": intent.source,
             "intent_latency_ms": intent.latency_ms,
@@ -126,9 +126,7 @@ def no_route_response(req: GenerateReq, detail: str) -> RouteResponse:
     )
 
 
-def _interpretation(
-    requirements: Any | None, status: OverallStatus | None
-) -> Interpretation | None:
+def interpretation(requirements: Any | None, status: OverallStatus | None) -> Interpretation | None:
     """What the system understood, in one compact block for the client.
 
     Codes and numbers only — the client localises ``code``/``reason`` itself.
@@ -168,7 +166,7 @@ def _interpretation(
     )
 
 
-def _verdicts(requirements: Any) -> list[dict[str, Any]]:
+def verdicts(requirements: Any) -> list[dict[str, Any]]:
     """One line per requirement: what was asked, what the verifier decided, why.
 
     Reads back the verdict the verifier wrote onto the requirement objects.
@@ -186,7 +184,7 @@ def _verdicts(requirements: Any) -> list[dict[str, Any]]:
     ]
 
 
-def _to_places(candidates: list[Candidate]) -> list[Place]:
+def to_places(candidates: list[Candidate]) -> list[Place]:
     """Candidates → the response points (one mapping, used by every branch)."""
     return [
         Place(
@@ -210,7 +208,7 @@ def _to_places(candidates: list[Candidate]) -> list[Place]:
     ]
 
 
-def _render_tour(
+def render_tour(
     route: list[Candidate],
     *,
     costing: str,
@@ -233,7 +231,7 @@ def _render_tour(
         return {}, {}
 
 
-def _services_along_evidence(places: Any, requirements: Any, shape: Any) -> Any:
+def services_along_evidence(places: Any, requirements: Any, shape: Any) -> Any:
     """Measure the services beside the line for the codes the requirements name.
 
     Returns None when nothing to measure; ``measured=False`` is a failed query.
@@ -321,18 +319,18 @@ def alternatives_sentence(offers: list[PlannedAlternative], walk_s: float) -> st
     )
 
 
-def _gone(before: list[Any], after: list[Any]) -> list[str]:
+def gone(before: list[Any], after: list[Any]) -> list[str]:
     """The names a step removed, in the order they arrived.
 
-    Capped by ``_TRACE_NAMES_MAX`` so a wide pool does not flood the trace.
+    Capped by ``TRACE_NAMES_MAX`` so a wide pool does not flood the trace.
     """
     kept = {c.id for c in after}
-    return [c.name for c in before if c.id not in kept][:_TRACE_NAMES_MAX]
+    return [c.name for c in before if c.id not in kept][:TRACE_NAMES_MAX]
 
 
-def _names(candidates: list[Any]) -> list[str]:
+def names(candidates: list[Any]) -> list[str]:
     """The first few names of a pool, for a step's Input panel.
 
-    What a step *received*, capped at ``_TRACE_NAMES_MAX``.
+    What a step *received*, capped at ``TRACE_NAMES_MAX``.
     """
-    return [c.name for c in candidates[:_TRACE_NAMES_MAX]]
+    return [c.name for c in candidates[:TRACE_NAMES_MAX]]

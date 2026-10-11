@@ -16,7 +16,7 @@ from planner.models import (
 )
 from telemetry import progress, trace
 
-from .response import _interpretation, _to_places, _verdicts
+from .response import interpretation, to_places, verdicts
 from .verify import overall_status, verify_catalogue
 
 log = logging.getLogger(__name__)
@@ -51,7 +51,7 @@ def catalogue_response(
         "verify",
         input=[r.code or r.text for r in requirements.requirements][:10],
         plan_status=status,
-        output=_verdicts(requirements),
+        output=verdicts(requirements),
     )
     trace.record(
         "response",
@@ -71,7 +71,7 @@ def catalogue_response(
             time_budget_minutes=d.time_budget_minutes,
             source=intent.source,
         ),
-        points=_to_places(ordered),
+        points=to_places(ordered),
         shape={},
         summary=RouteSummary(length_km=None, time_seconds=None),
         result_mode="catalogue",
@@ -83,7 +83,7 @@ def catalogue_response(
         ),
         status=status,
         requirements=requirements.public_requirements(),
-        interpretation=_interpretation(requirements, status),
+        interpretation=interpretation(requirements, status),
         costing=req.profile,
         changes=None,
         debug={

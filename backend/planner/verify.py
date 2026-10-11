@@ -172,7 +172,7 @@ def _coord_count(coords: Any) -> int:
 _PUNCT_RE = re.compile(r"[^\w\s]", re.UNICODE)
 
 
-def _norm_name(name: str | None) -> str:
+def norm_name(name: str | None) -> str:
     text = (name or "").strip().lower().replace("ё", "е")
     text = _PUNCT_RE.sub(" ", text)
     return " ".join(text.split())
@@ -232,9 +232,9 @@ def _match_named(r: Requirement, stops: list[Any]) -> Any | None:
             if _field(stop, "id") == r.place_id:
                 return stop
     if r.name:
-        wanted = _norm_name(r.name)
+        wanted = norm_name(r.name)
         for stop in stops:
-            if wanted and _norm_name(_field(stop, "name")) == wanted:
+            if wanted and norm_name(_field(stop, "name")) == wanted:
                 return stop
     return None
 

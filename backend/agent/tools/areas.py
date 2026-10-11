@@ -12,10 +12,10 @@ from agent.schema import InterpretDeps
 from agent.tools import (
     ERR_AREA_REGISTRY,
     ERR_BAD_ARGUMENT,
-    _envelope,
-    _fetch,
-    _norm_term,
-    _project,
+    envelope,
+    fetch,
+    norm_term,
+    project,
 )
 
 log = logging.getLogger(__name__)
@@ -34,7 +34,7 @@ def _areas_from_registry(term: str, locale: str, limit: int) -> list[dict]:
     slug = resolve_area(term, locale)
     if slug:
         found.append(slug)
-    needle = _norm_term(term)
+    needle = norm_term(term)
     if needle:
         for candidate, area in registry.items():
             if candidate in found:
@@ -43,7 +43,7 @@ def _areas_from_registry(term: str, locale: str, limit: int) -> list[dict]:
             aliases = area.get("aliases") or {}
             for loc in ("ru", "en"):
                 terms.extend(aliases.get(loc) or [])
-            if any(needle in _norm_term(t) for t in terms if t):
+            if any(needle in norm_term(t) for t in terms if t):
                 found.append(candidate)
             if len(found) >= limit:
                 break
@@ -72,7 +72,7 @@ def find_areas(term: str, locale: str = "ru", *, repos: Any = None) -> dict:
         "result_cap": MAX_AREAS_PER_CALL,
     }
     if not term.strip():
-        return _envelope(
+        return envelope(
             "find_areas",
             [],
             provenance,
@@ -84,16 +84,16 @@ def find_areas(term: str, locale: str = "ru", *, repos: Any = None) -> dict:
         found = _areas_from_registry(term, provenance["locale"], MAX_AREAS_PER_CALL)
     except ImportError:
         provenance["source"] = "areas (db fallback)"
-        rows, error, message = _fetch(
+        rows, error, message = fetch(
             repos, lambda store: store.areas.search(term, MAX_AREAS_PER_CALL)
         )
         if error is not None:
-            return _envelope("find_areas", [], provenance, error=error, message=message)
-        results = [_project(row, _AREA_FIELDS) for row in (rows or [])[:MAX_AREAS_PER_CALL]]
-        return _envelope("find_areas", results, provenance, capped=len(rows or []) > len(results))
+            return envelope("find_areas", [], provenance, error=error, message=message)
+        results = [project(row, _AREA_FIELDS) for row in (rows or [])[:MAX_AREAS_PER_CALL]]
+        return envelope("find_areas", results, provenance, capped=len(rows or []) > len(results))
     except Exception as exc:
         log.warning("find_areas: area registry unusable: %s", exc)
-        return _envelope(
+        return envelope(
             "find_areas",
             [],
             provenance,
@@ -101,8 +101,8 @@ def find_areas(term: str, locale: str = "ru", *, repos: Any = None) -> dict:
             message="area registry is unusable; areas cannot be resolved",
         )
 
-    results = [_project(row, _AREA_FIELDS) for row in found[:MAX_AREAS_PER_CALL]]
-    return _envelope("find_areas", results, provenance, capped=len(found) >= MAX_AREAS_PER_CALL)
+    results = [project(row, _AREA_FIELDS) for row in found[:MAX_AREAS_PER_CALL]]
+    return envelope("find_areas", results, provenance, capped=len(found) >= MAX_AREAS_PER_CALL)
 
 
 def register_find_areas(agent: Any, _remember: Callable[[Any, dict], dict]) -> None:

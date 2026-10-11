@@ -17,11 +17,11 @@ from agent.tools import (
     ERR_BAD_ARGUMENT,
     ERR_EMPTY_QUERY,
     ERR_NOT_FOUND,
-    _clamp,
-    _envelope,
-    _fetch,
-    _positive_int,
-    _project,
+    clamp,
+    envelope,
+    fetch,
+    positive_int,
+    project,
 )
 from reference.taxonomy import db_values
 
@@ -63,13 +63,13 @@ def search_places(
     db_cats = db_values(requested)
     dropped = [c for c in requested if c not in db_cats]
 
-    want, limit_clamped = _clamp(limit, 1, MAX_PLACES_PER_SEARCH, DEFAULT_SEARCH_LIMIT)
+    want, limit_clamped = clamp(limit, 1, MAX_PLACES_PER_SEARCH, DEFAULT_SEARCH_LIMIT)
     want = int(want)
 
     near: tuple[float, float, float] | None = None
     radius_clamped = False
     if isinstance(near_lat, (int, float)) and isinstance(near_lon, (int, float)):
-        radius, radius_clamped = _clamp(radius_m, MIN_RADIUS_M, MAX_RADIUS_M, DEFAULT_RADIUS_M)
+        radius, radius_clamped = clamp(radius_m, MIN_RADIUS_M, MAX_RADIUS_M, DEFAULT_RADIUS_M)
         near = (float(near_lat), float(near_lon), float(radius))
 
     provenance: dict[str, Any] = {
@@ -82,7 +82,7 @@ def search_places(
     }
 
     if not query.strip():
-        return _envelope(
+        return envelope(
             "search_places",
             [],
             provenance,
@@ -91,20 +91,20 @@ def search_places(
         )
 
     def run(store: Any) -> list[dict]:
-        fetch = MAX_PLACES_PER_SEARCH if db_cats else want
+        cap = MAX_PLACES_PER_SEARCH if db_cats else want
         if near is not None:
-            found = store.places.nearby(near[0], near[1], radius_km=near[2] / 1000.0, limit=fetch)
+            found = store.places.nearby(near[0], near[1], radius_km=near[2] / 1000.0, limit=cap)
         else:
-            found = store.places.keyword_search(query.strip(), limit=fetch)
+            found = store.places.keyword_search(query.strip(), limit=cap)
         if db_cats:
             found = [place for place in found if place.category in db_cats]
-        return [_project(place, _PLACE_FIELDS) for place in found][:want]
+        return [project(place, _PLACE_FIELDS) for place in found][:want]
 
-    rows, error, message = _fetch(repos, run)
+    rows, error, message = fetch(repos, run)
     if error is not None:
-        return _envelope("search_places", [], provenance, error=error, message=message)
+        return envelope("search_places", [], provenance, error=error, message=message)
     results = rows or []
-    return _envelope(
+    return envelope(
         "search_places",
         results,
         provenance,
@@ -121,8 +121,8 @@ def get_place_facts(place_id: int, *, repos: Any = None) -> dict:
         "result_cap": MAX_FACTS_PER_CALL,
         "fact_status": "raw_unverified",
     }
-    if not _positive_int(place_id):
-        return _envelope(
+    if not positive_int(place_id):
+        return envelope(
             "get_place_facts",
             [],
             provenance,
@@ -134,25 +134,25 @@ def get_place_facts(place_id: int, *, repos: Any = None) -> dict:
         place = store.places.get_by_id(place_id)
         if place is None:
             return []
-        facts = _project(place, _FACT_FIELDS)
+        facts = project(place, _FACT_FIELDS)
         links = place.links
         facts["links"] = (
             list(links)[:MAX_LINKS_PER_PLACE] if isinstance(links, (list, tuple)) else None
         )
         return [facts]
 
-    rows, error, message = _fetch(repos, run)
+    rows, error, message = fetch(repos, run)
     if error is not None:
-        return _envelope("get_place_facts", [], provenance, error=error, message=message)
+        return envelope("get_place_facts", [], provenance, error=error, message=message)
     if not rows:
-        return _envelope(
+        return envelope(
             "get_place_facts",
             [],
             provenance,
             error=ERR_NOT_FOUND,
             message=f"no place with id {place_id}",
         )
-    return _envelope("get_place_facts", rows[:MAX_FACTS_PER_CALL], provenance)
+    return envelope("get_place_facts", rows[:MAX_FACTS_PER_CALL], provenance)
 
 
 def register_search_places(agent: Any, remember: Callable[[Any, dict], dict]) -> None:

@@ -33,37 +33,37 @@ from telemetry import progress, trace
 
 from .catalogue import catalogue_response
 from .cost import (
-    _is_service_code,
-    _is_sight_stop,
+    is_service_code,
+    is_sight_stop,
 )
-from .coverage import _outside_left_unresolved, refuse_out_of_coverage
-from .dedupe import _drop_duplicates, _dupe_pairs
+from .coverage import outside_left_unresolved, refuse_out_of_coverage
+from .dedupe import drop_duplicates, dupe_pairs
 from .diversity import mmr_select
 from .explain import explain as explain_route
 from .geo import (
-    _TRACE_NAMES_MAX,
-    _geo_focus,
-    _geo_focus_report,
+    TRACE_NAMES_MAX,
+    geo_focus,
+    geo_focus_report,
     should_skip_geo_focus,
 )
 from .intent import build_requirements, intent_from_requirements
 from .plan_tail import run_plan_tail
 from .preprocess import preprocess
 from .refine import (
-    _context_changes,
-    _drop_excluded,
+    context_changes,
+    drop_excluded,
 )
 from .refinement_flow import generate_refinement, refinement_base
 from .render import render
 from .resolve import resolve
 from .response import (
-    _gone,
-    _names,
-    _render_tour,
-    _services_along_evidence,
-    _to_places,
-    _verdicts,
     build_response,
+    gone,
+    names,
+    render_tour,
+    services_along_evidence,
+    to_places,
+    verdicts,
 )
 from .retrieve import apply_negative_filter, candidate_of, retrieve
 from .turn import Turn, seconds_left
@@ -94,7 +94,7 @@ class Pipeline:
             if base:
                 trace.record(
                     "refinement",
-                    input=[p.name for p in req.context.base_points][:_TRACE_NAMES_MAX],
+                    input=[p.name for p in req.context.base_points][:TRACE_NAMES_MAX],
                     base_points=len(req.context.base_points),
                 )
                 return generate_refinement(req, base, turn.t0, repos=self.repos)
@@ -113,9 +113,9 @@ class Pipeline:
         if turn.catalogue:
             trace.record(
                 "catalogue",
-                input=_names(candidates),
+                input=names(candidates),
                 candidates=len(candidates),
-                names=_names(candidates),
+                names=names(candidates),
             )
             return self._catalogue_response(req, requirements, intent, candidates, turn.t0)
 
@@ -141,7 +141,7 @@ class Pipeline:
         )
 
         changes = (
-            _context_changes(turn.base_candidates, plan.route) if turn.base_candidates else None
+            context_changes(turn.base_candidates, plan.route) if turn.base_candidates else None
         )
 
         trace.record(
@@ -231,12 +231,12 @@ class Pipeline:
             time_budget_minutes=constraints.time_budget_minutes,
             must_visit_ids=len(constraints.must_visit_ids),
             optional_categories=len(constraints.optional_categories),
-            must_visit=constraints.resolved_names[:_TRACE_NAMES_MAX],
-            optional_names=constraints.optional_categories[:_TRACE_NAMES_MAX],
-            forbidden_names=constraints.forbidden_categories[:_TRACE_NAMES_MAX],
-            forbidden_keywords=constraints.forbidden_keywords[:_TRACE_NAMES_MAX],
-            must_visit_keywords=constraints.must_visit_keywords[:_TRACE_NAMES_MAX],
-            query_keywords=constraints.query_keywords[:_TRACE_NAMES_MAX],
+            must_visit=constraints.resolved_names[:TRACE_NAMES_MAX],
+            optional_names=constraints.optional_categories[:TRACE_NAMES_MAX],
+            forbidden_names=constraints.forbidden_categories[:TRACE_NAMES_MAX],
+            forbidden_keywords=constraints.forbidden_keywords[:TRACE_NAMES_MAX],
+            must_visit_keywords=constraints.must_visit_keywords[:TRACE_NAMES_MAX],
+            query_keywords=constraints.query_keywords[:TRACE_NAMES_MAX],
             area_anchor=constraints.area_anchor,
             bbox=constraints.bbox,
             round_trip=constraints.round_trip,
@@ -246,7 +246,7 @@ class Pipeline:
         )
         turn.round_trip = constraints.round_trip
 
-        outside_left = _outside_left_unresolved(requirements, constraints)
+        outside_left = outside_left_unresolved(requirements, constraints)
         trace.record(
             "coverage",
             input=[r.code or r.text for r in requirements.requirements][:5],
@@ -294,7 +294,7 @@ class Pipeline:
                     "relevance": round(c.relevance, 3),
                     "rrf": round(c.rrf_score, 3),
                 }
-                for c in candidates[:_TRACE_NAMES_MAX]
+                for c in candidates[:TRACE_NAMES_MAX]
             ],
         )
         if not candidates:
@@ -306,8 +306,8 @@ class Pipeline:
 
     def _step_dedupe(self, turn: Turn, candidates: list[Candidate]) -> list[Candidate]:
         before_dupes = candidates
-        candidates = _drop_duplicates(candidates, constants.DUPLICATE_RADIUS_M)
-        duplicates = _gone(before_dupes, candidates)
+        candidates = drop_duplicates(candidates, constants.DUPLICATE_RADIUS_M)
+        duplicates = gone(before_dupes, candidates)
 
         excluded = set(turn.req.context.excluded_ids) if turn.req.context else set()
         turn.excluded = excluded
@@ -315,17 +315,17 @@ class Pipeline:
         if excluded:
             before = len(candidates)
             before_excluded = candidates
-            candidates = _drop_excluded(candidates, excluded)
-            user_removed = _gone(before_excluded, candidates)
+            candidates = drop_excluded(candidates, excluded)
+            user_removed = gone(before_excluded, candidates)
             log.info("context: dropped %d excluded stop(s)", before - len(candidates))
         trace.record(
             "dedupe",
-            input=_names(before_dupes),
+            input=names(before_dupes),
             before=len(before_dupes),
             candidates=len(candidates),
             excluded=len(excluded),
             duplicates=duplicates,
-            merged=_dupe_pairs(before_dupes, candidates, constants.DUPLICATE_RADIUS_M),
+            merged=dupe_pairs(before_dupes, candidates, constants.DUPLICATE_RADIUS_M),
             user_removed=user_removed,
         )
         return candidates
@@ -346,7 +346,7 @@ class Pipeline:
             geo_anchor = constraints.area_anchor or (
                 constraints.must_visit_ids[0] if constraints.must_visit_ids else None
             )
-            candidates, geo_report = _geo_focus_report(
+            candidates, geo_report = geo_focus_report(
                 candidates, origin=turn.req.origin, anchor_id=geo_anchor
             )
         if len(candidates) < 2:
@@ -356,10 +356,10 @@ class Pipeline:
         trace.record(
             "geo",
             "skipped" if skip_geo else "ok",
-            input=_names(before_geo),
+            input=names(before_geo),
             candidates=len(candidates),
             before=pool,
-            dropped=_gone(before_geo, candidates),
+            dropped=gone(before_geo, candidates),
             anchor=geo_report["anchor"],
             radius_km=geo_report["radius_km"],
             outside=geo_report["dropped"],
@@ -386,12 +386,12 @@ class Pipeline:
         trace.record(
             "diversity",
             "ok" if constraints.time_budget_minutes else "skipped",
-            input=_names(before_mmr),
+            input=names(before_mmr),
             candidates=len(candidates),
             before=pool,
             mmr_ran=bool(constraints.time_budget_minutes),
             trimmed=len(candidates) < pool,
-            dropped=_gone(before_mmr, candidates),
+            dropped=gone(before_mmr, candidates),
         )
         if len(candidates) < 2:
             raise NoCandidatesFoundError(
@@ -424,12 +424,12 @@ class Pipeline:
         progress.note(progress.STAGE_SELECTING)
         all_candidates = list(candidates)
         turn.all_candidates = all_candidates
-        sights = [c for c in candidates if _is_sight_stop(c)]
+        sights = [c for c in candidates if is_sight_stop(c)]
         widened: list[Any] = []
 
         if len(sights) < 3 and not turn.region_scope:
             sight_categories = [
-                c for c in constraints.optional_categories if not _is_service_code(c)
+                c for c in constraints.optional_categories if not is_service_code(c)
             ]
             relaxed = constraints.model_copy(
                 update={
@@ -441,7 +441,7 @@ class Pipeline:
             wider = retrieve(relaxed, turn.qvec, self.repos.places, query_text="", near=turn.near)
             if relaxed.forbidden_categories or relaxed.forbidden_keywords:
                 wider = apply_negative_filter(wider, relaxed)
-            wider = _geo_focus(
+            wider = geo_focus(
                 wider,
                 origin=turn.req.origin,
                 anchor_id=constraints.area_anchor
@@ -456,8 +456,8 @@ class Pipeline:
                     len(candidates),
                     len(added),
                 )
-                candidates = _drop_excluded(candidates + added, turn.excluded)
-                sights = [c for c in candidates if _is_sight_stop(c)]
+                candidates = drop_excluded(candidates + added, turn.excluded)
+                sights = [c for c in candidates if is_sight_stop(c)]
                 widened = added
 
         before_narrowing = candidates
@@ -473,11 +473,11 @@ class Pipeline:
 
         trace.record(
             "pool",
-            input=_names(before_narrowing),
+            input=names(before_narrowing),
             before=len(before_narrowing),
             candidates=len(candidates),
-            widened=[c.name for c in widened[:_TRACE_NAMES_MAX]],
-            services_off=_gone(before_narrowing, candidates),
+            widened=[c.name for c in widened[:TRACE_NAMES_MAX]],
+            services_off=gone(before_narrowing, candidates),
         )
 
         _candidates, _cost, _route, _info, plan = run_plan_tail(turn, candidates, constraints)
@@ -486,7 +486,7 @@ class Pipeline:
     def _step_render(self, turn: Turn, plan) -> dict:
         progress.note(progress.STAGE_DRAWING)
         if seconds_left(turn.t0) >= constants.RENDER_MIN_LEFT_S:
-            shape, summary = _render_tour(
+            shape, summary = render_tour(
                 plan.route,
                 costing=turn.costing,
                 origin=turn.req.origin,
@@ -530,7 +530,7 @@ class Pipeline:
             requirements,
             plan,
             turn.shape,
-            _services_along_evidence(self.repos.places, requirements, turn.shape),
+            services_along_evidence(self.repos.places, requirements, turn.shape),
         )
         status = overall_status(requirements)
         progress.note(progress.STAGE_DONE)
@@ -538,7 +538,7 @@ class Pipeline:
             "verify",
             input=[r.code or r.text for r in requirements.requirements][:10],
             plan_status=status,
-            output=_verdicts(requirements),
+            output=verdicts(requirements),
         )
         return status
 
@@ -599,7 +599,7 @@ class Pipeline:
 
         return RouteResponse(
             parsed=ParsedQuery(source="explicit"),
-            points=_to_places(plan.route),
+            points=to_places(plan.route),
             changes=None,
             shape=shape,
             summary=RouteSummary(length_km=length_km, time_seconds=walk_s),

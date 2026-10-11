@@ -11,8 +11,8 @@ from core.config import settings
 from core.errors import UpstreamUnavailableError
 
 from . import http, snap
-from .constants import _PRECISION, LOCATION_SNAP_RADIUS_M, ROUTE_SNAP_RADII_M
-from .matrix import _is_route_failure
+from .constants import LOCATION_SNAP_RADIUS_M, PRECISION, ROUTE_SNAP_RADII_M
+from .matrix import is_route_failure
 from .types import RouteResult, RouteStatus
 
 logger = logging.getLogger(__name__)
@@ -37,7 +37,7 @@ def _decode_polyline(encoded: str) -> list[list[float]]:
                 lat += delta
             else:
                 lon += delta
-        coords.append([lon / _PRECISION, lat / _PRECISION])
+        coords.append([lon / PRECISION, lat / PRECISION])
     return coords
 
 
@@ -162,7 +162,7 @@ def route_through(
         )
     locs = snap.snap_locations(locs, costing, timeout)
 
-    locs = snap._drop_unsnappable(locs, costing, timeout)
+    locs = snap.drop_unsnappable(locs, costing, timeout)
     if len(locs) < 2:
         logger.warning("route: fewer than 2 of the stops can be snapped — no route")
         return RouteResult(
@@ -178,7 +178,7 @@ def route_through(
         try:
             body = _route_request(locs, costing, language, timeout, radius)
         except UpstreamUnavailableError as exc:
-            if not _is_route_failure(exc):
+            if not is_route_failure(exc):
                 return RouteResult(
                     status=RouteStatus.SERVICE_UNAVAILABLE,
                     shape={},

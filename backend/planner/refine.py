@@ -465,7 +465,7 @@ def _with_base_points(
     return merged, base
 
 
-def _nearby_convenience(
+def nearby_convenience(
     places: PostgresPlaceRepository | None,
     base: list[Candidate],
     wanted: set[str],
@@ -497,7 +497,7 @@ def _nearby_convenience(
     return list(found.values())
 
 
-def _cap_for_valhalla(
+def cap_for_valhalla(
     candidates: list[Candidate],
     base: list[Candidate],
     limit: int = constants.VALHALLA_MAX_LOCATIONS,
@@ -512,7 +512,7 @@ def _cap_for_valhalla(
     return (ordered + rest)[:limit]
 
 
-def _context_changes(base: list[Candidate], route: list[Candidate]) -> RouteChanges:
+def context_changes(base: list[Candidate], route: list[Candidate]) -> RouteChanges:
     """What a refinement did to the previous route — added / dropped / kept."""
     base_ids = {c.id for c in base}
     route_ids = {c.id for c in route}
@@ -531,7 +531,7 @@ def _context_changes(base: list[Candidate], route: list[Candidate]) -> RouteChan
     )
 
 
-def _drop_excluded(candidates: list[Candidate], excluded_ids: set[int]) -> list[Candidate]:
+def drop_excluded(candidates: list[Candidate], excluded_ids: set[int]) -> list[Candidate]:
     """Drop candidates the user removed by hand.
 
     Without this the same POI returns on every rebuild and the deletion looks ignored.

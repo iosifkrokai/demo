@@ -20,7 +20,7 @@ ERR_AREA_REGISTRY = "area_registry_unavailable"
 ERR_NOT_IMPLEMENTED = "not_implemented"
 
 
-def _envelope(
+def envelope(
     tool: str,
     results: list[dict],
     provenance: dict,
@@ -40,7 +40,7 @@ def _envelope(
     }
 
 
-def _clamp(
+def clamp(
     value: Any, low: int | float, high: int | float, default: int | float
 ) -> tuple[int | float, bool]:
     """Clamp a number the model sent into [low, high]; report whether we did.
@@ -56,14 +56,14 @@ def _clamp(
     return value, False
 
 
-def _project(row: Any, fields: tuple[str, ...]) -> dict:
+def project(row: Any, fields: tuple[str, ...]) -> dict:
     """Only these fields — from a mapping or from a model, whichever we hold."""
     if isinstance(row, Mapping):
         return {f: row.get(f) for f in fields if f in row}
     return {f: getattr(row, f, None) for f in fields}
 
 
-def _fetch(repos: Any, fn: Callable[[Any], Any]) -> tuple[Any, str | None, str | None]:
+def fetch(repos: Any, fn: Callable[[Any], Any]) -> tuple[Any, str | None, str | None]:
     """Run `fn(repos)`, or say why the database could not be reached.
 
     Never raises: a tool that cannot read reports it, so the model learns the
@@ -81,11 +81,11 @@ def _fetch(repos: Any, fn: Callable[[Any], Any]) -> tuple[Any, str | None, str |
         return None, ERR_DB_UNAVAILABLE, "database not reachable"
 
 
-def _positive_int(value: Any) -> bool:
+def positive_int(value: Any) -> bool:
     return isinstance(value, int) and not isinstance(value, bool) and value > 0
 
 
-def _norm_term(text: str) -> str:
+def norm_term(text: str) -> str:
     """Lowercase, ё-folded, whitespace-collapsed — for term matching only."""
     return " ".join(str(text).lower().replace("ё", "е").split())
 

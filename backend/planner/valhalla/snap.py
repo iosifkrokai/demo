@@ -94,7 +94,7 @@ def _snappable(location: dict, costing: str, timeout: float | None) -> bool:
     return bool(entry.get("edges"))
 
 
-def _drop_unsnappable(locations: list[dict], costing: str, timeout: float | None) -> list[dict]:
+def drop_unsnappable(locations: list[dict], costing: str, timeout: float | None) -> list[dict]:
     """Keep only the locations /locate can place on the routing network.
 
     One off-graph POI makes Valhalla answer 500 for the whole request.

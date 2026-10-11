@@ -21,7 +21,7 @@ from planner import (
     plan_tail as plan_tail_mod,
     response as response_mod,
 )
-from planner.cost import _refinement_cost, _synthetic_cost
+from planner.cost import _synthetic_cost, refinement_cost
 from planner.models import Candidate, GenerateReq, LatLon
 from planner.pipeline import Pipeline
 from planner.refine import (
@@ -464,7 +464,7 @@ class TestCostFallback:
             "compute_cost_matrix",
             lambda *_a, **_kw: (_ for _ in ()).throw(UpstreamUnavailableError("down")),
         )
-        route, cost = _refinement_cost(cands, constraints=None, costing="pedestrian")  # type: ignore[arg-type]
+        route, cost = refinement_cost(cands, constraints=None, costing="pedestrian")  # type: ignore[arg-type]
         assert [c.id for c in route] == [1, 2]
         assert len(cost.walk_seconds) == 2
 

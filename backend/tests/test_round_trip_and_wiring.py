@@ -118,12 +118,12 @@ def _island_cost() -> CostMatrix:
 
 
 def test_pipeline_pruner_keeps_a_mandatory_stop_and_returns_the_report():
-    """``_prune_unroutable`` must forward ``must_visit_ids`` and hand back the reason."""
+    """``prune_unroutable`` must forward ``must_visit_ids`` and hand back the reason."""
     a = _cand(1, "Волковыск", "памятник")
     b = _cand(2, "Каплица на острове", "костёл", lat=53.007, lon=23.917)
     c = _cand(3, "Гродно", "памятник")
 
-    route, report = optimize_mod._prune_unroutable([a, b, c], [a, b, c], _island_cost(), [2])
+    route, report = optimize_mod.prune_unroutable([a, b, c], [a, b, c], _island_cost(), [2])
 
     assert [x.id for x in route] == [1, 2, 3], "the mandatory stop stays on the route"
     assert [p.id for p in report] == [2]
@@ -139,7 +139,7 @@ def test_the_order_follows_the_stops_a_prune_removed():
     c = _cand(3, "В", "парк", lon=23.86)
     cost = _island_cost()
 
-    info = optimize_mod._order_after_prune({"order": [0, 1, 2]}, [a, c], [a, b, c])
+    info = optimize_mod.order_after_prune({"order": [0, 1, 2]}, [a, c], [a, b, c])
     assert info["order"] == [0, 2], "index 1 (the pruned stop) is gone"
 
     plan = validate([a, c], cost, ResolvedConstraints(), info)
@@ -162,7 +162,7 @@ def test_the_optional_tour_reorder_is_bounded_and_degrades(monkeypatch):
     route = [_cand(1, "A", "замок"), _cand(2, "B", "музей"), _cand(3, "C", "парк")]
     info = {"order": [0, 1, 2]}
 
-    out_route, out_info = optimize_mod._valhalla_order(
+    out_route, out_info = optimize_mod.valhalla_order(
         route,
         info,
         costing="auto",

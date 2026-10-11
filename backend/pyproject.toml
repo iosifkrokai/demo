@@ -127,7 +127,6 @@ reportUnknownMemberType = "none"
 # Deferred, counted on 2026-10-11, the same way the ruff list above is. Each is
 # a campaign, not a setting:
 reportMissingTypeArgument = "none"      # 200  bare `dict`/`list` in annotations
-reportPrivateUsage = "none"             # 55   a private helper imported module-to-module
 reportMissingParameterType = "none"     # 31   parameters with no annotation
 
 # Style rather than correctness, and both are used deliberately: a wrapped

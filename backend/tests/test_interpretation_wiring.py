@@ -20,7 +20,7 @@ from core.errors import InterpretationUnavailableError, UpstreamUnavailableError
 from planner import intent as intent_mod
 from planner.intent import build_requirements, reader_brief
 from planner.models import Candidate, GenerateReq, ValidatedPlan
-from planner.response import _interpretation
+from planner.response import interpretation
 from planner.verify import overall_status, verify
 
 RU = "Погулять по старому Гродно с двумя детьми, туалет обязательно, кафе если по пути"
@@ -253,7 +253,7 @@ class TestInterpretationBlock:
         tr = self._mandatory_toilet()
         plan = _plan(Candidate(id=4, name="Фарный костёл", category="костёл", lat=53.68, lon=23.82))
         verify(tr, plan, GEOJSON)
-        block = _interpretation(tr, overall_status(tr))
+        block = interpretation(tr, overall_status(tr))
 
         assert block.status == "infeasible"
         assert block.unmet, "an unsatisfied mandatory requirement must be listed"
@@ -272,7 +272,7 @@ class TestInterpretationBlock:
             Candidate(id=4, name="Фарный костёл", category="костёл", lat=53.685, lon=23.825),
         )
         verify(tr, plan, GEOJSON)
-        block = _interpretation(tr, overall_status(tr))
+        block = interpretation(tr, overall_status(tr))
         assert block.status == "ready"
         assert block.unmet == []
 
@@ -280,7 +280,7 @@ class TestInterpretationBlock:
         """No prose in the payload: the client localises every code itself."""
         tr = self._mandatory_toilet()
         verify(tr, _plan(), GEOJSON)
-        block = _interpretation(tr, overall_status(tr))
+        block = interpretation(tr, overall_status(tr))
         dumped = block.model_dump()
         assert set(dumped) >= {
             "source",
@@ -319,7 +319,7 @@ class TestInterpretationBlock:
             ),
         )
         tr = build_requirements(RU, GenerateReq(query=RU, interests=["музей"]))
-        block = _interpretation(tr, "pending")
+        block = interpretation(tr, "pending")
         assert block.source == "mixed"
         by_code = {s.code: s for s in block.requirements}
         assert by_code["музей"].origin == "ui"
