@@ -14,11 +14,11 @@ from planner.models import (
 )
 from routing.models import CategoryFacts
 from routing.validate import validate
+from routing.verify import overall_status, verify, verify_summary
 from telemetry import trace
 
 from .intent import mark_out_of_coverage
 from .response import build_response, verdicts
-from .verify import overall_status, verify, verify_summary
 
 
 def outside_left_unresolved(requirements: Any, constraints: ResolvedConstraints) -> list[str]:
@@ -50,7 +50,7 @@ def refuse_out_of_coverage(
     """
     mark_out_of_coverage(requirements, names)
     plan = validate([], CostMatrix(), constraints, {})
-    verify(requirements, {"route": [], "trace": plan.trace}, None)
+    verify(requirements, {"route": [], "trace": plan.trace}, None, facts=facts)
     plan.trace["requirements"] = requirements.public_requirements()
     plan.trace["requirement_summary"] = verify_summary(requirements)
     plan.trace["status"] = plan.trace["requirement_summary"]["status"]

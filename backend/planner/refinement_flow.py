@@ -18,6 +18,7 @@ from planner.models import Candidate, GenerateReq, RouteContext, RouteResponse
 from routing.dedupe import norm_name
 from routing.geo import TRACE_NAMES_MAX
 from routing.models import CategoryFacts
+from routing.verify import overall_status, verify
 from telemetry import trace
 
 from .explain import explain as explain_route
@@ -42,7 +43,6 @@ from .response import (
 )
 from .retrieve import candidate_of
 from .turn import Turn
-from .verify import overall_status, verify
 
 log = logging.getLogger(__name__)
 
@@ -267,6 +267,7 @@ def generate_refinement(
         plan,
         shape,
         services_along_evidence(repos.places, requirements, shape),
+        facts=turn.facts,
     )
     status = overall_status(requirements)
     trace.record(

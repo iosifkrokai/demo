@@ -10,8 +10,7 @@ from typing import Any
 
 from agent.models import TripRequirements
 from planner.models import Candidate
-
-from .verify import verify_summary
+from routing.verify import verify_summary
 
 # Below this spread of MMR diversity, and with enough stops for it to mean
 # something, the walk is worth warning about.

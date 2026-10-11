@@ -15,10 +15,10 @@ from planner.models import (
     RouteSummary,
 )
 from routing.models import CategoryFacts
+from routing.verify import overall_status, verify_catalogue
 from telemetry import progress, trace
 
 from .response import interpretation, to_places, verdicts
-from .verify import overall_status, verify_catalogue
 
 log = logging.getLogger(__name__)
 
@@ -36,7 +36,7 @@ def catalogue_response(
     Ordered by town then by relevance, so the order is stable between runs.
     """
     ordered = sorted(candidates, key=lambda c: ((c.town or "").strip().lower(), -c.relevance))
-    verify_catalogue(requirements, ordered)
+    verify_catalogue(requirements, ordered, facts=facts)
     status = overall_status(requirements)
     progress.note(progress.STAGE_DONE)
 

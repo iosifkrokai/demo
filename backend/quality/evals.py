@@ -13,11 +13,23 @@ from pathlib import Path
 from typing import Any
 
 from agent.models import Requirement, TripRequirements
+from db.seed.taxonomy import all_categories as _seed_categories
 from db.store import services as services_mod
 from db.store.errors import StorageUnavailableError
 from db.store.places import PostgresPlaceRepository
-from planner.verify import ServiceAlongEvidence, verify
-from reference import taxonomy
+from routing.models import CategoryFacts
+from routing.verify import ServiceAlongEvidence, verify
+
+# `quality` is a development tool and not shipped, so it reads the taxonomy
+# from the dataset rather than from the database.
+QUALITY_FACTS = CategoryFacts.from_rows(_seed_categories())
+_SEED_ROLES = {cat.code: cat.role for cat in _seed_categories()}
+
+
+def _role(code: str) -> str | None:
+    """The role of a canonical code, or None when it is not one."""
+    return _SEED_ROLES.get(code)
+
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
@@ -72,7 +84,7 @@ def run_verdicts() -> dict[str, Any]:
                 by_code=raw["evidence"].get("by_code", {}),
             )
         try:
-            result = verify(reqs, raw["plan"], raw.get("geometry"), evidence)
+            result = verify(reqs, raw["plan"], raw.get("geometry"), evidence, facts=QUALITY_FACTS)
         except Exception as exc:
             checks.append(
                 {
@@ -184,9 +196,7 @@ def run_services() -> dict[str, Any]:
                 if off <= gate:
                     ref[place.id] = (off, along)
 
-            bad_role = [
-                i["category"] for i in items if _role_of(taxonomy, i["category"]) != "service"
-            ]
+            bad_role = [i["category"] for i in items if _role_of(i["category"]) != "service"]
             checks.append(
                 {
                     "case": case.id,
@@ -337,11 +347,9 @@ def run_services() -> dict[str, Any]:
     return {"stage": "services", "checks": checks, "skipped": None, "near_gate_points": near_gate}
 
 
-def _role_of(taxonomy: Any, code: str) -> str:
-    try:
-        return taxonomy.role(code)
-    except Exception:
-        return "unknown"
+def _role_of(code: str) -> str:
+    """The role of a canonical code, or "unknown" when it is not one."""
+    return _role(code) or "unknown"
 
 
 BASE_URL = os.environ.get("EVALS_BASE_URL", "http://localhost:8080")
@@ -407,7 +415,7 @@ def run_plan() -> dict[str, Any]:
             offenders = [
                 f"{s.get('name')} [{s.get('category')}]"
                 for s in stops
-                if _role_of(taxonomy, s.get("category") or "") == "service"
+                if _role_of(s.get("category") or "") == "service"
             ]
             check(
                 "stops_are_not_services",
@@ -504,9 +512,7 @@ def run_interpretation() -> dict[str, Any]:
             }
         )
 
-        invented = [
-            r.code for r in got.requirements if r.code and not _code_exists(taxonomy, r.code)
-        ]
+        invented = [r.code for r in got.requirements if r.code and not _code_exists(r.code)]
         checks.append(
             {
                 "case": case.id,
@@ -546,12 +552,9 @@ def run_interpretation() -> dict[str, Any]:
     }
 
 
-def _code_exists(taxonomy: Any, code: str) -> bool:
-    try:
-        taxonomy.role(code)
-        return True
-    except Exception:
-        return False
+def _code_exists(code: str) -> bool:
+    """True when the code is a canonical taxonomy code."""
+    return _role(code) is not None
 
 
 STAGES: dict[str, Callable[[], dict[str, Any]]] = {

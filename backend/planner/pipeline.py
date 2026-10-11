@@ -46,6 +46,7 @@ from routing.geo import (
 from routing.models import CategoryFacts
 from routing.render import render
 from routing.valhalla.http import ping as valhalla_ping
+from routing.verify import overall_status, verify
 from telemetry import progress, trace
 
 from .catalogue import catalogue_response
@@ -71,7 +72,6 @@ from .response import (
 )
 from .retrieve import apply_negative_filter, candidate_of, retrieve
 from .turn import Turn, seconds_left
-from .verify import overall_status, verify
 
 log = logging.getLogger(__name__)
 
@@ -544,6 +544,7 @@ class Pipeline:
             plan,
             turn.shape,
             services_along_evidence(self.repos.places, requirements, turn.shape),
+            facts=turn.facts,
         )
         status = overall_status(requirements)
         progress.note(progress.STAGE_DONE)

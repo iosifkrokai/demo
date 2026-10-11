@@ -252,7 +252,7 @@ def services_along_evidence(places: Any, requirements: Any, shape: Any) -> Any:
     if not codes or not shape:
         return None
 
-    from .verify import ServiceAlongEvidence
+    from routing.verify import ServiceAlongEvidence
 
     try:
         answer = places.services_along(shape, categories=codes, limit=MAX_SERVICES * 2)

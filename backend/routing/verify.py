@@ -5,12 +5,12 @@ from __future__ import annotations
 import re
 from typing import Any, Literal, NamedTuple
 
-from agent.models import (
+from routing.models import (
     REASON_MUST_VISIT_OUTSIDE as REASON_MUST_VISIT_OUTSIDE_CODE,
+    CategoryFacts,
     Requirement,
     TripRequirements,
 )
-from reference import taxonomy
 
 __all__ = [
     "INFEASIBLE_REASONS",
@@ -182,16 +182,16 @@ def _norm_cat(value: str | None) -> str:
     return (value or "").strip().lower().replace("ё", "е")
 
 
-def _canonical_code(code: str | None) -> str | None:
-    """Resolve a requirement code to a canonical taxonomy code, or None."""
+def _canonical_code(code: str | None, codes: frozenset[str]) -> str | None:
+    """The code itself when it is canonical, else None.
+
+    Requirements arrive with their codes already resolved — the reader validated
+    them against the taxonomy before they were ever written down — so this is a
+    membership check, not a second resolution.
+    """
     if not code:
         return None
-    try:
-        if code in taxonomy.all_codes():
-            return code
-        return taxonomy.resolve_code(code)
-    except Exception:  # pragma: no cover — taxonomy file missing / bad data
-        return None
+    return code if code in codes else None
 
 
 def _field(obj: Any, name: str, default: Any = None) -> Any:
@@ -204,7 +204,7 @@ def _field(obj: Any, name: str, default: Any = None) -> Any:
     return getattr(obj, name, default)
 
 
-def _stop_matches_code(stop: Any, code: str) -> bool:
+def _stop_matches_code(stop: Any, code: str, codes: frozenset[str]) -> bool:
     """Does a route stop belong to the canonical category ``code``?"""
     stop_cat = _norm_cat(_field(stop, "category"))
     norm_code = _norm_cat(code)
@@ -212,7 +212,7 @@ def _stop_matches_code(stop: Any, code: str) -> bool:
         return False
     if stop_cat == norm_code or norm_code in stop_cat or stop_cat in norm_code:
         return True
-    resolved = _canonical_code(stop_cat)
+    resolved = _canonical_code(stop_cat, codes)
     return resolved is not None and _norm_cat(resolved) == norm_code
 
 
@@ -276,7 +276,7 @@ def _verify_must_visit(
 
 
 def _evidence_for(
-    r: Requirement, services_along: ServiceAlongEvidence | None
+    r: Requirement, services_along: ServiceAlongEvidence | None, codes: frozenset[str]
 ) -> tuple[bool | None, list[dict[str, Any]] | None]:
     """``(measured_ok, items)`` for this requirement.
 
@@ -288,7 +288,7 @@ def _evidence_for(
         return False, None
     if not r.code:
         return True, None
-    code = _canonical_code(r.code)
+    code = _canonical_code(r.code, codes)
     if code is None:
         return True, None
     return True, services_along.by_code.get(code, [])
@@ -299,18 +299,19 @@ def _verify_service(
     stops: list[Any],
     route_present: bool,
     geom_ok: bool,
+    codes: frozenset[str],
     evidence: tuple[bool | None, list[dict[str, Any]] | None] = (None, None),
 ) -> None:
     measured_ok, measured = evidence
     if not r.code:
         _set(r, "uncertain", [], REASON_CODE_UNSPECIFIED)
         return
-    code = _canonical_code(r.code)
+    code = _canonical_code(r.code, codes)
     if code is None:
         _set(r, "uncertain", [], REASON_CODE_UNKNOWN)
         return
 
-    matched = [s for s in stops if _stop_matches_code(s, code)]
+    matched = [s for s in stops if _stop_matches_code(s, code, codes)]
     if matched:
         ids = [i for i in (_field(s, "id") for s in matched) if isinstance(i, int)]
         if geom_ok:
@@ -342,16 +343,17 @@ def _verify_interest(
     stops: list[Any],
     route_present: bool,
     geom_ok: bool,
+    codes: frozenset[str],
 ) -> None:
     if not r.code:
         _set(r, "uncertain", [], REASON_CODE_UNSPECIFIED)
         return
-    code = _canonical_code(r.code)
+    code = _canonical_code(r.code, codes)
     if code is None:
         _set(r, "uncertain", [], REASON_CODE_UNKNOWN)
         return
 
-    matched = [s for s in stops if _stop_matches_code(s, code)]
+    matched = [s for s in stops if _stop_matches_code(s, code, codes)]
     if matched:
         ids = [s.id for s in matched if isinstance(getattr(s, "id", None), int)]
         if geom_ok:
@@ -366,16 +368,18 @@ def _verify_interest(
     _set(r, "unmet", [], REASON_INTEREST_ABSENT)
 
 
-def _verify_avoid(r: Requirement, stops: list[Any], route_present: bool) -> None:
+def _verify_avoid(
+    r: Requirement, stops: list[Any], route_present: bool, codes: frozenset[str]
+) -> None:
     if not r.code:
         _set(r, "uncertain", [], REASON_CODE_UNSPECIFIED)
         return
-    code = _canonical_code(r.code)
+    code = _canonical_code(r.code, codes)
     if code is None:
         _set(r, "uncertain", [], REASON_CODE_UNKNOWN)
         return
 
-    offenders = [s for s in stops if _stop_matches_code(s, code)]
+    offenders = [s for s in stops if _stop_matches_code(s, code, codes)]
     if offenders:
         ids = [i for i in (_field(s, "id") for s in offenders) if isinstance(i, int)]
         _set(r, "unmet", ids, REASON_AVOID_VIOLATED)
@@ -391,10 +395,13 @@ def verify(
     plan: Any,
     geometry: Any,
     services_along: ServiceAlongEvidence | None = None,
+    *,
+    facts: CategoryFacts,
 ) -> list[Requirement]:
     """Statuses are written onto the requirement objects *in place* and the same
     list is returned; every requirement leaves resolved.
     """
+    codes = facts.codes
     stops = _route_stops(plan)
     trace = _plan_trace(plan)
     unroutable = _unroutable_ids(trace)
@@ -405,25 +412,30 @@ def verify(
         if r.kind == "must_visit":
             _verify_must_visit(r, stops, route_present, unroutable, geom_ok)
         elif r.kind == "service":
-            _verify_service(r, stops, route_present, geom_ok, _evidence_for(r, services_along))
+            _verify_service(
+                r, stops, route_present, geom_ok, codes, _evidence_for(r, services_along, codes)
+            )
         elif r.kind == "interest":
-            _verify_interest(r, stops, route_present, geom_ok)
+            _verify_interest(r, stops, route_present, geom_ok, codes)
         elif r.kind == "avoid":
-            _verify_avoid(r, stops, route_present)
+            _verify_avoid(r, stops, route_present, codes)
         else:  # pragma: no cover — RequirementKind is closed
             _set(r, "uncertain", [], REASON_CODE_UNSPECIFIED)
 
     return requirements.requirements
 
 
-def verify_catalogue(requirements: TripRequirements, places: list[Any]) -> list[Requirement]:
+def verify_catalogue(
+    requirements: TripRequirements, places: list[Any], *, facts: CategoryFacts
+) -> list[Requirement]:
     """Check a CATALOGUE (a list of places to choose from) against the request.
 
     Satisfaction reasons are the `*_in_catalogue` codes — no verdict claims "on the route".
     """
+    codes = facts.codes
     empty = not places
     for r in requirements.requirements:
-        code = _canonical_code(r.code) if r.code else None
+        code = _canonical_code(r.code, codes) if r.code else None
 
         if r.kind == "must_visit":
             if r.place_id is None and not r.name:
@@ -448,7 +460,7 @@ def verify_catalogue(requirements: TripRequirements, places: list[Any]) -> list[
             continue
 
         if r.kind in ("service", "interest"):
-            matched = [p for p in places if _stop_matches_code(p, code)]
+            matched = [p for p in places if _stop_matches_code(p, code, codes)]
             if matched:
                 ids = [i for i in (_field(p, "id") for p in matched) if isinstance(i, int)]
                 reason = (
@@ -472,7 +484,7 @@ def verify_catalogue(requirements: TripRequirements, places: list[Any]) -> list[
                 _set(r, "unmet", [], REASON_INTEREST_ABSENT)
             continue
 
-        offenders = [p for p in places if _stop_matches_code(p, code)]
+        offenders = [p for p in places if _stop_matches_code(p, code, codes)]
         if offenders:
             ids = [i for i in (_field(p, "id") for p in offenders) if isinstance(i, int)]
             _set(r, "unmet", ids, REASON_AVOID_VIOLATED)
