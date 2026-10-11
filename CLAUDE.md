@@ -8,7 +8,7 @@ service, a React/Vite frontend served by nginx.
 
 ```
 backend/     the service — api (HTTP) · agent (LLM) · planner (the pipeline)
-             core · reference · telemetry · ml · quality · tests · data
+             core · reference · telemetry · embeddings · quality · tests · data
              db/  — the persistence side: models (rows) · store (repositories)
                     · seed (the projection) · alembic · connection.py
 frontend/    React + Vite + MapLibre, talked to over nginx
@@ -18,17 +18,19 @@ docker-compose.yml   the whole stack, including the db image (inline)
 `api` → `planner`/`agent`/`db`/`core`; `planner` → `agent`/`db`/`core`/`reference`;
 nothing imports upward, and `agent` is a leaf — it declares its own input
 (`agent/models.py::ReaderBrief`) rather than reaching for the HTTP body. `agent/`
-is the LLM layer (model, prompts, tools, runner); the one place a provider is
-named is `agent/model.py`.
+is the LLM layer (client, prompts, tools, runner); the one place a provider is
+named is `agent/llm.py`.
 
 Each layer declares its own shapes: `db/models/` the rows, `planner/models.py` the
 currency the pipeline speaks, `api/models/` the wire. There is no shared
 `contracts/` — where a rule is genuinely needed by two layers it lives below both
-(`core/accounts.py` is the email/password rules the seed and the API share).
+(`core/accounts.py` is the email/password rules the seed and the API share, and
+`core/cache.py` is the reading and embedding cache).
 
 Nothing above `db/store` writes SQL or holds a connection: a logic layer is
 handed repositories (`db/store/registry.py::Repositories`) and calls them.
-`tests/test_layer_boundaries.py` enforces all of that.
+`tests/test_layer_boundaries.py` enforces all of that. The gate runs
+`ruff format --check` as well as `ruff check`: the formatter is not optional.
 
 ## Bring it up
 

@@ -59,7 +59,7 @@ seed read.
 | `DATABASE_URL` | Postgres DSN (agent and seed; default is the local compose one) |
 | `VALHALLA_URL` | routing engine address |
 | `AGENT_HOST` / `AGENT_PORT` | bind address |
-| `AGENT_INTERPRET_MODEL` | optional override of the interpretation model (its default is named in `agent/model.py`) |
+| `AGENT_INTERPRET_MODEL` | optional override of the interpretation model (its default is named in `agent/llm.py`) |
 | `LANGFUSE_HOST` / `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` | optional self-hosted tracing (`telemetry/trace.py`); **both keys** are required, and without them tracing is a no-op |
 | `CACHE_BUST=1` | turn the in-process reading/embedding cache off for this process |
 | `INTERPRET_CACHE_SIZE` / `INTERPRET_CACHE_TTL_S` | bounds of that cache (defaults 128 entries / 30 min) |
@@ -78,7 +78,7 @@ Browser → nginx :80 (frontend container)
   │                           │
   │  preprocess ─ interpret (PydanticAI over OpenRouter; refuses without a key)
   │  resolve ─ retrieve (vector + keyword + must-visit, RRF fusion)
-  │             vector = LOCAL embeddings (ml/embeddings.py, CPU ONNX)
+  │             vector = LOCAL embeddings (embeddings/model.py, CPU ONNX)
   │  geo-focus ─ diversity (MMR) ─ cost (Valhalla matrix) ─ optimize
   │  validate ─ render (Valhalla /route) ─ explain ─ verify (deterministic)
   │
@@ -90,7 +90,7 @@ nginx (`frontend/nginx.conf`) proxies the agent prefixes above and the Valhalla
 paths; the trailing slash on `/auth|/me|/admin/` is deliberate, so the *bare*
 `/admin`, `/login` and `/visited` stay SPA routes.
 
-The LLM layer is `backend/agent/` (client / model / runner / tools / prompts); the
+The LLM layer is `backend/agent/` (client / llm / runner / tools / prompts); the
 Valhalla client is the `backend/planner/valhalla/` package, the place queries
 `backend/db/store/places.py`.
 
