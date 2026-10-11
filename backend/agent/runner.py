@@ -15,7 +15,7 @@ from agent import llm as model_mod
 from agent.models import ReaderBrief
 from agent.prompts import compose_instructions
 from agent.prompts.notes import _request_note, _ui_note
-from agent.schema import AgentReading, InterpretDeps
+from agent.schema import AgentReading, PlanningDeps
 from agent.tools import register_all
 from telemetry import trace
 
@@ -48,22 +48,22 @@ def _record_model_failure(reason: str, prompt: str = "") -> None:
     )
 
 
-def _catalogue(deps: InterpretDeps) -> Sequence[Any]:
+def _catalogue(deps: PlanningDeps) -> Sequence[Any]:
     """The taxonomy as prompt data, or nothing when there is no database."""
     return deps.repos.taxonomy.all() if deps.repos is not None else ()
 
 
-def _territories(deps: InterpretDeps) -> Sequence[Any]:
+def _territories(deps: PlanningDeps) -> Sequence[Any]:
     """The named territories as prompt data, or nothing when there is no database."""
     return deps.repos.areas.list_all() if deps.repos is not None else ()
 
 
-def _build_agent(model: Any, brief: ReaderBrief, deps: InterpretDeps) -> Any:
+def _build_agent(model: Any, brief: ReaderBrief, deps: PlanningDeps) -> Any:
     """Create the PydanticAI agent and register the bounded tool surface."""
     agent = pydantic_ai.Agent(
         model,
         output_type=AgentReading,
-        deps_type=InterpretDeps,
+        deps_type=PlanningDeps,
         instructions=compose_instructions(_catalogue(deps), _territories(deps), _ui_note(brief)),
     )
 
@@ -97,7 +97,7 @@ def _run_with_timeout(fn: Any, timeout_s: float) -> tuple[Any, str | None]:
 
 
 def _run_agent(
-    query: str, brief: ReaderBrief, deps: InterpretDeps, wall_clock_s: float | None = None
+    query: str, brief: ReaderBrief, deps: PlanningDeps, wall_clock_s: float | None = None
 ) -> tuple[AgentReading | None, str | None]:
     """Run one bounded interpretation. Returns (reading, failure_reason)."""
     try:

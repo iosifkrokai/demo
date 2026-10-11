@@ -96,12 +96,13 @@ def norm_term(text: str) -> str:
 
 # The registry needs the submodules; they import the helpers above, so this
 # import has to sit below them.
-from agent.tools import areas, places, services  # noqa: E402
+from agent.tools import areas, places, plan, services  # noqa: E402
 
 # The registry: what the agent advertises, one line per tool.
 TOOL_REGISTRARS: tuple[Callable[[Any, Remember], None], ...] = (
     areas.register_find_areas,
     places.register_search_places,
+    plan.register_plan_walk,
     places.register_get_place_facts,
     services.register_services_near_route,
 )

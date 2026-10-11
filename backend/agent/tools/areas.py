@@ -6,7 +6,7 @@ from typing import Any
 
 from pydantic_ai import RunContext
 
-from agent.schema import InterpretDeps
+from agent.schema import PlanningDeps
 from agent.tools import (
     ERR_BAD_ARGUMENT,
     Remember,
@@ -55,6 +55,6 @@ def register_find_areas(agent: Any, _remember: Remember) -> None:
     """
 
     @agent.tool(name="find_areas")
-    def _find_areas(ctx: RunContext[InterpretDeps], term: str, locale: str = "ru") -> ToolAnswer:
+    def _find_areas(ctx: RunContext[PlanningDeps], term: str, locale: str = "ru") -> ToolAnswer:
         """Resolve a territory name to canonical area codes for this region."""
         return find_areas(term, locale, repos=ctx.deps.repos)

@@ -6,7 +6,7 @@ from typing import Any
 
 from pydantic_ai import RunContext
 
-from agent.schema import InterpretDeps
+from agent.schema import PlanningDeps
 from agent.tools import ERR_NOT_IMPLEMENTED, Remember, clamp, envelope
 
 MAX_SERVICES_PER_CALL = 5
@@ -62,7 +62,7 @@ def register_services_near_route(agent: Any, _remember: Remember) -> None:
 
     @agent.tool
     def services_near_route(
-        _ctx: RunContext[InterpretDeps],
+        _ctx: RunContext[PlanningDeps],
         category_codes: list[str] | None = None,
         shape: list[Any] | None = None,
         max_detour_minutes: float | None = None,

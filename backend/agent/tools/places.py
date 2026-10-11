@@ -9,7 +9,7 @@ from typing import Any
 
 from pydantic_ai import RunContext
 
-from agent.schema import InterpretDeps
+from agent.schema import PlanningDeps
 from agent.tools import (
     ERR_BAD_ARGUMENT,
     ERR_EMPTY_QUERY,
@@ -164,7 +164,7 @@ def register_search_places(agent: Any, remember: Remember) -> None:
 
     @agent.tool(name="search_places")
     def _search_places(
-        ctx: RunContext[InterpretDeps],
+        ctx: RunContext[PlanningDeps],
         query: str,
         category_codes: list[str] | None = None,
         limit: int = DEFAULT_SEARCH_LIMIT,
@@ -194,6 +194,6 @@ def register_get_place_facts(agent: Any, remember: Remember) -> None:
     """
 
     @agent.tool(name="get_place_facts")
-    def _get_place_facts(ctx: RunContext[InterpretDeps], place_id: int) -> dict[str, Any]:
+    def _get_place_facts(ctx: RunContext[PlanningDeps], place_id: int) -> dict[str, Any]:
         """Raw stored facts (hours, price, town, source URL) about one place."""
         return remember(ctx, get_place_facts(place_id, repos=ctx.deps.repos))

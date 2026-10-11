@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 
 from agent import llm, mapping, runner
 from agent.models import ReaderBrief, TripRequirements
-from agent.schema import InterpretDeps
+from agent.schema import PlanningDeps
 
 if TYPE_CHECKING:
     from db.store.registry import Repositories
@@ -50,7 +50,7 @@ def interpret_with_agent(
         runner._record_model_failure("agent_unavailable", runner._build_prompt(query, brief))
         return None
 
-    deps = InterpretDeps(repos=repos)
+    deps = PlanningDeps(repos=repos)
     try:
         reading, failure = runner._run_agent(query.strip(), brief, deps, wall_clock_s=wall_clock_s)
     except Exception as exc:

@@ -1,15 +1,18 @@
 """The shapes the interpretation agent speaks in.
 
 The model's structured output (``AgentReading``/``AgentRequirement``) and the
-dependencies a single run carries (``InterpretDeps``).
+dependencies a single run carries (``PlanningDeps``).
 """
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Literal
 
 from pydantic import BaseModel, Field
+
+from routing.models import CategoryFacts, LatLon
 
 if TYPE_CHECKING:
     from db.store.registry import Repositories
@@ -46,12 +49,24 @@ class AgentReading(BaseModel):
 
 
 @dataclass
-class InterpretDeps:
-    """What one interpretation run is allowed to reach.
+class PlanningDeps:
+    """What one planning run may reach, and what it already knows.
 
-    ``observed_ids`` guards `place_id`: the model may only reference a place the
-    tools actually handed it. ``repos`` is how the tools read anything at all.
+    ``observed_ids`` guards every id the model may speak: it may only reference a
+    place the tools actually handed it. ``deadline_at`` is the run's end on the
+    monotonic clock, so a tool can refuse to start work it cannot finish.
     """
 
     repos: Repositories | None = None
     observed_ids: set[int] = field(default_factory=set)
+
+    locale: str = "ru"
+    origin: LatLon | None = None
+    facts: CategoryFacts = field(default_factory=CategoryFacts)
+    deadline_at: float | None = None
+
+    def seconds_left(self) -> float:
+        """Seconds until this run's deadline; infinite when it has none."""
+        if self.deadline_at is None:
+            return float("inf")
+        return self.deadline_at - time.monotonic()
