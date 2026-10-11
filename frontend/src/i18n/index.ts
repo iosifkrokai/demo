@@ -76,9 +76,11 @@ void i18n.use(initReactI18next).init({
   initAsync: false,
 });
 
-/** Keep the document honest about what language it is in (screen readers, hyphenation). */
+/** Keep the document honest about its language: screen readers, hyphenation, the tab title. */
 const applyDocumentLanguage = (lng: string) => {
-  if (typeof document !== 'undefined') document.documentElement.lang = lng;
+  if (typeof document === 'undefined') return;
+  document.documentElement.lang = lng;
+  document.title = i18n.t('app.title');
 };
 
 applyDocumentLanguage(i18n.language);

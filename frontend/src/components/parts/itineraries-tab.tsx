@@ -56,8 +56,7 @@ export function ItinerariesTab({
     return (
       <div className="flex flex-col gap-2" data-testid="itineraries-error">
         <p className="text-meta text-muted-foreground" role="alert">
-          Не удалось загрузить готовые маршруты. Сами маршруты целы — не ответил
-          агент.
+          {t('itineraries.loadFailed')}
         </p>
         {onReload && (
           <button
@@ -78,7 +77,7 @@ export function ItinerariesTab({
         className="text-meta text-muted-foreground"
         data-testid="itineraries-empty"
       >
-        Готовых маршрутов пока нет.
+        {t('itineraries.emptyList')}
       </p>
     );
   }
@@ -86,14 +85,12 @@ export function ItinerariesTab({
   return (
     <div className="flex flex-col gap-2" data-testid="itineraries-tab">
       <p className="text-meta text-muted-foreground">
-        Собраны вручную из реальных точек данных: открываются сразу, без запроса
-        к модели — потом маршрут можно править как обычно.
+        {t('itineraries.intro')}
       </p>
 
       {missing.length > 0 && (
         <p className="text-meta text-destructive" role="status">
-          Часть точек не нашлась в данных ({missing.length}) — такие маршруты
-          показаны не полностью.
+          {t('itineraries.incompleteCount', { count: missing.length })}
         </p>
       )}
 
