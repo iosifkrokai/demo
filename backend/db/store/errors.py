@@ -18,7 +18,3 @@ class EmailTakenError(RuntimeError):
 
 class DuplicateSourceError(RuntimeError):
     """Another place already claims this `source_url` (→ 409)."""
-
-
-class TooManyRoutesError(RuntimeError):
-    """The client is at its cap on saved routes (→ 409)."""

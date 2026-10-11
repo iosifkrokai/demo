@@ -31,7 +31,6 @@ from api.models.accounts import (
 from core.errors import AgentError
 from core.passwords import hash_token
 from db.models.user import User
-from db.store.clients import ClientRepository
 from db.store.errors import StorageUnavailableError
 from db.store.places import PostgresPlaceRepository
 from db.store.registry import Repositories
@@ -184,12 +183,3 @@ def get_stats_repository(request: Request) -> StatsRepository:
     """
     repo = getattr(request.app.state, "stats_repository", None)
     return repo if repo is not None else get_repos(request).stats
-
-
-def get_client_repository(request: Request) -> ClientRepository:
-    """The process-wide client repository, or a test-injected fake.
-
-    Tests set ``app.state.clients_repository``.
-    """
-    repo = getattr(request.app.state, "clients_repository", None)
-    return repo if repo is not None else get_repos(request).clients

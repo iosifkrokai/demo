@@ -28,7 +28,6 @@ from api.models.accounts import (
     VisitedListOut,
     public_user,
 )
-from api.models.clients import CLIENT_ID_HEADER
 from core.accounts import REASON_INVALID_EMAIL, normalize_email, password_problem
 from core.passwords import (
     SESSION_TTL_S,
@@ -44,17 +43,6 @@ from db.store.places import PostgresPlaceRepository
 from db.store.users import UserRepository
 
 router = APIRouter(tags=["accounts"])
-
-
-def _optional_client_id(request: Request) -> uuid.UUID | None:
-    """The browser's anonymous ``X-Client-Id``, when it is a well-formed UUID."""
-    raw = request.headers.get(CLIENT_ID_HEADER)
-    if raw is None or not raw.strip():
-        return None
-    try:
-        return uuid.UUID(raw.strip())
-    except (ValueError, AttributeError):
-        return None
 
 
 def _start_session(
@@ -106,7 +94,6 @@ def register(
             password_hash=hash_password(body.password),
             display_name=display_name,
             role="user",
-            client_id=_optional_client_id(request),
         )
     except EmailTakenError:
         return deps.error(409, REASON_EMAIL_TAKEN)
@@ -126,10 +113,6 @@ def login(
     user = repo.get_user_by_email(email) if email is not None else None
     if user is None or not verify_password(body.password, user.password_hash):
         return deps.error(401, REASON_INVALID_CREDENTIALS)
-    client_id = _optional_client_id(request)
-    if client_id is not None:
-        assert user.id is not None
-        repo.link_client(user.id, client_id)
     _start_session(request, response, repo, user)
     return public_user(user)
 

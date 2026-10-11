@@ -101,7 +101,6 @@ USER_COLUMNS: tuple[str, ...] = (
     "email",
     "display_name",
     "role",
-    "client_id",
     "created_at",
     "updated_at",
     "last_login_at",

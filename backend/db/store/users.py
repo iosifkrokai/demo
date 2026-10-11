@@ -6,8 +6,8 @@ splitting by table. Reads return the row models; a miss is ``None``, a Postgres
 outage is :class:`StorageUnavailableError`.
 
 The admin CRUD over ``places`` belongs to the place repository, where the table
-it writes lives; the counts that span users, routes and visits are a query rather
-than an aggregate, and are in :mod:`db.store.stats`.
+it writes lives; the counts that span users and visits are a query rather than an
+aggregate, and are in :mod:`db.store.stats`.
 """
 
 from __future__ import annotations
@@ -36,14 +36,11 @@ class UserRepository(Protocol):
         password_hash: str,
         display_name: str | None = None,
         role: str = "user",
-        client_id: uuid.UUID | None = None,
     ) -> User: ...
 
     def get_user_by_email(self, email: str) -> User | None: ...
 
     def get_user(self, user_id: uuid.UUID) -> User | None: ...
-
-    def link_client(self, user_id: uuid.UUID, client_id: uuid.UUID) -> bool: ...
 
     def touch_login(self, user_id: uuid.UUID) -> None: ...
 
@@ -95,32 +92,16 @@ class PostgresUserRepository(PostgresRepository):
         password_hash: str,
         display_name: str | None = None,
         role: str = "user",
-        client_id: uuid.UUID | None = None,
     ) -> User:
-        """Insert an account. Raises :class:`EmailTakenError` on a duplicate address.
-
-        An anonymous client is adopted only when nobody else already owns it.
-        """
+        """Insert an account. Raises :class:`EmailTakenError` on a duplicate address."""
         with self._cursor() as cur:
-            if client_id is not None:
-                cur.execute(
-                    """
-                    INSERT INTO clients (id, created_at, last_seen_at)
-                    VALUES (%s, now(), now())
-                    ON CONFLICT (id) DO UPDATE SET last_seen_at = now()
-                    """,
-                    (client_id,),
-                )
-                cur.execute("SELECT 1 FROM users WHERE client_id = %s", (client_id,))
-                if cur.fetchone() is not None:
-                    client_id = None
             try:
                 cur.execute(
                     f"""
                     INSERT INTO users
-                        (id, email, password_hash, display_name, role, client_id,
+                        (id, email, password_hash, display_name, role,
                          created_at, updated_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, now(), now())
+                    VALUES (%s, %s, %s, %s, %s, now(), now())
                     RETURNING {USER_SELECT}
                     """,
                     (
@@ -129,7 +110,6 @@ class PostgresUserRepository(PostgresRepository):
                         password_hash,
                         display_name,
                         role,
-                        client_id,
                     ),
                 )
                 row = cur.fetchone()
@@ -153,31 +133,6 @@ class PostgresUserRepository(PostgresRepository):
             cur.execute(f"SELECT {USER_SELECT} FROM users WHERE id = %s", (user_id,))
             row = cur.fetchone()
         return model_from_row(User, row) if row is not None else None
-
-    def link_client(self, user_id: uuid.UUID, client_id: uuid.UUID) -> bool:
-        """Give the account the anonymous client, if neither side already has one."""
-        with self._cursor() as cur:
-            cur.execute(
-                """
-                INSERT INTO clients (id, created_at, last_seen_at)
-                VALUES (%s, now(), now())
-                ON CONFLICT (id) DO UPDATE SET last_seen_at = now()
-                """,
-                (client_id,),
-            )
-            cur.execute(
-                """
-                UPDATE users SET client_id = %s, updated_at = now()
-                WHERE id = %s
-                  AND client_id IS NULL
-                  AND NOT EXISTS (
-                      SELECT 1 FROM users u2
-                      WHERE u2.client_id = %s AND u2.id <> %s
-                  )
-                """,
-                (client_id, user_id, client_id, user_id),
-            )
-            return cur.rowcount > 0
 
     def touch_login(self, user_id: uuid.UUID) -> None:
         with self._cursor() as cur:
@@ -215,15 +170,13 @@ class PostgresUserRepository(PostgresRepository):
     def list_users(
         self, *, q: str = "", limit: int = 50, offset: int = 0
     ) -> tuple[list[AdminUser], int]:
-        """Newest first, with the two counts an admin asks about."""
+        """Newest first, with the count an admin asks about."""
         pattern = f"%{q}%"
         where = "(u.email ILIKE %s OR u.display_name ILIKE %s)"
         with self._cursor() as cur:
             cur.execute(
                 f"""
                 SELECT {_selected("u")},
-                       (SELECT count(*) FROM saved_routes r
-                        WHERE r.client_id = u.client_id) AS saved_routes,
                        (SELECT count(*) FROM visited_places v
                         WHERE v.user_id = u.id) AS visited
                 FROM users u

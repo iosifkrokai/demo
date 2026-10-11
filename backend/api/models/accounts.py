@@ -73,11 +73,9 @@ class AuthMeOut(BaseModel):
 
 
 class AdminUserItem(PublicUser):
-    """One row of GET /admin/users, with the counts an admin asks about."""
+    """One row of GET /admin/users, with the count an admin asks about."""
 
-    client_id: UUID | None = None
     last_login_at: datetime | None = None
-    saved_routes: int = 0
     visited: int = 0
 
 
@@ -198,13 +196,12 @@ class VisitedBulkOut(BaseModel):
 
 
 class StatsOut(BaseModel):
-    """GET /admin/stats — the four numbers the admin header shows."""
+    """GET /admin/stats — the numbers the admin header shows."""
 
     users: int
     admins: int
     places: int
     visited: int
-    saved_routes: int
 
 
 def public_user(user: User) -> PublicUser:

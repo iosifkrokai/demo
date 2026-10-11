@@ -7,7 +7,7 @@ the whole app is not the goal, and a test that does not pay for itself is delete
 
 One success case per HTTP endpoint. The list is enumerated from
 `backend/api/routers/`, one test function each: health, routes, catalogue,
-clients, accounts, admin. A new endpoint gets exactly one success test here and
+accounts, admin. A new endpoint gets exactly one success test here and
 nothing else; error branches come later, one campaign at a time.
 
 These tests run against the live stack at `GRODNO_BASE_URL` (default

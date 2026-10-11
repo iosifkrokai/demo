@@ -9,7 +9,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from db.store.areas import PostgresAreaRepository
-from db.store.clients import PostgresClientRepository
 from db.store.itineraries import PostgresItineraryRepository
 from db.store.places import PostgresPlaceRepository
 from db.store.stats import PostgresStatsRepository
@@ -23,9 +22,9 @@ class Repositories:
 
     Frozen so a request cannot swap a repository mid-flight; the repositories
     themselves are mutable, because each owns a connection it reconnects lazily.
-    The account, client and stats repositories default to real ones so a
-    planner-only construction — `Repositories(places=…, areas=…)` — stays a
-    one-liner; a test that needs a fake passes it explicitly.
+    The account and stats repositories default to real ones so a planner-only
+    construction — `Repositories(places=…, areas=…)` — stays a one-liner; a test
+    that needs a fake passes it explicitly.
     """
 
     places: PostgresPlaceRepository
@@ -34,7 +33,6 @@ class Repositories:
     itineraries: PostgresItineraryRepository = field(default_factory=PostgresItineraryRepository)
     users: PostgresUserRepository = field(default_factory=PostgresUserRepository)
     stats: PostgresStatsRepository = field(default_factory=PostgresStatsRepository)
-    clients: PostgresClientRepository = field(default_factory=PostgresClientRepository)
 
     def close(self) -> None:
         for repo in (
@@ -44,6 +42,5 @@ class Repositories:
             self.itineraries,
             self.users,
             self.stats,
-            self.clients,
         ):
             repo.close()

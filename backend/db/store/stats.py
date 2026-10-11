@@ -1,8 +1,8 @@
 """The numbers the admin header shows, in one query.
 
-They count users, places, visits and routes — four tables with no aggregate in
-common — so they belong to no single repository. Keeping them here keeps the
-``count(*)`` from being scattered across the aggregates that own the tables.
+They count users, places and visits — three tables with no aggregate in common —
+so they belong to no single repository. Keeping them here keeps the ``count(*)``
+from being scattered across the aggregates that own the tables.
 """
 
 from __future__ import annotations
@@ -30,8 +30,7 @@ class PostgresStatsRepository(PostgresRepository):
                        (SELECT count(*) FROM users
                         WHERE role = 'admin')                      AS admins,
                        (SELECT count(*) FROM places)               AS places,
-                       (SELECT count(*) FROM visited_places)       AS visited,
-                       (SELECT count(*) FROM saved_routes)         AS saved_routes
+                       (SELECT count(*) FROM visited_places)       AS visited
                 """
             )
             row = cur.fetchone()

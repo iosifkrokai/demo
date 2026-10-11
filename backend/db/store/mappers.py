@@ -11,7 +11,7 @@ import contextlib
 import dataclasses
 import json
 from collections.abc import Mapping
-from typing import Any, TypedDict
+from typing import Any
 
 from db.models.area import Area
 from db.models.category import Category
@@ -144,43 +144,4 @@ def place_payload(place: Place) -> dict[str, Any]:
         "links": parse_links(place.links),
         "photo": photo_of(place),
         "ticket_price": place.ticket_price,
-    }
-
-
-class RouteMetrics(TypedDict):
-    """The three scalars a saved-routes list row carries, `stop_count` always set."""
-
-    stop_count: int
-    distance_m: int | None
-    duration_min: int | None
-
-
-def route_metrics(
-    stop_count: int,
-    summary: dict[str, Any] | None,
-    budget: dict[str, Any] | None,
-) -> RouteMetrics:
-    """Derive the list columns from the plan's lightweight sub-objects.
-
-    A plan that does not carry a value yields null rather than a guessed one.
-    """
-    distance_m: int | None = None
-    duration_min: int | None = None
-
-    km = (summary or {}).get("length_km")
-    if isinstance(km, (int, float)) and not isinstance(km, bool):
-        distance_m = round(float(km) * 1000)
-
-    total = (budget or {}).get("total_minutes")
-    if isinstance(total, (int, float)) and not isinstance(total, bool):
-        duration_min = round(float(total))
-    else:
-        secs = (summary or {}).get("time_seconds")
-        if isinstance(secs, (int, float)) and not isinstance(secs, bool):
-            duration_min = round(float(secs) / 60.0)
-
-    return {
-        "stop_count": int(stop_count),
-        "distance_m": distance_m,
-        "duration_min": duration_min,
     }

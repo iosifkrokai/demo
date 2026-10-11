@@ -21,14 +21,12 @@ from api.routers import (
     accounts as accounts_api,
     admin as admin_api,
     catalogue as catalogue_api,
-    clients as clients_api,
     health as health_api,
     routes as routes_api,
 )
 from core.config import logfire_token, settings
 from db.embeddings import model
 from db.store.areas import PostgresAreaRepository
-from db.store.clients import PostgresClientRepository
 from db.store.places import PostgresPlaceRepository
 from db.store.registry import Repositories
 from db.store.stats import PostgresStatsRepository
@@ -54,7 +52,6 @@ async def lifespan(_: FastAPI):
         areas=PostgresAreaRepository(),
         users=PostgresUserRepository(),
         stats=PostgresStatsRepository(),
-        clients=PostgresClientRepository(),
     )
     app.state.repos = repos
     model.embed_text("warmup")
@@ -78,7 +75,6 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(title="grodno-poc-agent", lifespan=lifespan)
 
-app.include_router(clients_api.router)
 app.include_router(accounts_api.router)
 app.include_router(admin_api.router)
 app.include_router(routes_api.router)
@@ -97,7 +93,7 @@ app.add_middleware(
     ],
     allow_credentials=True,
     allow_methods=["POST", "GET", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["Content-Type", "X-Client-Id", "Authorization"],
+    allow_headers=["Content-Type", "Authorization"],
 )
 
 

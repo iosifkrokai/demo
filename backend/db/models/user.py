@@ -16,7 +16,6 @@ class User:
     password_hash: str | None = None
     display_name: str | None = None
     role: str = "user"
-    client_id: UUID | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
     last_login_at: datetime | None = None
@@ -24,14 +23,13 @@ class User:
 
 @dataclass(frozen=True)
 class AdminUser(User):
-    """A user as the admin list shows one: the row plus its activity counts.
+    """A user as the admin list shows one: the row plus its activity count.
 
-    Not a row of `users` — the counts come from `saved_routes` and
-    `visited_places` and exist only for that one listing, which is why this is a
-    projection beside the schema-pinned models rather than a change to `User`.
+    Not a row of `users` — the count comes from `visited_places` and exists only
+    for that one listing, which is why this is a projection beside the
+    schema-pinned models rather than a change to `User`.
     """
 
-    saved_routes: int = 0
     visited: int = 0
 
 

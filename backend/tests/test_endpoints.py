@@ -1,7 +1,7 @@
 """One success case per HTTP endpoint, against the running stack.
 
 The list below is the whole surface, enumerated from ``api/routers``: health,
-routes, catalogue, clients, accounts and admin. A new endpoint gets exactly one
+routes, catalogue, accounts and admin. A new endpoint gets exactly one
 success test here — no error branches yet, those come later.
 
 Every test reaches the live stack through ``live_stack`` and skips when it is
@@ -11,9 +11,8 @@ success to assert. The admin endpoints skip unless ``GRODNO_ADMIN_EMAIL`` and
 ``GRODNO_ADMIN_PASSWORD`` name a real administrator. A skip is not a pass.
 
 The shape asserted is the wire model's own: the routes and health models still
-live in ``api.models.routes``, the client and account models in
-``api.models``. Asserting against ``model_fields`` means a renamed field breaks
-here instead of drifting.
+live in ``api.models.routes``, the account models in ``api.models``. Asserting
+against ``model_fields`` means a renamed field breaks here instead of drifting.
 """
 
 from __future__ import annotations
@@ -38,7 +37,6 @@ from api.models.accounts import (
     VisitedItem,
     VisitedListOut,
 )
-from api.models.clients import PreferencesOut, RouteCreated, RouteDetail, RouteListItem
 from api.models.routes import HealthResponse, RouteResponse
 
 
@@ -59,30 +57,12 @@ def api(live_stack) -> Iterator[httpx.Client]:
 
 
 @pytest.fixture
-def client_id() -> str:
-    """A fresh anonymous ``X-Client-Id``, one per test."""
-    return uuid.uuid4().hex
-
-
-@pytest.fixture
 def account(api: httpx.Client) -> str:
     """Register a throwaway user; ``api`` is left holding the session cookie."""
     email = f"test-{uuid.uuid4().hex}@example.com"
     response = api.post("/auth/register", json={"email": email, "password": "correct-horse-9"})
     assert response.status_code == 201, response.text
     return email
-
-
-@pytest.fixture
-def saved_route(api: httpx.Client, client_id: str) -> str:
-    """One route persisted for the anonymous client."""
-    response = api.post(
-        "/clients/me/routes",
-        headers={"X-Client-Id": client_id},
-        json={"query": "тест", "plan": {"points": []}},
-    )
-    assert response.status_code == 201, response.text
-    return response.json()["id"]
 
 
 @pytest.fixture
@@ -178,70 +158,6 @@ def test_services_along_a_line(api: httpx.Client) -> None:
     )
     assert response.status_code == 200, response.text
     assert {"items", "capped"} <= response.json().keys()
-
-
-# --- anonymous client -------------------------------------------------------
-
-
-def test_client_preferences_read_anonymously(api: httpx.Client) -> None:
-    response = api.get("/clients/me/preferences")
-    assert response.status_code == 200, response.text
-    _carries(response.json(), PreferencesOut)
-
-
-def test_client_preferences_are_stored(api: httpx.Client, client_id: str) -> None:
-    response = api.put(
-        "/clients/me/preferences",
-        headers={"X-Client-Id": client_id},
-        json={"transport": "pedestrian"},
-    )
-    assert response.status_code == 200, response.text
-    _carries(response.json(), PreferencesOut)
-    assert response.json()["transport"] == "pedestrian"
-
-
-def test_client_route_is_saved(api: httpx.Client, client_id: str) -> None:
-    response = api.post(
-        "/clients/me/routes",
-        headers={"X-Client-Id": client_id},
-        json={"query": "тест", "plan": {"points": []}},
-    )
-    assert response.status_code == 201, response.text
-    _carries(response.json(), RouteCreated)
-
-
-def test_client_routes_are_listed(api: httpx.Client, client_id: str, saved_route: str) -> None:
-    response = api.get("/clients/me/routes", headers={"X-Client-Id": client_id})
-    assert response.status_code == 200, response.text
-    assert any(item["id"] == saved_route for item in response.json())
-    _carries(response.json()[0], RouteListItem)
-
-
-def test_client_route_detail(api: httpx.Client, client_id: str, saved_route: str) -> None:
-    response = api.get(f"/clients/me/routes/{saved_route}", headers={"X-Client-Id": client_id})
-    assert response.status_code == 200, response.text
-    _carries(response.json(), RouteDetail)
-
-
-def test_client_route_is_renamed(api: httpx.Client, client_id: str, saved_route: str) -> None:
-    response = api.patch(
-        f"/clients/me/routes/{saved_route}",
-        headers={"X-Client-Id": client_id},
-        json={"name": "новое имя"},
-    )
-    assert response.status_code == 200, response.text
-    _carries(response.json(), RouteDetail)
-    assert response.json()["name"] == "новое имя"
-
-
-def test_client_route_is_deleted(api: httpx.Client, client_id: str, saved_route: str) -> None:
-    response = api.delete(f"/clients/me/routes/{saved_route}", headers={"X-Client-Id": client_id})
-    assert response.status_code == 204, response.text
-
-
-def test_client_entity_is_deleted(api: httpx.Client, client_id: str) -> None:
-    response = api.delete("/clients/me", headers={"X-Client-Id": client_id})
-    assert response.status_code == 204, response.text
 
 
 # --- accounts ---------------------------------------------------------------
