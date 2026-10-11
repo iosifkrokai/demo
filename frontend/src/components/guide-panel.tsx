@@ -1405,7 +1405,7 @@ const NearbyHint = ({ service, distanceAhead, onDismiss }: NearbyHintProps) => {
       className="rounded-2xl border border-border bg-card p-3 shadow-card"
     >
       <div className="flex items-center gap-2.5">
-        <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-blue-50 text-blue-600 dark:bg-blue-950 dark:text-blue-400">
+        <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-blue-50 text-blue-600">
           <ServiceIcon className="size-4" aria-hidden="true" />
         </span>
         <div className="min-w-0 flex-1">

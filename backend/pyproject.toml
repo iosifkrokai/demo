@@ -17,9 +17,6 @@ dependencies = [
     "alembic>=1.13",
 ]
 
-[project.urls]
-Repository = "https://github.com/kioharu/grodno-agent"
-
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
@@ -68,41 +65,22 @@ select = [
     "PL",
 ]
 ignore = [
-    # The product speaks Russian: Cyrillic in a string is the point, not a defect.
-    "RUF001", "RUF002", "RUF003",
-    # FastAPI requires a call in the default (Depends(...)): the framework's idiom.
+    "RUF001",
+    "RUF002",
+    "RUF003",
     "B008",
-
-    # --- deferred, counted on 2026-10-11 --------------------------------------
-    # These are not "rules we would rather not have"; each is a campaign of its
-    # own, and the count is here so the debt is visible in one place instead of
-    # implied by an absent rule. Removing an entry means doing that campaign.
-
-    # 72 comparisons against a small structural count — `len(route) < 2`,
-    # `len(parts) != 6`. A name would restate the number. The ones that meant
-    # something are named: HTTP statuses, the search-strategy thresholds in
-    # `planner/optimize.py`, the diversity thresholds in `explain`/`diversity`.
     "PLR2004",
-    # 21 imports left inside functions: five break a real cycle (`agent.runner`
-    # and `prompts.rules`, `cost` and `refine`, `pipeline` and `photos`),
-    # and the rest defer a stage until it is asked for — the seed's stages,
-    # the optional tracing client, fastembed. Twenty-three were hoisted.
     "PLC0415",
-    "PLR0913", # 42  too many arguments
-    "PLR0917", # 14  too many positional arguments
-    "PLR0912", # 8   too many branches
-    "PLR0915", # 8   too many statements
-    "PLR0911", # 4   too many return statements
+    "PLR0913",
+    "PLR0917",
+    "PLR0912",
+    "PLR0915",
+    "PLR0911",
 ]
 
 [tool.ruff.lint.per-file-ignores]
-# PLC0415: a test importing the module it exercises inside the test is
-# this suite's convention, and several rely on it to keep a seam patchable.
 "tests/**/*.py" = ["E501", "PLR2004", "ARG", "RUF012", "PLC0415"]
 "**/__init__.py" = ["F401"]
-# The baseline reproduces the old init.sql statement for statement —
-# its own docstring claims that — so wrapping its lines for style
-# would break the claim it exists to make.
 "db/alembic/versions/*.py" = ["E501"]
 
 [tool.ruff.lint.isort]
@@ -121,26 +99,11 @@ pythonPlatform = "Linux"
 typeCheckingMode = "strict"
 venvPath = "."
 venv = ".venv"
-
-# The libraries this service runs on — psycopg, fastembed, httpx, opentelemetry —
-# ship no type information, so everything they hand back is `Unknown`. These five
-# rules report on that rather than on this code: leaving them on would mean an
-# annotation or a suppression at every call into a dependency, which is the
-# opposite of the point. `reportMissingTypeStubs` states the same fact once.
 reportMissingTypeStubs = "none"
 reportUnknownVariableType = "none"
 reportUnknownArgumentType = "none"
 reportUnknownParameterType = "none"
 reportUnknownLambdaType = "none"
 reportUnknownMemberType = "none"
-
-# Deferred, counted on 2026-10-11, the same way the ruff list above is. Each is
-# a campaign, not a setting:
-
-
-
-# Style rather than correctness, and both are used deliberately: a wrapped
-# Russian sentence is implicit concatenation, and a private helper reached from a
-# sibling module is how this codebase shares helpers inside a package.
 reportImplicitStringConcatenation = "warning"
 reportUnusedFunction = "warning"

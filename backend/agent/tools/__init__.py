@@ -105,7 +105,7 @@ TOOL_REGISTRARS: tuple[Callable[[Any, Remember], None], ...] = (
     plan.register_plan_walk,
     places.register_get_place_facts,
     verify.register_check_requirements,
-    services.register_services_near_route,
+    services.register_nearby_services,
 )
 
 
