@@ -11,19 +11,11 @@ export interface Waypoint {
   id: string;
   geocodeResults: ActiveWaypoint[];
   userInput: string;
-  // Set when the point came from the agent (or from a saved route): lets the
-  // map look the place up in `placeDetails` to render its blurb / fun fact.
   placeId?: number;
-  // True for a stop the user placed or kept by hand (map click, typed address).
-  // A refinement ("add a café") must never drop a pinned stop.
   pinned?: boolean;
 }
 
-/**
- * Id of the waypoint that marks the tourist's own position (the route start the
- * sidebar pins when the browser hands us coordinates). The map draws it as a
- * separate pin and keeps the stops numbered from 1.
- */
+/** Id of the waypoint marking the tourist's own position (the pinned route start). */
 export const ME_WAYPOINT_ID = 'me';
 
 interface HighlightSegment {
@@ -51,30 +43,19 @@ interface LatLng {
   lat: number;
 }
 
-// Route history entry
 export interface RouteHistoryEntry {
   id: string;
   query: string;
   timeBudget: number;
   places: RouteHistoryPlace[];
-  createdAt: number; // timestamp
-  /**
-   * Fingerprint of the route's stops (see `guideRouteKey`). Stored so the guide
-   * can find this entry when the walk moves: without it the history has no way
-   * to tell which of two similar routes was actually walked.
-   */
+  createdAt: number;
+  /** Fingerprint of the route's stops (see `guideRouteKey`). */
   routeKey?: string;
   /** How far the walk got, once it was started at all. */
   walk?: RouteHistoryWalk;
 }
 
-/**
- * How far the tourist got through a route's walk.
- *
- * Kept with the history entry rather than in the guide, because a route you
- * actually walked is a different thing from one you only planned — that
- * difference has to survive closing the guide, reloading, and tomorrow.
- */
+/** How far the tourist got through a route's walk. */
 export interface RouteHistoryWalk {
   visited: number;
   total: number;
@@ -108,8 +89,6 @@ export interface RouteHistoryPlace {
   photo?: Photo | null;
 }
 
-// What the agent knows about a place, keyed by the DB `places.id`. Populated
-// from /routes/generate and reused when a route is restored from history.
 export interface PlaceDetails {
   name: string;
   category: string | null;
@@ -135,10 +114,7 @@ export interface RefinementEntry {
   createdAt: number;
 }
 
-/**
- * Everything a refinement turn can change. Snapshotted before each refine so
- * "Отменить последнее уточнение" restores the previous route exactly.
- */
+/** Everything a refinement turn can change. */
 export interface RouteSnapshot {
   waypoints: Waypoint[];
   placeDetails: Record<number, PlaceDetails>;
@@ -166,9 +142,7 @@ const saveHistoryToStorage = (history: RouteHistoryEntry[]) => {
       STORAGE_KEY,
       JSON.stringify(history.slice(0, MAX_HISTORY))
     );
-  } catch {
-    // localStorage might be full or unavailable
-  }
+  } catch {}
 };
 
 const createEmptyWaypoint = (id: string): Waypoint => ({
@@ -203,17 +177,10 @@ export interface DirectionsState {
   inclineDeclineTotal?: InclineDeclineTotal;
   isOptimized: boolean;
   activeRouteIndex: number;
-  // Route history
   routeHistory: RouteHistoryEntry[];
-  // Curated info (blurb / fun fact) about agent-generated stops, by places.id.
   placeDetails: Record<number, PlaceDetails>;
-  // Stops the user deleted by hand. Sent back on a refinement so they do not
-  // reappear ("убери форт" must stay removed).
   excludedPlaceIds: number[];
-  // Iterative refinement turns, oldest first — rendered as chips under the
-  // route summary so the user sees how the route got to its current state.
   refinementLog: RefinementEntry[];
-  // Undo stack: one snapshot per refinement turn resp. manual edit batch.
   routeSnapshots: RouteSnapshot[];
 }
 
@@ -246,12 +213,8 @@ interface DirectionsActions {
   ) => void;
   setIsOptimized: (isOptimized: boolean) => void;
   setActiveRouteIndex: (index: number) => void;
-  // Route history actions
   addToHistory: (entry: Omit<RouteHistoryEntry, 'id' | 'createdAt'>) => void;
-  /**
-   * Record how far the walk of a route has got. Matched on the route's stop
-   * fingerprint; a route with no history entry is left alone (nothing to mark).
-   */
+  /** Record how far the walk of a route has got. */
   markWalked: (walk: {
     routeKey: string;
     visited: number;
@@ -261,7 +224,6 @@ interface DirectionsActions {
   clearHistory: () => void;
   loadHistory: () => void;
   setPlaceDetails: (details: Record<number, PlaceDetails>) => void;
-  // ── Iterative refinement ──
   /** Remove stops by DB id and remember them as excluded from future turns. */
   excludeStops: (params: { placeIds: number[] }) => void;
   /** Un-exclude a stop (the user brought it back / asked for it explicitly). */
@@ -533,7 +495,6 @@ export const useDirectionsStore = create<DirectionsStore>()(
           'setActiveRouteIndex'
         ),
 
-      // Route history actions
       addToHistory: (entry) =>
         set(
           (state) => {
@@ -545,13 +506,9 @@ export const useDirectionsStore = create<DirectionsStore>()(
               id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
               createdAt: Date.now(),
             };
-            // Rebuilding the *same* route under the same request is a re-do, not
-            // a new route: keep the walk that was already recorded for it. A
-            // different route (different stops) starts with no walk.
             if (previous?.routeKey && previous.routeKey === entry.routeKey) {
               newEntry.walk = previous.walk;
             }
-            // Remove duplicate queries
             state.routeHistory = [
               newEntry,
               ...state.routeHistory.filter((e) => e.query !== entry.query),
@@ -568,8 +525,6 @@ export const useDirectionsStore = create<DirectionsStore>()(
             const entry = state.routeHistory.find(
               (e) => e.routeKey === routeKey
             );
-            // No entry for this route (a hand-made one, say): nothing to mark,
-            // and nothing to invent either.
             if (!entry) return;
             entry.walk = {
               visited,

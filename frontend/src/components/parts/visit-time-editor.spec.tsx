@@ -58,7 +58,6 @@ describe('VisitTimeEditor', () => {
     fireEvent.click(screen.getByTestId('visit-time-chip'));
     fireEvent.click(screen.getByTestId('visit-time-minus'));
 
-    // 60 − 10 = 50 = the estimate: nothing overridden any more.
     expect(onChange).toHaveBeenCalledWith(null);
   });
 

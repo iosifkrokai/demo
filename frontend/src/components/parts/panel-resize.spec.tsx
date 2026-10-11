@@ -39,19 +39,15 @@ const drag = async (dx: number) => {
 
 beforeEach(() => {
   localStorage.clear();
-  // A desktop viewport: the ceiling is a share of it, not a fixed number.
   window.innerWidth = 1440;
 });
 
 describe('ширина панели', () => {
   it('не отдаёт панели всю ширину экрана', () => {
-    // 60% от 900 — это 540, и это меньше жёсткого потолка в 720.
     expect(clampPanelWidth(700, 900)).toBe(540);
-    // На большом экране потолок — жёсткий максимум, и шире него не станет.
     expect(clampPanelWidth(5000, 1440)).toBe(PANEL_WIDTH_MAX);
     expect(clampPanelWidth(700, 1440)).toBe(700);
     expect(clampPanelWidth(100, 1440)).toBe(PANEL_WIDTH_MIN);
-    // Мусор вместо числа — не причина отдать панель нулевой ширины.
     expect(clampPanelWidth(Number.NaN, 1440)).toBe(PANEL_WIDTH_DEFAULT);
   });
 
@@ -79,8 +75,17 @@ describe('ширина панели', () => {
 
     render(<Harness />);
 
-    // 700 шире, чем можно на этом экране: панель не должна съесть карту.
     expect(widthNow()).toBe(540);
+  });
+
+  it('сжимается до доли экрана при сужении окна', () => {
+    render(<Harness />);
+    expect(widthNow()).toBe(PANEL_WIDTH_DEFAULT);
+
+    window.innerWidth = 500;
+    fireEvent(window, new Event('resize'));
+
+    expect(widthNow()).toBe(PANEL_WIDTH_MIN);
   });
 
   it('управляется с клавиатуры, а Shift двигает крупнее', async () => {

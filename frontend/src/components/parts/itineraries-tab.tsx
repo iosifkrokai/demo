@@ -12,10 +12,9 @@ import { useCommonStore } from '@/stores/common-store';
 import type { Itinerary, ItineraryStop } from '@/api/types';
 import { fmtMin } from './guide-format';
 import { guideModeFor } from './guide-mode';
-import { STOP_FORMS, pluralCountRu } from '@/utils/plural';
 
 interface ItinerariesTabProps {
-  /** Show a curated route on the map. No request to the model is made. */
+  /** Show a curated route on the map. */
   onOpen: (itinerary: Itinerary) => void;
   /** A plan is already in flight: opening another route would fight it. */
   disabled?: boolean;
@@ -27,19 +26,7 @@ interface ItinerariesTabProps {
   onReload?: () => void;
 }
 
-/**
- * «Готовые» — curated routes with their stops, ready to look at.
- *
- * These are authored by hand (backend/data/itineraries.json) and resolved
- * against the live dataset, so a card prints the real stop names, the curated
- * visit time and the opening hours that are actually known — nothing is
- * described from memory. Tapping «показать на карте» puts the stops on the map
- * and draws the route with the router: it does **not** ask the model for a plan,
- * which is the point of the tab — something to start from without a request.
- *
- * A route the dataset cannot fully resolve is still shown, with the shortfall
- * stated, rather than quietly presented as complete.
- */
+/** «Готовые» — curated routes with their stops, ready to look at. */
 export function ItinerariesTab({
   itineraries,
   missing = [],
@@ -69,8 +56,7 @@ export function ItinerariesTab({
     return (
       <div className="flex flex-col gap-2" data-testid="itineraries-error">
         <p className="text-meta text-muted-foreground" role="alert">
-          Не удалось загрузить готовые маршруты. Сами маршруты целы — не ответил
-          агент.
+          {t('itineraries.loadFailed')}
         </p>
         {onReload && (
           <button
@@ -91,7 +77,7 @@ export function ItinerariesTab({
         className="text-meta text-muted-foreground"
         data-testid="itineraries-empty"
       >
-        Готовых маршрутов пока нет.
+        {t('itineraries.emptyList')}
       </p>
     );
   }
@@ -99,14 +85,12 @@ export function ItinerariesTab({
   return (
     <div className="flex flex-col gap-2" data-testid="itineraries-tab">
       <p className="text-meta text-muted-foreground">
-        Собраны вручную из реальных точек данных: открываются сразу, без запроса
-        к модели — потом маршрут можно править как обычно.
+        {t('itineraries.intro')}
       </p>
 
       {missing.length > 0 && (
         <p className="text-meta text-destructive" role="status">
-          Часть точек не нашлась в данных ({missing.length}) — такие маршруты
-          показаны не полностью.
+          {t('itineraries.incompleteCount', { count: missing.length })}
         </p>
       )}
 
@@ -123,8 +107,6 @@ export function ItinerariesTab({
                   {itinerary.blurb}
                 </p>
 
-                {/* Only facts the dataset holds: the curated visit time and how
-                    many real stops the route has. */}
                 <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-badge text-muted-foreground">
                   <span className="inline-flex items-center gap-1">
                     <TransportIcon className="h-3.5 w-3.5" aria-hidden="true" />
@@ -132,7 +114,7 @@ export function ItinerariesTab({
                   </span>
                   <span className="inline-flex items-center gap-1">
                     <RouteIcon className="h-3.5 w-3.5" aria-hidden="true" />
-                    {pluralCountRu(itinerary.stop_count, STOP_FORMS)}
+                    {t('guide.stops', { count: itinerary.stop_count })}
                   </span>
                   {itinerary.visit_minutes > 0 && (
                     <span className="inline-flex items-center gap-1">
@@ -189,7 +171,6 @@ export function ItinerariesTab({
                   </ol>
                 )}
 
-                {/* Said quietly and without a number: this is a hint, not a stop. */}
                 {expanded && (itinerary.services?.length ?? 0) > 0 && (
                   <p
                     className="mt-1.5 text-meta text-muted-foreground"
@@ -234,8 +215,6 @@ function StopRow({ stop, index }: { stop: ItineraryStop; index: number }) {
         />
       )}
       <span className="min-w-0">
-        {/* A curated stop is a place like any other: tapping its name shows it
-            on the map instead of leaving the tourist to search for it. */}
         <button
           type="button"
           onClick={() => focusOn(stop.lon, stop.lat)}
@@ -249,8 +228,6 @@ function StopRow({ stop, index }: { stop: ItineraryStop; index: number }) {
             {facts.join(' · ')}
           </span>
         )}
-        {/* The credit stays on the row: it is a licence obligation, and a
-            thumbnail without it would be an unlicensed picture in a small size. */}
         {stop.photo && (
           <span className="block break-words text-muted-foreground">
             {t('photo.credit', {

@@ -1,21 +1,4 @@
-/**
- * The accounts / visits / admin API (docs/specs/005-accounts-visits-admin §3).
- *
- * Every call is same-origin relative: nginx (and the dev Vite proxy) forwards
- * `/auth/*`, `/me/*` and `/admin/*` to the agent, so nothing hardcodes a host.
- *
- * Identity rides in an HttpOnly cookie the browser attaches itself — this module
- * never reads or stores the session token, which is the whole point of using a
- * cookie rather than localStorage. Every call still sends `X-Client-Id`: on
- * register/login the agent *adopts* that anonymous client, so routes and
- * preferences saved before signing in stay reachable.
- *
- * Failures become an `AccountApiError` carrying the agent's machine code, so a
- * caller can tell «the store is down» (`storage_unavailable`) from «wrong
- * password» (`invalid_credentials`) without parsing prose.
- */
-
-import { getClientId } from '@/utils/client-id';
+/** The accounts / visits / admin API. */
 
 import {
   STORAGE_DOWN_CODES,
@@ -35,8 +18,6 @@ import {
 
 /** Same-origin by default; VITE_AGENT_URL only points at a remote agent. */
 const AGENT_URL = (import.meta.env.VITE_AGENT_URL as string | undefined) ?? '';
-
-const CLIENT_ID_HEADER = 'X-Client-Id';
 
 /** A failed account call, carrying the agent's machine code rather than prose. */
 export class AccountApiError extends Error {
@@ -100,7 +81,6 @@ const codeFromStatus = (status: number): AccountApiErrorCode => {
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
-  headers.set(CLIENT_ID_HEADER, getClientId());
   if (init.body != null && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json');
   }
@@ -110,12 +90,9 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     response = await fetch(`${AGENT_URL}${path}`, {
       ...init,
       headers,
-      // The session cookie must travel; same-origin needs no CORS for it, but
-      // `include` also covers a remote VITE_AGENT_URL.
       credentials: 'include',
     });
   } catch {
-    // The request never reached the agent: a different failure from a refusal.
     throw new AccountApiError(
       'network_unavailable',
       'агент недоступен — попробуйте позже'
@@ -145,8 +122,6 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     );
   }
 }
-
-// ── Normalisers (trust the wire only after checking it) ──────────────────────
 
 const asRecord = (value: unknown): Record<string, unknown> | null =>
   value && typeof value === 'object' && !Array.isArray(value)
@@ -187,10 +162,8 @@ const normalizeAdminUser = (value: unknown): AdminUser | null => {
     typeof v === 'number' && Number.isFinite(v) ? v : 0;
   return {
     ...base,
-    client_id: typeof record.client_id === 'string' ? record.client_id : null,
     last_login_at:
       typeof record.last_login_at === 'string' ? record.last_login_at : null,
-    saved_routes: num(record.saved_routes),
     visited: num(record.visited),
   };
 };
@@ -212,8 +185,6 @@ const asTotal = (body: unknown, fallback: number): number => {
   const record = asRecord(body);
   return typeof record?.total === 'number' ? record.total : fallback;
 };
-
-// ── Auth ────────────────────────────────────────────────────────────────────
 
 export const getAuthState = async (): Promise<AuthState> =>
   normalizeAuthState(await request<unknown>('/auth/me'));
@@ -252,8 +223,6 @@ export async function loginAccount(input: {
 export const logoutAccount = (): Promise<void> =>
   request<void>('/auth/logout', { method: 'POST' });
 
-// ── Visits ──────────────────────────────────────────────────────────────────
-
 const normalizeVisited = (value: unknown): VisitedPlace | null => {
   const place = normalizePlace(value);
   if (!place) return null;
@@ -284,17 +253,6 @@ export const markVisited = async (placeId: number): Promise<VisitedPlace> => {
 
 export const unmarkVisited = (placeId: number): Promise<void> =>
   request<void>(`/me/visited/${placeId}`, { method: 'DELETE' });
-
-export const markVisitedBulk = (
-  placeIds: number[]
-): Promise<{ marked: number[] }> =>
-  request<{ marked: number[] }>('/me/visited', {
-    method: 'POST',
-    body: JSON.stringify({ place_ids: placeIds }),
-  });
-
-// ── Admin — users ───────────────────────────────────────────────────────────
-
 export const adminListUsers = async (
   params: { q?: string; limit?: number; offset?: number } = {}
 ): Promise<AdminUserList> => {
@@ -326,8 +284,6 @@ export const adminPatchUser = async (
 
 export const adminDeleteUser = (userId: string): Promise<void> =>
   request<void>(`/admin/users/${userId}`, { method: 'DELETE' });
-
-// ── Admin — places ──────────────────────────────────────────────────────────
 
 export const adminListPlaces = async (
   params: {

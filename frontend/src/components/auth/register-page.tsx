@@ -1,22 +1,15 @@
 import { Link, useSearch } from '@tanstack/react-router';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { describeAccountError, useRegister } from '@/hooks/use-auth';
+import { appPath } from '@/utils/app-path';
 
-/**
- * Create an account (spec 005 §3).
- *
- * Registration always makes a plain `user`; the first administrator is created by
- * `scripts/create_admin.py`, not by being first to sign up.
- *
- * The anonymous client is adopted here: the browser's `X-Client-Id` (sent by
- * `api/account.ts`) becomes this account's, so routes and preferences saved
- * before signing in are not orphaned.
- */
+/** Create an account. */
 export function RegisterPage() {
-  // Where the guard sent us from (`?redirect=…`); default is the map.
+  const { t } = useTranslation();
   const { redirect: returnTo } = useSearch({ from: '/register' });
   const register = useRegister();
   const [email, setEmail] = useState('');
@@ -36,7 +29,9 @@ export function RegisterPage() {
       {
         onSuccess: () =>
           window.location.assign(
-            returnTo && returnTo.startsWith('/') ? returnTo : '/directions'
+            appPath(
+              returnTo && returnTo.startsWith('/') ? returnTo : '/directions'
+            )
           ),
         onError: (err) => setError(describeAccountError(err)),
       }
@@ -50,14 +45,13 @@ export function RegisterPage() {
         data-testid="register-form"
         className="flex w-full max-w-sm flex-col gap-3 rounded-2xl border border-border bg-card p-5 shadow-card"
       >
-        <h1 className="text-title font-semibold">Регистрация</h1>
+        <h1 className="text-title font-semibold">{t('auth.register.title')}</h1>
         <p className="text-meta text-muted-foreground">
-          Сохранённые маршруты и посещённые места будут доступны с любого
-          устройства.
+          {t('auth.register.subtitle')}
         </p>
 
         <label className="flex flex-col gap-1 text-meta font-medium">
-          Почта
+          {t('auth.email')}
           <Input
             type="email"
             name="email"
@@ -70,9 +64,9 @@ export function RegisterPage() {
         </label>
 
         <label className="flex flex-col gap-1 text-meta font-medium">
-          Как вас зовут{' '}
+          {t('auth.name')}{' '}
           <span className="font-normal text-muted-foreground">
-            (необязательно)
+            {t('auth.optional')}
           </span>
           <Input
             name="display_name"
@@ -85,9 +79,9 @@ export function RegisterPage() {
         </label>
 
         <label className="flex flex-col gap-1 text-meta font-medium">
-          Пароль{' '}
+          {t('auth.password')}{' '}
           <span className="font-normal text-muted-foreground">
-            (минимум 8 символов)
+            {t('auth.passwordHint')}
           </span>
           <Input
             type="password"
@@ -103,10 +97,11 @@ export function RegisterPage() {
 
         {error && (
           <p
+            role="alert"
             data-testid="register-error"
             className="text-meta text-destructive"
           >
-            {error}
+            {t(error)}
           </p>
         )}
 
@@ -115,16 +110,20 @@ export function RegisterPage() {
           disabled={register.isPending}
           data-testid="register-submit"
         >
-          {register.isPending ? 'создаю…' : 'создать аккаунт'}
+          {t(
+            register.isPending
+              ? 'auth.register.submitting'
+              : 'auth.register.submit'
+          )}
         </Button>
 
         <p className="text-meta text-muted-foreground">
-          Уже есть аккаунт?{' '}
+          {t('auth.register.hasAccount')}{' '}
           <Link
             to="/login"
             className="text-primary underline-offset-4 hover:underline"
           >
-            войти
+            {t('auth.register.loginLink')}
           </Link>
         </p>
       </form>

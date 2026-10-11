@@ -57,10 +57,10 @@ describe('RouteHoverPopup', () => {
     expect(popup).toHaveAttribute('data-latitude', '50.5');
   });
 
-  it('should display "Route Summary" title', () => {
+  it('should display the route summary title', () => {
     render(<RouteHoverPopup {...defaultProps} />);
 
-    expect(screen.getByText('Route Summary')).toBeInTheDocument();
+    expect(screen.getByText('Сводка маршрута')).toBeInTheDocument();
   });
 
   it('should display distance in km with 1 decimal for short routes', () => {
@@ -71,7 +71,7 @@ describe('RouteHoverPopup', () => {
       />
     );
 
-    expect(screen.getByText('25.5 km')).toBeInTheDocument();
+    expect(screen.getByText('25,5 км')).toBeInTheDocument();
   });
 
   it('should display distance in km with 0 decimals for long routes', () => {
@@ -82,7 +82,7 @@ describe('RouteHoverPopup', () => {
       />
     );
 
-    expect(screen.getByText('1501 km')).toBeInTheDocument();
+    expect(screen.getByText('1501 км')).toBeInTheDocument();
   });
 
   it('should display formatted duration', () => {
@@ -93,7 +93,7 @@ describe('RouteHoverPopup', () => {
       />
     );
 
-    expect(screen.getByText('1h 1m')).toBeInTheDocument();
+    expect(screen.getByText('1 ч 1 мин')).toBeInTheDocument();
   });
 
   it('should display duration in minutes for short trips', () => {
@@ -104,6 +104,6 @@ describe('RouteHoverPopup', () => {
       />
     );
 
-    expect(screen.getByText('15m')).toBeInTheDocument();
+    expect(screen.getByText('15 мин')).toBeInTheDocument();
   });
 });

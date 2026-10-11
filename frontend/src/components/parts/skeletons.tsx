@@ -1,7 +1,4 @@
-/**
- * DESIGN.md loading state: skeleton rows, never a spinner in the middle of the
- * panel — the panel keeps its shape while the agent thinks.
- */
+/** Loading state: skeleton rows, never a spinner, so the panel keeps its shape. */
 
 export const StopsSkeleton = ({ rows = 3 }: { rows?: number }) => (
   <div
@@ -24,8 +21,11 @@ export const SummarySkeleton = () => (
     aria-hidden="true"
     className="grid grid-cols-3 gap-2"
   >
-    {['точек', 'км', 'мин в пути'].map((label) => (
-      <div key={label} className="h-[62px] animate-pulse rounded-xl bg-muted" />
+    {Array.from({ length: 3 }, (_, i) => (
+      <div
+        key={`summary-${i}`}
+        className="h-[62px] animate-pulse rounded-xl bg-muted"
+      />
     ))}
   </div>
 );

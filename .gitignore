@@ -1,45 +1,15 @@
-# Valhalla tiles / OSM extracts (1.3 GB — never commit)
+# repo-wide; backend/.gitignore and frontend/.gitignore own their own artifacts
+
+# data
 valhalla-data/
 
-# Python
-__pycache__/
-*.pyc
-.venv/
-.python-version
-.pyright/
-.ruff_cache/
-
-# Node (frontend)
-node_modules/
-frontend/build/
-frontend/dist/
-frontend/tsconfig.tsbuildinfo
-
-# Env & secrets
+# env
 .env
 .env.local
 .env.production.local
 
-# Misc
-cache/
-.cache/
-.legacy_backup/
+# logs
 *.log
 
-# Generated benchmark output (regenerate with scripts/bench_routes.py)
-backend/benchmarks/report.json
-backend/benchmarks/report.md
-
-# Рабочие артефакты прогонов: логи агентов, записи демо, скачанные страницы
-tmp-fresh-pgdata/
-tmp-fresh-valhalla/
-cache/logs/
-cache/video/
-cache/headcheck/
-cache/*.log
-cache/*.json
-cache/research/pages/
-cache/research/raw/
-
-# Скриншоты живой проверки UI — артефакты отчётов, не код продукта
-ui/
+# agent worktrees
+.claude/worktrees/

@@ -1,16 +1,4 @@
-/**
- * Secondary points beside a route (`POST /routes/services`).
- *
- * The question is «что есть по пути», and the answer is deliberately narrow:
- * the agent measures how far a café or a toilet sits from the line the tourist
- * is walking and how far along it that is. It does not build a detour, so the
- * payload carries `detour_confirmed: false` and no screen may turn that into a
- * walking time.
- *
- * Same-origin like every other agent call (the dev Vite proxy and the
- * production nginx both forward `/routes/*`). A failure here must not look like
- * «рядом ничего нет»: the caller shows «не удалось проверить» instead.
- */
+/** Secondary points beside a route (`POST /routes/services`). */
 
 import type { RouteLine, ServicesAlongAnswer } from './types';
 import { currentRunSession } from '@/utils/run-session';
@@ -67,8 +55,6 @@ export async function fetchServicesAlong(
         shape,
         profile,
         ...(categories ? { categories } : {}),
-        // «Что по пути» belongs to the run that drew the line, so its trace
-        // lands in the same Langfuse session as the generate.
         session_id: currentRunSession(),
       }),
       signal,

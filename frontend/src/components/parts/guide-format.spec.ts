@@ -76,13 +76,20 @@ describe('agentErrorMessage', () => {
     expect(message).toContain('404');
     expect(message).toContain('настройки');
     expect(message).not.toContain('не найдено место');
-    expect(message).toMatch(/найдено/); // only inside the «а не …» denial
+    expect(message).toMatch(/найдено/);
   });
 
   it('keeps the plain status wording for a server error', () => {
     expect(agentErrorMessage(503)).toBe(
       'агент ответил ошибкой 503 — попробуйте ещё раз'
     );
+  });
+
+  it('names an unconfigured planner instead of a bare 503', () => {
+    const message = agentErrorMessage(503, 'llm_not_configured');
+
+    expect(message).toContain('ключ');
+    expect(message).not.toContain('503');
   });
 
   it('names an access problem and a bad request for what they are', () => {

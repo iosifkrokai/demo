@@ -1,14 +1,7 @@
-/**
- * «Отметить посещённым» — the one control that writes to the tourist's visited
- * registry (spec 005 §3).
- *
- * It is deliberately honest about the anonymous case: without a session there is
- * nowhere to save, so instead of a button that fails, the card says «войдите,
- * чтобы отмечать» and links nowhere else. A signed-in tourist gets a real
- * toggle; the server side is idempotent, so pressing it twice is safe.
- */
+/** «Отметить посещённым» — the one control that writes to the tourist's visited registry. */
 
 import { Check, MapPinPlus } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
@@ -22,6 +15,7 @@ export interface VisitedToggleProps {
 }
 
 export function VisitedToggle({ placeId, className }: VisitedToggleProps) {
+  const { t } = useTranslation();
   const { authenticated } = useAuth();
   const visitedIds = useVisitedIds(authenticated);
   const toggle = useToggleVisited();
@@ -34,7 +28,7 @@ export function VisitedToggle({ placeId, className }: VisitedToggleProps) {
         data-testid="visited-login-hint"
         className={`text-meta text-muted-foreground ${className ?? ''}`}
       >
-        войдите, чтобы отмечать посещённые места
+        {t('visited.toggleHint')}
       </p>
     );
   }
@@ -52,7 +46,7 @@ export function VisitedToggle({ placeId, className }: VisitedToggleProps) {
       onClick={() =>
         toggle.mutate(
           { placeId, visited },
-          { onError: (error) => toast.error(describeAccountError(error)) }
+          { onError: (error) => toast.error(t(describeAccountError(error))) }
         )
       }
       className={className}
@@ -62,7 +56,7 @@ export function VisitedToggle({ placeId, className }: VisitedToggleProps) {
       ) : (
         <MapPinPlus className="size-4" aria-hidden="true" />
       )}
-      {visited ? 'посещено' : 'отметить посещённым'}
+      {t(visited ? 'visited.visited' : 'visited.markVisited')}
     </Button>
   );
 }

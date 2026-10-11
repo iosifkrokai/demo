@@ -1,12 +1,4 @@
-/**
- * How long the tourist wants to spend at a stop.
- *
- * The dataset gives an estimate per place (`visitMinutes`, from the taxonomy) and
- * the UI shows it as approximate — «≈ 40 мин, столько обычно и оставляют». The
- * tourist is the one who decides, so their number is stored next to the route
- * (same idea as the walk progress) and every total that depends on visit time
- * is computed from it.
- */
+/** How long the tourist wants to spend at a stop. */
 export const VISIT_MIN = 5;
 export const VISIT_MAX = 480;
 export const VISIT_STEP = 10;
@@ -36,7 +28,6 @@ export const loadVisitOverrides = (routeKey: string): VisitOverrides => {
       )
     );
   } catch {
-    // unreadable storage — fall back to the dataset estimates
     return {};
   }
 };
@@ -50,9 +41,7 @@ export const saveVisitOverrides = (
       STORAGE_KEY,
       JSON.stringify({ route: routeKey, overrides } satisfies StoredVisitTimes)
     );
-  } catch {
-    // private mode / quota — the guide keeps working with estimates
-  }
+  } catch {}
 };
 
 /** The minutes to plan with for one stop: the tourist's own, else the estimate. */

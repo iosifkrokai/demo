@@ -1,13 +1,4 @@
-/**
- * The full point catalogue (`GET /places`) — every point in the dataset, for the
- * «все точки» tab.
- *
- * One request, same-origin like every other agent call (the dev Vite proxy and
- * the production nginx both forward `/routes/*` and `/places`). No model is
- * involved on the agent side, so this cannot be slow in the way a plan request
- * can — and when it does fail, the tab says so instead of showing an empty list,
- * which would read as «точек нет», which is a different, untrue story.
- */
+/** The full point catalogue (`GET /places`) for the «все точки» tab. */
 
 import type { PlacesAnswer } from './types';
 
@@ -33,7 +24,6 @@ export async function fetchPlaces(signal?: AbortSignal): Promise<PlacesAnswer> {
       signal,
     });
   } catch (error) {
-    // The request never reached the agent — a different failure from a refusal.
     throw new PlacesError(
       error instanceof Error ? error.message : 'network',
       null

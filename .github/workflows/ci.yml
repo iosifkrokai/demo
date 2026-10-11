@@ -1,11 +1,7 @@
-# Backend gates: the three checks the README calls "CI equivalent", now actually
-# run on every push and PR. All three pass on a clean checkout; if one starts
-# failing, the tree is not green — that is the whole point of wiring them up.
-#
-# The frontend job is deliberately NOT here yet: its lint/typecheck gate is red
-# on the current tree (dead upstream panel tree + unfinished i18n), so it needs
-# that cleanup first — see the audit notes. Add it in the same PR that makes it
-# pass, never before.
+# The gates the README calls "CI equivalent" — backend (ruff + pyright + the
+# offline seed contract + pytest) and frontend (typecheck + eslint + vitest),
+# the same commands as `make test-backend` / `make test-frontend`. All pass on a
+# clean checkout; a red job means the tree is not green.
 name: ci
 
 on:
@@ -33,8 +29,42 @@ jobs:
       - name: Lint (ruff)
         run: .venv/bin/ruff check .
 
+      - name: Format (ruff)
+        run: .venv/bin/ruff format --check .
+
       - name: Type-check (pyright)
         run: .venv/bin/pyright
 
+      - name: Seed data contract (offline)
+        # "Data is code": the committed CSVs must still validate. No DB, no network.
+        run: .venv/bin/python -m db.seed --dry-run
+
       - name: Tests (pytest)
         run: .venv/bin/python -m pytest -q
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies (locked)
+        run: npm ci
+
+      - name: Type-check (tsc)
+        run: npm run typecheck
+
+      - name: Lint (eslint)
+        run: npm run lint
+
+      - name: Tests (vitest)
+        run: npm test -- run

@@ -27,8 +27,6 @@
     "node_modules",
     "coverage",
     "build",
-    "playwright-report",
-    "test-results",
     "public/sw.js"
   ]
 }

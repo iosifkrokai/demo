@@ -8,8 +8,6 @@ import type { PlaceDetails } from '@/stores/directions-store';
 
 import { PlaceCardBody } from './place-card-body';
 
-// The «посещено» toggle (spec 005) has its own spec; here it is mocked so a pure
-// layout test does not need a QueryClient. Anonymous: the card shows the hint.
 vi.mock('@/hooks/use-auth', () => ({
   useAuth: () => ({
     user: null,
@@ -36,8 +34,6 @@ const details = (overrides: Partial<PlaceDetails> = {}): PlaceDetails => ({
   ...overrides,
 });
 
-// jsdom shares one document across the files of a worker: without this, the
-// card this spec leaves behind answers the next spec's queries.
 afterEach(cleanup);
 
 describe('PlaceCardBody', () => {
@@ -80,10 +76,6 @@ describe('PlaceCardBody', () => {
   });
 
   it('keeps a tap on the card from reaching the map underneath', () => {
-    // Otherwise the map's own click handler reads the tap as a miss and closes
-    // the card mid-sentence — and on a phone the card sits exactly where the
-    // thumb reaches for the map. The listener here stands in for the map's:
-    // it is on an ancestor, so only `stopPropagation` on the card stops it.
     const onMapClick = vi.fn();
     render(
       <div onClick={onMapClick}>
@@ -95,15 +87,11 @@ describe('PlaceCardBody', () => {
     fireEvent.click(screen.getByTestId('place-card-body'));
     expect(onMapClick).not.toHaveBeenCalled();
 
-    // A tap on the map beside the card still gets through — the card swallows
-    // its own events, not the map's.
     fireEvent.click(screen.getByTestId('the-map'));
     expect(onMapClick).toHaveBeenCalledTimes(1);
   });
 
   it('puts the extra facts and the links behind one tap on a phone', () => {
-    // Measured on 390x844 before: eight stacked blocks at 12px, so the point's
-    // name sat above the fold and the reason to visit was a scroll away.
     render(<PlaceCardBody details={details()} onClose={() => {}} mobile />);
 
     expect(screen.queryByText('Ещё факты')).not.toBeInTheDocument();
@@ -117,13 +105,11 @@ describe('PlaceCardBody', () => {
     expect(screen.getByText('Ещё факты')).toBeInTheDocument();
     expect(screen.getByText('История костёла')).toBeInTheDocument();
 
-    // And it closes again — the card must not grow permanently.
     fireEvent.click(more);
     expect(screen.queryByText('Ещё факты')).not.toBeInTheDocument();
   });
 
   it('has no disclosure at all when there is nothing behind it', () => {
-    // A «More» that opens onto nothing is a control that lies.
     render(
       <PlaceCardBody
         details={details({ funFacts: [], links: [] })}
@@ -165,19 +151,10 @@ describe('PlaceCardBody', () => {
   });
 
   it('names itself in the interface language, not in Russian only', () => {
-    // The headings used to be hardcoded strings in the popup, so an
-    // English-language tourist read «Ещё факты» on an otherwise English card.
     render(<PlaceCardBody details={details()} onClose={() => {}} />);
     expect(screen.getByLabelText('Закрыть')).toBeInTheDocument();
   });
 
-  // The close button's 40px comes from `size-10`, and `size-10` is referenced
-  // only inside src/components/ui/button.tsx. Tailwind does not scan that
-  // directory on its own, so before index.css named it as a source the class was
-  // dropped from the build with no error at all — and this button measured
-  // 16x16 on the phone while every test was green. Both halves are pinned here:
-  // the button asks for a real utility, and the stylesheet really scans the
-  // directory that defines it.
   it('берёт мишень закрытия из реальной утилиты, а не из воздуха', () => {
     render(<PlaceCardBody details={details()} onClose={() => {}} mobile />);
     expect(screen.getByLabelText('Закрыть').className).toContain('size-10');

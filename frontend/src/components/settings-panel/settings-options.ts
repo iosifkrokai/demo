@@ -1,5 +1,4 @@
 import type { BicycleType, PedestrianType } from '@/components/types';
-import type { Profile } from '@/stores/common-store';
 
 interface NumericSetting {
   name: string;
@@ -820,64 +819,12 @@ export const generalize = {
   },
 };
 
-// Valhalla supported language options for turn-by-turn navigation instructions
-// Reference: https://valhalla.github.io/valhalla/api/turn-by-turn/api-reference/#supported-language-tags
-export const languageOptions = [
-  { key: 'bg-BG', text: 'Bulgarian (Bulgaria)', value: 'bg-BG' },
-  { key: 'ca-ES', text: 'Catalan (Spain)', value: 'ca-ES' },
-  { key: 'cs-CZ', text: 'Czech (Czech Republic)', value: 'cs-CZ' },
-  { key: 'da-DK', text: 'Danish (Denmark)', value: 'da-DK' },
-  { key: 'de-DE', text: 'German (Germany)', value: 'de-DE' },
-  { key: 'el-GR', text: 'Greek (Greece)', value: 'el-GR' },
-  { key: 'en-GB', text: 'English (United Kingdom)', value: 'en-GB' },
-  { key: 'en-US', text: 'English (United States)', value: 'en-US' },
-  { key: 'en-US-x-pirate', text: 'English (Pirate)', value: 'en-US-x-pirate' },
-  { key: 'es-ES', text: 'Spanish (Spain)', value: 'es-ES' },
-  { key: 'et-EE', text: 'Estonian (Estonia)', value: 'et-EE' },
-  { key: 'fi-FI', text: 'Finnish (Finland)', value: 'fi-FI' },
-  { key: 'fr-FR', text: 'French (France)', value: 'fr-FR' },
-  { key: 'hi-IN', text: 'Hindi (India)', value: 'hi-IN' },
-  { key: 'hu-HU', text: 'Hungarian (Hungary)', value: 'hu-HU' },
-  { key: 'it-IT', text: 'Italian (Italy)', value: 'it-IT' },
-  { key: 'ja-JP', text: 'Japanese (Japan)', value: 'ja-JP' },
-  { key: 'nb-NO', text: 'Bokmal (Norway)', value: 'nb-NO' },
-  { key: 'nl-NL', text: 'Dutch (Netherlands)', value: 'nl-NL' },
-  { key: 'pl-PL', text: 'Polish (Poland)', value: 'pl-PL' },
-  { key: 'pt-BR', text: 'Portuguese (Brazil)', value: 'pt-BR' },
-  { key: 'pt-PT', text: 'Portuguese (Portugal)', value: 'pt-PT' },
-  { key: 'ro-RO', text: 'Romanian (Romania)', value: 'ro-RO' },
-  { key: 'ru-RU', text: 'Russian (Russia)', value: 'ru-RU' },
-  { key: 'sk-SK', text: 'Slovak (Slovakia)', value: 'sk-SK' },
-  { key: 'sl-SI', text: 'Slovenian (Slovenia)', value: 'sl-SI' },
-  { key: 'sv-SE', text: 'Swedish (Sweden)', value: 'sv-SE' },
-  { key: 'tr-TR', text: 'Turkish (Türkiye)', value: 'tr-TR' },
-  { key: 'uk-UA', text: 'Ukrainian (Ukraine)', value: 'uk-UA' },
-] as const;
-
-export type DirectionsLanguage = (typeof languageOptions)[number]['value'];
-
-export const DEFAULT_DIRECTIONS_LANGUAGE: DirectionsLanguage = 'en-US';
-export const DIRECTIONS_LANGUAGE_STORAGE_KEY = 'directions_language';
-
-// Settings surfaced in the QuickSettings (left sidebar) panel rather than the
-// advanced (right) panel. Keep this list in sync with what QuickSettings renders
-// — settings-panel.tsx reads it to skip these in the advanced view.
 export const QUICK_SETTING_PARAMS = [
   'use_highways',
   'use_tolls',
   'use_ferry',
   'alternates',
 ] as const;
-
-// Profiles where use_highways / use_tolls are meaningful costing options.
-// Pedestrian, bicycle, motor_scooter ignore them, so the QuickSettings panel
-// only renders those two controls when the active profile is in this list.
-export const HIGHWAY_TOLL_PROFILES = [
-  'car',
-  'truck',
-  'bus',
-  'motorcycle',
-] as const satisfies readonly Profile[];
 
 export const settingsInit = {
   maneuver_penalty: 5,
@@ -950,10 +897,6 @@ export const settingsInitTruckOverride = {
   height: 4.11,
 };
 
-// `turnPenaltyCost` and `maneuverPenalty` below are two sliders bound to the same
-// `maneuver_penalty` key. A profile must therefore carry exactly one of them: the
-// last control written wins, so a profile listing both shows two sliders that
-// move each other and fight over one store key.
 const gateSettings = [gateCost, gatePenalty] as const;
 const maneuverSettings = [maneuverPenalty] as const;
 const borderSettings = [countryCrossingCost, countryCrossingPenalty] as const;
@@ -982,10 +925,6 @@ const commonVehicleProfileBoolean = [
   ignoreHierarchies,
 ] as const;
 
-// The turn-penalty control is spelled out per profile instead of shared: it goes
-// in the *general* settings of the profiles whose profile settings do not already
-// bind `maneuver_penalty` (car, bus, bicycle), and stays out of the ones that do
-// (truck, motorcycle, motor_scooter). See `gateSettings` above.
 const commonGeneralNumeric = [
   useHighways,
   ...tollSettings,

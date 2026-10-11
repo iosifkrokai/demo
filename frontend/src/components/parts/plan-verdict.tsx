@@ -12,10 +12,7 @@ interface PlanVerdictProps {
   response: AgentRouteResponse | null;
 }
 
-/**
- * Every reason the backend can send, so an unknown future code falls back to
- * the generic label instead of printing a raw dictionary key on screen.
- */
+/** Known verdict reasons; unknown codes fall back to the generic label, not the raw key. */
 const KNOWN_REASONS: readonly PlanRequirementReason[] = [
   'must_visit_on_route',
   'must_visit_absent',
@@ -46,16 +43,7 @@ const reasonLabel = (
 const requirementName = (item: PlanRequirement): string =>
   item.name || item.code || item.kind;
 
-/**
- * The plan's own verdict, straight from the agent's answer: why the route could
- * not be built, or which part of the request went unmet.
- *
- * Renders nothing for `ready` (and `pending`) — the happy path is silent, the
- * route speaks for itself. `infeasible` is an error tone (there is no route),
- * `degraded` the amber tone of the panel's other warnings (there is a route,
- * with a caveat). Place names are printed as the data gave them, never
- * translated: a name the tourist cannot match to the map is worse than none.
- */
+/** The agent's verdict: why the route could not be built or which request went unmet. */
 export const PlanVerdict = ({ response }: PlanVerdictProps) => {
   const { t } = useTranslation();
   const status = response?.status;
@@ -74,8 +62,6 @@ export const PlanVerdict = ({ response }: PlanVerdictProps) => {
   );
 
   if (status === 'infeasible') {
-    // Outside coverage is the one reason the tourist can act on directly, so
-    // it gets its own wording: name the places, then say where to look instead.
     const outside = unmet.filter(
       (item) => item.reason === 'must_visit_outside_coverage'
     );

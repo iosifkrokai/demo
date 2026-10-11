@@ -1,5 +1,4 @@
 export const decode = (str: string, precision: number = 6) => {
-  // Handle invalid inputs
   if (!str || typeof str !== 'string') {
     return [];
   }
@@ -16,11 +15,7 @@ export const decode = (str: string, precision: number = 6) => {
 
   const factor = Math.pow(10, precision);
 
-  // Coordinates have variable length when encoded, so just keep
-  // track of whether we've hit the end of the string. In each
-  // loop iteration, a single coordinate is decoded.
   while (index < str.length) {
-    // Reset shift, result, and byte
     byte = null;
     shift = 0;
     result = 0;

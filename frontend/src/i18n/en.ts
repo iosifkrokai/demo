@@ -1,12 +1,6 @@
 import type { Dictionary } from './ru';
 
-/**
- * English strings.
- *
- * Typed as `Dictionary`, so a key added to the Russian source of truth is a
- * compile error here until it is translated — the UI cannot silently fall back
- * to Russian mid-screen.
- */
+/** English strings. */
 export const en: Dictionary = {
   panel: {
     resize: 'resize the panel',
@@ -35,15 +29,12 @@ export const en: Dictionary = {
     placeholder: 'What would you like to see?',
     label: 'What would you like to see',
     chips: {
-      // A chip *is* the query — it goes to the agent as written.
       oldTown: 'Old town in two hours on foot',
       castlesChurches: 'Castles and churches of Grodno',
       food: 'Where to eat in the centre, on a budget',
       evening: 'An evening walk along Sovetskaya',
       withChildren: 'With children: parks and castles',
     },
-    // Offered only once a route exists: instructions that change it, not fresh
-    // requests. The pair must stay in step with the Russian chips.
     chipsRefine: {
       addCafe: 'add a café on the way',
       removeMuseum: 'take the museum out',
@@ -79,14 +70,6 @@ export const en: Dictionary = {
     stops_few: '{{count}} stops',
     stops_many: '{{count}} stops',
   },
-  history: {
-    empty: 'Nothing yet — routes you build will show up here',
-    walked: 'walked',
-    walkedPartial: '{{visited}} of {{total}} done',
-    restore: 'back on the map',
-    clear: 'Clear history',
-    remove: 'Remove from history',
-  },
   itineraries: {
     loading: 'Loading ready-made routes…',
     loadFailed:
@@ -105,16 +88,6 @@ export const en: Dictionary = {
     alongTheWay: 'along the way',
     onFoot: 'on foot',
     byCar: 'by car',
-  },
-  places: {
-    loading: 'Loading all points…',
-    loadFailed:
-      'Could not load the points. The data is fine — the agent did not answer.',
-    retry: 'retry',
-    search: 'Name, town or category',
-    intro:
-      '{{count}} in the dataset — the whole catalogue, on the map and as a list.',
-    noMatch: 'Nothing matched — try another word.',
   },
   language: {
     label: 'Interface language',

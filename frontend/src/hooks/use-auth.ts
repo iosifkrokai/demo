@@ -1,14 +1,4 @@
-/**
- * The signed-in account (spec 005 §3–§4).
- *
- * `useAuth` is the single source of truth for «кто сейчас вошёл»: it reads
- * `GET /auth/me` and every mutation writes the result straight back into the same
- * query cache, so the account bar, the admin gate and the visited toggle all
- * agree without prop-drilling a user object.
- *
- * Anonymous is a first-class state, not an error: the agent answers
- * `{authenticated: false}` and this hook returns exactly that.
- */
+/** The signed-in account. */
 
 import {
   queryOptions,
@@ -28,45 +18,39 @@ import type { AccountApiErrorCode, AccountUser, AuthState } from '@/api/types';
 
 export const AUTH_QUERY_KEY = ['auth', 'me'] as const;
 
-/**
- * The session read as a reusable query option, so the router's `beforeLoad` guard
- * (spec 005 §5) and the `useAuth` hook share one cache entry and one request —
- * the gate does not invent a second source of truth about who is signed in.
- */
+/** Session query option shared by the router guard and `useAuth`, so they share one cache. */
 export const authQueryOptions = queryOptions<AuthState>({
   queryKey: AUTH_QUERY_KEY,
   queryFn: getAuthState,
   staleTime: 5 * 60 * 1000,
-  // A refused or unreachable probe must not block navigation on retries;
-  // «anonymous» is the safe default the guard acts on.
   retry: false,
 });
 
 const ANONYMOUS: AuthState = { authenticated: false, user: null };
 
-/** A Russian sentence for a machine code — the UI owns all human text. */
+/** A translation key for a machine code — the dictionary owns the human text. */
 export function describeAccountError(error: unknown): string {
   if (error instanceof AccountApiError) {
     const byCode: Partial<Record<AccountApiErrorCode, string>> = {
-      invalid_credentials: 'неверная почта или пароль',
-      email_taken: 'такая почта уже занята',
-      weak_password: 'пароль слишком короткий — минимум 8 символов',
-      invalid_email: 'проверьте адрес почты',
-      not_authenticated: 'нужно войти',
-      not_admin: 'нужны права администратора',
-      storage_unavailable: 'сервер не сохраняет данные — попробуйте позже',
-      network_unavailable: 'нет связи с сервером — попробуйте позже',
-      last_admin: 'нельзя оставить систему без администратора',
-      self_role: 'нельзя менять собственную роль',
-      self_delete: 'нельзя удалить самого себя',
-      user_not_found: 'пользователь не найден',
-      place_not_found: 'место не найдено',
-      source_taken: 'такая ссылка-источник уже занята',
-      invalid_request: 'нечего сохранять',
+      invalid_credentials: 'account.errors.invalid_credentials',
+      email_taken: 'account.errors.email_taken',
+      weak_password: 'account.errors.weak_password',
+      invalid_email: 'account.errors.invalid_email',
+      not_authenticated: 'account.errors.not_authenticated',
+      not_admin: 'account.errors.not_admin',
+      storage_unavailable: 'account.errors.storage_unavailable',
+      network_unavailable: 'account.errors.network_unavailable',
+      last_admin: 'account.errors.last_admin',
+      self_role: 'account.errors.self_role',
+      self_delete: 'account.errors.self_delete',
+      user_not_found: 'account.errors.user_not_found',
+      place_not_found: 'account.errors.place_not_found',
+      source_taken: 'account.errors.source_taken',
+      invalid_request: 'account.errors.invalid_request',
     };
-    return byCode[error.code] ?? 'не получилось — попробуйте ещё раз';
+    return byCode[error.code] ?? 'account.errors.generic';
   }
-  return 'не получилось — попробуйте ещё раз';
+  return 'account.errors.generic';
 }
 
 export interface AuthApi {
@@ -82,8 +66,6 @@ export function useAuth(): AuthApi {
     queryKey: AUTH_QUERY_KEY,
     queryFn: getAuthState,
     staleTime: 5 * 60 * 1000,
-    // A refused or unreachable probe must not spam retries: anonymous is a fine
-    // fallback for the three seconds it takes the user to press «войти».
     retry: false,
   });
 
@@ -110,7 +92,6 @@ function useSessionMutation<TInput>(
         authenticated: true,
         user,
       });
-      // A new identity changes what «мои» means everywhere.
       void client.invalidateQueries({ queryKey: ['visited'] });
       void client.invalidateQueries({ queryKey: ['admin'] });
     },
@@ -125,8 +106,6 @@ export function useLogout() {
   const client = useQueryClient();
   return useMutation<void, unknown, void>({
     mutationFn: logoutAccount,
-    // Even if the request fails, the browser's cookie is the user's to drop; the
-    // honest cache state after «выйти» is anonymous.
     onSettled: () => {
       client.setQueryData<AuthState>(AUTH_QUERY_KEY, ANONYMOUS);
       client.removeQueries({ queryKey: ['visited'] });

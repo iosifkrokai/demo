@@ -1,26 +1,22 @@
 import type { ReactNode } from 'react';
-import { cn } from '@/lib/utils';
-import { minutesLabel, pointsLabel, stopsLabel } from '@/utils/plural';
+import { useTranslation } from 'react-i18next';
 
-/**
- * A counted unit a stat tile can label itself with.
- *
- * Pass `count` + `unit` instead of a bare `label` when the number is a count:
- * the tile then inflects the noun itself («1 точка», «3 точки», «5 точек»), so
- * no caller has to pick a form and get it wrong for 21 or 12.
- */
+import { cn } from '@/lib/utils';
+
+/** A counted unit a stat tile can label itself with. */
 export type StatUnit = 'points' | 'stops' | 'minutes';
 
-const UNIT_LABELS: Record<StatUnit, (count: number) => string> = {
-  points: pointsLabel,
-  stops: stopsLabel,
-  minutes: minutesLabel,
+/** Which dictionary key names the unit; the dictionary owns the inflection. */
+const UNIT_KEYS: Record<StatUnit, string> = {
+  points: 'guide.pointNoun',
+  stops: 'guide.stopNoun',
+  minutes: 'guide.minuteNoun',
 };
 
 interface StatTileProps {
   /** The number that matters — 18–20px semibold (DESIGN.md). */
   value: ReactNode;
-  /** 12px muted label, unit included ("км", "мин в пути"). Used verbatim. */
+  /** 12px muted label, unit included ("км", "мин в пути"). */
   label?: string;
   /** The counted value behind `unit`, when the label is a counted noun. */
   count?: number;
@@ -36,8 +32,9 @@ export const StatTile = ({
   unit,
   className,
 }: StatTileProps) => {
+  const { t } = useTranslation();
   const resolvedLabel =
-    unit != null && count != null ? UNIT_LABELS[unit](count) : label;
+    unit != null && count != null ? t(UNIT_KEYS[unit], { count }) : label;
 
   return (
     <div

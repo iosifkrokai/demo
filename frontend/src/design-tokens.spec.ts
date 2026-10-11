@@ -3,24 +3,19 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
-/**
- * The design tokens are a contract (DESIGN.md). This locks the one measurable
- * rule a test can hold: every text-on-token pair the UI actually uses must pass
- * WCAG AA (4.5:1). The primary CTA — white on `--primary` — sat at 3.52:1 with
- * #ff385c and was the only failing pair in the audit.
- */
+/** The design tokens are a contract (DESIGN.md). Light theme is the only theme. */
 const css = readFileSync(
   path.resolve(path.dirname(fileURLToPath(import.meta.url)), 'index.css'),
   'utf8'
 );
 
-const token = (name: string, block: ':root' | '.dark' = ':root'): string => {
+const token = (name: string): string => {
   const scope = css.slice(
-    css.indexOf(`${block} {`),
-    css.indexOf('}', css.indexOf(`${block} {`))
+    css.indexOf(':root {'),
+    css.indexOf('}', css.indexOf(':root {'))
   );
   const match = scope.match(new RegExp(`${name}:\\s*(#[0-9a-fA-F]{6})`));
-  if (!match?.[1]) throw new Error(`${name} not found in ${block}`);
+  if (!match?.[1]) throw new Error(`${name} not found in :root`);
   return match[1];
 };
 
@@ -42,26 +37,21 @@ const contrast = (a: string, b: string) => {
   return (hi! + 0.05) / (lo! + 0.05);
 };
 
-describe.each([':root', '.dark'] as const)('design tokens (%s)', (block) => {
+describe('design tokens', () => {
   it('keeps the CTA (primary-foreground on primary) at AA 4.5:1 or better', () => {
-    const ratio = contrast(
-      token('--primary-foreground', block),
-      token('--primary', block)
-    );
+    const ratio = contrast(token('--primary-foreground'), token('--primary'));
     expect(ratio).toBeGreaterThanOrEqual(4.5);
   });
 
   it('keeps body text on the page background readable', () => {
     expect(
-      contrast(token('--foreground', block), token('--background', block))
+      contrast(token('--foreground'), token('--background'))
     ).toBeGreaterThanOrEqual(4.5);
   });
 
   it('keeps secondary text on the page background at least at AA large', () => {
-    // muted-foreground is 12px helper copy; AA large (3:1) is the floor it must
-    // never drop below, and today it comfortably beats 4.5:1.
     expect(
-      contrast(token('--muted-foreground', block), token('--background', block))
+      contrast(token('--muted-foreground'), token('--background'))
     ).toBeGreaterThanOrEqual(4.5);
   });
 });

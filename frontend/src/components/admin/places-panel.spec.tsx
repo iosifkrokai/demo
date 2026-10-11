@@ -27,20 +27,31 @@ const one = (id: number, name: string): Place => ({
 const PLACES = [one(79, 'Землякам погибшим в ВОВ'), one(80, 'Второе место')];
 
 const mutate = vi.hoisted(() => vi.fn());
+const refetch = vi.hoisted(() => vi.fn());
+const errorOverride = vi.hoisted(() => ({ value: null as Error | null }));
 
 vi.mock('@/hooks/use-admin', () => ({
-  useAdminPlaces: () => ({
-    items: PLACES,
-    total: PLACES.length,
-    isLoading: false,
-  }),
+  useAdminPlaces: () =>
+    errorOverride.value
+      ? {
+          items: [],
+          total: 0,
+          isLoading: false,
+          error: errorOverride.value,
+          refetch,
+        }
+      : {
+          items: PLACES,
+          total: PLACES.length,
+          isLoading: false,
+          error: null,
+          refetch,
+        },
   useUpdatePlace: () => ({ mutate, isPending: false }),
   useDeletePlace: () => ({ mutate: vi.fn(), isPending: false }),
   useCreatePlace: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
-// The real map needs WebGL. This stands in for it and lets a test play the map's
-// side of the link: a pin click, and a dropped pin.
 vi.mock('@/components/place-map/place-map', () => ({
   PlaceMap: ({
     places,
@@ -80,6 +91,8 @@ vi.mock('@/components/place-map/place-map', () => ({
 
 beforeEach(() => {
   mutate.mockClear();
+  refetch.mockClear();
+  errorOverride.value = null;
 });
 
 describe('PlacesPanel — list and map are two windows on one page', () => {
@@ -148,5 +161,16 @@ describe('PlacesPanel — list and map are two windows on one page', () => {
     expect(args.placeId).toBe(79);
     expect(args.patch.lat).toBe(53.9);
     expect(args.patch.lon).toBe(23.7);
+  });
+
+  it('shows an error with a retry instead of «ничего не найдено»', () => {
+    errorOverride.value = new Error('offline');
+    render(<PlacesPanel enabled />);
+
+    expect(screen.getByTestId('admin-places-error')).toBeInTheDocument();
+    expect(screen.queryByText('ничего не найдено')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('admin-places-retry'));
+    expect(refetch).toHaveBeenCalledTimes(1);
   });
 });

@@ -9,10 +9,7 @@ import { WaypointList, plannerVisitKey } from './waypoint-list';
 const mockRefetch = vi.fn();
 const mockSetWaypoint = vi.fn();
 
-/**
- * Two agent stops with their dataset estimates. The list reads them from the
- * store; the numbers here are the ones the editor must show as approximate.
- */
+/** Two agent stops with their dataset estimates. */
 const mockWaypoints: Waypoint[] = [
   {
     id: '0',
@@ -115,12 +112,10 @@ describe('WaypointList — the tourist sets their own visit time', () => {
     await user.click(screen.getAllByTestId('visit-time-chip')[0]!);
     await user.click(screen.getAllByTestId('visit-time-plus')[0]!);
 
-    // The tourist's own number is now the one on screen, without the «≈».
     const chip = screen.getAllByTestId('visit-time-chip')[0]!;
     expect(chip).toHaveTextContent('50 мин');
     expect(chip).not.toHaveTextContent('≈');
 
-    // …and it is in storage, under this route, so a reload finds it again.
     const stored = readStored();
     expect(stored.route).toBe(plannerVisitKey(mockWaypoints));
     expect(stored.overrides).toEqual({ '1': 50 });
@@ -155,11 +150,6 @@ describe('WaypointList — the tourist sets their own visit time', () => {
     expect(plannerVisitKey(reversed)).toBe(plannerVisitKey(mockWaypoints));
   });
 
-  // A phone row is a grid of ONE line. `flex-wrap` used to break it across up to
-  // four lines and drop the tail below, so a row measured 152px instead of 52px
-  // and six stops needed 539px of a 760px sheet — the «text stretches down»
-  // complaint. These pin the grid itself; the width it produces is measured in
-  // scripts/measure-mobile.mjs and in the browser, not here.
   it('складывает строку остановки в одну линию на телефоне', () => {
     render(<WaypointList onChanged={() => {}} />);
 
@@ -168,11 +158,9 @@ describe('WaypointList — the tourist sets their own visit time', () => {
       .map((el) => el.closest('li'))[0]!;
     const cls = row.className;
 
-    // A grid with no wrapping, and every control pinned to its own column.
     expect(cls).toContain('max-md:grid');
     expect(cls).toContain('max-md:flex-nowrap');
     expect(cls).toContain('max-md:grid-cols-');
-    // The grip, the number, the name, the visit time, the actions.
     expect(cls).toMatch(/2\.5rem/);
   });
 
@@ -186,7 +174,6 @@ describe('WaypointList — the tourist sets their own visit time', () => {
   });
 
   it('не отдаёт номер остановки целую колонку на телефоне', () => {
-    // 1.25rem, not 1.5rem: every pixel here comes out of the name's width.
     render(<WaypointList onChanged={() => {}} />);
 
     const row = screen.getAllByTestId(/focus-place-/)[0]!.closest('li')!;
@@ -194,12 +181,8 @@ describe('WaypointList — the tourist sets their own visit time', () => {
   });
 
   it('прячет декоративную эмодзи-категорию на телефоне', () => {
-    // The stop number already orders the route; the emoji is decorative and was
-    // taking a column from a name that has ~150px.
     render(<WaypointList onChanged={() => {}} />);
 
-    // PlaceIcon renders a span carrying the category as its title; the stop
-    // number also has one, so match the emoji's own shape rather than `title`.
     const icons = [...document.querySelectorAll('li span[title]')].filter(
       (el) => !el.className.includes('items-center justify-center')
     );
@@ -210,17 +193,10 @@ describe('WaypointList — the tourist sets their own visit time', () => {
   });
 
   it('оставляет десктопную строку как была: flex с переносом', () => {
-    // Everything above is `max-md:`-scoped, so from md up the row is the single
-    // flex line it has always been — icon visible, name wrapping, time inline.
     render(<WaypointList onChanged={() => {}} />);
 
     const row = screen.getAllByTestId(/focus-place-/)[0]!.closest('li')!;
-    // `flex-wrap` is the base, and every mobile override is `max-md:`-scoped,
-    // so above md the class list reads exactly as it did before.
     expect(row.className).toContain('flex min-h-[52px] flex-wrap');
-    // Every override carries a `max-md:` prefix, so each one is inert from md
-    // up. (Asserting the prefix list, not an empty list: the classes ARE on the
-    // element — that is what makes them conditional.)
     const overrides = row.className
       .split(' ')
       .filter((c) => c.startsWith('max-md:'));

@@ -1,12 +1,4 @@
-/**
- * Russian strings — the source of truth for the UI.
- *
- * Every key here exists in `en`, and a test asserts the two dictionaries have
- * the same shape: a missing translation must fail the build, not appear as a
- * raw key in front of a tourist. Strings that the backend already returns with
- * its own text (place names, blurbs, turn instructions) are not here: they come
- * from data and are switched by the request's `language`, not by the UI.
- */
+/** Russian strings — the source of truth for the UI. */
 export const ru = {
   panel: {
     resize: 'изменять ширину панели',
@@ -35,17 +27,12 @@ export const ru = {
     placeholder: 'Что хотите посмотреть?',
     label: 'что хотите посмотреть',
     chips: {
-      // A chip *is* the query: it goes to the agent exactly as written, so it
-      // reads like something a tourist would say, not like a filter name.
       oldTown: 'Старый город за два часа пешком',
       castlesChurches: 'Замки и костёлы Гродно',
       food: 'Где поесть в центре, недорого',
       evening: 'Вечерняя прогулка по Советской',
       withChildren: 'С детьми: парки и замки',
     },
-    // Offered only when a route already exists: these edit it instead of
-    // planning a new one. Each is an instruction the pipeline can honour —
-    // add a stop, exclude one, shorten the budget, narrow the interests.
     chipsRefine: {
       addCafe: 'добавь кафе по пути',
       removeMuseum: 'убери музей из маршрута',
@@ -81,14 +68,6 @@ export const ru = {
     stops_few: '{{count}} остановки',
     stops_many: '{{count}} остановок',
   },
-  history: {
-    empty: 'Пока пусто — построенные маршруты появятся здесь',
-    walked: 'пройден',
-    walkedPartial: 'пройдено {{visited}} из {{total}}',
-    restore: 'вернуть на карту',
-    clear: 'Очистить историю',
-    remove: 'Убрать из истории',
-  },
   itineraries: {
     loading: 'Загружаю готовые маршруты…',
     loadFailed:
@@ -107,14 +86,6 @@ export const ru = {
     alongTheWay: 'по пути',
     onFoot: 'пешком',
     byCar: 'на машине',
-  },
-  places: {
-    loading: 'Загружаю все точки…',
-    loadFailed: 'Не удалось загрузить точки. Данные целы — не ответил агент.',
-    retry: 'повторить',
-    search: 'Название, город или категория',
-    intro: '{{count}} в данных — весь каталог на карте и в списке.',
-    noMatch: 'Ничего не нашлось — попробуйте другое слово.',
   },
   language: {
     label: 'Язык интерфейса',

@@ -14,7 +14,6 @@ function getBaseUrl() {
   };
   if (!homepage) return '/';
 
-  // If it's a full URL, extract just the pathname
   if (homepage.startsWith('http')) {
     const url = new URL(homepage);
     return url.pathname === '/' ? '/' : url.pathname.replace(/\/$/, '') + '/';
@@ -58,14 +57,6 @@ export default defineConfig({
     // Without it every build attempt 404s against the Vite server.
     proxy: {
       '/routes': {
-        target: process.env.VITE_DEV_AGENT_TARGET || 'http://localhost:8080',
-        changeOrigin: true,
-      },
-      // Anonymous client entity (spec 003): saved routes, preferences and
-      // «удалить мои данные». Same proxy miss class as the Valhalla pattern
-      // below — without this entry Vite answers 200 with index.html and the
-      // client layer honestly reports a bad response instead of saving.
-      '/clients': {
         target: process.env.VITE_DEV_AGENT_TARGET || 'http://localhost:8080',
         changeOrigin: true,
       },

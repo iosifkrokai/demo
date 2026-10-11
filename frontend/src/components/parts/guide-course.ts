@@ -1,19 +1,6 @@
-/**
- * Which way the route goes — the course the camera should be looking along.
- *
- * The map used to be turned by the device's own heading (`coords.heading`), and
- * on a walk that is the wrong number twice over: a browser reports it only while
- * the tourist is moving, it is the direction the *phone* points rather than the
- * direction the *route* goes, and a hand-held phone wobbles. Measured effect: the
- * map turns away from the path and the tourist walks with the route running
- * sideways across the screen.
- *
- * The route itself always knows the answer: it is the direction from the point
- * where the tourist is to the point a little further along the line.
- */
+/** Which way the route goes — the course the camera should be looking along. */
 
-/** How far ahead to look. 25 m is roughly five seconds of walking — far enough
- * to ignore the noise of a single shape point, near enough to still be «here». */
+/** How far ahead to look for a course (25 m ≈ five seconds of walking). */
 export const COURSE_LOOKAHEAD_M = 25;
 
 export interface CourseLine {
@@ -48,11 +35,7 @@ const pointAt = (
   return points[points.length - 1] ?? null;
 };
 
-/**
- * Bearing along the route at `alongM`, in degrees clockwise from north, or null
- * when there is no line to read a course from (a route without usable geometry:
- * the map then keeps whatever heading it has).
- */
+/** Bearing along the route at `alongM` (degrees clockwise from north); null with no line. */
 export const courseAlongLine = (
   line: CourseLine | null,
   alongM: number,
@@ -64,16 +47,7 @@ export const courseAlongLine = (
   return courseBetween(line, along, along + lookaheadM, lookaheadM);
 };
 
-/**
- * The same course, but found from a position instead of a distance along the
- * line.
- *
- * Needed because «how far along the route am I» only advances on a trusted fix:
- * before the first good fix — or while the guide is not yet in its walking state
- * — there is no progress to read a course from, yet the map still has to know
- * which way the route goes the moment the tourist asks for «по курсу». The
- * nearest point of the line answers that.
- */
+/** The same course, but found from a position instead of a distance along the line. */
 export const courseAtPoint = (
   line: CourseLine | null,
   lat: number,
@@ -127,10 +101,6 @@ const courseBetween = (
   const here = pointAt(line, start);
   const ahead = pointAt(line, end);
 
-  // Normally the course is «from here to a little further on». At the very end
-  // of the line there is nothing further on, so the last segment is read
-  // backwards — still pointing the way the tourist is walking, so the map does
-  // not swing round at the last step of the route.
   let from = here;
   let to = ahead;
   if (from && to && from.lat === to.lat && from.lon === to.lon) {

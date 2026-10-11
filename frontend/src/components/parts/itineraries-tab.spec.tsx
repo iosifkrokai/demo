@@ -21,8 +21,6 @@ const stop = (over: Partial<Itinerary['stops'][number]>) => ({
   fun_facts: [],
   links: [],
   ticket_price: null,
-  // The API always sends this field; most points have no photo, so the default
-  // is the common case and a test that wants one says so explicitly.
   photo: null,
   ...over,
 });
@@ -63,12 +61,10 @@ describe('ItinerariesTab', () => {
     render(<ItinerariesTab itineraries={[ITINERARY]} onOpen={vi.fn()} />);
     await user.click(screen.getByTestId('itinerary-stops-old-town-castles'));
 
-    // The numbered list holds stops only — a toilet was never a destination.
     const stops = screen.getByTestId('itinerary-stops-list-old-town-castles');
     expect(stops).not.toHaveTextContent('Туалет');
     expect(stops.querySelectorAll('li')).toHaveLength(2);
 
-    // And the hint says it exists, without inflating the route.
     const hint = screen.getByTestId('itinerary-services-old-town-castles');
     expect(hint).toHaveTextContent('по пути: Туалет');
   });
@@ -78,10 +74,8 @@ describe('ItinerariesTab', () => {
 
     expect(screen.getByText('Два замка и Советская')).toBeInTheDocument();
     expect(screen.getByText('2 остановки')).toBeInTheDocument();
-    // Curated visit time of the stops, not an invented duration.
     expect(screen.getByText(/осмотр ~/)).toBeInTheDocument();
 
-    // Stops are behind the disclosure until it is opened.
     expect(screen.queryByText('Старый замок (Гродно)')).toBeNull();
   });
 
@@ -98,7 +92,6 @@ describe('ItinerariesTab', () => {
       expect.stringContaining('Старый замок (Гродно)'),
       expect.stringContaining('Новый замок'),
     ]);
-    // A real fact from the row, and nothing invented for the stop that has none.
     expect(screen.getByText(/вт–вс 10:00–18:00/)).toBeInTheDocument();
   });
 
@@ -179,13 +172,11 @@ describe('ItinerariesTab', () => {
     render(<ItinerariesTab itineraries={[withPhoto]} onOpen={vi.fn()} />);
     await user.click(screen.getByTestId('itinerary-stops-old-town-castles'));
 
-    // Печать на строке — тоже печать: подпись обязана быть рядом с картинкой.
     expect(screen.getByAltText('Старый замок (Гродно)')).toHaveAttribute(
       'src',
       'https://upload.wikimedia.org/wikipedia/commons/6/6a/castle.jpg'
     );
     expect(screen.getByText(/Александр Липилин/)).toBeInTheDocument();
-    // У второй остановки фото нет — значит и картинки быть не должно.
     expect(screen.queryByAltText('Коложская церковь')).toBeNull();
   });
 });

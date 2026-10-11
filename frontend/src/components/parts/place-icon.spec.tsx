@@ -22,7 +22,6 @@ describe('categoryEmoji', () => {
 describe('PlaceIcon', () => {
   it('falls back to a muted pin without a category', () => {
     const { container } = render(<PlaceIcon />);
-    // an svg pin, not a category face
     expect(container.querySelector('svg')).toBeInTheDocument();
   });
 

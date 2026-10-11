@@ -17,11 +17,7 @@ interface MarkerProps {
   onDragEnd?: (event: { lngLat: { lat: number; lng: number } }) => void;
 }
 
-/**
- * The map itself needs WebGL; what is asserted here is the contract both pages
- * lean on — a pin per place, coordinates, which pin is draggable, what a drop
- * reports, and that a click travels back with the place id.
- */
+/** Mock for the WebGL map; asserts a pin per place, drag/drop and click contract. */
 vi.mock('react-map-gl/maplibre', async () => {
   const React = await import('react');
   return {
@@ -170,7 +166,6 @@ describe('PlaceMap', () => {
       .getByTestId('place-pin-2')
       .closest('[data-testid="marker"]')!;
     expect(marker).toHaveAttribute('data-draggable', 'true');
-    // The edited pin follows the draft, not the stored row.
     expect(marker).toHaveAttribute('data-lat', '53.71');
 
     fireEvent.click(marker.querySelector('[data-testid="marker-drag"]')!);

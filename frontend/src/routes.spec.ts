@@ -1,64 +1,64 @@
 import { describe, it, expect } from 'vitest';
-import { redirect } from '@tanstack/react-router';
-import { isValidTab } from './utils/route-schemas';
+import { activeTabBeforeLoad } from './routes';
 
-function activeTabBeforeLoad({
-  params,
-  search,
-}: {
-  params: { activeTab: string };
-  search: { profile?: string; style?: string };
-}) {
-  if (!isValidTab(params.activeTab)) {
-    throw redirect({
-      to: '/$activeTab',
-      params: { activeTab: 'directions' },
-      search: {
-        profile: 'bicycle',
-      },
-    });
-  }
-  if (!search.profile) {
-    throw redirect({
-      to: '/$activeTab',
-      params: { activeTab: params.activeTab },
-      search: {
-        ...search,
-        profile: 'bicycle',
-      },
-    });
-  }
+/** The router's thrown redirect, carrying navigation options a test can read back. */
+interface ThrownRedirect {
+  options: {
+    to?: string;
+    params?: { activeTab?: string };
+    search?: { profile?: unknown; style?: unknown };
+  };
 }
+
+const catchRedirect = (fn: () => void): ThrownRedirect => {
+  try {
+    fn();
+  } catch (error) {
+    return error as ThrownRedirect;
+  }
+  throw new Error('expected a redirect to be thrown');
+};
 
 describe('routes', () => {
   describe('activeTabRoute beforeLoad', () => {
     it('should redirect to directions with default profile for invalid tab', () => {
-      expect(() =>
+      const redirect = catchRedirect(() =>
         activeTabBeforeLoad({
           params: { activeTab: 'invalid' },
           search: {},
         })
-      ).toThrow();
+      );
+
+      expect(redirect.options.to).toBe('/$activeTab');
+      expect(redirect.options.params).toEqual({ activeTab: 'directions' });
+      expect(redirect.options.search?.profile).toBeTruthy();
     });
 
     it('should redirect with default profile when profile is missing', () => {
-      expect(() =>
+      const redirect = catchRedirect(() =>
         activeTabBeforeLoad({
           params: { activeTab: 'directions' },
           search: {},
         })
-      ).toThrow();
+      );
+
+      expect(redirect.options.params).toEqual({ activeTab: 'directions' });
+      expect(redirect.options.search?.profile).toBeTruthy();
     });
 
     it('should redirect with default profile and preserve other search params', () => {
-      try {
-        activeTabBeforeLoad({
-          params: { activeTab: 'isochrones' },
-          search: { style: 'custom' },
-        });
-      } catch (e) {
-        expect(e).toBeDefined();
-      }
+      const search = { style: 'custom' } as {
+        profile?: string;
+        style: string;
+      };
+
+      const redirect = catchRedirect(() =>
+        activeTabBeforeLoad({ params: { activeTab: 'directions' }, search })
+      );
+
+      expect(redirect.options.params).toEqual({ activeTab: 'directions' });
+      expect(redirect.options.search?.style).toBe('custom');
+      expect(redirect.options.search?.profile).toBeTruthy();
     });
 
     it('should not redirect when profile is present', () => {
@@ -70,22 +70,26 @@ describe('routes', () => {
       ).not.toThrow();
     });
 
-    it('should not redirect when profile is present on isochrones tab', () => {
-      expect(() =>
+    it('should redirect a removed tab even when profile is present', () => {
+      const redirect = catchRedirect(() =>
         activeTabBeforeLoad({
           params: { activeTab: 'isochrones' },
           search: { profile: 'truck' },
         })
-      ).not.toThrow();
+      );
+
+      expect(redirect.options.params).toEqual({ activeTab: 'directions' });
     });
 
-    it('should preserve existing profile when switching tabs', () => {
-      expect(() =>
+    it('should redirect a removed tab while switching tabs', () => {
+      const redirect = catchRedirect(() =>
         activeTabBeforeLoad({
-          params: { activeTab: 'isochrones' },
+          params: { activeTab: 'tiles' },
           search: { profile: 'car' },
         })
-      ).not.toThrow();
+      );
+
+      expect(redirect.options.params).toEqual({ activeTab: 'directions' });
 
       expect(() =>
         activeTabBeforeLoad({

@@ -1,11 +1,4 @@
-/**
- * The panel's own controls: the handle on its edge, the grab bar of the mobile
- * sheet and the way out of it.
- *
- * A separate area rather than a handful of keys in `sidebar.ts` because these
- * strings belong to the panel as a *thing*, not to what it shows: the same three
- * controls serve planning, itineraries and history.
- */
+/** The panel's controls: its edge handle, the mobile sheet's grab bar and close button. */
 export interface LocaleArea<T = Record<string, unknown>> {
   ru: T;
   en: T;

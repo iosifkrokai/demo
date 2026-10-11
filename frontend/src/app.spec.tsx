@@ -29,8 +29,6 @@ vi.mock('@/components/ui/sonner', () => ({
   ),
 }));
 
-// App renders panels that read server state through react-query, so the tree
-// only mounts inside a provider — same as index.tsx does in the running app.
 const renderApp = () =>
   render(
     <QueryClientProvider

@@ -1,0 +1,253 @@
+"""The wire: what /routes/* accepts and returns.
+
+These shapes belong to the HTTP layer. The pipeline's own currency — a candidate
+stop, a cost matrix, a validated plan — lives in `routing`, and the request body
+is narrowed to a `ReaderBrief` before the agent ever sees it.
+"""
+
+from __future__ import annotations
+
+from typing import Any, Literal
+
+from pydantic import BaseModel, Field, field_validator
+
+from core import constants
+from routing.models import LatLon, Photo
+
+TransportLiteral = Literal[
+    "pedestrian",
+    "bicycle",
+    "auto",
+    "car",
+    "truck",
+    "bus",
+    "motor_scooter",
+    "motorcycle",
+]
+# The service lookup also accepts "any" — a service is not a journey.
+TransportOrAnyLiteral = Literal[
+    "pedestrian",
+    "bicycle",
+    "auto",
+    "car",
+    "truck",
+    "bus",
+    "motor_scooter",
+    "motorcycle",
+    "any",
+]
+
+OverallStatus = Literal["ready", "infeasible", "degraded", "pending"]
+
+
+class ContextPoint(BaseModel):
+    """A stop the already-built route has, sent back on a refinement turn."""
+
+    id: int | None = None
+    name: str = Field(max_length=200)
+    lat: float
+    lon: float
+    pinned: bool = False
+    source: Literal["agent", "user", "mine"] = "agent"
+
+
+class RouteContext(BaseModel):
+    """The route as it stands plus what the user asks to change about it.
+
+    `instruction` is the delta only; `base_points` are forced to survive it.
+    """
+
+    instruction: str | None = Field(default=None, max_length=500)
+    base_points: list[ContextPoint] = Field(default_factory=list)
+    excluded_ids: list[int] = Field(default_factory=list)
+    revision: int = Field(default=0, ge=0)
+
+
+class RouteChange(BaseModel):
+    id: int | None = None
+    name: str
+    reason: str | None = None
+
+
+class RouteChanges(BaseModel):
+    """What a refinement did to the previous route — shown to the user honestly."""
+
+    added: list[RouteChange] = Field(default_factory=list)
+    removed: list[RouteChange] = Field(default_factory=list)
+    kept: int = 0
+
+
+class GenerateReq(BaseModel):
+    """POST /routes/generate body."""
+
+    query: str = Field(min_length=3, max_length=500)
+    progress_id: str | None = Field(default=None, max_length=64)
+    session_id: str | None = Field(default=None, max_length=128)
+    time_budget_minutes: int | None = Field(default=None, ge=0, le=constants.MAX_BUDGET_MIN)
+    origin: LatLon | None = None
+    profile: TransportLiteral | None = None
+    region_bbox: list[float] | None = Field(
+        default=None,
+        description="[south, west, north, east]. Used as a PostGIS envelope filter.",
+        min_length=4,
+        max_length=4,
+    )
+    context: RouteContext | None = None
+
+    locale: Literal["ru", "en"] = "ru"
+    party_adults: int | None = Field(default=None, ge=0, le=50)
+    party_children: int | None = Field(default=None, ge=0, le=20)
+    party_children_ages: list[int] = Field(default_factory=list)
+    mobility: list[str] = Field(default_factory=list)
+    hard_services: list[str] = Field(default_factory=list)
+    interests: list[str] = Field(default_factory=list)
+    avoid: list[str] = Field(default_factory=list)
+    result_mode: Literal["route", "catalogue"] = "route"
+    round_trip: bool = False
+
+    @field_validator("query")
+    @classmethod
+    def _strip_query(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("query must not be empty")
+        return v
+
+
+class Place(BaseModel):
+    id: int
+    name: str
+    category: str | None
+    lat: float
+    lon: float
+    blurb: str | None = None
+    fun_fact: str | None = None
+    fun_facts: list[str] = []
+    links: list[dict[str, Any]] = []
+    photo: Photo | None = None
+    visit_minutes: int | None = None
+    opening_hours: str | None = None
+    ticket_price: str | None = None
+    town: str | None = None
+    district: str | None = None
+
+
+class ParsedQuery(BaseModel):
+    keywords: list[str] = []
+    categories: list[str] = []
+    time_budget_minutes: int | None = None
+    source: Literal["agent", "explicit"] = "agent"
+
+
+class BudgetInfo(BaseModel):
+    budget_minutes: int | None = None
+    walk_minutes: int
+    visit_minutes: int
+    total_minutes: int
+    fits: bool
+    stops_dropped: int = 0
+
+
+class RouteSummary(BaseModel):
+    length_km: float | None = None
+    time_seconds: float | None = None
+
+
+class RequirementSignal(BaseModel):
+    """One requirement as the client renders it — codes only, never prose.
+
+    `origin` is the honest provenance; nothing here is a sentence in any language.
+    """
+
+    kind: Literal["must_visit", "service", "interest", "avoid"]
+    strength: Literal["hard", "soft"] = "soft"
+    code: str | None = None
+    name: str | None = None
+    origin: Literal["ui", "agent"] = "agent"
+    status: Literal["satisfied", "unmet", "uncertain", "pending"] = "pending"
+    reason: str | None = None
+    place_ids: list[int] = Field(default_factory=list)
+
+
+class Interpretation(BaseModel):
+    """What the system understood — one place, before the plan is judged.
+
+    Every field is a code or a number; the wording is the client's.
+    """
+
+    source: Literal["llm", "mixed", "explicit"] = "llm"
+    locale: Literal["ru", "en"] = "ru"
+    status: OverallStatus = "pending"
+
+    adults: int | None = None
+    children: int | None = None
+    children_ages: list[int] = Field(default_factory=list)
+    mobility: list[str] = Field(default_factory=list)
+    budget_minutes: int | None = None
+    areas: list[str] = Field(default_factory=list)
+    transport: str | None = None
+    result_mode: Literal["route", "catalogue"] = "route"
+    round_trip: bool = False
+
+    requirements: list[RequirementSignal] = Field(default_factory=list)
+    unmet: list[RequirementSignal] = Field(default_factory=list)
+    unknowns: list[str] = Field(default_factory=list)
+
+
+class PlannedAlternative(BaseModel):
+    """A way to actually make the plan, offered when the chosen one does not fit.
+
+    An offer with a reason code, not a silent switch of the request.
+    """
+
+    costing: str
+    reason: str
+    note: str
+
+
+class RouteResponse(BaseModel):
+    parsed: ParsedQuery
+    points: list[Place]
+    shape: dict[str, Any]
+    summary: RouteSummary
+    result_mode: Literal["route", "catalogue"] = "route"
+    budget: BudgetInfo | None = None
+    explanation: str | None = None
+    status: str | None = None
+    requirements: list[dict[str, Any]] | None = None
+    interpretation: Interpretation | None = None
+    costing: str | None = None
+    changes: RouteChanges | None = None
+    alternatives: list[PlannedAlternative] | None = None
+    debug: dict[str, Any] | None = None
+
+
+class RerouteReq(BaseModel):
+    point_ids: list[int] = Field(min_length=2, max_length=10)
+    profile: TransportLiteral | None = None
+
+
+class ExplainReq(BaseModel):
+    point_ids: list[int] = Field(min_length=2, max_length=10)
+
+
+class ServicesAlongReq(BaseModel):
+    """POST /routes/services body: the line the tourist is walking.
+
+    `shape` is the GeoJSON LineString the client already has.
+    """
+
+    shape: dict[str, Any] = Field(description="GeoJSON LineString, WGS84")
+    profile: TransportOrAnyLiteral | None = None
+    categories: list[str] | None = Field(default=None, max_length=8)
+    max_off_line_m: float | None = Field(default=None, ge=10, le=1500)
+    limit: int | None = Field(default=None, ge=1, le=20)
+    session_id: str | None = Field(default=None, max_length=128)
+
+
+class HealthResponse(BaseModel):
+    status: Literal["ok", "starting", "degraded"]
+    embedder: bool
+    llm: bool
+    db: bool
+    valhalla: bool

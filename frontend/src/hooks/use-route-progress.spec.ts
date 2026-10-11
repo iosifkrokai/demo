@@ -3,18 +3,7 @@ import { cleanup, renderHook, waitFor } from '@testing-library/react';
 
 import { POLL_INTERVAL_MS, useRouteProgress } from './use-route-progress';
 
-/**
- * The panel asks the pipeline where it got to, and shows what comes back.
- *
- * What this file pins:
- *
- * 1. **A stage comes from the server or not at all.** An unknown id (404) or a
- *    failed tick yields `null`, and the panel keeps its own truthful sentence;
- *    the client never invents a stage to fill the silence.
- * 2. **The codes are passed through, not guessed.** An unexpected code is not
- *    rendered as some neighbouring stage.
- * 3. **Polling stops.** A finished request must not leave a timer running.
- */
+/** The panel asks the pipeline where it got to, and shows what comes back. */
 
 const answer = (stage: string, done = false) => ({
   ok: true,
@@ -49,8 +38,6 @@ describe('useRouteProgress', () => {
   });
 
   it('ведёт стадии по мере продвижения конвейера', async () => {
-    // Real timers here: the point is that the panel follows the pipeline over
-    // time, and `waitFor` is the honest way to observe that.
     const stages = ['interpreting_request', 'measuring_legs', 'done'] as const;
     let call = 0;
     vi.stubGlobal(
