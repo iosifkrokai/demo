@@ -1,6 +1,7 @@
 /** Shared helpers so the guide, next-stop card and stop list word things consistently. */
 
 import i18n from '@/i18n';
+import { isEnglish } from '@/i18n/format';
 import {
   decimalRu,
   formatDistanceRu,
@@ -9,9 +10,6 @@ import {
 } from '@/utils/plural';
 
 export { formatDistanceRu };
-
-/** True while the interface is in English — the number shape differs too. */
-const isEnglish = () => i18n.language?.toLowerCase().startsWith('en') ?? false;
 
 /** The decimal separator: a comma in Russian, a dot in English. */
 const decimal = (value: number, digits = 1) =>

@@ -2,13 +2,6 @@ import { z } from 'zod';
 import { fallback } from '@tanstack/zod-adapter';
 import { profileEnum } from '../stores/common-store';
 import { mapStyleSchema } from '../components/map/utils';
-import { languageOptions } from '../components/settings-panel/settings-options';
-
-const languageValues = languageOptions.map((opt) => opt.value) as [
-  string,
-  ...string[],
-];
-const languageEnum = z.enum(languageValues);
 
 const willingness = z
   .number()
@@ -30,7 +23,6 @@ export const searchParamsSchema = z.object({
   use_highways: willingness.optional(),
   use_tolls: willingness.optional(),
   alternates: z.number().int().min(0).max(5).optional(),
-  lang: languageEnum.optional(),
 });
 
 export const VALID_TABS = ['directions'] as const;

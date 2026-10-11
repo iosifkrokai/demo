@@ -109,7 +109,6 @@ const activeTabRoute = createRoute({
         'use_highways',
         'use_tolls',
         'alternates',
-        'lang',
       ]),
     ],
   },
