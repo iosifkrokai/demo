@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 from collections.abc import Iterable
+from typing import Any
 
 from core import constants
 from core.config import settings
@@ -41,7 +42,7 @@ def _decode_polyline(encoded: str) -> list[list[float]]:
     return coords
 
 
-def _trip_to_shape(body: dict, language: str | None = None) -> RouteResult:
+def _trip_to_shape(body: dict[str, Any], language: str | None = None) -> RouteResult:
     """Convert Valhalla trip response to typed RouteResult."""
     if "trip" not in body:
         return RouteResult(
@@ -53,7 +54,7 @@ def _trip_to_shape(body: dict, language: str | None = None) -> RouteResult:
         )
     trip = body["trip"]
     coords: list[list[float]] = []
-    maneuvers: list[dict] = []
+    maneuvers: list[dict[str, Any]] = []
     for leg in trip.get("legs", []):
         coords.extend(_decode_polyline(leg.get("shape", "")))
         maneuvers.extend(leg.get("maneuvers", []))
@@ -80,12 +81,12 @@ def _trip_to_shape(body: dict, language: str | None = None) -> RouteResult:
 
 
 def _route_request(
-    locations: list[dict],
+    locations: list[dict[str, Any]],
     costing: str,
     language: str,
     timeout: float | None,
     radius: int,
-) -> dict:
+) -> dict[str, Any]:
     locs = [{**loc, "radius": radius} for loc in locations]
     payload = {
         "costing": costing,
@@ -104,12 +105,12 @@ def _route_request(
 
 
 def optimized_route(
-    locations: list[dict],
+    locations: list[dict[str, Any]],
     costing: str = "pedestrian",
     language: str = "ru",
     timeout: float | None = None,
     retries: int | None = None,
-) -> tuple[list[int], dict, dict | None]:
+) -> tuple[list[int], dict[str, Any], dict[str, Any] | None]:
     """Valhalla's own stop ordering: GET /optimized_route.
 
     Returns (order, shape, summary); order[i] indexes into `locations`.
@@ -142,7 +143,7 @@ def optimized_route(
 
 
 def route_through(
-    locations: Iterable[dict],
+    locations: Iterable[dict[str, Any]],
     costing: str = "pedestrian",
     language: str = "ru",
     timeout: float | None = None,

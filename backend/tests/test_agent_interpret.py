@@ -10,6 +10,7 @@ import json
 import os
 import sys
 import time
+from typing import Any
 
 import pytest
 from pydantic_ai import ModelResponse, ToolCallPart
@@ -52,7 +53,7 @@ FAKE_KEY = "test-key-not-real"
 class _FakePlaces:
     """A place repository that answers from memory — no connection involved."""
 
-    def __init__(self, rows: list[dict] | None = None) -> None:
+    def __init__(self, rows: list[dict[str, Any]] | None = None) -> None:
         self.rows = rows or []
 
     def keyword_search(self, query: str, limit: int = 20) -> list[Place]:
@@ -75,7 +76,7 @@ class _FakePlaces:
 class _FakeAreas:
     """An area repository that answers from memory."""
 
-    def __init__(self, rows: list[dict] | None = None) -> None:
+    def __init__(self, rows: list[dict[str, Any]] | None = None) -> None:
         self.rows = rows or []
 
     def search(self, term: str, limit: int = 8) -> list[Area]:
@@ -85,7 +86,9 @@ class _FakeAreas:
         return [area_from_row(row) for row in self.rows]
 
 
-def _repos(rows: list[dict] | None = None, area_rows: list[dict] | None = None) -> Repositories:
+def _repos(
+    rows: list[dict[str, Any]] | None = None, area_rows: list[dict[str, Any]] | None = None
+) -> Repositories:
     """The repositories a run is handed, backed by memory instead of Postgres."""
     return Repositories(places=_FakePlaces(rows), areas=_FakeAreas(area_rows))
 
@@ -154,7 +157,7 @@ def place_tools(monkeypatch):
     monkeypatch.setattr(tools, "TOOL_REGISTRARS", (*others, register))
 
 
-def _rows(n: int = 40) -> list[dict]:
+def _rows(n: int = 40) -> list[dict[str, Any]]:
     return [
         {
             "id": i,
@@ -169,7 +172,9 @@ def _rows(n: int = 40) -> list[dict]:
     ]
 
 
-def _fake_model(payload: dict | None, tool_calls: list[tuple[str, dict]] | None = None):
+def _fake_model(
+    payload: dict[str, Any] | None, tool_calls: list[tuple[str, dict[str, Any]]] | None = None
+):
     """A FunctionModel that calls `tool_calls` first, then emits `payload`.
 
     `seen_tools` records the tool names PydanticAI advertised to the model.
@@ -255,7 +260,7 @@ def test_the_default_model_is_the_measured_one():
         del os.environ["AGENT_INTERPRET_MODEL"]
 
 
-def _payload() -> dict:
+def _payload() -> dict[str, Any]:
     """What a well-behaved model would answer for QUERY — plus two traps:
     a `status` field it has no business setting, and a quote it invented."""
     return {
@@ -434,7 +439,7 @@ def test_llm_only_reading_is_tagged_llm(fake_key, monkeypatch):
     assert tr.interest_codes() == ["замок"]
 
 
-def _model_spans(trace_id: str) -> list:
+def _model_spans(trace_id: str) -> list[Any]:
     tracked = trace._traces.get(trace_id)
     return [s for s in tracked.spans if s.kind == "generation"] if tracked else []
 

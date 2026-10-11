@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import sys
+from typing import Any
 
 import httpx
 
@@ -134,14 +135,14 @@ def test_fetch_overpass_504_on_one_endpoint_fails_over_to_the_next(monkeypatch):
         def raise_for_status(self) -> None:
             raise _http_status_error(failing, 504)
 
-        def json(self) -> dict:
+        def json(self) -> dict[str, Any]:
             raise AssertionError("a 504 response has no body to parse")
 
     class _OkResp:
         def raise_for_status(self) -> None:
             return None
 
-        def json(self) -> dict:
+        def json(self) -> dict[str, Any]:
             return {"elements": valid_elements}
 
     posted: list[str] = []

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import sys
+from typing import Any
 
 import pytest
 
@@ -19,7 +20,7 @@ CENTRE_LINE = {
 }
 
 
-def _row(**over: object) -> dict:
+def _row(**over: object) -> dict[str, Any]:
     base = {
         "id": 1,
         "source_url": "osm:node/1",

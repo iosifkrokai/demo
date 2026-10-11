@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time as _time
+from typing import Any
 
 import httpx
 
@@ -15,10 +16,10 @@ def request_with_retry(
     method: str,
     url: str,
     *,
-    params: dict,
+    params: dict[str, Any],
     timeout: float,
     retries: int | None = None,
-) -> dict:
+) -> Any:
     """GET with bounded retries on transient failures.
 
     Exhausted retries raise UpstreamUnavailableError so main.py can return 503.

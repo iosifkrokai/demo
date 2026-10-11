@@ -51,7 +51,7 @@ def parse_fun_facts(raw: str | None) -> list[str]:
     return [f.strip() for f in raw.split("|") if f.strip()][:3]
 
 
-def parse_links(raw: str | None) -> list[dict]:
+def parse_links(raw: str | None) -> list[dict[str, Any]]:
     """Accept both '[{"title":...}]' JSON and 'title | url' pipe items."""
     raw = (raw or "").strip()
     if not raw:
@@ -61,7 +61,7 @@ def parse_links(raw: str | None) -> list[dict]:
             return [x for x in json.loads(raw) if isinstance(x, dict)][:4]
         except json.JSONDecodeError:
             pass
-    links: list[dict] = []
+    links: list[dict[str, Any]] = []
     for chunk in raw.split("|"):
         item = chunk.strip()
         if not item:
@@ -75,7 +75,7 @@ def parse_links(raw: str | None) -> list[dict]:
     return links[:4]
 
 
-def photo_of(place: Place) -> dict | None:
+def photo_of(place: Place) -> dict[str, Any] | None:
     """The point's picture with its credit — or nothing at all.
 
     A URL without its author and licence is not shown: Wikimedia files are

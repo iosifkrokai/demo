@@ -56,7 +56,7 @@ def _build_agent(model: Any, brief: ReaderBrief) -> Any:
         instructions=compose_instructions(_ui_note(brief)),
     )
 
-    def _remember(ctx: Any, out: dict) -> dict:
+    def _remember(ctx: Any, out: dict[str, Any]) -> dict[str, Any]:
         """Record the ids a tool actually returned (the place_id guard)."""
         for row in out.get("results") or ():
             pid = row.get("id") if isinstance(row, dict) else None

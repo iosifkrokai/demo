@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 from enum import Enum
+from typing import Any
 
 from core import constants
 
@@ -19,9 +20,9 @@ class RouteStatus(Enum):
 @dataclass
 class RouteResult:
     status: RouteStatus
-    shape: dict
-    summary: dict | None
-    maneuvers: list[dict] | None = None
+    shape: dict[str, Any]
+    summary: dict[str, Any] | None
+    maneuvers: list[dict[str, Any]] | None = None
     language: str | None = None
 
 

@@ -51,14 +51,14 @@ SIGHT_TAXONOMY = frozenset(c.code for c in taxonomy.all_categories() if c.role =
 SERVICE_TAXONOMY = frozenset(c.code for c in taxonomy.all_categories() if c.role == "service")
 
 
-def read_pipe_csv(path: Path) -> list[dict]:
+def read_pipe_csv(path: Path) -> list[dict[str, Any]]:
     """Parse a pipe-delimited CSV whose header may be commented out."""
     lines = [
         ln
         for ln in path.read_text(encoding="utf-8").splitlines()
         if ln.strip() and not ln.startswith("#")
     ]
-    rows: list[dict] = []
+    rows: list[dict[str, Any]] = []
     for raw in csv.reader(lines, delimiter="|"):
         if len(raw) != len(COLUMNS):
             raise SystemExit(f"expected {len(COLUMNS)} columns, got {len(raw)}: {raw[:3]}...")
@@ -67,7 +67,7 @@ def read_pipe_csv(path: Path) -> list[dict]:
 
 
 def _validate_common(
-    row: dict,
+    row: dict[str, Any],
     *,
     taxonomy_codes: frozenset[str],
     prefixes: tuple[str, ...],
@@ -105,7 +105,7 @@ def _validate_common(
     return problems
 
 
-def _normalize_common(row: dict, *, visit_required: bool) -> dict:
+def _normalize_common(row: dict[str, Any], *, visit_required: bool) -> dict[str, Any]:
     visit = (row.get("visit_minutes") or "").strip()
     return {
         "name": row["name"].strip(),
@@ -125,40 +125,40 @@ def _normalize_common(row: dict, *, visit_required: bool) -> dict:
     }
 
 
-def validate_city_region(row: dict) -> list[str]:
+def validate_city_region(row: dict[str, Any]) -> list[str]:
     """city:/region: hand-authored rows — sights, visit_minutes required."""
     return _validate_common(
         row, taxonomy_codes=SIGHT_TAXONOMY, prefixes=("city:", "region:"), visit_required=True
     )
 
 
-def validate_osm_sight(row: dict) -> list[str]:
+def validate_osm_sight(row: dict[str, Any]) -> list[str]:
     """osm: rows — sights, visit_minutes required."""
     return _validate_common(
         row, taxonomy_codes=SIGHT_TAXONOMY, prefixes=("osm:",), visit_required=True
     )
 
 
-def validate_osm_service(row: dict) -> list[str]:
+def validate_osm_service(row: dict[str, Any]) -> list[str]:
     """osm_poi: rows — everyday services, visit_minutes optional (NULL)."""
     return _validate_common(
         row, taxonomy_codes=SERVICE_TAXONOMY, prefixes=("osm_poi:",), visit_required=False
     )
 
 
-def normalize_city_region(row: dict) -> dict:
+def normalize_city_region(row: dict[str, Any]) -> dict[str, Any]:
     return _normalize_common(row, visit_required=True)
 
 
-def normalize_osm_sight(row: dict) -> dict:
+def normalize_osm_sight(row: dict[str, Any]) -> dict[str, Any]:
     return _normalize_common(row, visit_required=True)
 
 
-def normalize_osm_service(row: dict) -> dict:
+def normalize_osm_service(row: dict[str, Any]) -> dict[str, Any]:
     return _normalize_common(row, visit_required=False)
 
 
-def _read_pipe(path: Path) -> list[dict]:
+def _read_pipe(path: Path) -> list[dict[str, Any]]:
     return read_pipe_csv(path)
 
 
@@ -171,9 +171,9 @@ class Dataset:
         *,
         filename: str,
         prefix: str,
-        reader: Callable[[Path], list[dict]],
-        validator: Callable[[dict], list[str]],
-        normalizer: Callable[[dict], dict],
+        reader: Callable[[Path], list[dict[str, Any]]],
+        validator: Callable[[dict[str, Any]], list[str]],
+        normalizer: Callable[[dict[str, Any]], dict[str, Any]],
         category_source: str,
         fatal_invalid: bool,
         license: str = "see file header",
@@ -258,7 +258,7 @@ EXPECTED_CURATED_HEADER = [
 ]
 
 
-def read_curated(path: Path) -> list[dict]:
+def read_curated(path: Path) -> list[dict[str, Any]]:
     """Parse the pipe-delimited curated file.
     The header is commented out in the repo, hence the explicit fieldnames.
     """
@@ -292,7 +292,7 @@ def read_curated(path: Path) -> list[dict]:
     ]
 
 
-def match_place(name: str, db_rows: list[dict]) -> dict | None:
+def match_place(name: str, db_rows: list[dict[str, Any]]) -> dict[str, Any] | None:
     """Find the DB row for a curated name.
     Match on equality first, then case-insensitive containment (not by id).
     """
@@ -310,7 +310,7 @@ def match_place(name: str, db_rows: list[dict]) -> dict | None:
     return None
 
 
-def load_dataset(ds: Dataset) -> list[dict]:
+def load_dataset(ds: Dataset) -> list[dict[str, Any]]:
     """Read one dataset's raw pipe rows (empty for a missing optional dataset)."""
     if not ds.path.exists():
         if ds.optional:
@@ -319,7 +319,7 @@ def load_dataset(ds: Dataset) -> list[dict]:
     return ds.reader(ds.path)
 
 
-def validate_record(ds: Dataset, raw: dict) -> list[str]:
+def validate_record(ds: Dataset, raw: dict[str, Any]) -> list[str]:
     """Return the problems for one raw row (empty = valid)."""
     return ds.validator(raw)
 
@@ -333,9 +333,9 @@ def collect_records(datasets: list[Dataset]) -> dict[str, Any]:
     """Validate every dataset.
     Returns records, rejects (quarantined), per-dataset meta and the fatal flag.
     """
-    records: list[dict] = []
-    rejects: list[dict] = []
-    datasets_meta: list[dict] = []
+    records: list[dict[str, Any]] = []
+    rejects: list[dict[str, Any]] = []
+    datasets_meta: list[dict[str, Any]] = []
     fatal = False
 
     for ds in datasets:
@@ -423,19 +423,19 @@ def haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
 
 
 def find_suspected_duplicates(
-    records: list[dict], radius_m: float = DEFAULT_DUP_RADIUS_M
-) -> list[dict]:
+    records: list[dict[str, Any]], radius_m: float = DEFAULT_DUP_RADIUS_M
+) -> list[dict[str, Any]]:
     """Record pairs with the same normalised name within ``radius_m``.
     Candidates for merging, not proof — reported for review, not dropped.
     """
-    buckets: dict[str, list[dict]] = {}
+    buckets: dict[str, list[dict[str, Any]]] = {}
     for r in records:
         key = norm_name(r.get("name"))
         if not key or r.get("lat") is None or r.get("lon") is None:
             continue
         buckets.setdefault(key, []).append(r)
 
-    pairs: list[dict] = []
+    pairs: list[dict[str, Any]] = []
     for key, rows in buckets.items():
         if len(rows) < 2:
             continue
@@ -455,17 +455,17 @@ def find_suspected_duplicates(
     return pairs
 
 
-def _share(part: int, total: int) -> dict:
+def _share(part: int, total: int) -> dict[str, Any]:
     return {"count": part, "total": total, "share": round(part / total, 4) if total else None}
 
 
-def _counts(values: dict, total: int) -> dict:
+def _counts(values: dict[str, Any], total: int) -> dict[str, Any]:
     out = {str(k): v for k, v in values.items()}
     out["_total"] = total
     return out
 
 
-def _count_by(rows: list[dict], key: str) -> dict[str, int]:
+def _count_by(rows: list[dict[str, Any]], key: str) -> dict[str, int]:
     out: dict[str, int] = {}
     for r in rows:
         out[str(r.get(key))] = out.get(str(r.get(key)), 0) + 1
@@ -476,15 +476,15 @@ def build_coverage_report(
     collected: dict[str, Any],
     *,
     mode: str,
-    curated: list[dict] | None = None,
-    curated_stats: dict | None = None,
+    curated: list[dict[str, Any]] | None = None,
+    curated_stats: dict[str, Any] | None = None,
     duplicate_radius_m: float = DEFAULT_DUP_RADIUS_M,
-    db_stats: dict | None = None,
+    db_stats: dict[str, Any] | None = None,
     generated_at: str | None = None,
-) -> dict:
+) -> dict[str, Any]:
     """Assemble the machine-readable coverage report from in-memory records."""
-    records: list[dict] = collected["records"]
-    rejects: list[dict] = collected["rejects"]
+    records: list[dict[str, Any]] = collected["records"]
+    rejects: list[dict[str, Any]] = collected["rejects"]
     total = len(records)
 
     by_category: dict[str, int] = {}

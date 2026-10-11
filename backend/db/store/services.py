@@ -56,7 +56,7 @@ def service_codes(categories: Iterable[str] | None = None) -> list[str]:
     return [code for code in categories if code in known]
 
 
-def route_line(shape: Any) -> dict:
+def route_line(shape: Any) -> dict[str, Any]:
     """Validate a GeoJSON LineString and return it unchanged.
 
     Raises `ValueError` with a machine-readable reason, never an empty answer.

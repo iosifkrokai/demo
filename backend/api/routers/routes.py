@@ -5,6 +5,8 @@ The routes are thin; the decisions live in ``planner.pipeline.Pipeline``.
 
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import APIRouter, HTTPException, Request
 
 from api import deps
@@ -49,7 +51,7 @@ def generate(req: GenerateReq, request: Request) -> RouteResponse:
 
 
 @router.get("/routes/trace/{trace_id}")
-def route_trace(trace_id: str) -> dict:
+def route_trace(trace_id: str) -> dict[str, Any]:
     """The structured spans of one run, for a client that wants them raw.
 
     An unknown id is a 404 with a reason code, not an empty trace.
@@ -61,7 +63,7 @@ def route_trace(trace_id: str) -> dict:
 
 
 @router.get("/routes/progress/{progress_id}")
-def route_progress(progress_id: str) -> dict:
+def route_progress(progress_id: str) -> dict[str, Any]:
     """Where the pipeline got to, in stage codes the client localises.
 
     An unknown id is a 404 with a reason code, not an empty stage.
@@ -81,7 +83,7 @@ def reroute(req: RerouteReq, request: Request) -> RouteResponse:
 
 
 @router.post("/routes/explain")
-def explain(req: ExplainReq, request: Request) -> dict:
+def explain(req: ExplainReq, request: Request) -> dict[str, Any]:
     deps.require_llm()
     return {
         "explanation": deps.call_planner(

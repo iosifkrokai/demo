@@ -6,6 +6,7 @@ Anchor priority: tourist GPS > must-visit/named place > densest cluster.
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import Any
 
 from core import constants
 from planner.models import Candidate, LatLon
@@ -22,10 +23,10 @@ def should_skip_geo_focus(*, region_scope: bool, origin: LatLon | None) -> bool:
 
 
 def geo_focus(
-    candidates: list,
+    candidates: list[Any],
     origin: LatLon | None = None,
     anchor_id: int | None = None,
-) -> list:
+) -> list[Any]:
     """Drop candidates too far from the anchor.
 
     Anchor priority: tourist GPS > must-visit/named place > densest cluster.
@@ -35,10 +36,10 @@ def geo_focus(
 
 
 def geo_focus_report(
-    candidates: list,
+    candidates: list[Any],
     origin: LatLon | None = None,
     anchor_id: int | None = None,
-) -> tuple[list, dict]:
+) -> tuple[list[Any], dict[str, Any]]:
     """``geo_focus`` plus the reasoning, for the trace.
 
     The radius is reported as finally used (the discovery branch widens it).
@@ -91,7 +92,7 @@ def _geo_report(
     candidates: list[Candidate],
     keep: list[Candidate],
     dist: Callable[[Candidate], float],
-) -> dict:
+) -> dict[str, Any]:
     """Which anchor was chosen, how wide the radius ended up, who fell outside.
 
     The radius is reported as finally used, not as the constant it started from.

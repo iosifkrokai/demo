@@ -8,6 +8,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
+from typing import Any
 
 import pytest
 
@@ -16,7 +17,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 BASE_URL = os.environ.get("SMOKE_BASE_URL", "http://localhost:8080")
 BUDGET_S = float(os.environ.get("SMOKE_BUDGET_S", "75"))
 
-QUERIES: list[tuple[str, dict]] = [
+QUERIES: list[tuple[str, dict[str, Any]]] = [
     (
         "Погулять по старому Гродно с двумя детьми, туалет по пути, на два часа",
         {"time_budget_minutes": 120, "party_children": 2},
@@ -26,7 +27,9 @@ QUERIES: list[tuple[str, dict]] = [
 ]
 
 
-def _post(body: dict, timeout: float) -> tuple[int | None, dict | None, str | None, float]:
+def _post(
+    body: dict[str, Any], timeout: float
+) -> tuple[int | None, dict | None, str | None, float]:
     req = urllib.request.Request(
         f"{BASE_URL}/routes/generate",
         data=json.dumps(body).encode(),
@@ -67,7 +70,7 @@ pytestmark = pytest.mark.skipif(
 
 
 @pytest.mark.parametrize("query,extra", QUERIES, ids=["old_town_toilet", "region_castles", "eat"])
-def test_smoke_query(query: str, extra: dict):
+def test_smoke_query(query: str, extra: dict[str, Any]):
     status, body, err, elapsed = _post({"query": query, **extra}, timeout=BUDGET_S)
 
     assert err is None, f"{query!r} failed after {elapsed:.1f}s: {err}"

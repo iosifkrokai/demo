@@ -197,7 +197,9 @@ def read_evals(path: Path | None = None) -> dict[str, Any]:
     }
 
 
-def growth_points(routes: dict, golden: dict, evals: dict) -> list[dict[str, Any]]:
+def growth_points(
+    routes: dict[str, Any], golden: dict[str, Any], evals: dict[str, Any]
+) -> list[dict[str, Any]]:
     """Everything known-bad, sorted by the number of cases affected.
 
     Where the reach is unknown a "?" stands in, and the point is still visible.
@@ -262,7 +264,7 @@ def growth_points(routes: dict, golden: dict, evals: dict) -> list[dict[str, Any
     return sorted(points, key=lambda p: -p["affects"])
 
 
-def known_gaps(golden: dict, evals: dict) -> list[dict[str, Any]]:
+def known_gaps(golden: dict[str, Any], evals: dict[str, Any]) -> list[dict[str, Any]]:
     """Documented gaps: visible, but not counted as a failure."""
     gaps: list[dict[str, Any]] = []
     for stage in evals.get("stages") or []:
@@ -289,7 +291,7 @@ NOT_MEASURED = [
 ]
 
 
-def render(routes: dict, golden: dict, evals: dict) -> str:
+def render(routes: dict[str, Any], golden: dict[str, Any], evals: dict[str, Any]) -> str:
     out: list[str] = []
     out.append("")
     out.append("КАЧЕСТВО ГИДА — ОДНА СТРАНИЦА")

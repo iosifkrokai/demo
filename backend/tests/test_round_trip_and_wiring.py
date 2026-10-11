@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import sys
+from typing import Any
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -76,7 +77,7 @@ def test_validate_counts_the_return_leg_for_a_round_trip():
 
 def test_render_closes_the_tour_when_asked(monkeypatch):
     """The return leg is asked of Valhalla, so the drawn line includes it."""
-    captured: list[list[dict]] = []
+    captured: list[list[dict[str, Any]]] = []
 
     def fake_route_through(locations, costing="pedestrian", language="ru", timeout=None):
         captured.append([dict(loc) for loc in locations])
@@ -151,7 +152,7 @@ def test_the_optional_tour_reorder_is_bounded_and_degrades(monkeypatch):
     """The Valhalla re-order must get a short single-shot budget.
     It is an optimisation, not a requirement; a failure falls back to the planned order.
     """
-    captured: dict = {}
+    captured: dict[str, Any] = {}
 
     def fake(coords, costing="pedestrian", timeout=None, retries=None):
         captured["timeout"] = timeout
@@ -218,16 +219,16 @@ class _FakeCursor:
     already the mappings ``place_from_row`` reads.
     """
 
-    def __init__(self, rows: list[dict]) -> None:
+    def __init__(self, rows: list[dict[str, Any]]) -> None:
         self._rows = rows
 
     def execute(self, *_args, **_kwargs) -> None:
         return None
 
-    def fetchall(self) -> list[dict]:
+    def fetchall(self) -> list[dict[str, Any]]:
         return [dict(row) for row in self._rows]
 
-    def fetchone(self) -> dict | None:
+    def fetchone(self) -> dict[str, Any] | None:
         rows = self.fetchall()
         return rows[0] if rows else None
 
@@ -241,7 +242,7 @@ class _FakeCursor:
 class _FakeConnection:
     """A psycopg-shaped connection over a fixed set of place rows."""
 
-    def __init__(self, rows: list[dict]) -> None:
+    def __init__(self, rows: list[dict[str, Any]]) -> None:
         self.closed = False
         self._rows = rows
 
@@ -252,7 +253,7 @@ class _FakeConnection:
         self.closed = True
 
 
-def _row(pid: int, name: str, category: str, lat: float, lon: float) -> dict:
+def _row(pid: int, name: str, category: str, lat: float, lon: float) -> dict[str, Any]:
     return {
         "id": pid,
         "name": name,

@@ -311,7 +311,7 @@ class PostgresPlaceRepository(PostgresRepository):
 
     def services_along(
         self,
-        shape: dict,
+        shape: dict[str, Any],
         *,
         categories: Sequence[str] | None = None,
         profile: str = DEFAULT_PROFILE,

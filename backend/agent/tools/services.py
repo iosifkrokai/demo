@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from typing import Any
 
 from pydantic_ai import RunContext
 
 from agent.schema import InterpretDeps
-from agent.tools import ERR_NOT_IMPLEMENTED, clamp, envelope
+from agent.tools import ERR_NOT_IMPLEMENTED, Remember, clamp, envelope
 from reference.taxonomy import db_values
 
 MAX_SERVICES_PER_CALL = 5
@@ -18,9 +17,9 @@ MAX_DETOUR_MINUTES = 30
 
 def services_near_route(
     category_codes: list[str] | None = None,
-    shape: list | None = None,
+    shape: list[Any] | None = None,
     max_detour_minutes: float | None = None,
-) -> dict:
+) -> dict[str, Any]:
     """NOT IMPLEMENTED — a deliberate gap: it answers ``error="not_implemented"``
     with an empty result set, so the agent treats the service as unproven.
     """
@@ -57,15 +56,15 @@ def services_near_route(
 _services_near_route = services_near_route
 
 
-def register_services_near_route(agent: Any, _remember: Callable[[Any, dict], dict]) -> None:
+def register_services_near_route(agent: Any, _remember: Remember) -> None:
     """Advertise ``services_near_route`` to the agent."""
 
     @agent.tool
     def services_near_route(
         _ctx: RunContext[InterpretDeps],
         category_codes: list[str] | None = None,
-        shape: list | None = None,
+        shape: list[Any] | None = None,
         max_detour_minutes: float | None = None,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Services within a detour of a route shape (NOT implemented — honest gap)."""
         return _services_near_route(category_codes, shape, max_detour_minutes)

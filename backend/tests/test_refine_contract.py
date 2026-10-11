@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import sys
+from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
@@ -71,7 +72,7 @@ def _row(
     lat: float = 53.678,
     lon: float = 23.828,
     visit: int | None = None,
-) -> dict:
+) -> dict[str, Any]:
     return {
         "id": pid,
         "name": name,
@@ -173,7 +174,7 @@ def _refine(
     query="Гродно, замки, 2 часа",
 ):
     repos = _patch_offline(monkeypatch, rows=[r for r in BASE_ROWS if r["id"] in base_ids])
-    ctx: dict = {
+    ctx: dict[str, Any] = {
         "revision": 3,
         "base_points": [
             {"id": i, "name": f"stop {i}", "lat": 53.678, "lon": 23.828} for i in base_ids
@@ -183,7 +184,7 @@ def _refine(
         ctx["instruction"] = instruction
     if excluded:
         ctx["excluded_ids"] = list(excluded)
-    body: dict = {"query": query, "context": ctx}
+    body: dict[str, Any] = {"query": query, "context": ctx}
     if origin is not None:
         body["origin"] = origin
     req = GenerateReq.model_validate(body)

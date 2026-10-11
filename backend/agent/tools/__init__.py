@@ -19,16 +19,20 @@ ERR_DB_UNAVAILABLE = "db_unavailable"
 ERR_AREA_REGISTRY = "area_registry_unavailable"
 ERR_NOT_IMPLEMENTED = "not_implemented"
 
+ToolAnswer = dict[str, Any]
+# Every tool answers through `remember`, which records the ids it handed out.
+Remember = Callable[[Any, ToolAnswer], ToolAnswer]
+
 
 def envelope(
     tool: str,
-    results: list[dict],
-    provenance: dict,
+    results: list[dict[str, Any]],
+    provenance: dict[str, Any],
     *,
     capped: bool = False,
     error: str | None = None,
     message: str | None = None,
-) -> dict:
+) -> dict[str, Any]:
     """One shape for every tool answer: data + provenance + honest statuses."""
     return {
         "results": results,
@@ -56,7 +60,7 @@ def clamp(
     return value, False
 
 
-def project(row: Any, fields: tuple[str, ...]) -> dict:
+def project(row: Any, fields: tuple[str, ...]) -> dict[str, Any]:
     """Only these fields — from a mapping or from a model, whichever we hold."""
     if isinstance(row, Mapping):
         return {f: row.get(f) for f in fields if f in row}
@@ -95,7 +99,7 @@ def norm_term(text: str) -> str:
 from agent.tools import areas, places, services  # noqa: E402
 
 # The registry: what the agent advertises, one line per tool.
-TOOL_REGISTRARS: tuple[Callable[[Any, Callable[[Any, dict], dict]], None], ...] = (
+TOOL_REGISTRARS: tuple[Callable[[Any, Remember], None], ...] = (
     areas.register_find_areas,
     places.register_search_places,
     places.register_get_place_facts,
@@ -103,7 +107,7 @@ TOOL_REGISTRARS: tuple[Callable[[Any, Callable[[Any, dict], dict]], None], ...] 
 )
 
 
-def register_all(agent: Any, remember: Callable[[Any, dict], dict]) -> None:
+def register_all(agent: Any, remember: Remember) -> None:
     """Advertise every tool in the registry on ``agent``."""
     for register in TOOL_REGISTRARS:
         register(agent, remember)

@@ -7,7 +7,6 @@ had somewhere to hide in this package.
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from typing import Any
 
 from pydantic_ai import RunContext
@@ -17,6 +16,7 @@ from agent.tools import (
     ERR_BAD_ARGUMENT,
     ERR_EMPTY_QUERY,
     ERR_NOT_FOUND,
+    Remember,
     clamp,
     envelope,
     fetch,
@@ -55,7 +55,7 @@ def search_places(
     radius_m: float | None = None,
     *,
     repos: Any = None,
-) -> dict:
+) -> dict[str, Any]:
     """The ids are the only handles the agent may put into a requirement; unknown
     category codes are dropped, never sent to SQL.
     """
@@ -90,7 +90,7 @@ def search_places(
             message="query must be a non-empty string",
         )
 
-    def run(store: Any) -> list[dict]:
+    def run(store: Any) -> list[dict[str, Any]]:
         cap = MAX_PLACES_PER_SEARCH if db_cats else want
         if near is not None:
             found = store.places.nearby(near[0], near[1], radius_km=near[2] / 1000.0, limit=cap)
@@ -112,7 +112,7 @@ def search_places(
     )
 
 
-def get_place_facts(place_id: int, *, repos: Any = None) -> dict:
+def get_place_facts(place_id: int, *, repos: Any = None) -> dict[str, Any]:
     """The provenance says so (`fact_status="raw_unverified"`); a missing place
     returns ``error="not_found"``.
     """
@@ -130,7 +130,7 @@ def get_place_facts(place_id: int, *, repos: Any = None) -> dict:
             message="place_id must be a positive integer",
         )
 
-    def run(store: Any) -> list[dict]:
+    def run(store: Any) -> list[dict[str, Any]]:
         place = store.places.get_by_id(place_id)
         if place is None:
             return []
@@ -155,7 +155,7 @@ def get_place_facts(place_id: int, *, repos: Any = None) -> dict:
     return envelope("get_place_facts", rows[:MAX_FACTS_PER_CALL], provenance)
 
 
-def register_search_places(agent: Any, remember: Callable[[Any, dict], dict]) -> None:
+def register_search_places(agent: Any, remember: Remember) -> None:
     """Advertise ``search_places`` to the agent.
 
     The Python name differs from the advertised one on purpose: a nested
@@ -171,7 +171,7 @@ def register_search_places(agent: Any, remember: Callable[[Any, dict], dict]) ->
         near_lat: float | None = None,
         near_lon: float | None = None,
         radius_m: float | None = None,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Search real places by text and/or canonical category codes (capped)."""
         return remember(
             ctx,
@@ -187,13 +187,13 @@ def register_search_places(agent: Any, remember: Callable[[Any, dict], dict]) ->
         )
 
 
-def register_get_place_facts(agent: Any, remember: Callable[[Any, dict], dict]) -> None:
+def register_get_place_facts(agent: Any, remember: Remember) -> None:
     """Advertise ``get_place_facts`` to the agent.
 
     Named apart from the module function for the same reason as above.
     """
 
     @agent.tool(name="get_place_facts")
-    def _get_place_facts(ctx: RunContext[InterpretDeps], place_id: int) -> dict:
+    def _get_place_facts(ctx: RunContext[InterpretDeps], place_id: int) -> dict[str, Any]:
         """Raw stored facts (hours, price, town, source URL) about one place."""
         return remember(ctx, get_place_facts(place_id, repos=ctx.deps.repos))

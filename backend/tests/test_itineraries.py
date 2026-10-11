@@ -7,6 +7,7 @@ import os
 import sys
 import urllib.error
 import urllib.request
+from typing import Any
 
 import pytest
 
@@ -54,7 +55,7 @@ def test_a_broken_file_raises_instead_of_looking_empty(tmp_path):
 
 
 class _FakeCursor:
-    def __init__(self, rows: list[dict]) -> None:
+    def __init__(self, rows: list[dict[str, Any]]) -> None:
         self._rows = rows
         self.executed: list[tuple[str, object]] = []
 
@@ -67,7 +68,7 @@ class _FakeCursor:
     def execute(self, sql: str, params: object = None) -> None:
         self.executed.append((sql, params))
 
-    def fetchall(self) -> list[dict]:
+    def fetchall(self) -> list[dict[str, Any]]:
         return self._rows
 
 
@@ -76,7 +77,7 @@ class _FakeConn:
 
     closed = False
 
-    def __init__(self, rows: list[dict]) -> None:
+    def __init__(self, rows: list[dict[str, Any]]) -> None:
         self.rows = rows
         self.queries = 0
 
@@ -93,7 +94,7 @@ def _repo(conn: _FakeConn) -> PostgresPlaceRepository:
     return PostgresPlaceRepository(connect=lambda: conn)
 
 
-def _row(source_url: str, **over: object) -> dict:
+def _row(source_url: str, **over: object) -> dict[str, Any]:
     base = {
         "id": 1,
         "source_url": source_url,

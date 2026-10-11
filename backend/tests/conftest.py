@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+from typing import Any
 
 import pytest
 from pydantic_ai import models
@@ -42,7 +43,7 @@ class FakeLLM:
     """The reading every request gets until a test says otherwise."""
 
     def __init__(self) -> None:
-        self.payload: dict = {}
+        self.payload: dict[str, Any] = {}
 
     def set(self, **fields) -> None:
         """The fields the model will report, as the AgentReading they map to."""

@@ -10,6 +10,7 @@ import logging
 import math
 import time as _time
 from collections.abc import Iterator
+from typing import Any
 
 from core import constants
 from core.config import settings
@@ -37,7 +38,7 @@ def _is_distance_limit_error(exc: Exception) -> bool:
     return any(marker in text for marker in DISTANCE_LIMIT_MARKERS)
 
 
-def _pair_metres(a: dict, b: dict) -> float:
+def _pair_metres(a: dict[str, Any], b: dict[str, Any]) -> float:
     """Equirectangular straight-line distance in metres (fine at these scales)."""
     lat_mid = math.radians((float(a["lat"]) + float(b["lat"])) / 2)
     dx = math.radians(float(a["lon"]) - float(b["lon"])) * 6_371_000 * math.cos(lat_mid)
@@ -45,7 +46,7 @@ def _pair_metres(a: dict, b: dict) -> float:
     return math.hypot(dx, dy)
 
 
-def _same_point(a: dict, b: dict) -> bool:
+def _same_point(a: dict[str, Any], b: dict[str, Any]) -> bool:
     """True when two locations are the same point, even across chunk copies.
 
     Compares global indices when present, otherwise object identity.
@@ -63,7 +64,11 @@ def _matrix_chunk_indices(total: int, chunk_max: int) -> Iterator[tuple[int, int
 
 
 def _matrix_via_route(
-    source: dict, target: dict, costing: str, timeout: float, radius: int | None = None
+    source: dict[str, Any],
+    target: dict[str, Any],
+    costing: str,
+    timeout: float,
+    radius: int | None = None,
 ) -> float:
     """Fallback: single pair via GET /route."""
     snap = radius or LOCATION_SNAP_RADIUS_M
@@ -87,8 +92,8 @@ def _matrix_via_route(
 
 
 def _matrix_chunk(
-    sources: list[dict],
-    targets: list[dict],
+    sources: list[dict[str, Any]],
+    targets: list[dict[str, Any]],
     costing: str,
     timeout: float,
     radius: int | None = None,
@@ -121,8 +126,8 @@ def _matrix_chunk(
 
 
 def _matrix_chunk_resilient(
-    sources: list[dict],
-    targets: list[dict],
+    sources: list[dict[str, Any]],
+    targets: list[dict[str, Any]],
     costing: str,
     timeout: float,
     deadline: float | None = None,
@@ -148,8 +153,8 @@ def _matrix_chunk_resilient(
 
 
 def _distance_aware_fill(
-    sources: list[dict],
-    targets: list[dict],
+    sources: list[dict[str, Any]],
+    targets: list[dict[str, Any]],
     costing: str,
     timeout: float,
 ) -> list[list[float]]:
@@ -192,8 +197,8 @@ def _distance_aware_fill(
 
 
 def _isolate_row(
-    source: dict,
-    targets: list[dict],
+    source: dict[str, Any],
+    targets: list[dict[str, Any]],
     cols: list[int],
     costing: str,
     timeout: float,
@@ -223,7 +228,9 @@ def _chunks_safe(n_sources: int, n_targets: int) -> bool:
     return n_sources <= MATRIX_MAX_SOURCES and n_targets <= MATRIX_MAX_TARGETS
 
 
-def _matrix_via_route_resilient(source: dict, target: dict, costing: str, timeout: float) -> float:
+def _matrix_via_route_resilient(
+    source: dict[str, Any], target: dict[str, Any], costing: str, timeout: float
+) -> float:
     """One pair via /route, widening the snap radius only for a snap failure.
 
     Returns a time, UNREACHABLE_S, or UNKNOWN_S ("we could not ask").
@@ -258,8 +265,8 @@ def _matrix_via_route_resilient(source: dict, target: dict, costing: str, timeou
 
 
 def _fill_via_route(
-    sources: list[dict],
-    targets: list[dict],
+    sources: list[dict[str, Any]],
+    targets: list[dict[str, Any]],
     costing: str,
     timeout: float,
     deadline: float | None = None,
@@ -297,7 +304,11 @@ def _fill_via_route(
     return result
 
 
-def _zero_diagonal(result: list[list[float]], sources: list[dict], targets: list[dict]) -> None:
+def _zero_diagonal(
+    result: list[list[float]],
+    sources: list[dict[str, Any]],
+    targets: list[dict[str, Any]],
+) -> None:
     """Set diagonal cells to 0.0 when sources[i] and targets[i] are the same point."""
     n = min(len(sources), len(targets))
     for i in range(n):
@@ -306,8 +317,8 @@ def _zero_diagonal(result: list[list[float]], sources: list[dict], targets: list
 
 
 def time_matrix(
-    sources: list[dict],
-    targets: list[dict],
+    sources: list[dict[str, Any]],
+    targets: list[dict[str, Any]],
     costing: str = "pedestrian",
     timeout: float | None = None,
     deadline: float | None = None,
@@ -325,8 +336,8 @@ def time_matrix(
         _zero_diagonal(fast_result, sources, targets)
         return fast_result
 
-    idx_sources: list[dict] = [{**s, "_src_idx": i} for i, s in enumerate(sources)]
-    idx_targets: list[dict] = [{**t, "_tgt_idx": j} for j, t in enumerate(targets)]
+    idx_sources: list[dict[str, Any]] = [{**s, "_src_idx": i} for i, s in enumerate(sources)]
+    idx_targets: list[dict[str, Any]] = [{**t, "_tgt_idx": j} for j, t in enumerate(targets)]
 
     result: list[list[float]] = [[0.0] * n_tgt for _ in range(n_src)]
 

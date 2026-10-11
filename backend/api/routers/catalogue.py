@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from typing import Any
 
 from fastapi import APIRouter, Request
 
@@ -23,7 +24,7 @@ router = APIRouter(tags=["catalogue"])
 
 
 @router.get("/places")
-def places(request: Request) -> dict:
+def places(request: Request) -> dict[str, Any]:
     """The full point catalogue — every place in the dataset, for the «все точки» tab.
 
     A browse, not a search: no model is involved and nothing is capped by a query.
@@ -32,7 +33,7 @@ def places(request: Request) -> dict:
 
 
 @router.get("/routes/itineraries")
-def itineraries(request: Request) -> dict:
+def itineraries(request: Request) -> dict[str, Any]:
     """Ready-made routes — curated, and resolved against the live dataset.
 
     `missing` names any stop key that no longer resolves.
@@ -46,7 +47,7 @@ def itineraries(request: Request) -> dict:
 
 
 @router.post("/routes/services")
-def services_along_route(req: ServicesAlongReq, request: Request) -> dict:
+def services_along_route(req: ServicesAlongReq, request: Request) -> dict[str, Any]:
     """Secondary points beside the line: cafés, toilets, hotels — never stops.
 
     Distance and position are measured; items carry `detour_confirmed: false`.

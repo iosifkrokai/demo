@@ -9,6 +9,7 @@ import math
 import os
 import sys
 from itertools import permutations
+from typing import Any
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -32,7 +33,7 @@ def our_stops(*east_km: float) -> list[b.OurStop]:
     return [b.OurStop(f"o{i}", lat, lon) for i, (lat, lon) in enumerate(map(pt, east_km))]
 
 
-def api_points(names: list[str], *east_km: float) -> list[dict]:
+def api_points(names: list[str], *east_km: float) -> list[dict[str, Any]]:
     """Points in the shape /routes/generate returns them."""
     assert len(names) == len(east_km)
     return [

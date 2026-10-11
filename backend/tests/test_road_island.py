@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+from typing import Any
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -96,7 +97,7 @@ def test_prune_leaves_a_healthy_tour_alone():
 
 
 def test_render_falls_back_to_legs_when_the_tour_is_refused(monkeypatch):
-    calls: list[list[dict]] = []
+    calls: list[list[dict[str, Any]]] = []
 
     def fake_route_through(locations, costing="pedestrian", language="ru", timeout=None):
         locs = list(locations)

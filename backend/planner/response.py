@@ -43,14 +43,14 @@ def build_response(
     constraints: ResolvedConstraints,
     plan: ValidatedPlan,
     changes: RouteChanges | None,
-    shape: dict,
+    shape: dict[str, Any],
     walk_s: float,
     length_km: float | None,
     explanation: str,
     costing: str = "pedestrian",
     requirements: TripRequirements | None = None,
     status: OverallStatus | None = None,
-    deadline: dict | None = None,
+    deadline: dict[str, Any] | None = None,
 ) -> RouteResponse:
     """The one place a planned route becomes the response body.
 
@@ -218,7 +218,7 @@ def render_tour(
     costing: str,
     origin: LatLon | None,
     round_trip: bool = False,
-) -> tuple[dict, dict]:
+) -> tuple[dict[str, Any], dict[str, Any]]:
     """Draw the tour, never failing the request over geometry.
 
     If nothing draws, answer with the stops and no line instead of a 500.
@@ -258,7 +258,7 @@ def services_along_evidence(places: Any, requirements: Any, shape: Any) -> Any:
     except Exception:
         log.warning("services_along: measurement failed", exc_info=True)
         return ServiceAlongEvidence(measured=False, by_code={})
-    out: dict[str, list[dict]] = {}
+    out: dict[str, list[dict[str, Any]]] = {}
     for item in answer.get("items", []):
         out.setdefault(str(item.get("category")), []).append(item)
     return ServiceAlongEvidence(measured=True, by_code=out)

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+from typing import Any
 from unittest.mock import patch
 
 import pytest
@@ -15,7 +16,9 @@ from core.errors import UpstreamUnavailableError
 from planner.valhalla import constants, http, matrix
 
 
-def fake_matrix_response(sources: list[dict], targets: list[dict]) -> dict:
+def fake_matrix_response(
+    sources: list[dict[str, Any]], targets: list[dict[str, Any]]
+) -> dict[str, Any]:
     """Deterministic matrix: cell[global_src][global_tgt] = global_src*100 + global_tgt."""
     rows = []
     for si, src in enumerate(sources):
@@ -31,13 +34,13 @@ def fake_matrix_response(sources: list[dict], targets: list[dict]) -> dict:
     return {"sources_to_targets": rows}
 
 
-def get_shape_from_call(call: dict) -> tuple[int, int]:
+def get_shape_from_call(call: dict[str, Any]) -> tuple[int, int]:
     """Extract (n_sources, n_targets) from a recorded call dict."""
     payload = json.loads(call["kwargs"]["params"]["json"])
     return len(payload["sources"]), len(payload["targets"])
 
 
-def assert_no_unsafe_shapes(calls: list) -> None:
+def assert_no_unsafe_shapes(calls: list[Any]) -> None:
     """Fail if any recorded call has len(sources) >= 6 AND len(targets) >= 7."""
     for call in calls:
         n_src, n_tgt = get_shape_from_call(call)
@@ -58,7 +61,7 @@ def assert_matrix_correct(
             assert result[i][j] == expected, f"[{i}][{j}] = {result[i][j]}, expected {expected}"
 
 
-def _make_pts(n: int) -> list[dict]:
+def _make_pts(n: int) -> list[dict[str, Any]]:
     """Make n dummy {lat, lon} points."""
     return [{"lat": float(i), "lon": float(i)} for i in range(n)]
 

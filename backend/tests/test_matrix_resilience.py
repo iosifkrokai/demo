@@ -6,6 +6,7 @@ import json
 import math
 import os
 import sys
+from typing import Any
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -25,7 +26,7 @@ LABEL_500 = (
 )
 
 
-def _radius(params: dict) -> int:
+def _radius(params: dict[str, Any]) -> int:
     payload = json.loads(params["json"])
     return payload.get("sources", [{}])[0].get("radius")
 

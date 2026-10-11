@@ -37,7 +37,9 @@ def _leg_sum(matrix: list[list[float]], order: list[int]) -> float:
     return total
 
 
-def _record_optimizer_report(trace: dict, info: dict, prune_report: Any) -> None:
+def _record_optimizer_report(
+    trace: dict[str, Any], info: dict[str, Any], prune_report: Any
+) -> None:
     """Put the optimizer's / pruner's honesty signals into the trace.
 
     ``missing_must_visit_ids`` from optimize(); ``unroutable_stops`` from pruning.
@@ -58,7 +60,7 @@ def _record_optimizer_report(trace: dict, info: dict, prune_report: Any) -> None
 def _run_verification(
     requirements: TripRequirements | None,
     route: list[Candidate],
-    trace: dict,
+    trace: dict[str, Any],
     geometry: Any,
 ) -> None:
     """Verify the built route and attach the breakdown to the trace."""
@@ -74,7 +76,7 @@ def validate(
     route: list[Candidate],
     cost: CostMatrix,
     constraints: ResolvedConstraints,
-    info: dict,
+    info: dict[str, Any],
     *,
     requirements: TripRequirements | None = None,
     geometry: Any = None,
@@ -86,7 +88,7 @@ def validate(
     """
     n = len(route)
     if n == 0:
-        trace: dict = {"error": "empty_route"}
+        trace: dict[str, Any] = {"error": "empty_route"}
         _record_optimizer_report(trace, info, prune_report)
         _run_verification(requirements, route, trace, geometry)
         return ValidatedPlan(

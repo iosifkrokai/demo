@@ -6,6 +6,7 @@ import os
 import sys
 import time
 from contextlib import contextmanager
+from typing import Any
 
 import pytest
 from fastapi import HTTPException
@@ -154,7 +155,7 @@ def test_export_without_a_run_id_opens_no_session(monkeypatch):
 class _RecordingObs:
     """A span that remembers how it was created, the way Langfuse would."""
 
-    def __init__(self, calls: list[dict]) -> None:
+    def __init__(self, calls: list[dict[str, Any]]) -> None:
         self._calls = calls
 
     def start_observation(self, **kwargs: object) -> _RecordingObs:
@@ -167,7 +168,7 @@ class _RecordingObs:
 
 class _RecordingClient:
     def __init__(self) -> None:
-        self.calls: list[dict] = []
+        self.calls: list[dict[str, Any]] = []
 
     def start_observation(self, **kwargs: object) -> _RecordingObs:
         self.calls.append(kwargs)
@@ -179,7 +180,7 @@ def _no_propagation(_session_id: str | None):
     yield
 
 
-def _export_seen(monkeypatch: pytest.MonkeyPatch) -> list[dict]:
+def _export_seen(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
     """Every observation the exporter asks Langfuse to create, in order."""
     client = _RecordingClient()
     monkeypatch.setattr(trace, "_client", lambda: client)
@@ -286,13 +287,13 @@ class _OtelSpan:
 class _TimedObs:
     """A span that remembers the timestamps the exporter gave it."""
 
-    def __init__(self, record: dict, sink: list[dict]) -> None:
+    def __init__(self, record: dict[str, Any], sink: list[dict[str, Any]]) -> None:
         self._record = record
         self._sink = sink
         self._otel_span = _OtelSpan()
 
     def start_observation(self, **kwargs: object) -> _TimedObs:
-        child: dict = {"name": kwargs["name"]}
+        child: dict[str, Any] = {"name": kwargs["name"]}
         self._sink.append(child)
         return _TimedObs(child, self._sink)
 
@@ -303,10 +304,10 @@ class _TimedObs:
 
 class _TimedClient:
     def __init__(self) -> None:
-        self.calls: list[dict] = []
+        self.calls: list[dict[str, Any]] = []
 
     def start_observation(self, **kwargs: object) -> _TimedObs:
-        root: dict = {"name": kwargs["name"]}
+        root: dict[str, Any] = {"name": kwargs["name"]}
         self.calls.append(root)
         return _TimedObs(root, self.calls)
 

@@ -5,7 +5,7 @@ HTTP-facing models plus internal planner models used by planner.*.
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -146,7 +146,7 @@ class Place(BaseModel):
     blurb: str | None = None
     fun_fact: str | None = None
     fun_facts: list[str] = []
-    links: list[dict] = []
+    links: list[dict[str, Any]] = []
     photo: Photo | None = None
     visit_minutes: int | None = None
     opening_hours: str | None = None
@@ -234,18 +234,18 @@ class PlannedAlternative(BaseModel):
 class RouteResponse(BaseModel):
     parsed: ParsedQuery
     points: list[Place]
-    shape: dict
+    shape: dict[str, Any]
     summary: RouteSummary
     result_mode: Literal["route", "catalogue"] = "route"
     budget: BudgetInfo | None = None
     explanation: str | None = None
     status: str | None = None
-    requirements: list[dict] | None = None
+    requirements: list[dict[str, Any]] | None = None
     interpretation: Interpretation | None = None
     costing: str | None = None
     changes: RouteChanges | None = None
     alternatives: list[PlannedAlternative] | None = None
-    debug: dict | None = None
+    debug: dict[str, Any] | None = None
 
 
 class PreprocessedQuery(BaseModel):
@@ -277,7 +277,7 @@ class IntentResult(BaseModel):
     source: Literal["agent", "explicit"] = "agent"
     confidence: float = 1.0
     latency_ms: int = 0
-    raw_response: dict | None = None
+    raw_response: dict[str, Any] | None = None
 
 
 class ResolvedConstraints(BaseModel):
@@ -308,7 +308,7 @@ class Candidate(BaseModel):
     blurb: str | None = None
     fun_fact: str | None = None
     fun_facts: list[str] = []
-    links: list[dict] = []
+    links: list[dict[str, Any]] = []
     photo: Photo | None = None
     opening_hours: str | None = None
     ticket_price: str | None = None
@@ -334,7 +334,7 @@ class ValidatedPlan(BaseModel):
     total_seconds: int
     fits_budget: bool
     stops_dropped: int = 0
-    trace: dict = Field(default_factory=dict)
+    trace: dict[str, Any] = Field(default_factory=dict)
 
 
 class RerouteReq(BaseModel):
@@ -352,7 +352,7 @@ class ServicesAlongReq(BaseModel):
     `shape` is the GeoJSON LineString the client already has.
     """
 
-    shape: dict = Field(description="GeoJSON LineString, WGS84")
+    shape: dict[str, Any] = Field(description="GeoJSON LineString, WGS84")
     profile: TransportOrAnyLiteral | None = None
     categories: list[str] | None = Field(default=None, max_length=8)
     max_off_line_m: float | None = Field(default=None, ge=10, le=1500)

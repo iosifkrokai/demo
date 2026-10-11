@@ -9,6 +9,7 @@ import sys
 import urllib.error
 import urllib.request
 import uuid
+from typing import Any
 
 import pytest
 
@@ -23,12 +24,12 @@ from db.store.mappers import photo_of, place_from_row, place_payload
 from planner.models import Photo, Place
 
 
-def _stop_payload(row: dict) -> dict:
+def _stop_payload(row: dict[str, Any]) -> dict[str, Any]:
     """A stored place row as the card the panel prints."""
     return place_payload(place_from_row(row))
 
 
-def parse_photo(row: dict) -> dict | None:
+def parse_photo(row: dict[str, Any]) -> dict[str, Any] | None:
     """The stored photo columns as the card's photo, or nothing at all."""
     return photo_of(place_from_row(row))
 
@@ -235,7 +236,7 @@ def test_a_dead_wiki_does_not_break_the_reseed(monkeypatch):
     """A hint can name any wiki; an unreachable one must not stop the pass."""
     import db.seed.photos as seed
 
-    def boom(url: str) -> dict:
+    def boom(url: str) -> dict[str, Any]:
         raise OSError("no such wiki")
 
     monkeypatch.setattr(seed, "http_json", boom)
@@ -304,7 +305,7 @@ def test_an_itinerary_stop_carries_the_same_photo():
     assert _stop_payload({**row, "photo_url": None})["photo"] is None
 
 
-def _photos() -> dict:
+def _photos() -> dict[str, Any]:
     with open(PHOTOS, encoding="utf-8") as fh:
         return json.load(fh)
 

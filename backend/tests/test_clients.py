@@ -9,6 +9,7 @@ import os
 import sys
 import uuid
 from datetime import UTC, datetime
+from typing import Any
 
 import psycopg
 import pytest
@@ -59,7 +60,7 @@ class FakeRepo:
 
     def __init__(self, max_routes: int = 200) -> None:
         self.max_routes = max_routes
-        self.db: dict[uuid.UUID, dict] = {}
+        self.db: dict[uuid.UUID, dict[str, Any]] = {}
 
     def ensure_client(self, client_id: uuid.UUID) -> None:
         self.db.setdefault(client_id, {"prefs": None, "routes": []})
@@ -71,7 +72,7 @@ class FakeRepo:
         state = self.db.get(client_id, {}).get("prefs")
         return ClientPreferences(**state) if state is not None else None
 
-    def upsert_preferences(self, client_id: uuid.UUID, fields: dict) -> ClientPreferences:
+    def upsert_preferences(self, client_id: uuid.UUID, fields: dict[str, Any]) -> ClientPreferences:
         self.ensure_client(client_id)
         state = self.db[client_id]["prefs"]
         if state is None:
@@ -89,9 +90,9 @@ class FakeRepo:
         route_id: uuid.UUID,
         *,
         query: str,
-        plan: dict,
+        plan: dict[str, Any],
         name: str | None = None,
-        visit_overrides: dict | None = None,
+        visit_overrides: dict[str, Any] | None = None,
     ) -> SavedRoute:
         self.ensure_client(client_id)
         routes = self.db[client_id]["routes"]
@@ -453,7 +454,7 @@ class FakeCursor:
         self.conn = conn
         self.rowcount = 0
         self._one = None
-        self._all: list = []
+        self._all: list[Any] = []
 
     def __enter__(self):
         return self
@@ -478,7 +479,7 @@ class FakeCursor:
 class FakeConn:
     def __init__(self, handler=None):
         self.handler = handler or (lambda _sql, _params: {})
-        self.executed: list = []
+        self.executed: list[Any] = []
         self.closed = False
 
     def cursor(self, row_factory=None):

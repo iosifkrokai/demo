@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
 from typing import Any
 
 from pydantic_ai import RunContext
@@ -12,6 +11,8 @@ from agent.schema import InterpretDeps
 from agent.tools import (
     ERR_AREA_REGISTRY,
     ERR_BAD_ARGUMENT,
+    Remember,
+    ToolAnswer,
     envelope,
     fetch,
     norm_term,
@@ -25,7 +26,7 @@ MAX_AREAS_PER_CALL = 8
 _AREA_FIELDS = ("code", "name_ru", "name_en", "kind")
 
 
-def _areas_from_registry(term: str, locale: str, limit: int) -> list[dict]:
+def _areas_from_registry(term: str, locale: str, limit: int) -> list[dict[str, Any]]:
     """Canonical area slugs from the versioned registry (``reference/areas.py``)."""
     from reference.areas import load_areas, resolve_area
 
@@ -47,7 +48,7 @@ def _areas_from_registry(term: str, locale: str, limit: int) -> list[dict]:
                 found.append(candidate)
             if len(found) >= limit:
                 break
-    out: list[dict] = []
+    out: list[dict[str, Any]] = []
     for candidate in found[:limit]:
         area = registry.get(candidate) or {}
         out.append(
@@ -61,7 +62,7 @@ def _areas_from_registry(term: str, locale: str, limit: int) -> list[dict]:
     return out
 
 
-def find_areas(term: str, locale: str = "ru", *, repos: Any = None) -> dict:
+def find_areas(term: str, locale: str = "ru", *, repos: Any = None) -> dict[str, Any]:
     """Resolve a territory name ("старый город", "Новогрудок") to area slugs.
 
     A name that matches nothing returns an empty result set — never a guessed radius.
@@ -105,7 +106,7 @@ def find_areas(term: str, locale: str = "ru", *, repos: Any = None) -> dict:
     return envelope("find_areas", results, provenance, capped=len(found) >= MAX_AREAS_PER_CALL)
 
 
-def register_find_areas(agent: Any, _remember: Callable[[Any, dict], dict]) -> None:
+def register_find_areas(agent: Any, _remember: Remember) -> None:
     """Advertise ``find_areas`` to the agent.
 
     The Python name differs from the advertised one on purpose: a nested
@@ -113,6 +114,6 @@ def register_find_areas(agent: Any, _remember: Callable[[Any, dict], dict]) -> N
     """
 
     @agent.tool(name="find_areas")
-    def _find_areas(ctx: RunContext[InterpretDeps], term: str, locale: str = "ru") -> dict:
+    def _find_areas(ctx: RunContext[InterpretDeps], term: str, locale: str = "ru") -> ToolAnswer:
         """Resolve a territory name to canonical area codes for this region."""
         return find_areas(term, locale, repos=ctx.deps.repos)

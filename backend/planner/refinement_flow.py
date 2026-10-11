@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import logging
 import time as _time
+from typing import Any
 
 from core import constants
 from db.store.registry import Repositories
@@ -182,7 +183,7 @@ def generate_refinement(
         route = list(kept)
         algorithm = "refinement_keep"
 
-    info: dict = {
+    info: dict[str, Any] = {
         "algorithm": algorithm,
         "order": list(range(len(route))),
         "refinement_operation": directive.operation,

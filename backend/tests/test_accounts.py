@@ -9,6 +9,7 @@ import os
 import sys
 import uuid
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
@@ -44,7 +45,7 @@ def _place_row(
     lat: float = 53.67,
     lon: float = 23.82,
     visit_minutes: int | None = 60,
-) -> dict:
+) -> dict[str, Any]:
     """A row with every column ``place_payload`` reads, so payloads match live."""
     return {
         "id": pid,
@@ -73,21 +74,21 @@ class FakeRepo:
     """In-memory account and place repository with the Postgres contract."""
 
     def __init__(self) -> None:
-        self.users: dict[uuid.UUID, dict] = {}
-        self.sessions: dict[str, dict] = {}
+        self.users: dict[uuid.UUID, dict[str, Any]] = {}
+        self.sessions: dict[str, dict[str, Any]] = {}
         self.visited: dict[uuid.UUID, dict[int, datetime]] = {}
         self.saved_routes_count: dict[uuid.UUID, int] = {}
-        self.places: dict[int, dict] = {
+        self.places: dict[int, dict[str, Any]] = {
             1: _place_row(1, "Старый замок"),
             2: _place_row(2, "Новый замок"),
             3: _place_row(3, "Фарный костёл", category="костёл"),
         }
 
     @staticmethod
-    def _public(row: dict) -> dict:
+    def _public(row: dict[str, Any]) -> dict[str, Any]:
         return {k: v for k, v in row.items() if k != "password_hash"}
 
-    def _by_email(self, email: str) -> dict | None:
+    def _by_email(self, email: str) -> dict[str, Any] | None:
         low = email.lower()
         for row in self.users.values():
             if row["email"].lower() == low:

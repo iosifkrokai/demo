@@ -27,10 +27,10 @@ def optimize(
     cost: CostMatrix,
     constraints: ResolvedConstraints,
     costing: str = "pedestrian",
-) -> tuple[list[Candidate], dict]:
+) -> tuple[list[Candidate], dict[str, Any]]:
     """Pick the best order, return (ordered_candidates, debug_info)."""
     n = len(candidates)
-    info: dict = {"n_candidates": n, "algorithm": "unknown"}
+    info: dict[str, Any] = {"n_candidates": n, "algorithm": "unknown"}
     matrix = cost.walk_seconds
     visits = cost.visit_minutes
     budget_s = constraints.time_budget_minutes * 60 if constraints.time_budget_minutes else None
@@ -109,11 +109,11 @@ def optimize(
 
 
 def _report_missing_must(
-    info: dict,
+    info: dict[str, Any],
     order: list[int],
     candidates: list[Candidate],
     constraints: ResolvedConstraints,
-) -> dict:
+) -> dict[str, Any]:
     """Surfaced as ``missing_must_visit_ids`` in ``info`` so the verifier can mark
     the requirement unmet/infeasible.
     """
@@ -293,10 +293,10 @@ def _brute_open(
     matrix: list[list[float]],
     visits: list[int],
     budget_s: int | None,
-    info: dict,
+    info: dict[str, Any],
     *,
     round_trip: bool = False,
-) -> tuple[list[int], dict]:
+) -> tuple[list[int], dict[str, Any]]:
     """Enumerate (start, end) × all permutations of middle, return cheapest."""
     n = len(cands)
     best_route: list[int] | None = None
@@ -353,11 +353,11 @@ def _regret_insertion(
     visits: list[int],
     budget_s: int | None,
     must_idx: list[int],
-    info: dict,
+    info: dict[str, Any],
     *,
     costing: str = "pedestrian",
     round_trip: bool = False,
-) -> tuple[list[int], dict]:
+) -> tuple[list[int], dict[str, Any]]:
     """Sequentially insert the most "regrettable-to-skip" candidate."""
     n = len(cands)
     if must_idx:
@@ -425,10 +425,10 @@ def _nn_2opt_multi(
     matrix: list[list[float]],
     visits: list[int],
     budget_s: int | None,
-    info: dict,
+    info: dict[str, Any],
     *,
     round_trip: bool = False,
-) -> tuple[list[int], dict]:
+) -> tuple[list[int], dict[str, Any]]:
     """Nearest-neighbour from K random starts + 2-opt local search.
 
     A fixed seed gives the same route for the same query.
@@ -526,12 +526,12 @@ def _two_opt(order: list[int], matrix: list[list[float]]) -> list[int]:
 
 def valhalla_order(
     route: list[Candidate],
-    info: dict,
+    info: dict[str, Any],
     *,
     costing: str,
     timeout: float | None = None,
     retries: int | None = None,
-) -> tuple[list[Candidate], dict]:
+) -> tuple[list[Candidate], dict[str, Any]]:
     """Let Valhalla order the walk when nothing pins the sequence."""
     if len(route) < 3:
         return route, info
@@ -579,7 +579,9 @@ def prune_unroutable(
     return route, pruned
 
 
-def order_after_prune(info: dict, route: list[Candidate], candidates: list[Candidate]) -> dict:
+def order_after_prune(
+    info: dict[str, Any], route: list[Candidate], candidates: list[Candidate]
+) -> dict[str, Any]:
     """``info["order"]`` holds indices into the cost matrix, so a shortened route
     needs them recomputed.
     """

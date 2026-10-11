@@ -73,7 +73,7 @@ def upsert_sql() -> LiteralString:
     """
 
 
-def source_fields(source_url: str, license: str | None = None) -> dict:
+def source_fields(source_url: str, license: str | None = None) -> dict[str, Any]:
     """(provider, external_id, url) for place_sources from a source_url key."""
     prefix, _, rest = source_url.partition(":")
     provider = PROVIDER_BY_PREFIX.get(prefix, prefix or "unknown")
@@ -97,7 +97,9 @@ def allow_curated_category_change(conn: psycopg.Connection) -> None:
         cur.execute("SELECT set_config('grodno.allow_curated_category_change', 'on', true)")
 
 
-def apply_dataset(conn: psycopg.Connection, ds: Dataset, records: list[dict]) -> dict:
+def apply_dataset(
+    conn: psycopg.Connection, ds: Dataset, records: list[dict[str, Any]]
+) -> dict[str, Any]:
     """Upsert one dataset's rows; returns {'inserted', 'updated'}."""
     statement = upsert_sql()
     inserted = updated = 0
@@ -124,7 +126,7 @@ def apply_dataset(conn: psycopg.Connection, ds: Dataset, records: list[dict]) ->
     return {"inserted": inserted, "updated": updated}
 
 
-def apply_curated_rows(conn: psycopg.Connection, curated: list[dict]) -> dict:
+def apply_curated_rows(conn: psycopg.Connection, curated: list[dict[str, Any]]) -> dict[str, Any]:
     """Apply the curated CSV by name and mark its rows as curated.
     Sets ``category_source='curated'`` so later auto-classification cannot rewrite them.
     """
@@ -172,7 +174,9 @@ def apply_curated_rows(conn: psycopg.Connection, curated: list[dict]) -> dict:
         }
 
 
-def load_areas(conn: psycopg.Connection, records: list[dict], geo_dir: Path | None = None) -> int:
+def load_areas(
+    conn: psycopg.Connection, records: list[dict[str, Any]], geo_dir: Path | None = None
+) -> int:
     """Idempotently load the project-area polygon + one row per district."""
     written = 0
     with conn.cursor() as cur:
@@ -220,7 +224,7 @@ def _scalar(cur: Any) -> int:
     return int(row[0]) if row else 0
 
 
-def gather_db_stats(conn: psycopg.Connection) -> dict:
+def gather_db_stats(conn: psycopg.Connection) -> dict[str, Any]:
     """Post-apply counts: sources/areas/aliases and pending embeddings."""
     stats: dict[str, Any] = {}
     with conn.cursor() as cur:

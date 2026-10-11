@@ -10,6 +10,7 @@ import math
 import os
 import sys
 from pathlib import Path
+from typing import Any
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -56,7 +57,7 @@ def make_golden(
     )
 
 
-def point(name: str, east_km: float, pid: int | None = None) -> dict:
+def point(name: str, east_km: float, pid: int | None = None) -> dict[str, Any]:
     lat, lon = pt(east_km)
     out = {"name": name, "lat": lat, "lon": lon, "visit_minutes": 10}
     if pid is not None:
@@ -64,22 +65,22 @@ def point(name: str, east_km: float, pid: int | None = None) -> dict:
     return out
 
 
-def cover_points(golden: b.GoldenRoute, pid: int = 1) -> list[dict]:
+def cover_points(golden: b.GoldenRoute, pid: int = 1) -> list[dict[str, Any]]:
     """One returned stop on every reference stop — recall 1.0 by construction."""
     return [point(f"ours{i}", km_east(s.lat, s.lon), pid + i) for i, s in enumerate(golden.stops)]
 
 
 def api_response(
-    points: list[dict],
+    points: list[dict[str, Any]],
     *,
     walk_s: float = 1800.0,
     length_km: float | None = 2.0,
     fits: bool = True,
     stops_dropped: int = 0,
-    shape: dict | None = "auto",
-    trace: dict | None = None,
+    shape: dict[str, Any] | None = "auto",
+    trace: dict[str, Any] | None = None,
     intent_source: str = "regex",
-) -> dict:
+) -> dict[str, Any]:
     """A /routes/generate response in the shape the API actually returns."""
     if shape == "auto":
         shape = {"type": "LineString", "coordinates": [[23.8, 53.6]]}
@@ -114,7 +115,7 @@ def api_response(
     return body
 
 
-def run_of(golden: b.GoldenRoute, response: dict, repeat: int = 1, **kw) -> b.RunRecord:
+def run_of(golden: b.GoldenRoute, response: dict[str, Any], repeat: int = 1, **kw) -> b.RunRecord:
     result = b.score_response(golden, response, latency_s=1.5, **kw)
     return b.RunRecord(
         case=golden.case,
@@ -152,7 +153,9 @@ def write_snapshot(
     return path
 
 
-def golden_file(directory: Path, case: str, name: str, stops: list[dict], **extra) -> Path:
+def golden_file(
+    directory: Path, case: str, name: str, stops: list[dict[str, Any]], **extra
+) -> Path:
     """Write a quality/cases/routes/<case>.json the loader accepts."""
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / f"{case}.json"
@@ -169,7 +172,7 @@ def golden_file(directory: Path, case: str, name: str, stops: list[dict], **extr
     return path
 
 
-def stop_dict(name: str, east_km: float, grade: str | None = None) -> dict:
+def stop_dict(name: str, east_km: float, grade: str | None = None) -> dict[str, Any]:
     lat, lon = pt(east_km)
     out = {"name": name, "lat": lat, "lon": lon, "visit_minutes": 10}
     if grade is not None:

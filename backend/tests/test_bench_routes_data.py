@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -19,13 +20,13 @@ GRADES = {"must-see", "nice-to-have", "available"}
 META_KEYS = {"license", "retrieved_at", "coords_source"}
 
 
-def cases() -> list[tuple[str, dict]]:
+def cases() -> list[tuple[str, dict[str, Any]]]:
     files = sorted(ROUTES_DIR.glob("*.json"))
     assert files, f"no reference walks in {ROUTES_DIR}"
     return [(f.name, json.loads(f.read_text(encoding="utf-8"))) for f in files]
 
 
-def graded_cases() -> list[tuple[str, dict]]:
+def graded_cases() -> list[tuple[str, dict[str, Any]]]:
     return [(name, case) for name, case in cases() if name not in LEGACY]
 
 
@@ -48,7 +49,7 @@ def test_every_case_has_a_query_and_stops():
 
 
 @pytest.mark.parametrize("name,case", graded_cases(), ids=lambda v: v if isinstance(v, str) else "")
-def test_graded_cases_carry_provenance(name: str, case: dict):
+def test_graded_cases_carry_provenance(name: str, case: dict[str, Any]):
     meta = case.get("benchmark_meta") or {}
     assert set(meta) >= META_KEYS, f"{name}: benchmark_meta needs {META_KEYS}"
     assert meta["license"], f"{name}: empty license"
@@ -57,7 +58,7 @@ def test_graded_cases_carry_provenance(name: str, case: dict):
 
 
 @pytest.mark.parametrize("name,case", graded_cases(), ids=lambda v: v if isinstance(v, str) else "")
-def test_every_stop_is_located_graded_and_sourced(name: str, case: dict):
+def test_every_stop_is_located_graded_and_sourced(name: str, case: dict[str, Any]):
     for stop in case["stops"]:
         label = f"{name} :: {stop.get('name')}"
         lat, lon = stop.get("lat"), stop.get("lon")

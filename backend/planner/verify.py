@@ -58,7 +58,7 @@ class ServiceAlongEvidence(NamedTuple):
     """
 
     measured: bool
-    by_code: dict[str, list[dict]]
+    by_code: dict[str, list[dict[str, Any]]]
 
 
 REASON_CODES: frozenset[str] = frozenset(
@@ -114,7 +114,7 @@ def _route_stops(plan: Any) -> list[Any]:
     return []
 
 
-def _plan_trace(plan: Any) -> dict:
+def _plan_trace(plan: Any) -> dict[str, Any]:
     if isinstance(plan, dict):
         trace = plan.get("trace")
         return trace if isinstance(trace, dict) else {}
@@ -122,7 +122,7 @@ def _plan_trace(plan: Any) -> dict:
     return trace if isinstance(trace, dict) else {}
 
 
-def _unroutable_ids(trace: dict) -> set[int]:
+def _unroutable_ids(trace: dict[str, Any]) -> set[int]:
     """Stop ids the pruner reported as unroutable in this order."""
     out: set[int] = set()
     for key in ("unroutable_stops", "pruned_stops"):
@@ -277,7 +277,7 @@ def _verify_must_visit(
 
 def _evidence_for(
     r: Requirement, services_along: ServiceAlongEvidence | None
-) -> tuple[bool | None, list[dict] | None]:
+) -> tuple[bool | None, list[dict[str, Any]] | None]:
     """``(measured_ok, items)`` for this requirement.
 
     ``measured_ok`` is ``None`` when the caller measured nothing at all.
@@ -299,7 +299,7 @@ def _verify_service(
     stops: list[Any],
     route_present: bool,
     geom_ok: bool,
-    evidence: tuple[bool | None, list[dict] | None] = (None, None),
+    evidence: tuple[bool | None, list[dict[str, Any]] | None] = (None, None),
 ) -> None:
     measured_ok, measured = evidence
     if not r.code:
@@ -489,7 +489,7 @@ def _key(r: Requirement) -> str:
     return r.code or r.name or r.kind
 
 
-def verify_summary(requirements: TripRequirements) -> dict:
+def verify_summary(requirements: TripRequirements) -> dict[str, Any]:
     """Counts and handles per status, plus the overall plan status."""
     buckets: dict[str, list[str]] = {
         "satisfied": [],

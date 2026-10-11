@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import os
 import sys
+from typing import Any
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -18,7 +19,7 @@ MIXED = [0, 0.0123, 1, -1, 0.5, 2.0]
 class _FakeModel:
     """Stands in for the ONNX model: returns the vectors it is handed verbatim."""
 
-    def __init__(self, vectors: list[list]) -> None:
+    def __init__(self, vectors: list[list[Any]]) -> None:
         self._vectors = vectors
 
     def embed(self, texts: list[str]):

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import os
 import sys
+from typing import Any
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -22,7 +23,9 @@ def test_snap_cache_hits_the_network_once(monkeypatch):
     snap.SNAP_CACHE.clear()
     calls: list[str] = []
 
-    def fake(method: str, url: str, *, params: dict, timeout: float) -> list[dict]:
+    def fake(
+        method: str, url: str, *, params: dict[str, Any], timeout: float
+    ) -> list[dict[str, Any]]:
         calls.append(url)
         return [{"edges": [{"correlated_lat": 53.5, "correlated_lon": 23.5}]}]
 
@@ -44,7 +47,7 @@ def test_matrix_reads_the_transport_seam_off_the_module(monkeypatch):
     """
     calls: list[str] = []
 
-    def fake(method: str, url: str, *, params: dict, timeout: float) -> dict:
+    def fake(method: str, url: str, *, params: dict[str, Any], timeout: float) -> dict[str, Any]:
         calls.append(url)
         return {"sources_to_targets": [[{"time": 42.0}]]}
 

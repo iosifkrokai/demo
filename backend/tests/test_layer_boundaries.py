@@ -27,6 +27,7 @@ import re
 import sys
 import tomllib
 from pathlib import Path
+from typing import Any
 
 BACKEND = Path(__file__).resolve().parents[1]
 
@@ -143,7 +144,7 @@ def _sql_lines(path: Path) -> list[int]:
     return lines
 
 
-def _pyproject() -> dict:
+def _pyproject() -> dict[str, Any]:
     return tomllib.loads((BACKEND / "pyproject.toml").read_text(encoding="utf-8"))
 
 

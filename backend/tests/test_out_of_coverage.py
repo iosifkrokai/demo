@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import sys
+from typing import Any
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -32,7 +33,7 @@ def _cand(pid: int, name: str, category: str | None = "церковь") -> Candi
     return Candidate(id=pid, name=name, category=category, lat=53.89, lon=25.30)
 
 
-def _geom(n: int = 3) -> dict:
+def _geom(n: int = 3) -> dict[str, Any]:
     return {
         "type": "LineString",
         "coordinates": [[25.30 + i * 0.001, 53.89] for i in range(n)],

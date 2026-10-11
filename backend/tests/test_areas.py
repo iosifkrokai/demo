@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+from typing import Any
 
 import pytest
 
@@ -37,7 +38,7 @@ FOREIGN = [
 ]
 
 
-def _document() -> dict:
+def _document() -> dict[str, Any]:
     return json.loads(areas.AREAS_PATH.read_text(encoding="utf-8"))
 
 

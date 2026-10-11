@@ -9,6 +9,7 @@ import json
 import os
 import sys
 from pathlib import Path
+from typing import Any
 
 from core.paths import GEO_DIR, PHOTOS_DIR, PLACES_DIR
 
@@ -22,7 +23,7 @@ def _dsn(args: argparse.Namespace) -> str:
     return args.database_url or os.environ.get("DATABASE_URL", DEFAULT_DSN)
 
 
-def _count_by(rows: list[dict], key: str) -> dict[str, int]:
+def _count_by(rows: list[dict[str, Any]], key: str) -> dict[str, int]:
     out: dict[str, int] = {}
     for r in rows:
         out[str(r.get(key))] = out.get(str(r.get(key)), 0) + 1
@@ -43,7 +44,7 @@ def cmd_apply(args: argparse.Namespace) -> int:
 
     collected = collect_records(datasets)
 
-    db_stats: dict | None = None
+    db_stats: dict[str, Any] | None = None
     if not args.dry_run:
         try:
             with pipeline.connect(_dsn(args)) as conn:
@@ -108,7 +109,7 @@ def cmd_apply(args: argparse.Namespace) -> int:
     return 0
 
 
-def _print_summary(report: dict) -> None:
+def _print_summary(report: dict[str, Any]) -> None:
     t = report["totals"]
     print(
         f"[seed] mode={report['mode']} records={t['records']} "

@@ -485,7 +485,7 @@ class Pipeline:
         _candidates, _cost, _route, _info, plan = run_plan_tail(turn, candidates, constraints)
         return plan
 
-    def _step_render(self, turn: Turn, plan: ValidatedPlan) -> dict:
+    def _step_render(self, turn: Turn, plan: ValidatedPlan) -> dict[str, Any]:
         progress.note(progress.STAGE_DRAWING)
         if seconds_left(turn.t0) >= constants.RENDER_MIN_LEFT_S:
             shape, summary = render_tour(
@@ -623,7 +623,7 @@ class Pipeline:
         trace = {"algorithm": "direct", "diversity": 1.0, "fits_budget": True}
         return explain_route(cands, trace, walk_seconds=0.0)
 
-    def health(self) -> dict:
+    def health(self) -> dict[str, Any]:
         """Cheap liveness/readiness snapshot."""
         db_ok = self.repos.places.ping()
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Any
 from uuid import UUID
 
 
@@ -19,7 +20,7 @@ class SavedRoute:
     client_id: UUID | None = None
     name: str | None = None
     query: str = ""
-    plan: dict | None = None
+    plan: dict[str, Any] | None = None
     visit_overrides: dict[str, int] | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None

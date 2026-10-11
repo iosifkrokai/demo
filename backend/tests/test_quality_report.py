@@ -5,13 +5,14 @@ from __future__ import annotations
 import json
 import os
 import sys
+from typing import Any
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from quality.report import read_golden
 
 
-def _report() -> dict:
+def _report() -> dict[str, Any]:
     """A minimal artifact in the runner's own shape."""
     return {
         "schema": "bench_routes/report/2",

@@ -17,7 +17,9 @@ from reference.itineraries import load_itineraries
 log = logging.getLogger(__name__)
 
 
-def _split_by_role(payloads: list[dict[str, Any]]) -> tuple[list[dict], list[dict]]:
+def _split_by_role(
+    payloads: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Partition resolved places into (stops, services) using the taxonomy.
 
     An unknown code counts as a stop, never as a service.

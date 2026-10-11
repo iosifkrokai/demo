@@ -10,6 +10,7 @@ import os
 import sys
 import urllib.error
 from pathlib import Path
+from typing import Any
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -30,8 +31,8 @@ def make_case(
     *,
     locale: str = "ru",
     query: str = "прогулка по Гродно на два часа",
-    filters: dict | None = None,
-    expectations: dict | None = None,
+    filters: dict[str, Any] | None = None,
+    expectations: dict[str, Any] | None = None,
     parity_group: str | None = None,
 ) -> b.GoldenCase:
     """A valid case by construction; pass filters/expectations to break one part."""
@@ -63,7 +64,7 @@ def make_case(
     )
 
 
-def case_dict(data: dict) -> dict:
+def case_dict(data: dict[str, Any]) -> dict[str, Any]:
     """A schema-valid raw case (the dict side of the same builder)."""
     return {
         "id": data.get("id", "synthetic"),
@@ -98,7 +99,7 @@ def point(
     category: str | None = None,
     pid: int = 1,
     visit: int = 20,
-) -> dict:
+) -> dict[str, Any]:
     out = {
         "id": pid,
         "name": name,
@@ -112,13 +113,13 @@ def point(
 
 
 def plan(
-    points: list[dict],
+    points: list[dict[str, Any]],
     *,
     total_minutes: int = 100,
     walk_s: float = 2400.0,
-    shape: dict | None = None,
+    shape: dict[str, Any] | None = None,
     **extra,
-) -> dict:
+) -> dict[str, Any]:
     """A /routes/generate response in the shape the API actually returns."""
     body = {
         "parsed": {"source": "regex"},
@@ -140,7 +141,7 @@ def plan(
     return body
 
 
-def verdict_of(case: b.GoldenCase, raw: dict | None, **kw) -> b.ComplianceVerdict:
+def verdict_of(case: b.GoldenCase, raw: dict[str, Any] | None, **kw) -> b.ComplianceVerdict:
     return b.evaluate_compliance(case, raw, **kw)
 
 
@@ -165,7 +166,7 @@ def golden_dir(tmp_path: Path, monkeypatch) -> Path:
     return d
 
 
-def write_case(directory: Path, data: dict) -> Path:
+def write_case(directory: Path, data: dict[str, Any]) -> Path:
     path = directory / f"{data['id']}.json"
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
     return path
@@ -726,7 +727,7 @@ def test_build_golden_request_carries_the_explicit_filters_not_prose():
     assert "origin" not in b.build_golden_request(cases["vague_no_anchor"])
 
 
-def make_parity_pair(filters: dict, expectations: dict) -> list[b.GoldenCase]:
+def make_parity_pair(filters: dict[str, Any], expectations: dict[str, Any]) -> list[b.GoldenCase]:
     return [
         make_case(
             "walk_ru",
@@ -916,7 +917,9 @@ def test_the_summary_reports_a_case_that_was_never_run():
     assert summary["n_cases"] == 1 and summary["compliance_rate"] == pytest.approx(1.0)
 
 
-def golden_runs(cases: list[b.GoldenCase], responses: dict[str, dict]) -> list[b.GoldenRun]:
+def golden_runs(
+    cases: list[b.GoldenCase], responses: dict[str, dict[str, Any]]
+) -> list[b.GoldenRun]:
     return [
         b.GoldenRun(
             case=case,

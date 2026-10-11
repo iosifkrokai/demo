@@ -249,7 +249,7 @@ class _FakeCursor:
     def fetchone(self):
         return (1,)
 
-    def fetchall(self) -> list:
+    def fetchall(self) -> list[Any]:
         return []
 
 
@@ -286,7 +286,7 @@ class _HealthOnly:
     def __init__(self, monkeypatch):
         monkeypatch.setattr(pipeline_mod, "valhalla_ping", lambda: True, raising=False)
 
-    def health(self) -> dict:
+    def health(self) -> dict[str, Any]:
         return Pipeline(repos=_repos(_FakeDB())).health()
 
 
@@ -415,7 +415,7 @@ class TestLiveRefusal:
 
     def test_the_vector_signal_is_skipped_without_a_query_vector(self, live_db, monkeypatch):
         """An empty query_embedding is what switches the vector signal off."""
-        calls: list = []
+        calls: list[Any] = []
 
         def _record(*args, **kwargs):
             calls.append(args)

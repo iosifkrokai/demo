@@ -38,7 +38,7 @@ class Turn:
 
     all_candidates: list[Candidate] = field(default_factory=list)
     plan_info: dict[str, Any] | None = None
-    shape: dict = field(default_factory=dict)
+    shape: dict[str, Any] = field(default_factory=dict)
     walk_s: float = 0.0
     length_km: float | None = None
     base_candidates: list[Candidate] = field(default_factory=list)

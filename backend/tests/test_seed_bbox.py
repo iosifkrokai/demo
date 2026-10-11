@@ -6,6 +6,7 @@ from __future__ import annotations
 import os
 import re
 import sys
+from typing import Any
 
 import pytest
 
@@ -100,7 +101,7 @@ def test_fetch_overpass_posts_the_mapped_query(monkeypatch):
         def raise_for_status(self) -> None:
             return None
 
-        def json(self) -> dict:
+        def json(self) -> dict[str, Any]:
             return {"elements": []}
 
     def fake_post(_url, data=None, **_kwargs):

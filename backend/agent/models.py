@@ -18,7 +18,7 @@ layer was split up; the words did not change, only the address.)
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -192,7 +192,7 @@ class TripRequirements(BaseModel):
         """True only when every hard requirement is proven satisfied."""
         return not self.failed_hard() and not self.unresolved_hard()
 
-    def public_requirements(self) -> list[dict]:
+    def public_requirements(self) -> list[dict[str, Any]]:
         """Localizable view of the requirement list for the HTTP response.
 
         Frontend renders from kind/code/status so both locales share one contract.

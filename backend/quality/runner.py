@@ -23,6 +23,7 @@ from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from itertools import pairwise
 from pathlib import Path
+from typing import Any
 
 BACKEND = Path(__file__).parent.parent.resolve()
 QUALITY = BACKEND / "quality"
@@ -202,7 +203,7 @@ class LegSanity:
     over_cap: bool = False
     unreachable_sentinel: bool = False
     n_unreachable_legs: int = 0
-    duplicate_pairs: list[dict] = field(default_factory=list)
+    duplicate_pairs: list[dict[str, Any]] = field(default_factory=list)
     n_duplicate_stops: int = 0
     geometry_missing: bool = False
 
@@ -216,7 +217,7 @@ class Failure:
     def gated(self) -> bool:
         return self.kind in GATED_FAILURE_KINDS
 
-    def as_dict(self) -> dict:
+    def as_dict(self) -> dict[str, Any]:
         return {"kind": self.kind, "detail": self.detail, "gated": self.gated}
 
 
@@ -227,8 +228,8 @@ class GoldenCase:
     id: str
     locale: str
     query: str
-    filters: dict
-    expectations: dict
+    filters: dict[str, Any]
+    expectations: dict[str, Any]
     parity_group: str | None = None
     path: Path | None = None
 
@@ -246,7 +247,7 @@ class ComplianceVerdict:
     detail: str = ""
     status: str | None = None
     status_source: str | None = None
-    checks: dict = field(default_factory=dict)
+    checks: dict[str, Any] = field(default_factory=dict)
 
     @property
     def failed_checks(self) -> list[str]:
@@ -256,7 +257,7 @@ class ComplianceVerdict:
     def unverified_checks(self) -> list[str]:
         return [k for k, v in self.checks.items() if v.get("unverified")]
 
-    def as_dict(self) -> dict:
+    def as_dict(self) -> dict[str, Any]:
         return {
             "case_id": self.case_id,
             "passed": self.passed,
@@ -307,7 +308,7 @@ class EvaluationResult:
     def failure_kinds(self) -> list[str]:
         return [f.kind for f in self.failures]
 
-    def metrics_dict(self) -> dict:
+    def metrics_dict(self) -> dict[str, Any]:
         """The metric block recorded in a snapshot row (and diffed on replay)."""
         return {
             "recall_at_k": _r(self.recall_at_k),
@@ -361,11 +362,11 @@ class RunRecord:
     case_name: str
     repeat: int
     result: EvaluationResult
-    request: dict | None = None
-    response: dict | None = None
+    request: dict[str, Any] | None = None
+    response: dict[str, Any] | None = None
     ts: str | None = None
     git_sha: str | None = None
-    recorded_metrics: dict | None = None
+    recorded_metrics: dict[str, Any] | None = None
 
     @property
     def n_defined(self) -> int:
@@ -579,7 +580,7 @@ POOL_PROBE_PATHS: tuple[tuple[str, ...], ...] = (
 )
 
 
-def _dig(raw: dict, path: tuple[str, ...]):
+def _dig(raw: dict[str, Any], path: tuple[str, ...]):
     cur = raw
     for key in path:
         if not isinstance(cur, dict) or key not in cur:
@@ -588,7 +589,7 @@ def _dig(raw: dict, path: tuple[str, ...]):
     return cur
 
 
-def probe_stage1_pool(raw: dict) -> dict | None:
+def probe_stage1_pool(raw: dict[str, Any]) -> dict[str, Any] | None:
     """Find a candidate pool in a response, if the API happens to expose one.
 
     Returns {"path", "ids", "points"} or None; bare ids cannot be scored offline.
@@ -635,7 +636,7 @@ def _any_within(
 def stage_split(
     golden: GoldenRoute,
     our_stops: list[OurStop],
-    pool: dict | None = None,
+    pool: dict[str, Any] | None = None,
 ) -> StageSplit:
     """Split one run's outcome into a retrieval proxy and an assembly number."""
     if pool and pool.get("points"):
@@ -682,12 +683,12 @@ def result_matches_stop(golden: GoldenRoute, our_stops: list[OurStop], golden_id
     return any(haversine_km(gs.lat, gs.lon, o.lat, o.lon) <= MATCH_RADIUS_KM for o in our_stops)
 
 
-def find_duplicate_stop_pairs(our_stops: list[OurStop]) -> list[dict]:
+def find_duplicate_stop_pairs(our_stops: list[OurStop]) -> list[dict[str, Any]]:
     """Pairs of returned stops that are the same physical POI, in visit order.
 
     Three rules, first match wins: coincident, same_name, same_name_near.
     """
-    pairs: list[dict] = []
+    pairs: list[dict[str, Any]] = []
     for i in range(len(our_stops)):
         for j in range(i + 1, len(our_stops)):
             a, b = our_stops[i], our_stops[j]
@@ -724,9 +725,9 @@ def _duplicate_rule(name_a: str, name_b: str, dist_m: float) -> str | None:
 
 def leg_sanity(
     our_stops: list[OurStop],
-    trace: dict,
-    summary: dict,
-    raw: dict,
+    trace: dict[str, Any],
+    summary: dict[str, Any],
+    raw: dict[str, Any],
 ) -> LegSanity:
     """Is the returned route physically walkable?
 
@@ -781,9 +782,9 @@ def build_request(
     budget_minutes: int | None,
     origin_lat: float | None = None,
     origin_lon: float | None = None,
-) -> dict:
+) -> dict[str, Any]:
     """The exact body sent to POST /routes/generate (also what a row records)."""
-    payload: dict = {
+    payload: dict[str, Any] = {
         "query": query,
         "time_budget_minutes": budget_minutes,
     }
@@ -792,7 +793,7 @@ def build_request(
     return payload
 
 
-def post_generate(base_url: str, payload: dict) -> tuple[int, dict]:
+def post_generate(base_url: str, payload: dict[str, Any]) -> tuple[int, dict[str, Any]]:
     """POST /routes/generate → (http_status, parsed JSON)."""
     body = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(
@@ -811,7 +812,7 @@ def call_generate(
     budget_minutes: int | None,
     origin_lat: float | None = None,
     origin_lon: float | None = None,
-) -> dict:
+) -> dict[str, Any]:
     """POST /routes/generate → parsed dict (raw JSON)."""
     _status, raw = post_generate(
         base_url, build_request(query, budget_minutes, origin_lat, origin_lon)
@@ -857,7 +858,7 @@ def _http_error_detail(exc: urllib.error.HTTPError) -> str:
 
 def score_response(
     golden: GoldenRoute,
-    raw: dict | None,
+    raw: dict[str, Any] | None,
     *,
     http_status: int | None = None,
     api_error: str | None = None,
@@ -907,7 +908,7 @@ def score_response(
     return result
 
 
-def _our_stops(raw: dict) -> list[OurStop]:
+def _our_stops(raw: dict[str, Any]) -> list[OurStop]:
     out: list[OurStop] = []
     for p in raw.get("points") or []:
         out.append(
@@ -954,7 +955,9 @@ def _score_reference(result: EvaluationResult) -> None:
     result.detour_km = detour_km(result.our_walk_km, ref.distance_km)
 
 
-def _score_budget(result: EvaluationResult, summary: dict, budget_info: dict) -> None:
+def _score_budget(
+    result: EvaluationResult, summary: dict[str, Any], budget_info: dict[str, Any]
+) -> None:
     walk_s = summary.get("time_seconds") or budget_info.get("walk_minutes", 0) * 60
     walk_min = walk_s / 60.0
     if result.golden.est_walk_minutes is not None:
@@ -1029,7 +1032,7 @@ def bootstrap_ci(
     values: list[float],
     indices: list[tuple[int, ...]],
     alpha: float = BOOTSTRAP_ALPHA,
-) -> dict:
+) -> dict[str, Any]:
     """Mean and percentile CI of the mean of `values` under `indices`."""
     n = len(values)
     if n == 0:
@@ -1051,7 +1054,7 @@ def paired_bootstrap(
     b_values: list[float],
     indices: list[tuple[int, ...]],
     alpha: float = BOOTSTRAP_ALPHA,
-) -> dict:
+) -> dict[str, Any]:
     """Paired bootstrap on the difference A − B over the shared cases.
 
     A single paired case gets a difference but no interval and no p-value.
@@ -1129,7 +1132,7 @@ def make_meta(
     started_at: str,
     run_id: str,
     git_sha: str,
-) -> dict:
+) -> dict[str, Any]:
     return {
         "record": "meta",
         "schema": SNAPSHOT_SCHEMA,
@@ -1147,7 +1150,7 @@ def make_meta(
 def make_row(
     record: RunRecord,
     base_url: str,
-) -> dict:
+) -> dict[str, Any]:
     """The JSONL row for one (case, repeat) — the unit replay reads."""
     r = record.result
     return {
@@ -1170,7 +1173,7 @@ def make_row(
     }
 
 
-def write_meta(meta: dict, snapshot_dir: Path, append: bool) -> Path:
+def write_meta(meta: dict[str, Any], snapshot_dir: Path, append: bool) -> Path:
     snapshot_dir.mkdir(parents=True, exist_ok=True)
     path = snapshot_dir / "rows.jsonl"
     if not append:
@@ -1180,13 +1183,13 @@ def write_meta(meta: dict, snapshot_dir: Path, append: bool) -> Path:
     return path
 
 
-def append_row(row: dict, path: Path) -> None:
+def append_row(row: dict[str, Any], path: Path) -> None:
     """Append one row. A crashed run therefore leaves a replayable partial file."""
     with path.open("a", encoding="utf-8") as fh:
         fh.write(json.dumps(row, ensure_ascii=False) + "\n")
 
 
-def load_snapshot(snapshot_dir: Path) -> tuple[dict, list[dict]]:
+def load_snapshot(snapshot_dir: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     """Read a snapshot dir → (meta, rows).
 
     Only `rows*.jsonl` is snapshot data; unknown record kinds are dropped.
@@ -1197,8 +1200,8 @@ def load_snapshot(snapshot_dir: Path) -> tuple[dict, list[dict]]:
             f"no rows*.jsonl snapshot file in {snapshot_dir} "
             "(a snapshot dir holds rows.jsonl plus the reports)"
         )
-    meta: dict = {}
-    rows: list[dict] = []
+    meta: dict[str, Any] = {}
+    rows: list[dict[str, Any]] = []
     for path in files:
         with path.open(encoding="utf-8") as fh:
             for raw_line in fh:
@@ -1345,9 +1348,9 @@ def overall_stats(
     samples: int = BOOTSTRAP_SAMPLES,
     seed: int = BOOTSTRAP_SEED,
     alpha: float = BOOTSTRAP_ALPHA,
-) -> dict[str, dict]:
+) -> dict[str, dict[str, Any]]:
     """Bootstrap over CASES for every metric in CI_METRICS."""
-    out: dict[str, dict] = {}
+    out: dict[str, dict[str, Any]] = {}
     for path, label, _d in CI_METRICS:
         values = [v[path] for v in per_case.values() if v.get(path) is not None]
         stats = (
@@ -1360,12 +1363,12 @@ def overall_stats(
     return out
 
 
-def noise_floor(groups: list[list[RunRecord]]) -> dict[str, dict]:
+def noise_floor(groups: list[list[RunRecord]]) -> dict[str, dict[str, Any]]:
     """Mean within-case spread across repeats — the LLM-sampling noise floor.
 
     Reported next to every delta; a smaller change is indistinguishable from a re-run.
     """
-    out: dict[str, dict] = {}
+    out: dict[str, dict[str, Any]] = {}
     for path, label, _d in CI_METRICS:
         spreads, stds, n_cases = [], [], 0
         for g in groups:
@@ -1384,12 +1387,12 @@ def noise_floor(groups: list[list[RunRecord]]) -> dict[str, dict]:
     return out
 
 
-def failure_summary(groups: list[list[RunRecord]]) -> dict:
+def failure_summary(groups: list[list[RunRecord]]) -> dict[str, Any]:
     """Hard failures and leg-sanity defects — counted, never averaged in."""
     by_kind: dict[str, int] = {}
-    gated: list[dict] = []
-    defects: list[dict] = []
-    details: list[dict] = []
+    gated: list[dict[str, Any]] = []
+    defects: list[dict[str, Any]] = []
+    details: list[dict[str, Any]] = []
     total_runs = 0
     for g in groups:
         for rec in g:
@@ -1420,7 +1423,7 @@ def _pad(s: str, w: int) -> str:
     return s.ljust(w)
 
 
-def _ci_cell(stats: dict, decimals: int = 3) -> str:
+def _ci_cell(stats: dict[str, Any], decimals: int = 3) -> str:
     if stats.get("mean") is None:
         return "n/a"
     if stats.get("n", 0) < 2:
@@ -1428,7 +1431,7 @@ def _ci_cell(stats: dict, decimals: int = 3) -> str:
     return f"{stats['mean']:.{decimals}f} [{stats['lo']:.{decimals}f}, {stats['hi']:.{decimals}f}]"
 
 
-def _stage2_is_trivial(overall: dict[str, dict]) -> bool:
+def _stage2_is_trivial(overall: dict[str, dict[str, Any]]) -> bool:
     """True when stage-2 recall is 1.0 for want of a pool, not for want of skill.
 
     Under the route-points fallback the pool is the route, so the conditional is vacuous.
@@ -1536,9 +1539,9 @@ def print_table(groups: list[list[RunRecord]]) -> None:
 
 
 def print_ci_table(
-    overall: dict[str, dict],
-    per_case: dict[str, dict],
-    noise: dict[str, dict],
+    overall: dict[str, dict[str, Any]],
+    per_case: dict[str, dict[str, Any]],
+    noise: dict[str, dict[str, Any]],
     samples: int,
     seed: int,
 ) -> None:
@@ -1566,7 +1569,7 @@ def print_ci_table(
     print()
 
 
-def print_failures(summary: dict, overall: dict | None = None) -> None:
+def print_failures(summary: dict[str, Any], overall: dict[str, Any] | None = None) -> None:
     """Hard failures + leg-sanity defects. Deliberately outside every score."""
     print("─" * 78)
     print(
@@ -1593,7 +1596,7 @@ def print_failures(summary: dict, overall: dict | None = None) -> None:
     print()
 
 
-def _agg(runs: list[EvaluationResult], path: str) -> dict:
+def _agg(runs: list[EvaluationResult], path: str) -> dict[str, Any]:
     """mean / spread / min / max of one metric over the runs of a case."""
     vals = _attr(runs, path)
     if not vals:
@@ -1614,12 +1617,12 @@ def write_json_report(
     *,
     mode: str,
     generated_at: str,
-    snapshot: dict,
-    per_case: dict,
-    overall: dict,
-    noise: dict,
-    failures: dict,
-    drift_rows: list[dict],
+    snapshot: dict[str, Any],
+    per_case: dict[str, Any],
+    overall: dict[str, Any],
+    noise: dict[str, Any],
+    failures: dict[str, Any],
+    drift_rows: list[dict[str, Any]],
     samples: int = BOOTSTRAP_SAMPLES,
     seed: int = BOOTSTRAP_SEED,
 ) -> Path:
@@ -1771,8 +1774,8 @@ def write_json_report(
 def write_metrics_jsonl(
     groups: list[list[RunRecord]],
     out_dir: Path,
-    overall: dict,
-    failures: dict,
+    overall: dict[str, Any],
+    failures: dict[str, Any],
 ) -> Path:
     """One line per case — the shape a CI job diffs between runs."""
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -1823,11 +1826,11 @@ def write_md_report(
     *,
     mode: str,
     generated_at: str,
-    snapshot: dict,
-    overall: dict,
-    noise: dict,
-    failures: dict,
-    drift_rows: list[dict],
+    snapshot: dict[str, Any],
+    overall: dict[str, Any],
+    noise: dict[str, Any],
+    failures: dict[str, Any],
+    drift_rows: list[dict[str, Any]],
     samples: int = BOOTSTRAP_SAMPLES,
     seed: int = BOOTSTRAP_SEED,
 ) -> Path:
@@ -2220,7 +2223,7 @@ def validate_golden_case(data, path: Path | None = None) -> list[str]:
     return errs
 
 
-def golden_case_from_dict(data: dict, path: Path | None = None) -> GoldenCase:
+def golden_case_from_dict(data: dict[str, Any], path: Path | None = None) -> GoldenCase:
     """Build a GoldenCase from validated data (validate first, or it raises)."""
     errs = validate_golden_case(data, path)
     if errs:
@@ -2318,7 +2321,7 @@ def parity_groups(cases: list[GoldenCase]) -> dict[str, list[GoldenCase]]:
     return out
 
 
-def _status_from_requirements(requirements: list) -> str:
+def _status_from_requirements(requirements: list[Any]) -> str:
     """Mirror of planner/verify.py::overall_status over a public requirements list.
 
     Restated so the benchmark can grade without importing the planner.
@@ -2335,7 +2338,7 @@ def _status_from_requirements(requirements: list) -> str:
 
 
 def derive_status(
-    raw: dict | None,
+    raw: dict[str, Any] | None,
     *,
     http_status: int | None = None,
     api_error: str | None = None,
@@ -2372,7 +2375,7 @@ def _canon_codes(codes) -> list[str]:
     return [CANONICAL_CATEGORIES.get(c, c) for c in codes]
 
 
-def stop_category_codes(stop: dict) -> set[str]:
+def stop_category_codes(stop: dict[str, Any]) -> set[str]:
     """The canonical codes one returned stop counts as.
 
     The point's own `category` is authoritative; the name only votes when it is missing.
@@ -2383,19 +2386,21 @@ def stop_category_codes(stop: dict) -> set[str]:
     return codes_in_name(stop.get("name", ""))
 
 
-def _ok(detail: str = "", **extra) -> dict:
+def _ok(detail: str = "", **extra) -> dict[str, Any]:
     return {"ok": True, "detail": detail, **extra}
 
 
-def _fail(detail: str, **extra) -> dict:
+def _fail(detail: str, **extra) -> dict[str, Any]:
     return {"ok": False, "detail": detail, **extra}
 
 
-def _unverified(detail: str, **extra) -> dict:
+def _unverified(detail: str, **extra) -> dict[str, Any]:
     return {"ok": True, "unverified": True, "detail": detail, **extra}
 
 
-def response_total_minutes(raw: dict | None, points: list[dict]) -> float | None:
+def response_total_minutes(
+    raw: dict[str, Any] | None, points: list[dict[str, Any]]
+) -> float | None:
     """Total route minutes: `budget.total_minutes`, or walk + visits as a fallback.
 
     The fallback keeps an over-budget route from hiding behind a missing field.
@@ -2415,7 +2420,7 @@ def response_total_minutes(raw: dict | None, points: list[dict]) -> float | None
 
 def evaluate_compliance(
     case: GoldenCase,
-    raw: dict | None,
+    raw: dict[str, Any] | None,
     *,
     http_status: int | None = None,
     api_error: str | None = None,
@@ -2428,7 +2433,7 @@ def evaluate_compliance(
     raw = raw or {}
     points = [p for p in (raw.get("points") or []) if isinstance(p, dict)]
     status, source = derive_status(raw, http_status=http_status, api_error=api_error)
-    checks: dict[str, dict] = {}
+    checks: dict[str, dict[str, Any]] = {}
 
     expected_status = [str(s).strip().lower() for s in exp["expected_status"]]
     checks[CHECK_WRONG_STATUS] = (
@@ -2633,7 +2638,7 @@ def compliance_summary(
     cases: list[GoldenCase],
     verdicts: dict[str, ComplianceVerdict],
     parity: list[ComplianceVerdict] | None = None,
-) -> dict:
+) -> dict[str, Any]:
     """Per-case PASS/FAIL plus the aggregate rate over cases AND parity groups.
 
     The rate is over units: one per golden case, one more per parity group.
@@ -2670,13 +2675,13 @@ def compliance_summary(
     }
 
 
-def build_golden_request(case: GoldenCase) -> dict:
+def build_golden_request(case: GoldenCase) -> dict[str, Any]:
     """The exact body one golden case sends: the query plus its explicit filters.
 
     The filters go on the wire as GenerateReq fields, not prose.
     """
     filters = case.filters
-    payload: dict = {
+    payload: dict[str, Any] = {
         "query": case.query,
         "locale": case.locale,
         "party_children": filters.get("party_children"),
@@ -2698,10 +2703,10 @@ class GoldenRun:
 
     case: GoldenCase
     repeat: int
-    request: dict
+    request: dict[str, Any]
     http_status: int | None = None
     api_error: str | None = None
-    response: dict | None = None
+    response: dict[str, Any] | None = None
     latency_s: float = 0.0
     verdict: ComplianceVerdict | None = None
     ts: str | None = None
@@ -2767,7 +2772,7 @@ def run_golden(cases: list[GoldenCase], base_url: str, repeat: int) -> list[Gold
             request = build_golden_request(case)
             t0 = time.monotonic()
             status: int | None = None
-            raw: dict | None = None
+            raw: dict[str, Any] | None = None
             err: str | None = None
             try:
                 status, raw = post_generate(base_url, request)
@@ -2803,7 +2808,7 @@ def run_golden(cases: list[GoldenCase], base_url: str, repeat: int) -> list[Gold
     return runs
 
 
-def make_golden_row(run: GoldenRun, base_url: str) -> dict:
+def make_golden_row(run: GoldenRun, base_url: str) -> dict[str, Any]:
     return {
         "record": "golden_row",
         "schema": GOLDEN_ROW_SCHEMA,
@@ -2823,7 +2828,7 @@ def make_golden_row(run: GoldenRun, base_url: str) -> dict:
 
 def golden_snapshot_meta(
     cases: list[GoldenCase], base_url: str, repeat: int, *, git_sha: str | None = None
-) -> dict:
+) -> dict[str, Any]:
     """The provenance header of a golden snapshot, written by both entry points."""
     return {
         "record": "meta",
@@ -2844,7 +2849,7 @@ def write_golden_snapshot(
     base_url: str,
     *,
     append: bool = True,
-    meta: dict | None = None,
+    meta: dict[str, Any] | None = None,
 ) -> Path:
     """Write the golden snapshot (one meta record + one row per run).
 
@@ -2861,7 +2866,7 @@ def write_golden_snapshot(
     return path
 
 
-def load_golden_snapshot(snapshot_dir: Path) -> tuple[dict, list[dict]]:
+def load_golden_snapshot(snapshot_dir: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     """Read golden_rows.jsonl → (meta, rows). Never touches the network."""
     path = Path(snapshot_dir) / GOLDEN_SNAPSHOT_FILE
     if not path.exists():
@@ -2869,8 +2874,8 @@ def load_golden_snapshot(snapshot_dir: Path) -> tuple[dict, list[dict]]:
             f"no {GOLDEN_SNAPSHOT_FILE} in {snapshot_dir} "
             f"(a golden snapshot holds that file plus the reports)"
         )
-    meta: dict = {}
-    rows: list[dict] = []
+    meta: dict[str, Any] = {}
+    rows: list[dict[str, Any]] = []
     with path.open(encoding="utf-8") as fh:
         for raw_line in fh:
             line = raw_line.strip()
@@ -2887,7 +2892,7 @@ def load_golden_snapshot(snapshot_dir: Path) -> tuple[dict, list[dict]]:
     return meta, rows
 
 
-def rescore_golden_rows(rows: list[dict], cases: list[GoldenCase]) -> list[GoldenRun]:
+def rescore_golden_rows(rows: list[dict[str, Any]], cases: list[GoldenCase]) -> list[GoldenRun]:
     """Recompute every verdict offline: no agent, no Valhalla, no clock."""
     by_id = golden_by_id(cases)
     out: list[GoldenRun] = []
@@ -2945,7 +2950,7 @@ def print_compliance_table(
     cases: list[GoldenCase],
     verdicts: dict[str, ComplianceVerdict],
     parity: list[ComplianceVerdict],
-    summary: dict,
+    summary: dict[str, Any],
 ) -> None:
     width = 78
     print()
@@ -3003,10 +3008,10 @@ def write_compliance_reports(
     mode: str,
     generated_at: str,
     base_url: str,
-    snapshot: dict,
+    snapshot: dict[str, Any],
     cases: list[GoldenCase],
     runs: list[GoldenRun],
-    summary: dict,
+    summary: dict[str, Any],
 ) -> None:
     """compliance.json + compliance.md + compliance.metrics.jsonl (one line/case)."""
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -3132,7 +3137,7 @@ def write_compliance_reports(
     (out_dir / "compliance.md").write_text("\n".join(md) + "\n", encoding="utf-8")
 
 
-def fetch_health(base_url: str, timeout: float = HEALTH_TIMEOUT_S) -> dict:
+def fetch_health(base_url: str, timeout: float = HEALTH_TIMEOUT_S) -> dict[str, Any]:
     """GET /health → dict. Raises on transport failure (caller decides)."""
     req = urllib.request.Request(
         f"{base_url}/health",
@@ -3143,7 +3148,7 @@ def fetch_health(base_url: str, timeout: float = HEALTH_TIMEOUT_S) -> dict:
         return json.loads(resp.read().decode("utf-8"))
 
 
-def preflight_or_exit(base_url: str) -> dict:
+def preflight_or_exit(base_url: str) -> dict[str, Any]:
     """Refuse to benchmark a backend that is not there.
 
     Must not write a report without a live stack; exits 2 with the reason on stderr.
@@ -3186,7 +3191,7 @@ def _no_report(message: str) -> None:
     sys.exit(2)
 
 
-def _golden_output(args) -> tuple[list[GoldenRun], list[GoldenCase], Path, dict, str]:
+def _golden_output(args) -> tuple[list[GoldenRun], list[GoldenCase], Path, dict[str, Any], str]:
     cases = load_golden_cases(Path(args.golden_dir) if args.golden_dir else BENCH_GOLDEN)
     if args.case:
         wanted = set(args.case)
@@ -3214,7 +3219,9 @@ def _golden_output(args) -> tuple[list[GoldenRun], list[GoldenCase], Path, dict,
     return runs, cases, out_dir, {"dir": str(snapshot_dir) if snapshot_dir else None}, "golden-live"
 
 
-def _replay_golden_output(args) -> tuple[list[GoldenRun], list[GoldenCase], Path, dict, str]:
+def _replay_golden_output(
+    args: Any,
+) -> tuple[list[GoldenRun], list[GoldenCase], Path, dict[str, Any], str]:
     snapshot_dir = Path(args.replay_golden)
     print(f"Golden replay — {snapshot_dir} (offline: no agent, no Valhalla, no clock)")
     cases = load_golden_cases(Path(args.golden_dir) if args.golden_dir else BENCH_GOLDEN)
@@ -3285,7 +3292,7 @@ def run_live(
     repeat: int,
     snapshot_dir: Path | None,
     append: bool,
-) -> tuple[list[list[RunRecord]], dict]:
+) -> tuple[list[list[RunRecord]], dict[str, Any]]:
     """Call the agent once per (case, repeat); optionally snapshot every run."""
     started_at = datetime.now(UTC).isoformat()
     run_id = _run_id()
@@ -3321,7 +3328,7 @@ def _run_once(route: GoldenRoute, base_url: str, repeat: int, git_sha: str) -> R
     request = build_request(route.query_ru, route.budget_minutes, lat, lon)
     t0 = time.monotonic()
     status: int | None = None
-    raw: dict | None = None
+    raw: dict[str, Any] | None = None
     err: str | None = None
     try:
         status, raw = post_generate(base_url, request)
@@ -3363,14 +3370,16 @@ def _print_run(rec: RunRecord, i: int, repeat: int, route: GoldenRoute) -> None:
         print(f"      {'✗' if f.gated else '!'} {f.kind}: {f.detail}")
 
 
-def run_replay(snapshot_dir: Path) -> tuple[list[list[RunRecord]], dict, list[dict]]:
+def run_replay(
+    snapshot_dir: Path,
+) -> tuple[list[list[RunRecord]], dict[str, Any], list[dict[str, Any]]]:
     """Recompute every metric offline from a snapshot. No clock, no RNG, no I/O.
 
     Reference .json files are sha256-checked against the snapshot's recorded hashes.
     """
     meta, rows = load_snapshot(snapshot_dir)
     goldens = load_golden_map()
-    drift: list[dict] = []
+    drift: list[dict[str, Any]] = []
     groups: dict[str, list[RunRecord]] = {}
     for row in rows:
         case = str(row.get("case"))
@@ -3430,7 +3439,7 @@ def run_replay(snapshot_dir: Path) -> tuple[list[list[RunRecord]], dict, list[di
     return ordered, meta, drift
 
 
-def _snapshot_info(meta: dict, snapshot_dir: Path, n_rows: int) -> dict:
+def _snapshot_info(meta: dict[str, Any], snapshot_dir: Path, n_rows: int) -> dict[str, Any]:
     return {
         "dir": str(snapshot_dir),
         "schema": meta.get("schema", SNAPSHOT_SCHEMA),
@@ -3443,7 +3452,7 @@ def _snapshot_info(meta: dict, snapshot_dir: Path, n_rows: int) -> dict:
     }
 
 
-def compare_snapshots(dir_a: Path, dir_b: Path, samples: int, seed: int) -> dict:
+def compare_snapshots(dir_a: Path, dir_b: Path, samples: int, seed: int) -> dict[str, Any]:
     """Paired bootstrap A − B over the cases the two snapshots share.
 
     Both sides are rescored against the same current reference files, so the diff is fair.
@@ -3525,7 +3534,7 @@ def _noise_of(groups: list[list[RunRecord]], path: str) -> float | None:
     return _mean(spreads)
 
 
-def print_compare(cmp: dict) -> None:
+def print_compare(cmp: dict[str, Any]) -> None:
     a, b = cmp["a"], cmp["b"]
     boot = cmp["bootstrap"]
     floor_of_one = 1.0 / boot["samples"]
@@ -3592,7 +3601,7 @@ def print_compare(cmp: dict) -> None:
     print()
 
 
-def write_compare_report(cmp: dict, out_dir: Path) -> Path:
+def write_compare_report(cmp: dict[str, Any], out_dir: Path) -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
     path = out_dir / "compare.json"
     path.write_text(json.dumps(cmp, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -3725,11 +3734,11 @@ class RunOutput:
 
     mode: str
     groups: list[list[RunRecord]]
-    meta: dict
+    meta: dict[str, Any]
     out_dir: Path
-    snapshot: dict
+    snapshot: dict[str, Any]
     generated_at: str
-    drift: list[dict] = field(default_factory=list)
+    drift: list[dict[str, Any]] = field(default_factory=list)
 
 
 def _select_routes(args) -> list[GoldenRoute]:

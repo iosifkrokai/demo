@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import sys
+from typing import Any
 
 import pytest
 
@@ -48,7 +49,7 @@ def _cand(
     return Candidate(id=pid, name=name, category=category, lat=lat, lon=lon)
 
 
-def _geom(n: int = 3) -> dict:
+def _geom(n: int = 3) -> dict[str, Any]:
     return {
         "type": "LineString",
         "coordinates": [[23.83 + i * 0.001, 53.68] for i in range(n)],

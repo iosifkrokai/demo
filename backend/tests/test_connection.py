@@ -7,6 +7,8 @@ These tests pin that setup, and that it does not leave a transaction dangling.
 
 from __future__ import annotations
 
+from typing import Any
+
 import psycopg
 import pytest
 from psycopg import sql
@@ -21,7 +23,7 @@ class _FakeConn:
         self.executed: list[str] = []
         self.commits = 0
         self.closed = False
-        self.kwargs: dict = {}
+        self.kwargs: dict[str, Any] = {}
 
     def execute(self, query: object) -> None:
         if isinstance(query, sql.Composable):

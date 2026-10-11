@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+from typing import Any
 
 import pytest
 
@@ -33,7 +34,7 @@ SNAP_500 = (
 )
 
 
-def _radii_of(params: dict) -> list[int]:
+def _radii_of(params: dict[str, Any]) -> list[int]:
     payload = json.loads(params["json"])
     return [loc["radius"] for loc in payload["locations"]]
 
@@ -46,7 +47,7 @@ def _clear_snap_cache():
     snap.SNAP_CACHE.clear()
 
 
-def _locate_ok(url: str, lat: float = 53.6791, lon: float = 23.8216) -> list[dict] | None:
+def _locate_ok(url: str, lat: float = 53.6791, lon: float = 23.8216) -> list[dict[str, Any]] | None:
     """A canned /locate answer, or None when this call is not a locate probe."""
     if not url.endswith("/locate"):
         return None
@@ -54,7 +55,7 @@ def _locate_ok(url: str, lat: float = 53.6791, lon: float = 23.8216) -> list[dic
 
 
 def test_first_radius_is_used_when_it_works(monkeypatch):
-    seen: list[dict] = []
+    seen: list[dict[str, Any]] = []
 
     def fake(method, url, *, params, timeout):
         if (locate := _locate_ok(url)) is not None:
@@ -109,7 +110,7 @@ def test_non_snap_error_is_not_retried(monkeypatch):
 
 def test_unsnappable_stop_is_dropped_before_routing(monkeypatch):
     """A stop with no edge is dropped up front, endpoints included."""
-    routed: list[list[dict]] = []
+    routed: list[list[dict[str, Any]]] = []
 
     def fake(method, url, *, params, timeout):
         payload = json.loads(params["json"])

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import logging
 from itertools import pairwise
+from typing import Any
 
 from core import constants
 from core.errors import UpstreamUnavailableError
@@ -23,7 +24,7 @@ def render(
     origin: LatLon | None = None,
     locale: str = "ru",
     round_trip: bool = False,
-) -> tuple[dict, dict, str]:
+) -> tuple[dict[str, Any], dict[str, Any], str]:
     """Call Valhalla /route. Returns (shape_geojson, summary_dict, status_code).
 
     `origin` is the fixed start; `round_trip` closes the tour on its own start.
@@ -90,7 +91,7 @@ def render(
     return {}, {}, "empty_geometry"
 
 
-def _verify_maneuver_fields(maneuvers: list[dict]) -> list[str]:
+def _verify_maneuver_fields(maneuvers: list[dict[str, Any]]) -> list[str]:
     """Verify that required maneuver fields are present.
 
     Returns the missing field names; a maneuver without an instruction is blank.
@@ -108,7 +109,7 @@ def _verify_maneuver_fields(maneuvers: list[dict]) -> list[str]:
 
 def _render_legs(
     pts: list[tuple[float, float]], costing: str, locale: str
-) -> tuple[dict, dict, str]:
+) -> tuple[dict[str, Any], dict[str, Any], str]:
     """Draw every consecutive pair on its own and keep the legs that route.
 
     A leg Valhalla refuses is skipped, so one bad stop costs its two legs only.
