@@ -10,35 +10,11 @@ from __future__ import annotations
 
 import pytest
 
-from core.config import DSN
-from db.store.areas import PostgresAreaRepository
-from db.store.places import PostgresPlaceRepository
-from db.store.registry import Repositories
-
-pytestmark = pytest.mark.skipif(not DSN.startswith("postgresql"), reason="no database configured")
-
-
-@pytest.fixture(scope="module")
-def repos():
-    """A real repository pair, skipping the module when the database is down."""
-    bundle = Repositories(
-        places=PostgresPlaceRepository(),
-        areas=PostgresAreaRepository(),
-    )
-    try:
-        if not bundle.places.ping():
-            pytest.skip("database not reachable")
-    except Exception as exc:
-        pytest.skip(f"database not reachable: {type(exc).__name__}")
-    yield bundle
-    bundle.close()
-
-
 # Grodno's old town — a walk of a few hundred metres, not a tour of the oblast.
 OLD_TOWN = (53.6778, 23.8295)
 
 
-def _sight_ids(repos: Repositories, limit: int = 5) -> list[int]:
+def _sight_ids(repos, limit: int = 5) -> list[int]:
     """Hand-picked stops: real rows near one another, chosen by a query, not by a model.
 
     Deliberately a *cluster*: castles across the region are not a walk, and the
@@ -51,11 +27,11 @@ def _sight_ids(repos: Repositories, limit: int = 5) -> list[int]:
     return ids
 
 
-def test_a_handful_of_stops_becomes_a_measured_walk(repos: Repositories) -> None:
+def test_a_handful_of_stops_becomes_a_measured_walk(db_repos) -> None:
     from agent.tools.plan import plan_walk
 
-    ids = _sight_ids(repos)
-    answer = plan_walk(ids, repos=repos, budget_minutes=180)
+    ids = _sight_ids(db_repos)
+    answer = plan_walk(ids, repos=db_repos, budget_minutes=180)
 
     assert answer.get("error") is None, answer.get("message")
     assert answer["count"] >= 2
@@ -72,21 +48,21 @@ def test_a_handful_of_stops_becomes_a_measured_walk(repos: Repositories) -> None
     assert answer["round_trip"] is False
 
 
-def test_too_few_stops_is_an_error_not_a_crash(repos: Repositories) -> None:
+def test_too_few_stops_is_an_error_not_a_crash(db_repos) -> None:
     from agent.tools.plan import plan_walk
 
-    answer = plan_walk([1], repos=repos, budget_minutes=120)
+    answer = plan_walk([1], repos=db_repos, budget_minutes=120)
     assert answer["error"] is not None
     assert answer["results"] == []
 
 
-def test_must_keep_stops_are_never_dropped(repos: Repositories) -> None:
+def test_must_keep_stops_are_never_dropped(db_repos) -> None:
     """A refinement's pinned stop survives a budget that cannot hold everything."""
     from agent.tools.plan import plan_walk
 
-    ids = _sight_ids(repos, limit=6)
+    ids = _sight_ids(db_repos, limit=6)
     pinned = [ids[0]]
-    answer = plan_walk(ids, repos=repos, budget_minutes=15, must_keep_ids=pinned)
+    answer = plan_walk(ids, repos=db_repos, budget_minutes=15, must_keep_ids=pinned)
 
     assert answer.get("error") in (None, "no_route"), answer.get("message")
     if answer.get("error") is None:

@@ -8,7 +8,9 @@ provider (``fake_model``) and the running stack (``live_stack``).
 
 from __future__ import annotations
 
+import hashlib
 import json
+import math
 import os
 import sys
 from dataclasses import dataclass
@@ -45,6 +47,34 @@ def _empty_caches():
     yield
     for store in CACHES:
         store.clear()
+
+
+def fake_vector(text: str, dim: int = 384) -> list[float]:
+    """A deterministic unit vector for a text — free, and stable across runs.
+
+    It carries no meaning: ranking quality is the quality harness's question, and
+    no unit test should be answering it by downloading a model.
+    """
+    digest = hashlib.sha256(text.encode("utf-8")).digest()
+    raw = [((byte / 255.0) - 0.5) for byte in digest] * ((dim // len(digest)) + 1)
+    vector = raw[:dim]
+    norm = math.sqrt(sum(value * value for value in vector)) or 1.0
+    return [value / norm for value in vector]
+
+
+@pytest.fixture(autouse=True)
+def _mocked_embedder(monkeypatch):
+    """Vectorisation is mocked in every test.
+
+    The real model is a download and an inference — slow, and beside the point:
+    what a unit test can hold is the plumbing around it, not its judgement.
+    """
+    monkeypatch.setattr("embeddings.query.embed_query", fake_vector)
+    monkeypatch.setattr("embeddings.model.is_available", lambda: True)
+    monkeypatch.setattr("embeddings.model.embed_text", fake_vector)
+    # `find_places` bound the name at import, so the binding is patched too.
+    monkeypatch.setattr("agent.tools.places.embed_query", fake_vector)
+    monkeypatch.setattr("agent.tools.places.embeddings_model.is_available", lambda: True)
 
 
 class FakeModel:
@@ -115,3 +145,24 @@ def live_stack() -> LiveStack:
     except Exception as exc:  # any failure means "not reachable"
         pytest.skip(f"no live stack at {BASE_URL} ({type(exc).__name__}: {exc})")
     return LiveStack(url=BASE_URL, health=health)
+
+
+@pytest.fixture(scope="session")
+def db_repos():
+    """The real repositories, or skip when the database is unreachable.
+
+    The tools are the layer under test, so they get the same bundle the service
+    hands them — not a fake that could agree with a wrong assumption.
+    """
+    from db.store.areas import PostgresAreaRepository
+    from db.store.places import PostgresPlaceRepository
+    from db.store.registry import Repositories
+
+    bundle = Repositories(places=PostgresPlaceRepository(), areas=PostgresAreaRepository())
+    try:
+        if not bundle.places.ping():
+            pytest.skip("database not reachable")
+    except Exception as exc:  # any storage failure is "not reachable" here
+        pytest.skip(f"database not reachable: {type(exc).__name__}")
+    yield bundle
+    bundle.close()

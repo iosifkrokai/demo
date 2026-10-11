@@ -31,7 +31,7 @@ def test_a_plain_reading_replays_without_a_provider(fake_model: FakeModel) -> No
 
 def test_a_tool_call_is_answered_before_the_final_reading(fake_model: FakeModel) -> None:
     """The script plays turn by turn: the tool call first, the reading after it."""
-    fake_model.call("search_places", query="замок").finish(budget_minutes=90)
+    fake_model.call("find_places", query="замок").finish(budget_minutes=90)
 
     result = interpret_with_agent("замок на полтора часа", ReaderBrief(locale="ru"))
 

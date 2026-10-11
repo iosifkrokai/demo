@@ -201,7 +201,7 @@ def load_areas(conn: psycopg.Connection, geo_dir: Path | None = None) -> int:
                 INSERT INTO areas (code, name_ru, name_en, aliases, kind, source,
                                    license, note, is_project_area, geom)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s,
-                        CASE WHEN %s IS NULL THEN NULL ELSE ST_GeogFromText(%s) END)
+                        CASE WHEN %s::text IS NULL THEN NULL ELSE ST_GeogFromText(%s) END)
                 ON CONFLICT (code) DO UPDATE
                     SET name_ru = EXCLUDED.name_ru, name_en = EXCLUDED.name_en,
                         aliases = EXCLUDED.aliases, kind = EXCLUDED.kind,

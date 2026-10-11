@@ -9,13 +9,12 @@ reads places and nothing else, so it should not be able to reach past them.
 from __future__ import annotations
 
 import re
-from collections import defaultdict
-from collections.abc import Iterable
 
 from core import constants
 from db.store.places import PostgresPlaceRepository
 from planner.models import Candidate, ResolvedConstraints
 from reference.taxonomy import db_values
+from routing.select import rrf_fuse
 from routing.stops import candidate_of
 
 CATEGORY_KEYWORD_TO_LLM: dict[str, str] = {
@@ -156,21 +155,6 @@ def retrieve(
 
     candidates.sort(key=lambda c: c.rrf_score, reverse=True)
     return candidates[:pool_limit]
-
-
-def rrf_fuse(
-    rankings: Iterable[list[tuple[int, float]]],
-    k: int = 60,
-) -> dict[int, float]:
-    """Fuse multiple ranked lists into a single score per id.
-
-    score(id) = sum over signals of 1 / (k + rank); no score normalization needed.
-    """
-    scores: dict[int, float] = defaultdict(float)
-    for ranking in rankings:
-        for rank, (pid, _) in enumerate(ranking):
-            scores[pid] += 1.0 / (k + rank + 1)
-    return dict(scores)
 
 
 def _vector_signal(
