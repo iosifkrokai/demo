@@ -27,6 +27,7 @@ from .constants import (
     MATRIX_PATH_LIMIT_M,
     ROUTE_FAILURE_MARKERS,
     ROUTE_SNAP_RADII_M,
+    costing_for,
 )
 
 logger = logging.getLogger(__name__)
@@ -327,6 +328,7 @@ def time_matrix(
 
     A cell is a real time, UNREACHABLE_S ("no path") or UNKNOWN_S.
     """
+    costing = costing_for(costing)
     n_src = len(sources)
     n_tgt = len(targets)
     timeout = timeout or constants.VALHALLA_TIMEOUT_S

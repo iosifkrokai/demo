@@ -20,12 +20,3 @@ class Itinerary:
     transport: str = "pedestrian"
     position: int = 0
     stops: tuple[str, ...] = ()
-
-
-@dataclass(frozen=True)
-class ItineraryStop:
-    """One named stop of one itinerary."""
-
-    itinerary_id: str
-    ordinal: int
-    source_url: str

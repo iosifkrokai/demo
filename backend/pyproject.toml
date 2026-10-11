@@ -13,7 +13,6 @@ dependencies = [
     "pydantic>=2.7",
     "pydantic-ai-slim[anthropic,openrouter,logfire]>=1.0,<2",
     "fastembed>=0.9.0",
-    "numpy>=1.26",
     "alembic>=1.13",
 ]
 

@@ -17,10 +17,6 @@ class AgentError(Exception):
     http_status: int = 500
 
 
-class NoCandidatesFoundError(AgentError):
-    http_status = 404
-
-
 class NoRoutePossibleError(AgentError):
     http_status = 422
 

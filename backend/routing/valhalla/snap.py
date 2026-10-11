@@ -11,7 +11,7 @@ from core.config import settings
 from core.errors import UpstreamUnavailableError
 
 from . import http
-from .constants import LOCATE_RADIUS_M, LOCATE_SNAP_RADIUS_M
+from .constants import LOCATE_RADIUS_M, LOCATE_SNAP_RADIUS_M, costing_for
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +54,7 @@ def snap_locations(
 
     Results are memoised per rounded coordinate.
     """
+    costing = costing_for(costing)
     out: list[dict[str, Any]] = []
     for loc in locations:
         lat, lon = float(loc["lat"]), float(loc["lon"])

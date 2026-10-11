@@ -89,11 +89,6 @@ def positive_int(value: Any) -> bool:
     return isinstance(value, int) and not isinstance(value, bool) and value > 0
 
 
-def norm_term(text: str) -> str:
-    """Lowercase, ё-folded, whitespace-collapsed — for term matching only."""
-    return " ".join(str(text).lower().replace("ё", "е").split())
-
-
 # The registry needs the submodules; they import the helpers above, so this
 # import has to sit below them.
 from agent.tools import areas, places, plan, services, verify  # noqa: E402

@@ -6,7 +6,6 @@ import itertools
 import math
 from collections.abc import Collection
 from dataclasses import dataclass
-from typing import Any
 
 from core import constants
 from core.errors import NoRoutePossibleError, UpstreamUnavailableError
@@ -14,7 +13,7 @@ from routing.models import Candidate, CategoryFacts, CostMatrix, ResolvedConstra
 from routing.valhalla.matrix import time_matrix
 from routing.valhalla.snap import snap_locations
 
-from .geo import distance_m
+from .geometry import distance_m
 
 REASON_UNROUTABLE_LEG = "unroutable_leg"
 REASON_MUST_VISIT_UNROUTABLE = "must_visit_unroutable"
@@ -303,16 +302,3 @@ def build_cost(
             "Valhalla не нашла дороги между нашими точками — уточните город или район"
         )
     return candidates, cost
-
-
-def is_service_code(code: str, facts: CategoryFacts) -> bool:
-    """True when a taxonomy code is a service (a café, a toilet, a hotel)."""
-    return facts.is_service(code)
-
-
-def is_sight_stop(candidate: Any, facts: CategoryFacts) -> bool:
-    """True when a candidate is a destination, not a service the user asked for.
-
-    Unknown category codes count as sights.
-    """
-    return not facts.is_service(candidate.category)

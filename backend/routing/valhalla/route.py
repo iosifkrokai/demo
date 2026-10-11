@@ -12,7 +12,7 @@ from core.config import settings
 from core.errors import UpstreamUnavailableError
 
 from . import http, snap
-from .constants import LOCATION_SNAP_RADIUS_M, PRECISION, ROUTE_SNAP_RADII_M
+from .constants import LOCATION_SNAP_RADIUS_M, PRECISION, ROUTE_SNAP_RADII_M, costing_for
 from .matrix import is_route_failure
 from .types import RouteResult, RouteStatus
 
@@ -152,6 +152,7 @@ def route_through(
 
     Unsnappable stops are retried at a wider radius, then dropped.
     """
+    costing = costing_for(costing)
     locs = [dict(loc) for loc in locations]
     if len(locs) < 2:
         return RouteResult(

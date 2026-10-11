@@ -30,7 +30,7 @@ from core import cache
 BASE_URL = os.environ.get("GRODNO_BASE_URL", "http://localhost:8080")
 HEALTH_TIMEOUT_S = 3.0
 
-CACHES = (cache.INTERPRET_CACHE, cache.EMBED_CACHE)
+CACHES = (cache.EMBED_CACHE,)
 
 
 @pytest.fixture(autouse=True)
