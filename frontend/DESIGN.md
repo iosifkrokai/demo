@@ -9,7 +9,7 @@ surfaces, warm neutral greys (never blue-grey), one confident accent, big radii,
 
 Token variables are already wired: `--background --foreground --card --popover
 --primary --secondary --muted --accent --destructive --border --input --ring
---radius` (+ `--sidebar-*`). Change the VALUES in `src/index.css`; components keep
+--radius`. Change the VALUES in `src/index.css`; components keep
 using `bg-card`, `text-muted-foreground`, `rounded-xl`, etc.
 
 ## Tokens (`src/index.css`, `:root`)

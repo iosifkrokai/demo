@@ -27,5 +27,3 @@ declare module '*.svg' {
   export { ReactComponent };
   export default ReactComponent;
 }
-
-declare module '@stadiamaps/ferrostar-webcomponents' {}

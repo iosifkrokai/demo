@@ -7,32 +7,31 @@ service, a React/Vite frontend served by nginx.
 ## Layout
 
 ```
-backend/     the service — api (HTTP) · agent (LLM) · routing (the deterministic
-             math) · core · reference · telemetry · embeddings · quality · tests,
-             and planner/ — the pipeline, being dissolved into agent tools
+backend/     the service — api (HTTP) · agent (the planner) · routing (the
+             deterministic math) · core · quality · tests
              db/  — the persistence side: models (rows) · store (repositories)
                     · seed (the projection) · alembic · connection.py
+                    · embeddings (the local model) · data (the datasets)
 frontend/    React + Vite + MapLibre, talked to over nginx
-backend/db/data/  the versioned datasets — the seed's input, never the service's
 docker-compose.yml   the whole stack, including the db image (inline)
 ```
 
-`api` → `planner`/`agent`/`db`/`core`; `planner` → `agent`/`db`/`core`/`reference`;
-nothing imports upward, and `agent` is a leaf — it declares its own input
-(`agent/models.py::ReaderBrief`) rather than reaching for the HTTP body. `agent/`
-is the LLM layer (client, prompts, tools, runner); the one place a provider is
-named is `agent/llm.py`.
+`api` → `agent` → `routing` → `db` → `core`, and nothing imports upward.
+
+`agent/` is the LLM layer and the orchestrator: the run loop, the tool surface,
+the prompts, and the contracts it declares for itself (`agent/models.py::ReaderBrief`
+rather than the HTTP body). The one place a provider is named is `agent/llm.py`.
 
 `routing/` is the other leaf, below both: the Valhalla client, the cost matrix,
-the optimizer, the budget arithmetic and the requirement verdicts. It imports `core`
-and `db` and never `agent` or `planner`, which is what lets a planning tool do
-arithmetic without either layer reaching for the other.
+the optimizer, the budget arithmetic and the requirement verdicts. It imports
+`core` and `db` and never `agent`, which is what lets a planning tool do
+arithmetic without the agent reaching into it.
 
-Each layer declares its own shapes: `db/models/` the rows, `planner/models.py` the
-currency the pipeline speaks, `api/models/` the wire. There is no shared
-`contracts/` — where a rule is genuinely needed by two layers it lives below both
-(`core/accounts.py` is the email/password rules the seed and the API share, and
-`core/cache.py` is the reading and embedding cache).
+Each layer declares its own shapes: `db/models/` the rows, `routing/models.py` the
+measurement's currency and the requirement contract, `api/models/` the wire. There
+is no shared `contracts/` — where a rule is genuinely needed by two layers it lives
+below both (`core/accounts.py` is the email/password rules the seed and the API
+share, and `core/cache.py` is the reading cache).
 
 Nothing above `db/store` writes SQL or holds a connection: a logic layer is
 handed repositories (`db/store/registry.py::Repositories`) and calls them.
