@@ -10,7 +10,7 @@ from collections.abc import Callable
 from typing import Any
 
 from core import constants
-from planner.models import Candidate, LatLon
+from routing.models import Candidate, LatLon
 
 TRACE_NAMES_MAX = 15
 

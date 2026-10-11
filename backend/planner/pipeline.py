@@ -31,24 +31,25 @@ from planner.models import (
     RouteSummary,
     ValidatedPlan,
 )
-from planner.valhalla.http import ping as valhalla_ping
-from telemetry import progress, trace
-
-from .catalogue import catalogue_response
-from .cost import (
+from routing.cost import (
     is_service_code,
     is_sight_stop,
 )
-from .coverage import outside_left_unresolved, refuse_out_of_coverage
-from .dedupe import drop_duplicates, dupe_pairs
-from .diversity import mmr_select
-from .explain import explain as explain_route
-from .geo import (
+from routing.dedupe import drop_duplicates, dupe_pairs
+from routing.diversity import mmr_select
+from routing.geo import (
     TRACE_NAMES_MAX,
     geo_focus,
     geo_focus_report,
     should_skip_geo_focus,
 )
+from routing.render import render
+from routing.valhalla.http import ping as valhalla_ping
+from telemetry import progress, trace
+
+from .catalogue import catalogue_response
+from .coverage import outside_left_unresolved, refuse_out_of_coverage
+from .explain import explain as explain_route
 from .intent import build_requirements, intent_from_requirements
 from .plan_tail import run_plan_tail
 from .preprocess import preprocess
@@ -57,7 +58,6 @@ from .refine import (
     drop_excluded,
 )
 from .refinement_flow import generate_refinement, refinement_base
-from .render import render
 from .resolve import resolve
 from .response import (
     build_response,

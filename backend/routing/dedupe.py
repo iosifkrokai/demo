@@ -9,7 +9,7 @@ import re as _re
 from typing import Any
 
 from core import constants
-from planner.models import Candidate
+from routing.models import Candidate
 
 from .geo import TRACE_NAMES_MAX, distance_pt_m
 

@@ -15,11 +15,11 @@ from typing import Any
 from core import constants
 from db.store.registry import Repositories
 from planner.models import Candidate, GenerateReq, RouteContext, RouteResponse
+from routing.dedupe import norm_name
+from routing.geo import TRACE_NAMES_MAX
 from telemetry import trace
 
-from .dedupe import norm_name
 from .explain import explain as explain_route
-from .geo import TRACE_NAMES_MAX
 from .intent import build_requirements, intent_from_requirements
 from .plan_tail import run_plan_tail
 from .refine import (

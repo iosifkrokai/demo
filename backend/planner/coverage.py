@@ -12,12 +12,12 @@ from planner.models import (
     ResolvedConstraints,
     RouteResponse,
 )
+from routing.validate import validate
 from telemetry import trace
 
 from .intent import mark_out_of_coverage
 from .response import build_response, verdicts
-from .validate import validate
-from .verify import overall_status
+from .verify import overall_status, verify, verify_summary
 
 
 def outside_left_unresolved(requirements: Any, constraints: ResolvedConstraints) -> list[str]:
@@ -47,13 +47,11 @@ def refuse_out_of_coverage(
     No stop is returned: the verifier's own rule makes the status `infeasible`.
     """
     mark_out_of_coverage(requirements, names)
-    plan = validate(
-        [],
-        CostMatrix(),
-        constraints,
-        {},
-        requirements=requirements,
-    )
+    plan = validate([], CostMatrix(), constraints, {})
+    verify(requirements, {"route": [], "trace": plan.trace}, None)
+    plan.trace["requirements"] = requirements.public_requirements()
+    plan.trace["requirement_summary"] = verify_summary(requirements)
+    plan.trace["status"] = plan.trace["requirement_summary"]["status"]
     status = overall_status(requirements)
     trace.record(
         "verify",

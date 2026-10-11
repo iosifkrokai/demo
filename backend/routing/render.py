@@ -11,9 +11,9 @@ from typing import Any
 
 from core import constants
 from core.errors import UpstreamUnavailableError
-from planner.models import Candidate, LatLon
-from planner.valhalla.route import route_through
-from planner.valhalla.types import RouteStatus
+from routing.models import Candidate, LatLon
+from routing.valhalla.route import route_through
+from routing.valhalla.types import RouteStatus
 
 log = logging.getLogger(__name__)
 

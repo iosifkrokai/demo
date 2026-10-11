@@ -15,14 +15,14 @@ from typing import Any
 from core import constants
 from core.errors import NoRoutePossibleError
 from planner.models import Candidate, ResolvedConstraints
+from routing.cost import build_cost, compute_cost_matrix, is_sight_stop, refinement_cost
+from routing.geo import TRACE_NAMES_MAX
+from routing.optimize import optimize, order_after_prune, prune_unroutable, valhalla_order
+from routing.validate import validate
 from telemetry import progress, trace
 
-from .cost import build_cost, compute_cost_matrix, is_sight_stop, refinement_cost
-from .geo import TRACE_NAMES_MAX
-from .optimize import optimize, order_after_prune, prune_unroutable, valhalla_order
 from .response import gone, names
 from .turn import Turn, seconds_left
-from .validate import validate
 
 log = logging.getLogger(__name__)
 

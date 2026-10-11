@@ -10,10 +10,10 @@ from typing import Any
 
 from core import constants
 from core.errors import NoRoutePossibleError, UpstreamUnavailableError
-from planner.models import Candidate, CostMatrix, ResolvedConstraints
-from planner.valhalla.matrix import time_matrix
-from planner.valhalla.snap import snap_locations
 from reference import taxonomy
+from routing.models import Candidate, CostMatrix, ResolvedConstraints
+from routing.valhalla.matrix import time_matrix
+from routing.valhalla.snap import snap_locations
 
 from .geo import distance_m
 
@@ -57,6 +57,16 @@ def visit_time_minutes(category: str | None) -> int:
         return taxonomy.visit_minutes(code)
     except KeyError:  # pragma: no cover — resolve_code only returns known codes
         return DEFAULT_VISIT_MINUTES
+
+
+def visit_minutes_of(candidate: Candidate) -> int:
+    """The stop's own visit estimate, falling back to its category default.
+
+    An estimate from the taxonomy, not a hard constraint.
+    """
+    if candidate.visit_minutes_db is not None:
+        return int(candidate.visit_minutes_db)
+    return visit_time_minutes(candidate.category)
 
 
 def compute_cost_matrix(
@@ -243,8 +253,6 @@ def total_seconds(order: list[int], matrix: list[list[float]], visit_minutes: li
 
 def _synthetic_cost(candidates: list[Candidate], costing: str = "pedestrian") -> CostMatrix:
     """A straight-line cost matrix for when Valhalla cannot answer."""
-    from .refine import visit_minutes_of  # deferred: refine imports cost
-
     speed_ms = 1.3 if costing == "pedestrian" else 8.0
     n = len(candidates)
     matrix = [[0.0] * n for _ in range(n)]

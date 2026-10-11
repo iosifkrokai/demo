@@ -12,8 +12,8 @@ from db.models.place import Place
 from db.store.places import PostgresPlaceRepository
 from planner.models import Candidate, LatLon, RouteChange, RouteChanges
 from reference import taxonomy
+from routing.cost import visit_minutes_of
 
-from .cost import visit_time_minutes
 from .resolve import CATEGORY_SYNONYMS, CATEGORY_SYNONYMS_EN
 from .retrieve import candidate_of
 
@@ -354,16 +354,6 @@ def _add_names(text: str, categories: tuple[str, ...]) -> tuple[str, ...]:
             continue
         out.append(token)
     return tuple(dict.fromkeys(out))
-
-
-def visit_minutes_of(candidate: Candidate) -> int:
-    """The stop's own visit estimate, falling back to its category default.
-
-    An estimate from the taxonomy, not a hard constraint.
-    """
-    if candidate.visit_minutes_db is not None:
-        return int(candidate.visit_minutes_db)
-    return visit_time_minutes(candidate.category)
 
 
 def stop_category_code(candidate: Candidate) -> str | None:

@@ -9,7 +9,7 @@ import numpy as np
 
 from core import constants
 from db.store.places import PostgresPlaceRepository
-from planner.models import Candidate, ResolvedConstraints
+from routing.models import Candidate, ResolvedConstraints
 
 # Relevance is flat within this much; normalising by it divides by noise.
 _EPSILON = 1e-09

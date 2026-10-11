@@ -30,10 +30,9 @@ from planner.models import (
     RouteSummary,
     ValidatedPlan,
 )
-
-from .cost import visit_time_minutes
-from .geo import TRACE_NAMES_MAX
-from .render import render
+from routing.cost import visit_time_minutes
+from routing.geo import TRACE_NAMES_MAX
+from routing.render import render
 
 log = logging.getLogger(__name__)
 

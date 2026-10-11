@@ -1,6 +1,8 @@
-"""Step 7 — Validation.
+"""Budget validation.
 
 Builds the budget summary against the ACTUAL time, plus trace diagnostics.
+Measurement only: whether the request was satisfied is the verifier's question,
+asked elsewhere, so nothing here reads a requirement or a model.
 """
 
 from __future__ import annotations
@@ -9,11 +11,8 @@ import itertools
 import math
 from typing import Any
 
-from agent.models import TripRequirements
 from core import constants
-from planner.models import Candidate, CostMatrix, ResolvedConstraints, ValidatedPlan
-
-from .verify import verify, verify_summary
+from routing.models import Candidate, CostMatrix, ResolvedConstraints, ValidatedPlan
 
 
 def _leg_s(value: float) -> float:
@@ -57,40 +56,19 @@ def _record_optimizer_report(
         ]
 
 
-def _run_verification(
-    requirements: TripRequirements | None,
-    route: list[Candidate],
-    trace: dict[str, Any],
-    geometry: Any,
-) -> None:
-    """Verify the built route and attach the breakdown to the trace."""
-    if requirements is None:
-        return
-    verify(requirements, {"route": route, "trace": trace}, geometry)
-    trace["requirements"] = requirements.public_requirements()
-    trace["requirement_summary"] = verify_summary(requirements)
-    trace["status"] = trace["requirement_summary"]["status"]
-
-
 def validate(
     route: list[Candidate],
     cost: CostMatrix,
     constraints: ResolvedConstraints,
     info: dict[str, Any],
     *,
-    requirements: TripRequirements | None = None,
-    geometry: Any = None,
     prune_report: Any = None,
 ) -> ValidatedPlan:
-    """Budget summary + diagnostics, plus requirement verification when asked.
-
-    ``requirements`` / ``geometry`` / ``prune_report`` are optional.
-    """
+    """Budget summary + diagnostics for an already-ordered route."""
     n = len(route)
     if n == 0:
         trace: dict[str, Any] = {"error": "empty_route"}
         _record_optimizer_report(trace, info, prune_report)
-        _run_verification(requirements, route, trace, geometry)
         return ValidatedPlan(
             route=[],
             walk_seconds=0.0,
@@ -144,7 +122,6 @@ def validate(
         "walk_times_unknown": unknown_legs,
     }
     _record_optimizer_report(trace, info, prune_report)
-    _run_verification(requirements, route, trace, geometry)
 
     stops_dropped = int(info.get("stops_dropped", 0))
 
