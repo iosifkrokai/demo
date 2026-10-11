@@ -1,6 +1,7 @@
 import { Link } from '@tanstack/react-router';
 import { Loader2, ShieldCheck } from 'lucide-react';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { Button } from '@/components/ui/button';
 import { describeAccountError, useAuth } from '@/hooks/use-auth';
@@ -21,6 +22,7 @@ const StatCard = ({ label, value }: { label: string; value: number }) => (
 );
 
 export function AdminPage() {
+  const { t } = useTranslation();
   const { authenticated, isAdmin, user, isLoading } = useAuth();
   const stats = useAdminStats(isAdmin);
   const [tab, setTab] = useState<Tab>('users');
@@ -114,7 +116,7 @@ export function AdminPage() {
           className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-destructive/40 bg-card px-3 py-2"
         >
           <span className="text-meta text-muted-foreground">
-            {describeAccountError(stats.error)}
+            {t(describeAccountError(stats.error))}
           </span>
           <Button
             type="button"

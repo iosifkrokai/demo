@@ -1,5 +1,6 @@
 import { Pencil, Plus, Trash2, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
@@ -36,6 +37,7 @@ const finiteOr = (raw: string, fallback: number): number => {
 };
 
 export function PlacesPanel({ enabled }: { enabled: boolean }) {
+  const { t } = useTranslation();
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('');
   const debouncedQuery = useDebouncedValue(query);
@@ -77,7 +79,7 @@ export function PlacesPanel({ enabled }: { enabled: boolean }) {
       { placeId, patch: toPlacePatch(draft) },
       {
         onSuccess: () => stopEdit(),
-        onError: (error) => toast.error(describeAccountError(error)),
+        onError: (error) => toast.error(t(describeAccountError(error))),
       }
     );
   };
@@ -88,7 +90,7 @@ export function PlacesPanel({ enabled }: { enabled: boolean }) {
       onSuccess: () => {
         if (selectedId === place.place_id) setSelectedId(null);
       },
-      onError: (error) => toast.error(describeAccountError(error)),
+      onError: (error) => toast.error(t(describeAccountError(error))),
     });
   };
 
@@ -142,7 +144,7 @@ export function PlacesPanel({ enabled }: { enabled: boolean }) {
             onSubmit={(input) =>
               createPlace.mutate(input, {
                 onSuccess: () => setCreating(false),
-                onError: (error) => toast.error(describeAccountError(error)),
+                onError: (error) => toast.error(t(describeAccountError(error))),
               })
             }
           />
@@ -158,7 +160,7 @@ export function PlacesPanel({ enabled }: { enabled: boolean }) {
             className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-destructive/40 bg-card px-3 py-2"
           >
             <span className="text-meta text-muted-foreground">
-              {describeAccountError(places.error)}
+              {t(describeAccountError(places.error))}
             </span>
             <Button
               type="button"

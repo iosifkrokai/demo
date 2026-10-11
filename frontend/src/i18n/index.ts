@@ -2,6 +2,7 @@ import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
 
 import { en } from './en';
+import { accountArea } from './namespaces/account';
 import { guideArea } from './namespaces/guide';
 import { historyArea } from './namespaces/history';
 import { mapArea } from './namespaces/map';
@@ -37,6 +38,7 @@ export const flatRu = {
   ...guideArea.ru,
   ...mapArea.ru,
   ...historyArea.ru,
+  ...accountArea.ru,
   ...sidebarArea.ru,
   ...photoArea.ru,
   ...panelArea.ru,
@@ -46,6 +48,7 @@ export const flatEn = {
   ...guideArea.en,
   ...mapArea.en,
   ...historyArea.en,
+  ...accountArea.en,
   ...sidebarArea.en,
   ...photoArea.en,
   ...panelArea.en,

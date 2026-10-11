@@ -1,5 +1,6 @@
 import { Trash2 } from 'lucide-react';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
@@ -29,6 +30,7 @@ interface UsersPanelProps {
 }
 
 export function UsersPanel({ enabled, currentUserId }: UsersPanelProps) {
+  const { t } = useTranslation();
   const [query, setQuery] = useState('');
   const debouncedQuery = useDebouncedValue(query);
   const users = useAdminUsers(enabled, debouncedQuery);
@@ -38,14 +40,14 @@ export function UsersPanel({ enabled, currentUserId }: UsersPanelProps) {
   const changeRole = (user: AdminUser, role: UserRole) => {
     patchUser.mutate(
       { userId: user.id, patch: { role } },
-      { onError: (error) => toast.error(describeAccountError(error)) }
+      { onError: (error) => toast.error(t(describeAccountError(error))) }
     );
   };
 
   const remove = (user: AdminUser) => {
     if (!window.confirm(`Удалить аккаунт ${user.email}?`)) return;
     deleteUser.mutate(user.id, {
-      onError: (error) => toast.error(describeAccountError(error)),
+      onError: (error) => toast.error(t(describeAccountError(error))),
     });
   };
 
@@ -74,7 +76,7 @@ export function UsersPanel({ enabled, currentUserId }: UsersPanelProps) {
           className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-destructive/40 bg-card px-3 py-2"
         >
           <span className="text-meta text-muted-foreground">
-            {describeAccountError(users.error)}
+            {t(describeAccountError(users.error))}
           </span>
           <Button
             type="button"

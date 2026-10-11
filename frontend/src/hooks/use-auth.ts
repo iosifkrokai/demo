@@ -28,29 +28,29 @@ export const authQueryOptions = queryOptions<AuthState>({
 
 const ANONYMOUS: AuthState = { authenticated: false, user: null };
 
-/** A Russian sentence for a machine code — the UI owns all human text. */
+/** A translation key for a machine code — the dictionary owns the human text. */
 export function describeAccountError(error: unknown): string {
   if (error instanceof AccountApiError) {
     const byCode: Partial<Record<AccountApiErrorCode, string>> = {
-      invalid_credentials: 'неверная почта или пароль',
-      email_taken: 'такая почта уже занята',
-      weak_password: 'пароль слишком короткий — минимум 8 символов',
-      invalid_email: 'проверьте адрес почты',
-      not_authenticated: 'нужно войти',
-      not_admin: 'нужны права администратора',
-      storage_unavailable: 'сервер не сохраняет данные — попробуйте позже',
-      network_unavailable: 'нет связи с сервером — попробуйте позже',
-      last_admin: 'нельзя оставить систему без администратора',
-      self_role: 'нельзя менять собственную роль',
-      self_delete: 'нельзя удалить самого себя',
-      user_not_found: 'пользователь не найден',
-      place_not_found: 'место не найдено',
-      source_taken: 'такая ссылка-источник уже занята',
-      invalid_request: 'нечего сохранять',
+      invalid_credentials: 'account.errors.invalid_credentials',
+      email_taken: 'account.errors.email_taken',
+      weak_password: 'account.errors.weak_password',
+      invalid_email: 'account.errors.invalid_email',
+      not_authenticated: 'account.errors.not_authenticated',
+      not_admin: 'account.errors.not_admin',
+      storage_unavailable: 'account.errors.storage_unavailable',
+      network_unavailable: 'account.errors.network_unavailable',
+      last_admin: 'account.errors.last_admin',
+      self_role: 'account.errors.self_role',
+      self_delete: 'account.errors.self_delete',
+      user_not_found: 'account.errors.user_not_found',
+      place_not_found: 'account.errors.place_not_found',
+      source_taken: 'account.errors.source_taken',
+      invalid_request: 'account.errors.invalid_request',
     };
-    return byCode[error.code] ?? 'не получилось — попробуйте ещё раз';
+    return byCode[error.code] ?? 'account.errors.generic';
   }
-  return 'не получилось — попробуйте ещё раз';
+  return 'account.errors.generic';
 }
 
 export interface AuthApi {

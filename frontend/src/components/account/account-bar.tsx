@@ -7,6 +7,7 @@ import {
   UserRound,
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { Button } from '@/components/ui/button';
 import { useAuth, useLogout } from '@/hooks/use-auth';
@@ -17,6 +18,7 @@ const menuLink =
 
 /** The account control over the map. */
 export function AccountBar() {
+  const { t } = useTranslation();
   const { user, authenticated, isAdmin, isLoading } = useAuth();
   const logout = useLogout();
   const [open, setOpen] = useState(false);
@@ -60,7 +62,7 @@ export function AccountBar() {
         <Button asChild size="sm" variant="outline" data-testid="account-login">
           <Link to="/login">
             <UserRound className="size-4" aria-hidden="true" />
-            Войти
+            {t('account.signIn')}
           </Link>
         </Button>
       ) : (
@@ -85,7 +87,7 @@ export function AccountBar() {
             <div
               id="account-menu"
               role="menu"
-              aria-label="Меню аккаунта"
+              aria-label={t('account.menu')}
               data-testid="account-menu"
               className="flex w-56 flex-col gap-0.5 rounded-2xl border border-border bg-card p-1.5 shadow-float"
             >
@@ -100,7 +102,7 @@ export function AccountBar() {
                 data-testid="account-visited"
               >
                 <MapPinned className="size-4" aria-hidden="true" />
-                Мои посещённые
+                {t('account.visited')}
               </Link>
               {isAdmin && (
                 <Link
@@ -111,7 +113,7 @@ export function AccountBar() {
                   data-testid="account-admin"
                 >
                   <ShieldCheck className="size-4" aria-hidden="true" />
-                  Админка
+                  {t('account.admin')}
                 </Link>
               )}
               <button
@@ -127,7 +129,7 @@ export function AccountBar() {
                 }}
               >
                 <LogOut className="size-4" aria-hidden="true" />
-                Выйти
+                {t('account.logout')}
               </button>
             </div>
           )}

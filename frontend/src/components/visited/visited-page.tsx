@@ -1,6 +1,7 @@
 import { Link } from '@tanstack/react-router';
 import { Loader2, MapPinned, Plus, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { PlaceMap } from '@/components/place-map/place-map';
 import { Button } from '@/components/ui/button';
@@ -8,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { useAuth } from '@/hooks/use-auth';
 import { usePlaces } from '@/hooks/use-places';
 import { useToggleVisited, useVisited } from '@/hooks/use-visited';
+import { formatDate } from '@/i18n/format';
 
 /** «Мои посещённые места». */
 
@@ -15,17 +17,14 @@ const fmtDate = (value: string | null): string | null => {
   if (!value) return null;
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return null;
-  return date.toLocaleDateString('ru-RU', {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  });
+  return formatDate(date, { day: 'numeric', month: 'long', year: 'numeric' });
 };
 
 const where = (town: string | null, district: string | null): string =>
   [town, district].filter(Boolean).join(', ');
 
 export function VisitedPage() {
+  const { t } = useTranslation();
   const { authenticated, isLoading } = useAuth();
   const visited = useVisited(authenticated);
   const places = usePlaces({ enabled: authenticated });
@@ -66,7 +65,7 @@ export function VisitedPage() {
           className="flex items-center gap-2 text-meta text-muted-foreground"
         >
           <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-          загружаю…
+          {t('visited.loading')}
         </div>
       </main>
     );
@@ -80,13 +79,12 @@ export function VisitedPage() {
             className="size-8 text-muted-foreground"
             aria-hidden="true"
           />
-          <h1 className="text-title font-semibold">Мои посещённые места</h1>
+          <h1 className="text-title font-semibold">{t('visited.titleFull')}</h1>
           <p className="text-meta text-muted-foreground">
-            Здесь видны места, которые вы отметили. Чтобы вести этот список,
-            нужно войти.
+            {t('visited.signInHint')}
           </p>
           <Button asChild>
-            <Link to="/login">Войти</Link>
+            <Link to="/login">{t('visited.signIn')}</Link>
           </Button>
         </div>
       </main>
@@ -96,10 +94,10 @@ export function VisitedPage() {
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-4xl flex-col gap-4 bg-background p-4">
       <header className="flex items-center justify-between gap-2">
-        <h1 className="text-title font-semibold">Мои посещённые</h1>
+        <h1 className="text-title font-semibold">{t('visited.title')}</h1>
         <Button asChild size="sm" variant="ghost">
           <Link to="/$activeTab" params={{ activeTab: 'directions' }}>
-            к карте
+            {t('visited.backToMap')}
           </Link>
         </Button>
       </header>
@@ -108,12 +106,12 @@ export function VisitedPage() {
         <div className="flex min-w-0 flex-1 flex-col gap-4">
           <section className="flex flex-col gap-2" data-testid="visited-list">
             <div className="text-meta font-medium text-muted-foreground">
-              отмечено: {visited.count}
+              {t('visited.count', { count: visited.count })}
             </div>
 
             {visited.items.length === 0 && (
               <p className="rounded-2xl border border-border bg-card px-3 py-2 text-meta text-muted-foreground">
-                пока пусто — отметьте место на карте или найдите его ниже.
+                {t('visited.empty')}
               </p>
             )}
 
@@ -164,7 +162,7 @@ export function VisitedPage() {
                       className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-xl px-3 text-meta text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                     >
                       <Trash2 className="size-3.5" aria-hidden="true" />
-                      убрать
+                      {t('visited.remove')}
                     </button>
                   </li>
                 ))}
@@ -174,19 +172,19 @@ export function VisitedPage() {
 
           <section className="flex flex-col gap-2">
             <label className="text-meta font-medium" htmlFor="visited-search">
-              добавить место
+              {t('visited.addSection')}
             </label>
             <Input
               id="visited-search"
               data-testid="visited-search"
-              placeholder="название или город"
+              placeholder={t('visited.searchPlaceholder')}
               value={query}
               onChange={(event) => setQuery(event.target.value)}
             />
 
             {places.isLoading && query.trim().length >= 2 && (
               <p className="text-meta text-muted-foreground">
-                загружаю каталог…
+                {t('visited.loadingCatalog')}
               </p>
             )}
 
@@ -194,7 +192,7 @@ export function VisitedPage() {
               results.length === 0 &&
               !places.isLoading && (
                 <p className="text-meta text-muted-foreground">
-                  ничего не нашлось
+                  {t('visited.nothingFound')}
                 </p>
               )}
 
@@ -229,7 +227,7 @@ export function VisitedPage() {
                       }
                     >
                       <Plus className="size-4" aria-hidden="true" />
-                      отметить
+                      {t('visited.add')}
                     </Button>
                   </li>
                 ))}
