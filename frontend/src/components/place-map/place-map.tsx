@@ -1,6 +1,7 @@
 /** A small map of a set of places, shared by «Места» and «посещённые». */
 
 import { useEffect, useMemo, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Map,
   Marker,
@@ -69,6 +70,7 @@ export function PlaceMap({
   onMove,
   className = 'h-[22rem]',
 }: PlaceMapProps) {
+  const { t } = useTranslation();
   const mapRef = useRef<MapRef | null>(null);
   const bounds = useMemo(() => boundsOf(places), [places]);
 
@@ -157,10 +159,13 @@ export function PlaceMap({
 
       <div className="pointer-events-none absolute inset-x-0 bottom-0 truncate bg-card/90 px-2 py-1 text-meta shadow-card">
         {places.length === 0
-          ? 'ничего не найдено'
-          : `точек на карте: ${places.length}`}
+          ? t('map.miniMapNothing')
+          : t('map.miniMapCount', { count: places.length })}
         {editingId != null && (
-          <span className="text-muted-foreground"> · перетащите маркер</span>
+          <span className="text-muted-foreground">
+            {' · '}
+            {t('map.miniMapDrag')}
+          </span>
         )}
       </div>
     </div>

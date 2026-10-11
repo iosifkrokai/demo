@@ -33,31 +33,31 @@ describe('MapContextMenu', () => {
       expect(() => render(<MapContextMenu {...defaultProps} />)).not.toThrow();
     });
 
-    it('should render "Directions from here" button', () => {
+    it('should render "Маршрут отсюда" button', () => {
       render(<MapContextMenu {...defaultProps} />);
 
       expect(
-        screen.getByRole('button', { name: 'Directions from here' })
+        screen.getByRole('button', { name: 'Маршрут отсюда' })
       ).toBeInTheDocument();
     });
 
-    it('should render "Add as via point" button', () => {
+    it('should render "Добавить как промежуточную" button', () => {
       render(<MapContextMenu {...defaultProps} />);
 
       expect(
-        screen.getByRole('button', { name: 'Add as via point' })
+        screen.getByRole('button', { name: 'Добавить как промежуточную' })
       ).toBeInTheDocument();
     });
 
-    it('should render "Directions to here" button', () => {
+    it('should render "Маршрут сюда" button', () => {
       render(<MapContextMenu {...defaultProps} />);
 
       expect(
-        screen.getByRole('button', { name: 'Directions to here' })
+        screen.getByRole('button', { name: 'Маршрут сюда' })
       ).toBeInTheDocument();
     });
 
-    it('should call onAddWaypoint(0) when "Directions from here" is clicked', async () => {
+    it('should call onAddWaypoint(0) when "Маршрут отсюда" is clicked', async () => {
       const user = userEvent.setup();
       const onAddWaypoint = vi.fn();
 
@@ -65,14 +65,12 @@ describe('MapContextMenu', () => {
         <MapContextMenu {...defaultProps} onAddWaypoint={onAddWaypoint} />
       );
 
-      await user.click(
-        screen.getByRole('button', { name: 'Directions from here' })
-      );
+      await user.click(screen.getByRole('button', { name: 'Маршрут отсюда' }));
 
       expect(onAddWaypoint).toHaveBeenCalledWith(0);
     });
 
-    it('should call onAddWaypoint with last index when "Directions to here" is clicked', async () => {
+    it('should call onAddWaypoint with last index when "Маршрут сюда" is clicked', async () => {
       const user = userEvent.setup();
       const onAddWaypoint = vi.fn();
 
@@ -80,14 +78,12 @@ describe('MapContextMenu', () => {
         <MapContextMenu {...defaultProps} onAddWaypoint={onAddWaypoint} />
       );
 
-      await user.click(
-        screen.getByRole('button', { name: 'Directions to here' })
-      );
+      await user.click(screen.getByRole('button', { name: 'Маршрут сюда' }));
 
       expect(onAddWaypoint).toHaveBeenCalledWith(2);
     });
 
-    it('should add waypoint and call onAddWaypoint when "Add as via point" is clicked', async () => {
+    it('should add waypoint and call onAddWaypoint when "Добавить как промежуточную" is clicked', async () => {
       const user = userEvent.setup();
       const onAddWaypoint = vi.fn();
       const popupLocation = { lng: 10.5, lat: 50.5 };
@@ -101,7 +97,7 @@ describe('MapContextMenu', () => {
       );
 
       await user.click(
-        screen.getByRole('button', { name: 'Add as via point' })
+        screen.getByRole('button', { name: 'Добавить как промежуточную' })
       );
 
       expect(mockAddWaypointAtIndex).toHaveBeenCalledWith({

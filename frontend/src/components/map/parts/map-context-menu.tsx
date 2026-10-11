@@ -1,3 +1,5 @@
+import { useTranslation } from 'react-i18next';
+
 import { Button } from '@/components/ui/button';
 import { ButtonGroup } from '@/components/ui/button-group';
 import { useDirectionsStore } from '@/stores/directions-store';
@@ -14,6 +16,7 @@ export function MapContextMenu({
   onAddWaypoint,
   popupLocation,
 }: MapContextMenuProps) {
+  const { t } = useTranslation();
   const waypointCount = useDirectionsStore((state) => state.waypoints.length);
   const addWaypointAtIndex = useDirectionsStore(
     (state) => state.addWaypointAtIndex
@@ -30,7 +33,7 @@ export function MapContextMenu({
         className={TOUCH_BUTTON}
         onClick={() => onAddWaypoint(0)}
       >
-        Directions from here
+        {t('map.menuFrom')}
       </Button>
       <Button
         variant="outline"
@@ -44,7 +47,7 @@ export function MapContextMenu({
           onAddWaypoint(waypointCount - 1);
         }}
       >
-        Add as via point
+        {t('map.menuVia')}
       </Button>
       <Button
         variant="outline"
@@ -52,7 +55,7 @@ export function MapContextMenu({
         className={TOUCH_BUTTON}
         onClick={() => onAddWaypoint(waypointCount - 1)}
       >
-        Directions to here
+        {t('map.menuTo')}
       </Button>
     </ButtonGroup>
   );

@@ -1,4 +1,6 @@
 import { cva, type VariantProps } from 'class-variance-authority';
+import { useTranslation } from 'react-i18next';
+
 import { cn } from '@/lib/utils';
 
 /** Marker colours — one meaning, one colour. */
@@ -56,10 +58,13 @@ interface MarkerIconProps extends VariantProps<typeof markerIconVariants> {
 }
 
 export function MarkerIcon({ color, number, className }: MarkerIconProps) {
+  const { t } = useTranslation();
   return (
     <div
       className={cn(markerIconVariants({ color, className }))}
-      aria-label={number ? `Точка ${number}` : 'Старт'}
+      aria-label={
+        number ? t('map.markerPoint', { number }) : t('map.markerStart')
+      }
     >
       <svg
         width="35"
