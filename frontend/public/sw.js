@@ -49,8 +49,6 @@ const SW_CONFIG = {
     '/height',
     '/tile/',
     '/tile',
-    // Anonymous client entity
-    '/clients',
   ],
 };
 

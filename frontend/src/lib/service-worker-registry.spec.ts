@@ -35,7 +35,6 @@ const NO_CACHE_PREFIXES = [
   '/height',
   '/tile/',
   '/tile',
-  '/clients',
 ];
 
 describe('matchNoCache', () => {
@@ -55,7 +54,6 @@ describe('matchNoCache', () => {
       '/routes/generate'
     );
     expect(matchNoCache('/routes', NO_CACHE_PREFIXES)).toBe('/routes');
-    expect(matchNoCache('/clients', NO_CACHE_PREFIXES)).toBe('/clients');
     expect(matchNoCache('/status', NO_CACHE_PREFIXES)).toBe('/status');
   });
 
@@ -127,7 +125,6 @@ describe('getStrategy', () => {
     expect(getStrategy('/tile/12/2048/1024.png', NO_CACHE_PREFIXES)).toBe(
       'skip'
     );
-    expect(getStrategy('/clients', NO_CACHE_PREFIXES)).toBe('skip');
     expect(getStrategy('/status', NO_CACHE_PREFIXES)).toBe('skip');
   });
 

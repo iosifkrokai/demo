@@ -112,7 +112,6 @@ export function UsersPanel({ enabled, currentUserId }: UsersPanelProps) {
                 <div className="text-meta text-muted-foreground">
                   {t('admin.users.stats', {
                     visited: user.visited,
-                    routes: user.saved_routes,
                     login: fmtDate(user.last_login_at),
                   })}
                 </div>

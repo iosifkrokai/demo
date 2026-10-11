@@ -65,7 +65,6 @@ describe('AdminPage — the dashboard header admits failure', () => {
       admins: 1,
       places: 42,
       visited: 7,
-      saved_routes: 2,
     };
     render(<AdminPage />);
 

@@ -1,7 +1,5 @@
 /** The accounts / visits / admin API. */
 
-import { getClientId } from '@/utils/client-id';
-
 import {
   STORAGE_DOWN_CODES,
   type AccountApiErrorCode,
@@ -20,8 +18,6 @@ import {
 
 /** Same-origin by default; VITE_AGENT_URL only points at a remote agent. */
 const AGENT_URL = (import.meta.env.VITE_AGENT_URL as string | undefined) ?? '';
-
-const CLIENT_ID_HEADER = 'X-Client-Id';
 
 /** A failed account call, carrying the agent's machine code rather than prose. */
 export class AccountApiError extends Error {
@@ -85,7 +81,6 @@ const codeFromStatus = (status: number): AccountApiErrorCode => {
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
-  headers.set(CLIENT_ID_HEADER, getClientId());
   if (init.body != null && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json');
   }
@@ -167,10 +162,8 @@ const normalizeAdminUser = (value: unknown): AdminUser | null => {
     typeof v === 'number' && Number.isFinite(v) ? v : 0;
   return {
     ...base,
-    client_id: typeof record.client_id === 'string' ? record.client_id : null,
     last_login_at:
       typeof record.last_login_at === 'string' ? record.last_login_at : null,
-    saved_routes: num(record.saved_routes),
     visited: num(record.visited),
   };
 };

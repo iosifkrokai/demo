@@ -5,8 +5,6 @@ import type { ReactNode } from 'react';
 
 import { VisitedToggle } from './visited-toggle';
 
-const CLIENT_ID = '55555555-5555-4555-8555-555555555555';
-
 const jsonResponse = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
     status,
@@ -76,7 +74,6 @@ const stubFetch = (authState: unknown, visited: unknown) => {
 
 beforeEach(() => {
   localStorage.clear();
-  localStorage.setItem('grodno-client-id', CLIENT_ID);
 });
 
 afterEach(() => {

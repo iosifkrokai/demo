@@ -9,8 +9,6 @@ import {
   registerAccount,
 } from './account';
 
-const CLIENT_ID = '33333333-3333-4333-8333-333333333333';
-
 const jsonResponse = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
     status,
@@ -23,7 +21,6 @@ const mockFetch = (impl: (...args: FetchArgs) => Promise<Response>) =>
 
 beforeEach(() => {
   localStorage.clear();
-  localStorage.setItem('grodno-client-id', CLIENT_ID);
 });
 
 afterEach(() => {
@@ -43,7 +40,7 @@ describe('accounts api', () => {
     });
   });
 
-  it('registers, sends the client id and the session cookie, returns the user', async () => {
+  it('registers, sends the session cookie, returns the user', async () => {
     const fetchMock = mockFetch(async () =>
       jsonResponse(
         {
@@ -68,7 +65,6 @@ describe('accounts api', () => {
     expect(url).toBe('/auth/register');
     expect(init?.method).toBe('POST');
     expect(init?.credentials).toBe('include');
-    expect((init?.headers as Headers).get('X-Client-Id')).toBe(CLIENT_ID);
   });
 
   it('turns a reason code into a typed error', async () => {
@@ -140,9 +136,7 @@ describe('accounts api', () => {
             display_name: null,
             role: 'admin',
             created_at: '2026-10-07T00:00:00Z',
-            client_id: null,
             last_login_at: null,
-            saved_routes: 2,
             visited: 5,
           },
         ],
@@ -155,7 +149,6 @@ describe('accounts api', () => {
     expect(list.total).toBe(1);
     expect(list.items[0]).toMatchObject({
       role: 'admin',
-      saved_routes: 2,
       visited: 5,
     });
 

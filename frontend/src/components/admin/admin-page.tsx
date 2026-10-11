@@ -100,17 +100,13 @@ export function AdminPage() {
       </header>
 
       {stats.data && (
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <StatCard label={t('admin.stats.users')} value={stats.data.users} />
           <StatCard label={t('admin.stats.admins')} value={stats.data.admins} />
           <StatCard label={t('admin.stats.places')} value={stats.data.places} />
           <StatCard
             label={t('admin.stats.visited')}
             value={stats.data.visited}
-          />
-          <StatCard
-            label={t('admin.stats.routes')}
-            value={stats.data.saved_routes}
           />
         </div>
       )}

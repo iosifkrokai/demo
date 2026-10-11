@@ -1,94 +1,7 @@
-/** The wire types of the client entity. */
+/** Wire types shared by the API modules. */
 
 /** Transport the plan was built for (Valhalla costing). */
 export type Transport = 'pedestrian' | 'bicycle' | 'auto';
-
-/** Ui language the tourist reads the guide in. */
-export type ClientLanguage = 'ru' | 'en';
-
-/** `client_preferences` as it comes back from the agent. */
-export interface ClientPreferences {
-  transport: Transport | null;
-  time_budget_minutes: number | null;
-  party_adults: number | null;
-  party_children: number | null;
-  /** Codes of the canonical taxonomy — not human-readable labels. */
-  interests: string[] | null;
-  language: ClientLanguage | null;
-  /** `{категория: минуты}` — the tourist's own usual pace. */
-  visit_minutes_by_category: Record<string, number> | null;
-  updated_at?: string | null;
-}
-
-/** Partial update for `PUT /clients/me/preferences`: present keys only; `null` clears. */
-export type ClientPreferencesPatch = Partial<{
-  transport: Transport | null;
-  time_budget_minutes: number | null;
-  party_adults: number | null;
-  party_children: number | null;
-  interests: string[] | null;
-  language: ClientLanguage | null;
-  visit_minutes_by_category: Record<string, number> | null;
-}>;
-
-/** One row of `GET /clients/me/routes` — the light list, deliberately without the plan. */
-export interface SavedRouteSummary {
-  id: string;
-  /** What the tourist called it; may be empty. */
-  name: string | null;
-  query: string;
-  created_at: string | null;
-  stop_count: number | null;
-  distance_m: number | null;
-  duration_min: number | null;
-}
-
-/** A saved route as the list needs it, plus where this copy actually lives. */
-export interface SavedRouteListItem extends SavedRouteSummary {
-  /** `true` when the server never took this route and the copy exists only in this browser. */
-  local_only: boolean;
-}
-
-/** The full saved record (`GET /clients/me/routes/{id}`), including the plan. */
-export interface SavedRoute {
-  id: string;
-  name: string | null;
-  query: string;
-  plan: unknown;
-  visit_overrides: Record<string, number> | null;
-  created_at: string | null;
-  updated_at: string | null;
-}
-
-/** `POST /clients/me/routes` body. */
-export interface CreateRouteInput {
-  query: string;
-  plan: unknown;
-  name?: string | null;
-  visit_overrides?: Record<string, number> | null;
-}
-
-/** `201` answer of `POST /clients/me/routes`. */
-export interface CreatedRoute {
-  id: string;
-  created_at: string | null;
-}
-
-/** Machine reason codes the agent answers with. */
-export type ClientApiErrorCode =
-  | 'storage_unavailable'
-  | 'route_not_found'
-  | 'invalid_client_id'
-  | 'too_many_routes'
-  | 'network_unavailable'
-  | 'bad_response'
-  | 'server_error';
-
-/** Codes that mean «this request cannot be saved right now» — never «saved». */
-export const SAVING_UNAVAILABLE_CODES: readonly ClientApiErrorCode[] = [
-  'storage_unavailable',
-  'network_unavailable',
-];
 
 /** One stop of a ready-made route (`GET /routes/itineraries`). */
 export interface ItineraryStop {
@@ -211,11 +124,9 @@ export interface AuthState {
   user: AccountUser | null;
 }
 
-/** One row of `GET /admin/users`, with the counts an admin asks about. */
+/** One row of `GET /admin/users`, with the count an admin asks about. */
 export interface AdminUser extends AccountUser {
-  client_id: string | null;
   last_login_at: string | null;
-  saved_routes: number;
   visited: number;
 }
 
@@ -235,7 +146,6 @@ export interface AdminStats {
   admins: number;
   places: number;
   visited: number;
-  saved_routes: number;
 }
 
 /** A visited place: the whole catalogue payload plus *when* it was marked. */

@@ -14,7 +14,6 @@ import {
   chunkWaypoints,
   parseDirectionsGeometry,
   showValhallaWarnings,
-  VALHALLA_CLIENT_HEADERS,
 } from '@/utils/valhalla';
 import { forward_geocode, parseGeocodeResponse } from '@/utils/nominatim';
 import { filterProfileSettings } from '@/utils/filter-profile-settings';
@@ -150,10 +149,7 @@ async function requestRoute(
         json: JSON.stringify(json),
       })}`,
       {
-        headers: {
-          'Content-Type': 'application/json',
-          ...VALHALLA_CLIENT_HEADERS,
-        },
+        headers: { 'Content-Type': 'application/json' },
       }
     );
 

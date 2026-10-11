@@ -60,14 +60,6 @@ export default defineConfig({
         target: process.env.VITE_DEV_AGENT_TARGET || 'http://localhost:8080',
         changeOrigin: true,
       },
-      // Anonymous client entity (spec 003): saved routes, preferences and
-      // «удалить мои данные». Same proxy miss class as the Valhalla pattern
-      // below — without this entry Vite answers 200 with index.html and the
-      // client layer honestly reports a bad response instead of saving.
-      '/clients': {
-        target: process.env.VITE_DEV_AGENT_TARGET || 'http://localhost:8080',
-        changeOrigin: true,
-      },
       // The full point catalogue (GET /places) — a top-level agent path, not
       // under /routes, so it needs its own entry to reach the agent in dev.
       '/places': {
