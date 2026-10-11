@@ -7,6 +7,7 @@ import logging
 from agent.models import PartyComposition, ReaderBrief, Requirement, TripRequirements
 from agent.schema import AgentReading
 from core import constants
+from reference import areas as areas_mod
 from reference.taxonomy import resolve_code
 
 log = logging.getLogger(__name__)
@@ -60,7 +61,6 @@ def _reading_requirements(
     """A territory is not a stop: it is not made into a requirement, and it is not
     an area either.
     """
-    from reference import areas as areas_mod
 
     out: list[Requirement] = []
     unsupported: list[str] = []

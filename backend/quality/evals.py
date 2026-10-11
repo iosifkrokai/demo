@@ -12,6 +12,13 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from agent.models import Requirement, TripRequirements
+from db.store import services as services_mod
+from db.store.errors import StorageUnavailableError
+from db.store.places import PostgresPlaceRepository
+from planner.verify import ServiceAlongEvidence, verify
+from reference import taxonomy
+
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
@@ -53,8 +60,6 @@ def run_verdicts() -> dict[str, Any]:
 
     Offline and total: no DB, no model, no network.
     """
-    from agent.models import Requirement, TripRequirements
-    from planner.verify import ServiceAlongEvidence, verify
 
     checks: list[dict[str, Any]] = []
     for case in _load("verdicts"):
@@ -143,10 +148,6 @@ def run_services() -> dict[str, Any]:
 
     PostGIS vs a haversine reference; points near the gate are not counted as disagreement.
     """
-    from db.store import services as services_mod
-    from db.store.errors import StorageUnavailableError
-    from db.store.places import PostgresPlaceRepository
-    from reference import taxonomy
 
     checks: list[dict[str, Any]] = []
     places = PostgresPlaceRepository()
@@ -351,7 +352,6 @@ def run_plan() -> dict[str, Any]:
 
     It asks the served app, so a stale server shows up as a failure rather than a green run.
     """
-    from reference import taxonomy
 
     cases = _load("plan")
     checks: list[dict[str, Any]] = []
@@ -456,7 +456,6 @@ def run_interpretation() -> dict[str, Any]:
     """
     from planner.intent import build_requirements
     from planner.models import GenerateReq
-    from reference import taxonomy
 
     checks: list[dict[str, Any]] = []
     sources: dict[str, int] = {}

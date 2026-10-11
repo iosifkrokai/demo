@@ -17,6 +17,7 @@ from core.errors import (
     UpstreamUnavailableError,
 )
 from db.store.registry import Repositories
+from embeddings import model
 from embeddings.query import embed_query
 from planner.models import (
     Candidate,
@@ -631,8 +632,6 @@ class Pipeline:
             valhalla_ok = valhalla_ping()
         except Exception:
             valhalla_ok = False
-
-        from embeddings import model
 
         embedder_ok = model.is_available()
         llm_ok = bool(openrouter_api_key())

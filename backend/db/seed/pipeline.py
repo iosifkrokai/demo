@@ -252,7 +252,7 @@ def apply_photos(conn: psycopg.Connection, photos_dir: Path | None = None) -> in
     path = (photos_dir or PHOTOS_DIR) / "place_photos.json"
     if not path.exists():
         return 0
-    from .photos import apply_to_db
+    from .photos import apply_to_db  # deferred: photos imports this module
 
     return apply_to_db(conn, json.loads(path.read_text(encoding="utf-8")))
 

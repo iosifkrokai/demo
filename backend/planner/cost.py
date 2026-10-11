@@ -243,7 +243,7 @@ def total_seconds(order: list[int], matrix: list[list[float]], visit_minutes: li
 
 def _synthetic_cost(candidates: list[Candidate], costing: str = "pedestrian") -> CostMatrix:
     """A straight-line cost matrix for when Valhalla cannot answer."""
-    from .refine import visit_minutes_of
+    from .refine import visit_minutes_of  # deferred: refine imports cost
 
     speed_ms = 1.3 if costing == "pedestrian" else 8.0
     n = len(candidates)

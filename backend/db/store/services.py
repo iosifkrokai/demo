@@ -11,6 +11,8 @@ from __future__ import annotations
 from collections.abc import Iterable, Sequence
 from typing import Any
 
+from reference.taxonomy import all_categories
+
 MAX_OFF_LINE_M: dict[str, float] = {
     "pedestrian": 150.0,
     "bicycle": 250.0,
@@ -48,7 +50,6 @@ def service_codes(categories: Iterable[str] | None = None) -> list[str]:
 
     Unknown or non-service codes are dropped rather than trusted.
     """
-    from reference.taxonomy import all_categories
 
     known = [cat.code for cat in all_categories() if getattr(cat, "role", None) == "service"]
     if categories is None:

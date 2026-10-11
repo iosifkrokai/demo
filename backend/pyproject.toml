@@ -78,12 +78,17 @@ ignore = [
     # These are not "rules we would rather not have"; each is a campaign of its
     # own, and the count is here so the debt is visible in one place instead of
     # implied by an absent rule. Removing an entry means doing that campaign.
-    "PLC0415", # 92  imports inside functions — most exist to break a real cycle
+
     # 72 comparisons against a small structural count — `len(route) < 2`,
     # `len(parts) != 6`. A name would restate the number. The ones that meant
     # something are named: HTTP statuses, the search-strategy thresholds in
     # `planner/optimize.py`, the diversity thresholds in `explain`/`diversity`.
     "PLR2004",
+    # 21 imports left inside functions: five break a real cycle (`agent.runner`
+    # and `prompts.rules`, `cost` and `refine`, `pipeline` and `photos`),
+    # and the rest defer a stage until it is asked for — the seed's stages,
+    # the optional Langfuse client, fastembed. Twenty-three were hoisted.
+    "PLC0415",
     "PLR0913", # 42  too many arguments
     "PLR0917", # 14  too many positional arguments
     "PLR0912", # 8   too many branches
@@ -92,7 +97,9 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**/*.py" = ["E501", "PLR2004", "ARG", "RUF012"]
+# PLC0415: a test importing the module it exercises inside the test is
+# this suite's convention, and several rely on it to keep a seam patchable.
+"tests/**/*.py" = ["E501", "PLR2004", "ARG", "RUF012", "PLC0415"]
 "**/__init__.py" = ["F401"]
 # The baseline reproduces the old init.sql statement for statement —
 # its own docstring claims that — so wrapping its lines for style

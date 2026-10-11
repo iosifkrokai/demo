@@ -11,6 +11,7 @@ from typing import Any
 from agent.models import TripRequirements
 from core import cache as interpret_cache, constants
 from core.errors import UpstreamUnavailableError
+from db.store.services import MAX_SERVICES
 from planner.models import (
     BudgetInfo,
     Candidate,
@@ -249,7 +250,6 @@ def services_along_evidence(places: Any, requirements: Any, shape: Any) -> Any:
     )
     if not codes or not shape:
         return None
-    from db.store.services import MAX_SERVICES
 
     from .verify import ServiceAlongEvidence
 

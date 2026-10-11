@@ -11,6 +11,9 @@ from __future__ import annotations
 import os
 from typing import Any
 
+from pydantic_ai.models.openrouter import OpenRouterModel
+from pydantic_ai.providers.openrouter import OpenRouterProvider
+
 from core.config import openrouter_api_key
 
 DEFAULT_MODEL = "deepseek/deepseek-v4.1-flash"
@@ -22,8 +25,6 @@ def model_name() -> str:
 
 def make_model() -> Any:
     """Build the OpenRouter model. Tests replace this with a fake model."""
-    from pydantic_ai.models.openrouter import OpenRouterModel
-    from pydantic_ai.providers.openrouter import OpenRouterProvider
 
     key = openrouter_api_key()
     if not key:

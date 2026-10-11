@@ -12,6 +12,7 @@ from typing import Any
 
 from db.store.mappers import place_payload
 from db.store.places import PostgresPlaceRepository
+from reference import taxonomy
 from reference.itineraries import load_itineraries
 
 log = logging.getLogger(__name__)
@@ -24,7 +25,6 @@ def _split_by_role(
 
     An unknown code counts as a stop, never as a service.
     """
-    from reference import taxonomy
 
     stops: list[dict[str, Any]] = []
     services: list[dict[str, Any]] = []

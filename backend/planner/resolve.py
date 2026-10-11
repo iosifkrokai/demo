@@ -6,6 +6,7 @@ Merges IntentDecision with explicit client parameters (budget, bbox, names).
 from __future__ import annotations
 
 import logging
+import re as _re
 from collections.abc import Sequence
 
 from core import constants
@@ -622,7 +623,6 @@ def _word_boundary_match(text: str, query: str) -> bool:
 
     Word boundaries prevent "мир" matching inside "мискому".
     """
-    import re as _re
 
     if not text or not query:
         return False

@@ -39,7 +39,6 @@ from db.store.mappers import area_from_row, place_from_row
 from db.store.registry import Repositories
 from planner.intent import build_requirements, reader_brief
 from planner.models import GenerateReq
-from reference import areas as areas_mod
 from telemetry import trace
 
 QUERY = "старый Гродно, двое детей 5 и 9 лет, два часа, туалет обязателен, кафе если по пути"
@@ -599,9 +598,10 @@ def test_find_areas_resolves_through_the_registry(monkeypatch):
         "kind": "project",
         "aliases": {"ru": ["Старогородка"], "en": []},
     }
-    monkeypatch.setattr(areas_mod, "load_areas", lambda: registry)
+    # The tool binds the registry at import, so the patch goes where it reads it.
+    monkeypatch.setattr(tools_areas, "load_areas", lambda: registry)
     monkeypatch.setattr(
-        areas_mod,
+        tools_areas,
         "resolve_area",
         lambda term, locale=None: "grodno-old-town" if "стар" in term.lower() else None,
     )

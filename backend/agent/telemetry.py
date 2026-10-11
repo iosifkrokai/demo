@@ -9,6 +9,8 @@ import json
 import logging
 from typing import Any
 
+from pydantic_ai.messages import ToolCallPart, ToolReturnPart
+
 from agent import llm
 from agent.models import ReaderBrief
 from agent.prompts import compose_instructions
@@ -52,10 +54,6 @@ def _tool_exchanges(result: Any) -> list[dict[str, Any]]:
 
     An answer travels as its size plus its head, because it is the part that can be long.
     """
-    try:
-        from pydantic_ai.messages import ToolCallPart, ToolReturnPart
-    except Exception:
-        return []
     all_messages = getattr(result, "all_messages", None)
     if all_messages is None:
         return []

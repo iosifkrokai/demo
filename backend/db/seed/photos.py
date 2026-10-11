@@ -17,6 +17,7 @@ import urllib.parse
 import urllib.request
 from collections import Counter
 from collections.abc import Iterable
+from math import asin, cos, radians, sin, sqrt
 from pathlib import Path
 from typing import Any
 
@@ -193,7 +194,6 @@ def is_image(url: str) -> str:
 
 def haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     """Distance in metres — how far an article's own coordinates sit from ours."""
-    from math import asin, cos, radians, sin, sqrt
 
     dlat, dlon = radians(lat2 - lat1), radians(lon2 - lon1)
     a = sin(dlat / 2) ** 2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(dlon / 2) ** 2

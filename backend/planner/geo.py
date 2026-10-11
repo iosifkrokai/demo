@@ -5,6 +5,7 @@ Anchor priority: tourist GPS > must-visit/named place > densest cluster.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Callable
 from typing import Any
 
@@ -115,7 +116,6 @@ def distance_m(a: Candidate, b: Candidate) -> float:
 
 def distance_pt_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     """Equirectangular distance in metres (fine at city scale)."""
-    import math
 
     lat_mid = math.radians((lat1 + lat2) / 2)
     dx = math.radians(lon1 - lon2) * 6_371_000 * math.cos(lat_mid)

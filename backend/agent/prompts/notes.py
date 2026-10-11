@@ -7,6 +7,7 @@ pressed, and the facts about the request the model cannot read from the text.
 from __future__ import annotations
 
 from agent.models import ReaderBrief
+from reference import areas as areas_mod
 
 
 def _known_areas_note() -> str:
@@ -14,7 +15,6 @@ def _known_areas_note() -> str:
 
     The slugs listed here are what `find_areas` resolves to and what `areas` must carry.
     """
-    from reference import areas as areas_mod
 
     lines = []
     for slug, entry in sorted(areas_mod.load_areas().items()):

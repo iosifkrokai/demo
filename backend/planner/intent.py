@@ -14,6 +14,7 @@ from agent import client
 from agent.llm import model_name
 from agent.mapping import ui_requirements, ui_used
 from agent.models import (
+    REASON_MUST_VISIT_OUTSIDE,
     BriefStop,
     ReaderBrief,
     RefinementBrief,
@@ -26,6 +27,7 @@ from core import cache as interpret_cache, constants
 from core.errors import InterpretationUnavailableError
 from db.store.registry import Repositories
 from planner.models import GenerateReq, IntentDecision, IntentResult
+from reference import areas as areas_mod
 from telemetry import trace
 
 from .preprocess import WORD_RE
@@ -71,7 +73,6 @@ def intent_from_requirements(requirements: TripRequirements, query: str) -> Inte
 
 def _scope_from_areas(areas: list[str]) -> str:
     """town / district / region, read off the territories the contract named."""
-    from reference import areas as areas_mod
 
     kinds = {
         entry["kind"] for entry in (areas_mod.area_lookup_by_slug(slug) for slug in areas) if entry
@@ -132,7 +133,6 @@ def mark_out_of_coverage(contract: TripRequirements, names: list[str]) -> None:
     """Marks each `hard`; a refusal is never invented here — the verifier reports
     what the contract keeps.
     """
-    from agent.models import REASON_MUST_VISIT_OUTSIDE
 
     by_name = {
         (r.name or "").strip().lower(): r for r in contract.requirements if r.kind == "must_visit"
