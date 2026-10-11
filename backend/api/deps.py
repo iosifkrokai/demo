@@ -51,7 +51,7 @@ def require_llm() -> None:
     reader. Answering anyway — with a keyword parse — would silently give the
     tourist a worse route and no way to tell, so the request is refused instead.
     """
-    if not llm.api_key():
+    if not llm.chosen_provider().api_key:
         raise HTTPException(
             status_code=503,
             detail={"reason": "llm_not_configured"},

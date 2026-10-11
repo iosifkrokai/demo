@@ -1,10 +1,9 @@
 """The single place that names a provider and a model.
 
-Two providers are supported, both reached through PydanticAI:
-
-* **OpenRouter** (`openrouter`) — the default, an OpenAI-shaped gateway.
-* **Anthropic** (`anthropic`) — the Anthropic Messages format, which also covers a
-  self-hosted gateway speaking that format: point `ANTHROPIC_BASE_URL` at it.
+Everything about *which* provider and *which* model is configuration, not code:
+`core/config.py` holds the vocabulary (a key, an endpoint, a default model per
+provider) and this module turns the chosen one into a PydanticAI client. Nothing
+else in the codebase knows a vendor's name.
 
 Both SDKs are declared dependencies, so they are imported outright: an absent SDK
 is a broken install, and failing at import says so loudly. That is a different
@@ -14,7 +13,6 @@ thing from the *layer being unusable*, which is about the key and is answered by
 
 from __future__ import annotations
 
-import os
 from typing import Any
 
 from pydantic_ai.models.anthropic import AnthropicModel
@@ -22,51 +20,37 @@ from pydantic_ai.models.openrouter import OpenRouterModel
 from pydantic_ai.providers.anthropic import AnthropicProvider
 from pydantic_ai.providers.openrouter import OpenRouterProvider
 
-from core.config import anthropic_api_key, anthropic_base_url, openrouter_api_key
+from core.config import Provider, chosen_provider, model_name, provider_names
 
-PROVIDERS = ("openrouter", "anthropic")
-
-DEFAULT_MODEL_BY_PROVIDER = {
-    "openrouter": "deepseek/deepseek-v4.1-flash",
-    "anthropic": "claude-opus-5-5",
-}
+__all__ = ["chosen_provider", "make_model", "model_name", "provider_names"]
 
 
-def provider() -> str:
-    """Which provider this process talks to.
+def _openrouter(chosen: Provider) -> OpenRouterProvider:
+    """OpenRouter's client, pointed at the configured endpoint when there is one.
 
-    `AGENT_MODEL_PROVIDER` wins; otherwise the key that is actually present
-    decides, so a deployment that sets only an Anthropic key gets Anthropic
-    without further configuration.
+    The SDK takes no `base_url`; a gateway is reached by handing it an OpenAI
+    client that already knows where to go.
     """
-    chosen = (os.environ.get("AGENT_MODEL_PROVIDER") or "").strip().lower()
-    if chosen in PROVIDERS:
-        return chosen
-    if anthropic_api_key() and not openrouter_api_key():
-        return "anthropic"
-    return "openrouter"
+    if not chosen.base_url:
+        return OpenRouterProvider(api_key=chosen.api_key)
+    from openai import AsyncOpenAI
 
-
-def api_key() -> str | None:
-    """The key for the chosen provider, or None."""
-    return anthropic_api_key() if provider() == "anthropic" else openrouter_api_key()
-
-
-def model_name() -> str:
-    """The model id, overridable per deployment and defaulting per provider."""
-    return os.environ.get("AGENT_INTERPRET_MODEL") or DEFAULT_MODEL_BY_PROVIDER[provider()]
+    # The vendored stub types this parameter as `None`; at runtime it takes the
+    # client that carries the endpoint, which is the whole point of setting one.
+    client = AsyncOpenAI(api_key=chosen.api_key, base_url=chosen.base_url)
+    return OpenRouterProvider(api_key=chosen.api_key, openai_client=client)  # type: ignore[arg-type]
 
 
 def make_model() -> Any:
-    """Build the model for the chosen provider. Tests replace this with a fake."""
-
-    which = provider()
-    key = api_key()
-    if not key:
-        raise RuntimeError(f"no API key for {which}")  # pragma: no cover — checked earlier
-    if which == "anthropic":
+    """Build the model for the configured provider. Tests replace this with a fake."""
+    chosen = chosen_provider()
+    if not chosen.api_key:
+        # Checked earlier by `agent.client.available`; this is the loud fallback.
+        raise RuntimeError(f"no API key for {chosen.name}")
+    name = model_name()
+    if chosen.name == "anthropic":
         return AnthropicModel(
-            model_name(),
-            provider=AnthropicProvider(api_key=key, base_url=anthropic_base_url()),
+            name,
+            provider=AnthropicProvider(api_key=chosen.api_key, base_url=chosen.base_url),
         )
-    return OpenRouterModel(model_name(), provider=OpenRouterProvider(api_key=key))
+    return OpenRouterModel(name, provider=_openrouter(chosen))

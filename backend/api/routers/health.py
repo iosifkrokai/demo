@@ -32,7 +32,7 @@ def health(request: Request) -> HealthResponse:
     db_ok = deps.get_repos(request).places.ping()
     valhalla_ok = _valhalla_ok()
     embedder_ok = model.is_available()
-    llm_ok = bool(llm.api_key())
+    llm_ok = bool(llm.chosen_provider().api_key)
     payload: dict[str, Any] = {
         # A missing reader is not "ok": nothing can be planned without one.
         "status": "ok" if (db_ok and valhalla_ok and embedder_ok and llm_ok) else "degraded",

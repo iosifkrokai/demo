@@ -39,10 +39,10 @@ fresh volume. Both are idempotent: Alembic records the revision in
 `make` alone lists every target. UI: <http://localhost/>. The agent runs inside
 compose; the frontend's nginx proxies to `agent:8080`.
 
-**No `OPENROUTER_API_KEY`?** The planner has no reader, so `/routes/generate`,
+**No model key?** The agent has nothing to plan with, so `/routes/generate`,
 `/routes/reroute` and `/routes/explain` answer **503 `llm_not_configured`**;
 `/health` reports `llm: false` and `status: "degraded"`. The catalogue endpoints
-(`/places`, `/routes/itineraries`, `/routes/services`) need no reading and keep
+(`/places`, `/routes/itineraries`, `/routes/services`) need no model and keep
 working. Embeddings are local either way.
 
 ## Configuration
@@ -53,15 +53,23 @@ Secrets, addresses and two deliberate escape hatches live in the environment
 values, Postgres, proxy upstreams); the variables below are what the agent and
 seed read.
 
+The model is configuration, not code: one provider at a time, chosen from the
+keys that are actually set. **A model name is written once**, in the provider
+table in `core/config.py`.
+
 | Variable | What it is |
 |---|---|
-| `OPENROUTER_API_KEY` | secret; the query reading — **required to plan** (embeddings are local) |
+| `LLM_PROVIDER` | `openrouter` or `anthropic`; wins over the key-based guess |
+| `LLM_MODEL` | the model id; defaults to the chosen provider's own |
+| `OPENROUTER_API_KEY` | OpenRouter, or any OpenAI-shaped endpoint — **needed to plan** unless the other key is set |
+| `OPENROUTER_BASE_URL` | optional; a gateway in front of OpenRouter |
+| `ANTHROPIC_API_KEY` | the Anthropic Messages format — also a self-hosted gateway speaking it |
+| `ANTHROPIC_BASE_URL` | optional; where that gateway lives |
 | `DATABASE_URL` | Postgres DSN (agent and seed; default is the local compose one) |
 | `VALHALLA_URL` | routing engine address |
 | `AGENT_HOST` / `AGENT_PORT` | bind address |
-| `AGENT_INTERPRET_MODEL` | optional override of the interpretation model (its default is named in `agent/llm.py`) |
 | `LOGFIRE_TOKEN` | optional; send tracing to Logfire. Without it (the container/CI default) tracing is a **no-op**, not an error |
-| `CACHE_BUST=1` | turn the in-process reading/embedding cache off for this process |
+| `CACHE_BUST=1` | turn the in-process reading cache off for this process |
 | `INTERPRET_CACHE_SIZE` / `INTERPRET_CACHE_TTL_S` | bounds of that cache (defaults 128 entries / 30 min) |
 
 Changing a value in `core/constants.py` is a code-review decision: edit → tests
@@ -78,7 +86,7 @@ Browser → nginx :80 (frontend container)
   │                           │
   │  preprocess ─ interpret (PydanticAI over OpenRouter; refuses without a key)
   │  resolve ─ retrieve (vector + keyword + must-visit, RRF fusion)
-  │             vector = LOCAL embeddings (embeddings/model.py, CPU ONNX)
+  │             vector = LOCAL embeddings (db/embeddings/model.py, CPU ONNX)
   │  geo-focus ─ diversity (MMR) ─ cost (Valhalla matrix) ─ optimize
   │  validate ─ render (Valhalla /route) ─ explain ─ verify (deterministic)
   │
@@ -146,7 +154,7 @@ sending `radius: 100` per location (`LOCATION_SNAP_RADIUS_M` in
 
 **No semantic results (only keyword hits).** The rows have `embedding IS NULL`.
 `python -m db.seed` embeds everything locally — re-run it. (A missing
-`OPENROUTER_API_KEY` does not affect retrieval.)
+a model key does not affect retrieval.)
 
 ## What is not verified / not promised
 

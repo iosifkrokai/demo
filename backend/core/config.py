@@ -1,21 +1,21 @@
 """Deployment configuration — secrets and addresses ONLY.
 
 Models, weights, thresholds and limits live in constants.py as reviewable code.
+
+Everything here is read from the environment on every call rather than frozen at
+import: a container that starts before its keys are injected, and a test that
+injects them, must both see what is actually set.
 """
 
 from __future__ import annotations
 
 import os
+from dataclasses import dataclass
 
 
+@dataclass
 class Settings:
-    LOGFIRE_TOKEN: str | None = os.environ.get("LOGFIRE_TOKEN") or None
-
-    # The interpretation model is reached through one of two providers; both are
-    # read here and chosen in `agent/llm.py`, the only place a provider is named.
-    OPENROUTER_API_KEY: str | None = os.environ.get("OPENROUTER_API_KEY") or None
-    ANTHROPIC_API_KEY: str | None = os.environ.get("ANTHROPIC_API_KEY") or None
-    ANTHROPIC_BASE_URL: str | None = os.environ.get("ANTHROPIC_BASE_URL") or None
+    """The addresses that do not change while the process runs."""
 
     HOST: str = os.environ.get("AGENT_HOST", "0.0.0.0")
     PORT: int = int(os.environ.get("AGENT_PORT", "8080"))
@@ -29,26 +29,85 @@ DSN = settings.DSN
 VALHALLA_URL = settings.VALHALLA_URL
 HOST = settings.HOST
 PORT = settings.PORT
-LOGFIRE_TOKEN = settings.LOGFIRE_TOKEN
 
 
-def openrouter_api_key() -> str | None:
-    """The OpenRouter key for this process, or None.
+def logfire_token() -> str | None:
+    """The Logfire token, or None — tracing is a no-op without it."""
+    return os.environ.get("LOGFIRE_TOKEN") or None
 
-    Read from the environment on every call, with the import-time settings as a fallback.
+
+# --- the model -----------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class Provider:
+    """One way to reach a model: where it is, with which key, under which name."""
+
+    name: str
+    api_key: str | None
+    base_url: str | None
+    default_model: str
+
+
+@dataclass(frozen=True)
+class _Spec:
+    """Where one provider's settings live, and what it answers to by default."""
+
+    key_env: str
+    base_env: str
+    default_model: str
+
+
+# The whole vocabulary: a key, an endpoint and a default model per provider.
+# A model name is written here and nowhere else in the codebase.
+_SPECS: dict[str, _Spec] = {
+    "openrouter": _Spec(
+        key_env="OPENROUTER_API_KEY",
+        base_env="OPENROUTER_BASE_URL",
+        default_model="deepseek/deepseek-v4.1-flash",
+    ),
+    "anthropic": _Spec(
+        key_env="ANTHROPIC_API_KEY",
+        base_env="ANTHROPIC_BASE_URL",
+        default_model="claude-opus-5-5",
+    ),
+}
+
+DEFAULT_PROVIDER = "openrouter"
+
+
+def provider_names() -> tuple[str, ...]:
+    """Every provider this build can talk to."""
+    return tuple(_SPECS)
+
+
+def provider(name: str) -> Provider:
+    """One provider, as the environment currently describes it."""
+    spec = _SPECS[name]
+    return Provider(
+        name=name,
+        api_key=os.environ.get(spec.key_env) or None,
+        base_url=os.environ.get(spec.base_env) or None,
+        default_model=spec.default_model,
+    )
+
+
+def chosen_provider() -> Provider:
+    """Which provider this process talks to.
+
+    `LLM_PROVIDER` wins; otherwise the provider that actually holds a key
+    decides, so a deployment that sets one key needs no further configuration.
     """
-    return os.environ.get("OPENROUTER_API_KEY") or settings.OPENROUTER_API_KEY
+    named = (os.environ.get("LLM_PROVIDER") or "").strip().lower()
+    if named in _SPECS:
+        return provider(named)
+    for name in _SPECS:
+        candidate = provider(name)
+        if candidate.api_key:
+            return candidate
+    return provider(DEFAULT_PROVIDER)
 
 
-def anthropic_api_key() -> str | None:
-    """The Anthropic key (or gateway token) for this process, or None."""
-    return os.environ.get("ANTHROPIC_API_KEY") or settings.ANTHROPIC_API_KEY
-
-
-def anthropic_base_url() -> str | None:
-    """The gateway the Anthropic SDK should talk to, or None for the default.
-
-    Set this when the Anthropic-format endpoint is a proxy rather than
-    api.anthropic.com.
-    """
-    return os.environ.get("ANTHROPIC_BASE_URL") or settings.ANTHROPIC_BASE_URL
+def model_name() -> str:
+    """The model to ask for: `LLM_MODEL`, or the chosen provider's own default."""
+    return os.environ.get("LLM_MODEL") or chosen_provider().default_model

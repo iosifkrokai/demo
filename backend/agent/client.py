@@ -53,7 +53,7 @@ def available() -> bool:
 
     Cheap and offline — it answers "is the agent configured", not "is the provider up".
     """
-    if not llm.api_key():
+    if not llm.chosen_provider().api_key:
         return False
     return bool(llm.model_name())
 

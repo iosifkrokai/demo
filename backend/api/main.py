@@ -25,7 +25,7 @@ from api.routers import (
     health as health_api,
     routes as routes_api,
 )
-from core.config import LOGFIRE_TOKEN, settings
+from core.config import logfire_token, settings
 from db.embeddings import model
 from db.store.areas import PostgresAreaRepository
 from db.store.clients import PostgresClientRepository
@@ -47,7 +47,7 @@ async def lifespan(_: FastAPI):
     # Logfire, so every model call and every tool call of the agent loop is
     # visible without a hand-written span. Containers and CI carry no token, and
     # send_to_logfire="if-token-present" makes that absence a no-op, not an error.
-    logfire.configure(send_to_logfire="if-token-present", token=LOGFIRE_TOKEN)
+    logfire.configure(send_to_logfire="if-token-present", token=logfire_token())
     logfire.instrument_pydantic_ai()
     repos = Repositories(
         places=PostgresPlaceRepository(),
@@ -58,17 +58,19 @@ async def lifespan(_: FastAPI):
     )
     app.state.repos = repos
     model.embed_text("warmup")
+    chosen = llm.chosen_provider()
     log.info(
-        "agent ready (embeddings=%s local, model=%s, key=%s)",
+        "agent ready (embeddings=%s local, provider=%s, model=%s, key=%s)",
         model.MODEL_NAME,
+        chosen.name,
         llm.model_name(),
-        "set" if llm.api_key() else "MISSING",
+        "set" if chosen.api_key else "MISSING",
     )
-    if not llm.api_key():
+    if not chosen.api_key:
         log.warning(
-            f"no {llm.provider()} key — the planner has no reader for a request: "
-            "/routes/generate, /routes/reroute and /routes/explain will refuse "
-            "with 503 llm_not_configured. The catalogue endpoints still answer."
+            f"no {chosen.name} key — /routes/generate, /routes/reroute and "
+            "/routes/explain will refuse with 503 llm_not_configured. "
+            "The catalogue endpoints still answer."
         )
     yield
     repos.close()
