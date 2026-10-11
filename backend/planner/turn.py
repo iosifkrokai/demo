@@ -2,11 +2,8 @@
 
 One `Pipeline` serves every request, so anything request-scoped has to live
 somewhere else. It lives here: the request, when it started, what the steps
-decided, and the pool as it was trimmed.
-
-The steps used to be methods on `Pipeline`, which meant passing this object to
-each of them from the outside. Now that they are functions, it is the only thing
-they share.
+decided, and the pool as it was trimmed. The steps are functions, so this is the
+only thing they share.
 """
 
 from __future__ import annotations

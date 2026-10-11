@@ -1,10 +1,5 @@
 """The query embedding the pipeline uses: the model, behind the process cache.
 
-This wrapper could only live next to the model once the cache stopped belonging
-to a layer. While `EMBED_CACHE` sat in the agent package, the planner had to own
-the wrapper — the seed uses `embeddings.model` directly, and `db` may not reach
-up into `agent`.
-
 No vector is ever an error: an empty list means keyword-only retrieval, which is
 a worse answer but an answer.
 """

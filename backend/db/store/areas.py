@@ -15,9 +15,7 @@ log = logging.getLogger(__name__)
 class PostgresAreaRepository(PostgresRepository):
     """The territories the system can resolve a word to.
 
-    This query used to live in `agent/tools/_db.py` — SQL inside the LLM layer,
-    with no place to put it. It is a read of `areas` like any other, so it lives
-    with the other reads.
+    A read of `areas` like any other, so it lives with the other reads.
     """
 
     def search(self, term: str, limit: int = 8) -> list[Area]:

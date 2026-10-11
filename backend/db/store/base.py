@@ -1,9 +1,8 @@
 """What every Postgres repository shares: one lazy connection, two cursors.
 
 A repository is handed a connection *factory*, not a connection. Reconnection,
-thread-safety and the mapping from `psycopg.Error` to `StorageUnavailableError` live
-here, so no caller has to think about them — which is what passing a bare
-connection around used to push onto every layer above.
+thread-safety and the mapping from `psycopg.Error` to `StorageUnavailableError`
+live here, so no caller has to think about them.
 
 `_tx_cursor` is not decoration: the connection is autocommit, so a `SET LOCAL`
 or a trigger that reads transaction state needs a real transaction around it.

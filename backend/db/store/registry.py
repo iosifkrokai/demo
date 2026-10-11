@@ -1,9 +1,7 @@
 """What a logic layer is handed instead of a connection.
 
-A `Pipeline` used to take a `psycopg.Connection` and thread it through nineteen
-call sites in five modules. It takes this instead: the connection stays inside
-the repository that owns it, and nothing above `db/store` can run a query it did
-not ask for.
+The connection stays inside the repository that owns it, so nothing above
+`db/store` can run a query it did not ask for.
 """
 
 from __future__ import annotations

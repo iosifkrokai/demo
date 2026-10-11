@@ -5,10 +5,9 @@ a session only ever points at one — so they share a repository rather than
 splitting by table. Reads return the row models; a miss is ``None``, a Postgres
 outage is :class:`StorageUnavailableError`.
 
-The admin CRUD over ``places`` used to live here too, on the strength of nothing
-more than "an admin calls it"; it writes the place table, so it now lives on the
-place repository. The counts that span users, routes and visits are a query, not
-an aggregate, and live in :mod:`db.store.stats`.
+The admin CRUD over ``places`` belongs to the place repository, where the table
+it writes lives; the counts that span users, routes and visits are a query rather
+than an aggregate, and are in :mod:`db.store.stats`.
 """
 
 from __future__ import annotations

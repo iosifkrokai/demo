@@ -1,8 +1,6 @@
 """``search_places`` and ``get_place_facts`` — the place lookups.
 
-Both go through the place repository. The tools used to be handed a psycopg
-connection and look for the query helpers themselves; that is why a SQL statement
-had somewhere to hide in this package.
+Both go through the place repository, never a connection.
 """
 
 from __future__ import annotations

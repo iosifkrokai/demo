@@ -1,10 +1,8 @@
 """The storage layer's typed failures, in one place.
 
 A caller answers these differently — 503 for a database that is down, 409 for a
-constraint the user can act on — so they have to be distinguishable by class.
-Three identical `StorageUnavailableError` classes used to exist, one per store
-module, which meant `except StorageUnavailableError` only caught one of them; every
-repository raises the classes here now.
+constraint the user can act on — so they have to be distinguishable by class, and
+every repository has to raise the same one.
 """
 
 from __future__ import annotations

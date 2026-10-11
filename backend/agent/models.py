@@ -10,9 +10,6 @@ Two directions, two shapes, both owned here:
 
 Defining them here is what keeps this package a leaf: it imports no planner and
 no HTTP model, so the pipeline can drive it without a cycle.
-
-(``Requirement``/``TripRequirements`` were ``domain.requirements`` until the model
-layer was split up; the words did not change, only the address.)
 """
 
 from __future__ import annotations

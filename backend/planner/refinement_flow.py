@@ -4,10 +4,6 @@ The instruction is read, one typed operation is applied (add / remove / reorder)
 and the result goes back through the same cost → optimize → validate tail a fresh
 plan does — in "refine" mode, where nothing is re-searched. Base stops survive
 unless explicitly removed, so a refinement never answers 422.
-
-These were methods on `Pipeline`, using `self` for the repositories and for three
-sibling helpers and nothing else. They are functions over a `Repositories` now,
-which is what they always were.
 """
 
 from __future__ import annotations

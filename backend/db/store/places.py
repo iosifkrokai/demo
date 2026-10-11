@@ -1,12 +1,8 @@
 """The place repository: every query that reads or writes a `places` row.
 
-The queries themselves are unchanged from the modules they came from
-(`search.py`, `places.py`, `services.py`, and the pgvector write that used to sit
-in `infra/embeddings.py`) — this file is their one home, not a rewrite. What is
-new is the shape: methods on an object that owns the connection, returning
-`db.models.place.Place` instead of a raw dict.
-
-Callers in `planner/`, `agent/` and `api/` hold one of these, never a connection.
+Methods on an object that owns the connection, returning `Place` rather than a
+raw dict. Callers in `planner/`, `agent/` and `api/` hold one of these, never a
+connection.
 """
 
 from __future__ import annotations

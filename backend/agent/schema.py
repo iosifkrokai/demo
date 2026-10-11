@@ -50,9 +50,7 @@ class InterpretDeps:
     """What one interpretation run is allowed to reach.
 
     ``observed_ids`` guards `place_id`: the model may only reference a place the
-    tools actually handed it. ``repos`` is how the tools read anything at all —
-    they used to be handed a raw connection, which is why SQL lived in this
-    package.
+    tools actually handed it. ``repos`` is how the tools read anything at all.
     """
 
     repos: Repositories | None = None

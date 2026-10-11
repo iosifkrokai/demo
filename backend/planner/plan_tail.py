@@ -5,9 +5,6 @@ says which of the three they are — a refinement measures what it has, a rerout
 orders a fixed list, and a fresh generate searches, retries on a collapsed
 route, re-orders through Valhalla when there is time, and prunes what cannot be
 reached.
-
-It was a method on `Pipeline`, but it used `self` for exactly one thing: the
-clock. It is a function over a `Turn` now, which is what it always was.
 """
 
 from __future__ import annotations
