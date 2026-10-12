@@ -8,6 +8,7 @@ and every status was computed before it arrived.
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
 from typing import Any
 
 from agent.client import AgentOutcome
@@ -20,6 +21,8 @@ from api.models.routes import (
     Place,
     PlannedAlternative,
     RequirementSignal,
+    RouteChange,
+    RouteChanges,
     RouteResponse,
     RouteSummary,
 )
@@ -55,6 +58,50 @@ def to_places(candidates: list[Candidate], facts: CategoryFacts) -> list[Place]:
         )
         for p in candidates
     ]
+
+
+def route_changes(previous: Sequence[BriefStop], points: list[Place]) -> RouteChanges | None:
+    """What a refinement did to the route it started from.
+
+    ``previous`` is the route's stops as the refinement began — the journal's last
+    turn where the server has one, the client's re-sent snapshot only as a
+    fallback (see ``agent.thread.previous_stops``). ``None`` when there is no
+    previous route: a fresh generation changed nothing, and an empty diff would be
+    a claim the code cannot make.
+
+    A stop is matched by place id; a snapshot stop that carries no id — a point the
+    tourist pinned by hand — can only be matched by name. Everything on the
+    previous route that the final points do not carry is reported ``removed``,
+    whether the code dropped it or the model left it out: the final points are the
+    truth, and nothing absent from them may be reported ``kept``.
+    """
+    if not previous:
+        return None
+    new_ids = {place.id for place in points}
+    prev_ids = {stop.place_id for stop in previous if stop.place_id is not None}
+    new_by_name = {(place.name or "").strip(): place.id for place in points}
+    named_kept: set[int] = set()
+    removed: list[RouteChange] = []
+    kept = 0
+    for stop in previous:
+        if stop.place_id is not None:
+            if stop.place_id in new_ids:
+                kept += 1
+            else:
+                removed.append(RouteChange(id=stop.place_id, name=stop.name))
+        else:
+            hit = new_by_name.get((stop.name or "").strip())
+            if hit is not None:
+                named_kept.add(hit)
+                kept += 1
+            else:
+                removed.append(RouteChange(id=None, name=stop.name))
+    added = [
+        RouteChange(id=place.id, name=place.name)
+        for place in points
+        if place.id not in prev_ids and place.id not in named_kept
+    ]
+    return RouteChanges(added=added, removed=removed, kept=kept)
 
 
 def _ordered_candidates(repos: Any, outcome: AgentOutcome) -> list[Candidate]:
@@ -192,8 +239,14 @@ def route_response(
     repos: Any,
     facts: CategoryFacts,
     deadline: dict[str, Any] | None = None,
+    previous: Sequence[BriefStop] | None = None,
 ) -> RouteResponse:
-    """The one place a run's outcome becomes the response body."""
+    """The one place a run's outcome becomes the response body.
+
+    ``previous`` is the route this turn refines, when there is one; the response
+    says what the refinement did to it rather than leaving the tourist to guess.
+    A refusal or a fresh generation carries no such statement.
+    """
     contract = outcome.requirements
     measured = outcome.measured
 
@@ -211,13 +264,15 @@ def route_response(
     if offers and narrative:
         narrative = f"{narrative}\n\n{alternatives_sentence(offers, walk_s)}"
 
+    points = to_places(route, facts)
+
     return RouteResponse(
         parsed=ParsedQuery(
             categories=contract.interest_codes(),
             time_budget_minutes=contract.budget_minutes,
             source="agent",
         ),
-        points=to_places(route, facts),
+        points=points,
         shape=measured.get("shape") or {},
         summary=RouteSummary(length_km=length_km, time_seconds=walk_s),
         result_mode=contract.result_mode,
@@ -235,7 +290,7 @@ def route_response(
         requirements=contract.public_requirements(),
         interpretation=interpretation(contract, outcome.status),
         costing=costing,
-        changes=None,
+        changes=route_changes(previous or (), points),
         debug={
             "requirements_source": contract.source,
             "problems": outcome.problems,
