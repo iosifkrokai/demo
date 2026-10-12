@@ -73,6 +73,17 @@ stops are rewritten each run) — a re-run inserts nothing new and never overwri
 a curated category. `--dry-run` builds the report from the CSVs alone, so the `db`
 key is absent.
 
+## The data version
+
+The seed also stamps the projection's *version* into `data_versions` (one row,
+`name = 'seed'`, from `data_versions` in the `0005_data_version` revision). It is
+the digest of the committed files above — computed by `db/seed/version.py`, not a
+constant and not an mtime — so re-running over unchanged files reproduces it, and
+any change to a projected input moves it. The planner reads it through
+`db/store/datasets.py` and carries it in the measurement cache key (`plan_walk`),
+so a re-seed that moves a place makes the old numbers miss instead of replay. The
+report carries it too (`data_version`).
+
 ## Curated categories cannot be overwritten by automatic classification
 
 Three layers, enforced in `db/seed/pipeline.py` and pinned by

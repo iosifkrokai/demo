@@ -13,6 +13,7 @@ import psycopg
 from psycopg import sql
 
 from core.paths import GEO_DIR, PHOTOS_DIR
+from db.store.datasets import DATA_VERSION_ROW
 
 from .datasets import (
     PROTECTED_CATEGORY_SOURCES,
@@ -308,6 +309,28 @@ def _scalar(cur: Any) -> int:
     """The single value the cursor holds, or 0 when it holds nothing."""
     row = cur.fetchone()
     return int(row[0]) if row else 0
+
+
+def record_data_version(conn: psycopg.Connection, version: str) -> None:
+    """Stamp the projection's content version, one singleton row.
+
+    ``updated_at`` moves only when the version actually changes, so an idempotent
+    re-seed over unchanged files is a true no-op — the version is content, not a
+    clock. A version the planner has cached is refreshed on its own short TTL, so
+    the stamp need not be pushed anywhere.
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO data_versions (name, version) VALUES (%s, %s)
+            ON CONFLICT (name) DO UPDATE SET
+                version = EXCLUDED.version,
+                updated_at = CASE
+                    WHEN data_versions.version IS DISTINCT FROM EXCLUDED.version
+                    THEN now() ELSE data_versions.updated_at END
+            """,
+            (DATA_VERSION_ROW, version),
+        )
 
 
 def gather_db_stats(conn: psycopg.Connection) -> dict[str, Any]:

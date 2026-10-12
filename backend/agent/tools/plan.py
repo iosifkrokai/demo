@@ -26,6 +26,7 @@ from agent.tools import (
 )
 from core import cache, constants
 from core.errors import NoRoutePossibleError, UpstreamUnavailableError
+from db.store.errors import StorageUnavailableError
 from routing.cost import build_cost, refinement_cost
 from routing.models import CategoryFacts, LatLon, ResolvedConstraints
 from routing.optimize import optimize, order_after_prune, prune_unroutable, valhalla_order
@@ -44,6 +45,7 @@ def _measure_key(
     origin: LatLon | None,
     locale: str,
     must_keep_ids: list[int] | None,
+    data_version: str,
 ) -> str:
     """The identity of one measurement: the stops, the profile and the budget.
 
@@ -51,15 +53,18 @@ def _measure_key(
     fields are in it because they change the measured *result*, not just its
     presentation: the origin (it decides the drawn line's start), the locale (the
     shape's turn instructions are written in it) and the must-keep ids (they are
-    what survives pruning). A hit on any of those with a different value would be
-    a wrong answer, not a cheap one. There is no data version in the tree — see
-    `core.cache.MEASURE_CACHE` for why the key carries none.
+    what survives pruning). The `data_version` is the seed's stamp on the projected
+    rows — the stops describe the request, but a re-seed can move a place under it,
+    and without the version the old measurement would be served for the new rows.
+    A hit on any of these with a different value would be a wrong answer, not a
+    cheap one.
     """
     where = f"{origin.lat:.6f},{origin.lon:.6f}" if origin is not None else "-"
     keep = ",".join(str(i) for i in sorted(must_keep_ids or []))
     return "|".join(
         (
             "plan_walk",
+            data_version,
             ",".join(str(i) for i in sorted(wanted)),
             profile or "",
             str(budget_minutes),
@@ -69,6 +74,23 @@ def _measure_key(
             keep,
         )
     )
+
+
+def _data_version(repos: Any) -> str:
+    """The projection's content version, or "" when it cannot be read.
+
+    The version is a cache-key refinement, never a reason to fail a plan: a
+    database whose `data_versions` is not migrated in yet, or one that is down from
+    here on, simply measures under the empty version — which is exactly how the
+    cache behaved before a version existed.
+    """
+    datasets = getattr(repos, "datasets", None)
+    if datasets is None:
+        return ""
+    try:
+        return datasets.version() or ""
+    except StorageUnavailableError:
+        return ""
 
 
 def _facts(repos: Any, facts: CategoryFacts | None) -> CategoryFacts:
@@ -127,8 +149,18 @@ def plan_walk(
 
     # The same stops, profile and budget are the same walk: Valhalla is
     # deterministic, so measure once. This is what makes a refinement cheap — a
-    # stop the model kept is not re-walked.
-    key = _measure_key(wanted, budget_minutes, profile, round_trip, origin, locale, must_keep_ids)
+    # stop the model kept is not re-walked. The seed's data version is part of the
+    # key, so a re-seed that moves a place misses rather than replays.
+    key = _measure_key(
+        wanted,
+        budget_minutes,
+        profile,
+        round_trip,
+        origin,
+        locale,
+        must_keep_ids,
+        _data_version(repos),
+    )
     cached = cache.MEASURE_CACHE.get(key)
     if cached is not None:
         return dict(cached)

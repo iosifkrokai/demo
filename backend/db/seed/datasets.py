@@ -481,6 +481,7 @@ def build_coverage_report(
     curated_stats: dict[str, Any] | None = None,
     duplicate_radius_m: float = DEFAULT_DUP_RADIUS_M,
     db_stats: dict[str, Any] | None = None,
+    data_version: str | None = None,
     generated_at: str | None = None,
 ) -> dict[str, Any]:
     """Assemble the machine-readable coverage report from in-memory records."""
@@ -566,4 +567,6 @@ def build_coverage_report(
     }
     if db_stats is not None:
         report["db"] = db_stats
+    if data_version is not None:
+        report["data_version"] = data_version
     return report
