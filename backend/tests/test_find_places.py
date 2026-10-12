@@ -88,6 +88,26 @@ def test_a_box_with_nothing_in_it_returns_nothing(db_repos) -> None:
     assert answer["results"] == []
 
 
+def test_one_area_scoped_search_yields_enough_stops_to_plan(db_repos) -> None:
+    """The prompt tells the model one area-scoped search is the whole candidate set.
+
+    That instruction is only honest if it is true: a single `find_places` call for
+    the Old Town must hand back enough real stops to build a walk in the next call.
+    If it did not, "search once" would starve the plan rather than speed it up.
+    """
+    from agent.tools.places import find_places
+    from agent.tools.plan import plan_walk
+
+    found = find_places("достопримечательности", repos=db_repos, limit=8, area="grodno-old-town")
+    assert found.get("error") is None, found.get("message")
+    ids = [card["id"] for card in found["results"]]
+    assert len(ids) >= 3, "one search did not yield enough stops to choose a walk"
+
+    walk = plan_walk(ids, repos=db_repos, budget_minutes=120)
+    assert walk.get("error") is None, walk.get("message")
+    assert walk["count"] >= 2
+
+
 def test_the_project_area_has_a_boundary(db_repos) -> None:
     """The one area the dataset carries a polygon for resolves to a real box."""
     box = db_repos.areas.bbox("grodno-oblast")

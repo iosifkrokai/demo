@@ -261,8 +261,11 @@ def register_find_places(agent: Any, remember: Remember) -> None:
         """Find real places matching a description, a category, and/or a point.
 
         Pass `area` (a canonical slug `find_areas` returned) to search within a
-        territory in one call instead of walking it city by city. A territory the
-        registry has no boundary for is reported unfiltered, not guessed at.
+        territory in one call instead of walking it city by city. One such call
+        already returns up to eight cards — the whole candidate set for a walk;
+        when the answer holds several stops for the territory, go on to
+        `plan_walk` instead of searching it again. A territory the registry has
+        no boundary for is reported unfiltered, not guessed at.
 
         Returns a short card per place — id, name, category, town, location and
         how long a visit is estimated to take. The id is the only handle you may

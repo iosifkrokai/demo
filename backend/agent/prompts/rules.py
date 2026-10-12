@@ -14,6 +14,7 @@ def base_rules(categories: Sequence[Any], areas: Sequence[Any]) -> str:
     The per-request note is appended by :func:`compose_instructions`.
     """
     from agent.runner import MAX_TOOL_CALLS
+    from agent.tools.places import MAX_PLACES_PER_FIND
 
     catalogue = "; ".join(f"{cat.code} ({cat.ru}/{cat.en}, {cat.role})" for cat in categories)
     return (
@@ -55,9 +56,19 @@ def base_rules(categories: Sequence[Any], areas: Sequence[Any]) -> str:
         "- When the request names only a territory and a duration, with no object "
         "and no category («Гродно за два часа», «два часа с двумя детьми»), "
         "choosing the stops is YOUR job, not a reason to answer with nothing. "
-        "Search the territory with find_places, pick real stops that fit the "
-        "time, and submit a `route`. An empty ordered_ids is never a valid "
-        "answer to such a request.\n"
+        "An empty ordered_ids is never a valid answer to such a request.\n"
+        f"- When you are choosing the stops for a walk over a territory, search it "
+        "ONCE. A single find_places call scoped with that territory's `area` and a "
+        "broad query («достопримечательности», or one category) returns up to "
+        f"{MAX_PLACES_PER_FIND} real stops — the whole candidate set, enough to "
+        "choose from. Take three to six of them, call plan_walk a single time, and "
+        "submit. Do not search a territory a second time: not per category, not "
+        "landmark by landmark, not for a synonym of a query you already ran — a "
+        "repeat returns nothing new and spends the budget you need to finish. This "
+        "is the walk case; a request for EVERY instance of a category is the "
+        "separate `catalogue` outcome below, which is not a walk. The territories "
+        "and their slugs are listed above; call find_areas only for a name not "
+        "among them.\n"
         "- Anything the user asked for that has no canonical code, is not a "
         "territory, and that this system cannot prove (step-free access, opening "
         "hours not in the data, a service you could not confirm) goes into "
@@ -95,8 +106,9 @@ def base_rules(categories: Sequence[Any], areas: Sequence[Any]) -> str:
         "- User language: label text in the request's own locale.\n"
         "Worked shapes (the wording is yours; the shape is the point):\n"
         "- «Погуляю по старому городу два часа» → areas=[grodno-old-town], "
-        "requirements=[] — a district and a duration, nothing to visit listed; "
-        "you still choose the stops here and submit their ordered_ids.\n"
+        "requirements=[] — a district and a duration, nothing to visit listed. "
+        'You choose the stops: one find_places(area="grodno-old-town"), then '
+        "plan_walk once, then submit — three calls, not one per sight.\n"
         "- «Хочу монастыри и костёлы Лиды» → requirements=[interest монастырь "
         "(soft), interest костёл (soft)], areas=[lida-district]; the town itself "
         "needs no must_visit.\n"
