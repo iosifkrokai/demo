@@ -18,9 +18,6 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-PartyTypeLiteral = Literal["solo", "family", "couple", "group"]
-SearchScopeLiteral = Literal["town", "district", "region"]
-
 
 class LatLon(BaseModel):
     """Tourist's current position (device geolocation)."""
@@ -85,13 +82,7 @@ class Photo(BaseModel):
 
 class ResolvedConstraints(BaseModel):
     must_visit_ids: list[int] = []
-    resolved_names: list[str] = []
-    forbidden_categories: list[str] = []
-    forbidden_keywords: list[str] = []
     time_budget_minutes: int | None = 120
-    party_type: str = "solo"
-    must_visit_keywords: list[str] = []
-    query_keywords: list[str] = []
     round_trip: bool = False
 
 
