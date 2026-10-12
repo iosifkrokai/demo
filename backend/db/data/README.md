@@ -3,7 +3,9 @@
 Data is code: every dataset is a versioned text file, and the Postgres database is
 a *projection* rebuilt from them by one idempotent command. Layout: `places/`
 (datasets), `geo/` (map geometry), `photos/` (photo hints + resolution), plus
-`taxonomy.csv` and `itineraries.json`.
+`taxonomy.csv` and `itineraries.json` — the last two are projected into the
+`categories` and `itineraries`/`itinerary_stops` tables (see below), not read from
+disk at runtime.
 
 Sight and service rows share the pipe-delimited 14-column shape:
 
@@ -15,6 +17,30 @@ name|category|district|town|lat|lon|blurb|fun_fact|fun_facts|opening_hours|ticke
 only** — `source_url` is what to check them against. Services carry `visit_minutes`
 empty (NULL): stops *beside* a route, not sights. `places/places_curated.csv` uses
 a 7-column shape (`id|normalized_name|category|blurb|fun_fact|fun_facts|links`).
+
+## Two more files become tables: the taxonomy and the curated walks
+
+The place CSVs project onto `places`; `taxonomy.csv` and `itineraries.json` project
+onto reference tables the service reads instead of the files:
+
+- **`taxonomy.csv` → `categories`, natural key `code`.** One row per canonical
+  category — `code`, `ru`, `en`, `role` (`sight|service`), `osm_tags`,
+  `visit_minutes`, `aliases_ru`, `aliases_en`. Written by
+  `db.seed.pipeline.load_categories` with `ON CONFLICT (code) DO UPDATE`. The
+  service resolves free text through the table (`db/store/taxonomy.py`); the seed
+  still parses the same file (`db/seed/taxonomy.py`) only to validate a place's
+  category while it writes that place.
+- **`itineraries.json` → `itineraries` + `itinerary_stops`.** `itineraries` has
+  natural key `id` (`id`, `title`, `blurb`, `transport`, `position`); each stop
+  is an `itinerary_stops` row keyed `(itinerary_id, ordinal)`, whose `source_url`
+  is the same natural key `places` is matched on — never a database id a re-seed
+  could renumber. Written by `db.seed.pipeline.load_itineraries`: the walk upserts
+  on `id`, `position` is the file order, and the stops are rewritten wholesale
+  (delete-then-insert) so a walk that drops a stop drops it here too. The
+  catalogue serves them through `db/store/itineraries.py`.
+
+Both tables, and the `areas.note` / `areas.is_project_area` columns `areas.json`
+needed, arrive in the Alembic revision `0002_taxonomy_itineraries`.
 
 ## The one entry point: `python -m db.seed`
 
@@ -35,13 +61,17 @@ Order of a full apply — validate, upsert by natural key, embed locally, report
 4. `places_curated.csv` — matched by name, applied last, `category_source =
    'curated'`; each name also becomes a `place_aliases(locale='ru')` row.
 5. `areas` (project polygon + one row per district) and `place_sources` (one row
-   per `(provider, external_id)`); embeddings last, from the local CPU model.
+   per `(provider, external_id)`).
+6. `categories` (from `taxonomy.csv`, key `code`) and `itineraries` +
+   `itinerary_stops` (from `itineraries.json`, key `id`) — the two reference files
+   projected, see above; embeddings last, from the local CPU model.
 
 Idempotency: `places` upserts on `source_url`, `place_sources` on
 `(provider, external_id)`, `place_aliases` on `(place_id, lower(alias), locale)`,
-`areas` on `code` — a re-run inserts nothing new and never overwrites a curated
-category. `--dry-run` builds the report from the CSVs alone, so the `db` key is
-absent.
+`areas` on `code`, `categories` on `code`, `itineraries` on `id` (each walk's
+stops are rewritten each run) — a re-run inserts nothing new and never overwrites
+a curated category. `--dry-run` builds the report from the CSVs alone, so the `db`
+key is absent.
 
 ## Curated categories cannot be overwritten by automatic classification
 
