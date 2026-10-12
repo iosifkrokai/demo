@@ -3,6 +3,12 @@ import type {
   ParsedDirectionsGeometry,
 } from '@/components/types';
 import type { Photo } from '@/api/types';
+import {
+  fetchThread,
+  type ThreadJournal,
+  type ThreadStop,
+  type ThreadTurn,
+} from '@/api/threads';
 import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
 import { immer } from 'zustand/middleware/immer';
@@ -167,6 +173,67 @@ const hasActiveRoute = (waypoints: Waypoint[]): boolean =>
       wp.geocodeResults.length > 0 && wp.geocodeResults.some((r) => r.selected)
   ).length >= 2;
 
+/** The stops of a journal turn, as the store's waypoints — the journal's own order. */
+const waypointsFromTurn = (turn: ThreadTurn): Waypoint[] =>
+  (turn.measurement?.results ?? [])
+    .filter((stop) => Number.isFinite(stop.id))
+    .map((stop, index) => ({
+      id: index.toString(),
+      userInput: stop.name,
+      placeId: stop.id,
+      geocodeResults: [
+        {
+          title: stop.name,
+          description: stop.category ?? undefined,
+          selected: true,
+          displaylnglat: [stop.lon, stop.lat] as [number, number],
+          sourcelnglat: [stop.lon, stop.lat] as [number, number],
+          key: index,
+          addressindex: 0,
+        },
+      ],
+    }));
+
+/** The known facts of a stop: the journal's own, kept richer by whatever we already had. */
+const detailsFromStop = (
+  stop: ThreadStop,
+  existing?: PlaceDetails
+): PlaceDetails => ({
+  name: stop.name,
+  category: stop.category ?? existing?.category ?? null,
+  blurb: existing?.blurb ?? null,
+  funFact: existing?.funFact ?? null,
+  funFacts: existing?.funFacts ?? [],
+  links: existing?.links ?? [],
+  visitMinutes: stop.visit_minutes ?? existing?.visitMinutes ?? null,
+  openingHours: existing?.openingHours ?? null,
+  ticketPrice: existing?.ticketPrice ?? null,
+  town: stop.town ?? existing?.town ?? null,
+  district: existing?.district ?? null,
+  photo: existing?.photo ?? null,
+});
+
+/** Derive the route the tourist holds from a recorded turn, not from a snapshot. */
+const adoptThreadTurn = (state: DirectionsState, turn: ThreadTurn): void => {
+  const stops = (turn.measurement?.results ?? []).filter((stop) =>
+    Number.isFinite(stop.id)
+  );
+  // A turn with no stops is not a route (a catalogue or a refusal); it must not
+  // wipe the route the tourist is already holding.
+  if (stops.length === 0) return;
+  const start = state.waypoints.find((wp) => wp.id === ME_WAYPOINT_ID);
+  const placeWaypoints = waypointsFromTurn(turn);
+  state.waypoints = start ? [start, ...placeWaypoints] : placeWaypoints;
+
+  const details = { ...state.placeDetails };
+  for (const stop of stops) {
+    details[stop.id] = detailsFromStop(stop, details[stop.id]);
+  }
+  state.placeDetails = details;
+  state.successful = placeWaypoints.length > 0;
+  state.isOptimized = false;
+};
+
 export interface DirectionsState {
   successful: boolean;
   highlightSegment: HighlightSegment;
@@ -182,6 +249,10 @@ export interface DirectionsState {
   excludedPlaceIds: number[];
   refinementLog: RefinementEntry[];
   routeSnapshots: RouteSnapshot[];
+  /** The server's journal of this run, once it has been read back. */
+  thread: ThreadJournal | null;
+  /** Which revision the map currently shows; -1 before any journal is loaded. */
+  threadRevision: number;
 }
 
 interface DirectionsActions {
@@ -233,6 +304,12 @@ interface DirectionsActions {
   snapshotRoute: () => void;
   /** Restore the newest snapshot; no-op when the stack is empty. */
   undoRefinement: () => void;
+  /** Adopt the journal the server keeps: the route now comes from its last turn. */
+  applyThread: (journal: ThreadJournal) => void;
+  /** Show an earlier revision of the loaded journal — the replay of a turn. */
+  replayThreadRevision: (revision: number) => void;
+  /** Fetch the run's journal and adopt it; best-effort, never fails a route. */
+  refreshThread: (sessionId: string) => Promise<void>;
   /** Full reset: stops, details, exclusions, log, history of edits, line. */
   resetRoute: () => void;
 }
@@ -255,6 +332,8 @@ export const useDirectionsStore = create<DirectionsStore>()(
       excludedPlaceIds: [],
       refinementLog: [],
       routeSnapshots: [],
+      thread: null,
+      threadRevision: -1,
 
       updateInclineDecline: (inclineDeclineTotal) =>
         set(
@@ -649,18 +728,89 @@ export const useDirectionsStore = create<DirectionsStore>()(
         set(
           (state) => {
             const snap = state.routeSnapshots.at(-1);
-            if (!snap) {
+            // The journal is the truth: when a run has been read back and the
+            // map shows a later revision, undo replays the earlier turn itself.
+            const previous =
+              state.thread && state.threadRevision > 0
+                ? state.thread.turns.find(
+                    (turn) => turn.revision === state.threadRevision - 1
+                  )
+                : undefined;
+
+            if (previous) {
+              adoptThreadTurn(state, previous);
+              state.threadRevision = previous.revision;
+            } else if (snap) {
+              state.waypoints = snap.waypoints;
+              state.placeDetails = snap.placeDetails;
+            } else {
               return;
             }
-            state.waypoints = snap.waypoints;
-            state.placeDetails = snap.placeDetails;
-            state.excludedPlaceIds = snap.excludedPlaceIds;
-            state.refinementLog = snap.refinementLog;
-            state.routeSnapshots = state.routeSnapshots.slice(0, -1);
+
+            // Exclusions and the log are the client's own; they still come from
+            // the snapshot when there is one, and otherwise just step back.
+            if (snap) {
+              state.excludedPlaceIds = snap.excludedPlaceIds;
+              state.refinementLog = snap.refinementLog;
+              state.routeSnapshots = state.routeSnapshots.slice(0, -1);
+            } else {
+              state.refinementLog = state.refinementLog.slice(0, -1);
+            }
           },
           undefined,
           'undoRefinement'
         ),
+
+      applyThread: (journal) =>
+        set(
+          (state) => {
+            state.thread = journal;
+            const last = journal.turns.at(-1);
+            state.threadRevision = last ? last.revision : -1;
+            if (last) adoptThreadTurn(state, last);
+          },
+          undefined,
+          'applyThread'
+        ),
+
+      replayThreadRevision: (revision) =>
+        set(
+          (state) => {
+            const turn = state.thread?.turns.find(
+              (t) => t.revision === revision
+            );
+            if (!turn) return;
+            state.threadRevision = turn.revision;
+            adoptThreadTurn(state, turn);
+          },
+          undefined,
+          'replayThreadRevision'
+        ),
+
+      refreshThread: async (sessionId) => {
+        let journal: ThreadJournal;
+        try {
+          journal = await fetchThread(sessionId);
+        } catch {
+          // The journal is best-effort: a read that fails leaves the route the
+          // response already gave, and the local snapshot still undoes a turn.
+          return;
+        }
+        set(
+          (state) => {
+            // Adopt only when the journal actually grew: if the turn was never
+            // recorded server-side, the route the response just gave stands.
+            const grew =
+              journal.turns.length > (state.thread?.turns.length ?? 0);
+            state.thread = journal;
+            const last = journal.turns.at(-1);
+            state.threadRevision = last ? last.revision : -1;
+            if (last && grew) adoptThreadTurn(state, last);
+          },
+          undefined,
+          'refreshThread'
+        );
+      },
 
       resetRoute: () =>
         set(
@@ -670,6 +820,8 @@ export const useDirectionsStore = create<DirectionsStore>()(
             state.excludedPlaceIds = [];
             state.refinementLog = [];
             state.routeSnapshots = [];
+            state.thread = null;
+            state.threadRevision = -1;
             state.successful = false;
             state.inclineDeclineTotal = undefined;
             state.results = { data: null, show: { '0': true } };

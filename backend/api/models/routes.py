@@ -7,6 +7,7 @@ is narrowed to a `ReaderBrief` before the agent ever sees it.
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
@@ -220,6 +221,29 @@ class RouteResponse(BaseModel):
     changes: RouteChanges | None = None
     alternatives: list[PlannedAlternative] | None = None
     debug: dict[str, Any] | None = None
+
+
+class ThreadTurn(BaseModel):
+    """One recorded turn: what was asked, what the agent proposed, what was measured.
+
+    `submission` and `measurement` are the run's own JSON, carried whole so a turn
+    can be replayed without re-planning it — the rows themselves never leave the
+    store.
+    """
+
+    revision: int
+    query: str
+    submission: dict[str, Any]
+    measurement: dict[str, Any]
+    created_at: datetime | None = None
+
+
+class ThreadResponse(BaseModel):
+    """GET /routes/threads/{session_id} — the journal of the session that names it."""
+
+    session_id: str
+    created_at: datetime | None = None
+    turns: list[ThreadTurn] = Field(default_factory=list)
 
 
 class RerouteReq(BaseModel):
