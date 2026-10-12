@@ -8,23 +8,64 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from fastapi import APIRouter, HTTPException, Request
 
 from agent import client, thread
 from api import deps, responses
-from api.models.routes import ExplainReq, GenerateReq, RerouteReq, RouteResponse
+from api.models.routes import (
+    ExplainReq,
+    GenerateReq,
+    RerouteReq,
+    RouteResponse,
+    ThreadResponse,
+    ThreadTurn,
+)
 from core import constants
 from core.errors import AgentError, InterpretationUnavailableError, NoRoutePossibleError
+from core.passwords import hash_token
 from routing.models import CategoryFacts
 from routing.stops import candidate_of
+
+if TYPE_CHECKING:
+    from db.models.thread import Thread
 
 log = logging.getLogger(__name__)
 
 router = APIRouter(tags=["routes"])
 
 NO_PLAN = "no_plan"
+
+
+def _identity(request: Request) -> str | None:
+    """The namespace a run belongs to: the hash of the session that named it.
+
+    Only the hash is ever kept, exactly as the session store keeps it, so the
+    journal is addressed by the session and no thread is reachable from another.
+    """
+    token = deps.session_token(request)
+    return hash_token(token) if token else None
+
+
+def _thread_response(session_id: str, journal: Thread | None) -> ThreadResponse:
+    """The journal as the wire model — the turns, never the rows themselves."""
+    if journal is None:
+        return ThreadResponse(session_id=session_id)
+    return ThreadResponse(
+        session_id=session_id,
+        created_at=journal.created_at,
+        turns=[
+            ThreadTurn(
+                revision=turn.revision,
+                query=turn.query,
+                submission=turn.submission,
+                measurement=turn.measurement,
+                created_at=turn.created_at,
+            )
+            for turn in journal.turns
+        ],
+    )
 
 
 @router.post("/routes/generate", response_model=RouteResponse)
@@ -53,10 +94,13 @@ def _plan(req: GenerateReq, request: Request) -> RouteResponse:
     """One agent run, then the code's verdict on what it proposed."""
     repos = deps.get_repos(request)
     brief = responses.reader_brief(req)
-    if req.session_id:
+    thread_id = (
+        thread.thread_key(req.session_id, identity=_identity(request)) if req.session_id else None
+    )
+    if thread_id:
         # The thread the client names is the journal the refinement reconciles
         # against; the snapshot it re-sends is a fallback, not the authority.
-        brief = thread.reconcile_brief(repos.threads, thread_id=req.session_id, brief=brief)
+        brief = thread.reconcile_brief(repos.threads, thread_id=thread_id, brief=brief)
     # Read the refinement off the reconciled brief, not the raw body: the journal
     # can add base points, and the plan below is built from the brief.
     # A refinement gets its own tight budget; a fresh generation gets none here —
@@ -73,10 +117,10 @@ def _plan(req: GenerateReq, request: Request) -> RouteResponse:
         # a guess at what the tourist meant.
         raise InterpretationUnavailableError("the request could not be planned")
 
-    if req.session_id:
+    if thread_id:
         thread.record(
             repos.threads,
-            thread_id=req.session_id,
+            thread_id=thread_id,
             query=req.query,
             submission=outcome.submission.model_dump(mode="json"),
             measurement=outcome.measured,
@@ -84,6 +128,24 @@ def _plan(req: GenerateReq, request: Request) -> RouteResponse:
 
     facts = CategoryFacts.from_rows(repos.taxonomy.all())
     return responses.route_response(req, outcome, repos=repos, facts=facts)
+
+
+@router.get("/routes/threads/{session_id}", response_model=ThreadResponse)
+@deps.storage_guarded
+def read_thread(session_id: str, request: Request) -> Any:
+    """The turns recorded for this run, read back by the session that named it.
+
+    The journal is account-scoped: without a session there is nothing to read, and
+    a run recorded under one session is never returned under another — the key
+    carries the session, so the store has no row to hand back.
+    """
+    user, err = deps.require_user(request, deps.get_user_repository(request))
+    if err is not None:
+        return err
+    assert user is not None
+    thread_id = thread.thread_key(session_id, identity=_identity(request))
+    journal = deps.get_repos(request).threads.journal(thread_id)
+    return _thread_response(session_id, journal)
 
 
 @router.post("/routes/reroute", response_model=RouteResponse)

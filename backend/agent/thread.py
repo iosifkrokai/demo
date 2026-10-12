@@ -29,7 +29,18 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 
-__all__ = ["journal_stops", "reconcile", "reconcile_brief", "record"]
+__all__ = ["journal_stops", "reconcile", "reconcile_brief", "record", "thread_key"]
+
+
+def thread_key(session_id: str, *, identity: str | None = None) -> str:
+    """The journal key for a client run, namespaced by the session that names it.
+
+    A run is addressed by the id the client mints, but it belongs to the session
+    that asked for it: with an identity for that session the key carries it, so a
+    thread is only ever read back under the same session. Without one — an
+    anonymous run — the bare id stands.
+    """
+    return f"{identity}:{session_id}" if identity else session_id
 
 
 def journal_stops(turn: Turn | None) -> tuple[BriefStop, ...]:

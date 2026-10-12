@@ -20,6 +20,7 @@ const mockStoreState = vi.hoisted(() => ({
   refinementLog: [] as unknown[],
   routeSnapshots: [] as unknown[],
   excludedPlaceIds: [] as number[],
+  thread: null as unknown,
   setWaypoint: vi.fn(),
   setPlaceDetails: vi.fn(),
   addEmptyWaypointToEnd: vi.fn(),
@@ -31,6 +32,7 @@ const mockStoreState = vi.hoisted(() => ({
   undoRefinement: vi.fn(),
   resetRoute: vi.fn(),
   pushRefinement: vi.fn(),
+  refreshThread: vi.fn(),
 }));
 const mockSetWaypoint = mockStoreState.setWaypoint;
 const mockRefetch = vi.hoisted(() => vi.fn());
@@ -375,7 +377,7 @@ describe('Sidebar', () => {
     expect(planned[1].placeId).toBe(11);
   });
 
-  it('sends the current route as context on a refinement turn', async () => {
+  it('sends only its own points on a refinement, not the whole route', async () => {
     const sentBodies: string[] = [];
     const fetchMock = vi.fn(async (_url: string, init: RequestInit) => {
       sentBodies.push(String(init.body));
@@ -432,10 +434,12 @@ describe('Sidebar', () => {
     expect(body.context.instruction).toBe('добавь кофейню и туалет');
     expect(body.context.revision).toBe(2);
     expect(body.context.excluded_ids).toEqual([17]);
+    // The agent's stop belongs to the server's journal; only the tourist's own
+    // points travel with the turn.
     expect(
       body.context.base_points.map((p: { source: string }) => p.source)
-    ).toEqual(['mine', 'agent']);
-    expect(body.context.base_points[1].pinned).toBe(false);
+    ).toEqual(['mine']);
+    expect(body.context.base_points[0].pinned).toBe(false);
   });
 
   it('has no guide tab: the guide opens from one explicit action on a route', async () => {
