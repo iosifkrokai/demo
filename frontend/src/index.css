@@ -50,6 +50,12 @@
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
+  /* C7: the status tones — an unmet requirement (warning), a confirmed start
+     (success) and a neutral hint (info). Kept as tokens so no component has to
+     reach for the raw Tailwind palette. */
+  --color-warning: var(--warning);
+  --color-success: var(--success);
+  --color-info: var(--info);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
@@ -65,8 +71,12 @@
   --popover: #ffffff;
   --popover-foreground: #222222;
   /* DESIGN.md: the accent, darkened so white text on it passes WCAG AA.
-     #ff385c gave 3.52:1; #d92d4f gives 4.73:1 and keeps the same hue. */
-  --primary: #d92d4f;
+     #ff385c gave 3.52:1; #d92d4f gave 4.73:1 at rest — but the shared Button
+     lightens its fill on hover (a shadcn `hover:bg-primary/90` default our own
+     components never ask for; they darken via `hover:brightness-[0.97]`), and
+     white on #d92d4f/90 is only 4.17:1, below AA. #c82949 keeps the hue and
+     clears both: 5.43:1 at rest, 4.70:1 under the lightened hover. */
+  --primary: #c82949;
   --primary-foreground: #ffffff;
   --secondary: #f7f7f7;
   --secondary-foreground: #222222;
@@ -75,6 +85,15 @@
   --accent: #f7f7f7;
   --accent-foreground: #222222;
   --destructive: #c13515;
+  /* C7 status tones. Dark enough to clear AA as text on the white card/background
+     AND on their own `bg-*-/10`–`/15` tints — a degraded verdict or the
+     over-budget chip renders `text-warning` on `bg-warning/15` at 12px, which
+     needs the full 4.5:1, and #b45309 gave only 4.08:1 there. warning and info
+     are darkened accordingly (white / tint: 5.9 / 4.75 and 6.0 / 4.80). success
+     has no tint use yet; it stays put. */
+  --warning: #a24b08;
+  --success: #047857;
+  --info: #225ad6;
   --border: #ebebeb;
   --input: #ebebeb;
   --ring: #ff385c;

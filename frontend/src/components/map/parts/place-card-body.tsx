@@ -46,6 +46,7 @@ export function PlaceCardBody({
 
   return (
     <div
+      role="presentation"
       className={
         mobile
           ? 'relative flex min-w-0 flex-col gap-2.5 px-3 py-3'

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import type { ReactNode } from 'react';
 
@@ -28,8 +28,17 @@ const visited = (id: number, name: string): VisitedPlace => ({
 
 const VISITED = [visited(7, 'Старый замок'), visited(8, 'Новый замок')];
 
+/** When set, `useVisited` reports failure — the list must say so, not look empty. */
+const visitedError = vi.hoisted(() => ({ value: null as Error | null }));
+const toggleMutate = vi.hoisted(() => vi.fn());
+
+beforeEach(() => {
+  visitedError.value = null;
+  toggleMutate.mockClear();
+});
+
 vi.mock('@tanstack/react-router', () => ({
-  Link: ({ children }: { children?: ReactNode }) => <a>{children}</a>,
+  Link: ({ children }: { children?: ReactNode }) => <a href="/">{children}</a>,
 }));
 
 vi.mock('@/hooks/use-auth', () => ({
@@ -40,11 +49,17 @@ vi.mock('@/hooks/use-auth', () => ({
     isLoading: false,
     refetch: () => {},
   }),
+  describeAccountError: () => 'account.errors.generic',
 }));
 
 vi.mock('@/hooks/use-visited', () => ({
-  useVisited: () => ({ items: VISITED, count: VISITED.length }),
-  useToggleVisited: () => ({ mutate: vi.fn(), isPending: false }),
+  useVisited: () => ({
+    items: VISITED,
+    count: VISITED.length,
+    isLoading: false,
+    error: visitedError.value,
+  }),
+  useToggleVisited: () => ({ mutate: toggleMutate, isPending: false }),
 }));
 
 vi.mock('@/hooks/use-places', () => ({
@@ -70,6 +85,7 @@ vi.mock('@/components/place-map/place-map', () => ({
         <button
           key={place.place_id}
           type="button"
+          aria-label={`пин ${place.place_id}`}
           data-testid={`fake-pin-${place.place_id}`}
           onClick={() => onSelect(place.place_id)}
         />
@@ -115,5 +131,23 @@ describe('VisitedPage — the marked places are on a map too', () => {
       'data-selected-id',
       '7'
     );
+  });
+
+  it('surfaces a failed request instead of pretending the list is empty', () => {
+    visitedError.value = new Error('offline');
+    render(<VisitedPage />);
+
+    expect(screen.getByTestId('visited-error')).toBeInTheDocument();
+  });
+
+  it('reports a failed toggle instead of dropping it silently', () => {
+    render(<VisitedPage />);
+
+    fireEvent.click(screen.getByTestId('visited-remove-7'));
+
+    const options = toggleMutate.mock.calls[0]?.[1] as
+      | { onError?: unknown }
+      | undefined;
+    expect(options?.onError).toBeInstanceOf(Function);
   });
 });

@@ -1,13 +1,7 @@
 import { describe, it, expect, afterEach } from 'vitest';
 
 import i18n from '@/i18n';
-import {
-  fmtMin,
-  fmtDist,
-  fmtStops,
-  agentErrorMessage,
-  metresBetween,
-} from './guide-format';
+import { fmtMin, fmtDist, fmtStops, agentErrorMessage } from './guide-format';
 
 afterEach(async () => {
   await i18n.changeLanguage('ru');
@@ -105,13 +99,5 @@ describe('agentErrorMessage', () => {
       'the agent answered with error 503 — try again'
     );
     expect(agentErrorMessage(403)).toContain('403');
-  });
-});
-
-describe('metresBetween', () => {
-  it('is zero for the same point', () => {
-    expect(
-      metresBetween({ lat: 53.68, lon: 23.83 }, { lat: 53.68, lon: 23.83 })
-    ).toBe(0);
   });
 });

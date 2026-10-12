@@ -1,5 +1,7 @@
 /** Cutting the drawn route at the tourist. */
 
+import { metresBetween } from '@/utils/geo';
+
 export interface LonLat {
   lat: number;
   lon: number;
@@ -7,16 +9,6 @@ export interface LonLat {
 
 /** Coordinates as the map layer wants them: [lon, lat]. */
 export type LineCoords = [number, number][];
-
-const EARTH_RADIUS_M = 6_371_000;
-
-/** Distance between two points in metres (equirectangular, good enough at city scale). */
-export const metresBetween = (a: LonLat, b: LonLat): number => {
-  const meanLat = ((a.lat + b.lat) / 2) * (Math.PI / 180);
-  const dLat = (b.lat - a.lat) * (Math.PI / 180);
-  const dLon = (b.lon - a.lon) * (Math.PI / 180);
-  return EARTH_RADIUS_M * Math.hypot(dLat, dLon * Math.cos(meanLat));
-};
 
 export interface WalkSplit {
   /** The part already behind the tourist, ending exactly at their position. */

@@ -24,8 +24,9 @@ from agent.tools import (
     envelope,
     fetch,
 )
-from core import constants
+from core import cache, constants
 from core.errors import NoRoutePossibleError, UpstreamUnavailableError
+from db.store.errors import StorageUnavailableError
 from routing.cost import build_cost, refinement_cost
 from routing.models import CategoryFacts, LatLon, ResolvedConstraints
 from routing.optimize import optimize, order_after_prune, prune_unroutable, valhalla_order
@@ -34,6 +35,62 @@ from routing.stops import candidate_of
 from routing.validate import validate
 
 MAX_STOPS_PER_CALL = constants.VALHALLA_MAX_LOCATIONS
+
+
+def _measure_key(
+    wanted: list[int],
+    budget_minutes: int | None,
+    profile: str,
+    round_trip: bool,
+    origin: LatLon | None,
+    locale: str,
+    must_keep_ids: list[int] | None,
+    data_version: str,
+) -> str:
+    """The identity of one measurement: the stops, the profile and the budget.
+
+    The stops, profile, budget and round-trip are the core of it. Three more
+    fields are in it because they change the measured *result*, not just its
+    presentation: the origin (it decides the drawn line's start), the locale (the
+    shape's turn instructions are written in it) and the must-keep ids (they are
+    what survives pruning). The `data_version` is the seed's stamp on the projected
+    rows — the stops describe the request, but a re-seed can move a place under it,
+    and without the version the old measurement would be served for the new rows.
+    A hit on any of these with a different value would be a wrong answer, not a
+    cheap one.
+    """
+    where = f"{origin.lat:.6f},{origin.lon:.6f}" if origin is not None else "-"
+    keep = ",".join(str(i) for i in sorted(must_keep_ids or []))
+    return "|".join(
+        (
+            "plan_walk",
+            data_version,
+            ",".join(str(i) for i in sorted(wanted)),
+            profile or "",
+            str(budget_minutes),
+            "rt" if round_trip else "one_way",
+            where,
+            locale,
+            keep,
+        )
+    )
+
+
+def _data_version(repos: Any) -> str:
+    """The projection's content version, or "" when it cannot be read.
+
+    The version is a cache-key refinement, never a reason to fail a plan: a
+    database whose `data_versions` is not migrated in yet, or one that is down from
+    here on, simply measures under the empty version — which is exactly how the
+    cache behaved before a version existed.
+    """
+    datasets = getattr(repos, "datasets", None)
+    if datasets is None:
+        return ""
+    try:
+        return datasets.version() or ""
+    except StorageUnavailableError:
+        return ""
 
 
 def _facts(repos: Any, facts: CategoryFacts | None) -> CategoryFacts:
@@ -89,6 +146,24 @@ def plan_walk(
     if len(wanted) > MAX_STOPS_PER_CALL:
         wanted = wanted[:MAX_STOPS_PER_CALL]
         provenance["capped"] = True
+
+    # The same stops, profile and budget are the same walk: Valhalla is
+    # deterministic, so measure once. This is what makes a refinement cheap — a
+    # stop the model kept is not re-walked. The seed's data version is part of the
+    # key, so a re-seed that moves a place misses rather than replays.
+    key = _measure_key(
+        wanted,
+        budget_minutes,
+        profile,
+        round_trip,
+        origin,
+        locale,
+        must_keep_ids,
+        _data_version(repos),
+    )
+    cached = cache.MEASURE_CACHE.get(key)
+    if cached is not None:
+        return dict(cached)
 
     rows, error, message = fetch(repos, lambda store: store.places.get_by_ids(wanted))
     if error is not None:
@@ -154,7 +229,7 @@ def plan_walk(
     provenance["unroutable"] = [p.name for p in prune_report]
     provenance["missing_ids"] = missing
 
-    return envelope(
+    answer = envelope(
         "plan_walk",
         stops,
         provenance,
@@ -168,6 +243,9 @@ def plan_walk(
         "shape": shape or None,
         "round_trip": round_trip,
     }
+    if answer.get("error") is None and answer.get("results"):
+        cache.MEASURE_CACHE.put(key, answer)
+    return answer
 
 
 def register_plan_walk(agent: Any, _remember: Remember) -> None:

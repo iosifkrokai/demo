@@ -45,34 +45,36 @@ describe('App', () => {
     expect(() => renderApp()).not.toThrow();
   });
 
-  it('should render MapProvider as wrapper', () => {
+  it('should render MapProvider as wrapper', async () => {
     renderApp();
-    expect(screen.getByTestId('map-provider')).toBeInTheDocument();
+    expect(await screen.findByTestId('map-provider')).toBeInTheDocument();
   });
 
-  it('should render MapComponent', () => {
+  it('should render MapComponent', async () => {
     renderApp();
-    expect(screen.getByTestId('map-component')).toBeInTheDocument();
+    expect(await screen.findByTestId('map-component')).toBeInTheDocument();
   });
 
-  it('should render Sidebar', () => {
+  it('should render Sidebar', async () => {
     renderApp();
-    expect(screen.getByTestId('sidebar')).toBeInTheDocument();
+    expect(await screen.findByTestId('sidebar')).toBeInTheDocument();
   });
 
-  it('should render Toaster with correct props', () => {
+  it('should render Toaster with correct props', async () => {
     renderApp();
-    const toaster = screen.getByTestId('toaster');
+    const toaster = await screen.findByTestId('toaster');
     expect(toaster).toBeInTheDocument();
     expect(toaster).toHaveAttribute('data-position', 'bottom-center');
     expect(toaster).toHaveAttribute('data-duration', '5000');
   });
 
-  it('should render all components inside MapProvider', () => {
+  it('should render all components inside MapProvider', async () => {
     renderApp();
-    const mapProvider = screen.getByTestId('map-provider');
-    expect(mapProvider).toContainElement(screen.getByTestId('map-component'));
-    expect(mapProvider).toContainElement(screen.getByTestId('sidebar'));
-    expect(mapProvider).toContainElement(screen.getByTestId('toaster'));
+    const mapProvider = await screen.findByTestId('map-provider');
+    expect(mapProvider).toContainElement(
+      await screen.findByTestId('map-component')
+    );
+    expect(mapProvider).toContainElement(await screen.findByTestId('sidebar'));
+    expect(mapProvider).toContainElement(await screen.findByTestId('toaster'));
   });
 });

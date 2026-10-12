@@ -14,10 +14,10 @@
   "expectations": {
     "must_contain_categories": [],
     "must_not_contain_categories": [],
-    "expected_status": ["rejected", "infeasible", "needs_clarification"],
+    "expected_status": ["infeasible", "pending"],
     "max_total_minutes": 120,
     "in_region": true,
     "allow_empty": true,
-    "status_note": "in_region здесь не формальность: пустой план проходит (allow_empty), а любой возвращённый вильнюсский пункт — падает, то есть случай ловит именно подмену области. Причина отказа не важна (rejected/infeasible/clarification), важно, что маршрута по Вильнюсу не будет."
+    "status_note": "in_region здесь не формальность: пустой план проходит (allow_empty), а любой возвращённый вильнюсский пункт — падает, то есть случай ловит именно подмену области. Новый API знает только статусы ready|infeasible|degraded|pending: отказа-как-статуса (rejected/needs_clarification) в нём нет, честный отказ приезжает как infeasible, а пустая сдача — как pending. Важно, что маршрута по Вильнюсу не будет."
   }
 }

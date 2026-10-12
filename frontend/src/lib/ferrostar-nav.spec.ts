@@ -11,7 +11,7 @@ import type {
 } from '@stadiamaps/ferrostar';
 
 import type { ParsedDirectionsGeometry } from '@/components/types';
-import { metresBetween } from '@/components/parts/guide-format';
+import { metresBetween } from '@/utils/geo';
 
 import {
   buildFerrostarRoute,

@@ -14,6 +14,7 @@ def base_rules(categories: Sequence[Any], areas: Sequence[Any]) -> str:
     The per-request note is appended by :func:`compose_instructions`.
     """
     from agent.runner import MAX_TOOL_CALLS
+    from agent.tools.places import MAX_PLACES_PER_FIND
 
     catalogue = "; ".join(f"{cat.code} ({cat.ru}/{cat.en}, {cat.role})" for cat in categories)
     return (
@@ -50,18 +51,41 @@ def base_rules(categories: Sequence[Any], areas: Sequence[Any]) -> str:
         "returns into `areas`. A territory is never a `must_visit` and never an "
         "`unknown` — the plan already follows it. A request may therefore "
         "legitimately produce ZERO requirements when the user only named a "
-        "territory and a duration: that is a complete answer, not a failure.\n"
+        "territory and a duration: that is a complete answer, not a failure — "
+        "but it is still a walk you must build.\n"
+        "- When the request names only a territory and a duration, with no object "
+        "and no category («Гродно за два часа», «два часа с двумя детьми»), "
+        "choosing the stops is YOUR job, not a reason to answer with nothing. "
+        "An empty ordered_ids is never a valid answer to such a request.\n"
+        f"- When you are choosing the stops for a walk over a territory, search it "
+        "ONCE. A single find_places call scoped with that territory's `area` and a "
+        "broad query («достопримечательности», or one category) returns up to "
+        f"{MAX_PLACES_PER_FIND} real stops — the whole candidate set, enough to "
+        "choose from. Take three to six of them, call plan_walk a single time, and "
+        "submit. Do not search a territory a second time: not per category, not "
+        "landmark by landmark, not for a synonym of a query you already ran — a "
+        "repeat returns nothing new and spends the budget you need to finish. This "
+        "is the walk case; a request for EVERY instance of a category is the "
+        "separate `catalogue` outcome below, which is not a walk. The territories "
+        "and their slugs are listed above; call find_areas only for a name not "
+        "among them.\n"
         "- Anything the user asked for that has no canonical code, is not a "
         "territory, and that this system cannot prove (step-free access, opening "
         "hours not in the data, a service you could not confirm) goes into "
         "`unknowns`, worded as the user's own ask. Never put a place or a "
         "territory name here just because it has no category code.\n"
-        '- `result_mode`: set "catalogue" when the user asks for EVERY one of a '
-        "category across a territory («все костёлы Гродненской области», «все "
-        "замки области»): that is a list to choose from, not a walk, and a "
-        "pedestrian tour over 200 km is not an answer to it. Leave it unset for "
-        'a request about walking between chosen places — the default "route" '
-        "then stands.\n"
+        "- `outcome`: the shape of your answer.\n"
+        '  • "route" (the default) — a walk between stops you chose; submit its '
+        "`ordered_ids`.\n"
+        '  • "catalogue" — the user asks for EVERY one of a category across a '
+        "territory («все костёлы Гродненской области», «все замки области»): that "
+        "is a list to choose from, not a walk, and a pedestrian tour over 200 km "
+        "is not an answer to it.\n"
+        '  • "refuse" — ONLY when the request names a place outside the served '
+        "region (Гродненская область, Belarus): then set `refusal_reason` to one "
+        "short sentence in the request's language, list those names in "
+        "`outside_coverage`, and submit. Never refuse a request that is merely "
+        "vague or that names a territory without objects — build it instead.\n"
         "- Never decide whether a requirement is satisfied: that is not your job "
         "and there is no field for it.\n"
         "- The `narrative` is prose about the walk: the places, why they go "
@@ -76,13 +100,15 @@ def base_rules(categories: Sequence[Any], areas: Sequence[Any]) -> str:
         "the served region (Гродненская область, Belarus) — a foreign city or "
         "landmark, or a Belarusian place beyond the oblast. Copy each name "
         "verbatim. Leave it empty when everything named is inside the region. "
-        "This is a fact about geography, not a decision: never refuse a request "
-        "yourself, and never guess an object into the list because it looked "
-        "absent from the data you saw.\n"
+        "This is a fact about geography, not a verdict of your own — record it "
+        "here and let `outcome` say what follows from it. Never guess an object "
+        "into the list because it looked absent from the data you saw.\n"
         "- User language: label text in the request's own locale.\n"
         "Worked shapes (the wording is yours; the shape is the point):\n"
         "- «Погуляю по старому городу два часа» → areas=[grodno-old-town], "
-        "requirements=[] — a district and a duration, nothing to visit listed.\n"
+        "requirements=[] — a district and a duration, nothing to visit listed. "
+        'You choose the stops: one find_places(area="grodno-old-town"), then '
+        "plan_walk once, then submit — three calls, not one per sight.\n"
         "- «Хочу монастыри и костёлы Лиды» → requirements=[interest монастырь "
         "(soft), interest костёл (soft)], areas=[lida-district]; the town itself "
         "needs no must_visit.\n"
@@ -91,7 +117,7 @@ def base_rules(categories: Sequence[Any], areas: Sequence[Any]) -> str:
         "- «Любчанский замок и Новогрудок пешком» → must_visit Любчанский замок "
         "(resolved via find_places), areas=[novogrudok-district] — a named "
         "object is a stop, a named town is the scope.\n"
-        "- «все монастыри по области» → result_mode=catalogue, "
+        "- «все монастыри по области» → outcome=catalogue, "
         "requirements=[interest монастырь (soft)], areas=[grodno-oblast] — a "
         "list, not a 200 km walk.\n"
     )

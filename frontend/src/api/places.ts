@@ -1,9 +1,7 @@
 /** The full point catalogue (`GET /places`) for the «все точки» tab. */
 
+import { ApiError, request } from './request';
 import type { PlacesAnswer } from './types';
-
-/** Same-origin by default; VITE_AGENT_URL only points at a remote agent. */
-const AGENT_URL = (import.meta.env.VITE_AGENT_URL as string | undefined) ?? '';
 
 export class PlacesError extends Error {
   readonly status: number | null;
@@ -16,27 +14,22 @@ export class PlacesError extends Error {
 }
 
 export async function fetchPlaces(signal?: AbortSignal): Promise<PlacesAnswer> {
-  let response: Response;
+  let body: Partial<PlacesAnswer>;
   try {
-    response = await fetch(`${AGENT_URL}/places`, {
+    body = await request<Partial<PlacesAnswer>>('/places', {
       method: 'GET',
       headers: { Accept: 'application/json' },
       signal,
     });
   } catch (error) {
-    throw new PlacesError(
-      error instanceof Error ? error.message : 'network',
-      null
-    );
+    if (error instanceof ApiError) {
+      throw new PlacesError(error.message, error.status);
+    }
+    throw error;
   }
 
-  if (!response.ok) {
-    throw new PlacesError(`agent answered ${response.status}`, response.status);
-  }
-
-  const body = (await response.json()) as Partial<PlacesAnswer>;
   if (!Array.isArray(body?.items)) {
-    throw new PlacesError('agent answer has no places', response.status);
+    throw new PlacesError('agent answer has no places', null);
   }
   return {
     items: body.items,

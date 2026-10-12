@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+} from 'react';
 import { Marker, Popup, useMap, type MapRef } from 'react-map-gl/maplibre';
 import { useTranslation } from 'react-i18next';
 import {
@@ -11,6 +17,7 @@ import {
 } from 'lucide-react';
 
 import type { ServiceAlong } from '@/api/types';
+import { metresBetween } from '@/utils/geo';
 
 /** The services beside a route: cafés, restaurants, toilets, hotels. */
 
@@ -85,21 +92,6 @@ const MARK_HALF_PX = 18;
 
 /** How much of a mark may sit over a place name before the mark is dropped. */
 const LABEL_MAX_COVER = 0.12;
-
-/** Great-circle metres between two points — enough to space marks out. */
-const metresBetween = (
-  a: { lat: number; lon: number },
-  b: { lat: number; lon: number }
-): number => {
-  const R = 6_371_000;
-  const toRad = (d: number) => (d * Math.PI) / 180;
-  const dLat = toRad(b.lat - a.lat);
-  const dLon = toRad(b.lon - a.lon);
-  const s =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLon / 2) ** 2;
-  return 2 * R * Math.asin(Math.min(1, Math.sqrt(s)));
-};
 
 /** A rectangle in screen pixels — what two things on a map can collide in. */
 interface ScreenBox {
@@ -180,14 +172,30 @@ export function ServicesLayer({ items, thin }: ServicesLayerProps) {
   useEffect(() => {
     const instance = map?.getMap();
     if (typeof instance?.getCenter !== 'function') return;
+    // `move` fires on every frame of a drag; coalesce to one read per animation
+    // frame and skip the state write when the centre has not actually moved, so
+    // a still map (or a render for another reason) does not re-sort the marks.
+    let frame = 0;
     const read = () => {
+      frame = 0;
       const c = instance.getCenter?.();
-      if (c) setCentre({ lat: c.lat, lon: c.lng });
+      if (!c) return;
+      setCentre((previous) =>
+        previous &&
+        Math.abs(previous.lat - c.lat) < 1e-7 &&
+        Math.abs(previous.lon - c.lng) < 1e-7
+          ? previous
+          : { lat: c.lat, lon: c.lng }
+      );
+    };
+    const schedule = () => {
+      if (frame === 0) frame = window.requestAnimationFrame(read);
     };
     read();
-    instance.on?.('move', read);
+    instance.on?.('move', schedule);
     return () => {
-      instance.off?.('move', read);
+      instance.off?.('move', schedule);
+      if (frame !== 0) window.cancelAnimationFrame(frame);
     };
   }, [map]);
 
@@ -205,12 +213,18 @@ export function ServicesLayer({ items, thin }: ServicesLayerProps) {
 
   const labelBoxes = useRouteLabelBoxes(map);
 
-  const shown = visibleServices(
-    items,
-    centre,
-    thin ? { max: thin.max, minGapPx: thin.minGapPx } : null,
-    screenPos,
-    thin?.avoidLabels ? labelBoxes : []
+  // `visibleServices` sorts internally; keep it off the render path so an
+  // unrelated re-render (a popup opening, a theme flip) does not re-sort.
+  const shown = useMemo(
+    () =>
+      visibleServices(
+        items,
+        centre,
+        thin ? { max: thin.max, minGapPx: thin.minGapPx } : null,
+        screenPos,
+        thin?.avoidLabels ? labelBoxes : []
+      ),
+    [items, centre, thin, screenPos, labelBoxes]
   );
 
   return (
@@ -254,6 +268,7 @@ export function ServicesLayer({ items, thin }: ServicesLayerProps) {
           maxWidth="280px"
         >
           <div
+            role="presentation"
             className="flex min-w-[200px] flex-col gap-1.5 px-2.5 py-2.5"
             data-testid="service-card"
             onClick={(event) => event.stopPropagation()}

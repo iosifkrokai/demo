@@ -60,6 +60,7 @@ import { usePlaces } from '@/hooks/use-places';
 import type { Itinerary } from '@/api/types';
 import { formatNumber } from '@/i18n/format';
 import { newProgressId } from '@/api/progress';
+import { AGENT_URL } from '@/api/request';
 import { currentRunSession, startRunSession } from '@/utils/run-session';
 import { WaypointList } from './waypoint-list';
 import { Chip } from './parts/chip';
@@ -86,8 +87,6 @@ import {
 } from './parts/sheet-snap';
 import type { SheetHandleProps, SheetSnap } from './parts/sheet-snap';
 import { forward_geocode } from '@/utils/nominatim';
-
-const AGENT_URL = (import.meta.env.VITE_AGENT_URL as string | undefined) ?? '';
 
 /** Time-budget presets; 0 («без ограничения») sends no budget and builds the full route. */
 const buildTimeBudgetOptions = (t: TFunction) => [
@@ -378,6 +377,8 @@ export const Sidebar = ({
   const setPlaceDetails = useDirectionsStore((s) => s.setPlaceDetails);
   const refinementLog = useDirectionsStore((s) => s.refinementLog);
   const routeSnapshots = useDirectionsStore((s) => s.routeSnapshots);
+  const routeThread = useDirectionsStore((s) => s.thread);
+  const refreshThread = useDirectionsStore((s) => s.refreshThread);
   const excludedPlaceIds = useDirectionsStore((s) => s.excludedPlaceIds);
   const undoRefinement = useDirectionsStore((s) => s.undoRefinement);
   const resetRoute = useDirectionsStore((s) => s.resetRoute);
@@ -836,7 +837,11 @@ export const Sidebar = ({
       if (roundTrip) body.round_trip = true;
 
       const prior = useDirectionsStore.getState();
+      // Only the points the journal cannot know travel with a turn: the
+      // tourist's own position, and anything they pinned by hand. The agent's
+      // own stops are the server's to replay, not the client's to re-upload.
       const basePoints = prior.waypoints
+        .filter((wp) => wp.id === ME_WAYPOINT_ID || wp.placeId == null)
         .map((wp) => {
           const geo =
             wp.geocodeResults.find((g) => g.selected) ?? wp.geocodeResults[0];
@@ -850,24 +855,27 @@ export const Sidebar = ({
             lat,
             lon,
             pinned: wp.pinned ?? (!isMe && wp.placeId == null),
-            source: (isMe ? 'mine' : wp.placeId == null ? 'user' : 'agent') as
-              | 'agent'
-              | 'user'
-              | 'mine',
+            source: (isMe ? 'mine' : 'user') as 'agent' | 'user' | 'mine',
           };
         })
         .filter((p): p is NonNullable<typeof p> => p !== null);
-      const isRefinement = basePoints.some((p) => p.source !== 'mine');
+      const hasAgentStops = prior.waypoints.some(
+        (wp) => wp.id !== ME_WAYPOINT_ID && wp.placeId != null
+      );
+      const isRefinement =
+        hasAgentStops || (prior.thread?.turns.length ?? 0) > 0;
       if (isRefinement) {
         prior.snapshotRoute();
         body.context = {
           instruction: q,
-          revision: prior.refinementLog.length + 1,
+          revision:
+            prior.thread?.turns.length ?? prior.refinementLog.length + 1,
           excluded_ids: prior.excludedPlaceIds,
           base_points: basePoints,
         };
       }
-      body.session_id = isRefinement ? currentRunSession() : startRunSession();
+      const sessionId = isRefinement ? currentRunSession() : startRunSession();
+      body.session_id = sessionId;
 
       const r = await fetch(`${AGENT_URL}/routes/generate`, {
         method: 'POST',
@@ -1017,6 +1025,10 @@ export const Sidebar = ({
         });
       }
 
+      // The journal is where the route now lives: read it back so a later turn,
+      // or an undo, replays the server's own answer rather than a client snapshot.
+      void refreshThread(sessionId);
+
       if (
         (queryAsksForToilet(q) || hardServices.includes('туалет')) &&
         !pts.some((p) => p.category === 'туалет')
@@ -1155,7 +1167,7 @@ export const Sidebar = ({
   const geoBadge = useMemo(() => {
     switch (geoState) {
       case 'ok':
-        return { text: t('sidebar.geo.startIsMe'), tone: 'text-emerald-600' };
+        return { text: t('sidebar.geo.startIsMe'), tone: 'text-success' };
       case 'locating':
         return {
           text: t('sidebar.geo.searching'),
@@ -1166,7 +1178,7 @@ export const Sidebar = ({
           text: geoReason
             ? `${t('sidebar.geo.label')}: ${t(`sidebar.geo.${geoReason}`)}`
             : t('sidebar.geo.label'),
-          tone: 'text-amber-600',
+          tone: 'text-warning',
         };
       default:
         return {
@@ -1401,7 +1413,7 @@ export const Sidebar = ({
                 <LocateFixed
                   className={
                     geoState === 'ok'
-                      ? 'h-3.5 w-3.5 shrink-0 text-emerald-600'
+                      ? 'h-3.5 w-3.5 shrink-0 text-success'
                       : 'h-3.5 w-3.5 shrink-0 text-muted-foreground'
                   }
                 />
@@ -1697,7 +1709,7 @@ export const Sidebar = ({
                         : t('sidebar.ui.noLimit')}
                     </span>
                     {!summary.fits && (
-                      <span className="rounded-full bg-amber-500/15 px-2 py-0.5 font-medium text-amber-700">
+                      <span className="rounded-full bg-warning/15 px-2 py-0.5 font-medium text-warning">
                         {t('sidebar.plan.overBudget')}
                       </span>
                     )}
@@ -1740,7 +1752,7 @@ export const Sidebar = ({
                     status.kind === 'ok'
                       ? 'bg-primary/10 text-primary'
                       : status.kind === 'warn'
-                        ? 'bg-amber-500/15 text-amber-800'
+                        ? 'bg-warning/15 text-warning'
                         : 'bg-destructive/10 text-destructive',
                   ].join(' ')}
                 >
@@ -1825,7 +1837,10 @@ export const Sidebar = ({
                         });
                         refetchDirections();
                       }}
-                      disabled={routeSnapshots.length === 0}
+                      disabled={
+                        routeSnapshots.length === 0 &&
+                        (routeThread?.turns.length ?? 0) < 2
+                      }
                       className="h-9 rounded-full px-3 text-label disabled:opacity-40 max-md:h-11 pointer-coarse:h-11"
                     >
                       <Undo2 className="h-3.5 w-3.5" aria-hidden="true" />

@@ -3,17 +3,14 @@ import {
   createRootRoute,
   createRoute,
   createRouter,
+  lazyRouteComponent,
   redirect,
   retainSearchParams,
 } from '@tanstack/react-router';
 import { zodValidator } from '@tanstack/zod-adapter';
 import { z } from 'zod';
 import { App } from './app';
-import { AdminPage } from './components/admin/admin-page';
-import { LoginPage } from './components/auth/login-page';
-import { RegisterPage } from './components/auth/register-page';
 import { RootComponent } from './components/root-component';
-import { VisitedPage } from './components/visited/visited-page';
 import { authQueryOptions } from './hooks/use-auth';
 import * as TanStackQueryProvider from './lib/tanstack-query/root-provider';
 import { loginRedirectFor } from './utils/auth-guard';
@@ -22,6 +19,20 @@ import type { Profile } from './stores/common-store';
 
 const defaultProfile = ((import.meta.env
   .VITE_DEFAULT_COSTING_MODEL as string) || 'bicycle') as Profile;
+
+/** While a lazy route's chunk is fetched: skeleton rows, per DESIGN.md — not a spinner. */
+const RoutePending = () => (
+  <div
+    data-testid="route-pending"
+    className="flex min-h-[100dvh] items-center justify-center bg-background p-6"
+  >
+    <div className="w-full max-w-sm space-y-3">
+      <div className="h-12 animate-pulse rounded-xl bg-muted" />
+      <div className="h-12 animate-pulse rounded-xl bg-muted" />
+      <div className="h-12 animate-pulse rounded-xl bg-muted" />
+    </div>
+  </div>
+);
 
 export const rootRoute = createRootRoute({ component: RootComponent });
 
@@ -121,28 +132,40 @@ const activeTabRoute = createRoute({
 const loginRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/login',
-  component: LoginPage,
+  component: lazyRouteComponent(
+    () => import('./components/auth/login-page'),
+    'LoginPage'
+  ),
   validateSearch: zodValidator(loginSearchSchema),
 });
 
 const registerRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/register',
-  component: RegisterPage,
+  component: lazyRouteComponent(
+    () => import('./components/auth/register-page'),
+    'RegisterPage'
+  ),
   validateSearch: zodValidator(loginSearchSchema),
 });
 
 const visitedRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/visited',
-  component: VisitedPage,
+  component: lazyRouteComponent(
+    () => import('./components/visited/visited-page'),
+    'VisitedPage'
+  ),
   beforeLoad: requireAuth,
 });
 
 const adminRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/admin',
-  component: AdminPage,
+  component: lazyRouteComponent(
+    () => import('./components/admin/admin-page'),
+    'AdminPage'
+  ),
   beforeLoad: requireAuth,
 });
 
@@ -162,6 +185,7 @@ export const router = createRouter({
   scrollRestoration: true,
   defaultStructuralSharing: true,
   defaultPreloadStaleTime: 0,
+  defaultPendingComponent: RoutePending,
   basepath: import.meta.env.BASE_URL,
 });
 

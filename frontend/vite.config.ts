@@ -89,6 +89,36 @@ export default defineConfig({
   },
   build: {
     outDir: 'build',
+    rollupOptions: {
+      output: {
+        // Hoist the big, rarely-changing dependencies into their own long-lived
+        // chunks, so a change to our own code does not invalidate them in the
+        // browser cache. `maplibre-gl` and `@stadiamaps/ferrostar` are left out
+        // on purpose: both are large and already load on demand, and naming them
+        // here would pull them back into a chunk fetched on boot.
+        manualChunks(id: string) {
+          if (!id.includes('node_modules')) return undefined;
+          if (
+            id.includes('maplibre-gl') ||
+            id.includes('@stadiamaps/ferrostar')
+          ) {
+            return undefined;
+          }
+          if (/node_modules\/(react|react-dom|scheduler)\//.test(id)) {
+            return 'react';
+          }
+          if (id.includes('node_modules/@tanstack/')) return 'tanstack';
+          if (
+            id.includes('node_modules/i18next') ||
+            id.includes('node_modules/react-i18next')
+          ) {
+            return 'i18n';
+          }
+          if (id.includes('node_modules/zod')) return 'zod';
+          return undefined;
+        },
+      },
+    },
   },
   test: {
     environment: 'jsdom',

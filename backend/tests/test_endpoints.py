@@ -26,6 +26,7 @@ import httpx
 import pytest
 from pydantic import BaseModel
 
+from agent.runner import WALL_CLOCK_TIMEOUT_S
 from api.models.accounts import (
     AdminPlaceListOut,
     AdminUserListOut,
@@ -51,8 +52,16 @@ def _carries(payload: dict[str, Any], model: type[BaseModel]) -> None:
 
 @pytest.fixture
 def api(live_stack) -> Iterator[httpx.Client]:
-    """An HTTP client bound to the live stack; cookies persist across calls."""
-    with httpx.Client(base_url=live_stack.url, timeout=30.0) as client:
+    """An HTTP client bound to the live stack; cookies persist across calls.
+
+    The read timeout is the runner's own ceiling plus a margin, not a tight
+    number of its own: a plan is allowed `WALL_CLOCK_TIMEOUT_S` inside the agent,
+    so a client that gives up sooner reports a timeout for a request that was
+    still working. These tests assert the shape the endpoint answers with;
+    latency is measured by the quality harness, not by a smoke test.
+    """
+    timeout = httpx.Timeout(connect=15.0, read=2 * WALL_CLOCK_TIMEOUT_S, write=30.0, pool=30.0)
+    with httpx.Client(base_url=live_stack.url, timeout=timeout) as client:
         yield client
 
 

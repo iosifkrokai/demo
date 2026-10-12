@@ -29,25 +29,16 @@ export function ToolButton({
       disabled={disabled}
       data-testid={testId}
       className={cn(
-        'outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#ff385c]',
+        'flex size-11 items-center justify-center rounded-full border-none p-0 transition',
+        'outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
+        active
+          ? 'bg-primary/15 ring-2 ring-primary'
+          : 'bg-card ring-2 ring-foreground/10',
+        disabled ? 'cursor-default opacity-40' : 'cursor-pointer',
         className
       )}
-      style={{
-        width: '44px',
-        height: '44px',
-        backgroundColor: active ? '#ffe4ea' : '#ffffff',
-        borderRadius: '4px',
-        boxShadow: active ? '0 0 0 2px #ff385c' : '0 0 0 2px rgba(0,0,0,0.1)',
-        border: 'none',
-        cursor: disabled ? 'default' : 'pointer',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: 0,
-        opacity: disabled ? 0.4 : 1,
-      }}
     >
-      <span aria-hidden={true} style={{ display: 'flex' }}>
+      <span aria-hidden={true} className="flex">
         {icon}
       </span>
     </button>

@@ -229,4 +229,34 @@ describe('useMobileSheetSnap', () => {
     expect(snapPx('bar')).toBeLessThan(snapPx('peek'));
     expect(snapPx('peek')).toBeLessThan(snapPx('full'));
   });
+
+  it('measures against the visual viewport so an open keyboard shrinks the sheet', () => {
+    const originalInnerHeight = window.innerHeight;
+    Object.defineProperty(window, 'innerHeight', {
+      configurable: true,
+      value: 800,
+    });
+    Object.defineProperty(window, 'visualViewport', {
+      configurable: true,
+      value: {
+        height: 400,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      },
+    });
+
+    try {
+      const { result } = renderHook(() => useMobileSheetSnap('full'));
+
+      // 90% of the visible 400px, not of the 800px layout height the keyboard covers.
+      expect(result.current.height).toBe('360px');
+      expect(result.current.keyboardInset).toBe(400);
+    } finally {
+      Reflect.deleteProperty(window, 'visualViewport');
+      Object.defineProperty(window, 'innerHeight', {
+        configurable: true,
+        value: originalInnerHeight,
+      });
+    }
+  });
 });

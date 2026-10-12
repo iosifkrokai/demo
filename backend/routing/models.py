@@ -18,11 +18,6 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-EraLiteral = Literal["any", "pre1900", "soviet", "modern"]
-IntentTypeLiteral = Literal["discovery", "specific", "themed", "vague"]
-PartyTypeLiteral = Literal["solo", "family", "couple", "group"]
-SearchScopeLiteral = Literal["town", "district", "region"]
-
 
 class LatLon(BaseModel):
     """Tourist's current position (device geolocation)."""
@@ -87,18 +82,7 @@ class Photo(BaseModel):
 
 class ResolvedConstraints(BaseModel):
     must_visit_ids: list[int] = []
-    resolved_names: list[str] = []
-    area_anchor: int | None = None
-    optional_categories: list[str] = []
-    forbidden_categories: list[str] = []
-    forbidden_keywords: list[str] = []
     time_budget_minutes: int | None = 120
-    bbox: tuple[float, float, float, float] | None = None
-    era_hint: EraLiteral = "any"
-    party_type: str = "solo"
-    intent_type: str = "discovery"
-    must_visit_keywords: list[str] = []
-    query_keywords: list[str] = []
     round_trip: bool = False
 
 

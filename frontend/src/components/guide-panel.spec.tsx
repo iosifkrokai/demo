@@ -39,8 +39,14 @@ import { useDirectionsStore } from '@/stores/directions-store';
 
 import { installGeoSim, resetSim } from '@/lib/geo-sim';
 import { useServicesAlong } from '@/hooks/use-services-along';
+import { loadFerrostar } from '@/lib/ferrostar-nav';
 
 import { GuidePanel, guideRouteKey, type GuideStop } from './guide-panel';
+
+// The navigator core now loads on the intent to walk. Warm it at module scope so
+// the Vitest WASM runner initialises it during the module-graph phase — the only
+// point at which it can load a WASM ESM here — and the guide tests see a ready core.
+void loadFerrostar();
 
 afterEach(async () => {
   await i18n.changeLanguage('ru');
@@ -436,6 +442,33 @@ describe('GuidePanel', () => {
     expect(screen.queryByTestId('guide-voice-toggle-mobile')).toBeNull();
     expect(screen.queryByTestId('guide-geo-status')).toBeNull();
     expect(onExit).not.toHaveBeenCalled();
+  });
+
+  it('Escape leaves the walk, focuses the HUD and makes the planner behind it inert', () => {
+    stubGeolocation(null);
+    const onExit = vi.fn();
+    const app = document.createElement('div');
+    app.id = 'valhalla-app-root';
+    document.body.appendChild(app);
+    const opener = document.createElement('button');
+    app.appendChild(opener);
+    opener.focus();
+
+    const { unmount } = render(
+      <GuidePanel stops={STOPS} startInMoving onExit={onExit} />
+    );
+
+    const hud = screen.getByTestId('guide-panel');
+    expect(hud).toHaveFocus();
+    expect(app).toHaveAttribute('inert');
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(onExit).toHaveBeenCalledOnce();
+
+    unmount();
+    expect(app).not.toHaveAttribute('inert');
+    expect(opener).toHaveFocus();
+    app.remove();
   });
 
   it('shows the route overview when the mobile sheet is expanded, then resumes', () => {

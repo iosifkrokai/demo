@@ -1,16 +1,13 @@
 """The architecture the target layering promises: one test per rule.
 
 1. ``routing/`` is a leaf. It may reach ``core``, ``db`` and ``reference`` (and
-   third-party packages), but never ``agent``, ``planner`` or ``api``. The
-   deterministic routing math sits below every logic layer that wants it.
+   third-party packages), but never ``agent`` or ``api``. The deterministic
+   routing math sits below every logic layer that wants it.
 2. ``agent/`` is a leaf. It may reach ``core``, ``db`` and ``reference``, but
-   never ``planner`` or ``api``. The reader declares its own input.
+   never ``api``. The reader declares its own input.
 3. The logic layers never speak SQL and never import a driver. Every database
    read goes through a repository in ``db/store``.
 4. ``db/models/**`` describes rows: it imports the standard library only.
-
-``planner`` is kept in the logic tuple while it is mid-refactor; the leaf rules
-for ``routing`` and ``agent`` have to hold today.
 
 The checks parse with ``ast`` so a docstring that mentions ``SELECT`` or an
 ``import psycopg`` inside a comment is not mistaken for a violation.
@@ -29,12 +26,12 @@ BACKEND = Path(__file__).resolve().parents[1]
 
 # A layer that may import data (core/db/reference) but nothing above it.
 LEAF_RULES: dict[str, frozenset[str]] = {
-    "routing": frozenset({"agent", "planner", "api"}),
-    "agent": frozenset({"planner", "api"}),
+    "routing": frozenset({"agent", "api"}),
+    "agent": frozenset({"api"}),
 }
 
 # The layers that must go through `db/store` for everything database-shaped.
-LOGIC_LAYERS = ("planner", "agent", "api", "routing", "quality")
+LOGIC_LAYERS = ("agent", "api", "routing", "quality")
 
 MODEL_LAYER = BACKEND / "db" / "models"
 _MODEL_LAYER_ALLOWED = frozenset(sys.stdlib_module_names) | {"__future__"}

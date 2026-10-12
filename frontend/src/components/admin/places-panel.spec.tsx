@@ -27,6 +27,7 @@ const one = (id: number, name: string): Place => ({
 const PLACES = [one(79, 'Землякам погибшим в ВОВ'), one(80, 'Второе место')];
 
 const mutate = vi.hoisted(() => vi.fn());
+const deleteMutate = vi.hoisted(() => vi.fn());
 const refetch = vi.hoisted(() => vi.fn());
 const errorOverride = vi.hoisted(() => ({ value: null as Error | null }));
 
@@ -48,7 +49,7 @@ vi.mock('@/hooks/use-admin', () => ({
           refetch,
         },
   useUpdatePlace: () => ({ mutate, isPending: false }),
-  useDeletePlace: () => ({ mutate: vi.fn(), isPending: false }),
+  useDeletePlace: () => ({ mutate: deleteMutate, isPending: false }),
   useCreatePlace: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
@@ -76,12 +77,14 @@ vi.mock('@/components/place-map/place-map', () => ({
         <button
           key={place.place_id}
           type="button"
+          aria-label={`пин ${place.place_id}`}
           data-testid={`fake-pin-${place.place_id}`}
           onClick={() => onSelect(place.place_id)}
         />
       ))}
       <button
         type="button"
+        aria-label="перетащить маркер"
         data-testid="fake-drag"
         onClick={() => onMove?.(53.9, 23.7)}
       />
@@ -91,6 +94,7 @@ vi.mock('@/components/place-map/place-map', () => ({
 
 beforeEach(() => {
   mutate.mockClear();
+  deleteMutate.mockClear();
   refetch.mockClear();
   errorOverride.value = null;
 });
@@ -161,6 +165,19 @@ describe('PlacesPanel — list and map are two windows on one page', () => {
     expect(args.placeId).toBe(79);
     expect(args.patch.lat).toBe(53.9);
     expect(args.patch.lon).toBe(23.7);
+  });
+
+  it('asks to confirm a deletion in place, and deletes only on «Удалить»', () => {
+    render(<PlacesPanel enabled />);
+
+    fireEvent.click(screen.getByTestId('admin-place-delete-79'));
+    expect(
+      screen.getByText('Удалить место «Землякам погибшим в ВОВ»?')
+    ).toBeInTheDocument();
+    expect(deleteMutate).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByTestId('admin-place-delete-79-confirm'));
+    expect(deleteMutate).toHaveBeenCalledWith(79, expect.anything());
   });
 
   it('shows an error with a retry instead of «ничего не найдено»', () => {

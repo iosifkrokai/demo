@@ -2,9 +2,7 @@
 
 import type { RouteLine, ServicesAlongAnswer } from './types';
 import { currentRunSession } from '@/utils/run-session';
-
-/** Same-origin by default; VITE_AGENT_URL only points at a remote agent. */
-const AGENT_URL = (import.meta.env.VITE_AGENT_URL as string | undefined) ?? '';
+import { ApiError, request } from './request';
 
 export class ServicesError extends Error {
   readonly status: number | null;
@@ -46,9 +44,8 @@ export async function fetchServicesAlong(
   shape: RouteLine,
   { profile = 'pedestrian', categories, signal }: FetchServicesOptions = {}
 ): Promise<ServicesAlongAnswer> {
-  let response: Response;
   try {
-    response = await fetch(`${AGENT_URL}/routes/services`, {
+    return await request<ServicesAlongAnswer>('/routes/services', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -60,20 +57,15 @@ export async function fetchServicesAlong(
       signal,
     });
   } catch (error) {
-    if ((error as Error)?.name === 'AbortError') throw error;
-    throw new ServicesError(
-      'агент недоступен — «что по пути» проверить нельзя'
-    );
+    if (error instanceof ApiError) {
+      throw new ServicesError(
+        error.status === null
+          ? 'агент недоступен — «что по пути» проверить нельзя'
+          : error.message,
+        error.status,
+        reasonFrom(error.body)
+      );
+    }
+    throw error;
   }
-
-  if (!response.ok) {
-    const body: unknown = await response.json().catch(() => null);
-    throw new ServicesError(
-      `агент ответил ошибкой ${response.status}`,
-      response.status,
-      reasonFrom(body)
-    );
-  }
-
-  return (await response.json()) as ServicesAlongAnswer;
 }

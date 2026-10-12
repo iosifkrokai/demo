@@ -87,6 +87,7 @@ export const MapComponent = () => {
   );
   const toggleDirections = useCommonStore((state) => state.toggleDirections);
   const setMapReady = useCommonStore((state) => state.setMapReady);
+  const mapReady = useCommonStore((state) => state.mapReady);
   const { style } = useSearch({ from: '/$activeTab' });
   const [showContextPopup, setShowContextPopup] = useState(false);
   const [popupLngLat, setPopupLngLat] = useState<{
@@ -104,6 +105,18 @@ export const MapComponent = () => {
   const services = useServicesAlong(routeResult, {
     enabled: Boolean(routeResult),
   });
+  /** A stable thinning config, so the layer's memo is not undone by a new object. */
+  const servicesThin = useMemo(
+    () =>
+      isMobile
+        ? {
+            max: PHONE_MAX_MARKS,
+            minGapPx: PHONE_MIN_GAP_PX,
+            avoidLabels: true,
+          }
+        : undefined,
+    [isMobile]
+  );
   const setActiveRouteIndex = useDirectionsStore(
     (state) => state.setActiveRouteIndex
   );
@@ -353,6 +366,15 @@ export const MapComponent = () => {
       essential: true,
     });
   }, [focusRequest]);
+
+  /** The map is a landmark: react-map-gl does not forward props to its
+      container, so the role and the name are set on it directly, once it exists. */
+  useEffect(() => {
+    const container = mapRef.current?.getContainer?.();
+    if (!container) return;
+    container.setAttribute('role', 'region');
+    container.setAttribute('aria-label', t('map.region'));
+  }, [mapReady, t]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -826,18 +848,7 @@ export const MapComponent = () => {
         {placesVisible && <PlacesLayer places={places} />}
 
         {servicesVisible && (
-          <ServicesLayer
-            items={services.items}
-            thin={
-              isMobile
-                ? {
-                    max: PHONE_MAX_MARKS,
-                    minGapPx: PHONE_MIN_GAP_PX,
-                    avoidLabels: true,
-                  }
-                : undefined
-            }
-          />
+          <ServicesLayer items={services.items} thin={servicesThin} />
         )}
       </Map>
 

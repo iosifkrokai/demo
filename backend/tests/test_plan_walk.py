@@ -67,3 +67,72 @@ def test_must_keep_stops_are_never_dropped(db_repos) -> None:
     assert answer.get("error") in (None, "no_route"), answer.get("message")
     if answer.get("error") is None:
         assert pinned[0] in {stop["id"] for stop in answer["results"]}
+
+
+def test_the_same_stops_are_measured_once(db_repos) -> None:
+    """Valhalla is deterministic: the same stops and budget are a cache hit."""
+    from agent.tools.plan import plan_walk
+    from core import cache
+
+    ids = _sight_ids(db_repos)
+    first = plan_walk(ids, repos=db_repos, budget_minutes=180)
+    assert first.get("error") is None, first.get("message")
+
+    hits_before = cache.MEASURE_CACHE.hits
+    second = plan_walk(ids, repos=db_repos, budget_minutes=180)
+
+    assert cache.MEASURE_CACHE.hits == hits_before + 1
+    assert second["count"] == first["count"]
+
+
+def test_the_measure_key_carries_the_data_version() -> None:
+    """The version is part of the key: order-insensitive in stops, but a new
+    version is a new measurement."""
+    from agent.tools.plan import _measure_key
+
+    same = _measure_key([3, 1, 2], 60, "pedestrian", False, None, "ru", None, "v1")
+    reordered = _measure_key([1, 2, 3], 60, "pedestrian", False, None, "ru", None, "v1")
+    bumped = _measure_key([1, 2, 3], 60, "pedestrian", False, None, "ru", None, "v2")
+
+    assert same == reordered
+    assert same != bumped
+
+
+def test_a_data_version_bump_re_measures_instead_of_replaying(db_repos, monkeypatch) -> None:
+    """A re-seed is not a cache hit: the bump goes back to the rows.
+
+    The seed's version is faked here — the point is the key's behavior, not a live
+    re-seed (which the shared database must not be asked to perform). The same
+    version is a hit; a different one misses, and misses by *reading the rows
+    again* rather than returning the earlier numbers.
+    """
+    from agent.tools.plan import plan_walk
+    from core import cache
+
+    ids = _sight_ids(db_repos, limit=4)
+    monkeypatch.setattr(db_repos.datasets, "version", lambda: "before")
+    first = plan_walk(ids, repos=db_repos, budget_minutes=180)
+    assert first.get("error") is None, first.get("message")
+
+    hits = cache.MEASURE_CACHE.hits
+    repeat = plan_walk(ids, repos=db_repos, budget_minutes=180)
+    assert cache.MEASURE_CACHE.hits == hits + 1  # same version → HIT
+    assert repeat["count"] == first["count"]
+
+    # A bumped version must not replay the earlier answer: count the row reads.
+    reads = {"n": 0}
+    original = db_repos.places.get_by_ids
+
+    def counting(wanted):
+        reads["n"] += 1
+        return original(wanted)
+
+    monkeypatch.setattr(db_repos.places, "get_by_ids", counting)
+    monkeypatch.setattr(db_repos.datasets, "version", lambda: "after")
+
+    hits = cache.MEASURE_CACHE.hits
+    again = plan_walk(ids, repos=db_repos, budget_minutes=180)
+
+    assert reads["n"] >= 1  # it went back to the rows, not the cache
+    assert cache.MEASURE_CACHE.hits == hits  # ... and it was a miss
+    assert again["count"] == first["count"]

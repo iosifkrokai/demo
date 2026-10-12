@@ -9,6 +9,7 @@ import { describeAccountError } from '@/hooks/use-auth';
 import { useDebouncedValue } from '@/hooks/use-debounced-value';
 import { useAdminUsers, useDeleteUser, usePatchUser } from '@/hooks/use-admin';
 import { formatDate } from '@/i18n/format';
+import { InlineConfirm } from '@/components/parts/inline-confirm';
 import type { AdminUser, UserRole } from '@/api/types';
 
 /** The users half of the admin panel. */
@@ -42,8 +43,6 @@ export function UsersPanel({ enabled, currentUserId }: UsersPanelProps) {
   };
 
   const remove = (user: AdminUser) => {
-    if (!window.confirm(t('admin.users.confirmDelete', { email: user.email })))
-      return;
     deleteUser.mutate(user.id, {
       onError: (error) => toast.error(t(describeAccountError(error))),
     });
@@ -133,18 +132,15 @@ export function UsersPanel({ enabled, currentUserId }: UsersPanelProps) {
                 </select>
               </label>
 
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
+              <InlineConfirm
                 data-testid={`admin-user-delete-${user.id}`}
-                disabled={deleteUser.isPending}
-                onClick={() => remove(user)}
-                className="text-muted-foreground hover:text-destructive"
+                question={t('admin.users.confirmDelete', { email: user.email })}
+                busy={deleteUser.isPending}
+                onConfirm={() => remove(user)}
               >
                 <Trash2 className="size-4" aria-hidden="true" />
                 {t('admin.users.delete')}
-              </Button>
+              </InlineConfirm>
             </li>
           );
         })}

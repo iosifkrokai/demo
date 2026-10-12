@@ -13,7 +13,9 @@ from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeou
 from typing import Any
 
 import pydantic_ai
-from pydantic_ai import ToolOutput, UsageLimits
+from pydantic_ai import RunContext, ToolOutput, UsageLimits
+from pydantic_ai.capabilities import ProcessHistory
+from pydantic_ai.messages import ModelRequest, UserPromptPart
 from pydantic_ai.settings import ModelSettings
 
 from agent import llm as model_mod
@@ -33,12 +35,57 @@ MAX_OUTPUT_TOKENS = 8192
 WALL_CLOCK_TIMEOUT_S = 150.0
 MODEL_TIMEOUT_S = 90.0
 
+# When this little time is left, the run is nudged in-band to submit instead of
+# waiting for the tools to start refusing — the give-up signal becomes time, not
+# only the tool counter.
+TIME_NUDGE_LEFT_S = 25.0
+SUBMIT_NUDGE = (
+    "Time is nearly up. Submit this turn with what you already have — call "
+    "submit_plan with the stops you have found. Do not start a new search."
+)
+
 _NO_MODEL = {"agent_unavailable", "model_unavailable"}
 
 SUBMIT_DESCRIPTION = (
     "Submit the finished plan. Call this exactly once, at the very end, when the "
     "stops are chosen and measured."
 )
+
+
+def effective_wall_clock(wall_clock_s: float | None) -> float:
+    """The wall-clock bound one run gets: the tighter of the fixed ceiling and
+    the caller's request budget. ``None`` (or a non-positive value) means the
+    ceiling. One function so the deadline the tools see and the timeout the run
+    is killed by cannot disagree.
+    """
+    if wall_clock_s is not None and wall_clock_s > 0:
+        return min(WALL_CLOCK_TIMEOUT_S, float(wall_clock_s))
+    return WALL_CLOCK_TIMEOUT_S
+
+
+def _submission_nudge(messages: list[Any], seconds_left: float) -> list[Any]:
+    """Append a "submit now" reminder once time is short.
+
+    Attached as a part of the message the model is about to answer (never a second
+    consecutive request, which the loop would reject) and never stacked twice.
+    """
+    if seconds_left > TIME_NUDGE_LEFT_S:
+        return messages
+    if messages and isinstance(messages[-1], ModelRequest):
+        parts = list(messages[-1].parts)
+        if any(isinstance(p, UserPromptPart) and p.content == SUBMIT_NUDGE for p in parts):
+            return messages
+        return [*messages[:-1], ModelRequest([*parts, UserPromptPart(SUBMIT_NUDGE)])]
+    return [*messages, ModelRequest([UserPromptPart(SUBMIT_NUDGE)])]
+
+
+def _time_capability() -> ProcessHistory[PlanningDeps]:
+    """The in-loop degradation: a history processor that reads the live deadline."""
+
+    def processor(ctx: RunContext[PlanningDeps], messages: list[Any]) -> list[Any]:
+        return _submission_nudge(messages, ctx.deps.seconds_left())
+
+    return ProcessHistory(processor)
 
 
 def _build_prompt(query: str, brief: Any) -> str:
@@ -72,6 +119,7 @@ def _build_agent(model: Any, brief: ReaderBrief, deps: PlanningDeps) -> Any:
         output_type=ToolOutput(PlanSubmission, name="submit_plan", description=SUBMIT_DESCRIPTION),
         deps_type=PlanningDeps,
         instructions=compose_instructions(_catalogue(deps), _territories(deps), _ui_note(brief)),
+        capabilities=[_time_capability()],
     )
 
     def _remember(ctx: Any, out: dict[str, Any]) -> dict[str, Any]:
@@ -126,9 +174,7 @@ def _run_agent(
             prompt, deps=deps, usage_limits=usage_limits, model_settings=model_settings
         )
 
-    bound = WALL_CLOCK_TIMEOUT_S
-    if wall_clock_s is not None and wall_clock_s > 0:
-        bound = min(bound, float(wall_clock_s))
+    bound = effective_wall_clock(wall_clock_s)
     result, failure = _run_with_timeout(call, bound)
     if failure is not None:
         _record_model_failure(failure, prompt)
@@ -144,4 +190,10 @@ def _run_agent(
 
 
 # agent.client reuses the failure path and the prompt builder.
-__all__ = ["_build_prompt", "_record_model_failure", "_run_agent", "_run_with_timeout"]
+__all__ = [
+    "_build_prompt",
+    "_record_model_failure",
+    "_run_agent",
+    "_run_with_timeout",
+    "effective_wall_clock",
+]
