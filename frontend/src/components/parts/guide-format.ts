@@ -39,12 +39,3 @@ export const agentErrorMessage = (status: number, reason?: string | null) => {
   if (status === 422) return i18n.t('guide.agentBadRequest', { status });
   return i18n.t('guide.agentServerError', { status });
 };
-
-export const metresBetween = (
-  a: { lat: number; lon: number },
-  b: { lat: number; lon: number }
-) => {
-  const dLat = (a.lat - b.lat) * 111_320;
-  const dLon = (a.lon - b.lon) * 111_320 * Math.cos((a.lat * Math.PI) / 180);
-  return Math.hypot(dLat, dLon);
-};

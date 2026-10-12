@@ -1,5 +1,7 @@
 /** Where the route request got to (`GET /routes/progress/{id}`). */
 
+import { request } from './request';
+
 /** The stages the pipeline reports, in the order it reaches them. */
 export type RouteStageCode =
   | 'interpreting_request'
@@ -23,9 +25,6 @@ export const newProgressId = (): string =>
     ? crypto.randomUUID()
     : `p-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 
-/** Same-origin by default; VITE_AGENT_URL only points at a remote agent. */
-const AGENT_URL = (import.meta.env.VITE_AGENT_URL as string | undefined) ?? '';
-
 const STAGE_CODES: ReadonlySet<string> = new Set<RouteStageCode>([
   'interpreting_request',
   'searching_places',
@@ -48,14 +47,17 @@ export const fetchRouteProgress = async (
   progressId: string,
   signal: AbortSignal
 ): Promise<RouteProgress | null> => {
-  const response = await fetch(
-    `${AGENT_URL}/routes/progress/${encodeURIComponent(progressId)}`,
-    { signal }
-  );
-  if (response.status === 404) return null;
-  if (!response.ok) return null;
+  let body: Record<string, unknown>;
+  try {
+    body = await request<Record<string, unknown>>(
+      `/routes/progress/${encodeURIComponent(progressId)}`,
+      { signal }
+    );
+  } catch {
+    // Unreachable, 404 or a non-JSON answer all read the same to the panel: keep polling.
+    return null;
+  }
 
-  const body = (await response.json()) as Record<string, unknown>;
   const stage = asStageCode(body.stage);
   if (!stage) return null;
 

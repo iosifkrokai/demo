@@ -57,14 +57,15 @@ import {
   extractDistanceToNextManeuver,
   extractRemainingSteps,
   extractSpokenInstruction,
-  ferrostarReady,
   isCompletelyOffRoute,
+  loadFerrostar,
   FerrostarNavigator,
   type FerrostarRouteResult,
 } from '@/lib/ferrostar-nav';
 import { GuideEmpty } from './parts/guide-empty';
 import { courseAlongLine, courseAtPoint } from './parts/guide-course';
-import { fmtDist, metresBetween } from './parts/guide-format';
+import { fmtDist } from './parts/guide-format';
+import { metresBetween } from '@/utils/geo';
 import { mergeMicroManeuvers } from './parts/guide-maneuvers-stub';
 import { guideModeFor } from './parts/guide-mode';
 import { FerrostarNavigationHud } from './parts/ferrostar-navigation-hud';
@@ -787,7 +788,9 @@ export const GuidePanel = ({
 
     let cancelled = false;
     let createdNav: FerrostarNavigator | null = null;
-    void ferrostarReady
+    // Download the WASM core now — the tourist has asked to walk, so this is the
+    // intent that justifies the transfer (it used to download at import, for everyone).
+    void loadFerrostar()
       .then((mod) => {
         if (cancelled) return;
         if (!mod) {

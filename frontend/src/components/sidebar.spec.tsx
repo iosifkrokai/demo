@@ -181,11 +181,12 @@ const stubAgentFetch = (
 ) => {
   vi.stubGlobal('fetch', (url: string, init?: RequestInit) => {
     if (String(url).includes('/routes/progress/')) {
-      return Promise.resolve({
-        ok: false,
-        status: 404,
-        json: async () => ({ detail: { reason: 'unknown_progress_id' } }),
-      } as unknown as Response);
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({ detail: { reason: 'unknown_progress_id' } }),
+          { status: 404, headers: { 'content-type': 'application/json' } }
+        )
+      );
     }
     return mock(url, init as RequestInit);
   });
@@ -743,16 +744,15 @@ describe('Sidebar', () => {
   it('говорит стадию словами конвейера, когда он её называет', async () => {
     const fetchMock = vi.fn(async (url: string) => {
       if (String(url).includes('/routes/progress/')) {
-        return {
-          ok: true,
-          status: 200,
-          json: async () => ({
+        return new Response(
+          JSON.stringify({
             stage: 'ordering_stops',
             done: false,
             failed: false,
             elapsed_ms: 4200,
           }),
-        };
+          { status: 200, headers: { 'content-type': 'application/json' } }
+        );
       }
       return new Promise(() => undefined);
     });

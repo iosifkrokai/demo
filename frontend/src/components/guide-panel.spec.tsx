@@ -39,8 +39,14 @@ import { useDirectionsStore } from '@/stores/directions-store';
 
 import { installGeoSim, resetSim } from '@/lib/geo-sim';
 import { useServicesAlong } from '@/hooks/use-services-along';
+import { loadFerrostar } from '@/lib/ferrostar-nav';
 
 import { GuidePanel, guideRouteKey, type GuideStop } from './guide-panel';
+
+// The navigator core now loads on the intent to walk. Warm it at module scope so
+// the Vitest WASM runner initialises it during the module-graph phase — the only
+// point at which it can load a WASM ESM here — and the guide tests see a ready core.
+void loadFerrostar();
 
 afterEach(async () => {
   await i18n.changeLanguage('ru');

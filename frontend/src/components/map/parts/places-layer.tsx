@@ -1,7 +1,10 @@
 import { useMemo } from 'react';
 import { Source, Layer } from 'react-map-gl/maplibre';
 import type { FeatureCollection, Point } from 'geojson';
-import type { ExpressionSpecification } from 'maplibre-gl';
+import type {
+  CircleLayerSpecification,
+  ExpressionSpecification,
+} from 'maplibre-gl';
 
 import type { Place } from '@/api/types';
 
@@ -43,6 +46,16 @@ const colorExpression = (): ExpressionSpecification => {
   return stops as unknown as ExpressionSpecification;
 };
 
+/** The layer's paint, computed once: it depends only on the constant palette, so
+ *  rebuilding (and re-applying) it on every render was pure churn. */
+const PLACES_PAINT: CircleLayerSpecification['paint'] = {
+  'circle-radius': ['interpolate', ['linear'], ['zoom'], 10, 3, 16, 7],
+  'circle-color': colorExpression(),
+  'circle-opacity': 0.9,
+  'circle-stroke-width': 1,
+  'circle-stroke-color': '#ffffff',
+};
+
 export function PlacesLayer({ places }: { places: readonly Place[] }) {
   const data = useMemo<FeatureCollection<Point> | null>(() => {
     if (places.length === 0) return null;
@@ -68,17 +81,7 @@ export function PlacesLayer({ places }: { places: readonly Place[] }) {
 
   return (
     <Source id="all-places" type="geojson" data={data}>
-      <Layer
-        id={PLACES_POINTS_LAYER_ID}
-        type="circle"
-        paint={{
-          'circle-radius': ['interpolate', ['linear'], ['zoom'], 10, 3, 16, 7],
-          'circle-color': colorExpression(),
-          'circle-opacity': 0.9,
-          'circle-stroke-width': 1,
-          'circle-stroke-color': '#ffffff',
-        }}
-      />
+      <Layer id={PLACES_POINTS_LAYER_ID} type="circle" paint={PLACES_PAINT} />
     </Source>
   );
 }

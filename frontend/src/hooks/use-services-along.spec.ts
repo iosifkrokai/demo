@@ -68,6 +68,12 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { 'content-type': 'application/json' },
+  });
+
 describe('useServicesAlong', () => {
   it('не спрашивает агента, пока подсказки не включены — и не притворяется', async () => {
     const fetchMock = vi.fn();
@@ -91,10 +97,7 @@ describe('useServicesAlong', () => {
   });
 
   it('отдаёт найденные точки и то, что именно было измерено', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue({ ok: true, json: async () => answer })
-    );
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(json(answer)));
 
     const { result } = renderHook(() =>
       useServicesAlong(
@@ -114,9 +117,7 @@ describe('useServicesAlong', () => {
   });
 
   it('не зацикливается, когда родитель отдаёт новый объект геометрии', async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValue({ ok: true, json: async () => answer });
+    const fetchMock = vi.fn().mockResolvedValue(json(answer));
     vi.stubGlobal('fetch', fetchMock);
 
     const { result, rerender } = renderHook(
@@ -162,11 +163,11 @@ describe('useServicesAlong', () => {
   it('ошибку агента с кодом причины доводит наружу', async () => {
     vi.stubGlobal(
       'fetch',
-      vi.fn().mockResolvedValue({
-        ok: false,
-        status: 422,
-        json: async () => ({ detail: { reason: 'shape_not_linestring' } }),
-      })
+      vi
+        .fn()
+        .mockResolvedValue(
+          json({ detail: { reason: 'shape_not_linestring' } }, 422)
+        )
     );
 
     const { result } = renderHook(() =>

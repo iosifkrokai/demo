@@ -5,17 +5,16 @@ import { POLL_INTERVAL_MS, useRouteProgress } from './use-route-progress';
 
 /** The panel asks the pipeline where it got to, and shows what comes back. */
 
-const answer = (stage: string, done = false) => ({
-  ok: true,
-  status: 200,
-  json: async () => ({ stage, done, failed: false, elapsed_ms: 1234 }),
-});
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { 'content-type': 'application/json' },
+  });
 
-const notFound = {
-  ok: false,
-  status: 404,
-  json: async () => ({ detail: { reason: 'unknown_progress_id' } }),
-};
+const answer = (stage: string, done = false) =>
+  json({ stage, done, failed: false, elapsed_ms: 1234 });
+
+const notFound = json({ detail: { reason: 'unknown_progress_id' } }, 404);
 
 afterEach(() => {
   cleanup();

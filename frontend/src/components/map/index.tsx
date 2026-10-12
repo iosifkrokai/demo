@@ -104,6 +104,18 @@ export const MapComponent = () => {
   const services = useServicesAlong(routeResult, {
     enabled: Boolean(routeResult),
   });
+  /** A stable thinning config, so the layer's memo is not undone by a new object. */
+  const servicesThin = useMemo(
+    () =>
+      isMobile
+        ? {
+            max: PHONE_MAX_MARKS,
+            minGapPx: PHONE_MIN_GAP_PX,
+            avoidLabels: true,
+          }
+        : undefined,
+    [isMobile]
+  );
   const setActiveRouteIndex = useDirectionsStore(
     (state) => state.setActiveRouteIndex
   );
@@ -826,18 +838,7 @@ export const MapComponent = () => {
         {placesVisible && <PlacesLayer places={places} />}
 
         {servicesVisible && (
-          <ServicesLayer
-            items={services.items}
-            thin={
-              isMobile
-                ? {
-                    max: PHONE_MAX_MARKS,
-                    minGapPx: PHONE_MIN_GAP_PX,
-                    avoidLabels: true,
-                  }
-                : undefined
-            }
-          />
+          <ServicesLayer items={services.items} thin={servicesThin} />
         )}
       </Map>
 

@@ -3,7 +3,11 @@
 import { useQuery } from '@tanstack/react-query';
 
 import { fetchPlaces } from '@/api/places';
-import type { PlacesAnswer } from '@/api/types';
+import type { PlacesAnswer, Place } from '@/api/types';
+
+/** One shared empty array: `?? []` used to mint a fresh one every render, which
+ *  invalidated the `useMemo([places])` downstream for no change in the data. */
+const NO_PLACES: Place[] = [];
 
 export function usePlaces(options: { enabled?: boolean } = {}) {
   const query = useQuery<PlacesAnswer>({
@@ -15,7 +19,7 @@ export function usePlaces(options: { enabled?: boolean } = {}) {
   });
 
   return {
-    places: query.data?.items ?? [],
+    places: query.data?.items ?? NO_PLACES,
     total: query.data?.total ?? 0,
     capped: query.data?.capped ?? false,
     isLoading: query.isLoading,
