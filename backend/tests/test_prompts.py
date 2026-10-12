@@ -1,0 +1,50 @@
+"""The instruction text, held to its promise.
+
+The rules are the only lever on how the model searches: a rule that is not in the
+prompt cannot change the trajectory the live logs show, and a number the prompt
+names must be the number the tool enforces. These hold the one-search rule and its
+agreement with `find_places` — the two things a prompt change has to get right.
+"""
+
+from __future__ import annotations
+
+from agent.prompts import compose_instructions
+from agent.tools.places import MAX_PLACES_PER_FIND
+
+
+def _instructions() -> str:
+    return compose_instructions([], [], "")
+
+
+def test_a_territory_search_is_bounded_to_one_call() -> None:
+    """The over-search the live logs show — nine find_places calls for one Old Town
+    walk — is answered by an explicit rule, not by a bigger budget: search once,
+    then plan, then submit.
+    """
+    text = _instructions().lower()
+    assert "search it once." in text
+    assert "single find_places call" in text
+    assert "plan_walk a single time" in text
+    assert "do not search a territory a second time" in text
+
+
+def test_the_one_search_rule_is_scoped_to_a_walk_not_a_catalogue() -> None:
+    """'Search once, then plan_walk' must not swallow the catalogue outcome: a
+    request for every instance of a category is still a list, not a walk."""
+    text = _instructions()
+    assert "separate `catalogue` outcome below" in text
+
+
+def test_the_one_search_rule_names_the_cap_the_tool_enforces() -> None:
+    """The prompt promises 'up to N real stops'; N is read from the tool, so the
+    text cannot drift from what `find_places` actually returns."""
+    text = _instructions()
+    assert f"up to {MAX_PLACES_PER_FIND} real stops" in text
+
+
+def test_the_worked_old_town_shape_is_a_three_call_path() -> None:
+    """The worked shape spells the short path out, so 'choose the stops yourself'
+    does not read as a licence to search each sight in turn."""
+    text = _instructions()
+    assert 'find_places(area="grodno-old-town")' in text
+    assert "three calls" in text
