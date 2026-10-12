@@ -168,6 +168,7 @@ export const WaypointList = ({ onChanged }: Props) => {
               )}
               {isMe ? (
                 <span
+                  role="img"
                   aria-label={t('sidebar.ui.start')}
                   title={t('sidebar.waypoints.start')}
                   className="relative h-2.5 w-2.5 rounded-full bg-info ring-4 ring-card"

@@ -22,7 +22,7 @@ export function AccountBar() {
   const { user, authenticated, isAdmin, isLoading } = useAuth();
   const logout = useLogout();
   const [open, setOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -53,8 +53,9 @@ export function AccountBar() {
   }
 
   return (
-    <div
+    <nav
       ref={containerRef}
+      aria-label={t('account.menu')}
       data-testid="account-bar"
       className="pointer-events-auto fixed right-2 top-[calc(env(safe-area-inset-top)+0.5rem)] z-40 flex flex-col items-end gap-1"
     >
@@ -73,7 +74,7 @@ export function AccountBar() {
             variant="outline"
             aria-expanded={open}
             aria-haspopup="menu"
-            aria-controls="account-menu"
+            aria-controls={open ? 'account-menu' : undefined}
             data-testid="account-menu-button"
             onClick={() => setOpen((value) => !value)}
           >
@@ -135,6 +136,6 @@ export function AccountBar() {
           )}
         </>
       )}
-    </div>
+    </nav>
   );
 }
