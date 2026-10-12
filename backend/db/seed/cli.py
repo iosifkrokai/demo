@@ -13,7 +13,12 @@ from typing import Any
 
 from core.paths import GEO_DIR, PHOTOS_DIR, PLACES_DIR
 
-from . import datasets as ds_mod, itineraries as itineraries_mod, taxonomy as taxonomy_mod
+from . import (
+    datasets as ds_mod,
+    itineraries as itineraries_mod,
+    taxonomy as taxonomy_mod,
+    version as version_mod,
+)
 from .datasets import Dataset, build_coverage_report, collect_records, read_curated
 
 DEFAULT_DSN = "postgresql://grodno:grodno@localhost:5432/grodno"
@@ -43,6 +48,10 @@ def cmd_apply(args: argparse.Namespace) -> int:
     }
 
     collected = collect_records(datasets)
+    # The version is the content of the committed datasets, computed here (offline)
+    # and stamped into the database below, so the planner keys its measurement
+    # cache on it and a re-seed invalidates what the old rows produced.
+    data_version = version_mod.content_version()
 
     db_stats: dict[str, Any] | None = None
     if not args.dry_run:
@@ -66,6 +75,7 @@ def cmd_apply(args: argparse.Namespace) -> int:
                     conn, itineraries_mod.load_itineraries()
                 )
                 photos_written = pipeline.apply_photos(conn, PHOTOS_DIR)
+                pipeline.record_data_version(conn, data_version)
                 conn.commit()
 
                 embedded = 0
@@ -97,6 +107,7 @@ def cmd_apply(args: argparse.Namespace) -> int:
         curated=curated,
         curated_stats=curated_stats,
         db_stats=db_stats,
+        data_version=data_version,
     )
     _print_summary(report)
     if args.report:
@@ -130,6 +141,8 @@ def _print_summary(report: dict[str, Any]) -> None:
             f"category_source={ds['category_source']}){note}"
         )
     print("  coverage: " + ", ".join(f"{k}={v['share']}" for k, v in report["coverage"].items()))
+    if "data_version" in report:
+        print(f"  data_version: {report['data_version']}")
     if "db" in report:
         print(f"  db: {report['db']}")
 

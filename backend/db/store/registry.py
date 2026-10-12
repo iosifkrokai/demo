@@ -9,6 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from db.store.areas import PostgresAreaRepository
+from db.store.datasets import PostgresDatasetRepository
 from db.store.itineraries import PostgresItineraryRepository
 from db.store.places import PostgresPlaceRepository
 from db.store.stats import PostgresStatsRepository
@@ -35,6 +36,7 @@ class Repositories:
     users: PostgresUserRepository = field(default_factory=PostgresUserRepository)
     stats: PostgresStatsRepository = field(default_factory=PostgresStatsRepository)
     threads: PostgresThreadRepository = field(default_factory=PostgresThreadRepository)
+    datasets: PostgresDatasetRepository = field(default_factory=PostgresDatasetRepository)
 
     def close(self) -> None:
         for repo in (
@@ -45,5 +47,6 @@ class Repositories:
             self.users,
             self.stats,
             self.threads,
+            self.datasets,
         ):
             repo.close()
