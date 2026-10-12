@@ -60,16 +60,19 @@ class _Spec:
 
 # The whole vocabulary: a key, an endpoint and a default model per provider.
 # A model name is written here and nowhere else in the codebase.
+#
+# One entry, and it is one entry on purpose rather than by accident: every
+# endpoint in this vocabulary speaks the OpenAI chat format, so `agent/llm.py`
+# has a single client and the word "openrouter" names *the OpenAI-shaped
+# endpoint* — OpenRouter itself, a gateway in front of it, or OpenAI proper.
+# A provider that speaks a different format (Anthropic's Messages API was the
+# one that used to be here) is a second client, not a second key, and it earns
+# its place only when a deployment reaches a model through it.
 _SPECS: dict[str, _Spec] = {
     "openrouter": _Spec(
         key_env="OPENROUTER_API_KEY",
         base_env="OPENROUTER_BASE_URL",
         default_model="deepseek/deepseek-v4.1-flash",
-    ),
-    "anthropic": _Spec(
-        key_env="ANTHROPIC_API_KEY",
-        base_env="ANTHROPIC_BASE_URL",
-        default_model="claude-opus-5-5",
     ),
 }
 

@@ -11,7 +11,7 @@ dependencies = [
     "psycopg[binary]>=3.2",
     "httpx>=0.27",
     "pydantic>=2.7",
-    "pydantic-ai-slim[anthropic,openrouter,logfire]>=1.0,<2",
+    "pydantic-ai-slim[openai,logfire]>=1.0,<2",
     "fastembed>=0.9.0",
     "alembic>=1.13",
 ]

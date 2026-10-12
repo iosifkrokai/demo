@@ -19,7 +19,7 @@ curl -LsSf https://astral.sh/uv/install.sh | sh    # uv, for the host venv
 
 Outbound HTTPS reaches `download.geofabrik.de` (tiles), `huggingface.co` (the
 embedding model, baked at image build time), `overpass-api.de` (`db.seed fetch`) and
-`openrouter.ai` (the reading).
+the configured model endpoint (`OPENROUTER_BASE_URL`, else `openrouter.ai`) — the reading.
 
 ## Bring it up
 
@@ -53,18 +53,23 @@ Secrets, addresses and two deliberate escape hatches live in the environment
 values, Postgres, proxy upstreams); the variables below are what the agent and
 seed read.
 
-The model is configuration, not code: one provider at a time, chosen from the
-keys that are actually set. **A model name is written once**, in the provider
-table in `core/config.py`.
+The model is configuration, not code: the endpoint is chosen from the keys that
+are actually set. **A model name is written once**, in the provider table in
+`core/config.py`.
+
+The endpoint must speak the OpenAI chat format — OpenRouter, a gateway in front
+of it, or OpenAI itself all do, and they are the same client with a different
+address. It must also accept a **forced tool call**: this agent hands in its plan
+by calling a terminal tool, so PydanticAI sends `tool_choice: "required"`, and a
+model that refuses it answers every planning request with a 400. Gateway
+thinking modes refuse it; the `-no-thinking` variants do not.
 
 | Variable | What it is |
 |---|---|
-| `LLM_PROVIDER` | `openrouter` or `anthropic`; wins over the key-based guess |
+| `LLM_PROVIDER` | which entry of the provider table to use; wins over the key-based guess |
 | `LLM_MODEL` | the model id; defaults to the chosen provider's own |
-| `OPENROUTER_API_KEY` | OpenRouter, or any OpenAI-shaped endpoint — **needed to plan** unless the other key is set |
+| `OPENROUTER_API_KEY` | OpenRouter, or any OpenAI-shaped endpoint — **needed to plan** |
 | `OPENROUTER_BASE_URL` | optional; a gateway in front of OpenRouter |
-| `ANTHROPIC_API_KEY` | the Anthropic Messages format — also a self-hosted gateway speaking it |
-| `ANTHROPIC_BASE_URL` | optional; where that gateway lives |
 | `DATABASE_URL` | Postgres DSN (agent and seed; default is the local compose one) |
 | `VALHALLA_URL` | routing engine address |
 | `AGENT_HOST` / `AGENT_PORT` | bind address |
@@ -84,7 +89,7 @@ Browser → nginx :80 (frontend container)
   │                           │
   │               api.main → agent.client.plan_with_agent
   │                           │
-  │  reader_brief ─ read (PydanticAI over OpenRouter; refuses without a key)
+  │  reader_brief ─ read (PydanticAI over the configured endpoint; refuses without a key)
   │  retrieve (vector + keyword + must-visit, RRF fusion)
   │             vector = LOCAL embeddings (db/embeddings/model.py, CPU ONNX)
   │  opt-in: the model calls the tools — find_places / plan_walk / verify
