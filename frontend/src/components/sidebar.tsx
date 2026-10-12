@@ -1155,7 +1155,7 @@ export const Sidebar = ({
   const geoBadge = useMemo(() => {
     switch (geoState) {
       case 'ok':
-        return { text: t('sidebar.geo.startIsMe'), tone: 'text-emerald-600' };
+        return { text: t('sidebar.geo.startIsMe'), tone: 'text-success' };
       case 'locating':
         return {
           text: t('sidebar.geo.searching'),
@@ -1166,7 +1166,7 @@ export const Sidebar = ({
           text: geoReason
             ? `${t('sidebar.geo.label')}: ${t(`sidebar.geo.${geoReason}`)}`
             : t('sidebar.geo.label'),
-          tone: 'text-amber-600',
+          tone: 'text-warning',
         };
       default:
         return {
@@ -1401,7 +1401,7 @@ export const Sidebar = ({
                 <LocateFixed
                   className={
                     geoState === 'ok'
-                      ? 'h-3.5 w-3.5 shrink-0 text-emerald-600'
+                      ? 'h-3.5 w-3.5 shrink-0 text-success'
                       : 'h-3.5 w-3.5 shrink-0 text-muted-foreground'
                   }
                 />
@@ -1697,7 +1697,7 @@ export const Sidebar = ({
                         : t('sidebar.ui.noLimit')}
                     </span>
                     {!summary.fits && (
-                      <span className="rounded-full bg-amber-500/15 px-2 py-0.5 font-medium text-amber-700">
+                      <span className="rounded-full bg-warning/15 px-2 py-0.5 font-medium text-warning">
                         {t('sidebar.plan.overBudget')}
                       </span>
                     )}
@@ -1740,7 +1740,7 @@ export const Sidebar = ({
                     status.kind === 'ok'
                       ? 'bg-primary/10 text-primary'
                       : status.kind === 'warn'
-                        ? 'bg-amber-500/15 text-amber-800'
+                        ? 'bg-warning/15 text-warning'
                         : 'bg-destructive/10 text-destructive',
                   ].join(' ')}
                 >

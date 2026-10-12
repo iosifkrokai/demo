@@ -94,7 +94,7 @@ export const PlanVerdict = ({ response }: PlanVerdictProps) => {
     <div
       data-testid="plan-verdict"
       role="status"
-      className="rounded-xl bg-amber-500/15 px-3 py-2 text-meta text-amber-800"
+      className="rounded-xl bg-warning/15 px-3 py-2 text-meta text-warning"
     >
       <p>{t('sidebar.status.degradedTitle')}</p>
       {unmetList}

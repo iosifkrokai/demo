@@ -62,6 +62,7 @@ vi.mock('react-map-gl/maplibre', async () => {
         {children}
         <button
           type="button"
+          aria-label="перетащить маркер"
           data-testid="marker-drag"
           onClick={() => onDragEnd?.({ lngLat: { lat: 53.9, lng: 23.7 } })}
         />

@@ -54,4 +54,12 @@ describe('design tokens', () => {
       contrast(token('--muted-foreground'), token('--background'))
     ).toBeGreaterThanOrEqual(4.5);
   });
+
+  it('keeps the status tones (warning/success/info) readable as text on white', () => {
+    for (const name of ['--warning', '--success', '--info']) {
+      expect(
+        contrast(token(name), token('--background'))
+      ).toBeGreaterThanOrEqual(4.5);
+    }
+  });
 });

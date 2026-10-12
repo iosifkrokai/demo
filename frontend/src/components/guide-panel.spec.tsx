@@ -438,6 +438,33 @@ describe('GuidePanel', () => {
     expect(onExit).not.toHaveBeenCalled();
   });
 
+  it('Escape leaves the walk, focuses the HUD and makes the planner behind it inert', () => {
+    stubGeolocation(null);
+    const onExit = vi.fn();
+    const app = document.createElement('div');
+    app.id = 'valhalla-app-root';
+    document.body.appendChild(app);
+    const opener = document.createElement('button');
+    app.appendChild(opener);
+    opener.focus();
+
+    const { unmount } = render(
+      <GuidePanel stops={STOPS} startInMoving onExit={onExit} />
+    );
+
+    const hud = screen.getByTestId('guide-panel');
+    expect(hud).toHaveFocus();
+    expect(app).toHaveAttribute('inert');
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(onExit).toHaveBeenCalledOnce();
+
+    unmount();
+    expect(app).not.toHaveAttribute('inert');
+    expect(opener).toHaveFocus();
+    app.remove();
+  });
+
   it('shows the route overview when the mobile sheet is expanded, then resumes', () => {
     stubGeolocation(null);
     const onExit = vi.fn();

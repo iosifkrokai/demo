@@ -60,6 +60,12 @@ export default defineConfig([
       'jsx-a11y/aria-unsupported-elements': 'warn',
       'jsx-a11y/role-has-required-aria-props': 'warn',
       'jsx-a11y/role-supports-aria-props': 'warn',
+      'jsx-a11y/control-has-associated-label': 'error',
+      'react/button-has-type': 'error',
+      'jsx-a11y/anchor-is-valid': 'error',
+      'jsx-a11y/click-events-have-key-events': 'error',
+      'jsx-a11y/no-static-element-interactions': 'error',
+      'jsx-a11y/label-has-associated-control': 'error',
       'react/jsx-no-target-blank': 'off',
       'react/jsx-curly-brace-presence': [
         'error',

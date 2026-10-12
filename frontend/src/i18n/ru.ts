@@ -58,6 +58,8 @@ export const ru = {
     closePanel: 'закрыть панель',
     build: 'Подобрать маршрут',
     cancel: 'Отменить',
+    delete: 'Удалить',
+    close: 'Закрыть',
   },
   guide: {
     enter: 'Пойти по маршруту',

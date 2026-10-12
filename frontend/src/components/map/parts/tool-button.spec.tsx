@@ -118,13 +118,15 @@ describe('ToolButton', () => {
     expect(onClick).not.toHaveBeenCalled();
   });
 
-  it('should expose a coral focus-visible outline affordance', () => {
+  it('should expose a token focus-visible outline affordance, no raw hex', () => {
     render(
       <ToolButton title="Test" icon={<span>icon</span>} onClick={vi.fn()} />
     );
     const button = screen.getByRole('button', { name: 'Test' });
     expect(button.className).toMatch(/focus-visible:outline/);
-    expect(button.className).toContain('#ff385c');
+    expect(button.className).toContain('outline-ring');
+    expect(button.className).not.toMatch(/#[0-9a-fA-F]{3,6}/);
+    expect(button.getAttribute('style')).toBeNull();
   });
 
   it('should have a hit area of at least 44x44 CSS pixels', () => {
@@ -132,7 +134,7 @@ describe('ToolButton', () => {
       <ToolButton title="Test" icon={<span>icon</span>} onClick={vi.fn()} />
     );
     const button = screen.getByRole('button', { name: 'Test' });
-    expect(button.style.width).toBe('44px');
-    expect(button.style.height).toBe('44px');
+    // 44px square comes from the token-driven `size-11` utility (44 = 11 * 4px).
+    expect(button.className).toMatch(/(^|\s)size-11(\s|$)/);
   });
 });

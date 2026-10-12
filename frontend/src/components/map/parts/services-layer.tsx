@@ -254,6 +254,7 @@ export function ServicesLayer({ items, thin }: ServicesLayerProps) {
           maxWidth="280px"
         >
           <div
+            role="presentation"
             className="flex min-w-[200px] flex-col gap-1.5 px-2.5 py-2.5"
             data-testid="service-card"
             onClick={(event) => event.stopPropagation()}
