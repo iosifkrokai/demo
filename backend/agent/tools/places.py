@@ -72,6 +72,12 @@ def _card(place: Any) -> dict[str, Any]:
     return card
 
 
+def _inside(lat: float, lon: float, box: tuple[float, float, float, float]) -> bool:
+    """Is a point inside a (south, west, north, east) box?"""
+    south, west, north, east = box
+    return south <= lat <= north and west <= lon <= east
+
+
 def find_places(
     query: str,
     category_codes: list[str] | None = None,
@@ -79,13 +85,19 @@ def find_places(
     near_lat: float | None = None,
     near_lon: float | None = None,
     radius_m: float | None = None,
+    area: str | None = None,
     *,
     repos: Any = None,
+    region_bbox: list[float] | None = None,
 ) -> dict[str, Any]:
     """Rank real places against a description, a category, and/or a point.
 
-    The ids are the only handles the agent may put into a plan; an unknown
-    category code is dropped, never sent to SQL.
+    `area` scopes the search to a territory the registry knows (a slug `find_areas`
+    returned); a territory with no boundary is recorded as unfiltered rather than
+    guessed at. `region_bbox` is a raw (south, west, north, east) box that applies
+    when the model named no territory — the request's own territory. The ids are
+    the only handles the agent may put into a plan; an unknown category code is
+    dropped, never sent to SQL.
     """
     requested = [c for c in (category_codes or []) if c.strip()]
 
@@ -98,6 +110,15 @@ def find_places(
         radius, radius_clamped = clamp(radius_m, MIN_RADIUS_M, MAX_RADIUS_M, DEFAULT_RADIUS_M)
         near = (float(near_lat), float(near_lon), float(radius))
 
+    requested_box: tuple[float, float, float, float] | None = None
+    if region_bbox and len(region_bbox) == 4:
+        requested_box = (
+            float(region_bbox[0]),
+            float(region_bbox[1]),
+            float(region_bbox[2]),
+            float(region_bbox[3]),
+        )
+
     provenance: dict[str, Any] = {
         "source": "places",
         "signals": [],
@@ -105,6 +126,7 @@ def find_places(
         "dropped_codes": requested,
         "result_cap": MAX_PLACES_PER_FIND,
         "radius_m": near[2] if near else None,
+        "area": area,
     }
 
     if not query.strip() and not requested and near is None:
@@ -122,23 +144,38 @@ def find_places(
         provenance["categories"] = db_cats
         provenance["dropped_codes"] = [c for c in requested if c not in db_cats]
 
+        # A named territory wins over the request's box; a territory without a
+        # boundary leaves the box unfiltered, said so honestly.
+        box = requested_box
+        if area:
+            resolved = store.areas.bbox(area)
+            if resolved is not None:
+                box = resolved
+            else:
+                provenance["area_filter"] = "no_boundary"
+        provenance["region_bbox"] = list(box) if box is not None else None
+
+        def keep(place: Any) -> bool:
+            return box is None or _inside(place.lat, place.lon, box)
+
         pool = constants.RETRIEVAL_POOL_SIZE
         rankings: list[list[tuple[int, float]]] = []
 
         qvec = embed_query(query) if query.strip() and embeddings_model.is_available() else []
         if qvec:
-            rankings.append(
-                [(place.id, score) for place, score in store.places.by_embedding(qvec, limit=pool)]
-            )
+            found = store.places.by_embedding(qvec, limit=pool, region_bbox=box)
+            rankings.append([(place.id, score) for place, score in found if keep(place)])
             provenance["signals"].append("embedding")
         if db_cats:
-            rankings.append([(p.id, 0.0) for p in store.places.by_category(db_cats, pool)])
+            by_cat = store.places.by_category(db_cats, pool)
+            rankings.append([(p.id, 0.0) for p in by_cat if keep(p)])
             provenance["signals"].append("category")
         if near is not None:
-            found = store.places.nearby(near[0], near[1], radius_km=near[2] / 1000.0, limit=pool)
-            rankings.append([(p.id, 0.0) for p in found])
+            around = store.places.nearby(near[0], near[1], radius_km=near[2] / 1000.0, limit=pool)
+            rankings.append([(p.id, 0.0) for p in around if keep(p)])
             provenance["signals"].append("nearby")
 
+        rankings = [ranking for ranking in rankings if ranking]
         if not rankings:
             return []
         fused = rrf_fuse(rankings, k=constants.RRF_K)
@@ -219,8 +256,13 @@ def register_find_places(agent: Any, remember: Remember) -> None:
         near_lat: float | None = None,
         near_lon: float | None = None,
         radius_m: float | None = None,
+        area: str | None = None,
     ) -> dict[str, Any]:
         """Find real places matching a description, a category, and/or a point.
+
+        Pass `area` (a canonical slug `find_areas` returned) to search within a
+        territory in one call instead of walking it city by city. A territory the
+        registry has no boundary for is reported unfiltered, not guessed at.
 
         Returns a short card per place — id, name, category, town, location and
         how long a visit is estimated to take. The id is the only handle you may
@@ -235,7 +277,9 @@ def register_find_places(agent: Any, remember: Remember) -> None:
                 near_lat,
                 near_lon,
                 radius_m,
+                area,
                 repos=ctx.deps.repos,
+                region_bbox=list(ctx.deps.region_bbox) if ctx.deps.region_bbox else None,
             ),
         )
 

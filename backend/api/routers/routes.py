@@ -57,12 +57,16 @@ def _plan(req: GenerateReq, request: Request) -> RouteResponse:
         # The thread the client names is the journal the refinement reconciles
         # against; the snapshot it re-sends is a fallback, not the authority.
         brief = thread.reconcile_brief(repos.threads, thread_id=req.session_id, brief=brief)
+    # Read the refinement off the reconciled brief, not the raw body: the journal
+    # can add base points, and the plan below is built from the brief.
+    # A refinement gets its own tight budget; a fresh generation gets none here —
+    # the runner's own ceiling is the single source for that wall clock.
     refinement = bool(brief.context and brief.context.base_points)
     outcome = client.plan_with_agent(
         req.query,
         brief,
         repos=repos,
-        wall_clock_s=(constants.REFINE_DEADLINE_S if refinement else constants.REQUEST_DEADLINE_S),
+        wall_clock_s=(constants.REFINE_DEADLINE_S if refinement else None),
     )
     if outcome is None:
         # No plan is not an empty plan: the caller is refused rather than given

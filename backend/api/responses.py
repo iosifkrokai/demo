@@ -196,6 +196,10 @@ def route_response(
     """The one place a run's outcome becomes the response body."""
     contract = outcome.requirements
     measured = outcome.measured
+
+    if outcome.refused:
+        return _refusal_response(req, outcome, deadline=deadline)
+
     route = _ordered_candidates(repos, outcome)
 
     walk_s = float(measured.get("walk_minutes") or 0) * 60
@@ -236,6 +240,50 @@ def route_response(
             "requirements_source": contract.source,
             "problems": outcome.problems,
             "verdicts": measured.get("verdicts"),
+            "deadline": deadline,
+        },
+    )
+
+
+DEFAULT_REFUSAL = (
+    "Маршрут не построен: в запросе нет мест внутри обслуживаемого региона "
+    "(Гродненская область). Уточните запрос."
+)
+
+
+def _refusal_response(
+    req: GenerateReq, outcome: AgentOutcome, *, deadline: dict[str, Any] | None = None
+) -> RouteResponse:
+    """The agent said the request cannot be served: infeasible, with its reason.
+
+    A refusal is an answer, not a failed run — it reaches the client as an empty
+    plan carrying `status="infeasible"` and the reason the agent gave, never as a
+    pending plan with zero points.
+    """
+    contract = outcome.requirements
+    reason = (outcome.submission.refusal_reason or "").strip() or DEFAULT_REFUSAL
+    outside = ", ".join(contract.outside_coverage)
+    return RouteResponse(
+        parsed=ParsedQuery(
+            categories=contract.interest_codes(),
+            time_budget_minutes=contract.budget_minutes,
+            source="agent",
+        ),
+        points=[],
+        shape={},
+        summary=RouteSummary(length_km=None, time_seconds=None),
+        result_mode=contract.result_mode,
+        budget=None,
+        explanation=f"{reason} ({outside})" if outside else reason,
+        status="infeasible",
+        requirements=contract.public_requirements(),
+        interpretation=interpretation(contract, "infeasible"),
+        costing=outcome.submission.profile or req.profile or "pedestrian",
+        changes=None,
+        debug={
+            "reason": "refused",
+            "problems": outcome.problems,
+            "outside_coverage": list(contract.outside_coverage),
             "deadline": deadline,
         },
     )
@@ -286,6 +334,14 @@ def reader_brief(req: GenerateReq) -> ReaderBrief:
     layer and the agent's input.
     """
     origin = (req.origin.lat, req.origin.lon) if req.origin is not None else None
+    region_bbox: tuple[float, float, float, float] | None = None
+    if req.region_bbox and len(req.region_bbox) == 4:
+        region_bbox = (
+            float(req.region_bbox[0]),
+            float(req.region_bbox[1]),
+            float(req.region_bbox[2]),
+            float(req.region_bbox[3]),
+        )
     context = None
     if req.context is not None:
         context = RefinementBrief(
@@ -301,6 +357,7 @@ def reader_brief(req: GenerateReq) -> ReaderBrief:
         locale=req.locale,
         profile=req.profile,
         origin=origin,
+        region_bbox=region_bbox,
         time_budget_minutes=req.time_budget_minutes,
         party_adults=req.party_adults,
         party_children=req.party_children,
