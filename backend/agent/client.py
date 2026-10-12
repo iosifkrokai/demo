@@ -11,6 +11,7 @@ so what leaves here carries a status code computed the status, not narrated.
 from __future__ import annotations
 
 import logging
+import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -47,6 +48,11 @@ class AgentOutcome:
     def problems(self) -> list[dict[str, str]]:
         return list(self.measured.get("problems") or [])
 
+    @property
+    def refused(self) -> bool:
+        """True when the agent refused outright (outside coverage, not a bad plan)."""
+        return self.submission.outcome == "refuse"
+
 
 def available() -> bool:
     """True when this layer could run: a key, a model name, an importable SDK.
@@ -77,7 +83,13 @@ def plan_with_agent(
         runner._record_model_failure("agent_unavailable", runner._build_prompt(query, brief))
         return None
 
-    deps = PlanningDeps(repos=repos, locale=brief.locale, origin=_origin(brief))
+    deps = PlanningDeps(
+        repos=repos,
+        locale=brief.locale,
+        origin=_origin(brief),
+        region_bbox=brief.region_bbox,
+        deadline_at=time.monotonic() + runner.effective_wall_clock(wall_clock_s),
+    )
     if repos is not None:
         deps.facts = type(deps.facts).from_rows(repos.taxonomy.all())
 
@@ -93,7 +105,22 @@ def plan_with_agent(
         return None
 
     contract = mapping._merge(query.strip(), brief, submission, deps.observed_ids, deps.repos)
+
+    if submission.outcome == "refuse":
+        # A refusal is an answer, not a failure: it leaves here as an infeasible
+        # plan with the reason, never as a tool error or an empty stop list.
+        return AgentOutcome(
+            submission=submission, requirements=contract, measured=_refused(submission)
+        )
+
     ordered, keep = _with_base_stops(submission, brief)
+    ordered, keep = _without_excluded(ordered, keep, brief)
+    if contract.result_mode == "route" and not ordered:
+        # A route with no stops is not a plan: refuse the request rather than
+        # hand the client an empty route under a "pending" status.
+        log.info("agent_plan: empty route submission — no plan")
+        return None
+
     measured = submit_mod.submit_plan(
         ordered,
         repos=repos,
@@ -107,10 +134,42 @@ def plan_with_agent(
         contract=contract,
         unknowns=submission.unknowns,
         narrative=submission.narrative,
-        result_mode=submission.result_mode or brief.result_mode,
+        result_mode=contract.result_mode,
         deadline_s=deps.seconds_left(),
     )
     return AgentOutcome(submission=submission, requirements=contract, measured=measured)
+
+
+def _refused(submission: PlanSubmission) -> dict[str, Any]:
+    """The measurement of a refusal: infeasible, no stops, and the reason attached."""
+    reason = (submission.refusal_reason or "").strip()
+    return {
+        "status": "infeasible",
+        "ok": False,
+        "results": [],
+        "shape": None,
+        "verdicts": [],
+        "provenance": {"source": "agent", "refused": True},
+        "problems": [{"kind": "request", "code": "refused", "status": "unmet", "reason": reason}],
+    }
+
+
+def _without_excluded(
+    ordered: list[int], keep: list[int], brief: ReaderBrief
+) -> tuple[list[int], list[int]]:
+    """Drop the stops the user deleted by hand from both the route and the keeps.
+
+    Base stops are added by code (`_with_base_stops`); a deleted stop was, until
+    now, only a note to the model. Subtracting here makes the two symmetric: what
+    the user removed cannot ride back in on the model's word.
+    """
+    excluded = set(brief.context.excluded_ids) if brief.context else set()
+    if not excluded:
+        return ordered, keep
+    return (
+        [i for i in ordered if i not in excluded],
+        [i for i in keep if i not in excluded],
+    )
 
 
 def _with_base_stops(submission: PlanSubmission, brief: ReaderBrief) -> tuple[list[int], list[int]]:

@@ -67,3 +67,19 @@ def test_must_keep_stops_are_never_dropped(db_repos) -> None:
     assert answer.get("error") in (None, "no_route"), answer.get("message")
     if answer.get("error") is None:
         assert pinned[0] in {stop["id"] for stop in answer["results"]}
+
+
+def test_the_same_stops_are_measured_once(db_repos) -> None:
+    """Valhalla is deterministic: the same stops and budget are a cache hit."""
+    from agent.tools.plan import plan_walk
+    from core import cache
+
+    ids = _sight_ids(db_repos)
+    first = plan_walk(ids, repos=db_repos, budget_minutes=180)
+    assert first.get("error") is None, first.get("message")
+
+    hits_before = cache.MEASURE_CACHE.hits
+    second = plan_walk(ids, repos=db_repos, budget_minutes=180)
+
+    assert cache.MEASURE_CACHE.hits == hits_before + 1
+    assert second["count"] == first["count"]

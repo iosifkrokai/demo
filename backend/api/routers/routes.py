@@ -53,11 +53,13 @@ def _plan(req: GenerateReq, request: Request) -> RouteResponse:
     """One agent run, then the code's verdict on what it proposed."""
     repos = deps.get_repos(request)
     refinement = bool(req.context and req.context.base_points)
+    # A refinement gets its own tight budget; a fresh generation gets none here —
+    # the runner's own ceiling is the single source for that wall clock.
     outcome = client.plan_with_agent(
         req.query,
         responses.reader_brief(req),
         repos=repos,
-        wall_clock_s=(constants.REFINE_DEADLINE_S if refinement else constants.REQUEST_DEADLINE_S),
+        wall_clock_s=(constants.REFINE_DEADLINE_S if refinement else None),
     )
     if outcome is None:
         # No plan is not an empty plan: the caller is refused rather than given

@@ -174,6 +174,10 @@ def _merge(
         if slug.strip() and slug.strip() not in areas:
             areas.append(slug.strip())
 
+    # The submission's outcome decides route vs catalogue; a submission that says
+    # neither (or refuses) leaves the brief's own result_mode standing.
+    mode = reading.outcome if reading.outcome in ("route", "catalogue") else brief.result_mode
+
     return TripRequirements(
         locale=brief.locale,
         raw_query=query,
@@ -184,7 +188,7 @@ def _merge(
         origin_lon=brief.origin[1] if brief.origin is not None else None,
         areas=areas,
         outside_coverage=_outside_names(reading.outside_coverage),
-        result_mode=reading.result_mode or brief.result_mode,
+        result_mode=mode,
         round_trip=brief.round_trip,
         requirements=requirements,
         unknowns=_unknowns(reading, unsupported, party.mobility),

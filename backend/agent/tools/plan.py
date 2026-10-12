@@ -24,7 +24,7 @@ from agent.tools import (
     envelope,
     fetch,
 )
-from core import constants
+from core import cache, constants
 from core.errors import NoRoutePossibleError, UpstreamUnavailableError
 from routing.cost import build_cost, refinement_cost
 from routing.models import CategoryFacts, LatLon, ResolvedConstraints
@@ -34,6 +34,41 @@ from routing.stops import candidate_of
 from routing.validate import validate
 
 MAX_STOPS_PER_CALL = constants.VALHALLA_MAX_LOCATIONS
+
+
+def _measure_key(
+    wanted: list[int],
+    budget_minutes: int | None,
+    profile: str,
+    round_trip: bool,
+    origin: LatLon | None,
+    locale: str,
+    must_keep_ids: list[int] | None,
+) -> str:
+    """The identity of one measurement: the stops, the profile and the budget.
+
+    The stops, profile, budget and round-trip are the core of it. Three more
+    fields are in it because they change the measured *result*, not just its
+    presentation: the origin (it decides the drawn line's start), the locale (the
+    shape's turn instructions are written in it) and the must-keep ids (they are
+    what survives pruning). A hit on any of those with a different value would be
+    a wrong answer, not a cheap one. There is no data version in the tree — see
+    `core.cache.MEASURE_CACHE` for why the key carries none.
+    """
+    where = f"{origin.lat:.6f},{origin.lon:.6f}" if origin is not None else "-"
+    keep = ",".join(str(i) for i in sorted(must_keep_ids or []))
+    return "|".join(
+        (
+            "plan_walk",
+            ",".join(str(i) for i in sorted(wanted)),
+            profile or "",
+            str(budget_minutes),
+            "rt" if round_trip else "one_way",
+            where,
+            locale,
+            keep,
+        )
+    )
 
 
 def _facts(repos: Any, facts: CategoryFacts | None) -> CategoryFacts:
@@ -89,6 +124,14 @@ def plan_walk(
     if len(wanted) > MAX_STOPS_PER_CALL:
         wanted = wanted[:MAX_STOPS_PER_CALL]
         provenance["capped"] = True
+
+    # The same stops, profile and budget are the same walk: Valhalla is
+    # deterministic, so measure once. This is what makes a refinement cheap — a
+    # stop the model kept is not re-walked.
+    key = _measure_key(wanted, budget_minutes, profile, round_trip, origin, locale, must_keep_ids)
+    cached = cache.MEASURE_CACHE.get(key)
+    if cached is not None:
+        return dict(cached)
 
     rows, error, message = fetch(repos, lambda store: store.places.get_by_ids(wanted))
     if error is not None:
@@ -154,7 +197,7 @@ def plan_walk(
     provenance["unroutable"] = [p.name for p in prune_report]
     provenance["missing_ids"] = missing
 
-    return envelope(
+    answer = envelope(
         "plan_walk",
         stops,
         provenance,
@@ -168,6 +211,9 @@ def plan_walk(
         "shape": shape or None,
         "round_trip": round_trip,
     }
+    if answer.get("error") is None and answer.get("results"):
+        cache.MEASURE_CACHE.put(key, answer)
+    return answer
 
 
 def register_plan_walk(agent: Any, _remember: Remember) -> None:

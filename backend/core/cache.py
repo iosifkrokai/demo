@@ -103,6 +103,17 @@ class TtlLru:
 
 EMBED_CACHE = TtlLru(maxsize=512, ttl_s=DEFAULT_TTL_S)
 
+# Deterministic routing measurements (a cost matrix and the walk it yields) for a
+# given set of stops. Valhalla is deterministic, so the same stops with the same
+# profile and budget really do mean the same walk, and this is what makes a
+# refinement cheap: a stop the model keeps is not re-measured. The key has no
+# "data version" because the tree has no such notion — a re-seed while the process
+# is up can in principle move a stop, and what stands in for a version stamp is the
+# short TTL plus the deploy that re-seeds. Two entries can differ by the deadline
+# the run was measured under (a tight budget skips the final re-order); the TTL
+# keeps that window short.
+MEASURE_CACHE = TtlLru(maxsize=256, ttl_s=DEFAULT_TTL_S)
+
 
 def embed_key(texts: list[str], model: str) -> str:
     """Identity of an embedding: the model is part of it, so a swap misses."""

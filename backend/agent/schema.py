@@ -51,10 +51,17 @@ class PlanSubmission(BaseModel):
     budget_minutes: int | None = None
     areas: list[str] = Field(default_factory=list)
     unknowns: list[str] = Field(default_factory=list)
-    result_mode: Literal["route", "catalogue"] | None = None
     outside_coverage: list[str] = Field(default_factory=list)
 
     # --- what is proposed ---
+    # The outcome is explicit so "this request cannot be served" is expressible
+    # rather than smuggled through an empty stop list. `route` and `catalogue`
+    # pick the shape of the answer (a walk, or a list to choose from); `refuse`
+    # says the request cannot be planned at all — a place outside the served
+    # region — and carries the reason in `refusal_reason`. None means "no answer
+    # of your own", and the brief's own result_mode then stands.
+    outcome: Literal["route", "catalogue", "refuse"] | None = None
+    refusal_reason: str | None = None
     ordered_ids: list[int] = Field(default_factory=list)
     narrative: str = ""
     profile: str = "pedestrian"
@@ -78,6 +85,10 @@ class PlanningDeps:
     origin: LatLon | None = None
     facts: CategoryFacts = field(default_factory=CategoryFacts)
     deadline_at: float | None = None
+    # The request's own territory, as [south, west, north, east]: every
+    # `find_places` call the run makes is scoped to it unless the model names a
+    # territory of its own.
+    region_bbox: tuple[float, float, float, float] | None = None
 
     def seconds_left(self) -> float:
         """Seconds until this run's deadline; infinite when it has none."""

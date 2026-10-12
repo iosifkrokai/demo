@@ -60,6 +60,31 @@ class PostgresAreaRepository(PostgresRepository):
                 return area.code
         return None
 
+    def bbox(self, code: str) -> tuple[float, float, float, float] | None:
+        """An area's bounding box as (south, west, north, east), or None.
+
+        Only the project area carries a boundary polygon today; a district has no
+        geometry, so its extent is unknown — an explicit None rather than a
+        guessed box, which is why `find_places` reports the filter as not applied.
+        """
+        with self._cursor() as cur:
+            cur.execute(
+                "SELECT ST_YMin(ext) AS south, ST_XMin(ext) AS west, "
+                "       ST_YMax(ext) AS north, ST_XMax(ext) AS east "
+                "  FROM (SELECT ST_Extent(geom::geometry) AS ext FROM areas "
+                "         WHERE code = %s) AS boxed",
+                (code,),
+            )
+            row = cur.fetchone()
+        if not row or row["south"] is None:
+            return None
+        return (
+            float(row["south"]),
+            float(row["west"]),
+            float(row["north"]),
+            float(row["east"]),
+        )
+
 
 def _normalise(term: str | None) -> str:
     """Lowercase, drop punctuation, collapse whitespace — for exact matching."""
