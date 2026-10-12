@@ -11,11 +11,19 @@ from typing import Any
 
 from core import constants
 from core.errors import NoRoutePossibleError, UpstreamUnavailableError
-from routing.models import Candidate, CostMatrix, ResolvedConstraints
+from routing.models import Candidate, CostMatrix, OriginAnchor, ResolvedConstraints
 from routing.valhalla.constants import costing_for
 from routing.valhalla.route import optimized_route as valhalla_optimized_route
 
-from .cost import prune_unroutable_stops, total_seconds, visit_cost, walk_cost
+from .cost import (
+    ORIGIN_INDEX,
+    leg_seconds,
+    prune_unroutable_stops,
+    route_legs,
+    total_seconds,
+    visit_cost,
+    walk_cost,
+)
 
 log = logging.getLogger(__name__)
 
@@ -39,6 +47,7 @@ def optimize(
     info: dict[str, Any] = {"n_candidates": n, "algorithm": "unknown"}
     matrix = cost.walk_seconds
     visits = cost.visit_minutes
+    anchor = cost.anchor
     budget_s = constraints.time_budget_minutes * 60 if constraints.time_budget_minutes else None
     must_idx = [i for i, c in enumerate(candidates) if c.id in constraints.must_visit_ids]
 
@@ -66,6 +75,7 @@ def optimize(
             budget_s,
             info,
             round_trip=constraints.round_trip,
+            anchor=anchor,
         )
     elif n <= REGRET_INSERTION_MAX:
         order, info = _regret_insertion(
@@ -75,7 +85,9 @@ def optimize(
             budget_s,
             must_idx,
             info,
+            costing=costing,
             round_trip=constraints.round_trip,
+            anchor=anchor,
         )
     else:
         order, info = _nn_2opt_multi(
@@ -85,6 +97,7 @@ def optimize(
             budget_s,
             info,
             round_trip=constraints.round_trip,
+            anchor=anchor,
         )
 
     must_ids = set(constraints.must_visit_ids)
@@ -97,6 +110,7 @@ def optimize(
         must_ids,
         costing=costing,
         round_trip=constraints.round_trip,
+        anchor=anchor,
     )
     if constrained != list(range(n)):
         new_order = [i for i in constrained if i < len(candidates)]
@@ -143,25 +157,38 @@ def _leg_value(cell: float) -> float:
     return cell
 
 
-def _route_legs(order: list[int], round_trip: bool) -> list[tuple[int, int]]:
-    """The legs of a route, including the return leg for a round trip."""
-    legs = list(pairwise(order))
-    if round_trip and len(order) >= 2:
-        legs.append((order[-1], order[0]))
-    return legs
-
-
 def _order_total(
     order: list[int],
     matrix: list[list[float]],
     visits: list[int],
     round_trip: bool = False,
+    anchor: OriginAnchor | None = None,
 ) -> float:
-    """Total route time (walk + visit) with the return leg when it is a loop."""
+    """Total route time (walk + visit), the tourist's own legs included.
+
+    `total_seconds` carries the pairwise chain only, so the two legs that leave
+    from and return to the tourist's position are added here. Ranking orders by
+    this is what makes the optimizer prefer a first stop near where they stand.
+    """
     total = total_seconds(order, matrix, visits)
-    if round_trip and len(order) >= 2:
-        total += _leg_value(matrix[order[-1]][order[0]])
+    if anchor is not None and order:
+        total += _leg_value(leg_seconds(matrix, anchor, ORIGIN_INDEX, order[0]))
+    total += _closing_leg(order, matrix, round_trip, anchor)
     return total
+
+
+def _closing_leg(
+    order: list[int],
+    matrix: list[list[float]],
+    round_trip: bool,
+    anchor: OriginAnchor | None,
+) -> float:
+    """The one leg the pairwise chain does not carry: the way back."""
+    if not round_trip or len(order) < 2:
+        return 0.0
+    if anchor is not None:
+        return _leg_value(leg_seconds(matrix, anchor, order[-1], ORIGIN_INDEX))
+    return _leg_value(matrix[order[-1]][order[0]])
 
 
 def _measured_total(
@@ -169,24 +196,44 @@ def _measured_total(
     matrix: list[list[float]],
     visits: list[int],
     round_trip: bool,
+    anchor: OriginAnchor | None = None,
 ) -> float:
     """An unreachable/sentinel leg is not summed into the budget; the leg constraint
     handles it separately.
     """
     total = float(visit_cost(order, visits))
-    for a, b in _route_legs(order, round_trip):
-        cell = matrix[a][b]
+    for a, b in route_legs(order, round_trip, anchor):
+        cell = leg_seconds(matrix, anchor, a, b)
         if math.isfinite(cell):
             total += cell
     return total
 
 
+def _leg_rule_legs(
+    order: list[int], round_trip: bool, anchor: OriginAnchor | None
+) -> list[tuple[int, int]]:
+    """The legs the walkability rule applies to.
+
+    Not the tourist's own. `MAX_WALK_LEG_KM` exists so that a *tour* never
+    contains an absurd hop between two sights; the walk out of where they are
+    standing is a fact about their position, and the budget is what prices it. A
+    distant start should shorten the tour, not drop stops for a reason that is
+    not about the tour at all.
+    """
+    if anchor is not None:
+        return list(pairwise(order))
+    return route_legs(order, round_trip, None)
+
+
 def _worst_leg(
-    order: list[int], matrix: list[list[float]], round_trip: bool
+    order: list[int],
+    matrix: list[list[float]],
+    round_trip: bool,
+    anchor: OriginAnchor | None = None,
 ) -> tuple[int, int] | None:
     """The longest real leg of the route (NaN/"could not ask" legs skipped)."""
     worst: tuple[int, int] | None = None
-    for a, b in _route_legs(order, round_trip):
+    for a, b in _leg_rule_legs(order, round_trip, anchor):
         cell = matrix[a][b]
         if math.isnan(cell):
             continue
@@ -218,6 +265,7 @@ def _budget_constrain(
     *,
     costing: str = "pedestrian",
     round_trip: bool = False,
+    anchor: OriginAnchor | None = None,
 ) -> tuple[list[int], int]:
     """Greedily trim `order` to fit inside the time budget and max-leg constraint.
 
@@ -233,10 +281,10 @@ def _budget_constrain(
     max_leg_s = _max_leg_seconds(budget_s, costing)
 
     def total_of(r: list[int]) -> float:
-        return _measured_total(r, matrix, visits, round_trip)
+        return _measured_total(r, matrix, visits, round_trip, anchor)
 
     while len(route) > 1:
-        leg = _worst_leg(route, matrix, round_trip)
+        leg = _worst_leg(route, matrix, round_trip, anchor)
         leg_ok = leg is None or matrix[leg[0]][leg[1]] <= max_leg_s
         budget_ok = budget_s is None or total_of(route) <= budget_s
         if budget_ok and leg_ok:
@@ -284,13 +332,19 @@ def _max_leg_seconds(budget_s: int | None, costing: str = "pedestrian") -> float
     return min(budget_share_s, km_limit_s)
 
 
-def _max_leg(route: list[int], matrix: list[list[float]], round_trip: bool = False) -> float:
-    """Longest single walking leg in a route, in seconds.
+def _max_leg(
+    route: list[int],
+    matrix: list[list[float]],
+    round_trip: bool = False,
+    anchor: OriginAnchor | None = None,
+) -> float:
+    """Longest single leg of the tour itself, in seconds.
 
-    A round trip's return leg counts; a NaN ("could not ask") leg is skipped.
+    The tourist's own legs are not part of it (see `_leg_rule_legs`); a NaN
+    ("could not ask") leg is skipped.
     """
     best = 0.0
-    for a, b in _route_legs(route, round_trip):
+    for a, b in _leg_rule_legs(route, round_trip, anchor):
         cell = matrix[a][b]
         if math.isnan(cell):
             continue
@@ -306,6 +360,7 @@ def _brute_open(
     info: dict[str, Any],
     *,
     round_trip: bool = False,
+    anchor: OriginAnchor | None = None,
 ) -> tuple[list[int], dict[str, Any]]:
     """Enumerate (start, end) × all permutations of middle, return cheapest."""
     n = len(cands)
@@ -320,7 +375,7 @@ def _brute_open(
             middle = [i for i in range(n) if i not in (start, end)]
             for perm in permutations(middle):
                 order = [start, *perm, end]
-                total = _order_total(order, matrix, visits, round_trip)
+                total = _order_total(order, matrix, visits, round_trip, anchor)
                 walk = walk_cost(order, matrix)
                 if budget_s is not None and total > budget_s:
                     continue
@@ -337,14 +392,14 @@ def _brute_open(
                 middle = [i for i in range(n) if i not in (start, end)]
                 for perm in permutations(middle):
                     order = [start, *perm, end]
-                    total = _order_total(order, matrix, visits, round_trip)
+                    total = _order_total(order, matrix, visits, round_trip, anchor)
                     if total < best_total:
                         best_total = total
                         best_route = order
 
     if best_route is None:
         best_route = list(range(n))
-        best_total = _order_total(best_route, matrix, visits, round_trip)
+        best_total = _order_total(best_route, matrix, visits, round_trip, anchor)
 
     info.update(
         {
@@ -367,6 +422,7 @@ def _regret_insertion(
     *,
     costing: str = "pedestrian",
     round_trip: bool = False,
+    anchor: OriginAnchor | None = None,
 ) -> tuple[list[int], dict[str, Any]]:
     """Sequentially insert the most "regrettable-to-skip" candidate."""
     n = len(cands)
@@ -382,7 +438,7 @@ def _regret_insertion(
     skipped = 0
     max_leg_s = _max_leg_seconds(budget_s, costing=costing)
     while remaining:
-        cur_cost = _order_total(route, matrix, visits, round_trip)
+        cur_cost = _order_total(route, matrix, visits, round_trip, anchor)
         if budget_s is not None and cur_cost >= budget_s:
             break
 
@@ -392,9 +448,9 @@ def _regret_insertion(
             insertion_costs: list[tuple[float, int]] = []
             for pos in range(len(route) + 1):
                 new_route = [*route[:pos], c, *route[pos:]]
-                if _max_leg(new_route, matrix, round_trip) > max_leg_s:
+                if _max_leg(new_route, matrix, round_trip, anchor) > max_leg_s:
                     continue
-                cost = _order_total(new_route, matrix, visits, round_trip)
+                cost = _order_total(new_route, matrix, visits, round_trip, anchor)
                 insertion_costs.append((cost, pos))
             if not insertion_costs:
                 continue
@@ -409,7 +465,10 @@ def _regret_insertion(
             break
         _, chosen, pos = best_choice
         new_route = [*route[:pos], chosen, *route[pos:]]
-        if budget_s is not None and _order_total(new_route, matrix, visits, round_trip) > budget_s:
+        if (
+            budget_s is not None
+            and _order_total(new_route, matrix, visits, round_trip, anchor) > budget_s
+        ):
             remaining.remove(chosen)
             skipped += 1
             continue
@@ -424,7 +483,7 @@ def _regret_insertion(
             "iterations": iterations,
             "skipped_over_budget": skipped,
             "walk_seconds": walk_cost(route, matrix),
-            "total_seconds": int(_order_total(route, matrix, visits, round_trip)),
+            "total_seconds": int(_order_total(route, matrix, visits, round_trip, anchor)),
         }
     )
     return route, info
@@ -438,16 +497,22 @@ def _nn_2opt_multi(
     info: dict[str, Any],
     *,
     round_trip: bool = False,
+    anchor: OriginAnchor | None = None,
 ) -> tuple[list[int], dict[str, Any]]:
     """Nearest-neighbour from K random starts + 2-opt local search.
 
-    A fixed seed gives the same route for the same query.
+    A fixed seed gives the same route for the same query. When the tourist's
+    position is known its nearest stop is one of the starts, so the search does
+    not have to rely on the random draw to begin near them.
     """
     n = len(cands)
     rng = random.Random(42)
     starts = list(range(n))
     rng.shuffle(starts)
     starts = starts[:5] if n >= 5 else starts
+    if anchor is not None:
+        nearest = min(range(n), key=lambda i: leg_seconds(matrix, anchor, ORIGIN_INDEX, i))
+        starts = [nearest, *[s for s in starts if s != nearest]][:5]
 
     best_route: list[int] | None = None
     best_total = float("inf")
@@ -456,7 +521,7 @@ def _nn_2opt_multi(
     for start in starts:
         route = _nn_order(matrix, start, n)
         route = _two_opt(route, matrix)
-        total = _order_total(route, matrix, visits, round_trip)
+        total = _order_total(route, matrix, visits, round_trip, anchor)
         if budget_s is not None and total > budget_s:
             continue
         if total < best_total:
@@ -468,7 +533,7 @@ def _nn_2opt_multi(
         for start in starts:
             route = _nn_order(matrix, start, n)
             route = _two_opt(route, matrix)
-            total = _order_total(route, matrix, visits, round_trip)
+            total = _order_total(route, matrix, visits, round_trip, anchor)
             if total < best_total:
                 best_total = total
                 best_route = route
@@ -476,7 +541,7 @@ def _nn_2opt_multi(
 
     if best_route is None:
         best_route = list(range(n))
-        best_total = _order_total(best_route, matrix, visits, round_trip)
+        best_total = _order_total(best_route, matrix, visits, round_trip, anchor)
         best_walk = walk_cost(best_route, matrix)
 
     info.update(
@@ -541,8 +606,17 @@ def valhalla_order(
     costing: str,
     timeout: float | None = None,
     retries: int | None = None,
+    anchor: OriginAnchor | None = None,
 ) -> tuple[list[Candidate], dict[str, Any]]:
-    """Let Valhalla order the walk when nothing pins the sequence."""
+    """Let Valhalla order the walk when nothing pins the sequence.
+
+    Skipped when the tourist's position is known: `/optimized_route` reorders the
+    stops it is given and cannot be told where the walk starts, so it would undo
+    the anchor-aware order the optimizer just chose. The optimizer's own search is
+    exact up to six stops and good to twelve, which is the range the planner uses.
+    """
+    if anchor is not None:
+        return route, {**info, "valhalla_order": "skipped_origin_known"}
     if len(route) < 3:
         return route, info
     coords = [{"lat": c.lat, "lon": c.lon} for c in route]

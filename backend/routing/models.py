@@ -84,6 +84,10 @@ class ResolvedConstraints(BaseModel):
     must_visit_ids: list[int] = []
     time_budget_minutes: int | None = 120
     round_trip: bool = False
+    # Where the tourist is standing, when the device says. It is measurement data,
+    # not an agent concept: the walk out of and back to it is part of the tour, so
+    # the optimizer ranks orders by it and the budget counts it.
+    origin: LatLon | None = None
 
 
 class Candidate(BaseModel):
@@ -108,12 +112,27 @@ class Candidate(BaseModel):
     rrf_score: float = 0.0
 
 
+class OriginAnchor(BaseModel):
+    """The tourist's own position as a leg endpoint, measured beside the matrix.
+
+    It is deliberately *not* a row of ``CostMatrix``. The origin is not a stop —
+    it can never be dropped, reordered or pruned, and giving it an index would
+    shift every index the optimizer, the pruner and the measurement cache key
+    speak (``info["order"]``, ``CostMatrix.indices``, the Valhalla request
+    shapes). Two aligned vectors buy the same arithmetic without that.
+    """
+
+    from_origin: list[float] = []  # origin → candidate i, in seconds
+    to_origin: list[float] = []  # candidate i → origin, in seconds
+
+
 class CostMatrix(BaseModel):
-    """Walk cost matrix + per-place visit times."""
+    """Walk cost matrix + per-place visit times, and the origin's own legs."""
 
     walk_seconds: list[list[float]] = []
     visit_minutes: list[int] = []
     indices: list[int] = []
+    anchor: OriginAnchor | None = None
 
 
 class ValidatedPlan(BaseModel):

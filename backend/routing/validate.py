@@ -14,6 +14,8 @@ from typing import Any
 from core import constants
 from routing.models import Candidate, CostMatrix, ResolvedConstraints, ValidatedPlan
 
+from .cost import ORIGIN_INDEX, leg_seconds, route_legs
+
 
 def _leg_s(value: float) -> float:
     """Cell value with non-finite cells saturated to UNREACHABLE_S.
@@ -85,14 +87,24 @@ def validate(
 
     matrix = cost.walk_seconds
     visits = cost.visit_minutes
+    anchor = cost.anchor
 
-    legs = list(itertools.pairwise(order))
-    if constraints.round_trip and len(order) >= 2:
-        legs.append((order[-1], order[0]))
+    # The same legs `render` draws, the tourist's own included. Counting a
+    # different set here is how one answer came to carry two totals: a
+    # `walk_minutes` that included the walk out of their position and a
+    # `fits_budget` that did not.
+    legs = route_legs(order, constraints.round_trip, anchor)
 
-    walk = _leg_sum(matrix, order)
+    walk = _leg_sum(matrix, order)  # the pairwise chain
+    if anchor is not None and order:
+        walk += _leg_s(leg_seconds(matrix, anchor, ORIGIN_INDEX, order[0]))
     if constraints.round_trip and len(order) >= 2:
-        walk += _leg_s(matrix[order[-1]][order[0]])
+        # A round trip closes on the origin when it is known — as `render` draws it
+        # — and on the first stop when it is not.
+        if anchor is not None:
+            walk += _leg_s(leg_seconds(matrix, anchor, order[-1], ORIGIN_INDEX))
+        else:
+            walk += _leg_s(matrix[order[-1]][order[0]])
     visits_s = sum(visits[i] for i in order) * 60
     total = int(walk) + int(visits_s)
 
@@ -102,9 +114,9 @@ def validate(
     cats = {c.category for c in route if c.category}
     diversity = len(cats) / n if n else 0.0
 
-    max_leg = max((_leg_s(matrix[a][b]) for a, b in legs), default=0.0)
+    max_leg = max((_leg_s(leg_seconds(matrix, anchor, a, b)) for a, b in legs), default=0.0)
 
-    unknown_legs = sum(1 for a, b in legs if math.isnan(matrix[a][b]))
+    unknown_legs = sum(1 for a, b in legs if math.isnan(leg_seconds(matrix, anchor, a, b)))
 
     trace = {
         "algorithm": info.get("algorithm"),

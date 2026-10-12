@@ -9,12 +9,19 @@ from dataclasses import dataclass
 
 from core import constants
 from core.errors import NoRoutePossibleError, UpstreamUnavailableError
-from routing.models import Candidate, CategoryFacts, CostMatrix, ResolvedConstraints
+from routing.models import (
+    Candidate,
+    CategoryFacts,
+    CostMatrix,
+    LatLon,
+    OriginAnchor,
+    ResolvedConstraints,
+)
 from routing.valhalla.constants import costing_for
 from routing.valhalla.matrix import time_matrix
 from routing.valhalla.snap import snap_locations
 
-from .geometry import distance_m
+from .geometry import distance_m, distance_pt_m
 
 REASON_UNROUTABLE_LEG = "unroutable_leg"
 REASON_MUST_VISIT_UNROUTABLE = "must_visit_unroutable"
@@ -60,6 +67,38 @@ def visit_minutes_of(candidate: Candidate, facts: CategoryFacts) -> int:
     return visit_time_minutes(candidate.category, facts)
 
 
+def _measure_anchor(
+    origin: LatLon | None,
+    coords: list[dict[str, float]],
+    costing: str,
+    deadline: float | None,
+) -> OriginAnchor | None:
+    """Measure the tourist's own two legs, through the same matrix call as the rest.
+
+    Two extra requests, not two extra rows. An origin that cannot be measured —
+    the engine is down, the fix is off the network, the cells come back in an
+    unexpected shape — leaves the anchor absent, so the tour is measured exactly
+    as it was before an origin existed. A bad GPS fix must not turn a walkable
+    request into an infeasible one.
+    """
+    if origin is None or not coords:
+        return None
+    point = snap_locations([{"lat": origin.lat, "lon": origin.lon}], costing=costing)
+    try:
+        from_origin = time_matrix(point, coords, costing=costing, deadline=deadline)
+        to_origin = time_matrix(coords, point, costing=costing, deadline=deadline)
+    except UpstreamUnavailableError:
+        return None
+    if len(from_origin) != 1 or len(from_origin[0]) != len(coords):
+        return None
+    if len(to_origin) != len(coords) or any(len(row) != 1 for row in to_origin):
+        return None
+    return OriginAnchor(
+        from_origin=list(from_origin[0]),
+        to_origin=[row[0] for row in to_origin],
+    )
+
+
 def compute_cost_matrix(
     candidates: list[Candidate],
     constraints: ResolvedConstraints,
@@ -73,6 +112,7 @@ def compute_cost_matrix(
 
     coords = [{"lat": c.lat, "lon": c.lon} for c in candidates]
     coords = snap_locations(coords, costing=costing)
+    anchor = _measure_anchor(constraints.origin, coords, costing, deadline)
     try:
         matrix = time_matrix(coords, coords, costing=costing, deadline=deadline)
     except UpstreamUnavailableError:
@@ -109,6 +149,7 @@ def compute_cost_matrix(
         walk_seconds=matrix,
         visit_minutes=visits,
         indices=kept_original_idx,
+        anchor=anchor,
     )
 
 
@@ -120,10 +161,17 @@ def _usable_link(value: float) -> bool:
 
 
 def _sub_matrix(cost: CostMatrix, idx: list[int]) -> CostMatrix:
+    anchor = cost.anchor
+    if anchor is not None:
+        anchor = OriginAnchor(
+            from_origin=[anchor.from_origin[i] for i in idx],
+            to_origin=[anchor.to_origin[i] for i in idx],
+        )
     return CostMatrix(
         walk_seconds=[[cost.walk_seconds[i][j] for j in idx] for i in idx],
         visit_minutes=[cost.visit_minutes[i] for i in idx],
         indices=[cost.indices[i] for i in idx],
+        anchor=anchor,
     )
 
 
@@ -243,7 +291,47 @@ def total_seconds(order: list[int], matrix: list[list[float]], visit_minutes: li
     return int(walk_cost(order, matrix)) + visit_cost(order, visit_minutes)
 
 
-def _synthetic_cost(candidates: list[Candidate], costing: str, facts: CategoryFacts) -> CostMatrix:
+# The tourist's own position, as a leg endpoint. It is not an index into the
+# matrix: the origin is not a stop, so it never appears in `order`.
+ORIGIN_INDEX = -1
+
+
+def leg_seconds(matrix: list[list[float]], anchor: OriginAnchor | None, a: int, b: int) -> float:
+    """One leg's time in seconds; the origin has its own columns, not a row."""
+    if a == ORIGIN_INDEX:
+        return anchor.from_origin[b] if anchor is not None else constants.UNKNOWN_S
+    if b == ORIGIN_INDEX:
+        return anchor.to_origin[a] if anchor is not None else constants.UNKNOWN_S
+    return matrix[a][b]
+
+
+def route_legs(
+    order: list[int], round_trip: bool, anchor: OriginAnchor | None = None
+) -> list[tuple[int, int]]:
+    """Every leg of a route, the tourist's own legs included when they are known.
+
+    A round trip closes on the origin rather than on the first stop when the
+    origin is known — which is what ``render`` draws, so the arithmetic and the
+    drawn line measure the same walk instead of two different ones.
+    """
+    if not order:
+        return []
+    legs = list(itertools.pairwise(order))
+    if anchor is not None:
+        legs.insert(0, (ORIGIN_INDEX, order[0]))
+        if round_trip:
+            legs.append((order[-1], ORIGIN_INDEX))
+    elif round_trip and len(order) >= 2:
+        legs.append((order[-1], order[0]))
+    return legs
+
+
+def _synthetic_cost(
+    candidates: list[Candidate],
+    costing: str,
+    facts: CategoryFacts,
+    origin: LatLon | None = None,
+) -> CostMatrix:
     """A straight-line cost matrix for when Valhalla cannot answer."""
     speed_ms = 1.3 if costing_for(costing) == "pedestrian" else 8.0
     n = len(candidates)
@@ -252,10 +340,23 @@ def _synthetic_cost(candidates: list[Candidate], costing: str, facts: CategoryFa
         for j in range(n):
             if i != j:
                 matrix[i][j] = distance_m(candidates[i], candidates[j]) / speed_ms
+    anchor = None
+    if origin is not None:
+        # The origin's legs are estimated the same way, so a degraded fallback
+        # still budgets the walk out of and back to where the tourist stands.
+        anchor = OriginAnchor(
+            from_origin=[
+                distance_pt_m(origin.lat, origin.lon, c.lat, c.lon) / speed_ms for c in candidates
+            ],
+            to_origin=[
+                distance_pt_m(c.lat, c.lon, origin.lat, origin.lon) / speed_ms for c in candidates
+            ],
+        )
     return CostMatrix(
         walk_seconds=matrix,
         visit_minutes=[visit_minutes_of(c, facts) for c in candidates],
         indices=list(range(n)),
+        anchor=anchor,
     )
 
 
@@ -272,17 +373,18 @@ def refinement_cost(
     try:
         cost = compute_cost_matrix(route, constraints, costing, facts)
     except (UpstreamUnavailableError, NoRoutePossibleError):
-        return route, _synthetic_cost(route, costing, facts)
+        return route, _synthetic_cost(route, costing, facts, constraints.origin)
 
     if cost.indices != list(range(len(route))):
         aligned = [route[i] for i in cost.indices]
         if not base_ids <= {c.id for c in aligned}:
-            return route, _synthetic_cost(route, costing, facts)
+            return route, _synthetic_cost(route, costing, facts, constraints.origin)
         route = aligned
         cost = CostMatrix(
             walk_seconds=cost.walk_seconds,
             visit_minutes=cost.visit_minutes,
             indices=list(range(len(route))),
+            anchor=cost.anchor,
         )
     return route, cost
 

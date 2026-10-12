@@ -192,8 +192,10 @@ def plan_walk(
         must_visit_ids=keep,
         time_budget_minutes=budget_minutes,
         round_trip=round_trip,
+        origin=origin,
     )
     taxonomy = _facts(repos, facts)
+    info: dict[str, Any] = {}
 
     try:
         if keep:
@@ -209,6 +211,7 @@ def plan_walk(
                 costing=costing,
                 timeout=constants.VALHALLA_ORDER_TIMEOUT_S,
                 retries=constants.VALHALLA_ORDER_RETRIES,
+                anchor=cost.anchor,
             )
         planned = len(route)
         route, prune_report = prune_unroutable(route, candidates, cost, constraints.must_visit_ids)
@@ -216,7 +219,8 @@ def plan_walk(
         plan = validate(route, cost, constraints, info, prune_report=prune_report)
     except NoRoutePossibleError as exc:
         provenance["reason_code"] = "no_route_possible"
-        return envelope("plan_walk", [], provenance, error="no_route", message=str(exc))
+        message = _no_route_message(info, origin, str(exc))
+        return envelope("plan_walk", [], provenance, error="no_route", message=message)
 
     shape: dict[str, Any] = {}
     summary: dict[str, Any] = {}
@@ -252,6 +256,23 @@ def plan_walk(
     if answer.get("error") is None and answer.get("results"):
         cache.MEASURE_CACHE.put(key, answer)
     return answer
+
+
+def _no_route_message(info: dict[str, Any], origin: LatLon | None, fallback: str) -> str:
+    """Say why the walk could not be built, without blaming the engine for it.
+
+    Stops the budget rule could not fit leave the route too short to be a plan,
+    and the engine has nothing to do with that — so the message names the budget
+    and, when the tourist's own position is known and is what made the approach
+    expensive, the start.
+    """
+    if not info.get("stops_dropped"):
+        return fallback
+    where = " от точки старта" if origin is not None else ""
+    return (
+        f"Маршрут не влезает в отведённое время: даже без части остановок "
+        f"не хватает бюджета на дорогу{where}. Увеличьте время или начните ближе."
+    )
 
 
 def register_plan_walk(agent: Any, _remember: Remember) -> None:
