@@ -32,8 +32,6 @@ log = logging.getLogger(__name__)
 BRUTE_FORCE_MAX = 6
 REGRET_INSERTION_MAX = 12
 
-WALK_KMH = constants.PEDESTRIAN_SPEED_KMH
-
 
 def optimize(
     candidates: list[Candidate],
@@ -332,7 +330,7 @@ def _max_leg_seconds(budget_s: int | None, costing: str = "pedestrian") -> float
         return min(budget_s * constants.WALK_LEG_BUDGET_SHARE, ride_s)
     if costing != "pedestrian":
         return float(budget_s) if budget_s else constants.DRIVE_LEG_FALLBACK_S
-    km_limit_s = (constants.MAX_WALK_LEG_KM / WALK_KMH) * 3600
+    km_limit_s = (constants.MAX_WALK_LEG_KM / constants.PEDESTRIAN_SPEED_KMH) * 3600
     if budget_s is None:
         return km_limit_s
     return min(budget_s * constants.WALK_LEG_BUDGET_SHARE, km_limit_s)

@@ -46,6 +46,14 @@ VALHALLA_COSTINGS = frozenset(
 )
 _PROFILE_ALIASES = {"car": "auto", "drive": "auto", "walk": "pedestrian"}
 
+# No `costing_options` are sent, and that is a decision rather than an omission.
+# The engine's own per-costing defaults are mode-appropriate, and overriding the
+# pedestrian pace would move every measured time in every answer — a re-baseline
+# of the quality layers, not a tweak. The map panel (`frontend/src/utils/valhalla.ts`)
+# does send them; that is a different client, and the planner is deliberately not
+# tuned the same way. See `core/constants.py` for the paces the leg rule and the
+# offline fallback assume.
+
 
 def costing_for(profile: str | None) -> str:
     """The engine's name for a client's transport profile.
