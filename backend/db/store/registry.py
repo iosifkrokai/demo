@@ -13,6 +13,7 @@ from db.store.itineraries import PostgresItineraryRepository
 from db.store.places import PostgresPlaceRepository
 from db.store.stats import PostgresStatsRepository
 from db.store.taxonomy import PostgresCategoryRepository
+from db.store.threads import PostgresThreadRepository
 from db.store.users import PostgresUserRepository
 
 
@@ -33,6 +34,7 @@ class Repositories:
     itineraries: PostgresItineraryRepository = field(default_factory=PostgresItineraryRepository)
     users: PostgresUserRepository = field(default_factory=PostgresUserRepository)
     stats: PostgresStatsRepository = field(default_factory=PostgresStatsRepository)
+    threads: PostgresThreadRepository = field(default_factory=PostgresThreadRepository)
 
     def close(self) -> None:
         for repo in (
@@ -42,5 +44,6 @@ class Repositories:
             self.itineraries,
             self.users,
             self.stats,
+            self.threads,
         ):
             repo.close()

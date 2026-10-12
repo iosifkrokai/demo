@@ -12,7 +12,7 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
 
-from agent import client
+from agent import client, thread
 from api import deps, responses
 from api.models.routes import ExplainReq, GenerateReq, RerouteReq, RouteResponse
 from core import constants
@@ -52,10 +52,15 @@ def generate(req: GenerateReq, request: Request) -> RouteResponse:
 def _plan(req: GenerateReq, request: Request) -> RouteResponse:
     """One agent run, then the code's verdict on what it proposed."""
     repos = deps.get_repos(request)
-    refinement = bool(req.context and req.context.base_points)
+    brief = responses.reader_brief(req)
+    if req.session_id:
+        # The thread the client names is the journal the refinement reconciles
+        # against; the snapshot it re-sends is a fallback, not the authority.
+        brief = thread.reconcile_brief(repos.threads, thread_id=req.session_id, brief=brief)
+    refinement = bool(brief.context and brief.context.base_points)
     outcome = client.plan_with_agent(
         req.query,
-        responses.reader_brief(req),
+        brief,
         repos=repos,
         wall_clock_s=(constants.REFINE_DEADLINE_S if refinement else constants.REQUEST_DEADLINE_S),
     )
@@ -63,6 +68,15 @@ def _plan(req: GenerateReq, request: Request) -> RouteResponse:
         # No plan is not an empty plan: the caller is refused rather than given
         # a guess at what the tourist meant.
         raise InterpretationUnavailableError("the request could not be planned")
+
+    if req.session_id:
+        thread.record(
+            repos.threads,
+            thread_id=req.session_id,
+            query=req.query,
+            submission=outcome.submission.model_dump(mode="json"),
+            measurement=outcome.measured,
+        )
 
     facts = CategoryFacts.from_rows(repos.taxonomy.all())
     return responses.route_response(req, outcome, repos=repos, facts=facts)
