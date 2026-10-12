@@ -11,7 +11,12 @@ SHELL := /bin/bash
 .DEFAULT_GOAL := help
 
 COMPOSE := docker compose
-SEED    := $(COMPOSE) --profile seed run --rm seed
+# Build first, then run. The seed service lives under a compose profile, so
+# `make up` never rebuilds its image — left alone it drifts to code older than
+# the schema and then fails obscurely (`could not determine data type of
+# parameter $10`). With a warm BuildKit cache the build is ~20 s; a cold one
+# re-bakes the embedding model, which is what a correct build costs anyway.
+SEED    := $(COMPOSE) --profile seed build seed && $(COMPOSE) --profile seed run --rm seed
 BACKEND := cd backend && .venv/bin
 FRONTEND := cd frontend && npm
 

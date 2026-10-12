@@ -31,19 +31,22 @@ JSON, `--no-embed` skips the embedding pass.
 | Command | What it does |
 |---|---|
 | `python -m db.seed` | validate → upsert → embed → report (the normal path) |
-| `python -m db.seed fetch --source osm\|poi\|all` | re-acquire OSM rows over Overpass into `backend/db/backend/db/data/places/*.csv` — the only networked step |
+| `python -m db.seed fetch --source osm\|poi\|all` | re-acquire OSM rows over Overpass into `backend/db/data/places/*.csv` — the only networked step |
 | `python -m db.seed photos --apply` | resolve photo columns and write them into `places` |
 | `python -m db.seed prune` | list rows outside the project area (add `--apply` to delete) |
 | `python -m db.seed admin --email …` | create or promote the first administrator |
 
 `make seed` / `make fetch` / `make photos` / `make prune` / `make admin` wrap these
-and run them in the compose `seed` service.
+and run them in the compose `seed` service. They rebuild that image first: it sits
+under a compose profile, so `make up` never touches it and it would otherwise drift
+to code older than the schema. With a warm BuildKit cache the rebuild is seconds; a
+cold one re-bakes the embedding model and takes minutes — that is the build, not a hang.
 
 ## When it fails
 
 - **`relation "places" does not exist`** — the schema is missing or behind:
   `make migrate` first. Do not create tables by hand.
-- **"no photos on any place"** — the committed `backend/db/backend/db/data/photos/place_photos.json` was
+- **"no photos on any place"** — the committed `backend/db/data/photos/place_photos.json` was
   not applied; a plain `make seed` applies it. `make photos` re-resolves it from
   Wikimedia, which needs the network.
 - **rows missing after a fetch that looked fine** — the ingest quarantines rows
