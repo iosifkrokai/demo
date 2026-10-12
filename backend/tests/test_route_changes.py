@@ -192,6 +192,21 @@ def test_route_response_leaves_a_fresh_generation_without_changes() -> None:
     assert _built_response(None, [1, 2]).changes is None
 
 
+def test_the_reported_costing_is_the_one_the_line_was_drawn_with() -> None:
+    """The field is a Valhalla costing, not the client's word for the transport:
+    the contract carries the profile the tourist chose, and the client matches its
+    transport control on the engine's name."""
+    outcome = AgentOutcome(
+        submission=PlanSubmission(ordered_ids=[1]),
+        requirements=TripRequirements(costing="car"),
+        measured={"status": "ready", "results": [{"id": 1, "name": NAMES[1]}]},
+    )
+
+    response = route_response(outcome, repos=_Repos([1]), facts=CategoryFacts.from_rows([]))
+
+    assert response.costing == "auto"
+
+
 # --- which source the previous route comes from ------------------------------
 
 

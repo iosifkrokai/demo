@@ -82,13 +82,14 @@ Browser → nginx :80 (frontend container)
   │
   ├─ /routes/*, /places, ^/(auth|me|admin)/              → proxy → agent :8080
   │                           │
-  │               api.main → planner.Pipeline
+  │               api.main → agent.client.plan_with_agent
   │                           │
-  │  preprocess ─ interpret (PydanticAI over OpenRouter; refuses without a key)
-  │  resolve ─ retrieve (vector + keyword + must-visit, RRF fusion)
+  │  reader_brief ─ read (PydanticAI over OpenRouter; refuses without a key)
+  │  retrieve (vector + keyword + must-visit, RRF fusion)
   │             vector = LOCAL embeddings (db/embeddings/model.py, CPU ONNX)
-  │  geo-focus ─ diversity (MMR) ─ cost (Valhalla matrix) ─ optimize
-  │  validate ─ render (Valhalla /route) ─ explain ─ verify (deterministic)
+  │  opt-in: the model calls the tools — find_places / plan_walk / verify
+  │  plan_walk = cost (Valhalla matrix) ─ optimize ─ validate ─ render (Valhalla /route)
+  │  submit_plan = measure again ─ verify (deterministic) ─ the wire
   │
   └─ /route, /isochrone, /optimized_route, /status, /locate, /height, /tile
           → proxy → valhalla :8002
@@ -99,7 +100,7 @@ paths; the trailing slash on `/auth|/me|/admin/` is deliberate, so the *bare*
 `/admin`, `/login` and `/visited` stay SPA routes.
 
 The LLM layer is `backend/agent/` (client / llm / runner / tools / prompts); the
-Valhalla client is the `backend/planner/valhalla/` package, the place queries
+Valhalla client is the `backend/routing/valhalla/` package, the place queries
 `backend/db/store/places.py`.
 
 Two request fields change the shape of the answer:
@@ -108,8 +109,11 @@ Two request fields change the shape of the answer:
   no geometry, no ordering, no budget trim and no geo focus. Verification is
   membership-only (`verify_catalogue`), so a requirement chip can never claim
   «на маршруте» when no route exists.
-- `round_trip=true` — the tour closes on its own start; `render()` asks Valhalla
-  for the return leg and `validate()` counts it against the budget.
+- `round_trip=true` — the tour closes on the tourist's own position when the
+  device reports one, and on its first stop when it does not; `render()` draws that
+  return leg and `validate()` counts it against the budget. The walk out to the
+  first stop is counted the same way, so the budget covers every leg the tourist
+  actually walks.
 
 A refinement turn enters with the route as it stands and applies one typed
 operation (add / remove / reorder), or refuses with a reason code.
@@ -122,10 +126,10 @@ existing one is promoted; its password is left alone either way.
 
 ## Quality
 
-`backend/quality/` holds the three "is it still good?" layers — routes (geometry),
-compliance (did the request survive the pipeline) and evals (which stage is to
-blame) — plus the one-page readout `python -m quality.report`. See
-`backend/quality/README.md`.
+`backend/quality/` holds the four "is it still good?" layers — routes (geometry),
+compliance (did the request survive the pipeline), trajectory (did the run take a
+sane path) and evals (which stage is to blame) — plus the one-page readout
+`python -m quality.report`. See `backend/quality/README.md`.
 
 ## Smoke test
 
@@ -144,13 +148,13 @@ Apply it with `make migrate`.
 
 **`503 (valhalla ... sources_to_targets failed after retries)`.** Valhalla 3.5.1
 answers 500 `Could not find candidate edge used for label` for matrix shapes with
-`len(sources) >= 6 AND len(targets) >= 7`. `planner/valhalla/matrix.py` chunks around
+`len(sources) >= 6 AND len(targets) >= 7`. `routing/valhalla/matrix.py` chunks around
 it (`MATRIX_MAX_SOURCES` / `MATRIX_MAX_TARGETS`).
 
 **Route has no polyline / `length_km: null`.** `/route` answers 500 `Could not
 find candidate edge used for destination label` for some POI coordinates. Fixed by
 sending `radius: 100` per location (`LOCATION_SNAP_RADIUS_M` in
-`planner/valhalla/constants.py`).
+`routing/valhalla/constants.py`).
 
 **No semantic results (only keyword hits).** The rows have `embedding IS NULL`.
 `python -m db.seed` embeds everything locally — re-run it. (A missing

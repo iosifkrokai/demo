@@ -257,7 +257,9 @@ def route_response(
 
     walk_s = float(measured.get("walk_minutes") or 0) * 60
     length_km = measured.get("length_km")
-    costing = outcome.requirements.costing or "pedestrian"
+    # The contract holds the profile the tourist chose ("car"); the field is the
+    # costing the line was drawn with (`auto`), which is what the client matches on.
+    costing = costing_for(outcome.requirements.costing)
     narrative = outcome.submission.narrative or None
 
     offers = alternatives_for(costing=costing, walk_s=walk_s, length_km=length_km)
@@ -333,7 +335,7 @@ def _refusal_response(
         status="infeasible",
         requirements=contract.public_requirements(),
         interpretation=interpretation(contract, "infeasible"),
-        costing=outcome.requirements.costing or "pedestrian",
+        costing=costing_for(outcome.requirements.costing),
         changes=None,
         debug={
             "reason": "refused",
@@ -361,7 +363,7 @@ def no_route_response(req: GenerateReq, detail: str) -> RouteResponse:
         ),
         status="infeasible",
         requirements=[],
-        costing=req.profile or "pedestrian",
+        costing=costing_for(req.profile),
         changes=None,
         debug={"reason": "no_walkable_route", "detail": detail},
     )
