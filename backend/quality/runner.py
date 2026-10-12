@@ -33,18 +33,15 @@ BENCH_GOLDEN = QUALITY / "cases" / "compliance"
 BENCH_OUT = QUALITY / "reports"
 BENCH_SNAPSHOTS = BENCH_OUT / "snapshots"
 
-STATUSES = frozenset(
-    {
-        "ready",
-        "catalogue",
-        "degraded",
-        "pending",
-        "infeasible",
-        "rejected",
-        "needs_clarification",
-        "error",
-    }
-)
+# The statuses a golden case may EXPECT. They are exactly the wire's
+# `OverallStatus` (`api/models/routes.py`): the API emits `ready | infeasible |
+# degraded | pending`, and nothing else. `rejected`/`needs_clarification` are
+# gone with the old pipeline, and `catalogue` was never a status — a research
+# result is `result_mode`, checked separately by `expected_result_mode`.
+#
+# `derive_status` may still OBSERVE `error` when the backend fails; that is not a
+# legal expectation, so a case can never name it and a broken run fails loudly.
+STATUSES = frozenset({"ready", "degraded", "pending", "infeasible"})
 
 CHECK_API_ERROR = "api_error"
 CHECK_WRONG_STATUS = "wrong_status"
@@ -79,6 +76,8 @@ if str(BACKEND) not in sys.path:
 from core import constants as agent_constants  # noqa: E402
 from db.seed.geofence import inside_project_area  # noqa: E402
 from db.seed.taxonomy import all_categories  # noqa: E402
+from routing.models import Requirement, TripRequirements  # noqa: E402
+from routing.verify import overall_status  # noqa: E402
 
 # `quality` is a development tool and is not shipped, so it reads the taxonomy
 # from the dataset the seed projects rather than from the database.
@@ -574,51 +573,12 @@ def detour_km(our_distance_km: float | None, ref_distance_km: float | None) -> f
     return our_distance_km - ref_distance_km
 
 
-POOL_PROBE_PATHS: tuple[tuple[str, ...], ...] = (
-    ("debug", "trace", "candidates"),
-    ("debug", "candidates"),
-    ("candidates",),
-    ("debug", "trace", "candidate_ids"),
-    ("debug", "candidate_ids"),
-    ("pool",),
-)
-
-
-def _dig(raw: dict[str, Any], path: tuple[str, ...]):
-    cur = raw
-    for key in path:
-        if not isinstance(cur, dict) or key not in cur:
-            return None
-        cur = cur[key]
-    return cur
-
-
-def probe_stage1_pool(raw: dict[str, Any]) -> dict[str, Any] | None:
-    """Find a candidate pool in a response, if the API happens to expose one.
-
-    Returns {"path", "ids", "points"} or None; bare ids cannot be scored offline.
-    """
-    for path in POOL_PROBE_PATHS:
-        value = _dig(raw or {}, path)
-        if not isinstance(value, list) or not value:
-            continue
-        ids: list[int] = []
-        points: list[tuple[float, float]] = []
-        for item in value:
-            if isinstance(item, dict) and isinstance(item.get("id"), int):
-                ids.append(item["id"])
-                if isinstance(item.get("lat"), (int, float)) and isinstance(
-                    item.get("lon"), (int, float)
-                ):
-                    points.append((float(item["lat"]), float(item["lon"])))
-            elif isinstance(item, int):
-                ids.append(item)
-            else:
-                return None
-        if not ids:
-            return None
-        return {"path": ".".join(path), "ids": ids, "points": points or None}
-    return None
+# The wire (`api/models/routes.py::RouteResponse`) exposes exactly one candidate
+# list — `points`, the stops that made the route. The old `debug.trace.candidates`
+# pool is gone with the pipeline that built it, so the stage-1 split can only ever
+# be the route-points PROXY below: for each graded reference stop, the question is
+# whether any RETURNED stop sits within STAGE1_PROXY_RADIUS_M of it. There is no
+# pre-rerank pool to probe, and pretending otherwise would be a fabricated number.
 
 
 def _any_within(
@@ -640,17 +600,16 @@ def _any_within(
 def stage_split(
     golden: GoldenRoute,
     our_stops: list[OurStop],
-    pool: dict[str, Any] | None = None,
 ) -> StageSplit:
-    """Split one run's outcome into a retrieval proxy and an assembly number."""
-    if pool and pool.get("points"):
-        points = pool["points"]
-        source = "stage1_pool"
-        exposed = True
-    else:
-        points = [(s.lat, s.lon) for s in our_stops]
-        source = "route_points"
-        exposed = False
+    """Split one run's outcome into a retrieval proxy and an assembly number.
+
+    The wire exposes no pre-rerank pool, so stage 1 is always the route-points
+    proxy: the pool IS the route, and `pool_exposed` is False (see the note above
+    `_any_within`).
+    """
+    points = [(s.lat, s.lon) for s in our_stops]
+    source = "route_points"
+    exposed = False
 
     covered = _any_within(golden.stops, points, STAGE1_PROXY_RADIUS_M)
     n_cov = sum(covered)
@@ -729,56 +688,36 @@ def _duplicate_rule(name_a: str, name_b: str, dist_m: float) -> str | None:
 
 def leg_sanity(
     our_stops: list[OurStop],
-    trace: dict[str, Any],
     summary: dict[str, Any],
     raw: dict[str, Any],
 ) -> LegSanity:
-    """Is the returned route physically walkable?
+    """Is the returned route physically walkable, judging from the wire alone?
 
-    UNREACHABLE_S (1e9) is missing data, so `n_unreachable_legs` is a lower bound.
+    The old per-leg trace (`debug.trace.max_leg_seconds`, and the UNREACHABLE_S
+    sentinel it carried) went with the pipeline that produced it: the new wire
+    (`api/models/routes.py::RouteResponse`) has no matrix and no per-leg figure.
+    What remains is honest and offline — the straight-line hops between the
+    returned stops, the route's own drawn shape, and the duplicate-POI scan. A leg
+    over `MAX_WALK_LEG_KM` is still caught; the exact unreachable-hop count is NOT
+    measurable from the response any more, so `n_unreachable_legs` stays 0 rather
+    than being guessed at.
     """
     leg = LegSanity(n_stops=len(our_stops))
     points = [(s.lat, s.lon) for s in our_stops]
     leg.max_leg_km_straight = max_leg_km(points)
 
-    raw_leg = trace.get("max_leg_seconds")
-    if isinstance(raw_leg, (int, float)) and not isinstance(raw_leg, bool):
-        leg.max_leg_seconds = float(raw_leg)
-    leg.unreachable_sentinel = (
-        _saturated(leg.max_leg_seconds)
-        or _saturated(trace.get("walk_seconds"))
-        or _saturated(trace.get("total_seconds"))
-    )
-    if leg.unreachable_sentinel:
-        leg.n_unreachable_legs = 1
-
     length_km = summary.get("length_km")
     time_s = summary.get("time_seconds")
-    if (
-        isinstance(length_km, (int, float))
-        and isinstance(time_s, (int, float))
-        and length_km > 0
-        and time_s > 0
-    ):
+    if _is_num(length_km) and _is_num(time_s) and length_km > 0 and time_s > 0:
         leg.avg_speed_kmh = float(length_km) / (float(time_s) / 3600.0)
-        if leg.max_leg_seconds is not None:
-            leg.max_leg_km = leg.max_leg_seconds / 3600.0 * leg.avg_speed_kmh
 
-    for value in (leg.max_leg_km, leg.max_leg_km_straight):
-        if value is not None and value > MAX_WALK_LEG_KM:
-            leg.over_cap = True
-            break
+    if leg.max_leg_km_straight is not None and leg.max_leg_km_straight > MAX_WALK_LEG_KM:
+        leg.over_cap = True
 
     leg.duplicate_pairs = find_duplicate_stop_pairs(our_stops)
     leg.n_duplicate_stops = len(leg.duplicate_pairs)
     leg.geometry_missing = "shape" in (raw or {}) and not raw.get("shape")
     return leg
-
-
-def _saturated(value) -> bool:
-    if not isinstance(value, (int, float)) or isinstance(value, bool):
-        return False
-    return not math.isfinite(float(value)) or float(value) >= UNREACHABLE_S
 
 
 def build_request(
@@ -891,23 +830,25 @@ def score_response(
 
     summary = (raw or {}).get("summary") or {}
     budget_info = (raw or {}).get("budget") or {}
-    trace = ((raw or {}).get("debug") or {}).get("trace") or {}
-    result.intent_source = ((raw or {}).get("debug") or {}).get("intent_source")
+    # The wire names the request's reader in `interpretation.source`
+    # (`llm | mixed | explicit`); `debug.requirements_source` carries the same
+    # provenance. The old `debug.intent_source` went with the old pipeline.
+    interpretation = (raw or {}).get("interpretation") or {}
+    result.intent_source = interpretation.get("source") or ((raw or {}).get("debug") or {}).get(
+        "requirements_source"
+    )
     result.stops_dropped = int(budget_info.get("stops_dropped") or 0)
 
-    pool = probe_stage1_pool(raw or {})
-    if pool:
-        result.candidate_ids = pool["ids"]
-        result.candidate_ids_source = "stage1_pool"
-    else:
-        result.candidate_ids = [s.place_id for s in result.our_stops if s.place_id is not None]
-        result.candidate_ids_source = "route_points"
+    # The wire exposes no candidate pool: `points` are the stops that made the
+    # route, and that is all the harness can see (see the note above `_any_within`).
+    result.candidate_ids = [s.place_id for s in result.our_stops if s.place_id is not None]
+    result.candidate_ids_source = "route_points"
 
     _score_coverage(result)
     _score_reference(result)
     _score_budget(result, summary, budget_info)
-    result.stage = stage_split(golden, result.our_stops, pool)
-    result.leg = leg_sanity(result.our_stops, trace, summary, raw or {})
+    result.stage = stage_split(golden, result.our_stops)
+    result.leg = leg_sanity(result.our_stops, summary, raw or {})
     result.failures.extend(_leg_failures(result.leg))
     return result
 
@@ -1313,7 +1254,7 @@ CI_METRICS: tuple[tuple[str, str, int], ...] = (
     ("kendall_tau", "τ shared (vs reference walk)", 3),
     ("detour_km", "detour km", 3),
     ("walk_diff_min", "Δwalk min", 1),
-    ("leg.max_leg_km", "max leg km (from trace)", 2),
+    ("leg.max_leg_km_straight", "max leg km (straight)", 2),
     ("latency_s", "latency s", 2),
 )
 
@@ -1325,7 +1266,7 @@ COMPARE_METRICS: tuple[tuple[str, str], ...] = (
     ("kendall_tau", "τ shared"),
     ("detour_km", "detour km"),
     ("walk_diff_min", "Δwalk min"),
-    ("leg.max_leg_km", "max leg km"),
+    ("leg.max_leg_km_straight", "max leg km (straight)"),
 )
 
 
@@ -1739,15 +1680,16 @@ def write_json_report(
             "grades": (
                 f"grade weights {GRADE_WEIGHTS}; an ungraded stop counts as '{DEFAULT_GRADE}'."
             ),
-            "max_leg_km": (
-                "trace.max_leg_seconds converted at the route's own average speed; "
-                f"a value over MAX_WALK_LEG_KM={MAX_WALK_LEG_KM} is a leg-sanity "
-                "defect. The straight-line maximum is kept as an offline lower bound."
+            "max_leg_km_straight": (
+                "the longest straight-line hop between the returned stops. The wire "
+                "carries no per-leg figure any more (the old debug.trace.max_leg_seconds "
+                "went with the pipeline), so this is the offline leg-cap check: a value "
+                f"over MAX_WALK_LEG_KM={MAX_WALK_LEG_KM} is a leg-sanity defect. It is a "
+                "lower bound on the walked leg, not the walked leg itself."
             ),
             "n_unreachable_legs": (
-                "lower bound: the UNREACHABLE_S sentinel saturates the trace but "
-                "the matrix itself is not shipped, so the exact hop count is not "
-                "recoverable offline."
+                "NOT MEASURABLE from the wire: the new response carries no cost matrix "
+                "and no UNREACHABLE_S sentinel, so this stays 0 rather than being guessed."
             ),
             "duplicates": (
                 f"same POI twice inside one route: <{DUPLICATE_RADIUS_M:.0f} m "
@@ -2326,19 +2268,36 @@ def parity_groups(cases: list[GoldenCase]) -> dict[str, list[GoldenCase]]:
 
 
 def _status_from_requirements(requirements: list[Any]) -> str:
-    """Mirror of planner/verify.py::overall_status over a public requirements list.
+    """The plan's status, decided by the LIVE verifier — `routing.verify.overall_status`.
 
-    Restated so the benchmark can grade without importing the planner.
+    The response carries the public view of the contract (`kind`, `strength`,
+    `status`, `detail`), so it is rebuilt into a `TripRequirements` and handed to
+    the same function that runs in production. This used to be a hand-copied mirror
+    of the deleted `planner/verify.py::overall_status`, and it had drifted: it
+    called ANY unmet hard requirement `infeasible`, while the live code returns
+    `infeasible` only for the reasons in `INFEASIBLE_REASONS` (an unmet hard
+    requirement outside that set is merely `degraded`).
     """
-    hard = [r for r in requirements if isinstance(r, dict) and r.get("strength") == "hard"]
-    states = {str(r.get("status")) for r in hard}
-    if "unmet" in states:
-        return "infeasible"
-    if "uncertain" in states:
-        return "degraded"
-    if "pending" in states:
-        return "pending"
-    return "ready"
+    rebuilt: list[Requirement] = []
+    for r in requirements:
+        if not isinstance(r, dict) or not isinstance(r.get("kind"), str):
+            continue
+        try:
+            rebuilt.append(
+                Requirement(
+                    kind=r["kind"],
+                    strength=r.get("strength") or "soft",
+                    code=r.get("code"),
+                    name=r.get("name"),
+                    status=r.get("status") or "pending",
+                    place_ids=list(r.get("place_ids") or []),
+                    reason=r.get("detail"),
+                )
+            )
+        except Exception:
+            # A malformed verdict cannot be graded; skip it rather than crash the run.
+            continue
+    return overall_status(TripRequirements(requirements=rebuilt))
 
 
 def derive_status(
@@ -2352,9 +2311,11 @@ def derive_status(
     `source` records which rung was used; a derived status is never passed off as the API's.
     """
     if api_error or (http_status is not None and http_status >= HTTPStatus.BAD_REQUEST):
-        code = int(http_status or 0)
-        if HTTPStatus.BAD_REQUEST <= code < HTTPStatus.INTERNAL_SERVER_ERROR:
-            return "rejected", "http_status"
+        # A failed request is not a plan, and the wire has no `rejected` status: a
+        # genuine refusal comes back as HTTP 200 with `status="infeasible"`
+        # (`api/responses.py::no_route_response`). The harness names a broken
+        # request itself, and `error` is not a legal `expected_status` — so a case
+        # can never "expect" a backend failure.
         return "error", "api_error" if api_error else "http_status"
     raw = raw or {}
     explicit = raw.get("status")
@@ -3367,7 +3328,7 @@ def _print_run(rec: RunRecord, i: int, repeat: int, route: GoldenRoute) -> None:
         f"recall@K={r.recall_at_k:.3f} prec={r.precision:.3f} "
         f"τ={_f(r.kendall_tau, 3)} detour={_f(r.detour_km, 3)}km "
         f"Δwalk={_f(r.walk_diff_min, 1)}min fit={'✓' if r.budget_fit else '✗'} "
-        f"maxleg={_f(r.leg.max_leg_km, 2)}km dup={r.leg.n_duplicate_stops} "
+        f"maxleg={_f(r.leg.max_leg_km_straight, 2)}km dup={r.leg.n_duplicate_stops} "
         f"unr={r.leg.n_unreachable_legs} lat={r.latency_s:.2f}s"
     )
     for f in r.failures:

@@ -14,11 +14,11 @@
   "expectations": {
     "must_contain_categories": ["костёл", "церковь"],
     "must_not_contain_categories": [],
-    "expected_status": ["ready", "catalogue"],
+    "expected_status": ["ready", "degraded", "pending"],
     "expected_result_mode": "catalogue",
     "max_total_minutes": null,
     "in_region": true,
     "min_places": 10,
-    "status_note": "«все костёлы и церкви Гродненской области» — это каталог, а не прогулка: запрос называет ОБА кода (костёл и церковь) и требует области, поэтому оба должны присутствовать, а минимальное число мест взято заведомо выше одной короткой прогулки (в области их десятки). API пока не отдаёт ни result_mode, ни status, поэтому ожидание catalogue и expected_result_mode отмечаются как непроверяемые, а не как пройденные."
+    "status_note": "«все костёлы и церкви Гродненской области» — это каталог, а не прогулка: запрос называет ОБА кода (костёл и церковь) и требует области, поэтому оба должны присутствовать, а минимальное число мест взято заведомо выше одной короткой прогулки (в области их десятки). «catalogue» — это result_mode, а не статус, и новый API отдаёт и то, и другое: result_mode проверяет expected_result_mode, а статус берётся из ready|degraded|pending|infeasible."
   }
 }
