@@ -306,7 +306,7 @@ const SimulatedBadge = ({ active }: { active: boolean }) => {
   return (
     <p
       data-testid="guide-simulated"
-      className="flex items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 text-meta font-medium text-amber-900"
+      className="flex items-center gap-1.5 rounded-lg bg-warning/10 px-2.5 py-1.5 text-meta font-medium text-warning"
     >
       {t('sidebar.status.simulatedFix')}
     </p>
@@ -1405,7 +1405,7 @@ const NearbyHint = ({ service, distanceAhead, onDismiss }: NearbyHintProps) => {
       className="rounded-2xl border border-border bg-card p-3 shadow-card"
     >
       <div className="flex items-center gap-2.5">
-        <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-blue-50 text-blue-600">
+        <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-info/10 text-info">
           <ServiceIcon className="size-4" aria-hidden="true" />
         </span>
         <div className="min-w-0 flex-1">

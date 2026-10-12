@@ -5,6 +5,7 @@ export const mapArea = {
   ru: {
     map: {
       myLocation: 'Моё местоположение',
+      region: 'Карта',
       routeStart: 'старт маршрута',
       locateFailed: 'не удалось определить ваше местоположение',
       locateDenied: 'браузер запретил доступ к геолокации',
@@ -43,6 +44,7 @@ export const mapArea = {
   en: {
     map: {
       myLocation: 'My location',
+      region: 'Map',
       routeStart: 'route start',
       locateFailed: 'could not determine your location',
       locateDenied: 'the browser blocked access to geolocation',

@@ -64,6 +64,7 @@ const mockMapRef = vi.hoisted(() => ({
   fitBounds: vi.fn(),
   easeTo: vi.fn(),
   isEasing: vi.fn(() => false),
+  getContainer: vi.fn(() => null as HTMLElement | null),
   getMap: mockGetMap,
 }));
 
@@ -103,6 +104,7 @@ vi.mock('react-map-gl/maplibre', async () => {
 
         return (
           <div
+            role="presentation"
             data-testid="map"
             data-longitude={
               props.initialViewState?.longitude ?? props.longitude
@@ -146,6 +148,7 @@ vi.mock('react-map-gl/maplibre', async () => {
     ),
     Marker: vi.fn(({ children, longitude, latitude, onClick }) => (
       <div
+        role="presentation"
         data-testid="marker"
         data-lng={longitude}
         data-lat={latitude}
@@ -161,12 +164,14 @@ vi.mock('react-map-gl/maplibre', async () => {
     GeolocateControl: vi.fn(({ onError }) => (
       <div data-testid="geolocate-control">
         <button
+          type="button"
           data-testid="trigger-geolocate-error"
           onClick={() => onError?.({ PERMISSION_DENIED: false })}
         >
           Trigger Error
         </button>
         <button
+          type="button"
           data-testid="trigger-geolocate-permission-denied"
           onClick={() => onError?.({ PERMISSION_DENIED: true })}
         >
@@ -285,6 +290,7 @@ vi.mock('./parts/tool-button', () => ({
       'data-testid'?: string;
     }) => (
       <button
+        type="button"
         aria-label={title}
         title={title}
         onClick={onClick}
@@ -300,7 +306,9 @@ vi.mock('./parts/tool-button', () => ({
 vi.mock('./parts/map-context-menu', () => ({
   MapContextMenu: vi.fn(({ onAddWaypoint }) => (
     <div data-testid="map-context-menu">
-      <button onClick={() => onAddWaypoint(0)}>Add Waypoint</button>
+      <button type="button" onClick={() => onAddWaypoint(0)}>
+        Add Waypoint
+      </button>
     </div>
   )),
 }));
@@ -363,6 +371,16 @@ describe('MapComponent', () => {
       'data-attribution-control',
       'false'
     );
+  });
+
+  it('labels the map container as a named region', () => {
+    const container = document.createElement('div');
+    mockMapRef.getContainer.mockReturnValue(container);
+
+    render(<MapComponent />);
+
+    expect(container).toHaveAttribute('role', 'region');
+    expect(container).toHaveAttribute('aria-label', 'Карта');
   });
 
   it('держит верхний правый угол карты без кнопок', () => {

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import {
@@ -101,6 +101,39 @@ export const FerrostarNavigationHud = ({
   const [placeDetailsFor, setPlaceDetailsFor] = useState<string | null>(null);
   const placeDetailsOpen = nextStopId != null && placeDetailsFor === nextStopId;
 
+  const rootRef = useRef<HTMLElement>(null);
+  const restoreFocusRef = useRef<HTMLElement | null>(null);
+
+  /** Escape leaves the walk, doing what the HUD's own «выйти» does. */
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      onExit();
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [onExit]);
+
+  /** The HUD is full-screen: it takes focus and the planner behind it goes inert,
+      so a keyboard or a screen reader cannot wander back out until it closes. */
+  useEffect(() => {
+    restoreFocusRef.current =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
+    rootRef.current?.focus();
+
+    const app = document.getElementById('valhalla-app-root');
+    const alreadyInert = app?.hasAttribute('inert') ?? false;
+    app?.setAttribute('inert', '');
+    return () => {
+      if (!alreadyInert) app?.removeAttribute('inert');
+      restoreFocusRef.current?.focus();
+      restoreFocusRef.current = null;
+    };
+  }, []);
+
   /** Report a skipped suggestion to the panel, which owns the «skipped» set. */
   const dismissSuggestion = (id: string) => {
     if (onSkipSuggestion) onSkipSuggestion(id);
@@ -110,10 +143,12 @@ export const FerrostarNavigationHud = ({
 
   return createPortal(
     <section
+      ref={rootRef}
       data-testid="guide-panel"
       data-mode="moving"
+      tabIndex={-1}
       aria-label={t('guide.title')}
-      className="fixed inset-0 z-[100]"
+      className="fixed inset-0 z-[100] outline-none"
     >
       <div
         data-testid="guide-top-stack"

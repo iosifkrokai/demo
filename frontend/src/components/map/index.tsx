@@ -87,6 +87,7 @@ export const MapComponent = () => {
   );
   const toggleDirections = useCommonStore((state) => state.toggleDirections);
   const setMapReady = useCommonStore((state) => state.setMapReady);
+  const mapReady = useCommonStore((state) => state.mapReady);
   const { style } = useSearch({ from: '/$activeTab' });
   const [showContextPopup, setShowContextPopup] = useState(false);
   const [popupLngLat, setPopupLngLat] = useState<{
@@ -353,6 +354,15 @@ export const MapComponent = () => {
       essential: true,
     });
   }, [focusRequest]);
+
+  /** The map is a landmark: react-map-gl does not forward props to its
+      container, so the role and the name are set on it directly, once it exists. */
+  useEffect(() => {
+    const container = mapRef.current?.getContainer?.();
+    if (!container) return;
+    container.setAttribute('role', 'region');
+    container.setAttribute('aria-label', t('map.region'));
+  }, [mapReady, t]);
 
   useEffect(() => {
     const map = mapRef.current;

@@ -2,11 +2,12 @@ import { Link } from '@tanstack/react-router';
 import { Loader2, MapPinned, Plus, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { toast } from 'sonner';
 
 import { PlaceMap } from '@/components/place-map/place-map';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { useAuth } from '@/hooks/use-auth';
+import { describeAccountError, useAuth } from '@/hooks/use-auth';
 import { usePlaces } from '@/hooks/use-places';
 import { useToggleVisited, useVisited } from '@/hooks/use-visited';
 import { formatDate } from '@/i18n/format';
@@ -109,6 +110,16 @@ export function VisitedPage() {
               {t('visited.count', { count: visited.count })}
             </div>
 
+            {visited.error != null && (
+              <div
+                role="alert"
+                data-testid="visited-error"
+                className="rounded-2xl border border-destructive/40 bg-card px-3 py-2 text-meta text-destructive"
+              >
+                {t(describeAccountError(visited.error))}
+              </div>
+            )}
+
             {visited.items.length === 0 && (
               <p className="rounded-2xl border border-border bg-card px-3 py-2 text-meta text-muted-foreground">
                 {t('visited.empty')}
@@ -154,10 +165,16 @@ export function VisitedPage() {
                       data-testid={`visited-remove-${place.place_id}`}
                       disabled={toggle.isPending}
                       onClick={() =>
-                        toggle.mutate({
-                          placeId: place.place_id,
-                          visited: true,
-                        })
+                        toggle.mutate(
+                          {
+                            placeId: place.place_id,
+                            visited: true,
+                          },
+                          {
+                            onError: (error) =>
+                              toast.error(t(describeAccountError(error))),
+                          }
+                        )
                       }
                       className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-xl px-3 text-meta text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                     >
@@ -220,10 +237,16 @@ export function VisitedPage() {
                       data-testid={`visited-add-${place.place_id}`}
                       disabled={toggle.isPending}
                       onClick={() =>
-                        toggle.mutate({
-                          placeId: place.place_id,
-                          visited: false,
-                        })
+                        toggle.mutate(
+                          {
+                            placeId: place.place_id,
+                            visited: false,
+                          },
+                          {
+                            onError: (error) =>
+                              toast.error(t(describeAccountError(error))),
+                          }
+                        )
                       }
                     >
                       <Plus className="size-4" aria-hidden="true" />

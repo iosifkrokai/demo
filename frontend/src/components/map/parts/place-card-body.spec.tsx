@@ -78,7 +78,7 @@ describe('PlaceCardBody', () => {
   it('keeps a tap on the card from reaching the map underneath', () => {
     const onMapClick = vi.fn();
     render(
-      <div onClick={onMapClick}>
+      <div role="presentation" onClick={onMapClick}>
         <span data-testid="the-map" />
         <PlaceCardBody details={details()} onClose={() => {}} mobile />
       </div>

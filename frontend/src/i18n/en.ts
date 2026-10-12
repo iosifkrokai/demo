@@ -60,6 +60,8 @@ export const en: Dictionary = {
     closePanel: 'close the panel',
     build: 'Plan my route',
     cancel: 'Cancel',
+    delete: 'Delete',
+    close: 'Close',
   },
   guide: {
     enter: 'Walk this route',

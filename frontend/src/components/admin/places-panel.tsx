@@ -16,6 +16,7 @@ import {
 import type { AdminPlaceInput, Place } from '@/api/types';
 
 import { PlaceMap } from '@/components/place-map/place-map';
+import { InlineConfirm } from '@/components/parts/inline-confirm';
 
 import {
   fieldsOf,
@@ -85,8 +86,6 @@ export function PlacesPanel({ enabled }: { enabled: boolean }) {
   };
 
   const remove = (place: Place) => {
-    if (!window.confirm(t('admin.places.confirmDelete', { name: place.name })))
-      return;
     deletePlace.mutate(place.place_id, {
       onSuccess: () => {
         if (selectedId === place.place_id) setSelectedId(null);
@@ -261,6 +260,7 @@ export function PlacesPanel({ enabled }: { enabled: boolean }) {
                     {t('admin.fields.blurb')}
                     <textarea
                       rows={2}
+                      aria-label={t('admin.fields.blurb')}
                       value={draft.blurb}
                       onChange={(e) =>
                         setDraft({ ...draft, blurb: e.target.value })
@@ -340,17 +340,17 @@ export function PlacesPanel({ enabled }: { enabled: boolean }) {
                       <Pencil className="size-4" aria-hidden="true" />
                       {t('admin.places.edit')}
                     </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
+                    <InlineConfirm
                       data-testid={`admin-place-delete-${place.place_id}`}
-                      disabled={deletePlace.isPending}
-                      onClick={() => remove(place)}
-                      className="text-muted-foreground hover:text-destructive"
+                      question={t('admin.places.confirmDelete', {
+                        name: place.name,
+                      })}
+                      label={t('actions.delete')}
+                      busy={deletePlace.isPending}
+                      onConfirm={() => remove(place)}
                     >
                       <Trash2 className="size-4" aria-hidden="true" />
-                    </Button>
+                    </InlineConfirm>
                   </div>
                 </div>
               )}
@@ -427,7 +427,13 @@ function CreatePlaceForm({
         <span className="text-meta font-semibold">
           {t('admin.places.newPlace')}
         </span>
-        <Button type="button" size="icon-sm" variant="ghost" onClick={onCancel}>
+        <Button
+          type="button"
+          size="icon-sm"
+          variant="ghost"
+          onClick={onCancel}
+          aria-label={t('actions.close')}
+        >
           <X className="size-4" aria-hidden="true" />
         </Button>
       </div>

@@ -46,11 +46,18 @@ export const MobileShell = ({
     (s) => s.setDirectionsPanelOpen
   );
 
-  const { snap, height, dragHeight, dragging, handleProps, setSnap } =
-    useMobileSheetSnap(initialSnap, {
-      restingPx: guiding ? guidePx() : undefined,
-      onDismiss: () => setDirectionsPanelOpen(false),
-    });
+  const {
+    snap,
+    height,
+    keyboardInset,
+    dragHeight,
+    dragging,
+    handleProps,
+    setSnap,
+  } = useMobileSheetSnap(initialSnap, {
+    restingPx: guiding ? guidePx() : undefined,
+    onDismiss: () => setDirectionsPanelOpen(false),
+  });
 
   const guideCollapsed = guiding && snap === 'peek';
   const restingHeight = guideCollapsed ? MOBILE_GUIDE_HEIGHT : null;
@@ -116,7 +123,13 @@ export const MobileShell = ({
             SHEET_CLASS,
             guideCollapsed && 'bg-transparent border-t-transparent shadow-none'
           )}
-          style={{ height: sheetHeight } as CSSProperties}
+          style={
+            {
+              height: sheetHeight,
+              /* Ride above an open keyboard, so it cannot cover the sheet's input. */
+              ...(keyboardInset > 0 ? { bottom: keyboardInset } : {}),
+            } as CSSProperties
+          }
         >
           {panel ? (
             typeof panel === 'function' ? (

@@ -50,6 +50,12 @@
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
+  /* C7: the status tones — an unmet requirement (warning), a confirmed start
+     (success) and a neutral hint (info). Kept as tokens so no component has to
+     reach for the raw Tailwind palette. */
+  --color-warning: var(--warning);
+  --color-success: var(--success);
+  --color-info: var(--info);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
@@ -75,6 +81,11 @@
   --accent: #f7f7f7;
   --accent-foreground: #222222;
   --destructive: #c13515;
+  /* C7 status tones. Dark enough to clear AA when used as text on the white
+     card/background; `bg-warning/10`-style tints stay readable underneath. */
+  --warning: #b45309;
+  --success: #047857;
+  --info: #2563eb;
   --border: #ebebeb;
   --input: #ebebeb;
   --ring: #ff385c;

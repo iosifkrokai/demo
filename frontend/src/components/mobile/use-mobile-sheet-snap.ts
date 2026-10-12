@@ -31,10 +31,45 @@ const RESISTANCE = 0.3;
 /** Dragged this far below the strip, the release closes the panel. */
 const DISMISS_RATIO = 0.6;
 
-const viewportHeight = (): number =>
-  typeof window === 'undefined' || !window.innerHeight
-    ? 800
-    : window.innerHeight;
+/** The share of the viewport each position takes; `bar` is a fixed strip. */
+const SNAP_FRACTION: Record<MobileSnap, number | null> = {
+  bar: null,
+  peek: 0.39,
+  full: 0.9,
+};
+
+/** Whether the browser gives us a visual viewport to measure the keyboard by. */
+const hasVisualViewport = (): boolean =>
+  typeof window !== 'undefined' && window.visualViewport != null;
+
+/* `dvh` and `innerHeight` both miss the on-screen keyboard, so the sheet kept
+   its full height and the keyboard covered its input. `visualViewport.height`
+   is the visible height with the keyboard subtracted, so both the geometry and
+   the resting height are measured against it. */
+const viewportHeight = (): number => {
+  if (typeof window === 'undefined') return 800;
+  const visible = window.visualViewport?.height;
+  if (typeof visible === 'number' && visible > 0) return visible;
+  return window.innerHeight || 800;
+};
+
+/** How much of the window an open keyboard hides below the visual viewport. */
+const keyboardInset = (): number => {
+  if (typeof window === 'undefined') return 0;
+  const visible = window.visualViewport?.height;
+  if (typeof visible !== 'number' || visible <= 0) return 0;
+  return Math.max(0, Math.round(window.innerHeight - visible));
+};
+
+/** The sheet's resting height: the dvh constant, or the visual viewport's share
+    once one exists, so a keyboard shrinks the sheet instead of hiding its input. */
+const restingHeight = (position: MobileSnap, viewportPx: number): string => {
+  const fraction = SNAP_FRACTION[position];
+  if (fraction == null || !hasVisualViewport()) {
+    return MOBILE_SHEET_HEIGHT[position];
+  }
+  return `${Math.round(viewportPx * fraction)}px`;
+};
 
 const now = (): number =>
   typeof performance !== 'undefined' ? performance.now() : Date.now();
@@ -96,6 +131,8 @@ export interface MobileSheetSnap {
   snap: MobileSnap;
   /** The resting height of the current position, as CSS. */
   height: string;
+  /** Px the on-screen keyboard hides at the bottom; a host can lift the sheet by it. */
+  keyboardInset: number;
   /** The height under the finger right now, in px; null while it is not being dragged. */
   dragHeight: number | null;
   dragging: boolean;
@@ -123,8 +160,27 @@ export const useMobileSheetSnap = (
 ): MobileSheetSnap => {
   const [snap, setSnapState] = useState<MobileSnap>(initial);
   const [dragHeight, setDragHeight] = useState<number | null>(null);
+  const [viewportPx, setViewportPx] = useState(viewportHeight);
+  const [inset, setInset] = useState(keyboardInset);
   const gesture = useRef<Gesture | null>(null);
   const swallowClick = useRef(false);
+
+  /** Re-measure when the visual viewport changes — an open keyboard, chiefly. */
+  useEffect(() => {
+    const vv =
+      typeof window === 'undefined' ? undefined : window.visualViewport;
+    if (!vv) return;
+    const sync = () => {
+      setViewportPx(viewportHeight());
+      setInset(keyboardInset());
+    };
+    vv.addEventListener('resize', sync);
+    vv.addEventListener('scroll', sync);
+    return () => {
+      vv.removeEventListener('resize', sync);
+      vv.removeEventListener('scroll', sync);
+    };
+  }, []);
 
   const latest = useRef({ snap, restingPx, onDismiss });
   useEffect(() => {
@@ -255,7 +311,8 @@ export const useMobileSheetSnap = (
 
   return {
     snap,
-    height: MOBILE_SHEET_HEIGHT[snap],
+    height: restingHeight(snap, viewportPx),
+    keyboardInset: inset,
     dragHeight,
     dragging: dragHeight !== null,
     setSnap,
