@@ -8,9 +8,15 @@ surfaces, warm neutral greys (never blue-grey), one confident accent, big radii,
 1px hairline borders, soft layered shadows, lots of breathing room.
 
 Token variables are already wired: `--background --foreground --card --popover
---primary --secondary --muted --accent --destructive --border --input --ring
---radius`. Change the VALUES in `src/index.css`; components keep
-using `bg-card`, `text-muted-foreground`, `rounded-xl`, etc.
+--primary --secondary --muted --accent --destructive --warning --success --info
+--border --input --ring --radius`. Change the VALUES in `src/index.css`;
+components keep using `bg-card`, `text-muted-foreground`, `rounded-xl`, etc.
+
+A tone is only half-chosen until it is checked against the tint it will sit on:
+`text-warning` on `bg-warning/15` (and `text-info` on `bg-info/10`) is the pairing
+the verdicts and chips actually use, and AA against white says nothing about it.
+`src/design-tokens.spec.ts` pins those pairings — add the pairing, not just the
+value, when you add a tone.
 
 ## Tokens (`src/index.css`, `:root`)
 
@@ -21,17 +27,22 @@ using `bg-card`, `text-muted-foreground`, `rounded-xl`, etc.
 | `--card`                 | `#ffffff` | cards                                                |
 | `--muted`                | `#f7f7f7` | quiet fills, chip tracks, hover rows                 |
 | `--muted-foreground`     | `#717171` | secondary text, labels                               |
-| `--primary`              | `#d92d4f` | the accent (buttons, active states, route line)      |
+| `--primary`              | `#c82949` | the accent (buttons, active states, route line)      |
 | `--primary-foreground`   | `#ffffff` | text on accent                                       |
 | `--secondary`            | `#f7f7f7` | secondary buttons                                    |
 | `--secondary-foreground` | `#222222` |                                                      |
+| `--warning`              | `#a24b08` | degraded verdicts, over-budget chips                 |
+| `--success`              | `#047857` |                                                     |
+| `--info`                 | `#225ad6` |                                                     |
 | `--border`               | `#ebebeb` | hairlines                                            |
 | `--input`                | `#ebebeb` |                                                      |
 | `--ring`                 | `#ff385c` | focus ring                                           |
 | `--radius`               | `1rem`    | 16px base; `rounded-xl` → 20px, `rounded-2xl` → 24px |
 
 The accent was darkened from the brand `#ff385c` (3.52:1 on white) to `#d92d4f`
-(4.73:1) so white text on it passes WCAG AA; the hue is unchanged. Shadows are
+(4.73:1) so white text on it passes WCAG AA, and then to `#c82949` — the button
+face lightens on hover (`hover:bg-primary/90`), and white on the lightened fill
+was 4.17:1, under AA. The hue is unchanged. Shadows are
 tokens too — `--shadow-card`, `--shadow-float`, `--shadow-sheet`, with matching
 `.shadow-*` utilities. An arbitrary `shadow-[...]` in a component is a review
 failure: if a new elevation is genuinely needed, add a token to `:root` first.
