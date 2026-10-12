@@ -25,6 +25,7 @@ from agent.mapping import _merge
 from agent.models import ReaderBrief
 from agent.schema import PlanSubmission
 from api.models.routes import TransportLiteral
+from core import constants
 from core.errors import UpstreamUnavailableError
 from routing.cost import _synthetic_cost
 from routing.geometry import distance_m
@@ -96,11 +97,29 @@ def test_the_leg_rule_follows_the_costing_not_the_word() -> None:
     """Otherwise `profile="walk"` is measured as a walk but capped as a drive."""
     assert _max_leg_seconds(3600, "walk") == _max_leg_seconds(3600, "pedestrian")
     assert _max_leg_seconds(3600, "car") == _max_leg_seconds(3600, "auto")
-    assert _max_leg_seconds(3600, "walk") != _max_leg_seconds(3600, "bicycle")
+    # Above a 5-hour budget the distance rule is what binds, so the profiles
+    # differ; below it both are the quarter-budget share and they do not.
+    longest = constants.MAX_BUDGET_MIN * 60
+    assert _max_leg_seconds(longest, "pedestrian") != _max_leg_seconds(longest, "bicycle")
+
+
+def test_a_bicycle_leg_is_capped_by_riding_distance_not_by_the_budget() -> None:
+    """A bicycle used to get the driven rule: one leg could be the whole budget."""
+    ride = (constants.BICYCLE_LEG_KM / constants.BICYCLE_SPEED_KMH) * 3600
+    longest = constants.MAX_BUDGET_MIN * 60  # 8 h, so the distance rule binds
+
+    assert _max_leg_seconds(longest, "bicycle") == pytest.approx(ride)
+    # With no budget it is that same riding rule, not the four-hour driving
+    # fallback it used to inherit.
+    assert _max_leg_seconds(None, "bicycle") == pytest.approx(ride)
+    assert _max_leg_seconds(None, "bicycle") < constants.DRIVE_LEG_FALLBACK_S
+    # A driven tour is still bounded by its budget alone.
+    assert _max_leg_seconds(3 * 3600, "auto") == pytest.approx(3 * 3600)
 
 
 def test_the_synthetic_fallback_walks_at_the_pedestrian_speed() -> None:
-    """The offline fallback is a measurement too: an alias must not change its pace."""
+    """The offline fallback is a measurement too: an alias must not change its pace,
+    and each transport moves at one reviewable speed rather than at 4.68 or 28.8."""
     a, b = _candidate(1, 53.6771, 23.8258), _candidate(2, 53.6819, 23.8400)
     facts = CategoryFacts.from_rows([])
     metres = distance_m(a, b)
@@ -109,9 +128,9 @@ def test_the_synthetic_fallback_walks_at_the_pedestrian_speed() -> None:
     alias = _synthetic_cost([a, b], "walk", facts).walk_seconds
     bicycle = _synthetic_cost([a, b], "bicycle", facts).walk_seconds
 
-    assert pedestrian[0][1] == pytest.approx(metres / 1.3)
+    assert pedestrian[0][1] == pytest.approx(metres / (constants.PEDESTRIAN_SPEED_KMH / 3.6))
     assert alias == pedestrian
-    assert bicycle[0][1] == pytest.approx(metres / 8.0)
+    assert bicycle[0][1] == pytest.approx(metres / (constants.BICYCLE_SPEED_KMH / 3.6))
 
 
 # --- the last boundary that speaks to Valhalla ------------------------------

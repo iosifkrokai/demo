@@ -32,8 +32,7 @@ log = logging.getLogger(__name__)
 BRUTE_FORCE_MAX = 6
 REGRET_INSERTION_MAX = 12
 
-WALK_KMH = 4.0
-_DRIVE_LEG_FALLBACK_S = 4 * 3600
+WALK_KMH = constants.PEDESTRIAN_SPEED_KMH
 
 
 def optimize(
@@ -317,19 +316,26 @@ def _budget_constrain(
 def _max_leg_seconds(budget_s: int | None, costing: str = "pedestrian") -> float:
     """Maximum allowed time for a single leg, in seconds.
 
-    A walkability rule for pedestrian tours; a driven tour is bounded by the budget alone.
+    A walkability rule for pedestrian tours, a riding rule for bicycles, and the
+    budget alone for a driven tour. A bicycle used to get the driven rule — the
+    whole budget for one leg, or four hours with none — which made a "ride" of a
+    single 40 km hop something the optimizer would happily build.
     """
     # A raw alias ("walk", "drive") must not decide which rule applies: the
     # engine measures it as the costing the alias names, so the rule follows the
     # costing, not the word the caller happened to pass.
     costing = costing_for(costing)
+    if costing == "bicycle":
+        ride_s = (constants.BICYCLE_LEG_KM / constants.BICYCLE_SPEED_KMH) * 3600
+        if budget_s is None:
+            return ride_s
+        return min(budget_s * constants.WALK_LEG_BUDGET_SHARE, ride_s)
     if costing != "pedestrian":
-        return float(budget_s) if budget_s else _DRIVE_LEG_FALLBACK_S
-    if budget_s is None:
-        return (constants.MAX_WALK_LEG_KM / WALK_KMH) * 3600
-    budget_share_s = budget_s * constants.WALK_LEG_BUDGET_SHARE
+        return float(budget_s) if budget_s else constants.DRIVE_LEG_FALLBACK_S
     km_limit_s = (constants.MAX_WALK_LEG_KM / WALK_KMH) * 3600
-    return min(budget_share_s, km_limit_s)
+    if budget_s is None:
+        return km_limit_s
+    return min(budget_s * constants.WALK_LEG_BUDGET_SHARE, km_limit_s)
 
 
 def _max_leg(

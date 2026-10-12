@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import pytest
 
+from core import constants
+
 # Grodno's old town — a walk of a few hundred metres, not a tour of the oblast.
 OLD_TOWN = (53.6778, 23.8295)
 
@@ -135,6 +137,25 @@ def test_the_measure_key_carries_the_data_version() -> None:
 
     assert same == reordered
     assert same != bumped
+
+
+def test_the_measure_key_carries_the_ordering_regime() -> None:
+    """A run that skips the Valhalla re-order measures a different walk from the
+    same stops, so it must not be served the other regime's entry."""
+    from agent.tools.plan import _measure_key, _order_regime
+    from routing.models import LatLon
+
+    ordered = _measure_key([1, 2, 3], 60, "pedestrian", False, None, "ru", None, "v1")
+    skipped = _measure_key([1, 2, 3], 60, "pedestrian", False, None, "ru", None, "v1", "noorder")
+
+    assert ordered != skipped
+
+    # A tight deadline leaves no room for the re-order; a known origin makes the
+    # re-order wrong, because it cannot be told where the walk starts.
+    assert _order_regime(None, None) == "order"
+    assert _order_regime(constants.VALHALLA_ORDER_MIN_LEFT_S - 1, None) == "noorder"
+    assert _order_regime(60.0, None) == "order"
+    assert _order_regime(None, LatLon(lat=53.6771, lon=23.8258)) == "noorder"
 
 
 def test_a_data_version_bump_re_measures_instead_of_replaying(db_repos, monkeypatch) -> None:

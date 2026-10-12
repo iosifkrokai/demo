@@ -47,18 +47,21 @@ def _measure_key(
     locale: str,
     must_keep_ids: list[int] | None,
     data_version: str,
+    regime: str = "order",
 ) -> str:
     """The identity of one measurement: the stops, the profile and the budget.
 
-    The stops, profile, budget and round-trip are the core of it. Three more
-    fields are in it because they change the measured *result*, not just its
-    presentation: the origin (it decides the drawn line's start), the locale (the
-    shape's turn instructions are written in it) and the must-keep ids (they are
-    what survives pruning). The `data_version` is the seed's stamp on the projected
-    rows — the stops describe the request, but a re-seed can move a place under it,
-    and without the version the old measurement would be served for the new rows.
-    A hit on any of these with a different value would be a wrong answer, not a
-    cheap one.
+    The stops, profile, budget and round-trip are the core of it. Four more fields
+    are in it because they change the measured *result*, not just its presentation:
+    the origin (it decides the drawn line's start and the two legs that leave from
+    it), the locale (the shape's turn instructions are written in it), the
+    must-keep ids (they are what survives pruning) and the ordering *regime* — a
+    tight deadline skips the Valhalla re-order, and an origin skips it too, so the
+    same stops can be measured as two different walks. The `data_version` is the
+    seed's stamp on the projected rows — the stops describe the request, but a
+    re-seed can move a place under it, and without the version the old measurement
+    would be served for the new rows. A hit on any of these with a different value
+    would be a wrong answer, not a cheap one.
     """
     where = f"{origin.lat:.6f},{origin.lon:.6f}" if origin is not None else "-"
     keep = ",".join(str(i) for i in sorted(must_keep_ids or []))
@@ -73,8 +76,21 @@ def _measure_key(
             where,
             locale,
             keep,
+            regime,
         )
     )
+
+
+def _order_regime(deadline_s: float | None, origin: LatLon | None) -> str:
+    """Which ordering the run will end up with — part of what gets measured.
+
+    The Valhalla re-order runs only when the deadline leaves room for it and the
+    tourist's position is not known (`valhalla_order` cannot be told where a walk
+    starts, so it would undo an anchor-aware order). Two runs that differ here
+    measure different walks from the same stops, so they must not share a key.
+    """
+    room = deadline_s is None or deadline_s >= constants.VALHALLA_ORDER_MIN_LEFT_S
+    return "order" if room and origin is None else "noorder"
 
 
 def _data_version(repos: Any) -> str:
@@ -166,6 +182,7 @@ def plan_walk(
         locale,
         must_keep_ids,
         _data_version(repos),
+        _order_regime(deadline_s, origin),
     )
     cached = cache.MEASURE_CACHE.get(key)
     if cached is not None:

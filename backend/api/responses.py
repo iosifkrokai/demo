@@ -32,6 +32,7 @@ from routing.cost import visit_time_minutes
 from routing.models import Candidate, CategoryFacts
 from routing.render import render
 from routing.stops import candidate_of
+from routing.valhalla.constants import costing_for
 
 log = logging.getLogger(__name__)
 
@@ -444,7 +445,10 @@ def reroute_response(req: Any, *, repos: Any) -> RouteResponse:
         raise NoRoutePossibleError(f"unknown point_ids: {sorted(missing)}")
 
     candidates = [candidate_of(found[pid], 0.0) for pid in req.point_ids]
-    costing = req.profile or "pedestrian"
+    # Report the costing the line was actually drawn with: `render` resolves the
+    # client's profile to the engine's name, so a raw "car" here would name a
+    # transport the tour was never drawn for.
+    costing = costing_for(req.profile)
     shape, summary = render_tour(candidates, costing=costing, origin=None)
     walk_s = float((summary or {}).get("time", 0.0) or 0.0)
     return RouteResponse(

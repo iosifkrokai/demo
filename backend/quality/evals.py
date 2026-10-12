@@ -171,8 +171,10 @@ def run_services() -> dict[str, Any]:
             shape = raw["shape"]
             line = [(lat, lon) for lon, lat in shape["coordinates"]]
             codes = list(raw["categories"])
+            # Through `threshold_for`, not the table: a case may name any profile
+            # the wire offers, and the table only holds the four canonical keys.
             gate = float(
-                raw.get("gate_m") or services_mod.MAX_OFF_LINE_M[raw.get("profile", "pedestrian")]
+                raw.get("gate_m") or services_mod.threshold_for(raw.get("profile", "pedestrian"))
             )
 
             answer = places.services_along(

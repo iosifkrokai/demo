@@ -326,6 +326,20 @@ def route_legs(
     return legs
 
 
+def _fallback_speed_ms(costing: str) -> float:
+    """The straight-line pace to assume when the engine cannot answer.
+
+    One number per transport, from `core.constants` — the two that were here gave
+    a walk 4.68 km/h and a bicycle 28.8, neither of which is a pace anyone moves
+    at, and the bicycle's was nearly twice its real speed.
+    """
+    kmh = {
+        "pedestrian": constants.PEDESTRIAN_SPEED_KMH,
+        "bicycle": constants.BICYCLE_SPEED_KMH,
+    }.get(costing_for(costing), constants.AUTO_SPEED_KMH)
+    return kmh / 3.6
+
+
 def _synthetic_cost(
     candidates: list[Candidate],
     costing: str,
@@ -333,7 +347,7 @@ def _synthetic_cost(
     origin: LatLon | None = None,
 ) -> CostMatrix:
     """A straight-line cost matrix for when Valhalla cannot answer."""
-    speed_ms = 1.3 if costing_for(costing) == "pedestrian" else 8.0
+    speed_ms = _fallback_speed_ms(costing)
     n = len(candidates)
     matrix = [[0.0] * n for _ in range(n)]
     for i in range(n):
