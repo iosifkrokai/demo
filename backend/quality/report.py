@@ -19,6 +19,7 @@ REPORTS = QUALITY / "reports"
 SNAPSHOTS = REPORTS / "snapshots"
 COMPLIANCE = REPORTS / "compliance.json"
 EVALS_LAST = REPORTS / "evals_last.json"
+TRAJECTORY = REPORTS / "trajectory.json"
 VENV = BACKEND / ".venv" / "bin" / "python"
 
 STALE_DAYS = 14
@@ -197,8 +198,56 @@ def read_evals(path: Path | None = None) -> dict[str, Any]:
     }
 
 
+def read_trajectory(path: Path | None = None) -> dict[str, Any]:
+    """The trajectory layer: which tools the agent called, and with what arguments.
+
+    Written by ``python -m quality.trajectory``. It needs the database and
+    Valhalla, and a missing artifact means the layer was not measured — never a
+    green run.
+    """
+    path = path or TRAJECTORY
+    if not path.exists():
+        return {
+            "layer": "quality/cases/trajectory",
+            "measured": False,
+            "how": (
+                "./.venv/bin/python -m quality.trajectory "
+                "(нужны база данных и Valhalla: тулзы читают места и строят ноги)"
+            ),
+        }
+    data = json.loads(path.read_text(encoding="utf-8"))
+    summary = data.get("summary") or {}
+    cases = data.get("cases") or []
+    failed = [
+        {
+            "case": case.get("id"),
+            "why": ", ".join(case.get("failed") or []),
+            "detail": "; ".join(
+                f"{name}: {(case.get('checks') or {}).get(name, {}).get('detail', '')}"
+                for name in (case.get("failed") or [])
+            ),
+        }
+        for case in cases
+        if not case.get("passed")
+    ]
+    return {
+        "layer": "quality/cases/trajectory",
+        "measured": True,
+        "source": _relative_to_backend(path),
+        "taken": _mtime(path),
+        "age_days": _age_days(path),
+        "passed": summary.get("n_cases_passed"),
+        "total": summary.get("n_cases") or len(cases),
+        "failed_cases": failed,
+        "mode": data.get("mode"),
+    }
+
+
 def growth_points(
-    routes: dict[str, Any], golden: dict[str, Any], evals: dict[str, Any]
+    routes: dict[str, Any],
+    golden: dict[str, Any],
+    evals: dict[str, Any],
+    trajectory: dict[str, Any],
 ) -> list[dict[str, Any]]:
     """Everything known-bad, sorted by the number of cases affected.
 
@@ -237,6 +286,16 @@ def growth_points(
                 "detail": case.get("detail") or "",
                 "affects": 1,
                 "where": golden.get("source", "quality/cases/compliance"),
+            }
+        )
+
+    for case in trajectory.get("failed_cases") or []:
+        points.append(
+            {
+                "what": f"траектория не сошлась: {case['case']}",
+                "detail": case.get("detail") or case.get("why") or "",
+                "affects": 1,
+                "where": trajectory.get("source", "quality/cases/trajectory"),
             }
         )
 
@@ -291,7 +350,12 @@ NOT_MEASURED = [
 ]
 
 
-def render(routes: dict[str, Any], golden: dict[str, Any], evals: dict[str, Any]) -> str:
+def render(
+    routes: dict[str, Any],
+    golden: dict[str, Any],
+    evals: dict[str, Any],
+    trajectory: dict[str, Any],
+) -> str:
     out: list[str] = []
     out.append("")
     out.append("КАЧЕСТВО ГИДА — ОДНА СТРАНИЦА")
@@ -323,7 +387,9 @@ def render(routes: dict[str, Any], golden: dict[str, Any], evals: dict[str, Any]
             else f"выдержали {golden.get('passed')}/{golden.get('total')}"
         )
         out.append(f"{'quality/cases/compliance':<21} {number:<38} {golden['taken']}")
-        out.append(f"{'':<21} {'(выдержал ли запрос конвейер)':<38} {golden.get('mode') or ''}")
+        out.append(
+            f"{'':<21} {'(выдержал ли план условия запроса)':<38} {golden.get('mode') or ''}"
+        )
     else:
         out.append(f"{'quality/cases/compliance':<21} {'НЕ ИЗМЕРЯЛОСЬ':<38} —")
 
@@ -342,7 +408,16 @@ def render(routes: dict[str, Any], golden: dict[str, Any], evals: dict[str, Any]
     else:
         out.append(f"{'evals':<21} {'НЕ ИЗМЕРЯЛОСЬ':<38} —")
 
-    points = growth_points(routes, golden, evals)
+    if trajectory.get("measured"):
+        number = f"траектории {trajectory.get('passed')}/{trajectory.get('total')}"
+        out.append(f"{'quality/cases/trajectory':<21} {number:<38} {trajectory['taken']}")
+        out.append(
+            f"{'':<21} {'(какие тулзы агент звал и как)':<38} {trajectory.get('mode') or ''}"
+        )
+    else:
+        out.append(f"{'quality/cases/trajectory':<21} {'НЕ ИЗМЕРЯЛОСЬ':<38} —")
+
+    points = growth_points(routes, golden, evals, trajectory)
     out.append("")
     if points:
         out.append(f"ТОЧКИ РОСТА ({len(points)}) — по числу затронутых кейсов")
@@ -476,7 +551,8 @@ def main(argv: list[str] | None = None) -> int:
         )
 
     routes, golden, evals = read_routes(), read_golden(), read_evals()
-    print(render(routes, golden, evals))
+    trajectory = read_trajectory()
+    print(render(routes, golden, evals, trajectory))
 
     if args.json:
         args.json.parent.mkdir(parents=True, exist_ok=True)
@@ -486,7 +562,8 @@ def main(argv: list[str] | None = None) -> int:
                     "routes": routes,
                     "golden": golden,
                     "evals": evals,
-                    "growth_points": growth_points(routes, golden, evals),
+                    "trajectory": trajectory,
+                    "growth_points": growth_points(routes, golden, evals, trajectory),
                     "known_gaps": known_gaps(golden, evals),
                     "not_measured": NOT_MEASURED,
                 },
@@ -497,7 +574,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         print(f"машинный отчёт: {args.json}")
 
-    if not any(layer.get("measured") for layer in (routes, golden, evals)):
+    if not any(layer.get("measured") for layer in (routes, golden, evals, trajectory)):
         print(
             "ни один слой не измерялся — отчёт не о чем; см. колонку «НЕ ИЗМЕРЯЛОСЬ»",
             file=sys.stderr,

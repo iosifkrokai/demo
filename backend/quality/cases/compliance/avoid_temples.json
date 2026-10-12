@@ -14,7 +14,7 @@
   "expectations": {
     "must_contain_categories": ["парк"],
     "must_not_contain_categories": ["храм", "костёл", "церковь", "монастырь"],
-    "expected_status": ["ready", "needs_clarification"],
+    "expected_status": ["ready", "degraded", "pending"],
     "max_total_minutes": 180,
     "in_region": true
   }

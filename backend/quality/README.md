@@ -1,11 +1,12 @@
 # backend/quality — one place for "is it still good?"
 
-Three layers, three different questions:
+Four layers, four different questions:
 
 | Layer | Question | Cases | Artifact |
 |---|---|---|---|
 | **routes** (geometry) | is our walk close to a reference walk? | `cases/routes/*.json` | `reports/snapshots/*/report.json` |
-| **compliance** | did the request survive the pipeline? | `cases/compliance/*.json` | `reports/compliance.json` |
+| **compliance** | does the plan meet the conditions the request states? | `cases/compliance/*.json` | `reports/compliance.json` |
+| **trajectory** | which tools did the agent call, and with what arguments? | `cases/trajectory.jsonl` | `reports/trajectory.json` |
 | **evals** (flow stages) | which stage is to blame when the answer is bad? | `cases/*.jsonl` | `reports/evals_last.json` |
 
 The sets are deliberately **small and representative** — the highest-signal cases
@@ -18,8 +19,9 @@ cd backend
 .venv/bin/python -m quality               # geometry: live run (needs the stack)
 .venv/bin/python -m quality --replay DIR  # recompute from a recorded snapshot (offline)
 .venv/bin/python -m quality --golden      # compliance: live (needs the stack)
+.venv/bin/python -m quality.trajectory    # trajectory: scripted run (needs db + Valhalla)
 .venv/bin/python -m quality.evals         # the flow stages (offline ones run without a stack)
-.venv/bin/python -m quality.report        # the one-page readout over all three
+.venv/bin/python -m quality.report        # the one-page readout over all four
 ```
 
 Nothing generated is committed. `python -m quality.report` reads whatever the runs
@@ -30,14 +32,21 @@ non-zero when *no* layer has numbers.
 ## Cases
 
 * **routes** (`cases/routes/<id>.json`, `id == file stem`): one reference walk each —
-  stops with coordinates, a budget, an optional `case_meta.kind`, plus a
-  `refinement` block for `.refine.` cases and an `adversarial` block for the three
-  negative cases. Scored on recall (≤750 m), pool recall, order (`kendall_tau`),
-  detour, budget fit and leg sanity.
+  stops with coordinates, a budget, plus `case_meta`/`refinement`/`adversarial`
+  blocks for the `.refine.` cases and the negative (`adv_*`) cases. Scored on recall
+  (≤750 m), pool recall, order (`kendall_tau`), detour, budget fit and leg sanity.
 * **compliance** (`cases/compliance/<id>.json`): a request expressed as filters
   (categories, prohibitions, region, budget, RU/EN parity) and the conditions any
   acceptable answer must meet. The loader (`quality/runner.py`) refuses unknown
   keys, so a case cannot carry an expectation nothing checks. Field reference below.
+* **trajectory** (`cases/trajectory.jsonl`): a scripted model turn-by-turn, and the
+  tool calls the CODE actually made. A `FunctionModel` stands in for the provider
+  (the same trick `tests/conftest.py` uses), so the run is offline of any provider
+  and exact; the harness records each tool function the loop invoked, in order,
+  with its arguments and its answer, and checks every expectation by code — there
+  is no model and no judge. Needs the database and Valhalla (the tools read places
+  and route legs); when either is unreachable the layer writes no artifact and stays
+  «НЕ ИЗМЕРЯЛОСЬ».
 * **evals** (`cases/<stage>.jsonl`): `verdicts` (offline verifier), `services`
   (`services_along.jsonl`; PostGIS, needs the DB), `interpretation` (live model),
   `plan` (live app). Every line carries a `why`; a malformed line is a loud error,
@@ -78,9 +87,15 @@ non-zero when *no* layer has numbers.
 Every category value — in `filters` and in `expectations` — is a **canonical domain
 code** from `core/constants.CATEGORIES` (loaded from `data/taxonomy.csv`), never
 prose and never translated: an EN case carries the Russian code too. A code outside
-the set is a schema error, because it would silently grade nothing. Statuses:
-`ready`, `catalogue`, `degraded`, `pending`, `infeasible`, `rejected`,
-`needs_clarification`, `error`.
+the set is a schema error, because it would silently grade nothing.
+
+`expected_status` names the wire's `OverallStatus` — `ready`, `degraded`, `pending`,
+`infeasible` — and nothing else, because that is all `api/models/routes.py` emits.
+`result_mode` is not a status (`catalogue` belongs to `expected_result_mode`), and
+the old pipeline's `rejected`/`needs_clarification` no longer exist: a genuine
+refusal arrives as `200` with `status="infeasible"`. The harness may still OBSERVE
+`error` when the backend fails, but `error` is deliberately not a legal
+expectation — a case can never expect a broken run.
 
 Cases sharing a `parity_group` are one request in RU and EN: exactly one case per
 locale, identical `filters` and `expectations` (only `status_note` may differ), and
@@ -108,3 +123,18 @@ mandatory-category outcome; the stop lists are deliberately not compared.
 Human taste, the mobile card layout, tile translation, regions other than Grodno,
 and the real detour *minutes* to reach a point beside the line (`services` measures
 the distance to the line, not a Valhalla walk). These stay unmeasured on purpose.
+
+The new wire carries no per-leg trace (`debug` has no `trace` and no candidate
+pool), so two route metrics the old pipeline fed are no longer measurable from a
+response: the walked per-leg figure (only the straight-line hop between stops is
+checked) and the exact unreachable-hop count (`n_unreachable_legs` stays 0, never
+guessed). Both are reported as such in `report.json`'s `metric_notes`.
+
+## Baseline: there is nothing to compare against
+
+A numeric "it got better" against the **old pipeline** is no longer possible: that
+planner's code is deleted and survives only in git history, so a current run has no
+counterpart to diff. If that comparison is ever needed, `master` must be deployed
+separately and measured there — do not invent a baseline here. What this harness
+*docs* compare is one snapshot against another (`quality --compare A B`, a paired
+bootstrap over the cases they share), and a recorded run against a live one.

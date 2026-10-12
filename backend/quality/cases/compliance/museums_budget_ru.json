@@ -15,7 +15,7 @@
   "expectations": {
     "must_contain_categories": ["музей"],
     "must_not_contain_categories": [],
-    "expected_status": ["ready", "needs_clarification", "infeasible"],
+    "expected_status": ["ready", "degraded", "pending", "infeasible"],
     "max_total_minutes": 120,
     "in_region": true
   }
