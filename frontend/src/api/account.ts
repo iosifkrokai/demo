@@ -1,5 +1,6 @@
 /** The accounts / visits / admin API. */
 
+import { ApiError, request as agentRequest } from './request';
 import {
   STORAGE_DOWN_CODES,
   type AccountApiErrorCode,
@@ -15,9 +16,6 @@ import {
   type VisitedList,
   type VisitedPlace,
 } from './types';
-
-/** Same-origin by default; VITE_AGENT_URL only points at a remote agent. */
-const AGENT_URL = (import.meta.env.VITE_AGENT_URL as string | undefined) ?? '';
 
 /** A failed account call, carrying the agent's machine code rather than prose. */
 export class AccountApiError extends Error {
@@ -79,47 +77,23 @@ const codeFromStatus = (status: number): AccountApiErrorCode => {
   return 'bad_response';
 };
 
+/** Translate the shared transport error into the typed account error. */
+const asAccountError = (error: ApiError): AccountApiError =>
+  new AccountApiError(
+    reasonFromBody(error.body) ??
+      (error.status != null
+        ? codeFromStatus(error.status)
+        : 'network_unavailable'),
+    error.message,
+    error.status
+  );
+
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const headers = new Headers(init.headers);
-  if (init.body != null && !headers.has('Content-Type')) {
-    headers.set('Content-Type', 'application/json');
-  }
-
-  let response: Response;
   try {
-    response = await fetch(`${AGENT_URL}${path}`, {
-      ...init,
-      headers,
-      credentials: 'include',
-    });
-  } catch {
-    throw new AccountApiError(
-      'network_unavailable',
-      'агент недоступен — попробуйте позже'
-    );
-  }
-
-  if (!response.ok) {
-    const body: unknown = await response.json().catch(() => null);
-    const code = reasonFromBody(body) ?? codeFromStatus(response.status);
-    throw new AccountApiError(
-      code,
-      `агент ответил ${response.status}`,
-      response.status
-    );
-  }
-
-  if (response.status === 204) return undefined as T;
-  const text = await response.text();
-  if (!text) return undefined as T;
-  try {
-    return JSON.parse(text) as T;
-  } catch {
-    throw new AccountApiError(
-      'bad_response',
-      'агент ответил не JSON',
-      response.status
-    );
+    return await agentRequest<T>(path, init);
+  } catch (error) {
+    if (error instanceof ApiError) throw asAccountError(error);
+    throw error;
   }
 }
 

@@ -60,6 +60,7 @@ import { usePlaces } from '@/hooks/use-places';
 import type { Itinerary } from '@/api/types';
 import { formatNumber } from '@/i18n/format';
 import { newProgressId } from '@/api/progress';
+import { AGENT_URL } from '@/api/request';
 import { currentRunSession, startRunSession } from '@/utils/run-session';
 import { WaypointList } from './waypoint-list';
 import { Chip } from './parts/chip';
@@ -86,8 +87,6 @@ import {
 } from './parts/sheet-snap';
 import type { SheetHandleProps, SheetSnap } from './parts/sheet-snap';
 import { forward_geocode } from '@/utils/nominatim';
-
-const AGENT_URL = (import.meta.env.VITE_AGENT_URL as string | undefined) ?? '';
 
 /** Time-budget presets; 0 («без ограничения») sends no budget and builds the full route. */
 const buildTimeBudgetOptions = (t: TFunction) => [

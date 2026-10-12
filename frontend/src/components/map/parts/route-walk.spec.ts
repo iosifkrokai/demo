@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { metresBetween, splitAtPosition } from './route-walk';
+import { metresBetween } from '@/utils/geo';
+import { splitAtPosition } from './route-walk';
 
 /** A straight line south to north along the meridian: ~111.3 m per 0.001°. */
 const LINE: [number, number][] = [

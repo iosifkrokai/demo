@@ -1,5 +1,7 @@
 /** A walking tourist, without a phone. */
 
+import { metresBetween } from '@/utils/geo';
+
 export type SimPoint = readonly [number, number];
 
 /** Walking speed in metres per second — the number the ETA is built from. */
@@ -36,20 +38,6 @@ const state: SimState = {
   fix: { lat: 0, lon: 0, heading: null },
   subscribers: new Set(),
   timer: null,
-};
-
-/** Metres between two coordinates, using the guide's own equirectangular approximation. */
-export const metres = (
-  aLat: number,
-  aLon: number,
-  bLat: number,
-  bLon: number
-): number => {
-  const R = 6371000;
-  const dLat = ((bLat - aLat) * Math.PI) / 180;
-  const dLon = ((bLon - aLon) * Math.PI) / 180;
-  const midLat = ((aLat + bLat) / 2) * (Math.PI / 180);
-  return Math.sqrt((dLat * R) ** 2 + (dLon * R * Math.cos(midLat)) ** 2);
 };
 
 /** Is the simulation asked for, and how fast? */
@@ -91,7 +79,10 @@ const accumulate = (path: SimPoint[]): number[] => {
   for (let i = 1; i < path.length; i += 1) {
     const [aLat, aLon] = path[i - 1] as [number, number];
     const [bLat, bLon] = path[i] as [number, number];
-    marks.push(marks[i - 1]! + metres(aLat, aLon, bLat, bLon));
+    marks.push(
+      marks[i - 1]! +
+        metresBetween({ lat: aLat, lon: aLon }, { lat: bLat, lon: bLon })
+    );
   }
   return marks;
 };

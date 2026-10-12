@@ -1,10 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { metresBetween } from '@/utils/geo';
 import {
   currentFix,
   installGeoSim,
   isSimulating,
-  metres,
   readSimOptions,
   resetSim,
   setSimPath,
@@ -80,15 +80,26 @@ describe('the walk', () => {
     });
 
     const at = () => currentFix()!;
-    const before = metres(at().lat, at().lon, START[0], START[1]);
+    const before = metresBetween(
+      { lat: at().lat, lon: at().lon },
+      { lat: START[0], lon: START[1] }
+    );
 
     for (let i = 0; i < 60; i += 1) tick();
 
     const end = at();
-    expect(metres(end.lat, end.lon, NEXT[0], NEXT[1])).toBeLessThan(5);
-    expect(metres(end.lat, end.lon, START[0], START[1])).toBeGreaterThan(
-      before
-    );
+    expect(
+      metresBetween(
+        { lat: end.lat, lon: end.lon },
+        { lat: NEXT[0], lon: NEXT[1] }
+      )
+    ).toBeLessThan(5);
+    expect(
+      metresBetween(
+        { lat: end.lat, lon: end.lon },
+        { lat: START[0], lon: START[1] }
+      )
+    ).toBeGreaterThan(before);
     expect(seen.length).toBeGreaterThanOrEqual(58);
     expect(seen[seen.length - 1]!.lat).toBeCloseTo(end.lat, 6);
   });

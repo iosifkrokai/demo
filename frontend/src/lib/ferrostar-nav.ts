@@ -18,15 +18,20 @@ import type {
   Maneuver,
   ParsedDirectionsGeometry,
 } from '@/components/types';
-import { metresBetween } from '@/components/parts/guide-format';
+import { metresBetween } from '@/utils/geo';
 
 /** The WASM module's namespace, loaded once and shared by every session. */
 type FerrostarModule = typeof import('@stadiamaps/ferrostar');
 
 let modulePromise: Promise<FerrostarModule> | null = null;
 
-/** Load the WASM core. */
-const loadFerrostar = async (): Promise<FerrostarModule | null> => {
+/**
+ * Load the WASM core **on intent**. Nothing calls this at module import any more:
+ * importing the module must stay cheap for the visitors who never start
+ * navigation, and the WASM bundle is large. The promise is memoised, so the
+ * first caller pays for the download and every later session reuses it.
+ */
+export const loadFerrostar = async (): Promise<FerrostarModule | null> => {
   try {
     modulePromise ??= import('@stadiamaps/ferrostar');
     return await modulePromise;
@@ -35,9 +40,6 @@ const loadFerrostar = async (): Promise<FerrostarModule | null> => {
     return null;
   }
 };
-
-/** Resolves when Ferrostar is usable, or with `null` when it never became usable. */
-export const ferrostarReady: Promise<FerrostarModule | null> = loadFerrostar();
 
 interface LatLon {
   lat: number;
