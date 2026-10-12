@@ -12,6 +12,7 @@ from typing import Any
 from core import constants
 from core.errors import NoRoutePossibleError, UpstreamUnavailableError
 from routing.models import Candidate, CostMatrix, ResolvedConstraints
+from routing.valhalla.constants import costing_for
 from routing.valhalla.route import optimized_route as valhalla_optimized_route
 
 from .cost import prune_unroutable_stops, total_seconds, visit_cost, walk_cost
@@ -270,6 +271,10 @@ def _max_leg_seconds(budget_s: int | None, costing: str = "pedestrian") -> float
 
     A walkability rule for pedestrian tours; a driven tour is bounded by the budget alone.
     """
+    # A raw alias ("walk", "drive") must not decide which rule applies: the
+    # engine measures it as the costing the alias names, so the rule follows the
+    # costing, not the word the caller happened to pass.
+    costing = costing_for(costing)
     if costing != "pedestrian":
         return float(budget_s) if budget_s else _DRIVE_LEG_FALLBACK_S
     if budget_s is None:

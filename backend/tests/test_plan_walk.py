@@ -69,6 +69,45 @@ def test_must_keep_stops_are_never_dropped(db_repos) -> None:
         assert pinned[0] in {stop["id"] for stop in answer["results"]}
 
 
+def test_the_profile_reaches_the_engine(db_repos) -> None:
+    """A bicycle is not a walk of the same stops.
+
+    Two stops, so the order is trivial and both profiles measure the same pair —
+    whatever differs below can only come from the costing. The raw client profile
+    is resolved to the name the engine answers to, and that name is reported back.
+
+    The numbers are not ordered the naive way: Sovetskaya is a pedestrian street,
+    so the walk may take it directly (~130 m) while a bicycle must go around it
+    (~900 m). The assertion is therefore the honest one — the profile *changes the
+    measurement* — not "the bicycle is faster".
+    """
+    from agent.tools.plan import plan_walk
+
+    found = db_repos.places.nearby(OLD_TOWN[0], OLD_TOWN[1], radius_km=1.5, limit=2)
+    ids = [row.id for row in found if row.id is not None]
+    if len(ids) < 2:
+        pytest.skip("not enough places in the dataset to measure a pair")
+
+    walk = plan_walk(ids, repos=db_repos, budget_minutes=180, profile="pedestrian")
+    bike = plan_walk(ids, repos=db_repos, budget_minutes=180, profile="bicycle")
+    car = plan_walk(ids, repos=db_repos, budget_minutes=180, profile="car")
+
+    assert walk.get("error") is None, walk.get("message")
+    assert bike.get("error") is None, bike.get("message")
+
+    # "car" is not a Valhalla costing: it must have been resolved before the call.
+    assert walk["provenance"]["profile"] == "pedestrian"
+    assert bike["provenance"]["profile"] == "bicycle"
+    assert car["provenance"]["profile"] == "auto"
+
+    # The same pair, drawn by three costings: the transport is not a relabel.
+    assert {s["id"] for s in bike["results"]} == {s["id"] for s in walk["results"]}
+    assert (bike["length_km"], bike["walk_minutes"]) != (
+        walk["length_km"],
+        walk["walk_minutes"],
+    )
+
+
 def test_the_same_stops_are_measured_once(db_repos) -> None:
     """Valhalla is deterministic: the same stops and budget are a cache hit."""
     from agent.tools.plan import plan_walk

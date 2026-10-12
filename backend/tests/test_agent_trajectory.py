@@ -103,7 +103,7 @@ def test_the_wire_status_of_a_refusal_is_infeasible(fake_model: FakeModel, db_re
     assert outcome is not None
 
     response = route_response(
-        req, outcome, repos=db_repos, facts=CategoryFacts.from_rows(db_repos.taxonomy.all())
+        outcome, repos=db_repos, facts=CategoryFacts.from_rows(db_repos.taxonomy.all())
     )
 
     assert response.status == "infeasible"

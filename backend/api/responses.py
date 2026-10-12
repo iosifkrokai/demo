@@ -233,7 +233,6 @@ def render_tour(
 
 
 def route_response(
-    req: GenerateReq,
     outcome: AgentOutcome,
     *,
     repos: Any,
@@ -251,13 +250,13 @@ def route_response(
     measured = outcome.measured
 
     if outcome.refused:
-        return _refusal_response(req, outcome, deadline=deadline)
+        return _refusal_response(outcome, deadline=deadline)
 
     route = _ordered_candidates(repos, outcome)
 
     walk_s = float(measured.get("walk_minutes") or 0) * 60
     length_km = measured.get("length_km")
-    costing = outcome.submission.profile or req.profile or "pedestrian"
+    costing = outcome.requirements.costing or "pedestrian"
     narrative = outcome.submission.narrative or None
 
     offers = alternatives_for(costing=costing, walk_s=walk_s, length_km=length_km)
@@ -307,7 +306,7 @@ DEFAULT_REFUSAL = (
 
 
 def _refusal_response(
-    req: GenerateReq, outcome: AgentOutcome, *, deadline: dict[str, Any] | None = None
+    outcome: AgentOutcome, *, deadline: dict[str, Any] | None = None
 ) -> RouteResponse:
     """The agent said the request cannot be served: infeasible, with its reason.
 
@@ -333,7 +332,7 @@ def _refusal_response(
         status="infeasible",
         requirements=contract.public_requirements(),
         interpretation=interpretation(contract, "infeasible"),
-        costing=outcome.submission.profile or req.profile or "pedestrian",
+        costing=outcome.requirements.costing or "pedestrian",
         changes=None,
         debug={
             "reason": "refused",

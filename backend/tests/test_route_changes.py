@@ -20,7 +20,7 @@ from agent import thread
 from agent.client import AgentOutcome
 from agent.models import BriefStop, RefinementBrief
 from agent.schema import PlanSubmission
-from api.models.routes import GenerateReq, ParsedQuery, Place, RouteResponse, RouteSummary
+from api.models.routes import ParsedQuery, Place, RouteResponse, RouteSummary
 from api.responses import route_changes, route_response
 from api.routers import routes as routes_api
 from db.models.place import Place as PlaceRow
@@ -173,7 +173,6 @@ def _built_response(previous: tuple[BriefStop, ...] | None, final: list[int]) ->
         },
     )
     return route_response(
-        GenerateReq(query="добавь кофе"),
         outcome,
         repos=_Repos([1, 2, 3, 4, 5]),
         facts=CategoryFacts.from_rows([]),
@@ -263,7 +262,7 @@ def test_generate_diffs_against_the_journals_last_turn(monkeypatch) -> None:
 
     seen: dict[str, Any] = {}
 
-    def fake_response(req: Any, outcome: Any, **kwargs: Any) -> RouteResponse:
+    def fake_response(outcome: Any, **kwargs: Any) -> RouteResponse:
         seen["previous"] = kwargs.get("previous")
         return RouteResponse(parsed=ParsedQuery(), points=[], shape={}, summary=RouteSummary())
 

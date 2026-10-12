@@ -126,7 +126,7 @@ def plan_with_agent(
         repos=repos,
         facts=deps.facts,
         budget_minutes=contract.budget_minutes,
-        profile=submission.profile,
+        profile=contract.costing or "pedestrian",
         origin=_origin(brief),
         round_trip=submission.round_trip or brief.round_trip,
         must_keep_ids=keep,

@@ -137,7 +137,7 @@ def _plan(req: GenerateReq, request: Request) -> RouteResponse:
         )
 
     facts = CategoryFacts.from_rows(repos.taxonomy.all())
-    return responses.route_response(req, outcome, repos=repos, facts=facts, previous=previous)
+    return responses.route_response(outcome, repos=repos, facts=facts, previous=previous)
 
 
 @router.get("/routes/threads/{session_id}", response_model=ThreadResponse)

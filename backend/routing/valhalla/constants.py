@@ -26,6 +26,12 @@ MATRIX_MAX_TARGETS = 5
 # What the engine answers to. A client's profile is not a costing: the wire says
 # "car", Valhalla says `auto`, and a name it does not know is a 400 rather than a
 # fallback — which is how a car request ended up with every leg unmeasured.
+#
+# The list is what this tile build can actually route, and nothing more.
+# `multimodal` is deliberately absent: it needs transit (GTFS) tiles, and the
+# stack is built from an OSM extract alone (docker-compose.yml), so it can only
+# answer 400 — "locations are in unconnected regions". The remaining costings
+# were each confirmed live against the running engine.
 VALHALLA_COSTINGS = frozenset(
     {
         "auto",
@@ -33,7 +39,6 @@ VALHALLA_COSTINGS = frozenset(
         "bus",
         "motorcycle",
         "motor_scooter",
-        "multimodal",
         "pedestrian",
         "taxi",
         "truck",
@@ -46,7 +51,8 @@ def costing_for(profile: str | None) -> str:
     """The engine's name for a client's transport profile.
 
     An unknown or unsupported profile becomes a walk: the one costing this
-    dataset is certainly routable with.
+    dataset is certainly routable with. Every caller that hands a name to the
+    engine goes through here, so a raw alias can never reach it.
     """
     name = (profile or "pedestrian").strip().lower()
     name = _PROFILE_ALIASES.get(name, name)

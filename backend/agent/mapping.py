@@ -183,7 +183,7 @@ def _merge(
         raw_query=query,
         party=party,
         budget_minutes=budget,
-        costing=brief.profile,
+        costing=brief.profile or reading.profile or None,
         origin_lat=brief.origin[0] if brief.origin is not None else None,
         origin_lon=brief.origin[1] if brief.origin is not None else None,
         areas=areas,

@@ -115,6 +115,7 @@ def optimized_route(
 
     Returns (order, shape, summary); order[i] indexes into `locations`.
     """
+    costing = costing_for(costing)
     snapped = snap.snap_locations(locations, costing, timeout)
     payload = {
         "costing": costing,

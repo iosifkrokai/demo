@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from core import constants
 from core.errors import NoRoutePossibleError, UpstreamUnavailableError
 from routing.models import Candidate, CategoryFacts, CostMatrix, ResolvedConstraints
+from routing.valhalla.constants import costing_for
 from routing.valhalla.matrix import time_matrix
 from routing.valhalla.snap import snap_locations
 
@@ -244,7 +245,7 @@ def total_seconds(order: list[int], matrix: list[list[float]], visit_minutes: li
 
 def _synthetic_cost(candidates: list[Candidate], costing: str, facts: CategoryFacts) -> CostMatrix:
     """A straight-line cost matrix for when Valhalla cannot answer."""
-    speed_ms = 1.3 if costing == "pedestrian" else 8.0
+    speed_ms = 1.3 if costing_for(costing) == "pedestrian" else 8.0
     n = len(candidates)
     matrix = [[0.0] * n for _ in range(n)]
     for i in range(n):

@@ -32,6 +32,7 @@ from routing.models import CategoryFacts, LatLon, ResolvedConstraints
 from routing.optimize import optimize, order_after_prune, prune_unroutable, valhalla_order
 from routing.render import render
 from routing.stops import candidate_of
+from routing.valhalla.constants import costing_for
 from routing.validate import validate
 
 MAX_STOPS_PER_CALL = constants.VALHALLA_MAX_LOCATIONS
@@ -126,9 +127,14 @@ def plan_walk(
     deadline_s: float | None = None,
 ) -> dict[str, Any]:
     """Order and measure. Never raises: a walk that cannot be built is reported."""
+    # The client's profile is not the engine's costing ("car" is `auto` there).
+    # Resolve it once, here: everything below — the matrix, the optimizer's leg
+    # rule, the ordering pass, the drawn line, the cache key and the provenance —
+    # then speaks the one name Valhalla answers to.
+    costing = costing_for(profile)
     provenance: dict[str, Any] = {
         "source": "places+valhalla",
-        "profile": profile,
+        "profile": costing,
         "round_trip": round_trip,
         "budget_minutes": budget_minutes,
         "result_cap": MAX_STOPS_PER_CALL,
@@ -154,7 +160,7 @@ def plan_walk(
     key = _measure_key(
         wanted,
         budget_minutes,
-        profile,
+        costing,
         round_trip,
         origin,
         locale,
@@ -191,16 +197,16 @@ def plan_walk(
 
     try:
         if keep:
-            candidates, cost = refinement_cost(candidates, constraints, profile, taxonomy)
+            candidates, cost = refinement_cost(candidates, constraints, costing, taxonomy)
         else:
-            candidates, cost = build_cost(candidates, constraints, profile, taxonomy)
-        route, info = optimize(candidates, cost, constraints, costing=profile)
+            candidates, cost = build_cost(candidates, constraints, costing, taxonomy)
+        route, info = optimize(candidates, cost, constraints, costing=costing)
 
         if deadline_s is None or deadline_s >= constants.VALHALLA_ORDER_MIN_LEFT_S:
             route, info = valhalla_order(
                 route,
                 info,
-                costing=profile,
+                costing=costing,
                 timeout=constants.VALHALLA_ORDER_TIMEOUT_S,
                 retries=constants.VALHALLA_ORDER_RETRIES,
             )
@@ -216,7 +222,7 @@ def plan_walk(
     summary: dict[str, Any] = {}
     try:
         shape, summary, _status = render(
-            route, costing=profile, origin=origin, locale=locale, round_trip=round_trip
+            route, costing=costing, origin=origin, locale=locale, round_trip=round_trip
         )
     except UpstreamUnavailableError:
         provenance["geometry"] = "valhalla unavailable"
