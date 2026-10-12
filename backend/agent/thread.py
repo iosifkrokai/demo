@@ -29,7 +29,7 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 
-__all__ = ["journal_stops", "reconcile", "reconcile_brief", "record"]
+__all__ = ["journal_stops", "previous_stops", "reconcile", "reconcile_brief", "record"]
 
 
 def journal_stops(turn: Turn | None) -> tuple[BriefStop, ...]:
@@ -74,6 +74,34 @@ def reconcile(context: RefinementBrief | None, recorded: Turn | None) -> Refinem
         excluded_ids=context.excluded_ids,
         base_points=tuple(base),
     )
+
+
+def previous_stops(
+    repo: ThreadRepository,
+    *,
+    thread_id: str | None,
+    context: RefinementBrief | None,
+) -> tuple[BriefStop, ...]:
+    """The route a refinement starts from: the journal's, or the client's snapshot.
+
+    The journal is the server's own record of the route it actually returned, so
+    where the thread has a turn it is the authority on what the previous route
+    was. The base points the client re-sends are its own claim, and stand only for
+    a thread the journal has nothing for. Best-effort, like every other journal
+    read: an unreadable one falls back to the snapshot rather than failing the
+    turn, and a fresh request (no refinement) has no previous route at all.
+    """
+    if context is None:
+        return ()
+    if thread_id:
+        try:
+            recorded = repo.latest(thread_id)
+        except StorageUnavailableError as exc:
+            log.warning("thread %s: journal unreadable (%s)", thread_id, exc)
+            recorded = None
+        if recorded is not None:
+            return journal_stops(recorded)
+    return context.base_points
 
 
 def reconcile_brief(repo: ThreadRepository, *, thread_id: str, brief: ReaderBrief) -> ReaderBrief:

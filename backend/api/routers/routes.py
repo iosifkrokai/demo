@@ -13,6 +13,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Request
 
 from agent import client, thread
+from agent.models import BriefStop
 from api import deps, responses
 from api.models.routes import ExplainReq, GenerateReq, RerouteReq, RouteResponse
 from core import constants
@@ -73,6 +74,15 @@ def _plan(req: GenerateReq, request: Request) -> RouteResponse:
         # a guess at what the tourist meant.
         raise InterpretationUnavailableError("the request could not be planned")
 
+    # What the response says the refinement changed is judged against the route
+    # it started from — read before this turn is recorded, so "the previous
+    # route" is the last completed turn, not the one about to be written.
+    previous: tuple[BriefStop, ...] = ()
+    if brief.context is not None:
+        previous = thread.previous_stops(
+            repos.threads, thread_id=req.session_id, context=brief.context
+        )
+
     if req.session_id:
         thread.record(
             repos.threads,
@@ -83,7 +93,7 @@ def _plan(req: GenerateReq, request: Request) -> RouteResponse:
         )
 
     facts = CategoryFacts.from_rows(repos.taxonomy.all())
-    return responses.route_response(req, outcome, repos=repos, facts=facts)
+    return responses.route_response(req, outcome, repos=repos, facts=facts, previous=previous)
 
 
 @router.post("/routes/reroute", response_model=RouteResponse)
