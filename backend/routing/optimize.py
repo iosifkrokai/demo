@@ -57,6 +57,16 @@ def optimize(
         )
     if n == 2:
         order = [0, 1] if not must_idx else (must_idx + [i for i in range(2) if i not in must_idx])
+        if anchor is not None:
+            # Two stops have no order worth searching, but they do have a
+            # direction: the walk out of the tourist's position and the walk back
+            # are the tour, so enter it from the nearer end. A must-visit stop is
+            # protected from being *dropped*, not from being second.
+            flipped = order[::-1]
+            if _order_total(flipped, matrix, visits, constraints.round_trip, anchor) < _order_total(
+                order, matrix, visits, constraints.round_trip, anchor
+            ):
+                order = flipped
         return [candidates[i] for i in order], _report_missing_must(
             {**info, "algorithm": "direct", "order": order},
             order,

@@ -163,6 +163,23 @@ def test_the_optimizer_starts_next_to_the_tourist() -> None:
     assert blind_info["order"][0] != 2
 
 
+def test_a_two_stop_tour_opens_at_the_nearer_end() -> None:
+    """Two stops have no order to search, but they do have a direction: without
+    this the walk out of the tourist's position could be the long way round."""
+    stops = [_candidate(1, 53.6771, 23.8258), _candidate(2, 53.6819, 23.8400)]
+    walk = [[0.0, 600.0], [600.0, 0.0]]
+    # Stop 2 is a step away; stop 1 is an hour's walk.
+    anchor = OriginAnchor(from_origin=[4000.0, 20.0], to_origin=[4000.0, 20.0])
+    constraints = ResolvedConstraints(time_budget_minutes=None)
+
+    blind, _ = optimize(stops, _cost(walk), constraints)
+    aware, aware_info = optimize(stops, _cost(walk, anchor), constraints)
+
+    assert blind[0].id == 1  # unchanged when the position is not known
+    assert aware_info["order"] == [1, 0]
+    assert aware[0].id == 2
+
+
 def test_an_unknown_leg_is_not_an_unreachable_one_for_the_anchor() -> None:
     """`UNKNOWN_S` means "could not ask": it must not turn the origin's legs into a
     verdict that the route is impossible."""
