@@ -423,64 +423,67 @@ def verify_catalogue(
     empty = not places
     for r in requirements.requirements:
         code = _canonical_code(r.code, codes) if r.code else None
-
         if r.kind == "must_visit":
-            if r.place_id is None and not r.name:
-                _set(r, "uncertain", [], REASON_MUST_VISIT_UNSPECIFIED)
-                continue
-            match = _match_named(r, places)
-            if match is not None:
-                pid = _field(match, "id")
-                ids = [pid] if isinstance(pid, int) else []
-                _set(r, "satisfied", ids, REASON_MUST_VISIT_IN_CATALOGUE)
-            elif empty:
-                _set(r, "uncertain", [], REASON_ROUTE_MISSING)
-            else:
-                _set(r, "unmet", [], REASON_MUST_VISIT_ABSENT)
-            continue
-
-        if not r.code:
+            _catalogue_must_visit(r, places, empty=empty)
+        elif not r.code:
             _set(r, "uncertain", [], REASON_CODE_UNSPECIFIED)
-            continue
-        if code is None:
+        elif code is None:
             _set(r, "uncertain", [], REASON_CODE_UNKNOWN)
-            continue
-
-        if r.kind in ("service", "interest"):
-            matched = [p for p in places if _stop_matches_code(p, code, codes)]
-            if matched:
-                ids = [i for i in (_field(p, "id") for p in matched) if isinstance(i, int)]
-                reason = (
-                    REASON_SERVICE_IN_CATALOGUE
-                    if r.kind == "service"
-                    else REASON_INTEREST_IN_CATALOGUE
-                )
-                _set(r, "satisfied", ids, reason)
-            elif empty:
-                _set(r, "uncertain", [], REASON_ROUTE_MISSING)
-            elif r.kind == "service":
-                _set(
-                    r,
-                    "unmet",
-                    [],
-                    REASON_HARD_SERVICE_ABSENT
-                    if r.strength == "hard"
-                    else REASON_SOFT_SERVICE_ABSENT,
-                )
-            else:
-                _set(r, "unmet", [], REASON_INTEREST_ABSENT)
-            continue
-
-        offenders = [p for p in places if _stop_matches_code(p, code, codes)]
-        if offenders:
-            ids = [i for i in (_field(p, "id") for p in offenders) if isinstance(i, int)]
-            _set(r, "unmet", ids, REASON_AVOID_VIOLATED)
-        elif empty:
-            _set(r, "uncertain", [], REASON_ROUTE_MISSING)
+        elif r.kind in ("service", "interest"):
+            _catalogue_wanted(r, places, code, codes, empty=empty)
         else:
-            _set(r, "satisfied", [], REASON_AVOID_OK)
+            _catalogue_avoid(r, places, code, codes, empty=empty)
 
     return requirements.requirements
+
+
+def _catalogue_must_visit(r: Requirement, places: list[Any], *, empty: bool) -> None:
+    """A named or id'd place the tourist asked to see, looked for in the list."""
+    if r.place_id is None and not r.name:
+        _set(r, "uncertain", [], REASON_MUST_VISIT_UNSPECIFIED)
+        return
+    match = _match_named(r, places)
+    if match is not None:
+        pid = _field(match, "id")
+        _set(r, "satisfied", [pid] if isinstance(pid, int) else [], REASON_MUST_VISIT_IN_CATALOGUE)
+    elif empty:
+        _set(r, "uncertain", [], REASON_ROUTE_MISSING)
+    else:
+        _set(r, "unmet", [], REASON_MUST_VISIT_ABSENT)
+
+
+def _catalogue_wanted(
+    r: Requirement, places: list[Any], code: str, codes: frozenset[str], *, empty: bool
+) -> None:
+    """A service or interest the catalogue is expected to contain somewhere."""
+    matched = [p for p in places if _stop_matches_code(p, code, codes)]
+    if matched:
+        ids = [i for i in (_field(p, "id") for p in matched) if isinstance(i, int)]
+        reason = (
+            REASON_SERVICE_IN_CATALOGUE if r.kind == "service" else REASON_INTEREST_IN_CATALOGUE
+        )
+        _set(r, "satisfied", ids, reason)
+    elif empty:
+        _set(r, "uncertain", [], REASON_ROUTE_MISSING)
+    elif r.kind == "service":
+        reason = REASON_HARD_SERVICE_ABSENT if r.strength == "hard" else REASON_SOFT_SERVICE_ABSENT
+        _set(r, "unmet", [], reason)
+    else:
+        _set(r, "unmet", [], REASON_INTEREST_ABSENT)
+
+
+def _catalogue_avoid(
+    r: Requirement, places: list[Any], code: str, codes: frozenset[str], *, empty: bool
+) -> None:
+    """Something the tourist asked to keep away from — satisfied only when absent."""
+    offenders = [p for p in places if _stop_matches_code(p, code, codes)]
+    if offenders:
+        ids = [i for i in (_field(p, "id") for p in offenders) if isinstance(i, int)]
+        _set(r, "unmet", ids, REASON_AVOID_VIOLATED)
+    elif empty:
+        _set(r, "uncertain", [], REASON_ROUTE_MISSING)
+    else:
+        _set(r, "satisfied", [], REASON_AVOID_OK)
 
 
 def _key(r: Requirement) -> str:

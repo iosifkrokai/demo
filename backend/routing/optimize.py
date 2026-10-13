@@ -256,42 +256,29 @@ def _max_leg(route: list[int], problem: WalkProblem) -> float:
 
 def _brute_open(problem: WalkProblem, info: dict[str, Any]) -> tuple[list[int], dict[str, Any]]:
     """Enumerate (start, end) × all permutations of middle, return cheapest."""
-    n = len(problem.candidates)
+    tours = _all_open_tours(problem.candidates)
     best_route: list[int] | None = None
     best_cost = float("inf")
     best_total = float("inf")
 
-    for start in range(n):
-        for end in range(n):
-            if start == end:
-                continue
-            middle = [i for i in range(n) if i not in (start, end)]
-            for perm in permutations(middle):
-                order = [start, *perm, end]
-                total = _order_total(order, problem)
-                walk = walk_cost(order, problem.matrix)
-                if problem.budget_s is not None and total > problem.budget_s:
-                    continue
-                if total < best_total:
-                    best_total = total
-                    best_route = order
-                    best_cost = walk
+    for order in tours:
+        total = _order_total(order, problem)
+        if problem.budget_s is not None and total > problem.budget_s:
+            continue
+        if total < best_total:
+            best_total = total
+            best_route = order
+            best_cost = walk_cost(order, problem.matrix)
 
     if best_route is None:
-        for start in range(n):
-            for end in range(n):
-                if start == end:
-                    continue
-                middle = [i for i in range(n) if i not in (start, end)]
-                for perm in permutations(middle):
-                    order = [start, *perm, end]
-                    total = _order_total(order, problem)
-                    if total < best_total:
-                        best_total = total
-                        best_route = order
+        for order in tours:
+            total = _order_total(order, problem)
+            if total < best_total:
+                best_total = total
+                best_route = order
 
     if best_route is None:
-        best_route = list(range(n))
+        best_route = list(range(len(problem.candidates)))
         best_total = _order_total(best_route, problem)
 
     info.update(
@@ -303,6 +290,19 @@ def _brute_open(problem: WalkProblem, info: dict[str, Any]) -> tuple[list[int], 
         }
     )
     return best_route, info
+
+
+def _all_open_tours(candidates: list[Candidate]) -> list[list[int]]:
+    """Every (start, end) pair crossed with every ordering of what lies between."""
+    n = len(candidates)
+    tours: list[list[int]] = []
+    for start in range(n):
+        for end in range(n):
+            if start == end:
+                continue
+            middle = [i for i in range(n) if i not in (start, end)]
+            tours.extend([start, *perm, end] for perm in permutations(middle))
+    return tours
 
 
 def _regret_insertion(

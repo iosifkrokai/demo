@@ -26,20 +26,8 @@ def render(
     if len(route) < constants.MIN_LEG_POINTS:
         return {}, {}, "no_route_exists"
 
-    pts = [(p.lat, p.lon) for p in route]
-    if origin is not None:
-        pts = [(origin.lat, origin.lon), *pts]
-    if round_trip:
-        pts = [*pts, pts[0]]
-
-    locations = [
-        {
-            "lat": lat,
-            "lon": lon,
-            "type": "break" if i in (0, len(pts) - 1) else "via",
-        }
-        for i, (lat, lon) in enumerate(pts)
-    ]
+    pts = _points(route, origin, round_trip)
+    locations = _locations(pts)
 
     if len(locations) > constants.VALHALLA_MAX_LOCATIONS:
         log.info(
@@ -47,10 +35,7 @@ def render(
             len(locations),
             constants.VALHALLA_MAX_LOCATIONS,
         )
-        shape, summary, leg_status = _render_legs(pts, costing, locale)
-        if leg_status == "usable" and shape.get("coordinates"):
-            return shape, summary, "usable"
-        return {}, {}, "empty_geometry"
+        return _leg_by_leg(pts, costing, locale)
 
     try:
         result = route_through(locations, costing=costing, language=locale)
@@ -58,33 +43,63 @@ def render(
         log.warning("route: /route failed for the whole tour (%s) — trying legs", exc)
         result = None
 
-    if result and result.status == RouteStatus.USABLE:
-        if result.language != locale:
-            log.warning("route: locale mismatch (requested %s, got %s)", locale, result.language)
-            return result.shape, result.summary or {}, "locale_mismatch"
-
-        if result.maneuvers:
-            missing = _verify_maneuver_fields(result.maneuvers)
-            if missing:
-                log.warning("route: missing maneuver fields: %s", missing)
-                return result.shape, result.summary or {}, "missing_maneuver_data"
-
-        return result.shape, result.summary or {}, "usable"
-
-    if result and result.status == RouteStatus.SERVICE_UNAVAILABLE:
-        return {}, {}, "service_unavailable"
+    answer = _tour_answer(result, locale) if result is not None else None
+    if answer is not None:
+        return answer
 
     if (
-        result
+        result is not None
         and result.status == RouteStatus.NO_ROUTE_EXISTS
         and len(pts) < constants.MIN_TOUR_STOPS
     ):
         return {}, {}, "no_route_exists"
 
+    return _leg_by_leg(pts, costing, locale)
+
+
+def _points(
+    route: list[Candidate], origin: LatLon | None, round_trip: bool
+) -> list[tuple[float, float]]:
+    """The tour's vertices, the tourist's own start and the way back included."""
+    pts = [(p.lat, p.lon) for p in route]
+    if origin is not None:
+        pts = [(origin.lat, origin.lon), *pts]
+    if round_trip:
+        pts = [*pts, pts[0]]
+    return pts
+
+
+def _locations(pts: list[tuple[float, float]]) -> list[dict[str, Any]]:
+    """The ends are breaks the engine must honour; everything between is a via."""
+    return [
+        {"lat": lat, "lon": lon, "type": "break" if i in (0, len(pts) - 1) else "via"}
+        for i, (lat, lon) in enumerate(pts)
+    ]
+
+
+def _tour_answer(result: Any, locale: str) -> tuple[dict[str, Any], dict[str, Any], str] | None:
+    """What a whole-tour answer amounts to; None means the legs are worth trying."""
+    if result.status == RouteStatus.SERVICE_UNAVAILABLE:
+        return {}, {}, "service_unavailable"
+    if result.status != RouteStatus.USABLE:
+        return None
+    if result.language != locale:
+        log.warning("route: locale mismatch (requested %s, got %s)", locale, result.language)
+        return result.shape, result.summary or {}, "locale_mismatch"
+    missing = _verify_maneuver_fields(result.maneuvers) if result.maneuvers else []
+    if missing:
+        log.warning("route: missing maneuver fields: %s", missing)
+        return result.shape, result.summary or {}, "missing_maneuver_data"
+    return result.shape, result.summary or {}, "usable"
+
+
+def _leg_by_leg(
+    pts: list[tuple[float, float]], costing: str, locale: str
+) -> tuple[dict[str, Any], dict[str, Any], str]:
+    """Draw every leg on its own; a tour with no drawable leg is its own status."""
     shape, summary, leg_status = _render_legs(pts, costing, locale)
     if leg_status == "usable" and shape.get("coordinates"):
         return shape, summary, "usable"
-
     log.warning("route: no leg of the tour could be drawn — empty shape")
     return {}, {}, "empty_geometry"
 
