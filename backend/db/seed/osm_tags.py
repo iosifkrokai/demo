@@ -50,13 +50,16 @@ Row = dict[str, str | float | None]
 
 def sight_tag_to_category(tags: dict[str, str]) -> str | None:
     """Map OSM tags → our sight category, or None."""
-    historic = tags.get("historic", "")
-    tourism = tags.get("tourism", "")
-    amenity = tags.get("amenity", "")
-    building = tags.get("building", "")
-    religion = tags.get("religion", "")
-    denomination = tags.get("denomination", "")
+    return (
+        _historic_category(tags.get("historic", ""))
+        or _tourism_category(tags.get("tourism", ""))
+        or _worship_category(tags)
+        or _building_category(tags)
+    )
 
+
+def _historic_category(historic: str) -> str | None:
+    """What the `historic` key alone settles."""
     if historic in ("castle", "manor", "ruins"):
         return "замок"
     if historic in ("monastery", "monastic_architecture"):
@@ -65,34 +68,52 @@ def sight_tag_to_category(tags: dict[str, str]) -> str | None:
         return "памятник"
     if historic == "archaeological_site":
         return "архитектура"
+    return None
 
+
+def _tourism_category(tourism: str) -> str | None:
+    """What the `tourism` key alone settles."""
     if tourism == "museum":
         return "музей"
     if tourism == "attraction":
         return "архитектура"
+    return None
 
-    if amenity == "place_of_worship":
-        if religion == "christian":
-            if denomination in ("catholic", "united", "roman_catholic"):
-                return "костёл"
-            if denomination in ("orthodox", "russian_orthodox", "old_believer"):
-                return "церковь"
-            return "костёл"
-        if religion == "muslim":
-            return "храм"
-        if religion == "jewish":
-            return "архитектура"
+
+def _worship_category(tags: dict[str, str]) -> str | None:
+    """A place of worship reads by its religion, and a Christian one by its rite."""
+    if tags.get("amenity", "") != "place_of_worship":
+        return None
+    religion = tags.get("religion", "")
+    if religion == "christian":
+        return _christian_rite(tags.get("denomination", ""))
+    if religion == "muslim":
         return "храм"
-
-    if building in ("church", "cathedral", "chapel"):
-        if religion == "christian":
-            if denomination in ("catholic", "roman_catholic"):
-                return "костёл"
-            return "церковь"
+    if religion == "jewish":
         return "архитектура"
+    return "храм"
+
+
+def _christian_rite(denomination: str) -> str:
+    """The Orthodox rites read as церковь; every other one, named or not, as костёл."""
+    if denomination in ("orthodox", "russian_orthodox", "old_believer"):
+        return "церковь"
+    return "костёл"
+
+
+def _building_category(tags: dict[str, str]) -> str | None:
+    """A church building is a костёл for Catholics and a церковь for anyone else."""
+    building = tags.get("building", "")
+    if building in ("church", "cathedral", "chapel"):
+        if tags.get("religion", "") != "christian":
+            return "архитектура"
+        return (
+            "костёл"
+            if tags.get("denomination", "") in ("catholic", "roman_catholic")
+            else "церковь"
+        )
     if building == "castle":
         return "замок"
-
     return None
 
 
