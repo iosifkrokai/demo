@@ -69,9 +69,6 @@ select = [
 ignore = [
     "RUF001",
     "RUF002",
-    "PLR0912",
-    "PLR0915",
-    "PLR0911",
 ]
 
 [tool.ruff.lint.per-file-ignores]

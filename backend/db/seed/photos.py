@@ -546,7 +546,7 @@ def _candidates(
 
 def _reference_images(
     candidates: list[tuple[dict[str, Any], dict[str, Any]]],
-) -> tuple[dict[str, Any], dict[str, Any]]:
+) -> tuple[dict[str, dict[str, Any]], dict[tuple[str, str], str]]:
     """What Wikidata and Wikipedia say these objects look like, before any matching."""
     qids = [h["wikidata"] for _, h in candidates if h.get("wikidata")]
     claims = wikidata_claims(sorted(set(qids))) if qids else {}
@@ -568,8 +568,8 @@ def _reference_images(
 
 def _hint_titles(
     candidates: list[tuple[dict[str, Any], dict[str, Any]]],
-    claims: dict[str, Any],
-    pageimages: dict[str, Any],
+    claims: dict[str, dict[str, Any]],
+    pageimages: dict[tuple[str, str], str],
     stats: Counter[str],
 ) -> tuple[dict[str, tuple[str, str]], dict[str, dict[str, Any]]]:
     """A Commons file for every hint that names one, by the shortest route available."""
@@ -655,7 +655,7 @@ def _named_matches(
 
 def _matched_titles(
     matched: dict[str, dict[str, Any]],
-    pageimages: dict[str, Any],
+    pageimages: dict[tuple[str, str], str],
     wanted: dict[str, tuple[str, str]],
     provenance: dict[str, dict[str, Any]],
     stats: Counter[str],

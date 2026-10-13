@@ -320,46 +320,72 @@ class CaseError(ValueError):
 def validate_case(data: Any, path: Path | None = None) -> list[str]:
     """Every way one case violates the schema, as strings. [] == valid."""
     where = path.name if path is not None else "<memory>"
-    errors: list[str] = []
     if not isinstance(data, dict):
         return [f"{where}: the case must be an object"]
+    return (
+        _case_keys(data, where)
+        + _script_errors(data, where)
+        + _expect_errors(data, where)
+        + _discover_errors(data, where)
+    )
 
+
+def _case_keys(data: dict[str, Any], where: str) -> list[str]:
+    """The keys the schema names — no others, none missing, and the strings filled."""
+    errors: list[str] = []
     for key in sorted(set(data) - REQUIRED_CASE_KEYS - OPTIONAL_CASE_KEYS):
         errors.append(f"{where}: unknown key {key!r}")
     for key in sorted(REQUIRED_CASE_KEYS - set(data)):
         errors.append(f"{where}: missing required key {key!r}")
-
     for key in ("id", "why", "query"):
         if not isinstance(data.get(key), str) or not data.get(key, "").strip():
             errors.append(f"{where}: {key} must be a non-empty string")
+    return errors
 
+
+def _script_errors(data: dict[str, Any], where: str) -> list[str]:
+    """The script: a non-empty list of {tool, args} calls."""
     script = data.get("script")
     if not isinstance(script, list) or not script:
-        errors.append(f"{where}: script must be a non-empty list of tool calls")
-    else:
-        for index, call in enumerate(script):
-            if not isinstance(call, dict) or not isinstance(call.get("tool"), str):
-                errors.append(f"{where}: script[{index}] must be {{tool, args}}")
+        return [f"{where}: script must be a non-empty list of tool calls"]
+    return [
+        f"{where}: script[{index}] must be {{tool, args}}"
+        for index, call in enumerate(script)
+        if not isinstance(call, dict) or not isinstance(call.get("tool"), str)
+    ]
 
+
+def _expect_errors(data: dict[str, Any], where: str) -> list[str]:
+    """The expectation: an object naming the tools the case should call."""
     expect = data.get("expect")
     if not isinstance(expect, dict):
-        errors.append(f"{where}: expect must be an object")
-    elif not isinstance(expect.get("tools"), list) or not expect.get("tools"):
-        errors.append(f"{where}: expect.tools must be a non-empty list of tool names")
+        return [f"{where}: expect must be an object"]
+    if not isinstance(expect.get("tools"), list) or not expect.get("tools"):
+        return [f"{where}: expect.tools must be a non-empty list of tool names"]
+    return []
 
+
+def _discover_errors(data: dict[str, Any], where: str) -> list[str]:
+    """The discover block, and whether a @stops placeholder has one to resolve against."""
     discover = data.get("discover")
-    if discover is not None and (
-        not isinstance(discover, dict)
-        or not isinstance(discover.get("near"), list)
-        or len(discover["near"]) != _LATLON
-        or "radius_km" not in discover
-        or "limit" not in discover
-    ):
-        errors.append(f"{where}: discover must be {{near:[lat,lon], radius_km, limit}}")
+    if discover is None:
+        if "@stops" in json.dumps(data) or "@stop" in json.dumps(data):
+            return [f"{where}: a @stops/@stop placeholder needs a discover block"]
+        return []
+    if _discover_shape_ok(discover):
+        return []
+    return [f"{where}: discover must be {{near:[lat,lon], radius_km, limit}}"]
 
-    if ("@stops" in json.dumps(data) or "@stop" in json.dumps(data)) and discover is None:
-        errors.append(f"{where}: a @stops/@stop placeholder needs a discover block")
-    return errors
+
+def _discover_shape_ok(discover: Any) -> bool:
+    """A discover block carries a lat/lon pair, a radius and a limit."""
+    return (
+        isinstance(discover, dict)
+        and isinstance(discover.get("near"), list)
+        and len(discover["near"]) == _LATLON
+        and "radius_km" in discover
+        and "limit" in discover
+    )
 
 
 def load_cases(path: Path | None = None) -> list[dict[str, Any]]:

@@ -1920,12 +1920,19 @@ def _validate_code_list(name: str, values, errs: list[str]) -> None:
 def validate_golden_case(data, path: Path | None = None) -> list[str]:
     """Every way one golden case violates the schema, as strings. [] == valid."""
     where = path.name if path is not None else "<memory>"
-    errs: list[str] = []
     if not isinstance(data, dict):
         return [f"{where}: top level must be an object"]
+    return (
+        _golden_header(data, where, path)
+        + _golden_filters(data, where)
+        + _golden_expectations(data, where)
+    )
 
-    unknown_top = set(data) - GOLDEN_REQUIRED_TOP - GOLDEN_OPTIONAL_TOP
-    for key in sorted(unknown_top):
+
+def _golden_header(data: dict[str, Any], where: str, path: Path | None) -> list[str]:
+    """The keys, the id, the locale, the query and the parity group."""
+    errs: list[str] = []
+    for key in sorted(set(data) - GOLDEN_REQUIRED_TOP - GOLDEN_OPTIONAL_TOP):
         errs.append(f"{where}: unknown top-level key {key!r}")
     for key in sorted(GOLDEN_REQUIRED_TOP - set(data)):
         errs.append(f"{where}: missing required key {key!r}")
@@ -1940,149 +1947,235 @@ def validate_golden_case(data, path: Path | None = None) -> list[str]:
     if locale not in LOCALES:
         errs.append(f"{where}: locale must be one of {list(LOCALES)}, got {locale!r}")
 
-    query = data.get("query")
-    if not isinstance(query, str) or not (
-        _QUERY_MIN_CHARS <= len(query.strip()) <= _QUERY_MAX_CHARS
-    ):
-        errs.append(
-            f"{where}: query must be a string of {_QUERY_MIN_CHARS}..{_QUERY_MAX_CHARS} characters"
-        )
-    elif locale in LOCALES:
-        has_cyrillic = bool(_CYRILLIC_RE.search(query))
-        if locale == "en" and has_cyrillic:
-            errs.append(f"{where}: locale is 'en' but the query contains Cyrillic")
-        if locale == "ru" and not has_cyrillic:
-            errs.append(f"{where}: locale is 'ru' but the query contains no Cyrillic")
+    errs += _query_errors(data.get("query"), locale, where)
 
     group = data.get("parity_group")
     if group is not None and (not isinstance(group, str) or not group.strip()):
         errs.append(f"{where}: parity_group must be a non-empty string when present")
+    return errs
 
+
+def _query_errors(query: Any, locale: Any, where: str) -> list[str]:
+    """The query's length, and whether its script matches the locale it claims."""
+    if not isinstance(query, str) or not (
+        _QUERY_MIN_CHARS <= len(query.strip()) <= _QUERY_MAX_CHARS
+    ):
+        return [
+            f"{where}: query must be a string of {_QUERY_MIN_CHARS}..{_QUERY_MAX_CHARS} characters"
+        ]
+    if locale not in LOCALES:
+        return []
+    has_cyrillic = bool(_CYRILLIC_RE.search(query))
+    errs: list[str] = []
+    if locale == "en" and has_cyrillic:
+        errs.append(f"{where}: locale is 'en' but the query contains Cyrillic")
+    if locale == "ru" and not has_cyrillic:
+        errs.append(f"{where}: locale is 'ru' but the query contains no Cyrillic")
+    return errs
+
+
+def _is_plain_int(value: Any, *, low: int | None = None, high: int | None = None) -> bool:
+    """A real int inside the bounds — `True` is a bool, and no bound means none here."""
+    if not isinstance(value, int) or isinstance(value, bool):
+        return False
+    if low is not None and value < low:
+        return False
+    return not (high is not None and value > high)
+
+
+def _golden_filters(data: dict[str, Any], where: str) -> list[str]:
+    """The filters block: its keys, the party, and the bounds on budget and origin."""
     filters = data.get("filters")
     if not isinstance(filters, dict):
-        errs.append(f"{where}: filters must be an object")
-    else:
-        for key in sorted(set(filters) - GOLDEN_FILTER_KEYS):
-            errs.append(f"{where}: unknown filters key {key!r}")
-        for key in sorted(GOLDEN_FILTER_KEYS - set(filters)):
-            errs.append(f"{where}: missing filters key {key!r}")
-        children = filters.get("party_children")
-        if children is not None and not (
-            isinstance(children, int)
-            and not isinstance(children, bool)
-            and 0 <= children <= _PARTY_CHILDREN_MAX
-        ):
-            errs.append(
-                f"{where}: party_children must be null or an int in 0..{_PARTY_CHILDREN_MAX}"
-            )
-        for key in ("hard_services", "interests", "avoid"):
-            if key in filters:
-                _validate_code_list(f"{where}: filters.{key}", filters[key], errs)
-        hard = {_norm_code(c) for c in filters.get("hard_services") or []}
-        avoid = {_norm_code(c) for c in filters.get("avoid") or []}
-        interests = {_norm_code(c) for c in filters.get("interests") or []}
-        both = hard & avoid
-        if both:
-            errs.append(
-                f"{where}: filters.hard_services and filters.avoid overlap "
-                f"({sorted(both)}) — a code cannot be mandatory and forbidden"
-            )
-        if interests & avoid:
-            errs.append(
-                f"{where}: filters.interests and filters.avoid overlap "
-                f"({sorted(interests & avoid)})"
-            )
-        budget = filters.get("time_budget_minutes")
-        if budget is not None and not (
-            isinstance(budget, int) and not isinstance(budget, bool) and budget >= 0
-        ):
-            errs.append(f"{where}: filters.time_budget_minutes must be null or an int >= 0")
-        elif budget is not None and budget > int(agent_constants.MAX_BUDGET_MIN):
-            errs.append(
+        return [f"{where}: filters must be an object"]
+    return (
+        _filter_keys(filters, where)
+        + _filter_overlap(filters, where)
+        + _filter_budget(filters, where)
+        + _filter_result_mode(filters, where)
+        + _filter_origin(filters, where)
+    )
+
+
+def _filter_keys(filters: dict[str, Any], where: str) -> list[str]:
+    """The keys the schema names, the party size, and the codes to look for."""
+    errs: list[str] = []
+    for key in sorted(set(filters) - GOLDEN_FILTER_KEYS):
+        errs.append(f"{where}: unknown filters key {key!r}")
+    for key in sorted(GOLDEN_FILTER_KEYS - set(filters)):
+        errs.append(f"{where}: missing filters key {key!r}")
+    children = filters.get("party_children")
+    if children is not None and not _is_plain_int(children, low=0, high=_PARTY_CHILDREN_MAX):
+        errs.append(f"{where}: party_children must be null or an int in 0..{_PARTY_CHILDREN_MAX}")
+    for key in ("hard_services", "interests", "avoid"):
+        if key in filters:
+            _validate_code_list(f"{where}: filters.{key}", filters[key], errs)
+    return errs
+
+
+def _filter_overlap(filters: dict[str, Any], where: str) -> list[str]:
+    """A code cannot be both mandatory and forbidden, nor both wanted and forbidden."""
+    hard = {_norm_code(c) for c in filters.get("hard_services") or []}
+    avoid = {_norm_code(c) for c in filters.get("avoid") or []}
+    interests = {_norm_code(c) for c in filters.get("interests") or []}
+    errs: list[str] = []
+    if hard & avoid:
+        errs.append(
+            f"{where}: filters.hard_services and filters.avoid overlap "
+            f"({sorted(hard & avoid)}) — a code cannot be mandatory and forbidden"
+        )
+    if interests & avoid:
+        errs.append(
+            f"{where}: filters.interests and filters.avoid overlap ({sorted(interests & avoid)})"
+        )
+    return errs
+
+
+def _filter_budget(filters: dict[str, Any], where: str) -> list[str]:
+    """The time budget, and that it stays inside what the API will accept."""
+    budget = filters.get("time_budget_minutes")
+    if budget is None:
+        return []
+    if not _is_plain_int(budget, low=0):
+        return [f"{where}: filters.time_budget_minutes must be null or an int >= 0"]
+    if budget > int(agent_constants.MAX_BUDGET_MIN):
+        return [
+            (
                 f"{where}: filters.time_budget_minutes {budget} exceeds the API "
                 f"maximum {agent_constants.MAX_BUDGET_MIN}"
             )
-        origin = filters.get("origin")
-        if origin is not None:
-            if not isinstance(origin, dict) or set(origin) != {"lat", "lon"}:
-                errs.append(f"{where}: filters.origin must be null or {{lat, lon}}")
-            else:
-                for axis, (lo, hi) in ORIGIN_BOUNDS.items():
-                    value = origin.get(axis)
-                    if not _is_num(value) or not (lo <= value <= hi):
-                        errs.append(
-                            f"{where}: filters.origin.{axis} must be a number in "
-                            f"{lo}..{hi}, got {value!r}"
-                        )
-        if filters.get("result_mode") not in RESULT_MODES:
-            errs.append(
-                f"{where}: filters.result_mode must be one of {list(RESULT_MODES)}, "
-                f"got {filters.get('result_mode')!r}"
-            )
+        ]
+    return []
 
+
+def _filter_result_mode(filters: dict[str, Any], where: str) -> list[str]:
+    """The result mode the case asks for."""
+    mode = filters.get("result_mode")
+    if mode in RESULT_MODES:
+        return []
+    return [f"{where}: filters.result_mode must be one of {list(RESULT_MODES)}, got {mode!r}"]
+
+
+def _filter_origin(filters: dict[str, Any], where: str) -> list[str]:
+    """The optional starting point, inside the box the API accepts."""
+    origin = filters.get("origin")
+    if origin is None:
+        return []
+    if not isinstance(origin, dict) or set(origin) != {"lat", "lon"}:
+        return [f"{where}: filters.origin must be null or {{lat, lon}}"]
+    errs: list[str] = []
+    for axis, (lo, hi) in ORIGIN_BOUNDS.items():
+        value = origin.get(axis)
+        if not _is_num(value) or not (lo <= value <= hi):
+            errs.append(
+                f"{where}: filters.origin.{axis} must be a number in {lo}..{hi}, got {value!r}"
+            )
+    return errs
+
+
+def _golden_expectations(data: dict[str, Any], where: str) -> list[str]:
+    """The expectations block: its keys, the lists, the bounds, and the flags."""
     exp = data.get("expectations")
     if not isinstance(exp, dict):
-        errs.append(f"{where}: expectations must be an object")
-    else:
-        for key in sorted(set(exp) - GOLDEN_EXPECTATION_KEYS):
-            errs.append(f"{where}: unknown expectations key {key!r}")
-        for key in sorted(GOLDEN_REQUIRED_EXPECTATIONS - set(exp)):
-            errs.append(f"{where}: missing expectations key {key!r}")
-        for key in ("must_contain_categories", "must_not_contain_categories"):
-            if key in exp:
-                _validate_code_list(f"{where}: expectations.{key}", exp[key], errs)
-        names = exp.get("must_contain_names")
-        if names is not None and (
-            not isinstance(names, list)
-            or not names
-            or any(not isinstance(n, str) or not n.strip() for n in names)
-        ):
-            errs.append(
-                f"{where}: expectations.must_contain_names must be a non-empty "
-                "list of non-empty strings when present"
-            )
-        statuses = exp.get("expected_status")
-        if not isinstance(statuses, list) or not statuses:
-            errs.append(f"{where}: expectations.expected_status must be a non-empty list")
-        else:
-            for status in statuses:
-                if status not in STATUSES:
-                    errs.append(
-                        f"{where}: expectations.expected_status {status!r} is not one "
-                        f"of {sorted(STATUSES)}"
-                    )
-        mode = exp.get("expected_result_mode")
-        if mode is not None and mode not in RESULT_MODES:
-            errs.append(f"{where}: expectations.expected_result_mode must be {RESULT_MODES}")
-        cap = exp.get("max_total_minutes")
-        if cap is not None and not (isinstance(cap, int) and not isinstance(cap, bool) and cap > 0):
-            errs.append(f"{where}: expectations.max_total_minutes must be null or int > 0")
-        elif (
-            cap is not None
-            and isinstance(filters, dict)
-            and isinstance(filters.get("time_budget_minutes"), int)
-            and cap > filters["time_budget_minutes"]
-        ):
-            errs.append(
-                f"{where}: expectations.max_total_minutes {cap} exceeds the stated "
-                f"budget {filters['time_budget_minutes']} — the cap would never bind"
-            )
-        if not isinstance(exp.get("in_region"), bool):
-            errs.append(f"{where}: expectations.in_region must be a boolean")
-        if "allow_empty" in exp and not isinstance(exp["allow_empty"], bool):
-            errs.append(f"{where}: expectations.allow_empty must be a boolean")
-        min_places = exp.get("min_places")
-        if min_places is not None and not (
-            isinstance(min_places, int) and not isinstance(min_places, bool) and min_places >= 0
-        ):
-            errs.append(f"{where}: expectations.min_places must be null or an int >= 0")
-        elif min_places is not None and not exp.get("allow_empty") and min_places == 0:
-            errs.append(
-                f"{where}: expectations.min_places 0 with allow_empty false — an "
-                "empty plan would pass; say allow_empty: true instead"
-            )
-        if exp.get("status_note") is not None and not isinstance(exp["status_note"], str):
-            errs.append(f"{where}: expectations.status_note must be a string")
+        return [f"{where}: expectations must be an object"]
+    return (
+        _expectation_keys(exp, where)
+        + _expectation_codes(exp, where)
+        + _expectation_status(exp, where)
+        + _expectation_result_mode(exp, where)
+        + _expectation_bounds(exp, where, data.get("filters"))
+        + _expectation_flags(exp, where)
+    )
+
+
+def _expectation_keys(exp: dict[str, Any], where: str) -> list[str]:
+    """The keys the schema names, and none missing."""
+    errs: list[str] = []
+    for key in sorted(set(exp) - GOLDEN_EXPECTATION_KEYS):
+        errs.append(f"{where}: unknown expectations key {key!r}")
+    for key in sorted(GOLDEN_REQUIRED_EXPECTATIONS - set(exp)):
+        errs.append(f"{where}: missing expectations key {key!r}")
+    return errs
+
+
+def _expectation_codes(exp: dict[str, Any], where: str) -> list[str]:
+    """The categories and the names the case says must (or must not) appear."""
+    errs: list[str] = []
+    for key in ("must_contain_categories", "must_not_contain_categories"):
+        if key in exp:
+            _validate_code_list(f"{where}: expectations.{key}", exp[key], errs)
+    names = exp.get("must_contain_names")
+    if names is not None and not _name_list_ok(names):
+        errs.append(
+            f"{where}: expectations.must_contain_names must be a non-empty "
+            "list of non-empty strings when present"
+        )
+    return errs
+
+
+def _name_list_ok(names: Any) -> bool:
+    """A non-empty list of non-empty strings."""
+    if not isinstance(names, list) or not names:
+        return False
+    return all(isinstance(n, str) and n.strip() for n in names)
+
+
+def _expectation_status(exp: dict[str, Any], where: str) -> list[str]:
+    """The plan statuses the case will accept."""
+    statuses = exp.get("expected_status")
+    if not isinstance(statuses, list) or not statuses:
+        return [f"{where}: expectations.expected_status must be a non-empty list"]
+    return [
+        f"{where}: expectations.expected_status {status!r} is not one of {sorted(STATUSES)}"
+        for status in statuses
+        if status not in STATUSES
+    ]
+
+
+def _expectation_result_mode(exp: dict[str, Any], where: str) -> list[str]:
+    """The result mode the case expects, when it says."""
+    mode = exp.get("expected_result_mode")
+    if mode is None or mode in RESULT_MODES:
+        return []
+    return [f"{where}: expectations.expected_result_mode must be {RESULT_MODES}"]
+
+
+def _expectation_bounds(exp: dict[str, Any], where: str, filters: Any) -> list[str]:
+    """The two numeric bounds: the total-minutes cap and the minimum stop count."""
+    errs: list[str] = []
+    cap = exp.get("max_total_minutes")
+    if cap is not None and not _is_plain_int(cap, low=1):
+        errs.append(f"{where}: expectations.max_total_minutes must be null or int > 0")
+    elif (
+        cap is not None
+        and isinstance(filters, dict)
+        and isinstance(filters.get("time_budget_minutes"), int)
+        and cap > filters["time_budget_minutes"]
+    ):
+        errs.append(
+            f"{where}: expectations.max_total_minutes {cap} exceeds the stated "
+            f"budget {filters['time_budget_minutes']} — the cap would never bind"
+        )
+    min_places = exp.get("min_places")
+    if min_places is not None and not _is_plain_int(min_places, low=0):
+        errs.append(f"{where}: expectations.min_places must be null or an int >= 0")
+    elif min_places is not None and not exp.get("allow_empty") and min_places == 0:
+        errs.append(
+            f"{where}: expectations.min_places 0 with allow_empty false — an "
+            "empty plan would pass; say allow_empty: true instead"
+        )
+    return errs
+
+
+def _expectation_flags(exp: dict[str, Any], where: str) -> list[str]:
+    """The three booleans, and the free-text note."""
+    errs: list[str] = []
+    if not isinstance(exp.get("in_region"), bool):
+        errs.append(f"{where}: expectations.in_region must be a boolean")
+    if "allow_empty" in exp and not isinstance(exp["allow_empty"], bool):
+        errs.append(f"{where}: expectations.allow_empty must be a boolean")
+    if exp.get("status_note") is not None and not isinstance(exp["status_note"], str):
+        errs.append(f"{where}: expectations.status_note must be a string")
     return errs
 
 
@@ -2287,133 +2380,19 @@ def evaluate_compliance(
     status, source = derive_status(raw, http_status=http_status, api_error=api_error)
     checks: dict[str, dict[str, Any]] = {}
 
-    expected_status = [str(s).strip().lower() for s in exp["expected_status"]]
-    checks[CHECK_WRONG_STATUS] = (
-        _ok(f"{status} ({source}) is in {expected_status}")
-        if status in expected_status
-        else _fail(f"status {status} ({source}) is not one of {expected_status}")
-    )
-    if status == "error":
-        checks[CHECK_API_ERROR] = _fail(
-            api_error or f"the backend failed with HTTP {http_status} — no plan"
-        )
-    elif api_error or (http_status is not None and http_status >= HTTPStatus.BAD_REQUEST):
-        checks[CHECK_API_ERROR] = _ok(
-            f"the backend refused the request (HTTP {http_status}) — an honest "
-            f"refusal, judged by the status check"
-        )
-    else:
-        checks[CHECK_API_ERROR] = _ok("the backend answered with a plan")
+    checks[CHECK_WRONG_STATUS] = _status_check(status, source, exp)
+    checks[CHECK_API_ERROR] = _api_error_check(status, http_status, api_error)
+    checks[CHECK_TOO_FEW_PLACES] = _too_few_places_check(points, exp)
 
-    allow_empty = bool(exp.get("allow_empty"))
-    min_places = exp.get("min_places")
-    if min_places is None:
-        min_places = 0 if allow_empty else 1
-    if len(points) < min_places:
-        detail = f"{len(points)} stop(s) returned, at least {min_places} required"
-        if not points and allow_empty:
-            detail = "empty plan, which this case allows"
-        checks[CHECK_TOO_FEW_PLACES] = _ok(detail) if len(points) >= min_places else _fail(detail)
-    else:
-        checks[CHECK_TOO_FEW_PLACES] = _ok(f"{len(points)} stop(s) returned (>= {min_places})")
-
-    seen: set[str] = set()
-    for stop in points:
-        seen |= stop_category_codes(stop)
-    stop_codes = set(seen)
-    for req in raw.get("requirements") or []:
-        if not isinstance(req, dict) or req.get("status") != "satisfied":
-            continue
-        code = req.get("code")
-        if isinstance(code, str) and code.strip():
-            seen.add(_norm_code(code))
-    wanted = [_norm_code(c) for c in exp["must_contain_categories"]]
-    missing = [c for c in wanted if c not in seen]
-    category_evidence = {
-        "missing": _canon_codes(missing),
-        "seen": sorted(_canon_codes(seen)),
-    }
-    checks[CHECK_MISSING_MANDATORY_CATEGORY] = (
-        _ok(f"every mandatory category is present {_canon_codes(wanted)}", **category_evidence)
-        if not missing
-        else _fail(
-            f"missing mandatory category(ies) {category_evidence['missing']}"
-            f"; the plan has {category_evidence['seen'] or 'no categories'}",
-            **category_evidence,
-        )
-    )
-    forbidden = [_norm_code(c) for c in exp["must_not_contain_categories"]]
-    present = [c for c in forbidden if c in stop_codes]
-    checks[CHECK_FORBIDDEN_CATEGORY_PRESENT] = (
-        _ok(f"no forbidden category present {_canon_codes(forbidden)}")
-        if not present
-        else _fail(
-            f"forbidden category(ies) present {[CANONICAL_CATEGORIES.get(c, c) for c in present]}"
-        )
-    )
-
-    names = exp.get("must_contain_names") or []
-    if names:
-        missing_names = [
-            n
-            for n in names
-            if not any(_norm_code(n) in norm_name(p.get("name", "")) for p in points)
-        ]
-        checks[CHECK_MISSING_NAMED_PLACE] = (
-            _ok(f"every named place is on the plan {names}")
-            if not missing_names
-            else _fail(
-                f"missing named place(s) {missing_names}; plan names "
-                f"{[p.get('name') for p in points][:6]}"
-            )
-        )
-
+    seen, stop_codes = _seen_codes(points, raw)
+    checks[CHECK_MISSING_MANDATORY_CATEGORY] = _mandatory_check(exp, seen)
+    checks[CHECK_FORBIDDEN_CATEGORY_PRESENT] = _forbidden_check(exp, stop_codes)
+    if exp.get("must_contain_names"):
+        checks[CHECK_MISSING_NAMED_PLACE] = _named_check(exp, points)
     if exp.get("in_region"):
-        offenders: list[str] = []
-        for stop in points:
-            lat, lon = stop.get("lat"), stop.get("lon")
-            if not (_is_num(lat) and _is_num(lon)):
-                offenders.append(f"{stop.get('name')!r} has no coordinates")
-            elif not inside_project_area(float(lat), float(lon)):
-                offenders.append(
-                    f"{stop.get('name')!r} at {lat:.4f},{lon:.4f} is outside Grodno ADM1"
-                )
-        checks[CHECK_OUT_OF_REGION_POINT] = (
-            _ok(f"all {len(points)} point(s) inside Grodno ADM1")
-            if not offenders
-            else _fail("; ".join(offenders[:4]))
-        )
-
-    cap = exp.get("max_total_minutes")
-    if cap is None:
-        checks[CHECK_OVER_BUDGET] = _ok("no time cap in this case")
-    else:
-        total = response_total_minutes(raw, points)
-        if total is None:
-            checks[CHECK_OVER_BUDGET] = _unverified(
-                f"cap {cap} min stated but the response reports no total"
-            )
-        elif total > cap + 1e-9:
-            checks[CHECK_OVER_BUDGET] = _fail(f"total {total:.1f} min exceeds the {cap} min cap")
-        else:
-            checks[CHECK_OVER_BUDGET] = _ok(f"total {total:.1f} min <= {cap} min cap")
-
-    expected_mode = exp.get("expected_result_mode")
-    if expected_mode is None:
-        checks[CHECK_RESULT_MODE] = _ok("no result mode expected")
-    else:
-        actual = _norm_code(raw.get("result_mode") or raw.get("mode"))
-        if actual:
-            checks[CHECK_RESULT_MODE] = (
-                _ok(f"result_mode {actual}")
-                if actual == _norm_code(expected_mode)
-                else _fail(f"result_mode {actual} != expected {expected_mode}")
-            )
-        else:
-            checks[CHECK_RESULT_MODE] = _unverified(
-                f"expected result_mode {expected_mode}, but the response carries no "
-                "result_mode marker (the API does not expose one yet)"
-            )
+        checks[CHECK_OUT_OF_REGION_POINT] = _region_check(points)
+    checks[CHECK_OVER_BUDGET] = _budget_check(raw, points, exp)
+    checks[CHECK_RESULT_MODE] = _result_mode_check(raw, exp)
 
     failed = [code for code in CHECK_PRIORITY if checks.get(code, {}).get("ok") is False]
     reason = failed[0] if failed else "ok"
@@ -2427,6 +2406,138 @@ def evaluate_compliance(
         status_source=source,
         checks=checks,
     )
+
+
+def _status_check(status: str, source: str, exp: dict[str, Any]) -> dict[str, Any]:
+    """The status the case will accept, and the one it got."""
+    expected_status = [str(s).strip().lower() for s in exp["expected_status"]]
+    if status in expected_status:
+        return _ok(f"{status} ({source}) is in {expected_status}")
+    return _fail(f"status {status} ({source}) is not one of {expected_status}")
+
+
+def _api_error_check(status: str, http_status: int | None, api_error: str | None) -> dict[str, Any]:
+    """An error status is the failure; a 4xx the case expected is an honest refusal."""
+    if status == "error":
+        return _fail(api_error or f"the backend failed with HTTP {http_status} — no plan")
+    if api_error or (http_status is not None and http_status >= HTTPStatus.BAD_REQUEST):
+        return _ok(
+            f"the backend refused the request (HTTP {http_status}) — an honest "
+            f"refusal, judged by the status check"
+        )
+    return _ok("the backend answered with a plan")
+
+
+def _too_few_places_check(points: list[dict[str, Any]], exp: dict[str, Any]) -> dict[str, Any]:
+    """How many stops came back, against the minimum this case allows."""
+    allow_empty = bool(exp.get("allow_empty"))
+    min_places = exp.get("min_places")
+    if min_places is None:
+        min_places = 0 if allow_empty else 1
+    if len(points) >= min_places:
+        return _ok(f"{len(points)} stop(s) returned (>= {min_places})")
+    detail = f"{len(points)} stop(s) returned, at least {min_places} required"
+    if not points and allow_empty:
+        detail = "empty plan, which this case allows"
+    return _fail(detail)
+
+
+def _seen_codes(points: list[dict[str, Any]], raw: dict[str, Any]) -> tuple[set[str], set[str]]:
+    """Every category the plan shows, and those of its stops alone."""
+    seen: set[str] = set()
+    for stop in points:
+        seen |= stop_category_codes(stop)
+    stop_codes = set(seen)
+    for req in raw.get("requirements") or []:
+        if not isinstance(req, dict) or req.get("status") != "satisfied":
+            continue
+        code = req.get("code")
+        if isinstance(code, str) and code.strip():
+            seen.add(_norm_code(code))
+    return seen, stop_codes
+
+
+def _mandatory_check(exp: dict[str, Any], seen: set[str]) -> dict[str, Any]:
+    """The categories the case insists on, against the ones the plan shows."""
+    wanted = [_norm_code(c) for c in exp["must_contain_categories"]]
+    missing = [c for c in wanted if c not in seen]
+    evidence = {"missing": _canon_codes(missing), "seen": sorted(_canon_codes(seen))}
+    if not missing:
+        return _ok(f"every mandatory category is present {_canon_codes(wanted)}", **evidence)
+    return _fail(
+        f"missing mandatory category(ies) {evidence['missing']}"
+        f"; the plan has {evidence['seen'] or 'no categories'}",
+        **evidence,
+    )
+
+
+def _forbidden_check(exp: dict[str, Any], stop_codes: set[str]) -> dict[str, Any]:
+    """The categories the case rules out, against the stops themselves."""
+    forbidden = [_norm_code(c) for c in exp["must_not_contain_categories"]]
+    present = [c for c in forbidden if c in stop_codes]
+    if not present:
+        return _ok(f"no forbidden category present {_canon_codes(forbidden)}")
+    return _fail(
+        f"forbidden category(ies) present {[CANONICAL_CATEGORIES.get(c, c) for c in present]}"
+    )
+
+
+def _named_check(exp: dict[str, Any], points: list[dict[str, Any]]) -> dict[str, Any]:
+    """The places the case names, against the names the plan carries."""
+    names = exp.get("must_contain_names") or []
+    missing_names = [
+        n for n in names if not any(_norm_code(n) in norm_name(p.get("name", "")) for p in points)
+    ]
+    if not missing_names:
+        return _ok(f"every named place is on the plan {names}")
+    return _fail(
+        f"missing named place(s) {missing_names}; plan names {[p.get('name') for p in points][:6]}"
+    )
+
+
+def _region_check(points: list[dict[str, Any]]) -> dict[str, Any]:
+    """Whether every stop sits inside the region the product serves."""
+    offenders: list[str] = []
+    for stop in points:
+        lat, lon = stop.get("lat"), stop.get("lon")
+        if not (_is_num(lat) and _is_num(lon)):
+            offenders.append(f"{stop.get('name')!r} has no coordinates")
+        elif not inside_project_area(float(lat), float(lon)):
+            offenders.append(f"{stop.get('name')!r} at {lat:.4f},{lon:.4f} is outside Grodno ADM1")
+    if not offenders:
+        return _ok(f"all {len(points)} point(s) inside Grodno ADM1")
+    return _fail("; ".join(offenders[:4]))
+
+
+def _budget_check(
+    raw: dict[str, Any], points: list[dict[str, Any]], exp: dict[str, Any]
+) -> dict[str, Any]:
+    """The total the response reports, against the cap the case states."""
+    cap = exp.get("max_total_minutes")
+    if cap is None:
+        return _ok("no time cap in this case")
+    total = response_total_minutes(raw, points)
+    if total is None:
+        return _unverified(f"cap {cap} min stated but the response reports no total")
+    if total > cap + 1e-9:
+        return _fail(f"total {total:.1f} min exceeds the {cap} min cap")
+    return _ok(f"total {total:.1f} min <= {cap} min cap")
+
+
+def _result_mode_check(raw: dict[str, Any], exp: dict[str, Any]) -> dict[str, Any]:
+    """The result mode the response carries, against the one the case expects."""
+    expected_mode = exp.get("expected_result_mode")
+    if expected_mode is None:
+        return _ok("no result mode expected")
+    actual = _norm_code(raw.get("result_mode") or raw.get("mode"))
+    if not actual:
+        return _unverified(
+            f"expected result_mode {expected_mode}, but the response carries no "
+            "result_mode marker (the API does not expose one yet)"
+        )
+    if actual == _norm_code(expected_mode):
+        return _ok(f"result_mode {actual}")
+    return _fail(f"result_mode {actual} != expected {expected_mode}")
 
 
 def parity_verdict(

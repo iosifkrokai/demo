@@ -162,175 +162,12 @@ def run_services() -> dict[str, Any]:
 
     checks: list[dict[str, Any]] = []
     places = PostgresPlaceRepository()
-
     near_gate = 0
     try:
         for case in _load("services_along"):
-            raw = case.raw
-            shape = raw["shape"]
-            line = [(lat, lon) for lon, lat in shape["coordinates"]]
-            codes = list(raw["categories"])
-            gate = float(
-                raw.get("gate_m") or services_mod.threshold_for(raw.get("profile", "pedestrian"))
-            )
-
-            answer = places.services_along(
-                shape,
-                categories=codes,
-                profile=raw.get("profile", "pedestrian"),
-                max_off_line_m=gate,
-                limit=raw.get("limit", services_mod.MAX_SERVICES),
-            )
-            items = answer["items"]
-
-            reference = places.with_category(codes, lat_lon_only=True)
-            ref: dict[int, tuple[float, float]] = {}
-            for place in reference:
-                if place.id is None:
-                    continue
-                off, along = _off_line_and_along(place.lat, place.lon, line)
-                if off <= gate:
-                    ref[place.id] = (off, along)
-
-            bad_role = [i["category"] for i in items if _role_of(i["category"]) != "service"]
-            checks.append(
-                {
-                    "case": case.id,
-                    "check": "role_only",
-                    "ok": not bad_role,
-                    "detail": f"не-услуги в ответе: {bad_role}",
-                    "why": case.why,
-                }
-            )
-
-            alongs = [i["along_m"] for i in items]
-            checks.append(
-                {
-                    "case": case.id,
-                    "check": "ordered_along",
-                    "ok": alongs == sorted(alongs),
-                    "detail": f"along_m = {alongs}",
-                    "why": case.why,
-                }
-            )
-
-            over = [i["off_line_m"] for i in items if i["off_line_m"] > gate + 1]
-            checks.append(
-                {
-                    "case": case.id,
-                    "check": "within_gate",
-                    "ok": not over,
-                    "detail": f"за порогом {gate} м: {over}",
-                    "why": case.why,
-                }
-            )
-
-            cap = int(raw.get("limit", services_mod.MAX_SERVICES))
-            ref_capped = dict(sorted(ref.items(), key=lambda kv: kv[1][1])[:cap])
-            safe_ref = {
-                pid
-                for pid, (off, _) in ref_capped.items()
-                if abs(off - gate) > _TIE_M and gate - off > _TIE_M
-            }
-            safe_got = {
-                i["id"]
-                for i in items
-                if abs(i["off_line_m"] - gate) > _TIE_M and gate - i["off_line_m"] > _TIE_M
-            }
-            ties = len(ref_capped) - len(safe_ref)
-            checks.append(
-                {
-                    "case": case.id,
-                    "check": "cap_matches_limit",
-                    "ok": len(items) <= cap,
-                    "detail": f"в ответе {len(items)} точек при пределе {cap}",
-                    "why": case.why,
-                }
-            )
+            case_checks, ties = _service_checks(places, case)
+            checks.extend(case_checks)
             near_gate += ties
-            missing = safe_ref - safe_got
-            extra = safe_got - safe_ref
-            checks.append(
-                {
-                    "case": case.id,
-                    "check": "membership_agrees",
-                    "ok": not missing and not extra,
-                    "detail": (
-                        f"нет в ответе {sorted(missing)}, лишние {sorted(extra)}"
-                        f" (у порога не считаем: {ties})"
-                    ),
-                    "why": case.why,
-                }
-            )
-
-            ref_off = {pid: off for pid, (off, _) in ref.items()}
-            worst = 0.0
-            allowance = 2.0
-            for item in items:
-                if item["id"] in ref_off:
-                    diff = abs(item["off_line_m"] - ref_off[item["id"]])
-                    allowance = max(allowance, 0.005 * ref_off[item["id"]] + 2.0)
-                    worst = max(worst, diff)
-            checks.append(
-                {
-                    "case": case.id,
-                    "check": "distance_agrees",
-                    "ok": worst <= allowance,
-                    "detail": f"максимальное расхождение {worst:.2f} м (допуск {allowance:.2f} м)",
-                    "why": case.why,
-                }
-            )
-
-            flags_ok = (
-                answer.get("detour_confirmed") is False
-                and answer.get("measured") == "distance_to_line"
-                and answer.get("not_measured") == "detour_walking_time"
-            )
-            checks.append(
-                {
-                    "case": case.id,
-                    "check": "honest_flags",
-                    "ok": flags_ok,
-                    "detail": f"detour_confirmed={answer.get('detour_confirmed')}, "
-                    f"measured={answer.get('measured')}, "
-                    f"not_measured={answer.get('not_measured')}",
-                    "why": case.why,
-                }
-            )
-
-            if len(items) >= int(raw.get("limit", services_mod.MAX_SERVICES)):
-                checks.append(
-                    {
-                        "case": case.id,
-                        "check": "cap_is_declared",
-                        "ok": answer.get("capped") is True,
-                        "detail": f"capped={answer.get('capped')} при {len(items)} точках",
-                        "why": case.why,
-                    }
-                )
-
-            if raw.get("monotonic_with_gate"):
-                cap_here = int(raw.get("limit", services_mod.MAX_SERVICES))
-                wider = places.services_along(
-                    shape,
-                    categories=codes,
-                    profile=raw["profile"],
-                    max_off_line_m=gate * 3,
-                    limit=max(cap_here, cap_here * 3),
-                )
-                ok = len(wider["items"]) >= len(items)
-                checks.append(
-                    {
-                        "case": case.id,
-                        "check": "wider_gate_finds_more",
-                        "ok": ok,
-                        "detail": (
-                            f"{len(items)} при {gate:.0f} м →"
-                            f" {len(wider['items'])} при {gate * 3:.0f} м"
-                        ),
-                        "why": case.why,
-                    }
-                )
     except StorageUnavailableError as exc:
         return {
             "stage": "services",
@@ -341,6 +178,173 @@ def run_services() -> dict[str, Any]:
         places.close()
 
     return {"stage": "services", "checks": checks, "skipped": None, "near_gate_points": near_gate}
+
+
+def _service_checks(places: Any, case: Any) -> tuple[list[dict[str, Any]], int]:
+    """Every check one services_along case makes of its own response."""
+    checks: list[dict[str, Any]] = []
+    raw = case.raw
+    shape = raw["shape"]
+    line = [(lat, lon) for lon, lat in shape["coordinates"]]
+    codes = list(raw["categories"])
+    gate = float(raw.get("gate_m") or services_mod.threshold_for(raw.get("profile", "pedestrian")))
+
+    answer = places.services_along(
+        shape,
+        categories=codes,
+        profile=raw.get("profile", "pedestrian"),
+        max_off_line_m=gate,
+        limit=raw.get("limit", services_mod.MAX_SERVICES),
+    )
+    items = answer["items"]
+
+    reference = places.with_category(codes, lat_lon_only=True)
+    ref: dict[int, tuple[float, float]] = {}
+    for place in reference:
+        if place.id is None:
+            continue
+        off, along = _off_line_and_along(place.lat, place.lon, line)
+        if off <= gate:
+            ref[place.id] = (off, along)
+
+    bad_role = [i["category"] for i in items if _role_of(i["category"]) != "service"]
+    checks.append(
+        {
+            "case": case.id,
+            "check": "role_only",
+            "ok": not bad_role,
+            "detail": f"не-услуги в ответе: {bad_role}",
+            "why": case.why,
+        }
+    )
+
+    alongs = [i["along_m"] for i in items]
+    checks.append(
+        {
+            "case": case.id,
+            "check": "ordered_along",
+            "ok": alongs == sorted(alongs),
+            "detail": f"along_m = {alongs}",
+            "why": case.why,
+        }
+    )
+
+    over = [i["off_line_m"] for i in items if i["off_line_m"] > gate + 1]
+    checks.append(
+        {
+            "case": case.id,
+            "check": "within_gate",
+            "ok": not over,
+            "detail": f"за порогом {gate} м: {over}",
+            "why": case.why,
+        }
+    )
+
+    cap = int(raw.get("limit", services_mod.MAX_SERVICES))
+    ref_capped = dict(sorted(ref.items(), key=lambda kv: kv[1][1])[:cap])
+    safe_ref = {
+        pid
+        for pid, (off, _) in ref_capped.items()
+        if abs(off - gate) > _TIE_M and gate - off > _TIE_M
+    }
+    safe_got = {
+        i["id"]
+        for i in items
+        if abs(i["off_line_m"] - gate) > _TIE_M and gate - i["off_line_m"] > _TIE_M
+    }
+    ties = len(ref_capped) - len(safe_ref)
+    checks.append(
+        {
+            "case": case.id,
+            "check": "cap_matches_limit",
+            "ok": len(items) <= cap,
+            "detail": f"в ответе {len(items)} точек при пределе {cap}",
+            "why": case.why,
+        }
+    )
+    missing = safe_ref - safe_got
+    extra = safe_got - safe_ref
+    checks.append(
+        {
+            "case": case.id,
+            "check": "membership_agrees",
+            "ok": not missing and not extra,
+            "detail": (
+                f"нет в ответе {sorted(missing)}, лишние {sorted(extra)}"
+                f" (у порога не считаем: {ties})"
+            ),
+            "why": case.why,
+        }
+    )
+
+    ref_off = {pid: off for pid, (off, _) in ref.items()}
+    worst = 0.0
+    allowance = 2.0
+    for item in items:
+        if item["id"] in ref_off:
+            diff = abs(item["off_line_m"] - ref_off[item["id"]])
+            allowance = max(allowance, 0.005 * ref_off[item["id"]] + 2.0)
+            worst = max(worst, diff)
+    checks.append(
+        {
+            "case": case.id,
+            "check": "distance_agrees",
+            "ok": worst <= allowance,
+            "detail": f"максимальное расхождение {worst:.2f} м (допуск {allowance:.2f} м)",
+            "why": case.why,
+        }
+    )
+
+    flags_ok = (
+        answer.get("detour_confirmed") is False
+        and answer.get("measured") == "distance_to_line"
+        and answer.get("not_measured") == "detour_walking_time"
+    )
+    checks.append(
+        {
+            "case": case.id,
+            "check": "honest_flags",
+            "ok": flags_ok,
+            "detail": f"detour_confirmed={answer.get('detour_confirmed')}, "
+            f"measured={answer.get('measured')}, "
+            f"not_measured={answer.get('not_measured')}",
+            "why": case.why,
+        }
+    )
+
+    if len(items) >= int(raw.get("limit", services_mod.MAX_SERVICES)):
+        checks.append(
+            {
+                "case": case.id,
+                "check": "cap_is_declared",
+                "ok": answer.get("capped") is True,
+                "detail": f"capped={answer.get('capped')} при {len(items)} точках",
+                "why": case.why,
+            }
+        )
+
+    if raw.get("monotonic_with_gate"):
+        cap_here = int(raw.get("limit", services_mod.MAX_SERVICES))
+        wider = places.services_along(
+            shape,
+            categories=codes,
+            profile=raw["profile"],
+            max_off_line_m=gate * 3,
+            limit=max(cap_here, cap_here * 3),
+        )
+        ok = len(wider["items"]) >= len(items)
+        checks.append(
+            {
+                "case": case.id,
+                "check": "wider_gate_finds_more",
+                "ok": ok,
+                "detail": (
+                    f"{len(items)} при {gate:.0f} м → {len(wider['items'])} при {gate * 3:.0f} м"
+                ),
+                "why": case.why,
+            }
+        )
+    return checks, ties
 
 
 def _role_of(code: str) -> str:

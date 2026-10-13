@@ -345,6 +345,26 @@ def render(
     evals: dict[str, Any],
     trajectory: dict[str, Any],
 ) -> str:
+    points = growth_points(routes, golden, evals, trajectory)
+    gaps = known_gaps(golden, evals)
+    caveats = _caveats(routes, golden, evals)
+    return "\n".join(
+        _header(routes, golden, evals, trajectory)
+        + _growth_section(points)
+        + _known_gaps_section(gaps)
+        + _caveats_section(caveats)
+        + _tail_section(routes, golden, evals)
+    )
+
+
+def _header(
+    routes: dict[str, Any],
+    golden: dict[str, Any],
+    evals: dict[str, Any],
+    trajectory: dict[str, Any],
+) -> list[str]:
+    """The table: one row per layer, and what it did or did not measure."""
+    out: list[str] = []
     out: list[str] = []
     out.append("")
     out.append("КАЧЕСТВО ГИДА — ОДНА СТРАНИЦА")
@@ -405,8 +425,12 @@ def render(
         )
     else:
         out.append(f"{'quality/cases/trajectory':<21} {'НЕ ИЗМЕРЯЛОСЬ':<38} —")
+    return out
 
-    points = growth_points(routes, golden, evals, trajectory)
+
+def _growth_section(points: list[dict[str, Any]]) -> list[str]:
+    """Where the layers lost cases, worst-covered first — never ranked by importance."""
+    out: list[str] = []
     out.append("")
     if points:
         out.append(f"ТОЧКИ РОСТА ({len(points)}) — по числу затронутых кейсов")
@@ -426,15 +450,23 @@ def render(
         out.append("Проваленных проверок ни в одном слое. Это значит «поведение совпало")
         out.append("с записанным контрактом», а не «продукт хорош»: кейсы написаны нами")
         out.append("и узкие, а вкус прогулки не меряет ни один слой.")
+    return out
 
-    gaps = known_gaps(golden, evals)
+
+def _known_gaps_section(gaps: list[dict[str, Any]]) -> list[str]:
+    """The gaps the layers name themselves: visible, and not counted as failures."""
+    out: list[str] = []
     if gaps:
         out.append("")
         out.append(f"ИЗВЕСТНЫЕ ПРОБЕЛЫ ({len(gaps)}) — видны, но не считаются провалом")
         out.append("-" * 66)
         for gap in gaps:
             out.append(f"  {gap.get('where')}: {gap['case']}")
+    return out
 
+
+def _caveats(routes: dict[str, Any], golden: dict[str, Any], evals: dict[str, Any]) -> list[str]:
+    """Collect the reasons not to trust a number as far as it looks."""
     caveats: list[str] = []
     notes = routes.get("notes") or {}
     if isinstance(notes, dict):
@@ -458,13 +490,26 @@ def render(
             )
     if routes.get("noise_floor"):
         caveats.append(f"шумовой порог (не из этого прогона): {routes['noise_floor']}")
+    return caveats
+
+
+def _caveats_section(caveats: list[str]) -> list[str]:
+    """What these numbers are not — each stated once, in the order it was found."""
+    out: list[str] = []
     if caveats:
         out.append("")
         out.append("ЧЕМ ЭТИ ЧИСЛА НЕ ЯВЛЯЮТСЯ")
         out.append("-" * 66)
         for caveat in dict.fromkeys(caveats):
             out.append(f"  • {caveat}")
+    return out
 
+
+def _tail_section(
+    routes: dict[str, Any], golden: dict[str, Any], evals: dict[str, Any]
+) -> list[str]:
+    """What is not measured at all, and the command that re-takes everything."""
+    out: list[str] = []
     out.append("")
     out.append("ЧЕГО ЗДЕСЬ НЕТ ВООБЩЕ")
     out.append("-" * 66)
@@ -479,7 +524,7 @@ def render(
             out.append(f"  {name}: {layer['how']}")
     out.append("  всё офлайн сразу: ./.venv/bin/python -m quality.report --run")
     out.append("")
-    return "\n".join(out)
+    return out
 
 
 def _run_offline() -> None:
