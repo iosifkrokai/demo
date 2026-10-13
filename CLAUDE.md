@@ -80,8 +80,10 @@ pass you should ignore.
 - **Reading a query needs the model.** Without `OPENROUTER_API_KEY` the planning
   endpoints answer `503 llm_not_configured` rather than guessing; retrieval is
   unaffected (embeddings are local, 384-d, ONNX).
-- **The product speaks Russian.** `ruff` deliberately ignores the ambiguous-unicode
-  rules (RUF001–RUF002): Cyrillic in strings is the point, not a defect.
+- **The product speaks Russian.** The ambiguous-unicode rules (RUF001–RUF002) stay
+  on, but `allowed-confusables` in `backend/pyproject.toml` lists the Russian and
+  Belarusian letters and the typography the product uses — so Cyrillic in strings
+  is not a defect, while any *other* homoglyph still is.
 - **Frontend:** do not fork `frontend/src/components/ui/*`; every size, radius and
   colour comes from the tokens in `frontend/src/index.css`. See `frontend/DESIGN.md`.
 
