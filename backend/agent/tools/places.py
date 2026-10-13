@@ -24,6 +24,8 @@ from db.embeddings import model as embeddings_model
 from db.embeddings.query import embed_query
 from routing.select import rrf_fuse
 
+SIGNALS = ("embedding", "category", "nearby")
+
 MAX_FACTS_PER_CALL = 1
 MAX_LINKS_PER_PLACE = 3
 MAX_BLURB_CHARS = 240
@@ -62,6 +64,40 @@ class Where(BaseModel):
     near_lat: float | None = None
     near_lon: float | None = None
     radius_m: float | None = None
+
+
+def _in_box(place: Any, box: tuple[float, float, float, float] | None) -> bool:
+    return box is None or _inside(place.lat, place.lon, box)
+
+
+def _text_hits(store: Any, query: str, box: Any, pool: int) -> list[tuple[int, float]] | None:
+    """Vector hits — only when the query says something and a model can embed it."""
+    if not query.strip() or not embeddings_model.is_available():
+        return None
+    qvec = embed_query(query)
+    if not qvec:
+        return None
+    found = store.places.by_embedding(qvec, limit=pool, region_bbox=box)
+    return [(place.id, score) for place, score in found if _in_box(place, box)]
+
+
+def _category_hits(
+    store: Any, codes: list[str], box: Any, pool: int
+) -> list[tuple[int, float]] | None:
+    """Everything the catalogue files under the codes the request named."""
+    if not codes:
+        return None
+    return [(p.id, 0.0) for p in store.places.by_category(codes, pool) if _in_box(p, box)]
+
+
+def _near_hits(
+    store: Any, near: tuple[float, float, float] | None, box: Any, pool: int
+) -> list[tuple[int, float]] | None:
+    """Everything inside the radius of the point the request named."""
+    if near is None:
+        return None
+    around = store.places.nearby(near[0], near[1], radius_km=near[2] / 1000.0, limit=pool)
+    return [(p.id, 0.0) for p in around if _in_box(p, box)]
 
 
 def _card(place: Any) -> dict[str, Any]:
@@ -141,27 +177,15 @@ def find_places(
                 provenance["area_filter"] = "no_boundary"
         provenance["region_bbox"] = list(box) if box is not None else None
 
-        def keep(place: Any) -> bool:
-            return box is None or _inside(place.lat, place.lon, box)
-
         pool = constants.RETRIEVAL_POOL_SIZE
-        rankings: list[list[tuple[int, float]]] = []
+        hits = (
+            _text_hits(store, query, box, pool),
+            _category_hits(store, db_cats, box, pool),
+            _near_hits(store, near, box, pool),
+        )
+        provenance["signals"] = [name for name, hit in zip(SIGNALS, hits, strict=False) if hit]
 
-        qvec = embed_query(query) if query.strip() and embeddings_model.is_available() else []
-        if qvec:
-            found = store.places.by_embedding(qvec, limit=pool, region_bbox=box)
-            rankings.append([(place.id, score) for place, score in found if keep(place)])
-            provenance["signals"].append("embedding")
-        if db_cats:
-            by_cat = store.places.by_category(db_cats, pool)
-            rankings.append([(p.id, 0.0) for p in by_cat if keep(p)])
-            provenance["signals"].append("category")
-        if near is not None:
-            around = store.places.nearby(near[0], near[1], radius_km=near[2] / 1000.0, limit=pool)
-            rankings.append([(p.id, 0.0) for p in around if keep(p)])
-            provenance["signals"].append("nearby")
-
-        rankings = [ranking for ranking in rankings if ranking]
+        rankings = [hit for hit in hits if hit]
         if not rankings:
             return []
         fused = rrf_fuse(rankings, k=constants.RRF_K)

@@ -53,6 +53,31 @@ def admin_list_users(
     return AdminUserListOut(items=items, total=total)
 
 
+def _target_or_error(user_id: str, repo: UserRepository) -> tuple[Any, Any]:
+    """The user this request names, or the 404 that says there is no such user.
+
+    A malformed uuid and an unknown one are the same answer.
+    """
+    target_id = deps.parse_uuid(user_id)
+    target = repo.get_user(target_id) if target_id is not None else None
+    if target is None:
+        return None, deps.error(404, REASON_USER_NOT_FOUND)
+    return target, None
+
+
+def _role_change_error(
+    actor: Any, target: Any, role: str | None, repo: UserRepository
+) -> Any | None:
+    """The two role changes an admin may not make: their own, and the last admin's."""
+    if role is None or role == target.role:
+        return None
+    if target.id == actor.id:
+        return deps.error(409, REASON_SELF_ROLE)
+    if target.role == ROLE_ADMIN and role != ROLE_ADMIN and repo.count_admins() <= 1:
+        return deps.error(409, REASON_LAST_ADMIN)
+    return None
+
+
 @router.patch("/users/{user_id}", response_model=PublicUser)
 @deps.storage_guarded
 def admin_patch_user(
@@ -65,28 +90,22 @@ def admin_patch_user(
     if err is not None:
         return err
     assert actor is not None
-    target_id = deps.parse_uuid(user_id)
-    if target_id is None:
-        return deps.error(404, REASON_USER_NOT_FOUND)
-    target = repo.get_user(target_id)
-    if target is None:
-        return deps.error(404, REASON_USER_NOT_FOUND)
+    target, err = _target_or_error(user_id, repo)
+    if err is not None:
+        return err
 
     fields = body.model_dump(exclude_unset=True)
     role = fields.get("role")
-    display_name_set = "display_name" in fields
 
-    if role is not None and role != target.role:
-        if target_id == actor.id:
-            return deps.error(409, REASON_SELF_ROLE)
-        if target.role == ROLE_ADMIN and role != ROLE_ADMIN and repo.count_admins() <= 1:
-            return deps.error(409, REASON_LAST_ADMIN)
+    denial = _role_change_error(actor, target, role, repo)
+    if denial is not None:
+        return denial
 
     updated = repo.update_user(
-        target_id,
+        target.id,
         role=role,
         display_name=fields.get("display_name"),
-        display_name_set=display_name_set,
+        display_name_set="display_name" in fields,
     )
     if updated is None:
         return deps.error(404, REASON_USER_NOT_FOUND)
@@ -104,17 +123,14 @@ def admin_delete_user(
     if err is not None:
         return err
     assert actor is not None
-    target_id = deps.parse_uuid(user_id)
-    if target_id is None:
-        return deps.error(404, REASON_USER_NOT_FOUND)
-    if target_id == actor.id:
+    target, err = _target_or_error(user_id, repo)
+    if err is not None:
+        return err
+    if target.id == actor.id:
         return deps.error(409, REASON_SELF_DELETE)
-    target = repo.get_user(target_id)
-    if target is None:
-        return deps.error(404, REASON_USER_NOT_FOUND)
     if target.role == ROLE_ADMIN and repo.count_admins() <= 1:
         return deps.error(409, REASON_LAST_ADMIN)
-    repo.delete_user(target_id)
+    repo.delete_user(target.id)
     return Response(status_code=204)
 
 

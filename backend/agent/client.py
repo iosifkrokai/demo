@@ -65,25 +65,9 @@ def plan_with_agent(
         runner._record_model_failure("agent_unavailable", runner._build_prompt(query, brief))
         return None
 
-    deps = PlanningDeps(
-        repos=repos,
-        locale=brief.locale,
-        origin=_origin(brief),
-        region_bbox=brief.region_bbox,
-        deadline_at=time.monotonic() + runner.effective_wall_clock(wall_clock_s),
-    )
-    if repos is not None:
-        deps.facts = type(deps.facts).from_rows(repos.taxonomy.all())
-
-    try:
-        submission, failure = runner._run_agent(
-            query.strip(), brief, deps, wall_clock_s=wall_clock_s
-        )
-    except Exception as exc:
-        log.warning("agent_plan: unexpected failure: %s: %s", type(exc).__name__, exc)
-        return None
+    deps = _deps(brief, repos, wall_clock_s)
+    submission = _submission(query.strip(), brief, deps, wall_clock_s)
     if submission is None:
-        log.info("agent_plan: no usable submission (%s) — no plan", failure)
         return None
 
     contract = mapping._merge(query.strip(), brief, submission, deps.observed_ids, deps.repos)
@@ -93,6 +77,43 @@ def plan_with_agent(
             submission=submission, requirements=contract, measured=_refused(submission)
         )
 
+    return _measured(brief, deps, submission, contract)
+
+
+def _deps(
+    brief: ReaderBrief, repos: Repositories | None, wall_clock_s: float | None
+) -> PlanningDeps:
+    """The run's reach: what it may read, and when its clock runs out."""
+    deps = PlanningDeps(
+        repos=repos,
+        locale=brief.locale,
+        origin=_origin(brief),
+        region_bbox=brief.region_bbox,
+        deadline_at=time.monotonic() + runner.effective_wall_clock(wall_clock_s),
+    )
+    if repos is not None:
+        deps.facts = type(deps.facts).from_rows(repos.taxonomy.all())
+    return deps
+
+
+def _submission(
+    query: str, brief: ReaderBrief, deps: PlanningDeps, wall_clock_s: float | None
+) -> PlanSubmission | None:
+    """The model's answer, or None with the reason already logged."""
+    try:
+        submission, failure = runner._run_agent(query, brief, deps, wall_clock_s=wall_clock_s)
+    except Exception as exc:
+        log.warning("agent_plan: unexpected failure: %s: %s", type(exc).__name__, exc)
+        return None
+    if submission is None:
+        log.info("agent_plan: no usable submission (%s) — no plan", failure)
+    return submission
+
+
+def _measured(
+    brief: ReaderBrief, deps: PlanningDeps, submission: PlanSubmission, contract: TripRequirements
+) -> AgentOutcome | None:
+    """The measured, verified outcome of a submission the model actually made."""
     ordered, keep = _with_base_stops(submission, brief)
     ordered, keep = _without_excluded(ordered, keep, brief)
     if contract.result_mode == "route" and not ordered:
@@ -110,7 +131,7 @@ def plan_with_agent(
             locale=brief.locale,
         ),
         submission,
-        repos=repos,
+        repos=deps.repos,
         facts=deps.facts,
         contract=contract,
         deadline_s=deps.seconds_left(),

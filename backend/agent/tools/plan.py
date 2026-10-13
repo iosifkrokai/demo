@@ -173,19 +173,7 @@ def plan_walk(
         message = _no_route_message(info, request.origin, str(exc))
         return envelope("plan_walk", [], provenance, error="no_route", message=message)
 
-    shape: dict[str, Any] = {}
-    summary: dict[str, Any] = {}
-    try:
-        shape, summary, _status = render(
-            route,
-            costing=costing,
-            origin=request.origin,
-            locale=request.locale,
-            round_trip=request.round_trip,
-        )
-    except UpstreamUnavailableError:
-        provenance["geometry"] = "valhalla unavailable"
-
+    shape, summary = _drawn(route, request, costing, provenance)
     walk_seconds = float(summary.get("time") or plan.walk_seconds or 0.0)
     visits = {c.id: v for c, v in zip(candidates, cost.visit_minutes, strict=False)}
     stops = [_stop(card, visits.get(card.id) or 0) for card in plan.route]
@@ -211,6 +199,24 @@ def plan_walk(
     if answer.get("error") is None and answer.get("results"):
         cache.MEASURE_CACHE.put(key, answer)
     return answer
+
+
+def _drawn(
+    route: list[Any], request: WalkRequest, costing: str, provenance: dict[str, Any]
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Ask Valhalla to draw the walk; a service that cannot is not a failed plan."""
+    try:
+        shape, summary, _status = render(
+            route,
+            costing=costing,
+            origin=request.origin,
+            locale=request.locale,
+            round_trip=request.round_trip,
+        )
+    except UpstreamUnavailableError:
+        provenance["geometry"] = "valhalla unavailable"
+        return {}, {}
+    return shape, summary
 
 
 def _no_route_message(info: dict[str, Any], origin: LatLon | None, fallback: str) -> str:
