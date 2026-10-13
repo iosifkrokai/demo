@@ -30,6 +30,8 @@ GEOFENCE_PROBLEM = "outside Grodno region"
 
 DEFAULT_DUP_RADIUS_M = _constants.DUPLICATE_RADIUS_M
 
+TWIN_RADIUS_M = 5.0
+
 COLUMNS = [
     "name",
     "category",
@@ -498,8 +500,89 @@ def resolve_shadowed(
                 "distance_m": round(
                     haversine_m(r["lat"], r["lon"], winner["lat"], winner["lon"]), 1
                 ),
+                "rule": "hand-authored",
             }
         )
+    return [r for index, r in enumerate(records) if index not in dropped], shadowed
+
+
+TWIN_FIELDS = (
+    "blurb",
+    "fun_fact",
+    "fun_facts",
+    "opening_hours",
+    "ticket_price",
+    "visit_minutes",
+    "links",
+)
+
+
+def _richness(r: dict[str, Any]) -> int:
+    return sum(1 for f in TWIN_FIELDS if r.get(f))
+
+
+def _twin_groups(records: list[dict[str, Any]], radius_m: float) -> list[list[int]]:
+    """Index groups of records that sit within ``radius_m`` of their group's head."""
+    remaining = list(range(len(records)))
+    groups: list[list[int]] = []
+    while remaining:
+        head, group, rest = remaining[0], [remaining[0]], []
+        for index in remaining[1:]:
+            a, b = records[head], records[index]
+            if haversine_m(a["lat"], a["lon"], b["lat"], b["lon"]) < radius_m:
+                group.append(index)
+            else:
+                rest.append(index)
+        remaining = rest
+        if len(group) > 1:
+            groups.append(group)
+    return groups
+
+
+def resolve_twins(
+    records: list[dict[str, Any]], radius_m: float = TWIN_RADIUS_M
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Collapse automatic records mapping one object twice: same name and category, metres apart.
+    Distance is what tells a twin from a namesake — same-name fortifications a hundred
+    metres apart are distinct objects, and are left alone.
+    """
+    buckets: dict[tuple[str, str], list[int]] = {}
+    for index, r in enumerate(records):
+        if r.get("_category_source") != SOURCE_AUTO:
+            continue
+        key = (norm_name(r.get("name")), str(r.get("category") or ""))
+        if key[0] and r.get("lat") is not None and r.get("lon") is not None:
+            buckets.setdefault(key, []).append(index)
+
+    dropped: set[int] = set()
+    shadowed: list[dict[str, Any]] = []
+    for indexes in buckets.values():
+        if len(indexes) < MIN_BUCKET_ROWS:
+            continue
+        rows = [records[index] for index in indexes]
+        for group in _twin_groups(rows, radius_m):
+            winner = min(group, key=lambda i: (-_richness(rows[i]), i))
+            survivor = rows[winner]
+            for position in group:
+                if position == winner:
+                    continue
+                loser = rows[position]
+                dropped.add(indexes[position])
+                shadowed.append(
+                    {
+                        "name": loser.get("name"),
+                        "dataset": loser["_dataset"],
+                        "source_url": loser["source_url"],
+                        "shadowed_by": survivor["source_url"],
+                        "distance_m": round(
+                            haversine_m(
+                                loser["lat"], loser["lon"], survivor["lat"], survivor["lon"]
+                            ),
+                            1,
+                        ),
+                        "rule": "same object",
+                    }
+                )
     return [r for index, r in enumerate(records) if index not in dropped], shadowed
 
 

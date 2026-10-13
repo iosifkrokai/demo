@@ -66,14 +66,24 @@ Order of a full apply — validate, upsert by natural key, embed locally, report
    `itinerary_stops` (from `itineraries.json`, key `id`) — the two reference files
    projected, see above; embeddings last, from the local CPU model.
 
-A hand-authored row **shadows** an automatic one: where the two names match after
-`norm_name()` and the rows sit within `DUPLICATE_RADIUS_M` of each other (150 m),
-the automatic row is not projected as a place and its `source_url` moves onto the
-hand-authored one, so `place_sources` carries both. This happens in memory, before
-any upsert (`datasets.resolve_shadowed`), so the report and the projection agree;
-the report's `merged` block lists exactly what it dropped. Automatic twins of each
-other are left alone — the name alone does not make a duplicate, and most same-name
-pairs are a bus stop and its counterpart across the road.
+Two rules drop a row before the upsert, both in memory (`datasets.resolve_shadowed`,
+`datasets.resolve_twins`) so the report and the projection agree, and both report
+in full: the report's `merged` block lists every drop, with the row that outranked
+it, the distance and which rule fired.
+
+- **A hand-authored row shadows an automatic one** of the same normalised name
+  within `DUPLICATE_RADIUS_M` (150 m). The automatic row is not projected, and its
+  `source_url` moves onto the hand-authored one, so `place_sources` carries both.
+- **An automatic row that is the same object as another automatic row collapses**:
+  same normalised name *and* category, within `TWIN_RADIUS_M` (5 m) — one stop
+  mapped as a node and as a way, say. The richer row survives, ties going to the
+  earlier one.
+
+Distance is what tells a twin from a namesake, and the namesake is the common case:
+the region has lines of identically named ДОТы and блиндажи a hundred metres apart,
+and nearly every bus stop has a same-named counterpart across the road. The
+remaining same-name pairs are left alone on purpose — collapsing on the name would
+delete real objects.
 
 Idempotency: `places` upserts on `source_url`, `place_sources` on
 `(provider, external_id)`, `place_aliases` on `(place_id, lower(alias), locale)`,

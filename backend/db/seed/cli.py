@@ -42,11 +42,12 @@ def _count_by(rows: list[dict[str, Any]], key: str) -> dict[str, int]:
 
 
 def _collect(datasets: list[Dataset]) -> tuple[dict[str, Any], list[dict[str, Any]]]:
-    """The valid records to project, and the automatic ones a hand-authored row shadows."""
+    """The valid records to project, and the ones another record shadows."""
     collected = collect_records(datasets)
-    kept, shadowed = ds_mod.resolve_shadowed(collected["records"])
+    kept, hand = ds_mod.resolve_shadowed(collected["records"])
+    kept, twins = ds_mod.resolve_twins(kept)
     collected["records"] = kept
-    return collected, shadowed
+    return collected, [*hand, *twins]
 
 
 def cmd_apply(args: argparse.Namespace) -> int:
