@@ -1,8 +1,4 @@
-"""HTTP surface for accounts and visits.
-
-The wire speaks codes, not prose; a missing identity differs from a wrong one.
-The admin panel lives in ``api.routers.admin``.
-"""
+"""HTTP surface for accounts and visits."""
 
 from __future__ import annotations
 
@@ -76,10 +72,7 @@ def register(
     response: Response,
     repo: UserRepository = Depends(deps.get_user_repository),
 ) -> Any:
-    """Create an account (always ``role=user``) and sign it in.
-
-    The first administrator is made by ``python -m db.seed admin``, not by registering.
-    """
+    """Create an account (always ``role=user``) and sign it in."""
     email = normalize_email(body.email)
     if email is None:
         return deps.error(422, REASON_INVALID_EMAIL)
@@ -137,10 +130,7 @@ def me(
     request: Request,
     repo: UserRepository = Depends(deps.get_user_repository),
 ) -> Any:
-    """Honest about the anonymous case: ``{authenticated: false}``, not a 401.
-
-    A 401 here would be console noise for every visitor who is not logged in.
-    """
+    """Honest about the anonymous case: ``{authenticated: false}``, not a 401."""
     user = deps.session_user(request, repo)
     if user is None:
         return AuthMeOut(authenticated=False, user=None)

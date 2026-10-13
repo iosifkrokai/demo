@@ -1,9 +1,4 @@
-"""Pure math of the routing leaf: no database, no network, no model.
-
-The first target is ``routing/valhalla/types.py`` — the time sentinels and the
-result shape every route call speaks. The rest is the small amount of the leaf
-that is pure at import and worth pinning.
-"""
+"""Pure math of the routing leaf: no database, no network, no model."""
 
 from __future__ import annotations
 
@@ -82,14 +77,6 @@ def test_latlon_accepts_the_region_and_refuses_the_globe() -> None:
         LatLon(lat=0.0, lon=0.0)
 
 
-# --- the tourist's own position as a leg endpoint -----------------------------
-#
-# The origin is not a stop, so it is not a matrix row: it travels as the anchor
-# beside the matrix. What it must change is the arithmetic — the walk out of and
-# back to where the tourist stands is part of the tour, and a plan that ignores it
-# reports a budget for a walk nobody was ever offered.
-
-
 def _candidate(pid: int, lat: float, lon: float) -> Candidate:
     return Candidate(id=pid, name=f"P{pid}", category="church", lat=lat, lon=lon)
 
@@ -109,13 +96,11 @@ def test_the_budget_counts_the_walk_out_of_the_tourists_position() -> None:
         [[0.0, 300.0], [300.0, 0.0]],
         OriginAnchor(from_origin=[600.0, 60.0], to_origin=[900.0, 90.0]),
     )
-    constraints = ResolvedConstraints(time_budget_minutes=30)  # 1800 s
+    constraints = ResolvedConstraints(time_budget_minutes=30)
 
     without = validate(stops, plain, constraints, {"order": [0, 1]})
     with_origin = validate(stops, counted, constraints, {"order": [0, 1]})
 
-    # 300 s of walking, plus 20 min of visits, fits 30 min. Add the 600 s walk out
-    # of the tourist's position and it does not.
     assert without.fits_budget is True
     assert with_origin.fits_budget is False
     assert with_origin.walk_seconds - without.walk_seconds == pytest.approx(600.0)
@@ -136,10 +121,7 @@ def test_a_round_trip_closes_on_the_origin_when_it_is_known() -> None:
         {"order": [0, 1]},
     )
 
-    assert without.walk_seconds == pytest.approx(600.0)  # 0→1 and 1→0
-    # 600 s out of the origin + 300 between the stops + 90 back from the LAST stop.
-    # Closing on the first stop instead — the pre-anchor behaviour — would add
-    # matrix[1][0] = 300 and make this 1200.
+    assert without.walk_seconds == pytest.approx(600.0)
     assert with_origin.walk_seconds == pytest.approx(990.0)
     assert with_origin.trace["max_leg_seconds"] == 600
 
@@ -150,7 +132,6 @@ def test_the_optimizer_starts_next_to_the_tourist() -> None:
     stops = [_candidate(1, 53.6771, 23.8258), _candidate(2, 53.6819, 23.8400)]
     stops.append(_candidate(3, 53.6900, 23.8500))
     walk = [[0.0, 1000.0, 1100.0], [1000.0, 0.0, 100.0], [1100.0, 100.0, 0.0]]
-    # Stop 3 is a step from the tourist's position; the other two are kilometres away.
     anchor = OriginAnchor(from_origin=[5000.0, 4000.0, 1.0], to_origin=[5000.0, 4000.0, 1.0])
     constraints = ResolvedConstraints(time_budget_minutes=None)
 
@@ -159,7 +140,6 @@ def test_the_optimizer_starts_next_to_the_tourist() -> None:
 
     assert aware_info["order"][0] == 2
     assert aware[0].id == 3
-    # ...and the anchor is what changed it: without it the tour opens elsewhere.
     assert blind_info["order"][0] != 2
 
 
@@ -168,14 +148,13 @@ def test_a_two_stop_tour_opens_at_the_nearer_end() -> None:
     this the walk out of the tourist's position could be the long way round."""
     stops = [_candidate(1, 53.6771, 23.8258), _candidate(2, 53.6819, 23.8400)]
     walk = [[0.0, 600.0], [600.0, 0.0]]
-    # Stop 2 is a step away; stop 1 is an hour's walk.
     anchor = OriginAnchor(from_origin=[4000.0, 20.0], to_origin=[4000.0, 20.0])
     constraints = ResolvedConstraints(time_budget_minutes=None)
 
     blind, _ = optimize(stops, _cost(walk), constraints)
     aware, aware_info = optimize(stops, _cost(walk, anchor), constraints)
 
-    assert blind[0].id == 1  # unchanged when the position is not known
+    assert blind[0].id == 1
     assert aware_info["order"] == [1, 0]
     assert aware[0].id == 2
 
@@ -191,7 +170,5 @@ def test_an_unknown_leg_is_not_an_unreachable_one_for_the_anchor() -> None:
     plan = validate(stops, cost, ResolvedConstraints(time_budget_minutes=30), {"order": [0, 1]})
 
     assert plan.fits_budget is True
-    # One unknown leg, not two: an open tour has the way out of the origin and the
-    # chain, and only the first of those was unanswerable.
     assert plan.trace["walk_times_unknown"] == 1
     assert plan.walk_seconds < constants.UNREACHABLE_S

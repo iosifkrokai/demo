@@ -1,7 +1,4 @@
-"""The interpretation agent package.
-
-``agent.client`` is the public entry point.
-"""
+"""The interpretation agent package."""
 
 from agent.client import AgentOutcome, available, plan_with_agent
 

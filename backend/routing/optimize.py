@@ -27,8 +27,6 @@ from .cost import (
 
 log = logging.getLogger(__name__)
 
-# Up to this many candidates the exhaustive order is cheap enough; past the
-# second, regret insertion still beats nearest-neighbour on quality.
 BRUTE_FORCE_MAX = 6
 REGRET_INSERTION_MAX = 12
 
@@ -58,10 +56,6 @@ def optimize(
     if n == 2:
         order = [0, 1] if not must_idx else (must_idx + [i for i in range(2) if i not in must_idx])
         if anchor is not None:
-            # Two stops have no order worth searching, but they do have a
-            # direction: the walk out of the tourist's position and the walk back
-            # are the tour, so enter it from the nearer end. A must-visit stop is
-            # protected from being *dropped*, not from being second.
             flipped = order[::-1]
             if _order_total(flipped, matrix, visits, constraints.round_trip, anchor) < _order_total(
                 order, matrix, visits, constraints.round_trip, anchor
@@ -171,12 +165,7 @@ def _order_total(
     round_trip: bool = False,
     anchor: OriginAnchor | None = None,
 ) -> float:
-    """Total route time (walk + visit), the tourist's own legs included.
-
-    `total_seconds` carries the pairwise chain only, so the two legs that leave
-    from and return to the tourist's position are added here. Ranking orders by
-    this is what makes the optimizer prefer a first stop near where they stand.
-    """
+    """Total route time (walk + visit), the tourist's own legs included."""
     total = total_seconds(order, matrix, visits)
     if anchor is not None and order:
         total += _leg_value(leg_seconds(matrix, anchor, ORIGIN_INDEX, order[0]))
@@ -219,14 +208,7 @@ def _measured_total(
 def _leg_rule_legs(
     order: list[int], round_trip: bool, anchor: OriginAnchor | None
 ) -> list[tuple[int, int]]:
-    """The legs the walkability rule applies to.
-
-    Not the tourist's own. `MAX_WALK_LEG_KM` exists so that a *tour* never
-    contains an absurd hop between two sights; the walk out of where they are
-    standing is a fact about their position, and the budget is what prices it. A
-    distant start should shorten the tour, not drop stops for a reason that is
-    not about the tour at all.
-    """
+    """The legs the walkability rule applies to."""
     if anchor is not None:
         return list(pairwise(order))
     return route_legs(order, round_trip, None)
@@ -274,10 +256,7 @@ def _budget_constrain(
     round_trip: bool = False,
     anchor: OriginAnchor | None = None,
 ) -> tuple[list[int], int]:
-    """Greedily trim `order` to fit inside the time budget and max-leg constraint.
-
-    Must-visit places are protected; returns (trimmed_order, n_dropped).
-    """
+    """Greedily trim `order` to fit inside the time budget and max-leg constraint."""
     if not order:
         return order, 0
 
@@ -322,16 +301,7 @@ def _budget_constrain(
 
 
 def _max_leg_seconds(budget_s: int | None, costing: str = "pedestrian") -> float:
-    """Maximum allowed time for a single leg, in seconds.
-
-    A walkability rule for pedestrian tours, a riding rule for bicycles, and the
-    budget alone for a driven tour. A bicycle used to get the driven rule — the
-    whole budget for one leg, or four hours with none — which made a "ride" of a
-    single 40 km hop something the optimizer would happily build.
-    """
-    # A raw alias ("walk", "drive") must not decide which rule applies: the
-    # engine measures it as the costing the alias names, so the rule follows the
-    # costing, not the word the caller happened to pass.
+    """Maximum allowed time for a single leg, in seconds."""
     costing = costing_for(costing)
     if costing == "bicycle":
         ride_s = (constants.BICYCLE_LEG_KM / constants.BICYCLE_SPEED_KMH) * 3600
@@ -352,11 +322,7 @@ def _max_leg(
     round_trip: bool = False,
     anchor: OriginAnchor | None = None,
 ) -> float:
-    """Longest single leg of the tour itself, in seconds.
-
-    The tourist's own legs are not part of it (see `_leg_rule_legs`); a NaN
-    ("could not ask") leg is skipped.
-    """
+    """Longest single leg of the tour itself, in seconds."""
     best = 0.0
     for a, b in _leg_rule_legs(route, round_trip, anchor):
         cell = matrix[a][b]
@@ -513,12 +479,7 @@ def _nn_2opt_multi(
     round_trip: bool = False,
     anchor: OriginAnchor | None = None,
 ) -> tuple[list[int], dict[str, Any]]:
-    """Nearest-neighbour from K random starts + 2-opt local search.
-
-    A fixed seed gives the same route for the same query. When the tourist's
-    position is known its nearest stop is one of the starts, so the search does
-    not have to rely on the random draw to begin near them.
-    """
+    """Nearest-neighbour from K random starts + 2-opt local search."""
     n = len(cands)
     rng = random.Random(42)
     starts = list(range(n))
@@ -622,13 +583,7 @@ def valhalla_order(
     retries: int | None = None,
     anchor: OriginAnchor | None = None,
 ) -> tuple[list[Candidate], dict[str, Any]]:
-    """Let Valhalla order the walk when nothing pins the sequence.
-
-    Skipped when the tourist's position is known: `/optimized_route` reorders the
-    stops it is given and cannot be told where the walk starts, so it would undo
-    the anchor-aware order the optimizer just chose. The optimizer's own search is
-    exact up to six stops and good to twelve, which is the range the planner uses.
-    """
+    """Let Valhalla order the walk when nothing pins the sequence."""
     if anchor is not None:
         return route, {**info, "valhalla_order": "skipped_origin_known"}
     if len(route) < 3:
@@ -659,10 +614,7 @@ def prune_unroutable(
     cost: CostMatrix,
     must_visit_ids: list[int] | None = None,
 ) -> tuple[list[Candidate], list[Any]]:
-    """Drop stops the matrix cannot connect to their predecessor in this order.
-
-    Returns ``(route, report)``; a mandatory stop is never removed but reported.
-    """
+    """Drop stops the matrix cannot connect to their predecessor in this order."""
     route, pruned = prune_unroutable_stops(route, candidates, cost, must_visit_ids=must_visit_ids)
     if pruned:
         log.warning(

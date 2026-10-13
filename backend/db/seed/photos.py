@@ -54,7 +54,7 @@ def _osmium() -> Any:
     """
     try:
         return importlib.import_module("osmium")
-    except ImportError as exc:  # pragma: no cover - depends on the environment
+    except ImportError as exc:
         raise RuntimeError(
             "стадия подсказок требует pyosmium (osmium): он не объявлен в pyproject — "
             "установите его отдельно (pip install osmium) или запустите стадию resolve "

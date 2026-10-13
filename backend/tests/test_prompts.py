@@ -1,10 +1,4 @@
-"""The instruction text, held to its promise.
-
-The rules are the only lever on how the model searches: a rule that is not in the
-prompt cannot change the trajectory the live logs show, and a number the prompt
-names must be the number the tool enforces. These hold the one-search rule and its
-agreement with `find_places` — the two things a prompt change has to get right.
-"""
+"""The instruction text, held to its promise."""
 
 from __future__ import annotations
 

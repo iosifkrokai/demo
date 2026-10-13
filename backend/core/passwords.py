@@ -1,7 +1,4 @@
-"""Password hashing and session tokens.
-
-Neither secret is recoverable from the database.
-"""
+"""Password hashing and session tokens."""
 
 from __future__ import annotations
 
@@ -18,7 +15,6 @@ SCRYPT_SALT_BYTES = 16
 SCRYPT_MAXMEM = 64 * 1024 * 1024
 
 _ALGO = "scrypt"
-# algorithm, n, r, p, salt, digest — the stored format, in order.
 _HASH_FIELDS = 6
 
 SESSION_TTL_S = 30 * 24 * 60 * 60
@@ -52,10 +48,7 @@ def hash_password(password: str) -> str:
 
 
 def verify_password(password: str, stored: str | None) -> bool:
-    """Constant-time check of ``password`` against a stored hash.
-
-    Returns ``False`` for any missing, malformed, or unknown-algorithm stored value.
-    """
+    """Constant-time check of ``password`` against a stored hash."""
     if not stored:
         return False
     parts = stored.split("$")

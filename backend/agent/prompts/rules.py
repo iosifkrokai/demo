@@ -9,10 +9,7 @@ from agent.prompts.notes import _known_areas_note
 
 
 def base_rules(categories: Sequence[Any], areas: Sequence[Any]) -> str:
-    """The standing instructions, up to (and including) the worked shapes.
-
-    The per-request note is appended by :func:`compose_instructions`.
-    """
+    """The standing instructions, up to (and including) the worked shapes."""
     from agent.runner import MAX_TOOL_CALLS
     from agent.tools.places import MAX_PLACES_PER_FIND
 

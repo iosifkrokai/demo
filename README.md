@@ -106,7 +106,10 @@ paths; the trailing slash on `/auth|/me|/admin/` is deliberate, so the *bare*
 
 The LLM layer is `backend/agent/` (client / llm / runner / tools / prompts); the
 Valhalla client is the `backend/routing/valhalla/` package, the place queries
-`backend/db/store/places.py`.
+`backend/db/store/places.py`. The planner sends **no `costing_options`** — the map
+panel (`frontend/src/utils/valhalla.ts`) does. Overriding the engine's per-costing
+defaults would move every measured time in every answer, which is a re-baseline of
+the quality layers rather than a tweak.
 
 Two request fields change the shape of the answer:
 

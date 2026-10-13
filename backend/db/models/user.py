@@ -23,12 +23,7 @@ class User:
 
 @dataclass(frozen=True)
 class AdminUser(User):
-    """A user as the admin list shows one: the row plus its activity count.
-
-    Not a row of `users` — the count comes from `visited_places` and exists only
-    for that one listing, which is why this is a projection beside the
-    schema-pinned models rather than a change to `User`.
-    """
+    """A user as the admin list shows one: the row plus its activity count."""
 
     visited: int = 0
 

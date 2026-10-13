@@ -1,14 +1,4 @@
-"""The account repository: users, their sessions and the places they visited.
-
-The three tables are one aggregate — a visit exists because an account does, and
-a session only ever points at one — so they share a repository rather than
-splitting by table. Reads return the row models; a miss is ``None``, a Postgres
-outage is :class:`StorageUnavailableError`.
-
-The admin CRUD over ``places`` belongs to the place repository, where the table
-it writes lives; the counts that span users and visits are a query rather than an
-aggregate, and are in :mod:`db.store.stats`.
-"""
+"""The account repository: users, their sessions and the places they visited."""
 
 from __future__ import annotations
 

@@ -1,18 +1,4 @@
-"""The server-side thread: a journal of turns, and what the journal outranks.
-
-The client holds a snapshot of the route it currently sees and re-sends the whole
-thing on every refinement. The server keeps its own journal, keyed by the client's
-run session, of what each turn asked and what the code answered, so a refinement
-reconciles against the journal rather than against the snapshot alone: the route
-the journal recorded is the spine the next turn builds on, and a base stop that
-route carries survives whatever the snapshot claims. The snapshot is only what the
-server falls back to when the journal has nothing — a first turn, or one that
-never completed.
-
-Both halves are best-effort. A journal read that fails leaves the snapshot as the
-only base, and a journal write that fails is logged: neither is allowed to turn a
-plan the tourist already holds into an error.
-"""
+"""The server-side thread: a journal of turns, and what the journal outranks."""
 
 from __future__ import annotations
 
@@ -40,23 +26,12 @@ __all__ = [
 
 
 def thread_key(session_id: str, *, identity: str | None = None) -> str:
-    """The journal key for a client run, namespaced by the session that names it.
-
-    A run is addressed by the id the client mints, but it belongs to the session
-    that asked for it: with an identity for that session the key carries it, so a
-    thread is only ever read back under the same session. Without one — an
-    anonymous run — the bare id stands.
-    """
+    """The journal key for a client run, namespaced by the session that names it."""
     return f"{identity}:{session_id}" if identity else session_id
 
 
 def journal_stops(turn: Turn | None) -> tuple[BriefStop, ...]:
-    """The stops a recorded turn left on the route, in its walking order.
-
-    The measurement is the code's own answer — the order the walk actually
-    settled into — so it is a firmer base than a snapshot the client may have
-    built from a route the server never produced.
-    """
+    """The stops a recorded turn left on the route, in its walking order."""
     if turn is None:
         return ()
     stops: list[BriefStop] = []
@@ -69,14 +44,7 @@ def journal_stops(turn: Turn | None) -> tuple[BriefStop, ...]:
 
 
 def reconcile(context: RefinementBrief | None, recorded: Turn | None) -> RefinementBrief | None:
-    """The refinement as the server will run it; the journal is the spine.
-
-    With a recorded turn, the base stops the next plan must preserve are the
-    journal's route, with the snapshot's own points merged in for anything the
-    journal does not know — the tourist's position, a stop they pinned by hand.
-    A stop the tourist has just deleted is dropped from both. Without a record
-    there is nothing to reconcile against, so the snapshot stands as sent.
-    """
+    """The refinement as the server will run it; the journal is the spine."""
     if context is None or recorded is None:
         return context
     excluded = set(context.excluded_ids)
@@ -100,15 +68,7 @@ def previous_stops(
     thread_id: str | None,
     context: RefinementBrief | None,
 ) -> tuple[BriefStop, ...]:
-    """The route a refinement starts from: the journal's, or the client's snapshot.
-
-    The journal is the server's own record of the route it actually returned, so
-    where the thread has a turn it is the authority on what the previous route
-    was. The base points the client re-sends are its own claim, and stand only for
-    a thread the journal has nothing for. Best-effort, like every other journal
-    read: an unreadable one falls back to the snapshot rather than failing the
-    turn, and a fresh request (no refinement) has no previous route at all.
-    """
+    """The route a refinement starts from: the journal's, or the client's snapshot."""
     if context is None:
         return ()
     if thread_id:
@@ -123,11 +83,7 @@ def previous_stops(
 
 
 def reconcile_brief(repo: ThreadRepository, *, thread_id: str, brief: ReaderBrief) -> ReaderBrief:
-    """The brief with its refinement checked against the thread's journal.
-
-    A thread with no record, or a journal the database would not answer, leaves
-    the brief exactly as the client sent it.
-    """
+    """The brief with its refinement checked against the thread's journal."""
     if brief.context is None:
         return brief
     try:
@@ -149,5 +105,5 @@ def record(
     """Append this turn to the thread's journal; a failed write is only logged."""
     try:
         repo.append(thread_id, query=query, submission=submission, measurement=measurement)
-    except Exception as exc:  # a journal write must never fail the tourist's plan
+    except Exception as exc:
         log.warning("thread %s: turn not recorded (%s: %s)", thread_id, type(exc).__name__, exc)

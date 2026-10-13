@@ -27,16 +27,10 @@ class RouteResult:
 
 
 def is_unreachable_time(seconds: float) -> bool:
-    """Check if a time value represents an unreachable pair.
-
-    Encapsulates the UNREACHABLE_S sentinel.
-    """
+    """Check if a time value represents an unreachable pair."""
     return seconds == float(constants.UNREACHABLE_S)
 
 
 def is_unknown_time(seconds: float) -> bool:
-    """True when the walk time was never measured (a transport failure).
-
-    UNKNOWN_S means "we could not ask"; only UNREACHABLE_S costs a stop.
-    """
+    """True when the walk time was never measured (a transport failure)."""
     return isinstance(seconds, float) and math.isnan(seconds)

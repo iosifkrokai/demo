@@ -1,9 +1,4 @@
-"""Rows to models, and models to the payloads the panel prints.
-
-The parsers live here rather than in a model because they decode a *stored*
-column, not a shape: `fun_facts` and `links` are JSON in the region dataset and
-pipe-delimited text in the curated one, and the table still holds both.
-"""
+"""Rows to models, and models to the payloads the panel prints."""
 
 from __future__ import annotations
 
@@ -20,12 +15,7 @@ from db.models.place import Place
 
 
 def model_from_row[Model](model: type[Model], row: Mapping[str, Any]) -> Model:
-    """A database row as a model of its table.
-
-    Columns the query did not ask for are simply absent, and a computed column
-    (`cosine_dist`, `_name_sim`) is ignored — so every SELECT can share one
-    column list without the mapper caring.
-    """
+    """A database row as a model of its table."""
     known = {field.name for field in dataclasses.fields(model)}  # type: ignore[arg-type]
     return model(**{key: value for key, value in row.items() if key in known})  # type: ignore[call-arg]
 
@@ -41,11 +31,7 @@ def area_from_row(row: Mapping[str, Any]) -> Area:
 
 
 def category_from_row(row: Mapping[str, Any]) -> Category:
-    """One `categories` row.
-
-    Postgres hands back `TEXT[]` as a list; the model declares tuples, and the
-    taxonomy is compared and hashed by value, so the coercion is done here.
-    """
+    """One `categories` row."""
     cat = model_from_row(Category, row)
     return Category(
         code=cat.code,
@@ -102,11 +88,7 @@ def parse_links(raw: str | None) -> list[dict[str, Any]]:
 
 
 def photo_of(place: Place) -> dict[str, Any] | None:
-    """The point's picture with its credit — or nothing at all.
-
-    A URL without its author and licence is not shown: Wikimedia files are
-    licensed, so "photo_url set, author missing" is a violation waiting to happen.
-    """
+    """The point's picture with its credit — or nothing at all."""
     url = (place.photo_url or "").strip()
     if not url:
         return None
@@ -123,10 +105,7 @@ def photo_of(place: Place) -> dict[str, Any] | None:
 
 
 def place_payload(place: Place) -> dict[str, Any]:
-    """One place, in the shape the panel prints. Numbers stay numbers.
-
-    The keys match `ItineraryStop` on the client.
-    """
+    """One place, in the shape the panel prints. Numbers stay numbers."""
     return {
         "place_id": place.id,
         "source_url": place.source_url,

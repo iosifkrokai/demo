@@ -111,10 +111,7 @@ def optimized_route(
     timeout: float | None = None,
     retries: int | None = None,
 ) -> tuple[list[int], dict[str, Any], dict[str, Any] | None]:
-    """Valhalla's own stop ordering: GET /optimized_route.
-
-    Returns (order, shape, summary); order[i] indexes into `locations`.
-    """
+    """Valhalla's own stop ordering: GET /optimized_route."""
     costing = costing_for(costing)
     snapped = snap.snap_locations(locations, costing, timeout)
     payload = {
@@ -149,10 +146,7 @@ def route_through(
     language: str = "ru",
     timeout: float | None = None,
 ) -> RouteResult:
-    """Call GET /route. Locations are [{lat, lon, type}], first/last 'break'.
-
-    Unsnappable stops are retried at a wider radius, then dropped.
-    """
+    """Call GET /route. Locations are [{lat, lon, type}], first/last 'break'."""
     costing = costing_for(costing)
     locs = [dict(loc) for loc in locations]
     if len(locs) < 2:

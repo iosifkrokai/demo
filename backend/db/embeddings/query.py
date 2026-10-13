@@ -1,8 +1,4 @@
-"""The query embedding the pipeline uses: the model, behind the process cache.
-
-No vector is ever an error: an empty list means keyword-only retrieval, which is
-a worse answer but an answer.
-"""
+"""The query embedding the pipeline uses: the model, behind the process cache."""
 
 from __future__ import annotations
 
@@ -15,10 +11,7 @@ log = logging.getLogger(__name__)
 
 
 def embed_query(text: str) -> list[float]:
-    """Embed a search query with the local model, or return no vector.
-
-    Returns [] only when the model cannot be loaded — keyword-only fallback.
-    """
+    """Embed a search query with the local model, or return no vector."""
     cache_key = cache.embed_key([text], model.MODEL_NAME)
     cached = cache.EMBED_CACHE.get(cache_key)
     if cached:

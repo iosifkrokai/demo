@@ -1,10 +1,4 @@
-"""The verdict is the code's, not the model's — the property this design rests on.
-
-`submit_plan` is the only way a run ends, and it never takes the model's word for
-whether its own work is good: it re-measures and re-verifies. These hold that
-`ok` follows the code, and that a plan which cannot satisfy a hard requirement
-comes back saying so instead of saying it is fine.
-"""
+"""The verdict is the code's, not the model's — the property this design rests on."""
 
 from __future__ import annotations
 
@@ -22,8 +16,6 @@ def test_a_present_stop_satisfies_a_must_visit(db_repos) -> None:
 
     stops = _stops(db_repos, 4)
     ids = [row.id for row in stops]
-    # The drawn line is the evidence that a visit happened; without it the
-    # verifier deliberately refuses to call a stop satisfied.
     shape = plan_walk(ids, repos=db_repos, budget_minutes=180)["shape"]
     first = stops[0]
     answer = check_requirements(
@@ -91,7 +83,6 @@ def test_submit_measures_and_verifies_before_it_answers(db_repos) -> None:
     )
 
     assert answer.get("error") is None, answer.get("message")
-    # The status is code's, and `ok` is derived from it rather than asserted.
     assert answer["status"] in ("ready", "degraded", "infeasible", "pending")
     assert answer["ok"] is (answer["status"] == "ready")
     assert answer["problems"] == [] if answer["ok"] else answer["problems"]

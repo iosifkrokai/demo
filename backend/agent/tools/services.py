@@ -1,13 +1,4 @@
-"""``nearby_services`` — what can be inserted on the way, with a measured detour.
-
-"Кофе по пути" is a wish about the walk, not about a place, so the answer has to
-be a *detour*: how many extra minutes the routing engine needs to slip the stop
-in between two the route already has. A straight-line guess would be a different
-number, and a wrong one.
-
-One matrix answers the whole question — every stop and every candidate together —
-so the cost is one call to the engine however many services are considered.
-"""
+"""``nearby_services`` — what can be inserted on the way, with a measured detour."""
 
 from __future__ import annotations
 
@@ -183,12 +174,7 @@ def register_nearby_services(agent: Any, remember: Remember) -> None:
         profile: str = "pedestrian",
         max_detour_minutes: float | None = None,
     ) -> ToolAnswer:
-        """Services that can be slipped in on this route, with the real detour.
-
-        Each result carries `detour_minutes` — the extra walking the engine needs
-        to insert it, not a straight-line guess — and `insert_after`, the stop it
-        belongs behind. Categories default to every service the taxonomy knows.
-        """
+        """Services that can be slipped in on this route, with the real detour."""
         return remember(
             ctx,
             nearby_services(

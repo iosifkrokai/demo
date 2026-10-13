@@ -1,9 +1,4 @@
-"""Budget validation.
-
-Builds the budget summary against the ACTUAL time, plus trace diagnostics.
-Measurement only: whether the request was satisfied is the verifier's question,
-asked elsewhere, so nothing here reads a requirement or a model.
-"""
+"""Budget validation."""
 
 from __future__ import annotations
 
@@ -18,10 +13,7 @@ from .cost import ORIGIN_INDEX, leg_seconds, route_legs
 
 
 def _leg_s(value: float) -> float:
-    """Cell value with non-finite cells saturated to UNREACHABLE_S.
-
-    UNKNOWN_S (NaN) means "we could not ask", so it counts as 0, not unreachable.
-    """
+    """Cell value with non-finite cells saturated to UNREACHABLE_S."""
     if math.isnan(value):
         return 0.0
     return float(constants.UNREACHABLE_S) if not math.isfinite(value) else value
@@ -41,10 +33,7 @@ def _leg_sum(matrix: list[list[float]], order: list[int]) -> float:
 def _record_optimizer_report(
     trace: dict[str, Any], info: dict[str, Any], prune_report: Any
 ) -> None:
-    """Put the optimizer's / pruner's honesty signals into the trace.
-
-    ``missing_must_visit_ids`` from optimize(); ``unroutable_stops`` from pruning.
-    """
+    """Put the optimizer's / pruner's honesty signals into the trace."""
     if info.get("missing_must_visit_ids"):
         trace["missing_must_visit_ids"] = list(info["missing_must_visit_ids"])
     if prune_report:
@@ -89,18 +78,12 @@ def validate(
     visits = cost.visit_minutes
     anchor = cost.anchor
 
-    # The same legs `render` draws, the tourist's own included. Counting a
-    # different set here is how one answer came to carry two totals: a
-    # `walk_minutes` that included the walk out of their position and a
-    # `fits_budget` that did not.
     legs = route_legs(order, constraints.round_trip, anchor)
 
-    walk = _leg_sum(matrix, order)  # the pairwise chain
+    walk = _leg_sum(matrix, order)
     if anchor is not None and order:
         walk += _leg_s(leg_seconds(matrix, anchor, ORIGIN_INDEX, order[0]))
     if constraints.round_trip and len(order) >= 2:
-        # A round trip closes on the origin when it is known — as `render` draws it
-        # — and on the first stop when it is not.
         if anchor is not None:
             walk += _leg_s(leg_seconds(matrix, anchor, order[-1], ORIGIN_INDEX))
         else:

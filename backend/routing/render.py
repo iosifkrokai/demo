@@ -1,7 +1,4 @@
-"""Step 8 — Render the canonical route via Valhalla /route.
-
-On a whole-tour refusal it falls back to drawing leg by leg.
-"""
+"""Step 8 — Render the canonical route via Valhalla /route."""
 
 from __future__ import annotations
 
@@ -25,10 +22,7 @@ def render(
     locale: str = "ru",
     round_trip: bool = False,
 ) -> tuple[dict[str, Any], dict[str, Any], str]:
-    """Call Valhalla /route. Returns (shape_geojson, summary_dict, status_code).
-
-    `origin` is the fixed start; `round_trip` closes the tour on its own start.
-    """
+    """Call Valhalla /route. Returns (shape_geojson, summary_dict, status_code)."""
     if len(route) < 2:
         return {}, {}, "no_route_exists"
 
@@ -92,10 +86,7 @@ def render(
 
 
 def _verify_maneuver_fields(maneuvers: list[dict[str, Any]]) -> list[str]:
-    """Verify that required maneuver fields are present.
-
-    Returns the missing field names; a maneuver without an instruction is blank.
-    """
+    """Verify that required maneuver fields are present."""
     missing_fields: list[str] = []
     required_fields = ["instruction", "length", "time", "type"]
 
@@ -110,10 +101,7 @@ def _verify_maneuver_fields(maneuvers: list[dict[str, Any]]) -> list[str]:
 def _render_legs(
     pts: list[tuple[float, float]], costing: str, locale: str
 ) -> tuple[dict[str, Any], dict[str, Any], str]:
-    """Draw every consecutive pair on its own and keep the legs that route.
-
-    A leg Valhalla refuses is skipped, so one bad stop costs its two legs only.
-    """
+    """Draw every consecutive pair on its own and keep the legs that route."""
     coords: list[list[float]] = []
     length_km = 0.0
     seconds = 0.0

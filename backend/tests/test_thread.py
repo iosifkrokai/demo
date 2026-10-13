@@ -1,10 +1,4 @@
-"""The server-side thread: the journal, the reconciliation, and the router that wires them.
-
-The reconciliation is exercised through an in-memory repository, and the router
-through a FastAPI app whose agent run is replaced — so no test here needs a model
-provider or a migrated database. The one test that touches Postgres skips itself
-when the `turns` schema is not applied, because a skip is not a pass.
-"""
+"""The server-side thread: the journal, the reconciliation, and the router that wires them."""
 
 from __future__ import annotations
 
@@ -89,9 +83,6 @@ def _recorded(*stops: tuple[int, str]) -> Turn:
     )
 
 
-# --- reading a recorded turn -------------------------------------------------
-
-
 def test_journal_stops_read_the_measured_order() -> None:
     turn = _recorded((2, "Б"), (1, "А"))
 
@@ -112,9 +103,6 @@ def test_journal_stops_skip_cards_without_an_id() -> None:
 
 def test_journal_stops_of_no_turn_are_empty() -> None:
     assert thread.journal_stops(None) == ()
-
-
-# --- reconciling a refinement ------------------------------------------------
 
 
 def test_the_journal_is_the_spine_a_refinement_is_merged_onto() -> None:
@@ -178,9 +166,6 @@ def test_without_a_record_the_snapshot_stands_as_sent() -> None:
     assert thread.reconcile(None, _recorded((1, "А"))) is None
 
 
-# --- reconciling a whole brief against the repository ------------------------
-
-
 def test_reconcile_brief_reads_the_journals_latest_turn() -> None:
     repo = FakeThreadRepository()
     repo.append(
@@ -220,9 +205,6 @@ def test_reconcile_brief_falls_back_when_the_journal_is_unreadable() -> None:
     assert thread.reconcile_brief(repo, thread_id="run-1", brief=brief) is brief
 
 
-# --- recording a turn --------------------------------------------------------
-
-
 def test_record_appends_a_turn() -> None:
     repo = FakeThreadRepository()
 
@@ -249,9 +231,6 @@ def test_record_swallows_a_journal_write_failure() -> None:
         submission={},
         measurement={},
     )
-
-
-# --- the router wires the journal in -----------------------------------------
 
 
 class _Taxonomy:
@@ -317,7 +296,6 @@ def test_generate_lets_the_journal_lead_the_refinement(monkeypatch) -> None:
     assert response.status_code == 200, response.text
     brief = captured[0]
     assert brief.context is not None
-    # The journal's route is the spine; the snapshot's own point is merged in.
     assert [stop.place_id for stop in brief.context.base_points] == [3, 4, 9]
 
 
@@ -359,9 +337,6 @@ def test_generate_reports_when_planning_produced_nothing(monkeypatch) -> None:
 
     assert response.status_code == 503
     assert repo.written() == set()
-
-
-# --- the real repository, when the schema is there ---------------------------
 
 
 def test_the_postgres_journal_round_trips(db_repos) -> None:

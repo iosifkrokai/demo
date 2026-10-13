@@ -1,9 +1,4 @@
-"""Running the planning agent: limits, timeouts, wall-clock, failure recording.
-
-One run reads the request, chooses the stops with the tools, measures them, and
-finishes by *submitting* — a schema-validated terminal call rather than a
-paragraph to be parsed. Everything the run produces is in that one shape.
-"""
+"""Running the planning agent: limits, timeouts, wall-clock, failure recording."""
 
 from __future__ import annotations
 
@@ -27,17 +22,12 @@ from agent.tools import register_all
 
 log = logging.getLogger(__name__)
 
-# Planning calls are heavier than reading calls, so the budget is tighter than
-# the read-only agent's was: a run that needs more than this is lost anyway.
 MAX_TOOL_CALLS = 12
 MAX_REQUESTS = 10
 MAX_OUTPUT_TOKENS = 8192
 WALL_CLOCK_TIMEOUT_S = 150.0
 MODEL_TIMEOUT_S = 90.0
 
-# When this little time is left, the run is nudged in-band to submit instead of
-# waiting for the tools to start refusing — the give-up signal becomes time, not
-# only the tool counter.
 TIME_NUDGE_LEFT_S = 25.0
 SUBMIT_NUDGE = (
     "Time is nearly up. Submit this turn with what you already have — call "
@@ -64,11 +54,7 @@ def effective_wall_clock(wall_clock_s: float | None) -> float:
 
 
 def _submission_nudge(messages: list[Any], seconds_left: float) -> list[Any]:
-    """Append a "submit now" reminder once time is short.
-
-    Attached as a part of the message the model is about to answer (never a second
-    consecutive request, which the loop would reject) and never stacked twice.
-    """
+    """Append a "submit now" reminder once time is short."""
     if seconds_left > TIME_NUDGE_LEFT_S:
         return messages
     if messages and isinstance(messages[-1], ModelRequest):
@@ -183,13 +169,11 @@ def _run_agent(
         _record_model_failure("unexpected_output", prompt)
         return None, "unexpected_output"
     if not isinstance(getattr(result, "output", None), PlanSubmission):
-        # A run that never submitted has no plan, whatever else it produced.
         _record_model_failure("no_submission", prompt)
         return None, "no_submission"
     return result.output, None
 
 
-# agent.client reuses the failure path and the prompt builder.
 __all__ = [
     "_build_prompt",
     "_record_model_failure",

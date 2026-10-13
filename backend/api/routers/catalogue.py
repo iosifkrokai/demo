@@ -1,7 +1,4 @@
-"""HTTP surface for the catalogue: the point list, ready-made routes, services.
-
-A browse, not a search: no model is involved and nothing is capped by a query.
-"""
+"""HTTP surface for the catalogue: the point list, ready-made routes, services."""
 
 from __future__ import annotations
 
@@ -22,19 +19,13 @@ router = APIRouter(tags=["catalogue"])
 
 @router.get("/places")
 def places(request: Request) -> dict[str, Any]:
-    """The full point catalogue — every place in the dataset, for the «все точки» tab.
-
-    A browse, not a search: no model is involved and nothing is capped by a query.
-    """
+    """The full point catalogue — every place in the dataset, for the «все точки» tab."""
     return deps.get_repos(request).places.catalog()
 
 
 @router.get("/routes/itineraries")
 def itineraries(request: Request) -> dict[str, Any]:
-    """Ready-made routes — curated, and resolved against the live dataset.
-
-    `missing` names any stop key that no longer resolves.
-    """
+    """Ready-made routes — curated, and resolved against the live dataset."""
     repos = deps.get_repos(request)
     items, missing = itineraries_mod.resolve_itineraries(
         repos.places, repos.taxonomy, repos.itineraries.authored()
@@ -44,10 +35,7 @@ def itineraries(request: Request) -> dict[str, Any]:
 
 @router.post("/routes/services")
 def services_along_route(req: ServicesAlongReq, request: Request) -> dict[str, Any]:
-    """Secondary points beside the line: cafés, toilets, hotels — never stops.
-
-    Distance and position are measured; items carry `detour_confirmed: false`.
-    """
+    """Secondary points beside the line: cafés, toilets, hotels — never stops."""
     repos = deps.get_repos(request)
     try:
         return repos.places.services_along(

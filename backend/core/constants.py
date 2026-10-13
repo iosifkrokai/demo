@@ -1,15 +1,8 @@
-"""Domain constants — models, weights, thresholds, limits.
-
-Deliberate engineering choices that belong in reviewable code, not a .env file.
-"""
+"""Domain constants — models, weights, thresholds, limits."""
 
 from __future__ import annotations
 
-# A refinement is a delta on a route the tourist already holds: it must feel fast.
 REFINE_DEADLINE_S = 40.0
-# A fresh generation has no constant here on purpose: its ceiling lives in the
-# runner (`agent.runner.WALL_CLOCK_TIMEOUT_S`), which clamps whatever the caller
-# passes to it. A second number here would only be clamped away again.
 COST_MATRIX_MIN_LEFT_S = 26.0
 POOL_TRIM_SIZE = 30
 VALHALLA_ORDER_MIN_LEFT_S = 18.0
@@ -53,19 +46,10 @@ MAX_WALK_LEG_KM = 5.0
 DUPLICATE_RADIUS_M = 150.0
 DUPLICATE_NAME_RADIUS_M = 500.0
 
-# Transport pace and leg limits. Real legs are measured by the engine; these are
-# what the offline fallback and the per-leg rule assume, so each is one reviewable
-# number. `PEDESTRIAN_SPEED_KMH` replaces three that disagreed: 4.0 in the leg
-# rule, 4.68 in the straight-line fallback, and the engine's own ~5.0, which is
-# what actually measures a leg. Nothing here is sent to the engine (see
-# `routing/valhalla/constants.py`), so changing one does not move a measured time.
 PEDESTRIAN_SPEED_KMH = 4.0
 BICYCLE_SPEED_KMH = 15.0
 AUTO_SPEED_KMH = 45.0
-# A bicycle tour may not contain a leg longer than this — the riding counterpart
-# of MAX_WALK_LEG_KM. A driven tour is bounded by its budget alone.
 BICYCLE_LEG_KM = 20.0
-# The per-leg ceiling for a driven tour with no budget to bound it.
 DRIVE_LEG_FALLBACK_S = 4 * 3600
 
 WALK_LEG_BUDGET_SHARE = 0.25

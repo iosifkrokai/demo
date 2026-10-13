@@ -1,7 +1,4 @@
-"""HTTP surface for the admin panel.
-
-The wire speaks codes, not prose; only an administrator gets past the guard.
-"""
+"""HTTP surface for the admin panel."""
 
 from __future__ import annotations
 

@@ -1,8 +1,4 @@
-"""Choosing a provider is configuration, and it is read from the environment.
-
-The rule worth pinning: one key is enough, an explicit choice wins, and a model
-name has exactly one home. Nothing here reaches a network or a model.
-"""
+"""Choosing a provider is configuration, and it is read from the environment."""
 
 from __future__ import annotations
 
@@ -18,7 +14,7 @@ def _no_ambient_llm_env(monkeypatch):
         spec = provider(name)
         for env in (f"{name.upper()}_API_KEY", f"{name.upper()}_BASE_URL"):
             monkeypatch.delenv(env, raising=False)
-        assert spec.default_model  # every provider names a default
+        assert spec.default_model
     monkeypatch.delenv("LLM_PROVIDER", raising=False)
     monkeypatch.delenv("LLM_MODEL", raising=False)
 

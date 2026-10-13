@@ -1,14 +1,4 @@
-"""``find_places`` and ``get_place_facts`` — how the agent sees the dataset.
-
-`find_places` is the only way a place enters the conversation. It fuses three
-signals — meaning (local embeddings), category, and proximity — and returns a
-short card per place, because the agent's context is a budget and a card is
-cheaper than a record.
-
-There are deliberately *two* tools rather than one: folding opening hours,
-ticket prices and links into every search result would multiply the tokens for
-facts that are only wanted about the two or three places worth keeping.
-"""
+"""``find_places`` and ``get_place_facts`` — how the agent sees the dataset."""
 
 from __future__ import annotations
 
@@ -90,15 +80,7 @@ def find_places(
     repos: Any = None,
     region_bbox: list[float] | None = None,
 ) -> dict[str, Any]:
-    """Rank real places against a description, a category, and/or a point.
-
-    `area` scopes the search to a territory the registry knows (a slug `find_areas`
-    returned); a territory with no boundary is recorded as unfiltered rather than
-    guessed at. `region_bbox` is a raw (south, west, north, east) box that applies
-    when the model named no territory — the request's own territory. The ids are
-    the only handles the agent may put into a plan; an unknown category code is
-    dropped, never sent to SQL.
-    """
+    """Rank real places against a description, a category, and/or a point."""
     requested = [c for c in (category_codes or []) if c.strip()]
 
     want, limit_clamped = clamp(limit, 1, MAX_PLACES_PER_FIND, DEFAULT_FIND_LIMIT)
@@ -139,13 +121,10 @@ def find_places(
         )
 
     def run(store: Any) -> list[dict[str, Any]]:
-        # Unknown category codes are dropped, never sent to SQL.
         db_cats = store.taxonomy.db_values(requested)
         provenance["categories"] = db_cats
         provenance["dropped_codes"] = [c for c in requested if c not in db_cats]
 
-        # A named territory wins over the request's box; a territory without a
-        # boundary leaves the box unfiltered, said so honestly.
         box = requested_box
         if area:
             resolved = store.areas.bbox(area)
@@ -241,11 +220,7 @@ def get_place_facts(place_id: int, *, repos: Any = None) -> dict[str, Any]:
 
 
 def register_find_places(agent: Any, remember: Remember) -> None:
-    """Advertise ``find_places`` to the agent.
-
-    The Python name differs from the advertised one on purpose: a nested
-    ``find_places`` would shadow the module function this body has to call.
-    """
+    """Advertise ``find_places`` to the agent."""
 
     @agent.tool(name="find_places")
     def _find_places(
@@ -258,19 +233,7 @@ def register_find_places(agent: Any, remember: Remember) -> None:
         radius_m: float | None = None,
         area: str | None = None,
     ) -> dict[str, Any]:
-        """Find real places matching a description, a category, and/or a point.
-
-        Pass `area` (a canonical slug `find_areas` returned) to search within a
-        territory in one call instead of walking it city by city. One such call
-        already returns up to eight cards — the whole candidate set for a walk;
-        when the answer holds several stops for the territory, go on to
-        `plan_walk` instead of searching it again. A territory the registry has
-        no boundary for is reported unfiltered, not guessed at.
-
-        Returns a short card per place — id, name, category, town, location and
-        how long a visit is estimated to take. The id is the only handle you may
-        use to refer to a place afterwards.
-        """
+        """Find real places matching a description, a category, and/or a point."""
         return remember(
             ctx,
             find_places(
@@ -288,10 +251,7 @@ def register_find_places(agent: Any, remember: Remember) -> None:
 
 
 def register_get_place_facts(agent: Any, remember: Remember) -> None:
-    """Advertise ``get_place_facts`` to the agent.
-
-    Named apart from the module function for the same reason as above.
-    """
+    """Advertise ``get_place_facts`` to the agent."""
 
     @agent.tool(name="get_place_facts")
     def _get_place_facts(ctx: RunContext[PlanningDeps], place_id: int) -> dict[str, Any]:

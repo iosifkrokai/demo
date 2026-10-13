@@ -1,19 +1,4 @@
-"""One success case per HTTP endpoint, against the running stack.
-
-The list below is the whole surface, enumerated from ``api/routers``: health,
-routes, catalogue, accounts and admin. A new endpoint gets exactly one
-success test here — no error branches yet, those come later.
-
-Every test reaches the live stack through ``live_stack`` and skips when it is
-unreachable. The planning endpoints additionally skip when ``/health`` reports
-``llm=false``: without a reader the request is refused by design, so there is no
-success to assert. The admin endpoints skip unless ``GRODNO_ADMIN_EMAIL`` and
-``GRODNO_ADMIN_PASSWORD`` name a real administrator. A skip is not a pass.
-
-The shape asserted is the wire model's own: the routes and health models still
-live in ``api.models.routes``, the account models in ``api.models``. Asserting
-against ``model_fields`` means a renamed field breaks here instead of drifting.
-"""
+"""One success case per HTTP endpoint, against the running stack."""
 
 from __future__ import annotations
 
@@ -47,19 +32,9 @@ def _carries(payload: dict[str, Any], model: type[BaseModel]) -> None:
     assert not missing, f"{model.__name__} is missing {sorted(missing)}"
 
 
-# --- fixtures ---------------------------------------------------------------
-
-
 @pytest.fixture
 def api(live_stack) -> Iterator[httpx.Client]:
-    """An HTTP client bound to the live stack; cookies persist across calls.
-
-    The read timeout is the runner's own ceiling plus a margin, not a tight
-    number of its own: a plan is allowed `WALL_CLOCK_TIMEOUT_S` inside the agent,
-    so a client that gives up sooner reports a timeout for a request that was
-    still working. These tests assert the shape the endpoint answers with;
-    latency is measured by the quality harness, not by a smoke test.
-    """
+    """An HTTP client bound to the live stack; cookies persist across calls."""
     timeout = httpx.Timeout(connect=15.0, read=2 * WALL_CLOCK_TIMEOUT_S, write=30.0, pool=30.0)
     with httpx.Client(base_url=live_stack.url, timeout=timeout) as client:
         yield client
@@ -111,17 +86,11 @@ def _place_ids(api: httpx.Client, count: int) -> list[int]:
     return [item["place_id"] for item in items[:count]]
 
 
-# --- health -----------------------------------------------------------------
-
-
 def test_health_reports_its_dependencies(api: httpx.Client) -> None:
     response = api.get("/health")
     assert response.status_code == 200, response.text
     _carries(response.json(), HealthResponse)
     assert response.json()["status"] in {"ok", "starting", "degraded"}
-
-
-# --- planning ---------------------------------------------------------------
 
 
 def test_generate_returns_a_route(live_stack, api: httpx.Client) -> None:
@@ -145,9 +114,6 @@ def test_explain_returns_an_explanation(live_stack, api: httpx.Client) -> None:
     assert isinstance(response.json()["explanation"], str)
 
 
-# --- catalogue --------------------------------------------------------------
-
-
 def test_places_lists_the_catalogue(api: httpx.Client) -> None:
     response = api.get("/places")
     assert response.status_code == 200, response.text
@@ -167,9 +133,6 @@ def test_services_along_a_line(api: httpx.Client) -> None:
     )
     assert response.status_code == 200, response.text
     assert {"items", "capped"} <= response.json().keys()
-
-
-# --- accounts ---------------------------------------------------------------
 
 
 def test_register_creates_and_signs_in(api: httpx.Client) -> None:
@@ -226,9 +189,6 @@ def test_a_place_is_unmarked_visited(api: httpx.Client, account: str) -> None:
     assert api.put(f"/me/visited/{place_id}").status_code == 200
     response = api.delete(f"/me/visited/{place_id}")
     assert response.status_code == 204, response.text
-
-
-# --- admin ------------------------------------------------------------------
 
 
 def test_admin_users_are_listed(admin: httpx.Client) -> None:

@@ -1,9 +1,4 @@
-"""HTTP surface for the health probe.
-
-Readiness is the honest sum of what a planning request needs: a database, a
-routing engine, a local embedder, and a configured model. Any of them missing is
-reported as such rather than as a plain "ok".
-"""
+"""HTTP surface for the health probe."""
 
 from __future__ import annotations
 
@@ -23,7 +18,7 @@ router = APIRouter(tags=["health"])
 def _valhalla_ok() -> bool:
     try:
         return bool(valhalla_ping())
-    except Exception:  # unreachable is exactly what this answers
+    except Exception:
         return False
 
 
@@ -34,7 +29,6 @@ def health(request: Request) -> HealthResponse:
     embedder_ok = model.is_available()
     llm_ok = bool(llm.chosen_provider().api_key)
     payload: dict[str, Any] = {
-        # A missing reader is not "ok": nothing can be planned without one.
         "status": "ok" if (db_ok and valhalla_ok and embedder_ok and llm_ok) else "degraded",
         "embedder": embedder_ok,
         "llm": llm_ok,

@@ -1,7 +1,4 @@
-"""Local CPU embeddings — the ONE embedder for the agent and the seed.
-
-E5 role prefixes: documents use ``"passage: "`` and queries ``"query: "``.
-"""
+"""Local CPU embeddings — the ONE embedder for the agent and the seed."""
 
 from __future__ import annotations
 
@@ -61,10 +58,7 @@ def _model_instance():
 
 
 def _embed_prefixed(prefixed: list[str]) -> list[list[float]]:
-    """Embed already-prefixed texts. Returns plain float lists.
-
-    The float coercion keeps pgvector honest (an int array silently mis-casts).
-    """
+    """Embed already-prefixed texts. Returns plain float lists."""
     if not prefixed:
         return []
     model = _model_instance()
@@ -77,12 +71,7 @@ def embed_documents(texts: Sequence[str]) -> list[list[float]]:
 
 
 def embed_text(text: str) -> list[float]:
-    """Embed one piece of text, with the E5 ``query: `` prefix.
-
-    This is the model itself. The entry point the pipeline calls is
-    `db.embeddings.query.embed_query`, which puts the in-process cache in front of
-    it; a warm-up or the seed wants the raw call and uses this one.
-    """
+    """Embed one piece of text, with the E5 ``query: `` prefix."""
     vectors = _embed_prefixed([QUERY_PREFIX + text])
     return vectors[0] if vectors else []
 

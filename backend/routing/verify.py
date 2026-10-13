@@ -139,10 +139,7 @@ def _unroutable_ids(trace: dict[str, Any]) -> set[int]:
 
 
 def geometry_ok(geometry: Any) -> bool:
-    """True when ``geometry`` is a usable line: ≥2 coordinates.
-
-    None, ``{}``, ``{"coordinates": []}`` and a bare Point all return False.
-    """
+    """True when ``geometry`` is a usable line: ≥2 coordinates."""
     if geometry is None or not isinstance(geometry, dict):
         return False
 
@@ -183,22 +180,14 @@ def _norm_cat(value: str | None) -> str:
 
 
 def _canonical_code(code: str | None, codes: frozenset[str]) -> str | None:
-    """The code itself when it is canonical, else None.
-
-    Requirements arrive with their codes already resolved — the reader validated
-    them against the taxonomy before they were ever written down — so this is a
-    membership check, not a second resolution.
-    """
+    """The code itself when it is canonical, else None."""
     if not code:
         return None
     return code if code in codes else None
 
 
 def _field(obj: Any, name: str, default: Any = None) -> Any:
-    """Read a stop's field whether the plan arrived as objects or as mappings.
-
-    Reading both spellings removes a class of silent wrong verdicts.
-    """
+    """Read a stop's field whether the plan arrived as objects or as mappings."""
     if isinstance(obj, dict):
         return obj.get(name, default)
     return getattr(obj, name, default)
@@ -223,10 +212,7 @@ def _set(requirement: Requirement, status: Status, place_ids: list[int], reason:
 
 
 def _match_named(r: Requirement, stops: list[Any]) -> Any | None:
-    """The stop proving a named/numbered must-visit, or None.
-
-    Identity first (a real place id), then the normalised name.
-    """
+    """The stop proving a named/numbered must-visit, or None."""
     if r.place_id is not None:
         for stop in stops:
             if _field(stop, "id") == r.place_id:
@@ -278,10 +264,7 @@ def _verify_must_visit(
 def _evidence_for(
     r: Requirement, services_along: ServiceAlongEvidence | None, codes: frozenset[str]
 ) -> tuple[bool | None, list[dict[str, Any]] | None]:
-    """``(measured_ok, items)`` for this requirement.
-
-    ``measured_ok`` is ``None`` when the caller measured nothing at all.
-    """
+    """``(measured_ok, items)`` for this requirement."""
     if services_along is None:
         return None, None
     if not services_along.measured:
@@ -419,7 +402,7 @@ def verify(
             _verify_interest(r, stops, route_present, geom_ok, codes)
         elif r.kind == "avoid":
             _verify_avoid(r, stops, route_present, codes)
-        else:  # pragma: no cover — RequirementKind is closed
+        else:
             _set(r, "uncertain", [], REASON_CODE_UNSPECIFIED)
 
     return requirements.requirements
@@ -428,10 +411,7 @@ def verify(
 def verify_catalogue(
     requirements: TripRequirements, places: list[Any], *, facts: CategoryFacts
 ) -> list[Requirement]:
-    """Check a CATALOGUE (a list of places to choose from) against the request.
-
-    Satisfaction reasons are the `*_in_catalogue` codes — no verdict claims "on the route".
-    """
+    """Check a CATALOGUE (a list of places to choose from) against the request."""
     codes = facts.codes
     empty = not places
     for r in requirements.requirements:

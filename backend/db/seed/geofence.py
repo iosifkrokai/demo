@@ -1,10 +1,4 @@
-"""The project-area predicate, as the seed needs it.
-
-Grodno ADM1 plus the previously verified border-POI exceptions. This is a
-*seed-time* check — it decides whether a dataset row is inside the region before
-it is written — so it reads the border files from the checkout rather than the
-database it is about to write into.
-"""
+"""The project-area predicate, as the seed needs it."""
 
 from __future__ import annotations
 

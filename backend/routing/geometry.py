@@ -1,7 +1,4 @@
-"""Distance between two points: keep a walking route local around its anchor.
-
-Anchor priority: tourist GPS > must-visit/named place > densest cluster.
-"""
+"""Distance between two points: keep a walking route local around its anchor."""
 
 from __future__ import annotations
 

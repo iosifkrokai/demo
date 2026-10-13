@@ -1,24 +1,10 @@
-"""The contracts the interpretation layer speaks.
-
-Two directions, two shapes, both owned here:
-
-* ``ReaderBrief`` — what the planner tells the reader about the request. Narrower
-  than the HTTP body on purpose: the reader never sees a client id or a raw JSON
-  object, only the facts that reach a prompt or a tool call.
-* ``TripRequirements`` — what the reader understood. The planner consumes it, the
-  verifier grades against it, the HTTP response is rendered from it.
-
-Defining them here is what keeps this package a leaf: it imports no planner and
-no HTTP model, so the pipeline can drive it without a cycle.
-"""
+"""The contracts the interpretation layer speaks."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Literal
 
-# The requirement contract is shared: the reader produces it, the verifier grades
-# against it, and the response renders it. It lives below both.
 from routing.models import (
     REASON_MUST_VISIT_OUTSIDE,
     PartyComposition,
@@ -46,11 +32,6 @@ __all__ = [
     "TripRequirements",
 ]
 
-# The brief speaks the same closed set for the mode it is told to plan in.
-
-
-# --- what the planner tells the reader ---------------------------------------
-
 
 @dataclass(frozen=True)
 class BriefStop:
@@ -73,12 +54,7 @@ class RefinementBrief:
 
 @dataclass(frozen=True)
 class ReaderBrief:
-    """The request as far as the reader is concerned.
-
-    The controls are the user's visible choices: they are applied with higher
-    precedence than the reading, so the reader is told them rather than asked to
-    guess them. Ages are carried, never invented.
-    """
+    """The request as far as the reader is concerned."""
 
     locale: Literal["ru", "en"] = "ru"
     profile: str | None = None

@@ -1,12 +1,4 @@
-"""What a refinement tells the tourist it changed.
-
-Two things are exercised here, both offline. The diff itself — previous route
-against the final points — is a pure function over stops and places. The source
-it diffs against is the journal's last turn where the server has one, and the
-client's re-sent snapshot only as a fallback; `previous_stops` is checked both
-ways, and the router is checked to wire the journal in. No model and no migrated
-database are needed.
-"""
+"""What a refinement tells the tourist it changed."""
 
 from __future__ import annotations
 
@@ -72,9 +64,6 @@ def _brief_stops(*pairs: tuple[int, str]) -> tuple[BriefStop, ...]:
     return tuple(BriefStop(place_id=pid, name=name) for pid, name in pairs)
 
 
-# --- the diff itself ---------------------------------------------------------
-
-
 def test_a_refinement_that_removes_a_stop_reports_it_removed() -> None:
     previous = _brief_stops((1, "А"), (2, "Б"), (3, "В"))
 
@@ -133,11 +122,7 @@ def test_a_pinned_stop_without_an_id_is_matched_by_name() -> None:
     assert changes is not None
     assert changes.removed == []
     assert changes.kept == 1
-    # The named stop is the one the point matches, so it is not a fresh addition.
     assert changes.added == []
-
-
-# --- the route_response producer --------------------------------------------
 
 
 def _row(pid: int) -> PlaceRow:
@@ -207,9 +192,6 @@ def test_the_reported_costing_is_the_one_the_line_was_drawn_with() -> None:
     assert response.costing == "auto"
 
 
-# --- which source the previous route comes from ------------------------------
-
-
 def test_the_journal_outranks_the_snapshot_for_the_previous_route() -> None:
     repo = FakeThreadRepository()
     repo.append(
@@ -251,9 +233,6 @@ def test_an_unreadable_journal_falls_back_to_the_snapshot() -> None:
 
 def test_a_fresh_request_has_no_previous_route() -> None:
     assert thread.previous_stops(FakeThreadRepository(), thread_id="run-1", context=None) == ()
-
-
-# --- the router wires the journal in -----------------------------------------
 
 
 def _canned_outcome() -> AgentOutcome:

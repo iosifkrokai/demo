@@ -1,10 +1,4 @@
-"""``submit_plan`` — the end of the run, and the only way one ends.
-
-The model does not get to declare its own work good. Whatever is submitted is
-re-measured and re-verified here, by the same code the agent may have called
-while planning, and the answer carries a status that came from that code. The
-tool is a schema rather than free text, so a submission cannot arrive half-shaped.
-"""
+"""``submit_plan`` — the end of the run, and the only way one ends."""
 
 from __future__ import annotations
 
@@ -18,7 +12,6 @@ from routing.stops import candidate_of
 from routing.verify import ServiceAlongEvidence, verify, verify_catalogue
 
 RESULT_MODES = ("route", "catalogue")
-# Enough to prove a service is on the way, not a catalogue of every bench.
 MAX_SERVICES_MEASURED = 24
 
 
@@ -37,11 +30,7 @@ def _problems(verdicts: list[dict[str, Any]]) -> list[dict[str, str]]:
 
 
 def _evidence(repos: Any, contract: TripRequirements, shape: Any) -> ServiceAlongEvidence | None:
-    """Measure the services beside the line, for the codes the request named.
-
-    Without this a service requirement can only ever come back `uncertain`, and
-    "кофе по пути" would never be provable.
-    """
+    """Measure the services beside the line, for the codes the request named."""
     codes = sorted(
         {r.code for r in contract.requirements if r.kind in ("service", "interest") and r.code}
     )
@@ -95,8 +84,6 @@ def submit_plan(
             message=f"result_mode must be one of {RESULT_MODES}",
         )
 
-    # The contract the response will render is the one verified here: a second
-    # copy would drift, and the client would show verdicts nobody computed.
     if contract is None:
         contract = requirements_from(requirement_specs)
     contract.unknowns = list(unknowns or [])

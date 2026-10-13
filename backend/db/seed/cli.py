@@ -48,9 +48,6 @@ def cmd_apply(args: argparse.Namespace) -> int:
     }
 
     collected = collect_records(datasets)
-    # The version is the content of the committed datasets, computed here (offline)
-    # and stamped into the database below, so the planner keys its measurement
-    # cache on it and a re-seed invalidates what the old rows produced.
     data_version = version_mod.content_version()
 
     db_stats: dict[str, Any] | None = None
@@ -83,7 +80,6 @@ def cmd_apply(args: argparse.Namespace) -> int:
                     from db.seed.embeddings import embed_missing
                     from db.store.places import PostgresPlaceRepository
 
-                    # Reuse the seed's own connection: one transaction, one commit.
                     embedded = embed_missing(PostgresPlaceRepository(connect=lambda: conn))
                 db_stats = pipeline.gather_db_stats(conn)
                 db_stats.update(

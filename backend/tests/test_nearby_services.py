@@ -1,10 +1,4 @@
-"""The detour is measured, not guessed — that is the whole point of the tool.
-
-"Кофе по пути" is only answerable against the road network: the straight-line
-distance to a café says nothing about what it costs to walk there and back to the
-route. These pin that the number comes from the engine, and that it is *extra*
-minutes rather than a leg.
-"""
+"""The detour is measured, not guessed — that is the whole point of the tool."""
 
 from __future__ import annotations
 
@@ -32,8 +26,6 @@ def test_a_detour_comes_from_the_engine(db_repos) -> None:
         pytest.skip("no services beside this route in the dataset")
 
     for item in answer["results"]:
-        # Extra minutes, never negative, and the stop it belongs behind is one
-        # the route actually has.
         assert item["detour_minutes"] >= 0
         assert item["insert_after"] in ids
         assert item["id"] not in ids

@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-"""
-bench_routes.py — Golden-set evaluation for the Grodno route planner.
-
-Modes: LIVE, REPLAY, COMPARE, GOLDEN — one metric implementation.
-"""
+"""Golden-set evaluation for the Grodno route planner."""
 
 from __future__ import annotations
 
@@ -33,14 +29,6 @@ BENCH_GOLDEN = QUALITY / "cases" / "compliance"
 BENCH_OUT = QUALITY / "reports"
 BENCH_SNAPSHOTS = BENCH_OUT / "snapshots"
 
-# The statuses a golden case may EXPECT. They are exactly the wire's
-# `OverallStatus` (`api/models/routes.py`): the API emits `ready | infeasible |
-# degraded | pending`, and nothing else. `rejected`/`needs_clarification` are
-# gone with the old pipeline, and `catalogue` was never a status — a research
-# result is `result_mode`, checked separately by `expected_result_mode`.
-#
-# `derive_status` may still OBSERVE `error` when the backend fails; that is not a
-# legal expectation, so a case can never name it and a broken run fails loudly.
 STATUSES = frozenset({"ready", "degraded", "pending", "infeasible"})
 
 CHECK_API_ERROR = "api_error"
@@ -79,8 +67,6 @@ from db.seed.taxonomy import all_categories  # noqa: E402
 from routing.models import Requirement, TripRequirements  # noqa: E402
 from routing.verify import overall_status  # noqa: E402
 
-# `quality` is a development tool and is not shipped, so it reads the taxonomy
-# from the dataset the seed projects rather than from the database.
 CANONICAL_CATEGORIES = {
     canonical.code.strip().lower().replace("ё", "е"): canonical.code
     for canonical in all_categories()
@@ -163,10 +149,7 @@ class OurStop:
 
 @dataclass
 class ReferenceWalk:
-    """The benchmark's reference walk, derived from the reference stop geometry.
-
-    `order` indexes `GoldenRoute.stops`; `distance_km` is its haversine length.
-    """
+    """The benchmark's reference walk, derived from the reference stop geometry."""
 
     order: list[int]
     distance_km: float
@@ -175,10 +158,7 @@ class ReferenceWalk:
 
 @dataclass
 class StageSplit:
-    """Retrieval (stage 1) vs assembly (stage 2) for one run.
-
-    `pool_exposed` is False for the current API: the pool proxy is the returned stops.
-    """
+    """Retrieval (stage 1) vs assembly (stage 2) for one run."""
 
     pool_exposed: bool
     pool_source: str
@@ -239,10 +219,7 @@ class GoldenCase:
 
 @dataclass
 class ComplianceVerdict:
-    """PASS/FAIL for one golden case (or parity group) against a plan response.
-
-    `reason` is the first failed CHECK_* code or "ok"; unverified checks are marked.
-    """
+    """PASS/FAIL for one golden case (or parity group) against a plan response."""
 
     case_id: str
     passed: bool
@@ -390,10 +367,7 @@ def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
 
 
 def norm_name(name: str) -> str:
-    """Lowercase, drop parentheticals and punctuation — the agent's own rule.
-
-    Mirrors planner/pipeline.py::norm_name, so both consider the same names identical.
-    """
+    """Lowercase, drop parentheticals and punctuation — the agent's own rule."""
     n = re.sub(r"\([^)]*\)", " ", (name or "").lower())
     n = re.sub(r"[^0-9a-zа-яё]+", " ", n)
     return " ".join(n.split())
@@ -415,10 +389,7 @@ def match_golden_to_ours(
     golden_stops: list[GoldenStop],
     our_stops: list[OurStop],
 ) -> list[tuple[int | None, int | None]]:
-    """Greedy best-cost match between golden stops and our stops.
-
-    Per golden stop, (golden_idx, our_idx | None); None = no match within MATCH_RADIUS_KM.
-    """
+    """Greedy best-cost match between golden stops and our stops."""
     n = len(golden_stops)
     m = len(our_stops)
     if n == 0 or m == 0:
@@ -471,10 +442,7 @@ def _nearest_neighbour_order(d: list[list[float]]) -> list[int]:
 
 
 def shortest_walk_order(points: list[tuple[float, float]]) -> list[int]:
-    """Indices of `points` in the order of a shortest open walk through all of them.
-
-    Exact DP up to REF_WALK_EXACT_MAX_STOPS, nearest neighbour above; ties are stable.
-    """
+    """Indices of `points` in the order of a shortest open walk through all of them."""
     n = len(points)
     if n <= 1:
         return list(range(n))
@@ -517,10 +485,7 @@ def walk_distance_km(points: list[tuple[float, float]], order: list[int]) -> flo
 
 
 def max_leg_km(points: list[tuple[float, float]]) -> float | None:
-    """Longest straight-line hop of an open walk, or None for < 2 points.
-
-    This is the offline lower bound of the network figure LegSanity.max_leg_km.
-    """
+    """Longest straight-line hop of an open walk, or None for < 2 points."""
     if len(points) < 2:
         return None
     return max(haversine_km(*a, *b) for a, b in pairwise(points))
@@ -538,10 +503,7 @@ def build_reference_walk(stops: list[GoldenStop]) -> ReferenceWalk:
 
 
 def kendall_tau(order_a: list[int], order_b: list[int]) -> float | None:
-    """Kendall's tau-b between two orderings, over the elements they share.
-
-    Returns None below MIN_TAU_STOPS shared elements, where tau-b carries no information.
-    """
+    """Kendall's tau-b between two orderings, over the elements they share."""
     pos_a = {e: i for i, e in enumerate(order_a)}
     shared = [e for e in order_b if e in pos_a]
     n = len(shared)
@@ -564,21 +526,10 @@ def kendall_tau(order_a: list[int], order_b: list[int]) -> float | None:
 
 
 def detour_km(our_distance_km: float | None, ref_distance_km: float | None) -> float | None:
-    """How much longer our walk is than the reference walk, in km.
-
-    Negative is legitimate; None when either side is unknown.
-    """
+    """How much longer our walk is than the reference walk, in km."""
     if our_distance_km is None or ref_distance_km is None:
         return None
     return our_distance_km - ref_distance_km
-
-
-# The wire (`api/models/routes.py::RouteResponse`) exposes exactly one candidate
-# list — `points`, the stops that made the route. The old `debug.trace.candidates`
-# pool is gone with the pipeline that built it, so the stage-1 split can only ever
-# be the route-points PROXY below: for each graded reference stop, the question is
-# whether any RETURNED stop sits within STAGE1_PROXY_RADIUS_M of it. There is no
-# pre-rerank pool to probe, and pretending otherwise would be a fabricated number.
 
 
 def _any_within(
@@ -586,10 +537,7 @@ def _any_within(
     points: list[tuple[float, float]],
     radius_m: float,
 ) -> list[bool]:
-    """Per target: is ANY returned stop within `radius_m`?
-
-    Not a one-to-one assignment — the question is "was this place reachable at all".
-    """
+    """Per target: is ANY returned stop within `radius_m`?"""
     radius_km = radius_m / 1000.0
     out: list[bool] = []
     for gs in targets:
@@ -601,12 +549,7 @@ def stage_split(
     golden: GoldenRoute,
     our_stops: list[OurStop],
 ) -> StageSplit:
-    """Split one run's outcome into a retrieval proxy and an assembly number.
-
-    The wire exposes no pre-rerank pool, so stage 1 is always the route-points
-    proxy: the pool IS the route, and `pool_exposed` is False (see the note above
-    `_any_within`).
-    """
+    """Split one run's outcome into a retrieval proxy and an assembly number."""
     points = [(s.lat, s.lon) for s in our_stops]
     source = "route_points"
     exposed = False
@@ -647,10 +590,7 @@ def result_matches_stop(golden: GoldenRoute, our_stops: list[OurStop], golden_id
 
 
 def find_duplicate_stop_pairs(our_stops: list[OurStop]) -> list[dict[str, Any]]:
-    """Pairs of returned stops that are the same physical POI, in visit order.
-
-    Three rules, first match wins: coincident, same_name, same_name_near.
-    """
+    """Pairs of returned stops that are the same physical POI, in visit order."""
     pairs: list[dict[str, Any]] = []
     for i in range(len(our_stops)):
         for j in range(i + 1, len(our_stops)):
@@ -691,17 +631,7 @@ def leg_sanity(
     summary: dict[str, Any],
     raw: dict[str, Any],
 ) -> LegSanity:
-    """Is the returned route physically walkable, judging from the wire alone?
-
-    The old per-leg trace (`debug.trace.max_leg_seconds`, and the UNREACHABLE_S
-    sentinel it carried) went with the pipeline that produced it: the new wire
-    (`api/models/routes.py::RouteResponse`) has no matrix and no per-leg figure.
-    What remains is honest and offline — the straight-line hops between the
-    returned stops, the route's own drawn shape, and the duplicate-POI scan. A leg
-    over `MAX_WALK_LEG_KM` is still caught; the exact unreachable-hop count is NOT
-    measurable from the response any more, so `n_unreachable_legs` stays 0 rather
-    than being guessed at.
-    """
+    """Is the returned route physically walkable, judging from the wire alone?"""
     leg = LegSanity(n_stops=len(our_stops))
     points = [(s.lat, s.lon) for s in our_stops]
     leg.max_leg_km_straight = max_leg_km(points)
@@ -807,10 +737,7 @@ def score_response(
     api_error: str | None = None,
     latency_s: float = 0.0,
 ) -> EvaluationResult:
-    """Every metric for one run, from a response and nothing else.
-
-    Shared by live, snapshot and replay; pure — no clock, no RNG, no I/O.
-    """
+    """Every metric for one run, from a response and nothing else."""
     result = EvaluationResult(
         golden=golden, api_error=api_error, latency_s=latency_s, http_status=http_status
     )
@@ -830,17 +757,12 @@ def score_response(
 
     summary = (raw or {}).get("summary") or {}
     budget_info = (raw or {}).get("budget") or {}
-    # The wire names the request's reader in `interpretation.source`
-    # (`llm | mixed | explicit`); `debug.requirements_source` carries the same
-    # provenance. The old `debug.intent_source` went with the old pipeline.
     interpretation = (raw or {}).get("interpretation") or {}
     result.intent_source = interpretation.get("source") or ((raw or {}).get("debug") or {}).get(
         "requirements_source"
     )
     result.stops_dropped = int(budget_info.get("stops_dropped") or 0)
 
-    # The wire exposes no candidate pool: `points` are the stops that made the
-    # route, and that is all the harness can see (see the note above `_any_within`).
     result.candidate_ids = [s.place_id for s in result.our_stops if s.place_id is not None]
     result.candidate_ids_source = "route_points"
 
@@ -881,10 +803,7 @@ def _score_coverage(result: EvaluationResult) -> None:
 
 
 def _score_reference(result: EvaluationResult) -> None:
-    """Reference walk, tau over the shared stops, walk lengths and detour.
-
-    Rebuilt per run — a pure function of the committed coordinates.
-    """
+    """Reference walk, tau over the shared stops, walk lengths and detour."""
     golden = result.golden
     ref = build_reference_walk(golden.stops)
     result.ref_walk_km = ref.distance_km
@@ -957,10 +876,7 @@ def percentile(sorted_values: list[float], q: float) -> float:
 
 
 def resample_indices(n: int, samples: int, seed: int) -> list[tuple[int, ...]]:
-    """`samples` bootstrap resamples of `n` case indices, from a seeded RNG.
-
-    Cached per (n, samples, seed) so every metric in one report shares the SAME indices.
-    """
+    """`samples` bootstrap resamples of `n` case indices, from a seeded RNG."""
     key = (n, samples, seed)
     cached = _RESAMPLE_CACHE.get(key)
     if cached is None:
@@ -1000,10 +916,7 @@ def paired_bootstrap(
     indices: list[tuple[int, ...]],
     alpha: float = BOOTSTRAP_ALPHA,
 ) -> dict[str, Any]:
-    """Paired bootstrap on the difference A − B over the shared cases.
-
-    A single paired case gets a difference but no interval and no p-value.
-    """
+    """Paired bootstrap on the difference A − B over the shared cases."""
     n = len(a_values)
     if n != len(b_values) or n == 0:
         return {"diff": None, "lo": None, "hi": None, "p": None, "n": n}
@@ -1135,10 +1048,7 @@ def append_row(row: dict[str, Any], path: Path) -> None:
 
 
 def load_snapshot(snapshot_dir: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:
-    """Read a snapshot dir → (meta, rows).
-
-    Only `rows*.jsonl` is snapshot data; unknown record kinds are dropped.
-    """
+    """Read a snapshot dir → (meta, rows)."""
     files = sorted(snapshot_dir.glob("rows*.jsonl"))
     if not files:
         raise FileNotFoundError(
@@ -1208,10 +1118,7 @@ def _std(values: list[float]) -> float | None:
 
 
 def _attr(runs: list[EvaluationResult], path: str) -> list[float]:
-    """Defined values of `path` across runs.
-
-    Gated hard failures and undefined (None) values are skipped, not averaged in.
-    """
+    """Defined values of `path` across runs."""
     out: list[float] = []
     for r in runs:
         if r.hard_failure:
@@ -1275,10 +1182,7 @@ def _results(groups: list[list[RunRecord]]) -> list[EvaluationResult]:
 
 
 def per_case_scores(groups: list[list[RunRecord]]) -> dict[str, dict[str, float | None]]:
-    """One score per case per metric: the mean over that case's defined runs.
-
-    The case is the resampling unit for every CI and paired bootstrap.
-    """
+    """One score per case per metric: the mean over that case's defined runs."""
     out: dict[str, dict[str, float | None]] = {}
     for g in groups:
         if not g:
@@ -1309,10 +1213,7 @@ def overall_stats(
 
 
 def noise_floor(groups: list[list[RunRecord]]) -> dict[str, dict[str, Any]]:
-    """Mean within-case spread across repeats — the LLM-sampling noise floor.
-
-    Reported next to every delta; a smaller change is indistinguishable from a re-run.
-    """
+    """Mean within-case spread across repeats — the LLM-sampling noise floor."""
     out: dict[str, dict[str, Any]] = {}
     for path, label, _d in CI_METRICS:
         spreads, stds, n_cases = [], [], 0
@@ -1377,10 +1278,7 @@ def _ci_cell(stats: dict[str, Any], decimals: int = 3) -> str:
 
 
 def _stage2_is_trivial(overall: dict[str, dict[str, Any]]) -> bool:
-    """True when stage-2 recall is 1.0 for want of a pool, not for want of skill.
-
-    Under the route-points fallback the pool is the route, so the conditional is vacuous.
-    """
+    """True when stage-2 recall is 1.0 for want of a pool, not for want of skill."""
     stats = overall.get("stage.route_recall_given_pool", {})
     return stats.get("mean") is not None and stats["mean"] >= 1.0
 
@@ -2218,10 +2116,7 @@ def golden_by_id(cases: list[GoldenCase]) -> dict[str, GoldenCase]:
 
 
 def _parity_signature(case: GoldenCase) -> tuple:
-    """What must be identical across a parity group: filters and conditions.
-
-    `status_note` is per-locale documentation; everything else must match.
-    """
+    """What must be identical across a parity group: filters and conditions."""
     exp = {k: v for k, v in case.expectations.items() if k != "status_note"}
     return (
         json.dumps(case.filters, sort_keys=True, ensure_ascii=False),
@@ -2268,16 +2163,7 @@ def parity_groups(cases: list[GoldenCase]) -> dict[str, list[GoldenCase]]:
 
 
 def _status_from_requirements(requirements: list[Any]) -> str:
-    """The plan's status, decided by the LIVE verifier — `routing.verify.overall_status`.
-
-    The response carries the public view of the contract (`kind`, `strength`,
-    `status`, `detail`), so it is rebuilt into a `TripRequirements` and handed to
-    the same function that runs in production. This used to be a hand-copied mirror
-    of the deleted `planner/verify.py::overall_status`, and it had drifted: it
-    called ANY unmet hard requirement `infeasible`, while the live code returns
-    `infeasible` only for the reasons in `INFEASIBLE_REASONS` (an unmet hard
-    requirement outside that set is merely `degraded`).
-    """
+    """The plan's status, decided by the LIVE verifier — `routing.verify.overall_status`."""
     rebuilt: list[Requirement] = []
     for r in requirements:
         if not isinstance(r, dict) or not isinstance(r.get("kind"), str):
@@ -2295,7 +2181,6 @@ def _status_from_requirements(requirements: list[Any]) -> str:
                 )
             )
         except Exception:
-            # A malformed verdict cannot be graded; skip it rather than crash the run.
             continue
     return overall_status(TripRequirements(requirements=rebuilt))
 
@@ -2306,16 +2191,8 @@ def derive_status(
     http_status: int | None = None,
     api_error: str | None = None,
 ) -> tuple[str, str]:
-    """(status, source) for one response, using the best evidence available.
-
-    `source` records which rung was used; a derived status is never passed off as the API's.
-    """
+    """(status, source) for one response, using the best evidence available."""
     if api_error or (http_status is not None and http_status >= HTTPStatus.BAD_REQUEST):
-        # A failed request is not a plan, and the wire has no `rejected` status: a
-        # genuine refusal comes back as HTTP 200 with `status="infeasible"`
-        # (`api/responses.py::no_route_response`). The harness names a broken
-        # request itself, and `error` is not a legal `expected_status` — so a case
-        # can never "expect" a backend failure.
         return "error", "api_error" if api_error else "http_status"
     raw = raw or {}
     explicit = raw.get("status")
@@ -2341,10 +2218,7 @@ def _canon_codes(codes) -> list[str]:
 
 
 def stop_category_codes(stop: dict[str, Any]) -> set[str]:
-    """The canonical codes one returned stop counts as.
-
-    The point's own `category` is authoritative; the name only votes when it is missing.
-    """
+    """The canonical codes one returned stop counts as."""
     category = _norm_code(stop.get("category"))
     if category:
         return {category}
@@ -2366,10 +2240,7 @@ def _unverified(detail: str, **extra) -> dict[str, Any]:
 def response_total_minutes(
     raw: dict[str, Any] | None, points: list[dict[str, Any]]
 ) -> float | None:
-    """Total route minutes: `budget.total_minutes`, or walk + visits as a fallback.
-
-    The fallback keeps an over-budget route from hiding behind a missing field.
-    """
+    """Total route minutes: `budget.total_minutes`, or walk + visits as a fallback."""
     raw = raw or {}
     budget = raw.get("budget") or {}
     total = budget.get("total_minutes")
@@ -2390,10 +2261,7 @@ def evaluate_compliance(
     http_status: int | None = None,
     api_error: str | None = None,
 ) -> ComplianceVerdict:
-    """Every expectation of one golden case against one response.
-
-    Pure; `reason` is the first failed check in CHECK_PRIORITY, or "ok".
-    """
+    """Every expectation of one golden case against one response."""
     exp = case.expectations
     raw = raw or {}
     points = [p for p in (raw.get("points") or []) if isinstance(p, dict)]
@@ -2547,10 +2415,7 @@ def parity_verdict(
     members: list[GoldenCase],
     verdicts: dict[str, ComplianceVerdict],
 ) -> ComplianceVerdict:
-    """Did the same request in RU and EN get the same KIND of answer?
-
-    Status, failed checks and mandatory categories are compared, not the stop lists.
-    """
+    """Did the same request in RU and EN get the same KIND of answer?"""
     case_id = f"parity:{group}"
     missing = [c.id for c in members if c.id not in verdicts]
     if missing:
@@ -2604,10 +2469,7 @@ def compliance_summary(
     verdicts: dict[str, ComplianceVerdict],
     parity: list[ComplianceVerdict] | None = None,
 ) -> dict[str, Any]:
-    """Per-case PASS/FAIL plus the aggregate rate over cases AND parity groups.
-
-    The rate is over units: one per golden case, one more per parity group.
-    """
+    """Per-case PASS/FAIL plus the aggregate rate over cases AND parity groups."""
     parity = parity or []
     case_verdicts = [verdicts[c.id] for c in cases if c.id in verdicts]
     unrun = [c.id for c in cases if c.id not in verdicts]
@@ -2641,10 +2503,7 @@ def compliance_summary(
 
 
 def build_golden_request(case: GoldenCase) -> dict[str, Any]:
-    """The exact body one golden case sends: the query plus its explicit filters.
-
-    The filters go on the wire as GenerateReq fields, not prose.
-    """
+    """The exact body one golden case sends: the query plus its explicit filters."""
     filters = case.filters
     payload: dict[str, Any] = {
         "query": case.query,
@@ -2679,10 +2538,7 @@ class GoldenRun:
 
 
 def summarise_repeats(case: GoldenCase, runs: list[GoldenRun]) -> ComplianceVerdict:
-    """One verdict per case over its repeats: PASS only when every repeat passed.
-
-    A condition that survives one run out of N is a flake, so the case fails.
-    """
+    """One verdict per case over its repeats: PASS only when every repeat passed."""
     verdicts = [r.verdict for r in runs if r.verdict is not None]
     if not verdicts:
         return ComplianceVerdict(
@@ -2723,10 +2579,7 @@ def summarise_repeats(case: GoldenCase, runs: list[GoldenRun]) -> ComplianceVerd
 
 
 def run_golden(cases: list[GoldenCase], base_url: str, repeat: int) -> list[GoldenRun]:
-    """Call the agent once per (case, repeat) and score each response.
-
-    Writes nothing: `write_golden_snapshot` owns the snapshot and runs once, after.
-    """
+    """Call the agent once per (case, repeat) and score each response."""
     git_sha = _git_sha()
     runs: list[GoldenRun] = []
     for case in cases:
@@ -2816,10 +2669,7 @@ def write_golden_snapshot(
     append: bool = True,
     meta: dict[str, Any] | None = None,
 ) -> Path:
-    """Write the golden snapshot (one meta record + one row per run).
-
-    Meta first, then the rows that ``rescore_golden_rows`` replays offline.
-    """
+    """Write the golden snapshot (one meta record + one row per run)."""
     snapshot_dir.mkdir(parents=True, exist_ok=True)
     path = snapshot_dir / GOLDEN_SNAPSHOT_FILE
     cases = [run.case for run in runs]
@@ -3114,10 +2964,7 @@ def fetch_health(base_url: str, timeout: float = HEALTH_TIMEOUT_S) -> dict[str, 
 
 
 def preflight_or_exit(base_url: str) -> dict[str, Any]:
-    """Refuse to benchmark a backend that is not there.
-
-    Must not write a report without a live stack; exits 2 with the reason on stderr.
-    """
+    """Refuse to benchmark a backend that is not there."""
     try:
         health = fetch_health(base_url)
     except urllib.error.HTTPError as exc:
@@ -3338,10 +3185,7 @@ def _print_run(rec: RunRecord, i: int, repeat: int, route: GoldenRoute) -> None:
 def run_replay(
     snapshot_dir: Path,
 ) -> tuple[list[list[RunRecord]], dict[str, Any], list[dict[str, Any]]]:
-    """Recompute every metric offline from a snapshot. No clock, no RNG, no I/O.
-
-    Reference .json files are sha256-checked against the snapshot's recorded hashes.
-    """
+    """Recompute every metric offline from a snapshot. No clock, no RNG, no I/O."""
     meta, rows = load_snapshot(snapshot_dir)
     goldens = load_golden_map()
     drift: list[dict[str, Any]] = []
@@ -3418,10 +3262,7 @@ def _snapshot_info(meta: dict[str, Any], snapshot_dir: Path, n_rows: int) -> dic
 
 
 def compare_snapshots(dir_a: Path, dir_b: Path, samples: int, seed: int) -> dict[str, Any]:
-    """Paired bootstrap A − B over the cases the two snapshots share.
-
-    Both sides are rescored against the same current reference files, so the diff is fair.
-    """
+    """Paired bootstrap A − B over the cases the two snapshots share."""
     groups_a, meta_a, _ = run_replay(dir_a)
     groups_b, meta_b, _ = run_replay(dir_b)
     per_a = per_case_scores(groups_a)

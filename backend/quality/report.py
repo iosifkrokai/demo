@@ -1,7 +1,4 @@
-"""One quality report: what we know, what we don't, and where to grow.
-
-Measures nothing itself: it reads what the layers already wrote.
-"""
+"""One quality report: what we know, what we don't, and where to grow."""
 
 from __future__ import annotations
 
@@ -199,12 +196,7 @@ def read_evals(path: Path | None = None) -> dict[str, Any]:
 
 
 def read_trajectory(path: Path | None = None) -> dict[str, Any]:
-    """The trajectory layer: which tools the agent called, and with what arguments.
-
-    Written by ``python -m quality.trajectory``. It needs the database and
-    Valhalla, and a missing artifact means the layer was not measured — never a
-    green run.
-    """
+    """The trajectory layer: which tools the agent called, and with what arguments."""
     path = path or TRAJECTORY
     if not path.exists():
         return {
@@ -249,10 +241,7 @@ def growth_points(
     evals: dict[str, Any],
     trajectory: dict[str, Any],
 ) -> list[dict[str, Any]]:
-    """Everything known-bad, sorted by the number of cases affected.
-
-    Where the reach is unknown a "?" stands in, and the point is still visible.
-    """
+    """Everything known-bad, sorted by the number of cases affected."""
     points: list[dict[str, Any]] = []
 
     hard = routes.get("hard_failures") or {}

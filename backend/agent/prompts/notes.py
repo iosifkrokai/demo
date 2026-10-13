@@ -1,8 +1,4 @@
-"""The notes spliced into the model's instructions.
-
-Three pieces: the territories the system already knows, the controls the user
-pressed, and the facts about the request the model cannot read from the text.
-"""
+"""The notes spliced into the model's instructions."""
 
 from __future__ import annotations
 
@@ -13,10 +9,7 @@ from agent.models import ReaderBrief
 
 
 def _known_areas_note(areas: Sequence[Any]) -> str:
-    """The territories the system already knows, as data for the model.
-
-    The codes listed here are what `find_areas` resolves to and what `areas` must carry.
-    """
+    """The territories the system already knows, as data for the model."""
 
     lines = []
     for area in sorted(areas, key=lambda a: a.code):
@@ -57,10 +50,7 @@ def _ui_note(brief: ReaderBrief) -> str:
 
 
 def _request_note(brief: ReaderBrief) -> str:
-    """Facts the model needs and cannot find in the request text.
-
-    These are facts about the request, not asks: the instructions say not to restate them.
-    """
+    """Facts the model needs and cannot find in the request text."""
     lines = [f"transport={brief.profile or 'unset'}"]
     if brief.origin is not None:
         lines.append(f"tourist_position={brief.origin[0]},{brief.origin[1]}")
@@ -84,6 +74,4 @@ def _request_note(brief: ReaderBrief) -> str:
     return "\n".join(lines)
 
 
-# The blocks compose_instructions assembles; the leading underscore is the
-# package-internal convention, not a privacy boundary.
 __all__ = ["_known_areas_note", "_request_note", "_ui_note"]

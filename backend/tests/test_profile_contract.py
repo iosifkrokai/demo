@@ -1,17 +1,5 @@
 """The profile the tourist chose must reach the measurement, and the engine must
 hear a name it knows.
-
-Offline throughout: no database, no Valhalla, no model. Everything here is a pure
-function or an intercepted request body, so a fix cannot pass by being skipped on
-a checkout without the stack.
-
-Two halves, one contract:
-
-* **precedence** — the visible control (`ReaderBrief.profile`) beats the model's
-  own guess, which is the rule `agent/mapping._merge` already states for every
-  other control;
-* **vocabulary** — a client's profile is not Valhalla's costing ("car" is `auto`
-  there), so every boundary that hands a name to the engine resolves it first.
 """
 
 from __future__ import annotations
@@ -39,9 +27,6 @@ def _candidate(pid: int, lat: float, lon: float) -> Candidate:
     return Candidate(id=pid, name=f"P{pid}", category=None, lat=lat, lon=lon)
 
 
-# --- precedence: the tourist's control, not the model's guess -----------------
-
-
 def _contract(brief_profile: str | None, submitted_profile: str) -> Any:
     brief = ReaderBrief(locale="ru", profile=brief_profile)
     submission = PlanSubmission(profile=submitted_profile)
@@ -57,9 +42,6 @@ def test_the_tourists_transport_beats_the_models_guess() -> None:
 def test_the_models_transport_stands_only_when_no_control_was_used() -> None:
     """The «any» transport is the one case where the reading decides."""
     assert _contract(None, "bicycle").costing == "bicycle"
-
-
-# --- vocabulary: what the engine answers to -----------------------------------
 
 
 @pytest.mark.parametrize(
@@ -90,15 +72,10 @@ def test_every_profile_the_wire_offers_is_routable() -> None:
         assert costing_for(profile) in VALHALLA_COSTINGS
 
 
-# --- the rules that branch on the profile ------------------------------------
-
-
 def test_the_leg_rule_follows_the_costing_not_the_word() -> None:
     """Otherwise `profile="walk"` is measured as a walk but capped as a drive."""
     assert _max_leg_seconds(3600, "walk") == _max_leg_seconds(3600, "pedestrian")
     assert _max_leg_seconds(3600, "car") == _max_leg_seconds(3600, "auto")
-    # Above a 5-hour budget the distance rule is what binds, so the profiles
-    # differ; below it both are the quarter-budget share and they do not.
     longest = constants.MAX_BUDGET_MIN * 60
     assert _max_leg_seconds(longest, "pedestrian") != _max_leg_seconds(longest, "bicycle")
 
@@ -106,14 +83,11 @@ def test_the_leg_rule_follows_the_costing_not_the_word() -> None:
 def test_a_bicycle_leg_is_capped_by_riding_distance_not_by_the_budget() -> None:
     """A bicycle used to get the driven rule: one leg could be the whole budget."""
     ride = (constants.BICYCLE_LEG_KM / constants.BICYCLE_SPEED_KMH) * 3600
-    longest = constants.MAX_BUDGET_MIN * 60  # 8 h, so the distance rule binds
+    longest = constants.MAX_BUDGET_MIN * 60
 
     assert _max_leg_seconds(longest, "bicycle") == pytest.approx(ride)
-    # With no budget it is that same riding rule, not the four-hour driving
-    # fallback it used to inherit.
     assert _max_leg_seconds(None, "bicycle") == pytest.approx(ride)
     assert _max_leg_seconds(None, "bicycle") < constants.DRIVE_LEG_FALLBACK_S
-    # A driven tour is still bounded by its budget alone.
     assert _max_leg_seconds(3 * 3600, "auto") == pytest.approx(3 * 3600)
 
 
@@ -131,9 +105,6 @@ def test_the_synthetic_fallback_walks_at_the_pedestrian_speed() -> None:
     assert pedestrian[0][1] == pytest.approx(metres / (constants.PEDESTRIAN_SPEED_KMH / 3.6))
     assert alias == pedestrian
     assert bicycle[0][1] == pytest.approx(metres / (constants.BICYCLE_SPEED_KMH / 3.6))
-
-
-# --- the last boundary that speaks to Valhalla ------------------------------
 
 
 def test_the_ordering_pass_hands_the_engine_a_costing_it_knows(monkeypatch) -> None:

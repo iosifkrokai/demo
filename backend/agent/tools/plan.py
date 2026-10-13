@@ -1,13 +1,4 @@
-"""``plan_walk`` — order the chosen stops into a walk and measure it.
-
-This is the one tool the agent cannot get by without, and the one that must never
-do arithmetic in the model's head: the cost matrix, the ordering, the budget
-pruning and the drawn line are all decided here, by code, and handed back as
-numbers. Six steps of the old pipeline collapse into this one call.
-
-`must_keep_ids` are stops the user already has: they are protected from pruning,
-which is what used to make a refinement turn unable to answer 422.
-"""
+"""``plan_walk`` — order the chosen stops into a walk and measure it."""
 
 from __future__ import annotations
 
@@ -49,20 +40,7 @@ def _measure_key(
     data_version: str,
     regime: str = "order",
 ) -> str:
-    """The identity of one measurement: the stops, the profile and the budget.
-
-    The stops, profile, budget and round-trip are the core of it. Four more fields
-    are in it because they change the measured *result*, not just its presentation:
-    the origin (it decides the drawn line's start and the two legs that leave from
-    it), the locale (the shape's turn instructions are written in it), the
-    must-keep ids (they are what survives pruning) and the ordering *regime* — a
-    tight deadline skips the Valhalla re-order, and an origin skips it too, so the
-    same stops can be measured as two different walks. The `data_version` is the
-    seed's stamp on the projected rows — the stops describe the request, but a
-    re-seed can move a place under it, and without the version the old measurement
-    would be served for the new rows. A hit on any of these with a different value
-    would be a wrong answer, not a cheap one.
-    """
+    """The identity of one measurement: the stops, the profile and the budget."""
     where = f"{origin.lat:.6f},{origin.lon:.6f}" if origin is not None else "-"
     keep = ",".join(str(i) for i in sorted(must_keep_ids or []))
     return "|".join(
@@ -82,25 +60,13 @@ def _measure_key(
 
 
 def _order_regime(deadline_s: float | None, origin: LatLon | None) -> str:
-    """Which ordering the run will end up with — part of what gets measured.
-
-    The Valhalla re-order runs only when the deadline leaves room for it and the
-    tourist's position is not known (`valhalla_order` cannot be told where a walk
-    starts, so it would undo an anchor-aware order). Two runs that differ here
-    measure different walks from the same stops, so they must not share a key.
-    """
+    """Which ordering the run will end up with — part of what gets measured."""
     room = deadline_s is None or deadline_s >= constants.VALHALLA_ORDER_MIN_LEFT_S
     return "order" if room and origin is None else "noorder"
 
 
 def _data_version(repos: Any) -> str:
-    """The projection's content version, or "" when it cannot be read.
-
-    The version is a cache-key refinement, never a reason to fail a plan: a
-    database whose `data_versions` is not migrated in yet, or one that is down from
-    here on, simply measures under the empty version — which is exactly how the
-    cache behaved before a version existed.
-    """
+    """The projection's content version, or "" when it cannot be read."""
     datasets = getattr(repos, "datasets", None)
     if datasets is None:
         return ""
@@ -143,10 +109,6 @@ def plan_walk(
     deadline_s: float | None = None,
 ) -> dict[str, Any]:
     """Order and measure. Never raises: a walk that cannot be built is reported."""
-    # The client's profile is not the engine's costing ("car" is `auto` there).
-    # Resolve it once, here: everything below — the matrix, the optimizer's leg
-    # rule, the ordering pass, the drawn line, the cache key and the provenance —
-    # then speaks the one name Valhalla answers to.
     costing = costing_for(profile)
     provenance: dict[str, Any] = {
         "source": "places+valhalla",
@@ -169,10 +131,6 @@ def plan_walk(
         wanted = wanted[:MAX_STOPS_PER_CALL]
         provenance["capped"] = True
 
-    # The same stops, profile and budget are the same walk: Valhalla is
-    # deterministic, so measure once. This is what makes a refinement cheap — a
-    # stop the model kept is not re-walked. The seed's data version is part of the
-    # key, so a re-seed that moves a place misses rather than replays.
     key = _measure_key(
         wanted,
         budget_minutes,
@@ -276,13 +234,7 @@ def plan_walk(
 
 
 def _no_route_message(info: dict[str, Any], origin: LatLon | None, fallback: str) -> str:
-    """Say why the walk could not be built, without blaming the engine for it.
-
-    Stops the budget rule could not fit leave the route too short to be a plan,
-    and the engine has nothing to do with that — so the message names the budget
-    and, when the tourist's own position is known and is what made the approach
-    expensive, the start.
-    """
+    """Say why the walk could not be built, without blaming the engine for it."""
     if not info.get("stops_dropped"):
         return fallback
     where = " от точки старта" if origin is not None else ""
@@ -304,12 +256,7 @@ def register_plan_walk(agent: Any, _remember: Remember) -> None:
         round_trip: bool = False,
         must_keep_ids: list[int] | None = None,
     ) -> ToolAnswer:
-        """Order chosen stops into the shortest feasible walk and measure it.
-
-        Returns the stops in walking order, the minutes of walking and visiting,
-        whether the budget is met, and the drawn line. Nothing here is estimated:
-        the numbers come from the routing engine and the budget arithmetic.
-        """
+        """Order chosen stops into the shortest feasible walk and measure it."""
         return plan_walk(
             stop_ids,
             repos=ctx.deps.repos,

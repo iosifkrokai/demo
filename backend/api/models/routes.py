@@ -1,9 +1,4 @@
-"""The wire: what /routes/* accepts and returns.
-
-These shapes belong to the HTTP layer. The pipeline's own currency — a candidate
-stop, a cost matrix, a validated plan — lives in `routing`, and the request body
-is narrowed to a `ReaderBrief` before the agent ever sees it.
-"""
+"""The wire: what /routes/* accepts and returns."""
 
 from __future__ import annotations
 
@@ -25,7 +20,6 @@ TransportLiteral = Literal[
     "motor_scooter",
     "motorcycle",
 ]
-# The service lookup also accepts "any" — a service is not a journey.
 TransportOrAnyLiteral = Literal[
     "pedestrian",
     "bicycle",
@@ -53,10 +47,7 @@ class ContextPoint(BaseModel):
 
 
 class RouteContext(BaseModel):
-    """The route as it stands plus what the user asks to change about it.
-
-    `instruction` is the delta only; `base_points` are forced to survive it.
-    """
+    """The route as it stands plus what the user asks to change about it."""
 
     instruction: str | None = Field(default=None, max_length=500)
     base_points: list[ContextPoint] = Field(default_factory=list)
@@ -155,10 +146,7 @@ class RouteSummary(BaseModel):
 
 
 class RequirementSignal(BaseModel):
-    """One requirement as the client renders it — codes only, never prose.
-
-    `origin` is the honest provenance; nothing here is a sentence in any language.
-    """
+    """One requirement as the client renders it — codes only, never prose."""
 
     kind: Literal["must_visit", "service", "interest", "avoid"]
     strength: Literal["hard", "soft"] = "soft"
@@ -171,10 +159,7 @@ class RequirementSignal(BaseModel):
 
 
 class Interpretation(BaseModel):
-    """What the system understood — one place, before the plan is judged.
-
-    Every field is a code or a number; the wording is the client's.
-    """
+    """What the system understood — one place, before the plan is judged."""
 
     source: Literal["llm", "mixed", "explicit"] = "llm"
     locale: Literal["ru", "en"] = "ru"
@@ -196,10 +181,7 @@ class Interpretation(BaseModel):
 
 
 class PlannedAlternative(BaseModel):
-    """A way to actually make the plan, offered when the chosen one does not fit.
-
-    An offer with a reason code, not a silent switch of the request.
-    """
+    """A way to actually make the plan, offered when the chosen one does not fit."""
 
     costing: str
     reason: str
@@ -224,12 +206,7 @@ class RouteResponse(BaseModel):
 
 
 class ThreadTurn(BaseModel):
-    """One recorded turn: what was asked, what the agent proposed, what was measured.
-
-    `submission` and `measurement` are the run's own JSON, carried whole so a turn
-    can be replayed without re-planning it — the rows themselves never leave the
-    store.
-    """
+    """One recorded turn: what was asked, what the agent proposed, what was measured."""
 
     revision: int
     query: str
@@ -256,10 +233,7 @@ class ExplainReq(BaseModel):
 
 
 class ServicesAlongReq(BaseModel):
-    """POST /routes/services body: the line the tourist is walking.
-
-    `shape` is the GeoJSON LineString the client already has.
-    """
+    """POST /routes/services body: the line the tourist is walking."""
 
     shape: dict[str, Any] = Field(description="GeoJSON LineString, WGS84")
     profile: TransportOrAnyLiteral | None = None

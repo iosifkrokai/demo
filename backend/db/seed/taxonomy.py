@@ -1,9 +1,4 @@
-"""Reading `data/taxonomy.csv` — the seed's view of the taxonomy.
-
-The file is the source; the `categories` table is the projection. The seed reads
-the file to validate a dataset row *while it writes it*, so it needs the parser
-even though the service reads the table.
-"""
+"""Reading `data/taxonomy.csv` — the seed's view of the taxonomy."""
 
 from __future__ import annotations
 
@@ -37,12 +32,12 @@ def _split(value: str) -> tuple[str, ...]:
 def read_categories(path: Path | None = None) -> tuple[Category, ...]:
     """Parse the taxonomy file, failing loudly on a malformed or ambiguous row."""
     source = path or TAXONOMY_CSV
-    if not source.exists():  # pragma: no cover — packaging error
+    if not source.exists():
         raise FileNotFoundError(f"taxonomy data file missing: {source}")
 
     with source.open(encoding="utf-8", newline="") as fh:
         rows = [row for row in csv.reader(fh) if row and not row[0].lstrip().startswith("#")]
-    if not rows:  # pragma: no cover
+    if not rows:
         raise ValueError(f"taxonomy data file has no rows: {source}")
 
     header = tuple(cell.strip() for cell in rows[0])

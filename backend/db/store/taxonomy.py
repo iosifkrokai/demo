@@ -1,10 +1,4 @@
-"""The category repository: the `categories` table, read whole.
-
-Eighteen rows, read once per process: every resolver folds over all of them
-anyway, so there is no per-code query to make. The folding — exact name, alias,
-ё-normalised, then an inflected stem — is the same logic that used to read
-`data/taxonomy.csv`, moved here so the service stops reading datasets at runtime.
-"""
+"""The category repository: the `categories` table, read whole."""
 
 from __future__ import annotations
 
@@ -46,10 +40,7 @@ def _norm(text: str) -> str:
 
 
 def _fold_candidates(norm: str) -> list[str]:
-    """Candidate lemmas for an inflected surface form (may be empty).
-
-    Stripped stems are also tried with a restored soft consonant («музеями» → «музей»).
-    """
+    """Candidate lemmas for an inflected surface form (may be empty)."""
     out: list[str] = []
     for ending in _RU_ENDINGS + _EN_ENDINGS:
         if norm.endswith(ending) and len(norm) - len(ending) >= 3:
@@ -65,8 +56,6 @@ class PostgresCategoryRepository(PostgresRepository):
         super().__init__(connect)
         self._cache: tuple[Category, ...] | None = None
         self._index: dict[str, str] | None = None
-
-    # --- reads -------------------------------------------------------------
 
     def all(self) -> tuple[Category, ...]:
         """Every category, in code order. Read once, then held."""
@@ -95,7 +84,7 @@ class PostgresCategoryRepository(PostgresRepository):
         for cat in self.all():
             if cat.code == resolved:
                 return cat
-        return None  # pragma: no cover — resolve_code only returns known codes
+        return None
 
     def role(self, code: str) -> Role:
         """Role of a code: 'sight' or 'service'. Raises KeyError if unknown."""
@@ -112,29 +101,21 @@ class PostgresCategoryRepository(PostgresRepository):
         return cat.visit_minutes
 
     def db_values(self, codes: Iterable[str]) -> list[str]:
-        """Map query codes/terms to ``places.category`` values.
-
-        Deduplicates, preserves input order; unknown input is dropped, never passed through.
-        """
+        """Map query codes/terms to ``places.category`` values."""
         out: list[str] = []
         for raw in codes or ():
             resolved = raw if raw in self._code_set() else self.resolve_code(raw or "")
             if resolved is None:
                 continue
             cat = self.get(resolved)
-            if cat is None:  # pragma: no cover
+            if cat is None:
                 continue
             if cat.ru not in out:
                 out.append(cat.ru)
         return out
 
-    # --- resolution --------------------------------------------------------
-
     def resolve_code(self, term: str | None) -> str | None:
-        """Resolve free text to a canonical code, or None when unknown.
-
-        Tries exact code/name/alias, ё-normalised match, then plural/substring fold.
-        """
+        """Resolve free text to a canonical code, or None when unknown."""
         if term is None:
             return None
         raw = term.strip()
@@ -164,10 +145,7 @@ class PostgresCategoryRepository(PostgresRepository):
         return frozenset(self.all_codes())
 
     def _surface_index(self) -> dict[str, str]:
-        """normalised surface form → code, for every alias/name/locale.
-
-        A form that maps to two different codes is ambiguous and raises.
-        """
+        """normalised surface form → code, for every alias/name/locale."""
         if self._index is None:
             index: dict[str, str] = {}
             for cat in self.all():

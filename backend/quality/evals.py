@@ -20,8 +20,6 @@ from db.store.places import PostgresPlaceRepository
 from routing.models import CategoryFacts
 from routing.verify import ServiceAlongEvidence, verify
 
-# `quality` is a development tool and not shipped, so it reads the taxonomy
-# from the dataset rather than from the database.
 QUALITY_FACTS = CategoryFacts.from_rows(_seed_categories())
 _SEED_ROLES = {cat.code: cat.role for cat in _seed_categories()}
 
@@ -68,10 +66,7 @@ def _load(name: str) -> list[Case]:
 
 
 def run_verdicts() -> dict[str, Any]:
-    """The deterministic verifier against the contract it must keep.
-
-    Offline and total: no DB, no model, no network.
-    """
+    """The deterministic verifier against the contract it must keep."""
 
     checks: list[dict[str, Any]] = []
     for case in _load("verdicts"):
@@ -123,10 +118,7 @@ def _haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
 def _off_line_and_along(
     lat: float, lon: float, line: list[tuple[float, float]]
 ) -> tuple[float, float]:
-    """Independent reference: metres off the polyline and metres along it.
-
-    Deliberately *not* PostGIS, so it can cross-check the database independently.
-    """
+    """Independent reference: metres off the polyline and metres along it."""
     lat0 = sum(p[0] for p in line) / len(line)
     kx = 111320.0 * math.cos(math.radians(lat0))
     ky = 110574.0
@@ -156,10 +148,7 @@ def _off_line_and_along(
 
 
 def run_services() -> dict[str, Any]:
-    """Does the measurement tell the truth about what lies beside the line?
-
-    PostGIS vs a haversine reference; points near the gate are not counted as disagreement.
-    """
+    """Does the measurement tell the truth about what lies beside the line?"""
 
     checks: list[dict[str, Any]] = []
     places = PostgresPlaceRepository()
@@ -171,8 +160,6 @@ def run_services() -> dict[str, Any]:
             shape = raw["shape"]
             line = [(lat, lon) for lon, lat in shape["coordinates"]]
             codes = list(raw["categories"])
-            # Through `threshold_for`, not the table: a case may name any profile
-            # the wire offers, and the table only holds the four canonical keys.
             gate = float(
                 raw.get("gate_m") or services_mod.threshold_for(raw.get("profile", "pedestrian"))
             )
@@ -186,9 +173,6 @@ def run_services() -> dict[str, Any]:
             )
             items = answer["items"]
 
-            # The reference stays a plain, unfiltered read of the same rows: the
-            # point is to cross-check PostGIS with haversine, so it must not run
-            # the measured query.
             reference = places.with_category(codes, lat_lon_only=True)
             ref: dict[int, tuple[float, float]] = {}
             for place in reference:
@@ -358,10 +342,7 @@ BASE_URL = os.environ.get("EVALS_BASE_URL", "http://localhost:8080")
 
 
 def run_plan() -> dict[str, Any]:
-    """What the walk is actually made of, over HTTP.
-
-    It asks the served app, so a stale server shows up as a failure rather than a green run.
-    """
+    """What the walk is actually made of, over HTTP."""
 
     cases = _load("plan")
     checks: list[dict[str, Any]] = []
@@ -469,11 +450,7 @@ def _repositories():
 
 
 def run_interpretation() -> dict[str, Any]:
-    """Did the request get read as it was meant?
-
-    Live, through the product's own entry point — the agent is asked to plan, and
-    what it says it understood is what gets graded. The report records the source.
-    """
+    """Did the request get read as it was meant?"""
     from agent import client
     from api.models.routes import GenerateReq
     from api.responses import reader_brief

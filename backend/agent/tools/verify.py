@@ -1,9 +1,4 @@
-"""``check_requirements`` — the deterministic verdict on the current route.
-
-The agent may call it as often as it likes while it plans; it is the feedback
-loop's signal, not a gate. `submit_plan` runs the same verifier on whatever is
-finally submitted, so a run cannot end without a code-computed status.
-"""
+"""``check_requirements`` — the deterministic verdict on the current route."""
 
 from __future__ import annotations
 
@@ -84,15 +79,7 @@ def register_check_requirements(agent: Any, _remember: Remember) -> None:
         geometry: dict[str, Any] | None = None,
         unknowns: list[str] | None = None,
     ) -> ToolAnswer:
-        """Re-read the route by code and report what it provably satisfies.
-
-        Returns one verdict per requirement — `satisfied`, `unmet`, `uncertain`
-        or `pending` — with the reason code behind it. Use it to decide what to
-        change; do not restate its verdicts in your own words.
-
-        Pass the `shape` that `plan_walk` returned: without a drawn line a visit
-        cannot be *proved*, and every stop requirement comes back `uncertain`.
-        """
+        """Re-read the route by code and report what it provably satisfies."""
         return check_requirements(
             requirement_specs,
             stop_ids,

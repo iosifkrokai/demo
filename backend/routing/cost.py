@@ -58,10 +58,7 @@ def visit_time_minutes(category: str | None, facts: CategoryFacts) -> int:
 
 
 def visit_minutes_of(candidate: Candidate, facts: CategoryFacts) -> int:
-    """The stop's own visit estimate, falling back to its category default.
-
-    An estimate from the taxonomy, not a hard constraint.
-    """
+    """The stop's own visit estimate, falling back to its category default."""
     if candidate.visit_minutes_db is not None:
         return int(candidate.visit_minutes_db)
     return visit_time_minutes(candidate.category, facts)
@@ -73,14 +70,7 @@ def _measure_anchor(
     costing: str,
     deadline: float | None,
 ) -> OriginAnchor | None:
-    """Measure the tourist's own two legs, through the same matrix call as the rest.
-
-    Two extra requests, not two extra rows. An origin that cannot be measured —
-    the engine is down, the fix is off the network, the cells come back in an
-    unexpected shape — leaves the anchor absent, so the tour is measured exactly
-    as it was before an origin existed. A bad GPS fix must not turn a walkable
-    request into an infeasible one.
-    """
+    """Measure the tourist's own two legs, through the same matrix call as the rest."""
     if origin is None or not coords:
         return None
     point = snap_locations([{"lat": origin.lat, "lon": origin.lon}], costing=costing)
@@ -291,8 +281,6 @@ def total_seconds(order: list[int], matrix: list[list[float]], visit_minutes: li
     return int(walk_cost(order, matrix)) + visit_cost(order, visit_minutes)
 
 
-# The tourist's own position, as a leg endpoint. It is not an index into the
-# matrix: the origin is not a stop, so it never appears in `order`.
 ORIGIN_INDEX = -1
 
 
@@ -308,12 +296,7 @@ def leg_seconds(matrix: list[list[float]], anchor: OriginAnchor | None, a: int, 
 def route_legs(
     order: list[int], round_trip: bool, anchor: OriginAnchor | None = None
 ) -> list[tuple[int, int]]:
-    """Every leg of a route, the tourist's own legs included when they are known.
-
-    A round trip closes on the origin rather than on the first stop when the
-    origin is known — which is what ``render`` draws, so the arithmetic and the
-    drawn line measure the same walk instead of two different ones.
-    """
+    """Every leg of a route, the tourist's own legs included when they are known."""
     if not order:
         return []
     legs = list(itertools.pairwise(order))
@@ -327,12 +310,7 @@ def route_legs(
 
 
 def _fallback_speed_ms(costing: str) -> float:
-    """The straight-line pace to assume when the engine cannot answer.
-
-    One number per transport, from `core.constants` — the two that were here gave
-    a walk 4.68 km/h and a bicycle 28.8, neither of which is a pace anyone moves
-    at, and the bicycle's was nearly twice its real speed.
-    """
+    """The straight-line pace to assume when the engine cannot answer."""
     kmh = {
         "pedestrian": constants.PEDESTRIAN_SPEED_KMH,
         "bicycle": constants.BICYCLE_SPEED_KMH,
@@ -356,8 +334,6 @@ def _synthetic_cost(
                 matrix[i][j] = distance_m(candidates[i], candidates[j]) / speed_ms
     anchor = None
     if origin is not None:
-        # The origin's legs are estimated the same way, so a degraded fallback
-        # still budgets the walk out of and back to where the tourist stands.
         anchor = OriginAnchor(
             from_origin=[
                 distance_pt_m(origin.lat, origin.lon, c.lat, c.lon) / speed_ms for c in candidates

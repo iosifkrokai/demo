@@ -1,9 +1,4 @@
-"""Turning a run's outcome into the wire.
-
-The agent proposes; the tools measure and verify; this module writes down what
-happened, once, for every branch. Nothing here decides anything — every number
-and every status was computed before it arrived.
-"""
+"""Turning a run's outcome into the wire."""
 
 from __future__ import annotations
 
@@ -62,20 +57,7 @@ def to_places(candidates: list[Candidate], facts: CategoryFacts) -> list[Place]:
 
 
 def route_changes(previous: Sequence[BriefStop], points: list[Place]) -> RouteChanges | None:
-    """What a refinement did to the route it started from.
-
-    ``previous`` is the route's stops as the refinement began — the journal's last
-    turn where the server has one, the client's re-sent snapshot only as a
-    fallback (see ``agent.thread.previous_stops``). ``None`` when there is no
-    previous route: a fresh generation changed nothing, and an empty diff would be
-    a claim the code cannot make.
-
-    A stop is matched by place id; a snapshot stop that carries no id — a point the
-    tourist pinned by hand — can only be matched by name. Everything on the
-    previous route that the final points do not carry is reported ``removed``,
-    whether the code dropped it or the model left it out: the final points are the
-    truth, and nothing absent from them may be reported ``kept``.
-    """
+    """What a refinement did to the route it started from."""
     if not previous:
         return None
     new_ids = {place.id for place in points}
@@ -117,10 +99,7 @@ def _ordered_candidates(repos: Any, outcome: AgentOutcome) -> list[Candidate]:
 
 
 def interpretation(contract: TripRequirements | None, status: str | None) -> Interpretation | None:
-    """What the system understood, in one compact block for the client.
-
-    Codes and numbers only — the client localises ``code``/``reason`` itself.
-    """
+    """What the system understood, in one compact block for the client."""
     if contract is None:
         return None
 
@@ -159,10 +138,7 @@ def interpretation(contract: TripRequirements | None, status: str | None) -> Int
 def alternatives_for(
     *, costing: str, walk_s: float, length_km: float | None
 ) -> list[PlannedAlternative]:
-    """What to offer when the plan outgrows the profile the tourist chose.
-
-    The far stops are NOT dropped; only costings we can genuinely route are offered.
-    """
+    """What to offer when the plan outgrows the profile the tourist chose."""
     if costing not in ("pedestrian", "bicycle"):
         return []
     far = (length_km or 0.0) >= constants.WALK_TOO_FAR_KM
@@ -217,10 +193,7 @@ def render_tour(
     origin: Any,
     round_trip: bool = False,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
-    """Draw the tour, never failing the request over geometry.
-
-    If nothing draws, answer with the stops and no line instead of a 500.
-    """
+    """Draw the tour, never failing the request over geometry."""
     try:
         shape, summary, status = render(
             route, costing=costing, origin=origin, round_trip=round_trip
@@ -241,12 +214,7 @@ def route_response(
     deadline: dict[str, Any] | None = None,
     previous: Sequence[BriefStop] | None = None,
 ) -> RouteResponse:
-    """The one place a run's outcome becomes the response body.
-
-    ``previous`` is the route this turn refines, when there is one; the response
-    says what the refinement did to it rather than leaving the tourist to guess.
-    A refusal or a fresh generation carries no such statement.
-    """
+    """The one place a run's outcome becomes the response body."""
     contract = outcome.requirements
     measured = outcome.measured
 
@@ -257,8 +225,6 @@ def route_response(
 
     walk_s = float(measured.get("walk_minutes") or 0) * 60
     length_km = measured.get("length_km")
-    # The contract holds the profile the tourist chose ("car"); the field is the
-    # costing the line was drawn with (`auto`), which is what the client matches on.
     costing = costing_for(outcome.requirements.costing)
     narrative = outcome.submission.narrative or None
 
@@ -311,12 +277,7 @@ DEFAULT_REFUSAL = (
 def _refusal_response(
     outcome: AgentOutcome, *, deadline: dict[str, Any] | None = None
 ) -> RouteResponse:
-    """The agent said the request cannot be served: infeasible, with its reason.
-
-    A refusal is an answer, not a failed run — it reaches the client as an empty
-    plan carrying `status="infeasible"` and the reason the agent gave, never as a
-    pending plan with zero points.
-    """
+    """The agent said the request cannot be served: infeasible, with its reason."""
     contract = outcome.requirements
     reason = (outcome.submission.refusal_reason or "").strip() or DEFAULT_REFUSAL
     outside = ", ".join(contract.outside_coverage)
@@ -347,10 +308,7 @@ def _refusal_response(
 
 
 def no_route_response(req: GenerateReq, detail: str) -> RouteResponse:
-    """Turn "there is no walk here" into an answer instead of a failed request.
-
-    Returns an empty plan with `status="infeasible"` and a machine-readable reason.
-    """
+    """Turn "there is no walk here" into an answer instead of a failed request."""
     return RouteResponse(
         parsed=ParsedQuery(time_budget_minutes=req.time_budget_minutes, source="agent"),
         points=[],
@@ -370,11 +328,7 @@ def no_route_response(req: GenerateReq, detail: str) -> RouteResponse:
 
 
 def explain_points(candidates: list[Candidate], facts: CategoryFacts) -> str:
-    """A short Russian description of a list of points, written from the data.
-
-    The planning agent writes its own narrative now; this is what the standalone
-    explain endpoint answers with, so a client that only holds ids still gets text.
-    """
+    """A short Russian description of a list of points, written from the data."""
     if not candidates:
         return "Точки не выбраны."
     places = to_places(candidates, facts)
@@ -384,12 +338,7 @@ def explain_points(candidates: list[Candidate], facts: CategoryFacts) -> str:
 
 
 def reader_brief(req: GenerateReq) -> ReaderBrief:
-    """Narrow the wire to what the agent is told.
-
-    The run never sees the wire shape — no client id, no raw payload — only the
-    controls that reach its prompt. This is the whole coupling between the HTTP
-    layer and the agent's input.
-    """
+    """Narrow the wire to what the agent is told."""
     origin = (req.origin.lat, req.origin.lon) if req.origin is not None else None
     region_bbox: tuple[float, float, float, float] | None = None
     if req.region_bbox and len(req.region_bbox) == 4:
@@ -430,11 +379,7 @@ def reader_brief(req: GenerateReq) -> ReaderBrief:
 
 
 def reroute_response(req: Any, *, repos: Any) -> RouteResponse:
-    """Route a list of points the client already chose, and draw it.
-
-    No model is involved: the points are given, so this is the measurement and
-    nothing else.
-    """
+    """Route a list of points the client already chose, and draw it."""
     from api.models.routes import RerouteReq
     from routing.models import CategoryFacts
 
@@ -447,9 +392,6 @@ def reroute_response(req: Any, *, repos: Any) -> RouteResponse:
         raise NoRoutePossibleError(f"unknown point_ids: {sorted(missing)}")
 
     candidates = [candidate_of(found[pid], 0.0) for pid in req.point_ids]
-    # Report the costing the line was actually drawn with: `render` resolves the
-    # client's profile to the engine's name, so a raw "car" here would name a
-    # transport the tour was never drawn for.
     costing = costing_for(req.profile)
     shape, summary = render_tour(candidates, costing=costing, origin=None)
     walk_s = float((summary or {}).get("time", 0.0) or 0.0)

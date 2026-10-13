@@ -1,9 +1,4 @@
-"""The place repository: every query that reads or writes a `places` row.
-
-Methods on an object that owns the connection, returning `Place` rather than a
-raw dict. Callers in `planner/`, `agent/` and `api/` hold one of these, never a
-connection.
-"""
+"""The place repository: every query that reads or writes a `places` row."""
 
 from __future__ import annotations
 
@@ -35,8 +30,6 @@ log = logging.getLogger(__name__)
 
 MAX_PLACES = 5000
 
-# The one query the service lookup runs. It lives beside the repository rather
-# than in a class of its own now that the repository is where queries live.
 _BESIDE_LINE = """
     WITH line AS (
         SELECT ST_GeomFromGeoJSON(%s) AS geom
@@ -61,13 +54,8 @@ _WORD = re.compile(r"[а-яёa-z]{3,}\d*")
 class PostgresPlaceRepository(PostgresRepository):
     """Reads, searches and the writes the seed and the admin both go through."""
 
-    # --- browse -------------------------------------------------------------
-
     def catalog(self) -> dict[str, Any]:
-        """Every place with coordinates, in a stable browse order.
-
-        Ordered by category then town then name, so a re-seed does not reorder it.
-        """
+        """Every place with coordinates, in a stable browse order."""
         with self._cursor() as cur:
             cur.execute(
                 f"SELECT {PLACE_SELECT} FROM places "
@@ -84,8 +72,6 @@ class PostgresPlaceRepository(PostgresRepository):
             "total": len(items),
             "capped": len(items) >= MAX_PLACES,
         }
-
-    # --- by identity --------------------------------------------------------
 
     def get_by_id(self, place_id: int) -> Place | None:
         """One place by id, or None."""
@@ -116,14 +102,8 @@ class PostgresPlaceRepository(PostgresRepository):
             found = {row["source_url"]: place_from_row(row) for row in cur.fetchall()}
         return found, [key for key in keys if key not in found]
 
-    # --- search -------------------------------------------------------------
-
     def keyword_search(self, query: str, limit: int = 20) -> list[Place]:
-        """Exact + prefix keyword search on name, town and district.
-
-        The fallback when embeddings are unavailable; ILIKE + pg_trgm carries the
-        inflection.
-        """
+        """Exact + prefix keyword search on name, town and district."""
         words = [w for w in _WORD.findall(query.lower()) if len(w) >= 3]
         if not words:
             return []
@@ -189,10 +169,7 @@ class PostgresPlaceRepository(PostgresRepository):
     def nearby(
         self, lat: float, lon: float, radius_km: float = 12.0, limit: int = 50
     ) -> list[Place]:
-        """Places within `radius_km` of a point, nearest first.
-
-        Guarantees the pool holds something around a known point or named town.
-        """
+        """Places within `radius_km` of a point, nearest first."""
         dlat = radius_km / 111.0
         dlon = radius_km / (111.0 * max(0.2, math.cos(math.radians(lat))))
         with self._cursor() as cur:
@@ -221,10 +198,7 @@ class PostgresPlaceRepository(PostgresRepository):
         limit: int = 50,
         region_bbox: Sequence[float] | None = None,
     ) -> list[tuple[Place, float]]:
-        """Top-K by vector cosine distance, each with the distance it scored.
-
-        Category filtering is left to the caller as a soft score boost, not a WHERE.
-        """
+        """Top-K by vector cosine distance, each with the distance it scored."""
         bbox_clause = ""
         bbox_params: list[Any] = []
         if region_bbox and len(region_bbox) == 4:
@@ -266,10 +240,7 @@ class PostgresPlaceRepository(PostgresRepository):
             return {row["id"]: row["category"] for row in cur.fetchall()}
 
     def with_category(self, codes: Iterable[str], *, lat_lon_only: bool = False) -> list[Place]:
-        """Places in these categories — the quality layer's reference set.
-
-        `lat_lon_only` keeps the rows the haversine cross-check needs.
-        """
+        """Places in these categories — the quality layer's reference set."""
         wanted = list(codes)
         if not wanted:
             return []
@@ -303,8 +274,6 @@ class PostgresPlaceRepository(PostgresRepository):
                     out[place_id] = list(arr)
             return out
 
-    # --- services beside a line ---------------------------------------------
-
     def services_along(
         self,
         shape: dict[str, Any],
@@ -315,10 +284,7 @@ class PostgresPlaceRepository(PostgresRepository):
         max_off_line_m: float | None = None,
         limit: int = MAX_SERVICES,
     ) -> dict[str, Any]:
-        """Services lying beside a route line, ordered along it.
-
-        Never mixes a service into the route's stops; the caller shows it.
-        """
+        """Services lying beside a route line, ordered along it."""
         line = route_line(shape)
         codes = service_codes(categories, service_category_codes)
         if not codes:
@@ -352,8 +318,6 @@ class PostgresPlaceRepository(PostgresRepository):
             "capped": len(items) >= cap,
         }
 
-    # --- health and the embedding backfill ----------------------------------
-
     def ping(self) -> bool:
         """True when the database answers. Never raises."""
         try:
@@ -380,16 +344,10 @@ class PostgresPlaceRepository(PostgresRepository):
                 (str(list(vector)), place_id),
             )
 
-    # --- the admin's reads and writes ---------------------------------------
-
     def list_places_paged(
         self, *, q: str = "", category: str = "", limit: int = 50, offset: int = 0
     ) -> tuple[list[Place], int]:
-        """Admin browse: filtered by free text and category, name order.
-
-        Returns the page and the total that matched, so the panel can paginate
-        without a second query of its own.
-        """
+        """Admin browse: filtered by free text and category, name order."""
         pattern = f"%{q}%"
         where = (
             "(%s = '' OR name ILIKE %s OR town ILIKE %s OR district ILIKE %s) "
@@ -408,11 +366,7 @@ class PostgresPlaceRepository(PostgresRepository):
         return places, total
 
     def create_place(self, fields: dict[str, Any]) -> Place:
-        """Insert a hand-curated point. Raises :class:`DuplicateSourceError` on a clash.
-
-        A category supplied by an admin is a curated one by definition, so the
-        row is stamped `curated` and the trigger protects it from the seed.
-        """
+        """Insert a hand-curated point. Raises :class:`DuplicateSourceError` on a clash."""
         cols = [c for c in PLACE_WRITE_COLUMNS if c in fields]
         extra_cols = ["category_source"] if "category" in cols else []
         values_sql = ", ".join(["%s"] * (len(cols) + len(extra_cols)))
@@ -433,11 +387,7 @@ class PostgresPlaceRepository(PostgresRepository):
         return place_from_row(row)
 
     def update_place(self, place_id: int, fields: dict[str, Any]) -> Place | None:
-        """Patch a point; ``None`` when the id is unknown.
-
-        A category change is an admin decision, so it runs with the
-        curated-category guard explicitly lowered — and re-stamps `curated`.
-        """
+        """Patch a point; ``None`` when the id is unknown."""
         cols = [c for c in PLACE_WRITE_COLUMNS if c in fields]
         if not cols:
             return self.get_by_id(place_id)

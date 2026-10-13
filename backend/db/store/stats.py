@@ -1,9 +1,4 @@
-"""The numbers the admin header shows, in one query.
-
-They count users, places and visits — three tables with no aggregate in common —
-so they belong to no single repository. Keeping them here keeps the ``count(*)``
-from being scattered across the aggregates that own the tables.
-"""
+"""The numbers the admin header shows, in one query."""
 
 from __future__ import annotations
 

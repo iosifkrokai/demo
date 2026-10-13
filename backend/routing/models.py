@@ -1,14 +1,4 @@
-"""The measurement currency — what the deterministic layer speaks.
-
-This lives below both the planner and the agent so the agent's tools can call the
-routing math without either of them importing the other. It is the *measurement*
-half of the old ``planner.models``; the HTTP wire and the pipeline glue stayed
-behind.
-
-``Candidate`` still carries display fields (blurb, links, photo). That is
-transitional: once the response is assembled from ids at the edge, they collapse
-into a thin ``Stop`` and leave this module.
-"""
+"""The measurement currency — what the deterministic layer speaks."""
 
 from __future__ import annotations
 
@@ -28,12 +18,7 @@ class LatLon(BaseModel):
 
 @dataclass(frozen=True)
 class CategoryFacts:
-    """What the measurement needs to know about categories — and nothing else.
-
-    The taxonomy lives in the database, but the arithmetic here is a leaf: it is
-    handed this value rather than a repository, so the cost matrix can be computed
-    from coordinates and numbers alone, with no connection in reach.
-    """
+    """What the measurement needs to know about categories — and nothing else."""
 
     codes: frozenset[str] = field(default_factory=frozenset)
     visit_minutes: Mapping[str, int] = field(default_factory=dict)
@@ -41,11 +26,7 @@ class CategoryFacts:
 
     @classmethod
     def from_rows(cls, categories: Any) -> CategoryFacts:
-        """Build from taxonomy rows (anything with code/ru/visit_minutes/role).
-
-        `places.category` stores the Russian name, not the code, so both surfaces
-        are keyed — a lookup succeeds whichever one the data carries.
-        """
+        """Build from taxonomy rows (anything with code/ru/visit_minutes/role)."""
         codes: set[str] = set()
         minutes: dict[str, int] = {}
         roles: dict[str, str] = {}
@@ -69,10 +50,7 @@ class CategoryFacts:
 
 
 class Photo(BaseModel):
-    """A picture of a point, always with the credit the licence demands.
-
-    url, author, license and source travel together; incomplete records are never emitted.
-    """
+    """A picture of a point, always with the credit the licence demands."""
 
     url: str
     author: str
@@ -84,9 +62,6 @@ class ResolvedConstraints(BaseModel):
     must_visit_ids: list[int] = []
     time_budget_minutes: int | None = 120
     round_trip: bool = False
-    # Where the tourist is standing, when the device says. It is measurement data,
-    # not an agent concept: the walk out of and back to it is part of the tour, so
-    # the optimizer ranks orders by it and the budget counts it.
     origin: LatLon | None = None
 
 
@@ -113,17 +88,11 @@ class Candidate(BaseModel):
 
 
 class OriginAnchor(BaseModel):
-    """The tourist's own position as a leg endpoint, measured beside the matrix.
+    """The tourist's own position as a leg endpoint, measured beside the matrix
+    rather than as a row of it: the origin is not a stop and has no index."""
 
-    It is deliberately *not* a row of ``CostMatrix``. The origin is not a stop —
-    it can never be dropped, reordered or pruned, and giving it an index would
-    shift every index the optimizer, the pruner and the measurement cache key
-    speak (``info["order"]``, ``CostMatrix.indices``, the Valhalla request
-    shapes). Two aligned vectors buy the same arithmetic without that.
-    """
-
-    from_origin: list[float] = []  # origin → candidate i, in seconds
-    to_origin: list[float] = []  # candidate i → origin, in seconds
+    from_origin: list[float] = []
+    to_origin: list[float] = []
 
 
 class CostMatrix(BaseModel):
@@ -147,7 +116,6 @@ class ValidatedPlan(BaseModel):
 
 ResultMode = Literal["route", "catalogue"]
 
-# --- what the reader understood ----------------------------------------------
 
 RequirementKind = Literal["must_visit", "service", "interest", "avoid"]
 
@@ -196,10 +164,7 @@ class PartyComposition(BaseModel):
 
 
 class TripRequirements(BaseModel):
-    """Everything the route must respect, in one place.
-
-    Built once per request, rebuilt from the delta on a refinement turn.
-    """
+    """Everything the route must respect, in one place."""
 
     locale: Literal["ru", "en"] = "ru"
     raw_query: str = ""
@@ -267,10 +232,7 @@ class TripRequirements(BaseModel):
         return not self.failed_hard() and not self.unresolved_hard()
 
     def public_requirements(self) -> list[dict[str, Any]]:
-        """Localizable view of the requirement list for the HTTP response.
-
-        Frontend renders from kind/code/status so both locales share one contract.
-        """
+        """Localizable view of the requirement list for the HTTP response."""
         return [
             {
                 "kind": r.kind,

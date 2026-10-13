@@ -1,7 +1,4 @@
-"""The time matrix: chunked /sources_to_targets with resilient fallbacks.
-
-The matrix guides ordering; the reported length/time must come from /route.
-"""
+"""The time matrix: chunked /sources_to_targets with resilient fallbacks."""
 
 from __future__ import annotations
 
@@ -48,10 +45,7 @@ def _pair_metres(a: dict[str, Any], b: dict[str, Any]) -> float:
 
 
 def _same_point(a: dict[str, Any], b: dict[str, Any]) -> bool:
-    """True when two locations are the same point, even across chunk copies.
-
-    Compares global indices when present, otherwise object identity.
-    """
+    """True when two locations are the same point, even across chunk copies."""
     si, ti = a.get("_src_idx"), b.get("_tgt_idx")
     if si is not None and ti is not None:
         return si == ti
@@ -159,10 +153,7 @@ def _distance_aware_fill(
     costing: str,
     timeout: float,
 ) -> list[list[float]]:
-    """Resolve a chunk Valhalla refused for the 200 km path limit, per source.
-
-    Far pairs are marked unreachable; near pairs still get real times.
-    """
+    """Resolve a chunk Valhalla refused for the 200 km path limit, per source."""
     n_s, n_t = len(sources), len(targets)
     unreachable = float(constants.UNREACHABLE_S)
     unknown = float(constants.UNKNOWN_S)
@@ -207,10 +198,7 @@ def _isolate_row(
     unreachable: float,
     unknown: float,
 ) -> list[float]:
-    """Probe one source's target block a single cell at a time.
-
-    The far cell is marked unreachable; transport failures stay unknown.
-    """
+    """Probe one source's target block a single cell at a time."""
     row: list[float] = []
     for j in cols:
         try:
@@ -222,20 +210,14 @@ def _isolate_row(
 
 
 def _chunks_safe(n_sources: int, n_targets: int) -> bool:
-    """True when this shape fits in a single /sources_to_targets request.
-
-    Valhalla answers 500 for larger shapes, so bigger ones are split.
-    """
+    """True when this shape fits in a single /sources_to_targets request."""
     return n_sources <= MATRIX_MAX_SOURCES and n_targets <= MATRIX_MAX_TARGETS
 
 
 def _matrix_via_route_resilient(
     source: dict[str, Any], target: dict[str, Any], costing: str, timeout: float
 ) -> float:
-    """One pair via /route, widening the snap radius only for a snap failure.
-
-    Returns a time, UNREACHABLE_S, or UNKNOWN_S ("we could not ask").
-    """
+    """One pair via /route, widening the snap radius only for a snap failure."""
     last_exc: Exception | None = None
     for radius in ROUTE_SNAP_RADII_M:
         try:
@@ -272,10 +254,7 @@ def _fill_via_route(
     timeout: float,
     deadline: float | None = None,
 ) -> list[list[float]]:
-    """Fill every cell with per-pair /route calls. Used only when all else fails.
-
-    Bounded by a call cap and a deadline; leftover cells stay UNKNOWN_S.
-    """
+    """Fill every cell with per-pair /route calls. Used only when all else fails."""
     n_src = len(sources)
     n_tgt = len(targets)
     started = _time.monotonic()
@@ -324,10 +303,7 @@ def time_matrix(
     timeout: float | None = None,
     deadline: float | None = None,
 ) -> list[list[float]]:
-    """GET /sources_to_targets → time matrix in seconds, chunked to avoid 500s.
-
-    A cell is a real time, UNREACHABLE_S ("no path") or UNKNOWN_S.
-    """
+    """GET /sources_to_targets → time matrix in seconds, chunked to avoid 500s."""
     costing = costing_for(costing)
     n_src = len(sources)
     n_tgt = len(targets)
@@ -363,9 +339,6 @@ def time_matrix(
 
 
 def is_route_failure(exc: Exception) -> bool:
-    """True when the tour itself is the problem, not the Valhalla connection.
-
-    Transport failures match neither marker and must keep bubbling up as 503.
-    """
+    """True when the tour itself is the problem, not the Valhalla connection."""
     text = str(exc).lower()
     return any(marker in text for marker in ROUTE_FAILURE_MARKERS)

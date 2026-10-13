@@ -13,10 +13,7 @@ log = logging.getLogger(__name__)
 
 
 def _verbatim(fragment: str | None, query: str) -> str | None:
-    """Keep a provenance fragment only if it is really from the query.
-
-    A fragment that does not occur in the request is dropped; the requirement survives.
-    """
+    """Keep a provenance fragment only if it is really from the query."""
     if not isinstance(fragment, str):
         return None
     frag = " ".join(fragment.split())
@@ -174,8 +171,6 @@ def _merge(
         if slug.strip() and slug.strip() not in areas:
             areas.append(slug.strip())
 
-    # The submission's outcome decides route vs catalogue; a submission that says
-    # neither (or refuses) leaves the brief's own result_mode standing.
     mode = reading.outcome if reading.outcome in ("route", "catalogue") else brief.result_mode
 
     return TripRequirements(
@@ -206,5 +201,4 @@ def _outside_names(raw: list[str]) -> list[str]:
     return out
 
 
-# Used by agent.client outside this module.
 __all__ = ["_merge", "_reading_requirements", "ui_requirements", "ui_used"]

@@ -1,12 +1,4 @@
-"""The planning agent's public entry point.
-
-``available()`` answers "is the agent configured"; ``plan_with_agent`` is the only
-way in. Everything else in the package is an implementation detail.
-
-A run does not *claim* a plan is good. It submits one, and this module hands the
-submission straight back to the deterministic tools — re-measured, re-verified —
-so what leaves here carries a status code computed the status, not narrated.
-"""
+"""The planning agent's public entry point."""
 
 from __future__ import annotations
 
@@ -30,11 +22,7 @@ __all__ = ["AgentOutcome", "available", "plan_with_agent"]
 
 @dataclass(frozen=True)
 class AgentOutcome:
-    """One run's whole result: what was proposed, and what the code proved.
-
-    ``measured`` is the verifier's answer — `status`, `ok`, `problems`, the
-    verdict list and the arithmetic — and it is never the model's own summary.
-    """
+    """One run's whole result: what was proposed, and what the code proved."""
 
     submission: PlanSubmission
     requirements: TripRequirements
@@ -55,10 +43,7 @@ class AgentOutcome:
 
 
 def available() -> bool:
-    """True when this layer could run: a key, a model name, an importable SDK.
-
-    Cheap and offline — it answers "is the agent configured", not "is the provider up".
-    """
+    """True when this layer could run: a key, a model name, an importable SDK."""
     if not llm.chosen_provider().api_key:
         return False
     return bool(llm.model_name())
@@ -71,11 +56,7 @@ def plan_with_agent(
     repos: Repositories | None = None,
     wall_clock_s: float | None = None,
 ) -> AgentOutcome | None:
-    """Returns a measured, verified outcome, or ``None``.
-
-    ``None`` is never a half-filled plan: it means the run did not produce one,
-    and the caller refuses the request rather than guessing at the query.
-    """
+    """Returns a measured, verified outcome, or ``None``."""
     if not query.strip():
         return None
     if not available():
@@ -107,8 +88,6 @@ def plan_with_agent(
     contract = mapping._merge(query.strip(), brief, submission, deps.observed_ids, deps.repos)
 
     if submission.outcome == "refuse":
-        # A refusal is an answer, not a failure: it leaves here as an infeasible
-        # plan with the reason, never as a tool error or an empty stop list.
         return AgentOutcome(
             submission=submission, requirements=contract, measured=_refused(submission)
         )
@@ -116,8 +95,6 @@ def plan_with_agent(
     ordered, keep = _with_base_stops(submission, brief)
     ordered, keep = _without_excluded(ordered, keep, brief)
     if contract.result_mode == "route" and not ordered:
-        # A route with no stops is not a plan: refuse the request rather than
-        # hand the client an empty route under a "pending" status.
         log.info("agent_plan: empty route submission — no plan")
         return None
 
@@ -157,12 +134,7 @@ def _refused(submission: PlanSubmission) -> dict[str, Any]:
 def _without_excluded(
     ordered: list[int], keep: list[int], brief: ReaderBrief
 ) -> tuple[list[int], list[int]]:
-    """Drop the stops the user deleted by hand from both the route and the keeps.
-
-    Base stops are added by code (`_with_base_stops`); a deleted stop was, until
-    now, only a note to the model. Subtracting here makes the two symmetric: what
-    the user removed cannot ride back in on the model's word.
-    """
+    """Drop the stops the user deleted by hand from both the route and the keeps."""
     excluded = set(brief.context.excluded_ids) if brief.context else set()
     if not excluded:
         return ordered, keep
@@ -173,12 +145,7 @@ def _without_excluded(
 
 
 def _with_base_stops(submission: PlanSubmission, brief: ReaderBrief) -> tuple[list[int], list[int]]:
-    """Keep the previous route's stops, whatever the model proposed.
-
-    A refinement is a delta on a route the tourist already holds, so a stop that
-    survives it must survive the proposal too — that is what used to make a
-    refinement turn unable to answer 422.
-    """
+    """Keep the previous route's stops, whatever the model proposed."""
     base = [
         point.place_id
         for point in (brief.context.base_points if brief.context else ())

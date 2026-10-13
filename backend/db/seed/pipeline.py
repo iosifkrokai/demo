@@ -37,13 +37,7 @@ def curated_category_is_protected(category_source: str | None) -> bool:
 
 
 def upsert_sql() -> LiteralString:
-    """INSERT ... ON CONFLICT (source_url) DO UPDATE that respects curation.
-
-    A protected row keeps its category against automatic writers. The statement is
-    assembled from the column names below and nothing else — no value ever reaches
-    it — so it is a literal by construction, which is what the return type says and
-    what psycopg's `LiteralString` guard exists to check.
-    """
+    """INSERT ... ON CONFLICT (source_url) DO UPDATE that respects curation."""
     protected = "places.category_source IN ('curated', 'dataset')"
     guarded_cat = (
         f"CASE WHEN {protected} AND EXCLUDED.category_source = 'auto' "
@@ -176,14 +170,7 @@ def apply_curated_rows(conn: psycopg.Connection, curated: list[dict[str, Any]]) 
 
 
 def load_areas(conn: psycopg.Connection, geo_dir: Path | None = None) -> int:
-    """Idempotently write the named-area registry from `areas.json`.
-
-    The registry file is the source, exactly as `taxonomy.csv` is for the
-    categories: every slug, name, alias and note is written here, and the project
-    area additionally carries the polygon from `grodno_border.json`. The project
-    row is keyed by the slug the file marks `is_project_area` (`grodno-oblast`),
-    not a code invented from an English alias.
-    """
+    """Idempotently write the named-area registry from `areas.json`."""
     directory = geo_dir or GEO_DIR
     document = json.loads((directory / "areas.json").read_text(encoding="utf-8"))
     border = directory / "grodno_border.json"
@@ -270,11 +257,7 @@ def load_categories(conn: psycopg.Connection, categories: Iterable[Any]) -> int:
 
 
 def load_itineraries(conn: psycopg.Connection, itineraries: Iterable[Any]) -> int:
-    """Idempotently write the curated walks and their named stops.
-
-    `id` is the natural key; the stops are rewritten wholesale, because an
-    itinerary that loses a stop must lose it in the database too.
-    """
+    """Idempotently write the curated walks and their named stops."""
     written = 0
     with conn.cursor() as cur:
         for position, item in enumerate(itineraries):
@@ -312,13 +295,7 @@ def _scalar(cur: Any) -> int:
 
 
 def record_data_version(conn: psycopg.Connection, version: str) -> None:
-    """Stamp the projection's content version, one singleton row.
-
-    ``updated_at`` moves only when the version actually changes, so an idempotent
-    re-seed over unchanged files is a true no-op — the version is content, not a
-    clock. A version the planner has cached is refreshed on its own short TTL, so
-    the stamp need not be pushed anywhere.
-    """
+    """Stamp the projection's content version, one singleton row."""
     with conn.cursor() as cur:
         cur.execute(
             """
@@ -361,7 +338,7 @@ def apply_photos(conn: psycopg.Connection, photos_dir: Path | None = None) -> in
     path = (photos_dir or PHOTOS_DIR) / "place_photos.json"
     if not path.exists():
         return 0
-    from .photos import apply_to_db  # deferred: photos imports this module
+    from .photos import apply_to_db
 
     return apply_to_db(conn, json.loads(path.read_text(encoding="utf-8")))
 

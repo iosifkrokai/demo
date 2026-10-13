@@ -1,10 +1,4 @@
-"""What counts as a service beside a route, and how far off the line it may be.
-
-Policy only: no SQL, no connection. The one query that uses these lives on
-`PostgresPlaceRepository.services_along`, which is where queries belong now.
-
-A service is never a stop, and geometry is measured, never guessed as a detour.
-"""
+"""What counts as a service beside a route, and how far off the line it may be."""
 
 from __future__ import annotations
 
@@ -44,10 +38,7 @@ def threshold_for(profile: str, max_off_line_m: float | None = None) -> float:
 
 
 def service_codes(categories: Iterable[str] | None, known: Sequence[str]) -> list[str]:
-    """The categories that count as services, given the taxonomy's own service list.
-
-    Unknown or non-service codes are dropped rather than trusted.
-    """
+    """The categories that count as services, given the taxonomy's own service list."""
     allowed = set(known)
     if categories is None:
         return list(known)
@@ -55,10 +46,7 @@ def service_codes(categories: Iterable[str] | None, known: Sequence[str]) -> lis
 
 
 def route_line(shape: Any) -> dict[str, Any]:
-    """Validate a GeoJSON LineString and return it unchanged.
-
-    Raises `ValueError` with a machine-readable reason, never an empty answer.
-    """
+    """Validate a GeoJSON LineString and return it unchanged."""
     if not isinstance(shape, dict) or shape.get("type") != "LineString":
         raise ValueError("shape_not_linestring")
     coords = shape.get("coordinates")

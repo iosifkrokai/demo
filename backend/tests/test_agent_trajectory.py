@@ -1,10 +1,4 @@
-"""Offline trajectory: a ``FunctionModel`` replays a planning run with no provider.
-
-The whole path runs — instructions, the tool loop, the terminal submission, the
-merge into a contract and the code's verdict on it — while ``fake_model`` stands
-in for the provider. The run is bounded by the script the test writes, so it is
-exact and returns in milliseconds.
-"""
+"""Offline trajectory: a ``FunctionModel`` replays a planning run with no provider."""
 
 from __future__ import annotations
 
@@ -34,7 +28,6 @@ def test_a_submission_replays_without_a_provider(fake_model: FakeModel, db_repos
     assert outcome is not None
     assert outcome.submission.narrative == "Прогулка по старому городу"
     assert outcome.requirements.budget_minutes == 120
-    # The status is code's: the run submitted, the tools answered.
     assert outcome.status in ("ready", "degraded", "infeasible", "pending")
 
 
@@ -195,5 +188,4 @@ def test_time_short_appends_a_submit_nudge_once() -> None:
     assert any(
         isinstance(p, UserPromptPart) and p.content == SUBMIT_NUDGE for p in nudged[-1].parts
     )
-    # A second call with the same short time does not stack the reminder.
     assert _submission_nudge(nudged, 5) is nudged

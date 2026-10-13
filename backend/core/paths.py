@@ -1,8 +1,4 @@
-"""Where the committed data lives, resolved from the backend root.
-
-The datasets belong to the persistence side — `db/seed` is what reads them — so
-they sit inside `db/`, beside the code that projects them into Postgres.
-"""
+"""Where the committed data lives, resolved from the backend root."""
 
 from __future__ import annotations
 

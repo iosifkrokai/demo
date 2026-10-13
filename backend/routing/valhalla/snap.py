@@ -50,10 +50,7 @@ def snap_locations(
     timeout: float | None = None,
     radius: int = LOCATE_SNAP_RADIUS_M,
 ) -> list[dict[str, Any]]:
-    """Snap every location onto the routing network; keeps lat/lon dict shape.
-
-    Results are memoised per rounded coordinate.
-    """
+    """Snap every location onto the routing network; keeps lat/lon dict shape."""
     costing = costing_for(costing)
     out: list[dict[str, Any]] = []
     for loc in locations:
@@ -73,10 +70,7 @@ def snap_locations(
 
 
 def _snappable(location: dict[str, Any], costing: str, timeout: float | None) -> bool:
-    """Ask /locate whether this point can be snapped onto the network.
-
-    Timeouts and 5xx count as snappable — a hiccup must not drop a stop.
-    """
+    """Ask /locate whether this point can be snapped onto the network."""
     payload = {
         "locations": [{**location, "radius": LOCATE_RADIUS_M}],
         "costing": costing,
@@ -99,10 +93,7 @@ def _snappable(location: dict[str, Any], costing: str, timeout: float | None) ->
 def drop_unsnappable(
     locations: list[dict[str, Any]], costing: str, timeout: float | None
 ) -> list[dict[str, Any]]:
-    """Keep only the locations /locate can place on the routing network.
-
-    One off-graph POI makes Valhalla answer 500 for the whole request.
-    """
+    """Keep only the locations /locate can place on the routing network."""
     keep = [loc for loc in locations if _snappable(loc, costing, timeout)]
     if len(keep) != len(locations):
         logger.warning(

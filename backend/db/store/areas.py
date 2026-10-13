@@ -14,10 +14,7 @@ log = logging.getLogger(__name__)
 
 
 class PostgresAreaRepository(PostgresRepository):
-    """The territories the system can resolve a word to.
-
-    A read of `areas` like any other, so it lives with the other reads.
-    """
+    """The territories the system can resolve a word to."""
 
     def search(self, term: str, limit: int = 8) -> list[Area]:
         """Areas whose code, name or an alias contains `term`, districts first."""
@@ -46,11 +43,7 @@ class PostgresAreaRepository(PostgresRepository):
             return [area_from_row(row) for row in cur.fetchall()]
 
     def resolve(self, term: str | None) -> str | None:
-        """Exact match of a term (code, either name, or alias) to a slug, or None.
-
-        Deliberately exact, not a search: this answers "is this word a territory",
-        and a substring hit would turn a stop into a scope.
-        """
+        """Exact match of a term (code, either name, or alias) to a slug, or None."""
         needle = _normalise(term)
         if not needle:
             return None
@@ -61,12 +54,7 @@ class PostgresAreaRepository(PostgresRepository):
         return None
 
     def bbox(self, code: str) -> tuple[float, float, float, float] | None:
-        """An area's bounding box as (south, west, north, east), or None.
-
-        Only the project area carries a boundary polygon today; a district has no
-        geometry, so its extent is unknown — an explicit None rather than a
-        guessed box, which is why `find_places` reports the filter as not applied.
-        """
+        """An area's bounding box as (south, west, north, east), or None."""
         with self._cursor() as cur:
             cur.execute(
                 "SELECT ST_YMin(ext) AS south, ST_XMin(ext) AS west, "

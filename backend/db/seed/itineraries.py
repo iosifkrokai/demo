@@ -1,9 +1,4 @@
-"""Reading `data/itineraries.json` — the seed's view of the curated walks.
-
-The file is the source; the `itineraries` tables are the projection. Attaching
-stored facts to a stop is a read of `places`, which stays in
-`db/store/itineraries.py`.
-"""
+"""Reading `data/itineraries.json` — the seed's view of the curated walks."""
 
 from __future__ import annotations
 
@@ -16,10 +11,7 @@ from core.paths import ITINERARIES_JSON
 
 
 def load_itineraries(path: Path | None = None) -> list[dict[str, Any]]:
-    """Read the curated file.
-
-    A broken file is a deployment bug, raised loudly, never swallowed silently.
-    """
+    """Read the curated file."""
     target = path or ITINERARIES_JSON
     try:
         raw = json.loads(target.read_text(encoding="utf-8"))

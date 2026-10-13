@@ -1,11 +1,4 @@
-"""HTTP models for accounts, visits and the admin surface.
-
-Field names and machine reason codes only; the UI owns every human sentence.
-
-The rules — what counts as an email, what makes a password too weak — live in
-`core.accounts`, below this layer, because `db/seed/admin` validates the first
-administrator with the very same ones.
-"""
+"""HTTP models for accounts, visits and the admin surface."""
 
 from __future__ import annotations
 
@@ -33,7 +26,6 @@ REASON_INVALID_REQUEST = "invalid_request"
 
 SESSION_COOKIE = "grodno_session"
 
-# The largest page an admin listing will serve; the HTTP cap, not a storage one.
 MAX_LIST_LIMIT = 500
 
 ROLE_ADMIN = "admin"
@@ -163,10 +155,7 @@ class AdminPlacePatch(BaseModel):
 
     @model_validator(mode="after")
     def _coordinates_are_never_nulled(self) -> AdminPlacePatch:
-        """A null `lat`/`lon` would write NULL into a NOT NULL column (a 500).
-
-        Omitting a coordinate means leave it unchanged; an explicit null is a 422.
-        """
+        """A null `lat`/`lon` would write NULL into a NOT NULL column (a 500)."""
         for name in ("lat", "lon"):
             if name in self.model_fields_set and getattr(self, name) is None:
                 raise ValueError(f"{name} may not be null — omit it to leave it unchanged")
@@ -205,9 +194,5 @@ class StatsOut(BaseModel):
 
 
 def public_user(user: User) -> PublicUser:
-    """Project a :class:`db.models.user.User` onto the public shape.
-
-    Built from attributes, so ``password_hash`` — populated only by the login
-    lookup — is simply never read.
-    """
+    """Project a :class:`db.models.user.User` onto the public shape."""
     return PublicUser.model_validate(user, from_attributes=True)

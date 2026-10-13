@@ -1,13 +1,4 @@
-"""The HTTP plumbing every router shares, in one copy.
-
-Three kinds of helper live here: the request guards that map a condition or an
-error onto HTTP, the session/admin gates, and the accessors that read the app's
-resources off ``request.app.state``. Routers import these instead of each
-carrying a private copy.
-
-The wire speaks codes, not prose. ``error`` returns ``{"reason": code}`` as the
-whole body; ``http_error`` is the same code as a raised ``HTTPException``.
-"""
+"""The HTTP plumbing every router shares, in one copy."""
 
 from __future__ import annotations
 
@@ -40,16 +31,8 @@ from db.store.users import UserRepository
 log = logging.getLogger(__name__)
 
 
-# --- request guards ---------------------------------------------------------
-
-
 def require_llm() -> None:
-    """Refuse a planning request when the interpreter is not configured.
-
-    Reading a free-text query is the model's job; without a key there is no
-    reader. Answering anyway — with a keyword parse — would silently give the
-    tourist a worse route and no way to tell, so the request is refused instead.
-    """
+    """Refuse a planning request when the interpreter is not configured."""
     if not llm.chosen_provider().api_key:
         raise HTTPException(
             status_code=503,
@@ -58,10 +41,7 @@ def require_llm() -> None:
 
 
 def guarded[T](fn: Callable[..., T], **kwargs: Any) -> T:
-    """Run a planning call and map its failures onto HTTP.
-
-    AgentError carries the status the layer chose; any other failure stays a 500.
-    """
+    """Run a planning call and map its failures onto HTTP."""
     try:
         return fn(**kwargs)
     except AgentError as e:
@@ -79,11 +59,7 @@ def http_error(status: int, reason: str) -> HTTPException:
 
 
 def storage_guarded(fn: Callable[..., Any]) -> Callable[..., Any]:
-    """Turn a storage outage into ``503 storage_unavailable``, never a 500.
-
-    Every repository raises the one :class:`db.store.errors.StorageUnavailableError`,
-    so a single ``except`` catches the whole storage layer — no per-store tuple.
-    """
+    """Turn a storage outage into ``503 storage_unavailable``, never a 500."""
 
     @functools.wraps(fn)
     def wrapper(*args: Any, **kwargs: Any) -> Any:
@@ -102,9 +78,6 @@ def parse_uuid(value: str) -> uuid.UUID | None:
         return uuid.UUID(value)
     except (ValueError, AttributeError):
         return None
-
-
-# --- session and admin gates ------------------------------------------------
 
 
 def session_token(request: Request) -> str | None:
@@ -146,40 +119,24 @@ def require_admin(
     return user, None
 
 
-# --- resource accessors -----------------------------------------------------
-
-
 def get_repos(request: Request) -> Repositories:
-    """The repositories the lifespan built onto ``app.state.repos``.
-
-    Tests set ``app.state.repos`` directly (no lifespan runs), so the per-kind
-    accessors below fall back to it only when no fake was injected.
-    """
+    """The repositories the lifespan built onto ``app.state.repos``."""
     return request.app.state.repos
 
 
 def get_place_repository(request: Request) -> PostgresPlaceRepository:
-    """The process-wide place repository, or a test-injected fake.
-
-    Tests set ``app.state.places_repository``.
-    """
+    """The process-wide place repository, or a test-injected fake."""
     repo = getattr(request.app.state, "places_repository", None)
     return repo if repo is not None else get_repos(request).places
 
 
 def get_user_repository(request: Request) -> UserRepository:
-    """The process-wide account repository, or a test-injected fake.
-
-    Tests set ``app.state.users_repository``.
-    """
+    """The process-wide account repository, or a test-injected fake."""
     repo = getattr(request.app.state, "users_repository", None)
     return repo if repo is not None else get_repos(request).users
 
 
 def get_stats_repository(request: Request) -> StatsRepository:
-    """The process-wide stats repository, or a test-injected fake.
-
-    Tests set ``app.state.stats_repository``.
-    """
+    """The process-wide stats repository, or a test-injected fake."""
     repo = getattr(request.app.state, "stats_repository", None)
     return repo if repo is not None else get_repos(request).stats

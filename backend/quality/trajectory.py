@@ -1,23 +1,5 @@
 #!/usr/bin/env python
-"""Trajectory evals: which tools the agent called, and with what arguments.
-
-This layer measures the **agent loop**, not the model. A scripted
-``FunctionModel`` stands in for the provider — the same trick ``tests/conftest.py``
-uses — so a run is offline of any provider and exact, and what the harness records
-is not the script but what the CODE actually did: every tool function the loop
-invoked, in order, with the arguments it was handed and the answer it gave back.
-Every expectation is checked by code; there is no model and no judge.
-
-The tool functions are wrapped for the duration of a case (see ``_recording``), so
-a call is recorded the moment it runs — including when the run later ends without a
-submission. The terminal ``submit_plan`` is not a tool function (it is the run's
-structured output), so it is recorded from the outcome instead.
-
-Prerequisites are the same as the live route layers: the database (the tools read
-places) and Valhalla (``plan_walk`` routes). When either is unreachable the whole
-layer is skipped and writes no artifact, so ``quality.report`` shows it as
-«НЕ ИЗМЕРЯЛОСЬ» rather than as a green run.
-"""
+"""Trajectory evals: which tools the agent called, and with what arguments."""
 
 from __future__ import annotations
 
@@ -56,13 +38,8 @@ CASES = QUALITY / "cases" / "trajectory.jsonl"
 REPORTS = QUALITY / "reports"
 DEFAULT_OUT = REPORTS / "trajectory.json"
 
-# The provider seam is the only thing the script replaces; this key is a stand-in,
-# never a real one, and it is set only for the duration of a case.
 FAKE_KEY = "trajectory-offline"
 
-# The advertised tool name → the module-level function the registered tool body
-# calls. The bodies resolve these names as module globals at call time, so wrapping
-# the global records every invocation without touching the agent package.
 TOOL_TARGETS: dict[str, tuple[Any, str]] = {
     "find_areas": (areas_mod, "find_areas"),
     "find_places": (places_mod, "find_places"),
@@ -71,8 +48,6 @@ TOOL_TARGETS: dict[str, tuple[Any, str]] = {
     "check_requirements": (verify_mod, "check_requirements"),
     "nearby_services": (services_mod, "nearby_services"),
 }
-# Arguments injected by the tool body from the deps, not the model — plumbing, not
-# a trajectory fact, so they are left out of what a case asserts on.
 PLUMBING_ARGS = frozenset({"repos", "facts", "deadline_s"})
 
 BRIEF_KEYS = frozenset(
@@ -90,9 +65,6 @@ BRIEF_KEYS = frozenset(
     }
 )
 TUPLE_BRIEF_KEYS = ("hard_services", "interests", "avoid")
-
-
-# --- the unit that is recorded ------------------------------------------------
 
 
 @dataclass
@@ -123,9 +95,6 @@ class Trajectory:
         return sum(1 for s in self.steps if s.name != "submit_plan")
 
 
-# --- pure scoring -------------------------------------------------------------
-
-
 def _matches(actual: Any, wanted: Any) -> bool:
     """Is every key/value in ``wanted`` present in ``actual``? (a subset check)."""
     if isinstance(wanted, dict):
@@ -136,11 +105,7 @@ def _matches(actual: Any, wanted: Any) -> bool:
 
 
 def score_case(case: dict[str, Any], trajectory: Trajectory) -> dict[str, Any]:
-    """Every expectation of one case against one recorded trajectory, by code.
-
-    Checks are keyed and each carries ``ok`` plus a human ``detail``; the case
-    passes only when every check holds.
-    """
+    """Every expectation of one case against one recorded trajectory, by code."""
     expect = case["expect"]
     checks: dict[str, dict[str, Any]] = {}
 
@@ -198,9 +163,6 @@ def score_case(case: dict[str, Any], trajectory: Trajectory) -> dict[str, Any]:
 
     failed = [name for name, check in checks.items() if not check["ok"]]
     return {"checks": checks, "passed": not failed, "failed": failed}
-
-
-# --- the scripted run ---------------------------------------------------------
 
 
 def _resolve(value: Any, ids: list[int]) -> Any:
@@ -274,11 +236,7 @@ def _make_wrapper(record: list[ToolStep], name: str, original: Any) -> Any:
 
 
 def _recording(record: list[ToolStep]) -> list[tuple[Any, str, Any]]:
-    """Wrap each registered tool's function so the call is recorded as it runs.
-
-    Returns the ``(module, attr, original)`` triples to put back; the wrapper is
-    undone even when a run raises, so a case never leaks into the next one.
-    """
+    """Wrap each registered tool's function so the call is recorded as it runs."""
     patches: list[tuple[Any, str, Any]] = []
     for name, (module, attr) in TOOL_TARGETS.items():
         original = getattr(module, attr)
@@ -313,8 +271,6 @@ def run_case(case: dict[str, Any], repos: Any) -> Trajectory:
 
     def _next(_messages: list[Any], _info: AgentInfo) -> ModelResponse:
         if not steps:
-            # The model stopped without submitting — the run ends with no plan, the
-            # same way a real run that trails off does (see tests/conftest.FakeModel).
             raise AssertionError(f"{case['id']}: the script ran out of turns")
         return steps.pop(0)
 
@@ -345,8 +301,6 @@ def run_case(case: dict[str, Any], repos: Any) -> Trajectory:
         )
     return trajectory
 
-
-# --- case loading -------------------------------------------------------------
 
 CASES_SCHEMA = "quality/trajectory/1"
 REQUIRED_CASE_KEYS = frozenset({"id", "why", "query", "script", "expect"})
@@ -431,9 +385,6 @@ def load_cases(path: Path | None = None) -> list[dict[str, Any]]:
     return cases
 
 
-# --- reporting ----------------------------------------------------------------
-
-
 def _repositories() -> Any:
     from db.store.areas import PostgresAreaRepository
     from db.store.places import PostgresPlaceRepository
@@ -509,7 +460,7 @@ def _offline_reason(repos: Any) -> str | None:
     try:
         if not repos.places.ping():
             return "база данных не отвечает"
-    except Exception as exc:  # any storage failure means "not reachable"
+    except Exception as exc:
         return f"база данных недоступна: {type(exc).__name__}: {exc}"
     return None
 
