@@ -28,6 +28,7 @@ class FakeThreadRepository:
 
     def __init__(self, *, unreadable: bool = False) -> None:
         self._turns: dict[str, list[Turn]] = {}
+        self._appended: list[Turn] = []
         self._unreadable = unreadable
 
     def append(
@@ -47,6 +48,7 @@ class FakeThreadRepository:
             measurement=measurement,
         )
         rows.append(turn)
+        self._appended.append(turn)
         return turn
 
     def latest(self, thread_id: str) -> Turn | None:
@@ -54,6 +56,14 @@ class FakeThreadRepository:
             raise StorageUnavailableError("the journal is not readable")
         rows = self._turns.get(thread_id) or []
         return rows[-1] if rows else None
+
+    def latest_with_prefix(self, prefix: str) -> Turn | None:
+        if self._unreadable:
+            raise StorageUnavailableError("the journal is not readable")
+        for turn in reversed(self._appended):
+            if turn.thread_id.startswith(prefix):
+                return turn
+        return None
 
 
 def _points(*pairs: tuple[int, str]) -> list[Place]:

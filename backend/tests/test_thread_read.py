@@ -26,6 +26,7 @@ class FakeThreadRepository:
 
     def __init__(self) -> None:
         self._turns: dict[str, list[Turn]] = {}
+        self._appended: list[Turn] = []
 
     def append(
         self,
@@ -44,11 +45,18 @@ class FakeThreadRepository:
             measurement=measurement,
         )
         rows.append(turn)
+        self._appended.append(turn)
         return turn
 
     def latest(self, thread_id: str) -> Turn | None:
         rows = self._turns.get(thread_id) or []
         return rows[-1] if rows else None
+
+    def latest_with_prefix(self, prefix: str) -> Turn | None:
+        for turn in reversed(self._appended):
+            if turn.thread_id.startswith(prefix):
+                return turn
+        return None
 
     def journal(self, thread_id: str) -> Thread | None:
         rows = self._turns.get(thread_id)

@@ -62,32 +62,56 @@ def reconcile(context: RefinementBrief | None, recorded: Turn | None) -> Refinem
     )
 
 
+def _recorded(
+    repo: ThreadRepository, *, thread_id: str | None, identity: str | None
+) -> Turn | None:
+    """The turn a refinement starts from: the named run's, or the account's newest.
+
+    A run id lives in the browser and does not survive a reload, so the client can
+    name a thread this server never saw while still holding a route on screen. The
+    account's newest turn is that route.
+    """
+    if thread_id:
+        recorded = repo.latest(thread_id)
+        if recorded is not None:
+            return recorded
+    if identity:
+        return repo.latest_with_prefix(f"{identity}:")
+    return None
+
+
 def previous_stops(
     repo: ThreadRepository,
     *,
     thread_id: str | None,
     context: RefinementBrief | None,
+    identity: str | None = None,
 ) -> tuple[BriefStop, ...]:
     """The route a refinement starts from: the journal's, or the client's snapshot."""
     if context is None:
         return ()
-    if thread_id:
-        try:
-            recorded = repo.latest(thread_id)
-        except StorageUnavailableError as exc:
-            log.warning("thread %s: journal unreadable (%s)", thread_id, exc)
-            recorded = None
-        if recorded is not None:
-            return journal_stops(recorded)
+    try:
+        recorded = _recorded(repo, thread_id=thread_id, identity=identity)
+    except StorageUnavailableError as exc:
+        log.warning("thread %s: journal unreadable (%s)", thread_id, exc)
+        recorded = None
+    if recorded is not None:
+        return journal_stops(recorded)
     return context.base_points
 
 
-def reconcile_brief(repo: ThreadRepository, *, thread_id: str, brief: ReaderBrief) -> ReaderBrief:
+def reconcile_brief(
+    repo: ThreadRepository,
+    *,
+    thread_id: str | None,
+    brief: ReaderBrief,
+    identity: str | None = None,
+) -> ReaderBrief:
     """The brief with its refinement checked against the thread's journal."""
     if brief.context is None:
         return brief
     try:
-        recorded = repo.latest(thread_id)
+        recorded = _recorded(repo, thread_id=thread_id, identity=identity)
     except StorageUnavailableError as exc:
         log.warning("thread %s: journal unreadable (%s)", thread_id, exc)
         return brief

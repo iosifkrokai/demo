@@ -87,11 +87,12 @@ def _plan(req: GenerateReq, request: Request) -> RouteResponse:
     """One agent run, then the code's verdict on what it proposed."""
     repos = deps.get_repos(request)
     brief = responses.reader_brief(req)
-    thread_id = (
-        thread.thread_key(req.session_id, identity=_identity(request)) if req.session_id else None
-    )
-    if thread_id:
-        brief = thread.reconcile_brief(repos.threads, thread_id=thread_id, brief=brief)
+    identity = _identity(request)
+    thread_id = thread.thread_key(req.session_id, identity=identity) if req.session_id else None
+    if brief.context is not None:
+        brief = thread.reconcile_brief(
+            repos.threads, thread_id=thread_id, brief=brief, identity=identity
+        )
     refinement = bool(brief.context and brief.context.base_points)
     outcome = client.plan_with_agent(
         req.query,
@@ -104,7 +105,9 @@ def _plan(req: GenerateReq, request: Request) -> RouteResponse:
 
     previous: tuple[BriefStop, ...] = ()
     if brief.context is not None:
-        previous = thread.previous_stops(repos.threads, thread_id=thread_id, context=brief.context)
+        previous = thread.previous_stops(
+            repos.threads, thread_id=thread_id, context=brief.context, identity=identity
+        )
 
     if thread_id:
         thread.record(

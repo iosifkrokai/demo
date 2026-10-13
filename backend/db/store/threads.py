@@ -39,6 +39,8 @@ class ThreadRepository(Protocol):
 
     def latest(self, thread_id: str) -> Turn | None: ...
 
+    def latest_with_prefix(self, prefix: str) -> Turn | None: ...
+
     def journal(self, thread_id: str) -> Thread | None: ...
 
     def delete(self, thread_id: str) -> bool: ...
@@ -84,6 +86,17 @@ class PostgresThreadRepository(PostgresRepository):
                 f"SELECT {TURN_SELECT} FROM turns WHERE thread_id = %s "
                 "ORDER BY revision DESC LIMIT 1",
                 (thread_id,),
+            )
+            row = cur.fetchone()
+        return model_from_row(Turn, row) if row is not None else None
+
+    def latest_with_prefix(self, prefix: str) -> Turn | None:
+        """The newest turn on any thread whose id begins with ``prefix``."""
+        with self._cursor() as cur:
+            cur.execute(
+                f"SELECT {TURN_SELECT} FROM turns WHERE starts_with(thread_id, %s) "
+                "ORDER BY created_at DESC LIMIT 1",
+                (prefix,),
             )
             row = cur.fetchone()
         return model_from_row(Turn, row) if row is not None else None
