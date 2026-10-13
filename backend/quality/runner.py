@@ -1686,30 +1686,38 @@ def write_md_report(
         "",
         f"**Mode:** `{mode}` · **Generated:** {generated_at}",
         "",
-        f"**Runs per case:** {repeat} · **cases:** {len(groups)} · "
-        f"**runs:** {sum(len(g) for g in groups)}",
+        (
+            f"**Runs per case:** {repeat} · **cases:** {len(groups)} · "
+            f"**runs:** {sum(len(g) for g in groups)}"
+        ),
         "",
     ]
     if snapshot:
         lines += [
-            f"**Snapshot:** `{snapshot.get('dir', '—')}` · "
-            f"{snapshot.get('n_rows', 0)} row(s) · "
-            f"git `{snapshot.get('git_sha', '—')}`",
+            (
+                f"**Snapshot:** `{snapshot.get('dir', '—')}` · "
+                f"{snapshot.get('n_rows', 0)} row(s) · "
+                f"git `{snapshot.get('git_sha', '—')}`"
+            ),
             "",
         ]
     if drift_rows:
         lines += [
-            f"> ⚠ {len(drift_rows)} row(s) recomputed to metrics that differ from "
-            "the values recorded in the snapshot — the metric code changed since "
-            "the run.",
+            (
+                f"> ⚠ {len(drift_rows)} row(s) recomputed to metrics that differ from "
+                "the values recorded in the snapshot — the metric code changed since "
+                "the run."
+            ),
             "",
         ]
 
     lines += [
         "## Per-case scores (`mean±spread` over repeats)",
         "",
-        "| case | S1 pool | S2 \\| S1 | Rec@K | prec | τ | detour km | Δwalk | fit "
-        "| dup | unr | HF |",
+        (
+            "| case | S1 pool | S2 \\| S1 | Rec@K | prec | τ | detour km | Δwalk | fit "
+            "| dup | unr | HF |"
+        ),
         "|---|---|---|---|---|---|---|---|---|---|---|---|",
     ]
     for runs in groups:
@@ -1748,8 +1756,10 @@ def write_md_report(
         "",
         "## Hard failures — outside every score above",
         "",
-        f"**{failures['n_failed_runs']} of {failures['total_runs']} run(s) gated "
-        f"out of the quality means.** Counts by kind:",
+        (
+            f"**{failures['n_failed_runs']} of {failures['total_runs']} run(s) gated "
+            f"out of the quality means.** Counts by kind:"
+        ),
         "",
     ]
     if not failures["by_kind"]:
@@ -2914,14 +2924,18 @@ def write_compliance_reports(
         "",
         f"**Mode:** `{mode}` · **Generated:** {generated_at} · **API:** `{base_url}`",
         "",
-        "This measures whether the CONDITIONS of a request survived, not how close "
-        "the route came to a reference walk. A case passes only if every "
-        "machine-checkable expectation of its file holds; a parity group passes "
-        "only if RU and EN got the same kind of answer.",
+        (
+            "This measures whether the CONDITIONS of a request survived, not how close "
+            "the route came to a reference walk. A case passes only if every "
+            "machine-checkable expectation of its file holds; a parity group passes "
+            "only if RU and EN got the same kind of answer."
+        ),
         "",
-        f"**Compliance rate: "
-        f"{compliance_text}** "
-        f"({summary['n_units_passed']}/{summary['n_units']} units)",
+        (
+            f"**Compliance rate: "
+            f"{compliance_text}** "
+            f"({summary['n_units_passed']}/{summary['n_units']} units)"
+        ),
         "",
         "| case | locale | verdict | status | reason | detail |",
         "|---|---|---|---|---|---|",
@@ -2944,8 +2958,10 @@ def write_compliance_reports(
             "",
             "## Checks the current API cannot answer",
             "",
-            "These are recorded as unverified rather than passed or failed, "
-            "because the response carries no field to decide them:",
+            (
+                "These are recorded as unverified rather than passed or failed, "
+                "because the response carries no field to decide them:"
+            ),
             "",
         ]
         md += [f"- `{c}`" for c in summary["unverified_checks"]]

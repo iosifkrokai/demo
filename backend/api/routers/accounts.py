@@ -147,7 +147,8 @@ def list_visited(
     user, err = deps.require_user(request, repo)
     if err is not None:
         return err
-    assert user is not None and user.id is not None
+    assert user is not None
+    assert user.id is not None
     marks = repo.list_visited(user.id)
     by_id = {place.id: place for place in places.get_by_ids([m.place_id for m in marks])}
     items: list[VisitedItem] = []
@@ -170,7 +171,8 @@ def mark_visited(
     user, err = deps.require_user(request, repo)
     if err is not None:
         return err
-    assert user is not None and user.id is not None
+    assert user is not None
+    assert user.id is not None
     mark = repo.mark_visited(user.id, place_id)
     place = places.get_by_id(place_id) if mark is not None else None
     if mark is None or place is None or mark.visited_at is None:
@@ -188,7 +190,8 @@ def mark_visited_bulk(
     user, err = deps.require_user(request, repo)
     if err is not None:
         return err
-    assert user is not None and user.id is not None
+    assert user is not None
+    assert user.id is not None
     marked = repo.mark_visited_many(user.id, body.place_ids)
     return VisitedBulkOut(marked=marked, count=len(marked))
 
@@ -203,6 +206,7 @@ def unmark_visited(
     user, err = deps.require_user(request, repo)
     if err is not None:
         return err
-    assert user is not None and user.id is not None
+    assert user is not None
+    assert user.id is not None
     repo.unmark_visited(user.id, place_id)
     return Response(status_code=204)

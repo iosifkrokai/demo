@@ -81,7 +81,8 @@ def test_a_refusal_is_an_infeasible_answer_not_a_tool_error(
     assert outcome.refused is True
     assert outcome.status == "infeasible"
     assert outcome.requirements.outside_coverage == ["Вильнюс"]
-    assert outcome.problems and outcome.problems[0]["reason"]
+    assert outcome.problems
+    assert outcome.problems[0]["reason"]
 
 
 def test_the_wire_status_of_a_refusal_is_infeasible(fake_model: FakeModel, db_repos) -> None:
@@ -101,7 +102,8 @@ def test_the_wire_status_of_a_refusal_is_infeasible(fake_model: FakeModel, db_re
 
     assert response.status == "infeasible"
     assert response.points == []
-    assert response.explanation and "регион" in response.explanation
+    assert response.explanation
+    assert "регион" in response.explanation
 
 
 def test_an_empty_route_submission_is_not_a_plan(fake_model: FakeModel, db_repos) -> None:

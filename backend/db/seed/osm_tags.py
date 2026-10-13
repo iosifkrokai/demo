@@ -63,7 +63,7 @@ def sight_tag_to_category(tags: dict[str, str]) -> str | None:
         return "монастырь"
     if historic in ("memorial", "monument"):
         return "памятник"
-    if historic in ("archaeological_site",):
+    if historic == "archaeological_site":
         return "архитектура"
 
     if tourism == "museum":

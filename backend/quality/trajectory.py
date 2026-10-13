@@ -280,7 +280,7 @@ def run_case(case: dict[str, Any], repos: Any) -> Trajectory:
         with (
             mock.patch.dict(os.environ, {"OPENROUTER_API_KEY": FAKE_KEY}),
             mock.patch.object(
-                llm, "make_model", lambda: FunctionModel(_next, model_name="fake-agent")
+                llm, "make_model", return_value=FunctionModel(_next, model_name="fake-agent")
             ),
         ):
             outcome = plan_with_agent(case["query"], _brief(case), repos=repos)

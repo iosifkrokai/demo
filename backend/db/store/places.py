@@ -115,8 +115,10 @@ class PostgresPlaceRepository(PostgresRepository):
         per_word_sql = " OR ".join(per_word)
         conditions = " OR ".join([per_word_sql] * len(words))
         word_sim = [
-            "GREATEST(similarity(name, %s), word_similarity(%s, name), "
-            "similarity(town, %s), word_similarity(%s, town))"
+            (
+                "GREATEST(similarity(name, %s), word_similarity(%s, name), "
+                "similarity(town, %s), word_similarity(%s, town))"
+            )
         ] * len(words)
         order_expr = "(" + ") + (".join(word_sim) + ")"
 

@@ -103,10 +103,7 @@ def compute_cost_matrix(
     coords = [{"lat": c.lat, "lon": c.lon} for c in candidates]
     coords = snap_locations(coords, costing=costing)
     anchor = _measure_anchor(constraints.origin, coords, costing, deadline)
-    try:
-        matrix = time_matrix(coords, coords, costing=costing, deadline=deadline)
-    except UpstreamUnavailableError:
-        raise
+    matrix = time_matrix(coords, coords, costing=costing, deadline=deadline)
 
     if not matrix or len(matrix) != len(candidates):
         raise UpstreamUnavailableError(

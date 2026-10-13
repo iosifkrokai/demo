@@ -415,7 +415,7 @@ def render(
         out.append("поэтому первым стоит то, что задевает больше кейсов, а не то, что важнее.")
         out.append("")
         for point in points:
-            affects = point["affects"] if point["affects"] else "?"
+            affects = point["affects"] or "?"
             out.append(f"  [{affects}] {point['what']}")
             if point["detail"]:
                 out.append(f"        {point['detail']}")

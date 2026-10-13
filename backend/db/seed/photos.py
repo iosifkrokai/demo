@@ -172,7 +172,7 @@ def http_json(url: str, post: bytes | None = None, cache_id: str | None = None) 
         except Exception as exc:
             last = exc
             time.sleep(BACKOFF[min(attempt, len(BACKOFF) - 1)])
-    raise last if last else RuntimeError(url)
+    raise last or RuntimeError(url)
 
 
 def is_image(url: str) -> str:

@@ -14,7 +14,8 @@ def test_a_description_returns_usable_cards(db_repos) -> None:
     for card in answer["results"]:
         assert isinstance(card["id"], int)
         assert card["name"]
-        assert card["lat"] and card["lon"]
+        assert card["lat"]
+        assert card["lon"]
 
 
 def test_a_point_ranks_what_is_around_it(db_repos) -> None:
@@ -102,4 +103,5 @@ def test_the_project_area_has_a_boundary(db_repos) -> None:
 
         pytest.skip("the project area has no boundary in this database")
     south, west, north, east = box
-    assert south < north and west < east
+    assert south < north
+    assert west < east
