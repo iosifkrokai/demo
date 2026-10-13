@@ -85,6 +85,9 @@ RAION_CENTRES: dict[str, tuple[float, float]] = {
 }
 
 
+_ATTEMPTS = 4
+
+
 def haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     """Metres between two lat/lon points."""
     earth_radius_m = 6371000
@@ -212,7 +215,7 @@ def fetch_overpass(
 
     failed_endpoints: list[str] = []
     dead: set[str] = set()
-    for attempt in range(4):
+    for attempt in range(_ATTEMPTS):
         for endpoint in OVERPASS_ENDPOINTS:
             if endpoint in dead:
                 continue
@@ -240,12 +243,12 @@ def fetch_overpass(
                     ),
                 ):
                     dead.add(endpoint)
-                if attempt == 3 and endpoint not in dead:
+                if attempt == _ATTEMPTS - 1 and endpoint not in dead:
                     failed_endpoints.append(f"{endpoint} ({exc})")
 
         if all(ep in dead for ep in OVERPASS_ENDPOINTS):
             break
-        if attempt < 3:
+        if attempt < _ATTEMPTS - 1:
             wait = (2**attempt) * 5
             sys.stderr.write(f"[overpass] retry in {wait}s …\n")
             time.sleep(wait)
@@ -253,7 +256,8 @@ def fetch_overpass(
     for ep in failed_endpoints:
         sys.stderr.write(f"[overpass] FAILED: {ep}\n")
     sys.stderr.write(
-        f"[overpass] all {len(OVERPASS_ENDPOINTS)} endpoints failed after 4 attempts — exiting\n"
+        f"[overpass] all {len(OVERPASS_ENDPOINTS)} endpoints failed "
+        f"after {_ATTEMPTS} attempts — exiting\n"
     )
     return None
 

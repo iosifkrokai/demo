@@ -70,6 +70,9 @@ BRIEF_KEYS = frozenset(
 TUPLE_BRIEF_KEYS = ("hard_services", "interests", "avoid")
 
 
+_LATLON = 2
+
+
 @dataclass
 class ToolStep:
     """One tool call the loop made, with its arguments and the answer it gave."""
@@ -348,7 +351,7 @@ def validate_case(data: Any, path: Path | None = None) -> list[str]:
     if discover is not None and (
         not isinstance(discover, dict)
         or not isinstance(discover.get("near"), list)
-        or len(discover["near"]) != 2
+        or len(discover["near"]) != _LATLON
         or "radius_km" not in discover
         or "limit" not in discover
     ):

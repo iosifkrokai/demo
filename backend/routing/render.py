@@ -23,7 +23,7 @@ def render(
     round_trip: bool = False,
 ) -> tuple[dict[str, Any], dict[str, Any], str]:
     """Call Valhalla /route. Returns (shape_geojson, summary_dict, status_code)."""
-    if len(route) < 2:
+    if len(route) < constants.MIN_LEG_POINTS:
         return {}, {}, "no_route_exists"
 
     pts = [(p.lat, p.lon) for p in route]
@@ -74,7 +74,11 @@ def render(
     if result and result.status == RouteStatus.SERVICE_UNAVAILABLE:
         return {}, {}, "service_unavailable"
 
-    if result and result.status == RouteStatus.NO_ROUTE_EXISTS and len(pts) < 3:
+    if (
+        result
+        and result.status == RouteStatus.NO_ROUTE_EXISTS
+        and len(pts) < constants.MIN_TOUR_STOPS
+    ):
         return {}, {}, "no_route_exists"
 
     shape, summary, leg_status = _render_legs(pts, costing, locale)

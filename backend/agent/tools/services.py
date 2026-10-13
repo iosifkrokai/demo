@@ -17,6 +17,7 @@ from agent.tools import (
     envelope,
     fetch,
 )
+from core import constants
 from core.errors import UpstreamUnavailableError
 from routing.models import Candidate
 from routing.stops import candidate_of
@@ -56,7 +57,7 @@ def nearby_services(
         "fact_status": "detour measured",
     }
     wanted = [i for i in (stop_ids or []) if i > 0][:MAX_STOPS]
-    if len(wanted) < 2:
+    if len(wanted) < constants.MIN_LEG_POINTS:
         return envelope(
             "nearby_services",
             [],
@@ -75,7 +76,7 @@ def nearby_services(
         return envelope("nearby_services", [], provenance, error=error, message=message)
 
     stops = [candidate_of(row, 0.0) for row in (rows or [])]
-    if len(stops) < 2:
+    if len(stops) < constants.MIN_LEG_POINTS:
         return envelope(
             "nearby_services",
             [],

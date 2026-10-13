@@ -48,6 +48,9 @@ WIKIMEDIA_HOSTS = ("upload.wikimedia.org", "commons.wikimedia.org")
 WANTED = ("wikidata", "wikipedia", "webpage", "wikimedia_commons", "image")
 
 
+_MIN_DOUBLED_LEN = 8
+
+
 def _osmium() -> Any:
     """Import pyosmium on demand, with a clear error when it is not installed.
     Not a declared dependency, so a hints-file-only checkout can still import this.
@@ -323,7 +326,7 @@ def clean_author(raw: str) -> str:
     text = re.sub(r"\s*<https?://[^>]*>?", " ", text)
     text = re.sub(r"\s+", " ", text).strip()
     half = len(text) // 2
-    if len(text) >= 8 and len(text) % 2 == 0 and text[:half] == text[half:]:
+    if len(text) >= _MIN_DOUBLED_LEN and len(text) % 2 == 0 and text[:half] == text[half:]:
         text = text[:half].strip()
     text = re.sub(r"(https?://\S+)$", "", text).strip()
     return text

@@ -109,6 +109,12 @@ GOLDEN_ROW_SCHEMA = "bench_routes/golden_row/1"
 REFERENCE_NOISE_FLOOR = "recall 0.711 ± 0.150 over 9 runs (measured 2026-09-26)"
 
 
+_PAIR = 2
+_QUERY_MIN_CHARS = 3
+_QUERY_MAX_CHARS = 500
+_PARTY_CHILDREN_MAX = 20
+
+
 @dataclass
 class GoldenStop:
     name: str
@@ -486,7 +492,7 @@ def walk_distance_km(points: list[tuple[float, float]], order: list[int]) -> flo
 
 def max_leg_km(points: list[tuple[float, float]]) -> float | None:
     """Longest straight-line hop of an open walk, or None for < 2 points."""
-    if len(points) < 2:
+    if len(points) < _PAIR:
         return None
     return max(haversine_km(*a, *b) for a, b in pairwise(points))
 
@@ -1110,7 +1116,7 @@ def _mean(values: list[float]) -> float | None:
 
 def _std(values: list[float]) -> float | None:
     """Sample std (ddof=1); None for a single value."""
-    if len(values) < 2:
+    if len(values) < _PAIR:
         return None
     m = sum(values) / len(values)
     var = sum((v - m) ** 2 for v in values) / (len(values) - 1)
@@ -1219,7 +1225,7 @@ def noise_floor(groups: list[list[RunRecord]]) -> dict[str, dict[str, Any]]:
         spreads, stds, n_cases = [], [], 0
         for g in groups:
             vals = _attr([r.result for r in g], path)
-            if len(vals) < 2:
+            if len(vals) < _PAIR:
                 continue
             n_cases += 1
             spreads.append(_spread(vals) or 0.0)
@@ -1272,7 +1278,7 @@ def _pad(s: str, w: int) -> str:
 def _ci_cell(stats: dict[str, Any], decimals: int = 3) -> str:
     if stats.get("mean") is None:
         return "n/a"
-    if stats.get("n", 0) < 2:
+    if stats.get("n", 0) < _PAIR:
         return f"{stats['mean']:.{decimals}f} (n=1, no CI)"
     return f"{stats['mean']:.{decimals}f} [{stats['lo']:.{decimals}f}, {stats['hi']:.{decimals}f}]"
 
@@ -1940,8 +1946,12 @@ def validate_golden_case(data, path: Path | None = None) -> list[str]:
         errs.append(f"{where}: locale must be one of {list(LOCALES)}, got {locale!r}")
 
     query = data.get("query")
-    if not isinstance(query, str) or not (3 <= len(query.strip()) <= 500):
-        errs.append(f"{where}: query must be a string of 3..500 characters")
+    if not isinstance(query, str) or not (
+        _QUERY_MIN_CHARS <= len(query.strip()) <= _QUERY_MAX_CHARS
+    ):
+        errs.append(
+            f"{where}: query must be a string of {_QUERY_MIN_CHARS}..{_QUERY_MAX_CHARS} characters"
+        )
     elif locale in LOCALES:
         has_cyrillic = bool(_CYRILLIC_RE.search(query))
         if locale == "en" and has_cyrillic:
@@ -1963,9 +1973,13 @@ def validate_golden_case(data, path: Path | None = None) -> list[str]:
             errs.append(f"{where}: missing filters key {key!r}")
         children = filters.get("party_children")
         if children is not None and not (
-            isinstance(children, int) and not isinstance(children, bool) and 0 <= children <= 20
+            isinstance(children, int)
+            and not isinstance(children, bool)
+            and 0 <= children <= _PARTY_CHILDREN_MAX
         ):
-            errs.append(f"{where}: party_children must be null or an int in 0..20")
+            errs.append(
+                f"{where}: party_children must be null or an int in 0..{_PARTY_CHILDREN_MAX}"
+            )
         for key in ("hard_services", "interests", "avoid"):
             if key in filters:
                 _validate_code_list(f"{where}: filters.{key}", filters[key], errs)
@@ -3350,7 +3364,7 @@ def _noise_of(groups: list[list[RunRecord]], path: str) -> float | None:
     spreads = []
     for g in groups:
         vals = _attr([r.result for r in g], path)
-        if len(vals) < 2:
+        if len(vals) < _PAIR:
             continue
         spreads.append(_spread(vals) or 0.0)
     return _mean(spreads)
@@ -3385,7 +3399,7 @@ def print_compare(cmp: dict[str, Any]) -> None:
     )
     for row in cmp["metrics"]:
         n = row.get("n_paired", 0)
-        if row["diff"] is None or n < 2:
+        if row["diff"] is None or n < _PAIR:
             note = "n=1, no CI" if n == 1 else "n/a"
             mean_a = "n/a" if row["mean_a"] is None else f"{row['mean_a']:.3f}"
             mean_b = "n/a" if row["mean_b"] is None else f"{row['mean_b']:.3f}"

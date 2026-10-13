@@ -11,6 +11,7 @@ from typing import Any
 
 import psycopg
 
+from core import constants
 from db.models.place import Place
 from db.store.base import PostgresRepository
 from db.store.columns import PLACE_SELECT, PLACE_WRITE_COLUMNS
@@ -104,7 +105,7 @@ class PostgresPlaceRepository(PostgresRepository):
 
     def keyword_search(self, query: str, limit: int = 20) -> list[Place]:
         """Exact + prefix keyword search on name, town and district."""
-        words = [w for w in _WORD.findall(query.lower()) if len(w) >= 3]
+        words = _WORD.findall(query.lower())
         if not words:
             return []
 
@@ -142,7 +143,7 @@ class PostgresPlaceRepository(PostgresRepository):
 
     def name_match(self, query: str, limit: int = 5) -> list[tuple[Place, float]]:
         """Name-only trigram search, best first, with the similarity it scored."""
-        words = [w for w in re.findall(r"[а-яёa-z]{2,}", query.lower()) if len(w) >= 2]
+        words = re.findall(r"[а-яёa-z]{2,}", query.lower())
         if not words:
             return []
 
@@ -203,7 +204,7 @@ class PostgresPlaceRepository(PostgresRepository):
         """Top-K by vector cosine distance, each with the distance it scored."""
         bbox_clause = ""
         bbox_params: list[Any] = []
-        if region_bbox and len(region_bbox) == 4:
+        if region_bbox and len(region_bbox) == constants.BBOX_COORDS:
             south, west, north, east = region_bbox
             bbox_clause = "   AND geom && ST_MakeEnvelope(%s, %s, %s, %s, 4326)"
             bbox_params = [west, south, east, north]

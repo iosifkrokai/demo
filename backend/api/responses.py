@@ -351,7 +351,7 @@ def reader_brief(req: GenerateReq) -> ReaderBrief:
     """Narrow the wire to what the agent is told."""
     origin = (req.origin.lat, req.origin.lon) if req.origin is not None else None
     region_bbox: tuple[float, float, float, float] | None = None
-    if req.region_bbox and len(req.region_bbox) == 4:
+    if req.region_bbox and len(req.region_bbox) == constants.BBOX_COORDS:
         region_bbox = (
             float(req.region_bbox[0]),
             float(req.region_bbox[1]),

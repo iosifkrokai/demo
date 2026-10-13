@@ -19,6 +19,9 @@ from .types import RouteResult, RouteStatus
 logger = logging.getLogger(__name__)
 
 
+_VARINT_CONTINUE = 0x20
+
+
 def _decode_polyline(encoded: str) -> list[list[float]]:
     coords: list[list[float]] = []
     lat = lon = 0
@@ -31,7 +34,7 @@ def _decode_polyline(encoded: str) -> list[list[float]]:
                 i += 1
                 result |= (byte & 0x1F) << shift
                 shift += 5
-                if byte < 0x20:
+                if byte < _VARINT_CONTINUE:
                     break
             delta = ~(result >> 1) if result & 1 else result >> 1
             if axis == 0:
@@ -149,7 +152,7 @@ def route_through(
     """Call GET /route. Locations are [{lat, lon, type}], first/last 'break'."""
     costing = costing_for(costing)
     locs = [dict(loc) for loc in locations]
-    if len(locs) < 2:
+    if len(locs) < constants.MIN_LEG_POINTS:
         return RouteResult(
             status=RouteStatus.NO_ROUTE_EXISTS,
             shape={},
@@ -160,7 +163,7 @@ def route_through(
     locs = snap.snap_locations(locs, costing, timeout)
 
     locs = snap.drop_unsnappable(locs, costing, timeout)
-    if len(locs) < 2:
+    if len(locs) < constants.MIN_LEG_POINTS:
         logger.warning("route: fewer than 2 of the stops can be snapped — no route")
         return RouteResult(
             status=RouteStatus.NO_ROUTE_EXISTS,
@@ -189,7 +192,7 @@ def route_through(
 
     for i in range(len(locs)):
         subset = locs[:i] + locs[i + 1 :]
-        if len(subset) < 2:
+        if len(subset) < constants.MIN_LEG_POINTS:
             break
         try:
             body = _route_request(subset, costing, language, timeout, ROUTE_SNAP_RADII_M[-1])

@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from typing import Any, Literal, NamedTuple
 
+from core import constants
 from routing.models import (
     REASON_MUST_VISIT_OUTSIDE as REASON_MUST_VISIT_OUTSIDE_CODE,
     CategoryFacts,
@@ -153,7 +154,7 @@ def geometry_ok(geometry: Any) -> bool:
         return False
 
     coords = geometry.get("coordinates")
-    return _coord_count(coords) >= 2
+    return _coord_count(coords) >= constants.MIN_LEG_POINTS
 
 
 def _coord_count(coords: Any) -> int:

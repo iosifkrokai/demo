@@ -31,6 +31,9 @@ BRUTE_FORCE_MAX = 6
 REGRET_INSERTION_MAX = 12
 
 
+NN_STARTS = 5
+
+
 def optimize(
     candidates: list[Candidate],
     cost: CostMatrix,
@@ -46,14 +49,14 @@ def optimize(
     budget_s = constraints.time_budget_minutes * 60 if constraints.time_budget_minutes else None
     must_idx = [i for i, c in enumerate(candidates) if c.id in constraints.must_visit_ids]
 
-    if n < 2:
+    if n < constants.MIN_LEG_POINTS:
         return list(candidates), _report_missing_must(
             {**info, "algorithm": "direct", "order": list(range(n))},
             list(range(n)),
             candidates,
             constraints,
         )
-    if n == 2:
+    if n == constants.MIN_LEG_POINTS:
         order = [0, 1] if not must_idx else (must_idx + [i for i in range(2) if i not in must_idx])
         if anchor is not None:
             flipped = order[::-1]
@@ -180,7 +183,7 @@ def _closing_leg(
     anchor: OriginAnchor | None,
 ) -> float:
     """The one leg the pairwise chain does not carry: the way back."""
-    if not round_trip or len(order) < 2:
+    if not round_trip or len(order) < constants.MIN_LEG_POINTS:
         return 0.0
     if anchor is not None:
         return _leg_value(leg_seconds(matrix, anchor, order[-1], ORIGIN_INDEX))
@@ -484,10 +487,10 @@ def _nn_2opt_multi(
     rng = random.Random(42)
     starts = list(range(n))
     rng.shuffle(starts)
-    starts = starts[:5] if n >= 5 else starts
+    starts = starts[:NN_STARTS] if n >= NN_STARTS else starts
     if anchor is not None:
         nearest = min(range(n), key=lambda i: leg_seconds(matrix, anchor, ORIGIN_INDEX, i))
-        starts = [nearest, *[s for s in starts if s != nearest]][:5]
+        starts = [nearest, *[s for s in starts if s != nearest]][:NN_STARTS]
 
     best_route: list[int] | None = None
     best_total = float("inf")
@@ -546,7 +549,7 @@ def _two_opt(order: list[int], matrix: list[list[float]]) -> list[int]:
     """A reversal is accepted only when it lowers the order's REAL cost — the sum
     `walk_cost` measures — not merely the two boundary edges.
     """
-    if len(order) <= 3:
+    if len(order) <= constants.MIN_TOUR_STOPS:
         return order
     n = len(order)
     current = walk_cost(order, matrix)
@@ -586,7 +589,7 @@ def valhalla_order(
     """Let Valhalla order the walk when nothing pins the sequence."""
     if anchor is not None:
         return route, {**info, "valhalla_order": "skipped_origin_known"}
-    if len(route) < 3:
+    if len(route) < constants.MIN_TOUR_STOPS:
         return route, info
     coords = [{"lat": c.lat, "lon": c.lon} for c in route]
     try:
@@ -622,7 +625,7 @@ def prune_unroutable(
             len(pruned),
             ", ".join(c.name for c in pruned),
         )
-    if len(route) < 2:
+    if len(route) < constants.MIN_LEG_POINTS:
         raise NoRoutePossibleError(
             "Valhalla не нашла дороги между нашими точками — уточните город или район"
         )

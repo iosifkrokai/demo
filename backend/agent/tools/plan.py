@@ -120,7 +120,7 @@ def plan_walk(
     }
 
     wanted = [i for i in (stop_ids or []) if i > 0]
-    if len(wanted) < 2:
+    if len(wanted) < constants.MIN_LEG_POINTS:
         return envelope(
             "plan_walk",
             [],
@@ -154,7 +154,7 @@ def plan_walk(
     by_id = {row.id: row for row in (rows or [])}
     missing = [i for i in wanted if i not in by_id]
     candidates = [candidate_of(by_id[i], 0.0) for i in wanted if i in by_id]
-    if len(candidates) < 2:
+    if len(candidates) < constants.MIN_LEG_POINTS:
         return envelope(
             "plan_walk",
             [],

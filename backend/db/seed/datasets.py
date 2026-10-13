@@ -52,6 +52,9 @@ SIGHT_TAXONOMY = frozenset(c.code for c in taxonomy.all_categories() if c.role =
 SERVICE_TAXONOMY = frozenset(c.code for c in taxonomy.all_categories() if c.role == "service")
 
 
+MIN_BUCKET_ROWS = 2
+
+
 def read_pipe_csv(path: Path) -> list[dict[str, Any]]:
     """Parse a pipe-delimited CSV whose header may be commented out."""
     lines = [
@@ -438,7 +441,7 @@ def find_suspected_duplicates(
 
     pairs: list[dict[str, Any]] = []
     for key, rows in buckets.items():
-        if len(rows) < 2:
+        if len(rows) < MIN_BUCKET_ROWS:
             continue
         for i in range(len(rows)):
             for j in range(i + 1, len(rows)):

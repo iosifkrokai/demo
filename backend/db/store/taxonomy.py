@@ -34,6 +34,10 @@ _RU_ENDINGS = (
 _EN_ENDINGS = ("es", "s")
 
 
+_MIN_STEM = 3
+_MIN_LOOSE_FORM = 4
+
+
 def _norm(text: str) -> str:
     """Lower-case and fold ё→е so «костёл»/«костел» are one surface form."""
     return text.strip().lower().replace("ё", "е")
@@ -43,7 +47,7 @@ def _fold_candidates(norm: str) -> list[str]:
     """Candidate lemmas for an inflected surface form (may be empty)."""
     out: list[str] = []
     for ending in _RU_ENDINGS + _EN_ENDINGS:
-        if norm.endswith(ending) and len(norm) - len(ending) >= 3:
+        if norm.endswith(ending) and len(norm) - len(ending) >= _MIN_STEM:
             stem = norm[: -len(ending)]
             out.extend((stem, stem + "й", stem + "ь"))
     return out
@@ -137,7 +141,11 @@ class PostgresCategoryRepository(PostgresRepository):
 
         longest: str | None = None
         for form in index:
-            if len(form) >= 4 and form in norm and (longest is None or len(form) > len(longest)):
+            if (
+                len(form) >= _MIN_LOOSE_FORM
+                and form in norm
+                and (longest is None or len(form) > len(longest))
+            ):
                 longest = form
         return index[longest] if longest is not None else None
 

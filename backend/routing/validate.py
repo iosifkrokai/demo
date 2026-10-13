@@ -20,7 +20,7 @@ def _leg_s(value: float) -> float:
 
 
 def _leg_sum(matrix: list[list[float]], order: list[int]) -> float:
-    if len(order) < 2:
+    if len(order) < constants.MIN_LEG_POINTS:
         return 0.0
     total = 0.0
     for a, b in itertools.pairwise(order):
@@ -83,7 +83,7 @@ def validate(
     walk = _leg_sum(matrix, order)
     if anchor is not None and order:
         walk += _leg_s(leg_seconds(matrix, anchor, ORIGIN_INDEX, order[0]))
-    if constraints.round_trip and len(order) >= 2:
+    if constraints.round_trip and len(order) >= constants.MIN_LEG_POINTS:
         if anchor is not None:
             walk += _leg_s(leg_seconds(matrix, anchor, order[-1], ORIGIN_INDEX))
         else:

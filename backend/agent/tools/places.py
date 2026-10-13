@@ -92,7 +92,7 @@ def find_places(
         near = (float(near_lat), float(near_lon), float(radius))
 
     requested_box: tuple[float, float, float, float] | None = None
-    if region_bbox and len(region_bbox) == 4:
+    if region_bbox and len(region_bbox) == constants.BBOX_COORDS:
         requested_box = (
             float(region_bbox[0]),
             float(region_bbox[1]),

@@ -31,6 +31,9 @@ QUALITY_FACTS = CategoryFacts.from_rows(_seed_categories())
 _SEED_ROLES = {cat.code: cat.role for cat in _seed_categories()}
 
 
+_TIE_M = 5.0
+
+
 def _role(code: str) -> str | None:
     """The role of a canonical code, or None when it is not one."""
     return _SEED_ROLES.get(code)
@@ -227,12 +230,12 @@ def run_services() -> dict[str, Any]:
             safe_ref = {
                 pid
                 for pid, (off, _) in ref_capped.items()
-                if abs(off - gate) > 5 and gate - off > 5
+                if abs(off - gate) > _TIE_M and gate - off > _TIE_M
             }
             safe_got = {
                 i["id"]
                 for i in items
-                if abs(i["off_line_m"] - gate) > 5 and gate - i["off_line_m"] > 5
+                if abs(i["off_line_m"] - gate) > _TIE_M and gate - i["off_line_m"] > _TIE_M
             }
             ties = len(ref_capped) - len(safe_ref)
             checks.append(

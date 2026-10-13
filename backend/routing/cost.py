@@ -184,7 +184,7 @@ def drop_unreachable(
     one; when fewer than two survive, the best pair is returned.
     """
     n = len(candidates)
-    if n < 3:
+    if n < constants.MIN_TOUR_STOPS:
         return candidates, cost
 
     alive = set(range(n))
@@ -200,7 +200,7 @@ def drop_unreachable(
 
     if len(alive) == n:
         return candidates, cost
-    if len(alive) < 2:
+    if len(alive) < constants.MIN_LEG_POINTS:
         return _best_pair(candidates, cost)
 
     idx = sorted(alive)
@@ -216,7 +216,7 @@ def prune_unroutable_stops(
     """Must-visit stops are never dropped: they stay and are reported with
     ``must_visit_unroutable``. Returns ``(kept_route, report)``.
     """
-    if len(route) < 3:
+    if len(route) < constants.MIN_TOUR_STOPS:
         return route, []
     index = {c.id: i for i, c in enumerate(candidates)}
     must = set(must_visit_ids or ())
@@ -233,7 +233,7 @@ def prune_unroutable_stops(
         return not math.isfinite(cell) or cell >= constants.UNREACHABLE_S
 
     changed = True
-    while changed and len(keep) >= 3:
+    while changed and len(keep) >= constants.MIN_TOUR_STOPS:
         changed = False
         for i in range(len(keep) - 1):
             if not leg_bad(keep[i], keep[i + 1]):
@@ -254,7 +254,7 @@ def walk_cost(order: list[int], matrix: list[list[float]]) -> float:
     """An infinite cell saturates at UNREACHABLE_S; a NaN cell (UNKNOWN_S) is
     skipped, not saturated.
     """
-    if len(order) < 2:
+    if len(order) < constants.MIN_LEG_POINTS:
         return 0.0
     total = 0.0
     for a, b in itertools.pairwise(order):
@@ -301,7 +301,7 @@ def route_legs(
         legs.insert(0, (ORIGIN_INDEX, order[0]))
         if round_trip:
             legs.append((order[-1], ORIGIN_INDEX))
-    elif round_trip and len(order) >= 2:
+    elif round_trip and len(order) >= constants.MIN_LEG_POINTS:
         legs.append((order[-1], order[0]))
     return legs
 
@@ -387,7 +387,7 @@ def build_cost(
     if cost.indices != list(range(len(candidates))):
         candidates = [candidates[i] for i in cost.indices]
     candidates, cost = drop_unreachable(candidates, cost)
-    if len(candidates) < 2:
+    if len(candidates) < constants.MIN_LEG_POINTS:
         raise NoRoutePossibleError(
             "Valhalla не нашла дороги между нашими точками — уточните город или район"
         )
