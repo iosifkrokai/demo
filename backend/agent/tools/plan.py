@@ -35,8 +35,9 @@ def _measure_key(
     profile: str,
     round_trip: bool,
     origin: LatLon | None,
+    *,
     locale: str,
-    must_keep_ids: list[int] | None,
+    must_keep_ids: list[int] | None = None,
     data_version: str,
     regime: str = "order",
 ) -> str:
@@ -137,10 +138,10 @@ def plan_walk(
         costing,
         round_trip,
         origin,
-        locale,
-        must_keep_ids,
-        _data_version(repos),
-        _order_regime(deadline_s, origin),
+        locale=locale,
+        must_keep_ids=must_keep_ids,
+        data_version=_data_version(repos),
+        regime=_order_regime(deadline_s, origin),
     )
     cached = cache.MEASURE_CACHE.get(key)
     if cached is not None:
@@ -251,6 +252,7 @@ def register_plan_walk(agent: Any, _remember: Remember) -> None:
     def _plan_walk(
         ctx: RunContext[PlanningDeps],
         stop_ids: list[int],
+        *,
         budget_minutes: int | None = None,
         profile: str = "pedestrian",
         round_trip: bool = False,

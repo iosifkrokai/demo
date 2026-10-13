@@ -106,9 +106,11 @@ def test_the_measure_key_carries_the_data_version() -> None:
     version is a new measurement."""
     from agent.tools.plan import _measure_key
 
-    same = _measure_key([3, 1, 2], 60, "pedestrian", False, None, "ru", None, "v1")
-    reordered = _measure_key([1, 2, 3], 60, "pedestrian", False, None, "ru", None, "v1")
-    bumped = _measure_key([1, 2, 3], 60, "pedestrian", False, None, "ru", None, "v2")
+    same = _measure_key([3, 1, 2], 60, "pedestrian", False, None, locale="ru", data_version="v1")
+    reordered = _measure_key(
+        [1, 2, 3], 60, "pedestrian", False, None, locale="ru", data_version="v1"
+    )
+    bumped = _measure_key([1, 2, 3], 60, "pedestrian", False, None, locale="ru", data_version="v2")
 
     assert same == reordered
     assert same != bumped
@@ -120,8 +122,10 @@ def test_the_measure_key_carries_the_ordering_regime() -> None:
     from agent.tools.plan import _measure_key, _order_regime
     from routing.models import LatLon
 
-    ordered = _measure_key([1, 2, 3], 60, "pedestrian", False, None, "ru", None, "v1")
-    skipped = _measure_key([1, 2, 3], 60, "pedestrian", False, None, "ru", None, "v1", "noorder")
+    ordered = _measure_key([1, 2, 3], 60, "pedestrian", False, None, locale="ru", data_version="v1")
+    skipped = _measure_key(
+        [1, 2, 3], 60, "pedestrian", False, None, locale="ru", data_version="v1", regime="noorder"
+    )
 
     assert ordered != skipped
 

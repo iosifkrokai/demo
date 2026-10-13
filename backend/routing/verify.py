@@ -283,6 +283,7 @@ def _verify_service(
     route_present: bool,
     geom_ok: bool,
     codes: frozenset[str],
+    *,
     evidence: tuple[bool | None, list[dict[str, Any]] | None] = (None, None),
 ) -> None:
     measured_ok, measured = evidence
@@ -396,7 +397,12 @@ def verify(
             _verify_must_visit(r, stops, route_present, unroutable, geom_ok)
         elif r.kind == "service":
             _verify_service(
-                r, stops, route_present, geom_ok, codes, _evidence_for(r, services_along, codes)
+                r,
+                stops,
+                route_present,
+                geom_ok,
+                codes,
+                evidence=_evidence_for(r, services_along, codes),
             )
         elif r.kind == "interest":
             _verify_interest(r, stops, route_present, geom_ok, codes)

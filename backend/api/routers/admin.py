@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Query, Request, Response
 
@@ -41,10 +41,10 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 @deps.storage_guarded
 def admin_list_users(
     request: Request,
+    repo: Annotated[UserRepository, Depends(deps.get_user_repository)],
     q: str = Query(default="", max_length=200),
     limit: int = Query(default=50, ge=1, le=MAX_LIST_LIMIT),
     offset: int = Query(default=0, ge=0),
-    repo: UserRepository = Depends(deps.get_user_repository),
 ) -> Any:
     _, err = deps.require_admin(request, repo)
     if err is not None:
@@ -60,7 +60,7 @@ def admin_patch_user(
     user_id: str,
     body: AdminUserPatch,
     request: Request,
-    repo: UserRepository = Depends(deps.get_user_repository),
+    repo: Annotated[UserRepository, Depends(deps.get_user_repository)],
 ) -> Any:
     actor, err = deps.require_admin(request, repo)
     if err is not None:
@@ -99,7 +99,7 @@ def admin_patch_user(
 def admin_delete_user(
     user_id: str,
     request: Request,
-    repo: UserRepository = Depends(deps.get_user_repository),
+    repo: Annotated[UserRepository, Depends(deps.get_user_repository)],
 ) -> Any:
     actor, err = deps.require_admin(request, repo)
     if err is not None:
@@ -123,12 +123,13 @@ def admin_delete_user(
 @deps.storage_guarded
 def admin_list_places(
     request: Request,
+    repo: Annotated[UserRepository, Depends(deps.get_user_repository)],
+    places: Annotated[PostgresPlaceRepository, Depends(deps.get_place_repository)],
+    *,
     q: str = Query(default="", max_length=200),
     category: str = Query(default="", max_length=120),
     limit: int = Query(default=50, ge=1, le=MAX_LIST_LIMIT),
     offset: int = Query(default=0, ge=0),
-    repo: UserRepository = Depends(deps.get_user_repository),
-    places: PostgresPlaceRepository = Depends(deps.get_place_repository),
 ) -> Any:
     _, err = deps.require_admin(request, repo)
     if err is not None:
@@ -147,8 +148,8 @@ def admin_list_places(
 def admin_create_place(
     body: AdminPlaceIn,
     request: Request,
-    repo: UserRepository = Depends(deps.get_user_repository),
-    places: PostgresPlaceRepository = Depends(deps.get_place_repository),
+    repo: Annotated[UserRepository, Depends(deps.get_user_repository)],
+    places: Annotated[PostgresPlaceRepository, Depends(deps.get_place_repository)],
 ) -> Any:
     _, err = deps.require_admin(request, repo)
     if err is not None:
@@ -166,8 +167,8 @@ def admin_patch_place(
     place_id: int,
     body: AdminPlacePatch,
     request: Request,
-    repo: UserRepository = Depends(deps.get_user_repository),
-    places: PostgresPlaceRepository = Depends(deps.get_place_repository),
+    repo: Annotated[UserRepository, Depends(deps.get_user_repository)],
+    places: Annotated[PostgresPlaceRepository, Depends(deps.get_place_repository)],
 ) -> Any:
     _, err = deps.require_admin(request, repo)
     if err is not None:
@@ -189,8 +190,8 @@ def admin_patch_place(
 def admin_delete_place(
     place_id: int,
     request: Request,
-    repo: UserRepository = Depends(deps.get_user_repository),
-    places: PostgresPlaceRepository = Depends(deps.get_place_repository),
+    repo: Annotated[UserRepository, Depends(deps.get_user_repository)],
+    places: Annotated[PostgresPlaceRepository, Depends(deps.get_place_repository)],
 ) -> Any:
     _, err = deps.require_admin(request, repo)
     if err is not None:
@@ -204,8 +205,8 @@ def admin_delete_place(
 @deps.storage_guarded
 def admin_stats(
     request: Request,
-    repo: UserRepository = Depends(deps.get_user_repository),
-    stats: StatsRepository = Depends(deps.get_stats_repository),
+    repo: Annotated[UserRepository, Depends(deps.get_user_repository)],
+    stats: Annotated[StatsRepository, Depends(deps.get_stats_repository)],
 ) -> Any:
     _, err = deps.require_admin(request, repo)
     if err is not None:

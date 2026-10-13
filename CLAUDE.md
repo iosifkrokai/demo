@@ -81,7 +81,7 @@ pass you should ignore.
   endpoints answer `503 llm_not_configured` rather than guessing; retrieval is
   unaffected (embeddings are local, 384-d, ONNX).
 - **The product speaks Russian.** `ruff` deliberately ignores the ambiguous-unicode
-  rules (RUF001–RUF003): Cyrillic in strings is the point, not a defect.
+  rules (RUF001–RUF002): Cyrillic in strings is the point, not a defect.
 - **Frontend:** do not fork `frontend/src/components/ui/*`; every size, radius and
   colour comes from the tokens in `frontend/src/index.css`. See `frontend/DESIGN.md`.
 
