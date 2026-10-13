@@ -15,6 +15,7 @@ from routing.models import (
     LatLon,
     OriginAnchor,
     ResolvedConstraints,
+    WalkProblem,
 )
 from routing.optimize import optimize
 from routing.valhalla import constants as valhalla
@@ -135,8 +136,8 @@ def test_the_optimizer_starts_next_to_the_tourist() -> None:
     anchor = OriginAnchor(from_origin=[5000.0, 4000.0, 1.0], to_origin=[5000.0, 4000.0, 1.0])
     constraints = ResolvedConstraints(time_budget_minutes=None)
 
-    _, blind_info = optimize(stops, _cost(walk), constraints)
-    aware, aware_info = optimize(stops, _cost(walk, anchor), constraints)
+    _, blind_info = optimize(WalkProblem(stops, _cost(walk), constraints))
+    aware, aware_info = optimize(WalkProblem(stops, _cost(walk, anchor), constraints))
 
     assert aware_info["order"][0] == 2
     assert aware[0].id == 3
@@ -151,8 +152,8 @@ def test_a_two_stop_tour_opens_at_the_nearer_end() -> None:
     anchor = OriginAnchor(from_origin=[4000.0, 20.0], to_origin=[4000.0, 20.0])
     constraints = ResolvedConstraints(time_budget_minutes=None)
 
-    blind, _ = optimize(stops, _cost(walk), constraints)
-    aware, aware_info = optimize(stops, _cost(walk, anchor), constraints)
+    blind, _ = optimize(WalkProblem(stops, _cost(walk), constraints))
+    aware, aware_info = optimize(WalkProblem(stops, _cost(walk, anchor), constraints))
 
     assert blind[0].id == 1
     assert aware_info["order"] == [1, 0]

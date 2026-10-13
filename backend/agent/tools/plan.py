@@ -19,7 +19,7 @@ from core import cache, constants
 from core.errors import NoRoutePossibleError, UpstreamUnavailableError
 from db.store.errors import StorageUnavailableError
 from routing.cost import build_cost, refinement_cost
-from routing.models import CategoryFacts, LatLon, ResolvedConstraints
+from routing.models import CategoryFacts, LatLon, ResolvedConstraints, WalkProblem
 from routing.optimize import optimize, order_after_prune, prune_unroutable, valhalla_order
 from routing.render import render
 from routing.stops import candidate_of
@@ -178,16 +178,16 @@ def plan_walk(
             candidates, cost = refinement_cost(candidates, constraints, costing, taxonomy)
         else:
             candidates, cost = build_cost(candidates, constraints, costing, taxonomy)
-        route, info = optimize(candidates, cost, constraints, costing=costing)
+        problem = WalkProblem(candidates, cost, constraints, costing)
+        route, info = optimize(problem)
 
         if deadline_s is None or deadline_s >= constants.VALHALLA_ORDER_MIN_LEFT_S:
             route, info = valhalla_order(
                 route,
                 info,
-                costing=costing,
+                problem,
                 timeout=constants.VALHALLA_ORDER_TIMEOUT_S,
                 retries=constants.VALHALLA_ORDER_RETRIES,
-                anchor=cost.anchor,
             )
         planned = len(route)
         route, prune_report = prune_unroutable(route, candidates, cost, constraints.must_visit_ids)

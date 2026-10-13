@@ -104,6 +104,42 @@ class CostMatrix(BaseModel):
     anchor: OriginAnchor | None = None
 
 
+@dataclass(frozen=True)
+class WalkProblem:
+    """One measurement's whole input: the stops, the matrix, and the rules."""
+
+    candidates: list[Candidate]
+    cost: CostMatrix
+    constraints: ResolvedConstraints
+    costing: str = "pedestrian"
+
+    @property
+    def matrix(self) -> list[list[float]]:
+        return self.cost.walk_seconds
+
+    @property
+    def visits(self) -> list[int]:
+        return self.cost.visit_minutes
+
+    @property
+    def anchor(self) -> OriginAnchor | None:
+        return self.cost.anchor
+
+    @property
+    def round_trip(self) -> bool:
+        return self.constraints.round_trip
+
+    @property
+    def budget_s(self) -> int | None:
+        minutes = self.constraints.time_budget_minutes
+        return minutes * 60 if minutes else None
+
+    @property
+    def must_idx(self) -> list[int]:
+        wanted = set(self.constraints.must_visit_ids)
+        return [i for i, c in enumerate(self.candidates) if c.id in wanted]
+
+
 class ValidatedPlan(BaseModel):
     route: list[Candidate]
     walk_seconds: float
