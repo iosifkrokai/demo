@@ -15,11 +15,12 @@ from api.models.routes import (
     ExplainReq,
     GenerateReq,
     RerouteReq,
+    RouteProgressOut,
     RouteResponse,
     ThreadResponse,
     ThreadTurn,
 )
-from core import constants
+from core import constants, progress
 from core.errors import AgentError, InterpretationUnavailableError, NoRoutePossibleError
 from core.passwords import hash_token
 from routing.models import CategoryFacts
@@ -65,14 +66,20 @@ def _thread_response(session_id: str, journal: Thread | None) -> ThreadResponse:
 def generate(req: GenerateReq, request: Request) -> RouteResponse:
     """Build a route. With a `progress_id`, the work is reported as it happens."""
     deps.require_llm()
+    progress.RUNS.begin(req.progress_id)
     started = time.perf_counter()
     try:
-        answer = _plan(req, request)
-    except NoRoutePossibleError as exc:
-        log.info("no route possible: %s", exc)
-        return responses.no_route_response(req, str(exc))
-    except AgentError as exc:
-        raise HTTPException(status_code=exc.http_status, detail=str(exc)) from exc
+        try:
+            answer = _plan(req, request)
+        except NoRoutePossibleError as exc:
+            log.info("no route possible: %s", exc)
+            answer = responses.no_route_response(req, str(exc))
+        except AgentError as exc:
+            raise HTTPException(status_code=exc.http_status, detail=str(exc)) from exc
+    except Exception:
+        progress.RUNS.finish(req.progress_id, failed=True)
+        raise
+    progress.RUNS.finish(req.progress_id)
     log.info(
         "plan.ok query_len=%d ms=%d stops=%d status=%s",
         len(req.query),
@@ -119,7 +126,17 @@ def _plan(req: GenerateReq, request: Request) -> RouteResponse:
         )
 
     facts = CategoryFacts.from_rows(repos.taxonomy.all())
+    progress.RUNS.mark(req.progress_id, progress.DRAWING_LINE)
     return responses.route_response(outcome, repos=repos, facts=facts, previous=previous)
+
+
+@router.get("/routes/progress/{progress_id}", response_model=RouteProgressOut)
+def read_progress(progress_id: str) -> Any:
+    """How far the run named by `progress_id` got; 404 for an id nobody is tracking."""
+    state = progress.RUNS.read(progress_id)
+    if state is None:
+        return deps.error(404, "unknown_progress_id")
+    return RouteProgressOut(**state)
 
 
 @router.get("/routes/threads/{session_id}", response_model=ThreadResponse)

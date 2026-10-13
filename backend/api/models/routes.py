@@ -243,6 +243,15 @@ class ServicesAlongReq(BaseModel):
     session_id: str | None = Field(default=None, max_length=128)
 
 
+class RouteProgressOut(BaseModel):
+    """GET /routes/progress/{id} body: where the run got to."""
+
+    stage: str
+    done: bool
+    failed: bool
+    elapsed_ms: int
+
+
 class HealthResponse(BaseModel):
     status: Literal["ok", "starting", "degraded"]
     embedder: bool

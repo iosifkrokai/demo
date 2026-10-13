@@ -23,7 +23,7 @@ from api.models.accounts import (
     VisitedItem,
     VisitedListOut,
 )
-from api.models.routes import HealthResponse, RouteResponse
+from api.models.routes import HealthResponse, RouteProgressOut, RouteResponse
 
 
 def _carries(payload: dict[str, Any], model: type[BaseModel]) -> None:
@@ -95,9 +95,26 @@ def test_health_reports_its_dependencies(api: httpx.Client) -> None:
 
 def test_generate_returns_a_route(live_stack, api: httpx.Client) -> None:
     live_stack.require("llm")
-    response = api.post("/routes/generate", json={"query": "погулять по старому Гродно"})
+    progress_id = uuid.uuid4().hex
+    response = api.post(
+        "/routes/generate",
+        json={"query": "погулять по старому Гродно", "progress_id": progress_id},
+    )
     assert response.status_code == 200, response.text
     _carries(response.json(), RouteResponse)
+
+    # The run is over by now, so the panel's next poll reads the end of it.
+    tracked = api.get(f"/routes/progress/{progress_id}")
+    assert tracked.status_code == 200, tracked.text
+    _carries(tracked.json(), RouteProgressOut)
+    assert tracked.json()["done"] is True
+
+
+def test_progress_for_an_untracked_run_is_a_404(api: httpx.Client) -> None:
+    response = api.get(f"/routes/progress/{uuid.uuid4().hex}")
+
+    assert response.status_code == 404
+    assert response.json() == {"reason": "unknown_progress_id"}
 
 
 def test_reroute_returns_a_route(live_stack, api: httpx.Client) -> None:
