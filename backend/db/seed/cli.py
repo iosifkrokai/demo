@@ -41,6 +41,14 @@ def _count_by(rows: list[dict[str, Any]], key: str) -> dict[str, int]:
     return out
 
 
+def _collect(datasets: list[Dataset]) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """The valid records to project, and the automatic ones a hand-authored row shadows."""
+    collected = collect_records(datasets)
+    kept, shadowed = ds_mod.resolve_shadowed(collected["records"])
+    collected["records"] = kept
+    return collected, shadowed
+
+
 def cmd_apply(args: argparse.Namespace) -> int:
     from . import pipeline
 
@@ -53,9 +61,10 @@ def cmd_apply(args: argparse.Namespace) -> int:
         "by_category": _count_by(curated, "category") if curated else {},
     }
 
-    collected = collect_records(datasets)
+    collected, shadowed = _collect(datasets)
     data_version = version_mod.content_version()
 
+    merged_rows = 0
     db_stats: dict[str, Any] | None = None
     if not args.dry_run:
         try:
@@ -67,6 +76,9 @@ def cmd_apply(args: argparse.Namespace) -> int:
                     out = pipeline.apply_dataset(conn, ds, rows)
                     totals["inserted"] += out["inserted"]
                     totals["updated"] += out["updated"]
+                merged_rows = pipeline.apply_shadowed(
+                    conn, shadowed, {d.name: d.license for d in datasets}
+                )
                 if curated:
                     curated_stats.update(pipeline.apply_curated_rows(conn, curated))
                     curated_stats["applied"] = True
@@ -97,6 +109,7 @@ def cmd_apply(args: argparse.Namespace) -> int:
                         "photos_written": photos_written,
                         "embedded": embedded,
                         "embeddings_skipped": args.no_embed,
+                        "merged_removed": merged_rows,
                     }
                 )
         except Exception as exc:
@@ -111,6 +124,7 @@ def cmd_apply(args: argparse.Namespace) -> int:
             curated_stats=curated_stats,
             db_stats=db_stats,
             data_version=data_version,
+            merged=shadowed,
         ),
     )
     _print_summary(report)
@@ -135,7 +149,8 @@ def _print_summary(report: dict[str, Any]) -> None:
     print(
         f"[seed] mode={report['mode']} records={t['records']} "
         f"geofence_rejects={t['geofence_rejects']} invalid={t['invalid']} "
-        f"duplicates={report['suspected_duplicates']['count']}"
+        f"duplicates={report['suspected_duplicates']['count']} "
+        f"merged={report['merged']['count']}"
     )
     for ds in report["datasets"]:
         note = " (absent — run `seed fetch`)" if ds.get("missing") else ""

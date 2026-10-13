@@ -343,6 +343,34 @@ def apply_photos(conn: psycopg.Connection, photos_dir: Path | None = None) -> in
     return apply_to_db(conn, json.loads(path.read_text(encoding="utf-8")))
 
 
+def apply_shadowed(
+    conn: psycopg.Connection, shadowed: list[dict[str, Any]], licenses: dict[str, str]
+) -> int:
+    """Drop the automatic rows a hand-authored one shadows, keeping their source on the survivor.
+    Returns how many places were removed. The caller commits.
+    """
+    if not shadowed:
+        return 0
+    with conn.cursor() as cur:
+        losers = [entry["source_url"] for entry in shadowed]
+        cur.execute("DELETE FROM places WHERE source_url = ANY(%s)", (losers,))
+        removed = cur.rowcount
+        for entry in shadowed:
+            license_ = licenses.get(entry["dataset"])
+            src = source_fields(entry["source_url"], license_)
+            cur.execute(
+                """
+                INSERT INTO place_sources (place_id, provider, external_id, url,
+                                          license, fetched_at)
+                SELECT id, %s, %s, %s, %s, now() FROM places WHERE source_url = %s
+                ON CONFLICT (provider, external_id) DO UPDATE
+                    SET place_id = EXCLUDED.place_id
+                """,
+                (src["provider"], src["external_id"], src["url"], license_, entry["shadowed_by"]),
+            )
+    return removed
+
+
 def prune_foreign(conn: psycopg.Connection, *, apply: bool = False) -> int:
     """Drop places outside the project area; returns the number found (deleted if apply).
     The ingest filters now, so this only cleans older DBs.

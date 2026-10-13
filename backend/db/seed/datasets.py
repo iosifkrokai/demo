@@ -10,7 +10,7 @@ import json
 import math
 import re
 import unicodedata
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -450,6 +450,59 @@ def find_suspected_duplicates(
     return pairs
 
 
+def _nearest_within(
+    candidates: Sequence[dict[str, Any]], lat: float, lon: float, radius_m: float
+) -> dict[str, Any] | None:
+    """The closest candidate within ``radius_m``, or None."""
+    best: dict[str, Any] | None = None
+    best_m = radius_m
+    for candidate in candidates:
+        distance = haversine_m(lat, lon, candidate["lat"], candidate["lon"])
+        if distance < best_m:
+            best, best_m = candidate, distance
+    return best
+
+
+def resolve_shadowed(
+    records: list[dict[str, Any]], radius_m: float = DEFAULT_DUP_RADIUS_M
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Split records into the ones to project and the automatic ones a hand-authored row shadows.
+    Same normalised name within ``radius_m``; the hand-authored row keeps the place.
+    """
+    buckets: dict[str, list[dict[str, Any]]] = {}
+    for r in records:
+        if r.get("_category_source") not in PROTECTED_CATEGORY_SOURCES:
+            continue
+        key = norm_name(r.get("name"))
+        if key and r.get("lat") is not None and r.get("lon") is not None:
+            buckets.setdefault(key, []).append(r)
+
+    shadowed: list[dict[str, Any]] = []
+    dropped: set[int] = set()
+    for index, r in enumerate(records):
+        if r.get("_category_source") in PROTECTED_CATEGORY_SOURCES:
+            continue
+        key = norm_name(r.get("name"))
+        if not key or r.get("lat") is None or r.get("lon") is None:
+            continue
+        winner = _nearest_within(buckets.get(key) or (), r["lat"], r["lon"], radius_m)
+        if winner is None:
+            continue
+        dropped.add(index)
+        shadowed.append(
+            {
+                "name": r.get("name"),
+                "dataset": r["_dataset"],
+                "source_url": r["source_url"],
+                "shadowed_by": winner["source_url"],
+                "distance_m": round(
+                    haversine_m(r["lat"], r["lon"], winner["lat"], winner["lon"]), 1
+                ),
+            }
+        )
+    return [r for index, r in enumerate(records) if index not in dropped], shadowed
+
+
 def _share(part: int, total: int) -> dict[str, Any]:
     return {"count": part, "total": total, "share": round(part / total, 4) if total else None}
 
@@ -478,6 +531,7 @@ class CoverageContext:
     db_stats: dict[str, Any] | None = None
     data_version: str | None = None
     generated_at: str | None = None
+    merged: list[dict[str, Any]] = field(default_factory=list)
 
 
 def build_coverage_report(collected: dict[str, Any], context: CoverageContext) -> dict[str, Any]:
@@ -560,6 +614,10 @@ def build_coverage_report(collected: dict[str, Any], context: CoverageContext) -
         "suspected_duplicates": {
             "count": len(duplicates),
             "pairs": duplicates[:50],
+        },
+        "merged": {
+            "count": len(context.merged),
+            "pairs": context.merged[:50],
         },
         "curated": context.curated_stats or {"rows": len(context.curated or []), "applied": False},
     }

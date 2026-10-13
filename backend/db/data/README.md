@@ -66,6 +66,15 @@ Order of a full apply — validate, upsert by natural key, embed locally, report
    `itinerary_stops` (from `itineraries.json`, key `id`) — the two reference files
    projected, see above; embeddings last, from the local CPU model.
 
+A hand-authored row **shadows** an automatic one: where the two names match after
+`norm_name()` and the rows sit within `DUPLICATE_RADIUS_M` of each other (150 m),
+the automatic row is not projected as a place and its `source_url` moves onto the
+hand-authored one, so `place_sources` carries both. This happens in memory, before
+any upsert (`datasets.resolve_shadowed`), so the report and the projection agree;
+the report's `merged` block lists exactly what it dropped. Automatic twins of each
+other are left alone — the name alone does not make a duplicate, and most same-name
+pairs are a bus stop and its counterpart across the road.
+
 Idempotency: `places` upserts on `source_url`, `place_sources` on
 `(provider, external_id)`, `place_aliases` on `(place_id, lower(alias), locale)`,
 `areas` on `code`, `categories` on `code`, `itineraries` on `id` (each walk's
