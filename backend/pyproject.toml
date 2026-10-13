@@ -70,7 +70,6 @@ ignore = [
     "RUF001",
     "RUF002",
     "PLR2004",
-    "PLC0415",
     "PLR0913",
     "PLR0912",
     "PLR0915",
@@ -79,6 +78,8 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = ["PLR2004", "ARG", "PLC0415"]
+"db/seed/*.py" = ["PLC0415"]
+"db/embeddings/model.py" = ["PLC0415"]
 "db/alembic/versions/*.py" = ["E501"]
 
 [tool.ruff.lint.isort]

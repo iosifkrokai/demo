@@ -17,6 +17,7 @@ from api.models.routes import (
     Place,
     PlannedAlternative,
     RequirementSignal,
+    RerouteReq,
     RouteChange,
     RouteChanges,
     RouteResponse,
@@ -387,12 +388,8 @@ def reader_brief(req: GenerateReq) -> ReaderBrief:
     )
 
 
-def reroute_response(req: Any, *, repos: Any) -> RouteResponse:
+def reroute_response(req: RerouteReq, *, repos: Any) -> RouteResponse:
     """Route a list of points the client already chose, and draw it."""
-    from api.models.routes import RerouteReq
-    from routing.models import CategoryFacts
-
-    assert isinstance(req, RerouteReq)
     facts = CategoryFacts.from_rows(repos.taxonomy.all())
     rows = repos.places.get_by_ids(req.point_ids)
     found = {row.id: row for row in rows}

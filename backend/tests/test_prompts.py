@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from agent.prompts import compose_instructions
-from agent.tools.places import MAX_PLACES_PER_FIND
+from core.constants import MAX_PLACES_PER_FIND
 
 
 def _instructions() -> str:

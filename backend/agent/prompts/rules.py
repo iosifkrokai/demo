@@ -6,13 +6,11 @@ from collections.abc import Sequence
 from typing import Any
 
 from agent.prompts.notes import _known_areas_note
+from core import constants
 
 
 def base_rules(categories: Sequence[Any], areas: Sequence[Any]) -> str:
     """The standing instructions, up to (and including) the worked shapes."""
-    from agent.runner import MAX_TOOL_CALLS
-    from agent.tools.places import MAX_PLACES_PER_FIND
-
     catalogue = "; ".join(f"{cat.code} ({cat.ru}/{cat.en}, {cat.role})" for cat in categories)
     return (
         "You interpret a tourist's walking-route request for the Grodno region "
@@ -20,7 +18,7 @@ def base_rules(categories: Sequence[Any], areas: Sequence[Any]) -> str:
         "Use the tools to ground every factual claim: call find_places before "
         "naming or id-ing a place, find_areas before restricting to a territory, "
         "get_place_facts for opening hours or ticket price.\n"
-        f"Tool budget: at most {MAX_TOOL_CALLS} tool calls in total. One call per "
+        f"Tool budget: at most {constants.MAX_TOOL_CALLS} tool calls in total. One call per "
         "distinct need, never the same query twice — then answer. If you are near "
         "the budget, answer with what you already know and put the rest in "
         "`unknowns`.\n"
@@ -57,7 +55,7 @@ def base_rules(categories: Sequence[Any], areas: Sequence[Any]) -> str:
         f"- When you are choosing the stops for a walk over a territory, search it "
         "ONCE. A single find_places call scoped with that territory's `area` and a "
         "broad query («достопримечательности», or one category) returns up to "
-        f"{MAX_PLACES_PER_FIND} real stops — the whole candidate set, enough to "
+        f"{constants.MAX_PLACES_PER_FIND} real stops — the whole candidate set, enough to "
         "choose from. Take three to six of them, call plan_walk a single time, and "
         "submit. Do not search a territory a second time: not per category, not "
         "landmark by landmark, not for a synonym of a query you already ran — a "

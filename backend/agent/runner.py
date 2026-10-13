@@ -19,10 +19,10 @@ from agent.prompts import compose_instructions
 from agent.prompts.notes import _request_note, _ui_note
 from agent.schema import PlanningDeps, PlanSubmission
 from agent.tools import register_all
+from core import constants
 
 log = logging.getLogger(__name__)
 
-MAX_TOOL_CALLS = 12
 MAX_REQUESTS = 10
 MAX_OUTPUT_TOKENS = 8192
 WALL_CLOCK_TIMEOUT_S = 150.0
@@ -149,7 +149,7 @@ def _run_agent(
 
     usage_limits = UsageLimits(
         request_limit=MAX_REQUESTS,
-        tool_calls_limit=MAX_TOOL_CALLS,
+        tool_calls_limit=constants.MAX_TOOL_CALLS,
     )
     model_settings = ModelSettings(max_tokens=MAX_OUTPUT_TOKENS, timeout=MODEL_TIMEOUT_S)
     prompt = _build_prompt(query, brief)

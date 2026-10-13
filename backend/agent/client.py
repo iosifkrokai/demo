@@ -11,6 +11,7 @@ from agent import llm, mapping, runner
 from agent.models import ReaderBrief, TripRequirements
 from agent.schema import PlanningDeps, PlanSubmission
 from agent.tools import submit as submit_mod
+from routing.models import LatLon
 
 if TYPE_CHECKING:
     from db.store.registry import Repositories
@@ -156,10 +157,8 @@ def _with_base_stops(submission: PlanSubmission, brief: ReaderBrief) -> tuple[li
     return ordered, keep
 
 
-def _origin(brief: ReaderBrief):
+def _origin(brief: ReaderBrief) -> LatLon | None:
     """The tourist's position as the model the routing layer expects."""
     if brief.origin is None:
         return None
-    from routing.models import LatLon
-
     return LatLon(lat=brief.origin[0], lon=brief.origin[1])

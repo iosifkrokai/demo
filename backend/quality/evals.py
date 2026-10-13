@@ -8,15 +8,22 @@ import json
 import math
 import os
 import sys
+import urllib.error
+import urllib.request
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from agent import client
 from agent.models import Requirement, TripRequirements
+from api.models.routes import GenerateReq
+from api.responses import reader_brief
 from db.seed.taxonomy import all_categories as _seed_categories
 from db.store import services as services_mod
+from db.store.areas import PostgresAreaRepository
 from db.store.errors import StorageUnavailableError
 from db.store.places import PostgresPlaceRepository
+from db.store.registry import Repositories
 from routing.models import CategoryFacts
 from routing.verify import ServiceAlongEvidence, verify
 
@@ -359,9 +366,6 @@ def run_plan() -> dict[str, Any]:
             }
         )
 
-    import urllib.error
-    import urllib.request
-
     for case in cases:
         raw = case.raw
         body = json.dumps(
@@ -440,21 +444,13 @@ def run_plan() -> dict[str, Any]:
     return {"stage": "plan", "checks": checks, "base_url": BASE_URL}
 
 
-def _repositories():
+def _repositories() -> Repositories:
     """The repositories a live stage reads through, skipping when there is none."""
-    from db.store.areas import PostgresAreaRepository
-    from db.store.places import PostgresPlaceRepository
-    from db.store.registry import Repositories
-
     return Repositories(places=PostgresPlaceRepository(), areas=PostgresAreaRepository())
 
 
 def run_interpretation() -> dict[str, Any]:
     """Did the request get read as it was meant?"""
-    from agent import client
-    from api.models.routes import GenerateReq
-    from api.responses import reader_brief
-
     repos = _repositories()
 
     checks: list[dict[str, Any]] = []

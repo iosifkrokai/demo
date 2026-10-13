@@ -32,6 +32,9 @@ from agent.tools import (  # noqa: E402
     services as services_mod,
     verify as verify_mod,
 )
+from db.store.areas import PostgresAreaRepository  # noqa: E402
+from db.store.places import PostgresPlaceRepository  # noqa: E402
+from db.store.registry import Repositories  # noqa: E402
 
 QUALITY = BACKEND / "quality"
 CASES = QUALITY / "cases" / "trajectory.jsonl"
@@ -385,11 +388,7 @@ def load_cases(path: Path | None = None) -> list[dict[str, Any]]:
     return cases
 
 
-def _repositories() -> Any:
-    from db.store.areas import PostgresAreaRepository
-    from db.store.places import PostgresPlaceRepository
-    from db.store.registry import Repositories
-
+def _repositories() -> Repositories:
     return Repositories(places=PostgresPlaceRepository(), areas=PostgresAreaRepository())
 
 

@@ -23,7 +23,6 @@ from db.embeddings import model as embeddings_model
 from db.embeddings.query import embed_query
 from routing.select import rrf_fuse
 
-MAX_PLACES_PER_FIND = 8
 MAX_FACTS_PER_CALL = 1
 MAX_LINKS_PER_PLACE = 3
 MAX_BLURB_CHARS = 240
@@ -83,7 +82,7 @@ def find_places(
     """Rank real places against a description, a category, and/or a point."""
     requested = [c for c in (category_codes or []) if c.strip()]
 
-    want, limit_clamped = clamp(limit, 1, MAX_PLACES_PER_FIND, DEFAULT_FIND_LIMIT)
+    want, limit_clamped = clamp(limit, 1, constants.MAX_PLACES_PER_FIND, DEFAULT_FIND_LIMIT)
     want = int(want)
 
     near: tuple[float, float, float] | None = None
@@ -106,7 +105,7 @@ def find_places(
         "signals": [],
         "categories": [],
         "dropped_codes": requested,
-        "result_cap": MAX_PLACES_PER_FIND,
+        "result_cap": constants.MAX_PLACES_PER_FIND,
         "radius_m": near[2] if near else None,
         "area": area,
     }
