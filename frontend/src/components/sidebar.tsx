@@ -837,11 +837,10 @@ export const Sidebar = ({
       if (roundTrip) body.round_trip = true;
 
       const prior = useDirectionsStore.getState();
-      // Only the points the journal cannot know travel with a turn: the
-      // tourist's own position, and anything they pinned by hand. The agent's
-      // own stops are the server's to replay, not the client's to re-upload.
+      // Every point the user can see travels with the turn, the agent's stops
+      // included: the run id does not survive a reload, so the server cannot be
+      // left to replay a route it was never told about.
       const basePoints = prior.waypoints
-        .filter((wp) => wp.id === ME_WAYPOINT_ID || wp.placeId == null)
         .map((wp) => {
           const geo =
             wp.geocodeResults.find((g) => g.selected) ?? wp.geocodeResults[0];
@@ -849,13 +848,14 @@ export const Sidebar = ({
           const [lon, lat] = geo.sourcelnglat ?? geo.displaylnglat ?? [];
           if (lat === undefined || lon === undefined) return null;
           const isMe = wp.id === ME_WAYPOINT_ID;
+          const source = isMe ? 'mine' : wp.placeId != null ? 'agent' : 'user';
           return {
             id: wp.placeId ?? null,
             name: wp.userInput || geo.title || t('sidebar.waypoints.unnamed'),
             lat,
             lon,
             pinned: wp.pinned ?? (!isMe && wp.placeId == null),
-            source: (isMe ? 'mine' : 'user') as 'agent' | 'user' | 'mine',
+            source: source as 'agent' | 'user' | 'mine',
           };
         })
         .filter((p): p is NonNullable<typeof p> => p !== null);

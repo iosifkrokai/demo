@@ -434,12 +434,13 @@ describe('Sidebar', () => {
     expect(body.context.instruction).toBe('добавь кофейню и туалет');
     expect(body.context.revision).toBe(2);
     expect(body.context.excluded_ids).toEqual([17]);
-    // The agent's stop belongs to the server's journal; only the tourist's own
-    // points travel with the turn.
+    // The whole route travels with the turn, the agent's stop included: the
+    // server must not have to replay a run id that a reload has already lost.
     expect(
       body.context.base_points.map((p: { source: string }) => p.source)
-    ).toEqual(['mine']);
+    ).toEqual(['mine', 'agent']);
     expect(body.context.base_points[0].pinned).toBe(false);
+    expect(body.context.base_points[1].id).toBe(11);
   });
 
   it('has no guide tab: the guide opens from one explicit action on a route', async () => {
