@@ -12,6 +12,7 @@ from api.models.routes import (
     BudgetInfo,
     GenerateReq,
     Interpretation,
+    OverallStatus,
     ParsedQuery,
     Place,
     PlannedAlternative,
@@ -98,6 +99,14 @@ def _ordered_candidates(repos: Any, outcome: AgentOutcome) -> list[Candidate]:
     return [candidate_of(row, 0.0) for row in rows]
 
 
+OVERALL_STATUSES: dict[str, OverallStatus] = {
+    "ready": "ready",
+    "infeasible": "infeasible",
+    "degraded": "degraded",
+    "pending": "pending",
+}
+
+
 def interpretation(contract: TripRequirements | None, status: str | None) -> Interpretation | None:
     """What the system understood, in one compact block for the client."""
     if contract is None:
@@ -119,7 +128,7 @@ def interpretation(contract: TripRequirements | None, status: str | None) -> Int
     return Interpretation(
         source=contract.source,
         locale=contract.locale,
-        status=status or "pending",  # type: ignore[arg-type]
+        status=OVERALL_STATUSES.get(status or "", "pending"),
         adults=contract.party.adults,
         children=contract.party.children,
         children_ages=list(contract.party.children_ages),

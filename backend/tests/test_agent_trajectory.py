@@ -142,12 +142,13 @@ def test_the_run_carries_a_live_deadline_and_region(
     """`seconds_left()` stops being infinite: the deadline reaches the tools."""
     from agent import runner
 
-    seen: dict[str, object] = {}
+    left: list[float] = []
+    bbox: list[tuple[float, float, float, float] | None] = []
     real = runner._run_agent
 
     def spy(query, brief, deps, *, wall_clock_s=None):
-        seen["left"] = deps.seconds_left()
-        seen["bbox"] = deps.region_bbox
+        left.append(deps.seconds_left())
+        bbox.append(deps.region_bbox)
         return real(query, brief, deps, wall_clock_s=wall_clock_s)
 
     monkeypatch.setattr(runner, "_run_agent", spy)
@@ -162,8 +163,8 @@ def test_the_run_carries_a_live_deadline_and_region(
     )
 
     assert outcome is not None
-    assert 0 < seen["left"] <= 10  # type: ignore[operator]
-    assert seen["bbox"] == (53.6, 23.7, 53.75, 23.9)
+    assert 0 < left[0] <= 10
+    assert bbox[0] == (53.6, 23.7, 53.75, 23.9)
 
 
 def test_the_wall_clock_is_capped_by_the_ceiling() -> None:
