@@ -53,9 +53,9 @@ Secrets, addresses and two deliberate escape hatches live in the environment
 values, Postgres, proxy upstreams); the variables below are what the agent and
 seed read.
 
-The model is configuration, not code: the endpoint is chosen from the keys that
-are actually set. **A model name is written once**, in the provider table in
-`core/config.py`.
+The model is configuration, not code: there is one endpoint, and its key and
+model name are read from the environment. **A model name is written once**, as
+the default in `core/config.py`.
 
 The endpoint must speak the OpenAI chat format — OpenRouter, a gateway in front
 of it, or OpenAI itself all do, and they are the same client with a different
@@ -66,8 +66,7 @@ thinking modes refuse it; the `-no-thinking` variants do not.
 
 | Variable | What it is |
 |---|---|
-| `LLM_PROVIDER` | which entry of the provider table to use; wins over the key-based guess |
-| `LLM_MODEL` | the model id; defaults to the chosen provider's own |
+| `LLM_MODEL` | the model id; defaults to the one in `core/config.py` |
 | `OPENROUTER_API_KEY` | OpenRouter, or any OpenAI-shaped endpoint — **needed to plan** |
 | `OPENROUTER_BASE_URL` | optional; a gateway in front of OpenRouter |
 | `DATABASE_URL` | Postgres DSN (agent and seed; default is the local compose one) |
@@ -75,7 +74,6 @@ thinking modes refuse it; the `-no-thinking` variants do not.
 | `AGENT_HOST` / `AGENT_PORT` | bind address |
 | `LOGFIRE_TOKEN` | optional; send tracing to Logfire. Without it (the container/CI default) tracing is a **no-op**, not an error |
 | `CACHE_BUST=1` | turn the in-process reading cache off for this process |
-| `INTERPRET_CACHE_SIZE` / `INTERPRET_CACHE_TTL_S` | bounds of that cache (defaults 128 entries / 30 min) |
 
 Changing a value in `core/constants.py` is a code-review decision: edit → tests
 → commit.

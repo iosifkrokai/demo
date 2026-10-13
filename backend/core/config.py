@@ -18,11 +18,6 @@ class Settings:
 
 settings = Settings()
 
-DSN = settings.DSN
-VALHALLA_URL = settings.VALHALLA_URL
-HOST = settings.HOST
-PORT = settings.PORT
-
 
 def logfire_token() -> str | None:
     """The Logfire token, or None — tracing is a no-op without it."""
@@ -56,13 +51,6 @@ _SPECS: dict[str, _Spec] = {
     ),
 }
 
-DEFAULT_PROVIDER = "openrouter"
-
-
-def provider_names() -> tuple[str, ...]:
-    """Every provider this build can talk to."""
-    return tuple(_SPECS)
-
 
 def provider(name: str) -> Provider:
     """One provider, as the environment currently describes it."""
@@ -76,15 +64,8 @@ def provider(name: str) -> Provider:
 
 
 def chosen_provider() -> Provider:
-    """Which provider this process talks to."""
-    named = (os.environ.get("LLM_PROVIDER") or "").strip().lower()
-    if named in _SPECS:
-        return provider(named)
-    for name in _SPECS:
-        candidate = provider(name)
-        if candidate.api_key:
-            return candidate
-    return provider(DEFAULT_PROVIDER)
+    """The endpoint this process talks to — named once, so no caller repeats it."""
+    return provider("openrouter")
 
 
 def model_name() -> str:

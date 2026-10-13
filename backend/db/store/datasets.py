@@ -2,20 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Protocol
-
 from core.cache import TtlLru
 from db.store.base import ConnectionFactory, PostgresRepository
 
 DATA_VERSION_ROW = "seed"
 VERSION_TTL_S = 60
 _KEY = "data_version"
-
-
-class DatasetVersionRepository(Protocol):
-    """The one read the planner needs from ``data_versions``."""
-
-    def version(self) -> str | None: ...
 
 
 class PostgresDatasetRepository(PostgresRepository):

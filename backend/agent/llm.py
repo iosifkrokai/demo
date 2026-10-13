@@ -7,9 +7,9 @@ from typing import Any
 from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.openai import OpenAIProvider
 
-from core.config import Provider, chosen_provider, model_name, provider_names
+from core.config import Provider, chosen_provider, model_name
 
-__all__ = ["chosen_provider", "make_model", "model_name", "provider_names"]
+__all__ = ["chosen_provider", "make_model", "model_name"]
 
 
 def _provider(chosen: Provider) -> OpenAIProvider:

@@ -29,7 +29,7 @@ from db.connection import connect
 BACKEND = Path(__file__).resolve().parent.parent
 HINTS = PHOTOS_DIR / "osm_photo_hints.json"
 OUT = PHOTOS_DIR / "place_photos.json"
-CACHE = Path(os.environ.get("PHOTO_CACHE", "/home/codespace/.hermes/cache/scratch/photo_cache"))
+CACHE = Path(os.environ.get("PHOTO_CACHE", PHOTOS_DIR / "cache"))
 DSN = os.environ.get("DATABASE_URL", "postgresql://grodno:grodno@localhost:5432/grodno")
 
 PBF = os.environ.get("OSM_PBF")

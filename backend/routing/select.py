@@ -5,10 +5,12 @@ from __future__ import annotations
 from collections import defaultdict
 from collections.abc import Iterable
 
+from core import constants
+
 
 def rrf_fuse(
     rankings: Iterable[list[tuple[int, float]]],
-    k: int = 60,
+    k: int = constants.RRF_K,
 ) -> dict[int, float]:
     """Fuse multiple ranked lists into a single score per id."""
     scores: dict[int, float] = defaultdict(float)
