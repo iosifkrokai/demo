@@ -19,7 +19,13 @@ from . import (
     taxonomy as taxonomy_mod,
     version as version_mod,
 )
-from .datasets import Dataset, build_coverage_report, collect_records, read_curated
+from .datasets import (
+    CoverageContext,
+    Dataset,
+    build_coverage_report,
+    collect_records,
+    read_curated,
+)
 
 DEFAULT_DSN = "postgresql://grodno:grodno@localhost:5432/grodno"
 
@@ -99,11 +105,13 @@ def cmd_apply(args: argparse.Namespace) -> int:
 
     report = build_coverage_report(
         collected,
-        mode="dry-run" if args.dry_run else "apply",
-        curated=curated,
-        curated_stats=curated_stats,
-        db_stats=db_stats,
-        data_version=data_version,
+        CoverageContext(
+            mode="dry-run" if args.dry_run else "apply",
+            curated=curated,
+            curated_stats=curated_stats,
+            db_stats=db_stats,
+            data_version=data_version,
+        ),
     )
     _print_summary(report)
     if args.report:

@@ -169,15 +169,7 @@ def _distance_aware_fill(
                 row_values = [float(v) for v in sub[0]]
             except UpstreamUnavailableError as exc:
                 if _is_distance_limit_error(exc) and len(cols) > 1:
-                    row_values = _isolate_row(
-                        source,
-                        targets,
-                        cols,
-                        costing,
-                        timeout,
-                        unreachable=unreachable,
-                        unknown=unknown,
-                    )
+                    row_values = _isolate_row(source, targets, cols, costing, timeout)
                 else:
                     logger.warning(
                         "matrix row %d could not be asked (%.80s) — left unknown", i, exc
@@ -194,11 +186,10 @@ def _isolate_row(
     cols: list[int],
     costing: str,
     timeout: float,
-    *,
-    unreachable: float,
-    unknown: float,
 ) -> list[float]:
     """Probe one source's target block a single cell at a time."""
+    unreachable = float(constants.UNREACHABLE_S)
+    unknown = float(constants.UNKNOWN_S)
     row: list[float] = []
     for j in cols:
         try:

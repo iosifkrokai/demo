@@ -340,6 +340,22 @@ class EvaluationResult:
         }
 
 
+@dataclass(frozen=True)
+class ReportInput:
+    """One run's identity and numbers — what every report writer is handed."""
+
+    mode: str
+    generated_at: str
+    snapshot: dict[str, Any]
+    base_url: str = ""
+    overall: dict[str, Any] = field(default_factory=dict)
+    noise: dict[str, Any] = field(default_factory=dict)
+    failures: dict[str, Any] = field(default_factory=dict)
+    drift_rows: list[dict[str, Any]] = field(default_factory=list)
+    samples: int = BOOTSTRAP_SAMPLES
+    seed: int = BOOTSTRAP_SEED
+
+
 @dataclass
 class RunRecord:
     """One (case, repeat) run — the unit the snapshot stores and the report reads."""
@@ -1463,17 +1479,9 @@ def _agg(runs: list[EvaluationResult], path: str) -> dict[str, Any]:
 def write_json_report(
     groups: list[list[RunRecord]],
     out_dir: Path,
+    report: ReportInput,
     *,
-    mode: str,
-    generated_at: str,
-    snapshot: dict[str, Any],
     per_case: dict[str, Any],
-    overall: dict[str, Any],
-    noise: dict[str, Any],
-    failures: dict[str, Any],
-    drift_rows: list[dict[str, Any]],
-    samples: int = BOOTSTRAP_SAMPLES,
-    seed: int = BOOTSTRAP_SEED,
 ) -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
     path = out_dir / "report.json"
@@ -1549,15 +1557,15 @@ def write_json_report(
 
     report = {
         "schema": REPORT_SCHEMA,
-        "mode": mode,
-        "generated_at": generated_at,
+        "mode": report.mode,
+        "generated_at": report.generated_at,
         "n_routes": len(groups),
         "repeat": len(groups[0]) if groups else 0,
         "n_runs": sum(len(g) for g in groups),
-        "snapshot": snapshot,
+        "snapshot": report.snapshot,
         "bootstrap": {
-            "samples": samples,
-            "seed": seed,
+            "samples": report.samples,
+            "seed": report.seed,
             "alpha": BOOTSTRAP_ALPHA,
             "resample": "cases",
         },
@@ -1607,13 +1615,13 @@ def write_json_report(
             ),
         },
         "per_case_scores": per_case,
-        "overall": _r(overall, 4),
+        "overall": _r(report.overall, 4),
         "noise_floor": {
-            "computed": _r(noise, 4),
+            "computed": _r(report.noise, 4),
             "reference_measurement": REFERENCE_NOISE_FLOOR,
         },
-        "hard_failures": failures,
-        "metrics_drift_vs_snapshot": drift_rows,
+        "hard_failures": report.failures,
+        "metrics_drift_vs_snapshot": report.drift_rows,
         "results": results,
     }
     path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -1670,27 +1678,14 @@ def write_metrics_jsonl(
     return path
 
 
-def write_md_report(
-    groups: list[list[RunRecord]],
-    out_dir: Path,
-    *,
-    mode: str,
-    generated_at: str,
-    snapshot: dict[str, Any],
-    overall: dict[str, Any],
-    noise: dict[str, Any],
-    failures: dict[str, Any],
-    drift_rows: list[dict[str, Any]],
-    samples: int = BOOTSTRAP_SAMPLES,
-    seed: int = BOOTSTRAP_SEED,
-) -> Path:
+def write_md_report(groups: list[list[RunRecord]], out_dir: Path, report: ReportInput) -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
     path = out_dir / "report.md"
     repeat = len(groups[0]) if groups else 0
     lines: list[str] = [
         "# Benchmark Report: Grodno Route Planner",
         "",
-        f"**Mode:** `{mode}` · **Generated:** {generated_at}",
+        f"**Mode:** `{report.mode}` · **Generated:** {report.generated_at}",
         "",
         (
             f"**Runs per case:** {repeat} · **cases:** {len(groups)} · "
@@ -1698,19 +1693,19 @@ def write_md_report(
         ),
         "",
     ]
-    if snapshot:
+    if report.snapshot:
         lines += [
             (
-                f"**Snapshot:** `{snapshot.get('dir', '—')}` · "
-                f"{snapshot.get('n_rows', 0)} row(s) · "
-                f"git `{snapshot.get('git_sha', '—')}`"
+                f"**Snapshot:** `{report.snapshot.get('dir', '—')}` · "
+                f"{report.snapshot.get('n_rows', 0)} row(s) · "
+                f"git `{report.snapshot.get('git_sha', '—')}`"
             ),
             "",
         ]
-    if drift_rows:
+    if report.drift_rows:
         lines += [
             (
-                f"> ⚠ {len(drift_rows)} row(s) recomputed to metrics that differ from "
+                f"> ⚠ {len(report.drift_rows)} row(s) recomputed to metrics that differ from "
                 "the values recorded in the snapshot — the metric code changed since "
                 "the run."
             ),
@@ -1743,14 +1738,14 @@ def write_md_report(
 
     lines += [
         "",
-        f"## Overall — bootstrap over cases (B={samples}, seed={seed})",
+        f"## Overall — bootstrap over cases (B={report.samples}, seed={report.seed})",
         "",
         "| metric | mean [95 % CI] | n cases | noise floor (within-case spread) |",
         "|---|---|---|---|",
     ]
     for path_, _label, dec in CI_METRICS:
-        stats = overall.get(path_, {})
-        nf = noise.get(path_, {}).get("mean_within_case_spread")
+        stats = report.overall.get(path_, {})
+        nf = report.noise.get(path_, {}).get("mean_within_case_spread")
         lines.append(
             f"| {stats.get('label', path_)} | {_ci_cell(stats, dec)} | "
             f"{stats.get('n', 0)} | "
@@ -1763,23 +1758,23 @@ def write_md_report(
         "## Hard failures — outside every score above",
         "",
         (
-            f"**{failures['n_failed_runs']} of {failures['total_runs']} run(s) gated "
+            f"**{report.failures['n_failed_runs']} of {report.failures['total_runs']} run(s) gated "
             f"out of the quality means.** Counts by kind:"
         ),
         "",
     ]
-    if not failures["by_kind"]:
+    if not report.failures["by_kind"]:
         lines.append("- none")
-    for kind, count in sorted(failures["by_kind"].items()):
+    for kind, count in sorted(report.failures["by_kind"].items()):
         tag = "gated" if kind in GATED_FAILURE_KINDS else "counted, kept in means"
         lines.append(f"- `{kind}`: {count} ({tag})")
-    if failures["gated"]:
+    if report.failures["gated"]:
         lines += ["", "| case | repeat | kind | detail |", "|---|---|---|---|"]
-        for row in failures["gated"]:
+        for row in report.failures["gated"]:
             lines.append(f"| {row['case']} | {row['repeat']} | {row['kind']} | {row['detail']} |")
     lines += [
         "",
-        f"Leg-sanity defects kept in the means: {failures['leg_sanity_defects']}.",
+        f"Leg-sanity defects kept in the means: {report.failures['leg_sanity_defects']}.",
         "",
         "## How the stage split is measured",
         "",
@@ -2843,11 +2838,8 @@ def print_compliance_table(
 
 def write_compliance_reports(
     out_dir: Path,
+    report: ReportInput,
     *,
-    mode: str,
-    generated_at: str,
-    base_url: str,
-    snapshot: dict[str, Any],
     cases: list[GoldenCase],
     runs: list[GoldenRun],
     summary: dict[str, Any],
@@ -2860,10 +2852,10 @@ def write_compliance_reports(
 
     payload = {
         "schema": REPORT_SCHEMA,
-        "mode": mode,
-        "generated_at": generated_at,
-        "base_url": base_url,
-        "snapshot": snapshot,
+        "mode": report.mode,
+        "generated_at": report.generated_at,
+        "base_url": report.base_url,
+        "snapshot": report.snapshot,
         "summary": summary,
         "cases": [
             {
@@ -2936,7 +2928,10 @@ def write_compliance_reports(
     md = [
         "# Golden-set compliance report",
         "",
-        f"**Mode:** `{mode}` · **Generated:** {generated_at} · **API:** `{base_url}`",
+        (
+            f"**Mode:** `{report.mode}` · **Generated:** {report.generated_at} · "
+            f"**API:** `{report.base_url}`"
+        ),
         "",
         (
             "This measures whether the CONDITIONS of a request survived, not how close "
@@ -3092,8 +3087,7 @@ def emit_golden(args, out: tuple) -> None:
     verdicts, parity = golden_verdicts(runs, cases)
     summary = compliance_summary(cases, verdicts, parity)
     print_compliance_table(cases, verdicts, parity, summary)
-    write_compliance_reports(
-        out_dir,
+    report = ReportInput(
         mode=mode,
         generated_at=(
             datetime.now(UTC).isoformat()
@@ -3102,10 +3096,8 @@ def emit_golden(args, out: tuple) -> None:
         ),
         base_url=args.base_url,
         snapshot=snapshot,
-        cases=cases,
-        runs=runs,
-        summary=summary,
     )
+    write_compliance_reports(out_dir, report, cases=cases, runs=runs, summary=summary)
     print(f"  compliance report → {out_dir / 'compliance.json'}")
     print(f"  compliance report → {out_dir / 'compliance.md'}")
     print(f"  compliance JSONL  → {out_dir / 'compliance.metrics.jsonl'}")
@@ -3656,19 +3648,19 @@ def _emit(args, out: RunOutput) -> None:
     print_ci_table(overall, per_case, noise, args.bootstrap, args.seed)
     print_failures(failures, overall)
 
-    common = {
-        "mode": out.mode,
-        "generated_at": out.generated_at,
-        "snapshot": out.snapshot,
-        "overall": overall,
-        "noise": noise,
-        "failures": failures,
-        "drift_rows": out.drift,
-        "samples": args.bootstrap,
-        "seed": args.seed,
-    }
-    write_json_report(out.groups, out.out_dir, per_case=per_case, **common)
-    write_md_report(out.groups, out.out_dir, **common)
+    report = ReportInput(
+        mode=out.mode,
+        generated_at=out.generated_at,
+        snapshot=out.snapshot,
+        overall=overall,
+        noise=noise,
+        failures=failures,
+        drift_rows=out.drift,
+        samples=args.bootstrap,
+        seed=args.seed,
+    )
+    write_json_report(out.groups, out.out_dir, report, per_case=per_case)
+    write_md_report(out.groups, out.out_dir, report)
     write_metrics_jsonl(out.groups, out.out_dir, overall, failures)
 
     if args.strict and failures["n_failed_runs"]:

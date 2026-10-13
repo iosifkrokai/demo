@@ -8,7 +8,6 @@ from fastapi import APIRouter, Depends, Query, Request, Response
 
 from api import deps
 from api.models.accounts import (
-    MAX_LIST_LIMIT,
     REASON_INVALID_REQUEST,
     REASON_LAST_ADMIN,
     REASON_PLACE_NOT_FOUND,
@@ -20,6 +19,8 @@ from api.models.accounts import (
     AdminPlaceIn,
     AdminPlaceListOut,
     AdminPlacePatch,
+    AdminPlaceQuery,
+    AdminSearchQuery,
     AdminUserItem,
     AdminUserListOut,
     AdminUserPatch,
@@ -41,15 +42,13 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 @deps.storage_guarded
 def admin_list_users(
     request: Request,
+    query: Annotated[AdminSearchQuery, Query()],
     repo: Annotated[UserRepository, Depends(deps.get_user_repository)],
-    q: str = Query(default="", max_length=200),
-    limit: int = Query(default=50, ge=1, le=MAX_LIST_LIMIT),
-    offset: int = Query(default=0, ge=0),
 ) -> Any:
     _, err = deps.require_admin(request, repo)
     if err is not None:
         return err
-    users, total = repo.list_users(q=q.strip(), limit=limit, offset=offset)
+    users, total = repo.list_users(q=query.q.strip(), limit=query.limit, offset=query.offset)
     items = [AdminUserItem.model_validate(user, from_attributes=True) for user in users]
     return AdminUserListOut(items=items, total=total)
 
@@ -123,19 +122,18 @@ def admin_delete_user(
 @deps.storage_guarded
 def admin_list_places(
     request: Request,
+    query: Annotated[AdminPlaceQuery, Query()],
     repo: Annotated[UserRepository, Depends(deps.get_user_repository)],
     places: Annotated[PostgresPlaceRepository, Depends(deps.get_place_repository)],
-    *,
-    q: str = Query(default="", max_length=200),
-    category: str = Query(default="", max_length=120),
-    limit: int = Query(default=50, ge=1, le=MAX_LIST_LIMIT),
-    offset: int = Query(default=0, ge=0),
 ) -> Any:
     _, err = deps.require_admin(request, repo)
     if err is not None:
         return err
     found, total = places.list_places_paged(
-        q=q.strip(), category=category.strip(), limit=limit, offset=offset
+        q=query.q.strip(),
+        category=query.category.strip(),
+        limit=query.limit,
+        offset=query.offset,
     )
     return AdminPlaceListOut(
         items=[PlaceItem(**place_payload(place)) for place in found],

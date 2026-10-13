@@ -11,6 +11,7 @@ import math
 import re
 import unicodedata
 from collections.abc import Callable
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -92,12 +93,12 @@ def _validate_common(
         problems.append(f"lat {lat} outside bbox")
     if not (BBOX["west"] <= lon <= BBOX["east"]):
         problems.append(f"lon {lon} outside bbox")
-    for field in ("fun_facts", "links"):
-        if (row.get(field) or "").strip():
+    for key in ("fun_facts", "links"):
+        if (row.get(key) or "").strip():
             try:
-                json.loads(row[field])
+                json.loads(row[key])
             except json.JSONDecodeError as e:
-                problems.append(f"bad JSON in {field} ({e})")
+                problems.append(f"bad JSON in {key} ({e})")
     if not row["source_url"].startswith(prefixes):
         problems.append(f"source_url must start with one of {prefixes}")
     visit = (row.get("visit_minutes") or "").strip()
@@ -166,34 +167,24 @@ def _read_pipe(path: Path) -> list[dict[str, Any]]:
     return read_pipe_csv(path)
 
 
+@dataclass
 class Dataset:
     """One versioned CSV dataset with its loader and natural-key prefix."""
 
-    def __init__(
-        self,
-        name: str,
-        *,
-        filename: str,
-        prefix: str,
-        reader: Callable[[Path], list[dict[str, Any]]],
-        validator: Callable[[dict[str, Any]], list[str]],
-        normalizer: Callable[[dict[str, Any]], dict[str, Any]],
-        category_source: str,
-        fatal_invalid: bool,
-        license: str = "see file header",
-        optional: bool = False,
-    ) -> None:
-        self.name = name
-        self.filename = filename
-        self.prefix = prefix
-        self.reader = reader
-        self.validator = validator
-        self.normalizer = normalizer
-        self.category_source = category_source
-        self.fatal_invalid = fatal_invalid
-        self.license = license
-        self.optional = optional
-        self.path: Path = PLACES_DIR / filename
+    name: str
+    filename: str
+    prefix: str
+    reader: Callable[[Path], list[dict[str, Any]]]
+    validator: Callable[[dict[str, Any]], list[str]]
+    normalizer: Callable[[dict[str, Any]], dict[str, Any]]
+    category_source: str
+    fatal_invalid: bool
+    license: str = "see file header"
+    optional: bool = False
+    path: Path = field(init=False)
+
+    def __post_init__(self) -> None:
+        self.path = PLACES_DIR / self.filename
 
     def with_data_dir(self, data_dir: Path) -> Dataset:
         self.path = data_dir / self.filename
@@ -476,17 +467,20 @@ def _count_by(rows: list[dict[str, Any]], key: str) -> dict[str, int]:
     return out
 
 
-def build_coverage_report(
-    collected: dict[str, Any],
-    *,
-    mode: str,
-    curated: list[dict[str, Any]] | None = None,
-    curated_stats: dict[str, Any] | None = None,
-    duplicate_radius_m: float = DEFAULT_DUP_RADIUS_M,
-    db_stats: dict[str, Any] | None = None,
-    data_version: str | None = None,
-    generated_at: str | None = None,
-) -> dict[str, Any]:
+@dataclass(frozen=True)
+class CoverageContext:
+    """What a coverage report is assembled in, beyond the rows themselves."""
+
+    mode: str
+    curated: list[dict[str, Any]] | None = None
+    curated_stats: dict[str, Any] | None = None
+    duplicate_radius_m: float = DEFAULT_DUP_RADIUS_M
+    db_stats: dict[str, Any] | None = None
+    data_version: str | None = None
+    generated_at: str | None = None
+
+
+def build_coverage_report(collected: dict[str, Any], context: CoverageContext) -> dict[str, Any]:
     """Assemble the machine-readable coverage report from in-memory records."""
     records: list[dict[str, Any]] = collected["records"]
     rejects: list[dict[str, Any]] = collected["rejects"]
@@ -516,12 +510,13 @@ def build_coverage_report(
 
     geofence_rejects = [r for r in rejects if r["kind"] == "geofence"]
     invalid_rejects = [r for r in rejects if r["kind"] == "invalid"]
-    duplicates = find_suspected_duplicates(records, duplicate_radius_m)
+    duplicates = find_suspected_duplicates(records, context.duplicate_radius_m)
 
     report: dict[str, Any] = {
-        "generated_at": generated_at or _dt.datetime.now(_dt.UTC).isoformat(timespec="seconds"),
-        "mode": mode,
-        "duplicate_radius_m": duplicate_radius_m,
+        "generated_at": context.generated_at
+        or _dt.datetime.now(_dt.UTC).isoformat(timespec="seconds"),
+        "mode": context.mode,
+        "duplicate_radius_m": context.duplicate_radius_m,
         "datasets": collected["datasets"],
         "totals": {
             "records": total,
@@ -544,7 +539,7 @@ def build_coverage_report(
             "en_script_names": _share(en_names, total),
             "mixed_script_names": _share(mixed, total),
             "unknown_script_names": _share(unknown, total),
-            "explicit_ru_aliases": _share(len(curated or []), total),
+            "explicit_ru_aliases": _share(len(context.curated or []), total),
             "explicit_en_aliases": _share(0, total),
             "note": (
                 "name-script proxy; explicit RU aliases come from the curated CSV, "
@@ -566,10 +561,10 @@ def build_coverage_report(
             "count": len(duplicates),
             "pairs": duplicates[:50],
         },
-        "curated": curated_stats or {"rows": len(curated or []), "applied": False},
+        "curated": context.curated_stats or {"rows": len(context.curated or []), "applied": False},
     }
-    if db_stats is not None:
-        report["db"] = db_stats
-    if data_version is not None:
-        report["data_version"] = data_version
+    if context.db_stats is not None:
+        report["db"] = context.db_stats
+    if context.data_version is not None:
+        report["data_version"] = context.data_version
     return report

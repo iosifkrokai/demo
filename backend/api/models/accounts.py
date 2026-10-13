@@ -116,6 +116,20 @@ class PlaceItem(BaseModel):
     ticket_price: str | None = None
 
 
+class AdminSearchQuery(BaseModel):
+    """A text filter and paging — what both admin listings take."""
+
+    q: str = Field(default="", max_length=200)
+    limit: int = Field(default=50, ge=1, le=MAX_LIST_LIMIT)
+    offset: int = Field(default=0, ge=0)
+
+
+class AdminPlaceQuery(AdminSearchQuery):
+    """The place listing narrows by category as well."""
+
+    category: str = Field(default="", max_length=120)
+
+
 class AdminPlaceListOut(BaseModel):
     items: list[PlaceItem]
     total: int
