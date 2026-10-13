@@ -11,7 +11,7 @@ from agent import llm, mapping, runner
 from agent.models import ReaderBrief, TripRequirements
 from agent.schema import PlanningDeps, PlanSubmission
 from agent.tools import submit as submit_mod
-from routing.models import LatLon
+from routing.models import LatLon, WalkRequest
 
 if TYPE_CHECKING:
     from db.store.registry import Repositories
@@ -100,19 +100,19 @@ def plan_with_agent(
         return None
 
     measured = submit_mod.submit_plan(
-        ordered,
+        WalkRequest(
+            stop_ids=ordered,
+            profile=contract.costing or "pedestrian",
+            budget_minutes=contract.budget_minutes,
+            origin=_origin(brief),
+            round_trip=submission.round_trip or brief.round_trip,
+            must_keep_ids=keep,
+            locale=brief.locale,
+        ),
+        submission,
         repos=repos,
         facts=deps.facts,
-        budget_minutes=contract.budget_minutes,
-        profile=contract.costing or "pedestrian",
-        origin=_origin(brief),
-        round_trip=submission.round_trip or brief.round_trip,
-        must_keep_ids=keep,
-        locale=brief.locale,
         contract=contract,
-        unknowns=submission.unknowns,
-        narrative=submission.narrative,
-        result_mode=contract.result_mode,
         deadline_s=deps.seconds_left(),
     )
     return AgentOutcome(submission=submission, requirements=contract, measured=measured)

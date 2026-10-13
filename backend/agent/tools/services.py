@@ -46,7 +46,6 @@ def nearby_services(
     repos: Any,
     profile: str = "pedestrian",
     max_detour_minutes: float | None = None,
-    limit: int = MAX_RESULTS,
     deadline_s: float | None = None,
 ) -> dict[str, Any]:
     """Services insertable on this route, each with the walking detour it costs."""
@@ -69,8 +68,6 @@ def nearby_services(
     budget, budget_clamped = clamp(
         max_detour_minutes, 1, MAX_DETOUR_MINUTES, DEFAULT_DETOUR_MINUTES
     )
-    want, want_clamped = clamp(limit, 1, MAX_RESULTS, MAX_RESULTS)
-
     rows, error, message = fetch(repos, lambda store: store.places.get_by_ids(wanted))
     if error is not None:
         return envelope("nearby_services", [], provenance, error=error, message=message)
@@ -155,12 +152,12 @@ def nearby_services(
         )
 
     ranked.sort(key=lambda item: item["detour_minutes"])
-    results = ranked[: int(want)]
+    results = ranked[:MAX_RESULTS]
     return envelope(
         "nearby_services",
         results,
         provenance,
-        capped=bool(budget_clamped or want_clamped or len(ranked) > len(results)),
+        capped=bool(budget_clamped or len(ranked) > len(results)),
     )
 
 

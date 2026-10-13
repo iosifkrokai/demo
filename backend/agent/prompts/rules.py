@@ -102,7 +102,8 @@ def base_rules(categories: Sequence[Any], areas: Sequence[Any]) -> str:
         "Worked shapes (the wording is yours; the shape is the point):\n"
         "- «Погуляю по старому городу два часа» → areas=[grodno-old-town], "
         "requirements=[] — a district and a duration, nothing to visit listed. "
-        'You choose the stops: one find_places(area="grodno-old-town"), then '
+        'You choose the stops: one find_places(where={"area": "grodno-old-town"}), '
+        "then "
         "plan_walk once, then submit — three calls, not one per sight.\n"
         "- «Хочу монастыри и костёлы Лиды» → requirements=[interest монастырь "
         "(soft), interest костёл (soft)], areas=[lida-district]; the town itself "

@@ -13,10 +13,11 @@ def _stops(repos, limit: int = 5) -> list:
 def test_a_present_stop_satisfies_a_must_visit(db_repos) -> None:
     from agent.tools.plan import plan_walk
     from agent.tools.verify import check_requirements
+    from routing.models import WalkRequest
 
     stops = _stops(db_repos, 4)
     ids = [row.id for row in stops]
-    shape = plan_walk(ids, repos=db_repos, budget_minutes=180)["shape"]
+    shape = plan_walk(WalkRequest(ids, budget_minutes=180), repos=db_repos)["shape"]
     first = stops[0]
     answer = check_requirements(
         [{"kind": "must_visit", "strength": "hard", "name": first.name, "place_id": first.id}],
@@ -63,23 +64,28 @@ def test_an_absent_place_is_unmet_not_ignored(db_repos) -> None:
 
 
 def test_submit_measures_and_verifies_before_it_answers(db_repos) -> None:
+    from agent.schema import PlanSubmission
     from agent.tools.submit import submit_plan
+    from agent.tools.verify import requirements_from
+    from routing.models import WalkRequest
 
     stops = _stops(db_repos, 4)
     ids = [row.id for row in stops]
     answer = submit_plan(
-        ids,
+        WalkRequest(ids, budget_minutes=180),
+        PlanSubmission(),
         repos=db_repos,
         facts=_facts(db_repos),
-        budget_minutes=180,
-        requirement_specs=[
-            {
-                "kind": "must_visit",
-                "strength": "hard",
-                "name": stops[0].name,
-                "place_id": stops[0].id,
-            }
-        ],
+        contract=requirements_from(
+            [
+                {
+                    "kind": "must_visit",
+                    "strength": "hard",
+                    "name": stops[0].name,
+                    "place_id": stops[0].id,
+                }
+            ]
+        ),
     )
 
     assert answer.get("error") is None, answer.get("message")
@@ -90,17 +96,20 @@ def test_submit_measures_and_verifies_before_it_answers(db_repos) -> None:
 
 
 def test_submit_refuses_to_call_an_impossible_plan_ready(db_repos) -> None:
+    from agent.schema import PlanSubmission
     from agent.tools.submit import submit_plan
+    from agent.tools.verify import requirements_from
+    from routing.models import WalkRequest
 
     stops = _stops(db_repos, 4)
     answer = submit_plan(
-        [row.id for row in stops],
+        WalkRequest([row.id for row in stops], budget_minutes=15),
+        PlanSubmission(),
         repos=db_repos,
         facts=_facts(db_repos),
-        budget_minutes=15,
-        requirement_specs=[
-            {"kind": "must_visit", "strength": "hard", "name": "Несуществующее место"}
-        ],
+        contract=requirements_from(
+            [{"kind": "must_visit", "strength": "hard", "name": "Несуществующее место"}]
+        ),
     )
 
     assert answer.get("error") is None, answer.get("message")

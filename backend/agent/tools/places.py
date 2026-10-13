@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from pydantic import BaseModel
 from pydantic_ai import RunContext
 
 from agent.schema import PlanningDeps
@@ -54,6 +55,15 @@ _FACT_FIELDS = (
 )
 
 
+class Where(BaseModel):
+    """Where to look: a named territory, a point with a radius, or both."""
+
+    area: str | None = None
+    near_lat: float | None = None
+    near_lon: float | None = None
+    radius_m: float | None = None
+
+
 def _card(place: Any) -> dict[str, Any]:
     card = project(place, _CARD_FIELDS)
     blurb = (getattr(place, "blurb", None) or "").strip()
@@ -72,14 +82,12 @@ def find_places(
     category_codes: list[str] | None = None,
     limit: int = DEFAULT_FIND_LIMIT,
     *,
-    near_lat: float | None = None,
-    near_lon: float | None = None,
-    radius_m: float | None = None,
-    area: str | None = None,
+    where: Where | None = None,
     repos: Any = None,
     region_bbox: list[float] | None = None,
 ) -> dict[str, Any]:
     """Rank real places against a description, a category, and/or a point."""
+    where = where or Where()
     requested = [c for c in (category_codes or []) if c.strip()]
 
     want, limit_clamped = clamp(limit, 1, constants.MAX_PLACES_PER_FIND, DEFAULT_FIND_LIMIT)
@@ -87,9 +95,9 @@ def find_places(
 
     near: tuple[float, float, float] | None = None
     radius_clamped = False
-    if isinstance(near_lat, (int, float)) and isinstance(near_lon, (int, float)):
-        radius, radius_clamped = clamp(radius_m, MIN_RADIUS_M, MAX_RADIUS_M, DEFAULT_RADIUS_M)
-        near = (float(near_lat), float(near_lon), float(radius))
+    if isinstance(where.near_lat, (int, float)) and isinstance(where.near_lon, (int, float)):
+        radius, radius_clamped = clamp(where.radius_m, MIN_RADIUS_M, MAX_RADIUS_M, DEFAULT_RADIUS_M)
+        near = (float(where.near_lat), float(where.near_lon), float(radius))
 
     requested_box: tuple[float, float, float, float] | None = None
     if region_bbox and len(region_bbox) == constants.BBOX_COORDS:
@@ -107,7 +115,7 @@ def find_places(
         "dropped_codes": requested,
         "result_cap": constants.MAX_PLACES_PER_FIND,
         "radius_m": near[2] if near else None,
-        "area": area,
+        "area": where.area,
     }
 
     if not query.strip() and not requested and near is None:
@@ -125,8 +133,8 @@ def find_places(
         provenance["dropped_codes"] = [c for c in requested if c not in db_cats]
 
         box = requested_box
-        if area:
-            resolved = store.areas.bbox(area)
+        if where.area:
+            resolved = store.areas.bbox(where.area)
             if resolved is not None:
                 box = resolved
             else:
@@ -228,10 +236,7 @@ def register_find_places(agent: Any, remember: Remember) -> None:
         *,
         category_codes: list[str] | None = None,
         limit: int = DEFAULT_FIND_LIMIT,
-        near_lat: float | None = None,
-        near_lon: float | None = None,
-        radius_m: float | None = None,
-        area: str | None = None,
+        where: Where | None = None,
     ) -> dict[str, Any]:
         """Find real places matching a description, a category, and/or a point."""
         return remember(
@@ -240,10 +245,7 @@ def register_find_places(agent: Any, remember: Remember) -> None:
                 query,
                 category_codes,
                 limit,
-                near_lat=near_lat,
-                near_lon=near_lon,
-                radius_m=radius_m,
-                area=area,
+                where=where,
                 repos=ctx.deps.repos,
                 region_bbox=list(ctx.deps.region_bbox) if ctx.deps.region_bbox else None,
             ),

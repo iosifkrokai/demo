@@ -105,6 +105,28 @@ class CostMatrix(BaseModel):
 
 
 @dataclass(frozen=True)
+class WalkRequest:
+    """What the tourist asked to walk, before there is a matrix to measure it on."""
+
+    stop_ids: list[int]
+    profile: str = "pedestrian"
+    budget_minutes: int | None = None
+    origin: LatLon | None = None
+    round_trip: bool = False
+    must_keep_ids: list[int] | None = None
+    locale: str = "ru"
+
+    def constraints(self, *, keep: list[int] | None = None) -> ResolvedConstraints:
+        """This request, as the rules the routing layer reads."""
+        return ResolvedConstraints(
+            must_visit_ids=list(self.must_keep_ids or [] if keep is None else keep),
+            time_budget_minutes=self.budget_minutes,
+            round_trip=self.round_trip,
+            origin=self.origin,
+        )
+
+
+@dataclass(frozen=True)
 class WalkProblem:
     """One measurement's whole input: the stops, the matrix, and the rules."""
 

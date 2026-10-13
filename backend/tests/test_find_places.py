@@ -19,10 +19,13 @@ def test_a_description_returns_usable_cards(db_repos) -> None:
 
 
 def test_a_point_ranks_what_is_around_it(db_repos) -> None:
-    from agent.tools.places import find_places
+    from agent.tools.places import Where, find_places
 
     answer = find_places(
-        "", repos=db_repos, limit=5, near_lat=53.6778, near_lon=23.8295, radius_m=800
+        "",
+        repos=db_repos,
+        limit=5,
+        where=Where(near_lat=53.6778, near_lon=23.8295, radius_m=800),
     )
 
     assert answer.get("error") is None, answer.get("message")
@@ -82,15 +85,21 @@ def test_a_box_with_nothing_in_it_returns_nothing(db_repos) -> None:
 
 def test_one_area_scoped_search_yields_enough_stops_to_plan(db_repos) -> None:
     """The prompt tells the model one area-scoped search is the whole candidate set."""
-    from agent.tools.places import find_places
+    from agent.tools.places import Where, find_places
     from agent.tools.plan import plan_walk
+    from routing.models import WalkRequest
 
-    found = find_places("достопримечательности", repos=db_repos, limit=8, area="grodno-old-town")
+    found = find_places(
+        "достопримечательности",
+        repos=db_repos,
+        limit=8,
+        where=Where(area="grodno-old-town"),
+    )
     assert found.get("error") is None, found.get("message")
     ids = [card["id"] for card in found["results"]]
     assert len(ids) >= 3, "one search did not yield enough stops to choose a walk"
 
-    walk = plan_walk(ids, repos=db_repos, budget_minutes=120)
+    walk = plan_walk(WalkRequest(ids, budget_minutes=120), repos=db_repos)
     assert walk.get("error") is None, walk.get("message")
     assert walk["count"] >= 2
 

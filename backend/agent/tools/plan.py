@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Any
 
 from pydantic_ai import RunContext
@@ -19,7 +20,7 @@ from core import cache, constants
 from core.errors import NoRoutePossibleError, UpstreamUnavailableError
 from db.store.errors import StorageUnavailableError
 from routing.cost import build_cost, refinement_cost
-from routing.models import CategoryFacts, LatLon, ResolvedConstraints, WalkProblem
+from routing.models import CategoryFacts, LatLon, WalkProblem, WalkRequest
 from routing.optimize import optimize, order_after_prune, prune_unroutable, valhalla_order
 from routing.render import render
 from routing.stops import candidate_of
@@ -29,31 +30,21 @@ from routing.validate import validate
 MAX_STOPS_PER_CALL = constants.VALHALLA_MAX_LOCATIONS
 
 
-def _measure_key(
-    wanted: list[int],
-    budget_minutes: int | None,
-    profile: str,
-    round_trip: bool,
-    origin: LatLon | None,
-    *,
-    locale: str,
-    must_keep_ids: list[int] | None = None,
-    data_version: str,
-    regime: str = "order",
-) -> str:
+def _measure_key(request: WalkRequest, *, data_version: str, regime: str = "order") -> str:
     """The identity of one measurement: the stops, the profile and the budget."""
+    origin = request.origin
     where = f"{origin.lat:.6f},{origin.lon:.6f}" if origin is not None else "-"
-    keep = ",".join(str(i) for i in sorted(must_keep_ids or []))
+    keep = ",".join(str(i) for i in sorted(request.must_keep_ids or []))
     return "|".join(
         (
             "plan_walk",
             data_version,
-            ",".join(str(i) for i in sorted(wanted)),
-            profile or "",
-            str(budget_minutes),
-            "rt" if round_trip else "one_way",
+            ",".join(str(i) for i in sorted(request.stop_ids)),
+            costing_for(request.profile),
+            str(request.budget_minutes),
+            "rt" if request.round_trip else "one_way",
             where,
-            locale,
+            request.locale,
             keep,
             regime,
         )
@@ -97,29 +88,23 @@ def _stop(card: Any, visit_minutes: int) -> dict[str, Any]:
 
 
 def plan_walk(
-    stop_ids: list[int],
+    request: WalkRequest,
     *,
     repos: Any,
-    budget_minutes: int | None = None,
-    profile: str = "pedestrian",
-    origin: LatLon | None = None,
-    round_trip: bool = False,
-    must_keep_ids: list[int] | None = None,
-    locale: str = "ru",
     facts: CategoryFacts | None = None,
     deadline_s: float | None = None,
 ) -> dict[str, Any]:
     """Order and measure. Never raises: a walk that cannot be built is reported."""
-    costing = costing_for(profile)
+    costing = costing_for(request.profile)
     provenance: dict[str, Any] = {
         "source": "places+valhalla",
         "profile": costing,
-        "round_trip": round_trip,
-        "budget_minutes": budget_minutes,
+        "round_trip": request.round_trip,
+        "budget_minutes": request.budget_minutes,
         "result_cap": MAX_STOPS_PER_CALL,
     }
 
-    wanted = [i for i in (stop_ids or []) if i > 0]
+    wanted = [i for i in request.stop_ids if i > 0]
     if len(wanted) < constants.MIN_LEG_POINTS:
         return envelope(
             "plan_walk",
@@ -131,17 +116,12 @@ def plan_walk(
     if len(wanted) > MAX_STOPS_PER_CALL:
         wanted = wanted[:MAX_STOPS_PER_CALL]
         provenance["capped"] = True
+    request = replace(request, stop_ids=wanted)
 
     key = _measure_key(
-        wanted,
-        budget_minutes,
-        costing,
-        round_trip,
-        origin,
-        locale=locale,
-        must_keep_ids=must_keep_ids,
+        request,
         data_version=_data_version(repos),
-        regime=_order_regime(deadline_s, origin),
+        regime=_order_regime(deadline_s, request.origin),
     )
     cached = cache.MEASURE_CACHE.get(key)
     if cached is not None:
@@ -163,13 +143,8 @@ def plan_walk(
             message=f"fewer than two of the given stops exist (missing: {missing})",
         )
 
-    keep = [i for i in (must_keep_ids or []) if i in by_id]
-    constraints = ResolvedConstraints(
-        must_visit_ids=keep,
-        time_budget_minutes=budget_minutes,
-        round_trip=round_trip,
-        origin=origin,
-    )
+    keep = [i for i in (request.must_keep_ids or []) if i in by_id]
+    constraints = request.constraints(keep=keep)
     taxonomy = _facts(repos, facts)
     info: dict[str, Any] = {}
 
@@ -195,14 +170,18 @@ def plan_walk(
         plan = validate(route, cost, constraints, info, prune_report=prune_report)
     except NoRoutePossibleError as exc:
         provenance["reason_code"] = "no_route_possible"
-        message = _no_route_message(info, origin, str(exc))
+        message = _no_route_message(info, request.origin, str(exc))
         return envelope("plan_walk", [], provenance, error="no_route", message=message)
 
     shape: dict[str, Any] = {}
     summary: dict[str, Any] = {}
     try:
         shape, summary, _status = render(
-            route, costing=costing, origin=origin, locale=locale, round_trip=round_trip
+            route,
+            costing=costing,
+            origin=request.origin,
+            locale=request.locale,
+            round_trip=request.round_trip,
         )
     except UpstreamUnavailableError:
         provenance["geometry"] = "valhalla unavailable"
@@ -227,7 +206,7 @@ def plan_walk(
         "fits_budget": plan.fits_budget,
         "length_km": summary.get("length"),
         "shape": shape or None,
-        "round_trip": round_trip,
+        "round_trip": request.round_trip,
     }
     if answer.get("error") is None and answer.get("results"):
         cache.MEASURE_CACHE.put(key, answer)
@@ -260,14 +239,16 @@ def register_plan_walk(agent: Any, _remember: Remember) -> None:
     ) -> ToolAnswer:
         """Order chosen stops into the shortest feasible walk and measure it."""
         return plan_walk(
-            stop_ids,
+            WalkRequest(
+                stop_ids=stop_ids,
+                profile=profile,
+                budget_minutes=budget_minutes,
+                origin=ctx.deps.origin,
+                round_trip=round_trip,
+                must_keep_ids=must_keep_ids,
+                locale=ctx.deps.locale,
+            ),
             repos=ctx.deps.repos,
-            budget_minutes=budget_minutes,
-            profile=profile,
-            origin=ctx.deps.origin,
-            round_trip=round_trip,
-            must_keep_ids=must_keep_ids,
-            locale=ctx.deps.locale,
             facts=ctx.deps.facts,
             deadline_s=ctx.deps.seconds_left(),
         )

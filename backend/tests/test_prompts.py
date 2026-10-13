@@ -40,5 +40,5 @@ def test_the_worked_old_town_shape_is_a_three_call_path() -> None:
     """The worked shape spells the short path out, so 'choose the stops yourself'
     does not read as a licence to search each sight in turn."""
     text = _instructions()
-    assert 'find_places(area="grodno-old-town")' in text
+    assert 'find_places(where={"area": "grodno-old-town"})' in text
     assert "three calls" in text

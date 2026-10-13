@@ -4,14 +4,14 @@ from __future__ import annotations
 
 from typing import Any
 
-from agent.tools import ERR_BAD_ARGUMENT, envelope
+from agent.schema import PlanSubmission
+from agent.tools import envelope
 from agent.tools.plan import plan_walk
-from agent.tools.verify import requirements_from, verdicts_of
-from routing.models import LatLon, TripRequirements
+from agent.tools.verify import verdicts_of
+from routing.models import TripRequirements, WalkRequest
 from routing.stops import candidate_of
 from routing.verify import ServiceAlongEvidence, verify, verify_catalogue
 
-RESULT_MODES = ("route", "catalogue")
 MAX_SERVICES_MEASURED = 24
 
 
@@ -52,44 +52,26 @@ def _evidence(repos: Any, contract: TripRequirements, shape: Any) -> ServiceAlon
 
 
 def submit_plan(
-    ordered_ids: list[int],
+    request: WalkRequest,
+    submission: PlanSubmission,
     *,
     repos: Any,
     facts: Any,
-    budget_minutes: int | None = None,
-    profile: str = "pedestrian",
-    origin: LatLon | None = None,
-    round_trip: bool = False,
-    must_keep_ids: list[int] | None = None,
-    locale: str = "ru",
-    requirement_specs: list[dict[str, Any]] | None = None,
-    contract: TripRequirements | None = None,
-    unknowns: list[str] | None = None,
-    narrative: str | None = None,
-    result_mode: str = "route",
+    contract: TripRequirements,
     deadline_s: float | None = None,
 ) -> dict[str, Any]:
     """Measure and verify the finished plan; the status is code's, not the model's."""
+    result_mode = contract.result_mode
+    narrative = submission.narrative
     provenance: dict[str, Any] = {
         "source": "places+valhalla",
         "result_mode": result_mode,
         "fact_status": "re-measured on submit",
     }
-    if result_mode not in RESULT_MODES:
-        return envelope(
-            "submit_plan",
-            [],
-            provenance,
-            error=ERR_BAD_ARGUMENT,
-            message=f"result_mode must be one of {RESULT_MODES}",
-        )
-
-    if contract is None:
-        contract = requirements_from(requirement_specs)
-    contract.unknowns = list(unknowns or [])
+    contract.unknowns = list(submission.unknowns)
 
     if result_mode == "catalogue":
-        rows = repos.places.get_by_ids(ordered_ids or [])
+        rows = repos.places.get_by_ids(request.stop_ids)
         places = [candidate_of(row, 0.0) for row in rows]
         verify_catalogue(contract, places, facts=facts)
         answer = verdicts_of(contract)
@@ -100,18 +82,7 @@ def submit_plan(
             **answer,
         }
 
-    measured = plan_walk(
-        ordered_ids,
-        repos=repos,
-        budget_minutes=budget_minutes,
-        profile=profile,
-        origin=origin,
-        round_trip=round_trip,
-        must_keep_ids=must_keep_ids,
-        locale=locale,
-        facts=facts,
-        deadline_s=deadline_s,
-    )
+    measured = plan_walk(request, repos=repos, facts=facts, deadline_s=deadline_s)
     if measured.get("error") is not None:
         provenance["reason_code"] = measured.get("error")
         return envelope(
@@ -122,7 +93,7 @@ def submit_plan(
             message=measured.get("message"),
         )
 
-    stops = [candidate_of(row, 0.0) for row in repos.places.get_by_ids(ordered_ids)]
+    stops = [candidate_of(row, 0.0) for row in repos.places.get_by_ids(request.stop_ids)]
     shape = measured.get("shape")
     verify(
         contract,
