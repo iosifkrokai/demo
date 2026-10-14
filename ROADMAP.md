@@ -3,17 +3,17 @@
 What is known and deliberately not done. Each entry says what it is, why it is parked,
 and where the evidence lives — so picking one up does not mean rediscovering it.
 
-Every entry below was checked against the working tree on 2026-10-14, and the eight that
+Every entry below was checked against the working tree on 2026-10-14, and the ten that
 were closed that day — the close-duplicate list, the area that did not narrow a search,
 `place_aliases` unread, the benchmark's coincidence rule, the frontend's missing
-`result_mode`, the English names, the service-only highlighting, and the empty
-requirement vocabulary — are in § *Closed* at the bottom. The list is renumbered after
-every such pass, so numbers are dense and an entry's number does not survive it.
+`result_mode`, the English names, the service-only highlighting, the empty requirement
+vocabulary, the names for the unnamed stops, and the empty infrastructure sheet — are in
+§ *Closed* at the bottom. The list is renumbered after every such pass, so numbers are
+dense and an entry's number does not survive it.
 
-Three of the eight entries below are waiting on a **decision**, not on hands: 2 (what to
-call a boulder), 4 (populate or drop a column) and 8 (re-author or prune the curated
-prose). Entry 5 is blocked by a vocabulary nobody has asked for yet. The rest are work
-(3, 6, 7) or an outside block (1).
+Two of the seven entries below are waiting on a **decision**, not on hands: 2 (what to call
+a boulder) and 3 (populate or drop a column). Entry 7 is editorial. The rest are work
+(4, 5, 6) or an outside block (1).
 
 ## 1. Authoritative data from the administration
 
@@ -27,8 +27,8 @@ objects we already hold also live. The committed pair is byte-identical to that 
 The **ingest** is not built. Doing it needs:
 
 - a new source prefix and provider (`gov:` → `grodno-admin`) and a dataset with its own
-  reader — the four existing sets share a 14-column shape, and the official reply will not
-  fit it;
+  reader — the four hand-authored and OSM sets share a 14-column shape, and the official
+  reply will not fit it;
 - tables for what the schema cannot hold today at all: address, accessibility, heritage
   status and registry number, contacts, structured opening hours, admission prices,
   events, and route infrastructure;
@@ -38,6 +38,10 @@ The **ingest** is not built. Doing it needs:
   dataset whose reader parses JSON and walks the nested arrays (hours, prices, events) into
   child rows. If it must travel through the pipe format instead, the nested arrays go in as
   JSON columns, the way `fun_facts` and `links` already do.
+
+Hours and prices are no longer the obstacle they were: the catalogue has a parser
+(`core/hours.py`) and a fact (`places.is_free`) for both, so an official value has
+somewhere to land and something to compare against.
 
 ## 2. `архитектура` still holds things that are not architecture
 
@@ -54,27 +58,7 @@ same place: the close-duplicate review found nine pairs of «замок» that a
 pillboxes and ДОТы, swept into the castle category by the same tags — the category name is
 the defect there, not the pairing.
 
-## 3. Names for the unnamed stops
-
-1273 transport stops and 303 toilets carry a generated label («Остановка», «Туалет»)
-because OSM leaves them unnamed, and 4 of the toilets carry a street hint in the name at
-best. The duplicate report skips these labels (they name a kind, not an object), which is
-why they no longer pollute it, but the catalogue still shows a thousand identical rows.
-
-Two ways out, neither taken:
-
-- reverse geocoding per point. Prototyped, throttled by Nominatim, and removed: it
-  answers a client that asks for ~1300 streets slowly, and the answers were mixed — real
-  streets, road refs (`Р42`), and at least one railway platform name. The client and its
-  tile cache are out of `overpass.py`; the code is in history if the idea comes back.
-- a local OSM extract, which is now the proven way in: `db/seed/aliases_en.py` reads the
-  350 MB `valhalla-data/belarus-latest.osm.pbf` in ten seconds with pyosmium, filtering in
-  C++, and the same pass can carry `addr:street` for the stop nodes we hold. pyosmium is
-  not in `pyproject.toml` (a pyproject change rebuilds the image and re-downloads the
-  embedding model), so install it in the venv: `uv pip install --python .venv/bin/python
-  osmium`.
-
-## 4. A dead column
+## 3. A dead column
 
 - `places.description` — declared in the schema and selected, but never written by the seed
   and never shown. Either populate it or drop it, which needs a migration: a decision
@@ -85,24 +69,36 @@ The two dead functions that sat here (`is_name_dup`, the Nominatim branch of
 deleted, not parked — pruning is the sweep over the datasets (`pipeline.prune_stale`, with
 `--no-prune` to keep everything), and since 2026-10-14 `load_areas` sweeps the same way.
 
-## 5. Steps can be avoided today; nothing asks the engine to
+## 4. Steps can be avoided today; nothing asks the engine to
 
 Valhalla's pedestrian costing takes `step_penalty` and it works. Between the two ends of
 way/37560981 — a 92 m stairway tagged `handrail=yes`, `incline=down` — the route is 95 m by
 default, **2.02 km** with `step_penalty=3600`, and 95 m again with `step_penalty=0`.
 
-The obstacle is not data: the oblast holds 1560 `highway=steps` ways, about 700 of them
-inside Grodno, 382 with `handrail`, 276 with `ramp`, 248 with `step_count`. The obstacle is
-the promise — a detour can be twenty times longer, so "без лестниц" is only honest with its
-price shown. The vocabulary for it is half there: `free` and `open` are requirement kinds
-since 2026-10-14, and a `step_free` one would need the route's own edges checked for steps,
-which nothing does yet. One path already forwards options like this: the frontend's own
-manual-directions request (`frontend/src/utils/valhalla.ts`), which is not the planner.
+Both halves of the obstacle are now smaller. The **data** exists: 1556 stairways are in the
+catalogue since 2026-10-14 (`places_steps.csv`, `highway=steps`, 633 tagged `handrail`, 479
+`ramp`, 464 `step_count`), highlighted beside a route and never a stop of one. The
+**vocabulary** has a shape to copy: `free` and `open` are requirement kinds, and a
+`step_free` one would be the third. What is missing is the verdict — nothing checks the
+route's own edges for steps, so a `step_free` claim would be about the costing option and
+not about the walk — and the promise: a detour can be twenty times longer, so "без лестниц"
+is only honest with its price shown.
 
 Remember one trap before touching costing options: Valhalla **silently accepts unknown
 `costing_options`** — `{"nonsense_option": 7}` answered 200 with the same route. A typo in
 an option name would pass unnoticed, so a tune can only be checked by comparing routes,
 never by the status code.
+
+## 5. Nothing knows whether a place is step-free
+
+The administration's schema asks for accessibility and the catalogue answers nothing: OSM
+tags `wheelchair` on 1729 objects inside the oblast, and our rows carry none of it. The
+same shape of task as the stairways — read the tag from the local extract into a fact, and
+let a requirement be decided by it — with two differences worth knowing before starting:
+`wheelchair` is an upper bound, not a count of sights (it is stated on shops, banks and
+benches), and `yes` does not mean step-free (a ramp at the door does not cover the stairs
+inside). So the honest first step is the same as item 4's cost question: state what the
+data says, attribute it to OSM, and never promise more than the tag does.
 
 ## 6. The tiles carry no elevation, so the hill options do nothing
 
@@ -116,38 +112,7 @@ Enabling it means rebuilding the valhalla image with elevation, which downloads 
 the whole country; the compose service sets `tile_urls` and nothing else. Until then the
 product must not promise anything about hills or climbs, and neither should the ТЗ.
 
-## 7. What OSM already knows, which we could seed ourselves
-
-Measured against the oblast boundary (OSM relation 59275), not against the fetch's
-rectangle:
-
-| tag | objects | what it maps to |
-|---|---|---|
-| `opening_hours` | 6366 | structured hours — we hold 593, and 460 of those are already in OSM syntax (`Mo-Su 10:00-22:00`, `24/7`) |
-| `highway=crossing` | 6953 | the infrastructure sheet's crossings |
-| `highway=steps` | 1560 | the same sheet's stairways (item 5) |
-| `wheelchair` | 1729 | accessibility, every object type — an upper bound, not a count of sights |
-
-`name:en` left this table: 295 English names are read out of the local extract and searchable
-since 2026-10-14. Two of the facts we already hold used to be thrown away, and neither is
-any more. `ticket_price` is the raw `fee`/`charge` tag, and the reading of it is a column
-now (`places.is_free`: 107 free, 53 paid, 8390 unknown); the fifteen rows that carried a
-literal `—` — which the ТЗ forbids in the reply precisely because a dash reads as a value —
-are empty, and `osm_tags.ticket_price_of` refuses punctuation at the source. The 460
-OSM-syntax hour strings are parsed by `core/hours.py` and read by the `open` requirement.
-
-What is left is the **infrastructure set**: stairways, crossings, lifts and the like, which
-the catalogue holds three of and the schema has a sheet for. Seeding them is what makes the
-sheet in the administration's schema stop being empty, and it is the other half of item 5 —
-there is nothing to highlight along a route and nothing to route around until these objects
-exist.
-
-Enrichment from OSM is a fact with a source, not a guess — but it must never be presented as
-administration-confirmed. `place_sources` already keys by `(provider, external_id)` per
-place, so an OSM value and an official one can sit side by side and be told apart;
-`verified_at` (item 1) is the empty slot for "confirmed by".
-
-## 8. The curated overlay reaches 17 of its 76 names
+## 7. The curated overlay reaches 17 of its 76 names
 
 `places_curated.csv` holds 76 rows, and each reaches its target by name and nothing else —
 the CSV carries no coordinate and no id. Applied on 2026-10-14: **17 matched, 58 matched
@@ -169,6 +134,23 @@ and re-authoring them is editorial work.
 
 Dropped from this list on 2026-10-14, so nobody re-adds them:
 
+- **names for the unnamed stops.** 1273 stops and 303 toilets carried a generated label
+  because OSM leaves them unnamed, and `addr:street` — which `service_name` already read —
+  is stated on 4 of them. The remaining path, a nearest-street guess, was measured before it
+  was believed: of 1572 targets, 818 sit on a **road number** within 15 m (`Р42`, `М6`,
+  `Н6131` — the failure that made the Nominatim answers mixed) and 501 have no road that
+  close, leaving **210** unambiguous (one named street within 15 m, no differently named
+  street within 40 m), which the seed lays on as «Остановка (улица Адама Мицкевича)» —
+  201 stops and 8 toilets. The ~87% that get nothing are not a gap in the code: there is no
+  street to name them after, and inventing one is what this measurement refuses to do.
+- **the infrastructure sheet was empty.** Three objects against 1557 stairways in the
+  oblast. `places_steps.csv` brings them in from the local extract with the tags OSM states
+  as facts, `role = service` so they are highlighted beside a walk and never a stop of one.
+  Seeding them exposed a second defect with it: the default highlight was "every
+  `role = service` category", so the map would have shown stairs instead of cafés; the
+  default is now a column in `taxonomy.csv` the seed projects. **Crossings are not in and
+  must not be added quietly** — 6953 of them would grow the catalogue by 80% and serve no
+  walk; the ТЗ sheet is not a reason to make them places.
 - **English names had no source.** OSM held them and the 14-column shape had nowhere to put
   them. `db/seed/aliases_en.py` reads `name:en` out of the local extract by OSM identity and
   writes a committed sidecar; 295 names land (59 were the row's own name in Latin), and a
@@ -176,18 +158,18 @@ Dropped from this list on 2026-10-14, so nobody re-adds them:
   read. «Lida castle» and «Transfiguration Church» reach their rows from an English query
   alone. Three do not resolve — their OSM rows were shadowed by a hand-authored place, and
   the Mir castle's English name is one of them, which the seed reports rather than hides.
-- **Highlighting along a route was services-only.** `places_along` measures any named
+- **highlighting along a route was services-only.** `places_along` measures any named
   category against the line and consults no role; `services_along` stays as the service
   default the submit path and the evals call. «Что по пути» about museums answers three of
   them where it used to answer `no_service_categories`.
-- **The planner had no vocabulary for what the catalogue holds.** `RequirementKind` gained
+- **the planner had no vocabulary for what the catalogue holds.** `RequirementKind` gained
   `free` and `open`, both decided by code re-reading the measured route: `free` reads
   `ticket_price` through `core/prices.py::free_entry` (a walk must be free stop by stop — one
   paid stop is `unmet`, a price nobody wrote down `uncertain` — while a catalogue only has to
   hold free places), and `open` reads `opening_hours` through `core/hours.py`, a parser for
   the 509 of 593 rows it understands exactly and `None` for the rest. The moment is an
   argument (`PlanningDeps.now`), never a clock read inside the verifier, and both kinds are
-  repairable. What is *not* closed with it: gaining a `step_free` kind, which is item 5.
+  repairable. What is *not* closed with it: a `step_free` kind, which is item 4.
 - **the close-duplicate list** (`db/data/duplicate_review.md`). Read as a list at last: of the
   102 pairs closer than 30 m, **4 are one object, 91 two objects, 7 unclear**, and none of
   them is inside the city of Grodno — so the city-side risk that made this worth reading did
@@ -222,7 +204,7 @@ Dropped from this list on 2026-10-14, so nobody re-adds them:
 - **the curated overlay picking an arbitrary twin.** `match_place` takes the hand-authored
   row first, then the lowest id, and refuses a name spread over kilometres; the seed resets
   every `curated` flag before it re-applies them, so a flag left by an earlier run no longer
-  protects a row for ever. What is left of it is item 8.
+  protects a row for ever. What is left of it is item 7.
 - **«недорого» is answerable only through the free/paid flag.** Answerable now: `places.is_free`
   is written by the seed and shown on the card, and a `free` requirement can constrain a walk.
   The administration's structured `prices` array is still the richer source, and item 1 is
