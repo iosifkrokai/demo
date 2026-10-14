@@ -100,11 +100,59 @@ def _near_hits(
     return [(p.id, 0.0) for p in around if _in_box(p, box)]
 
 
-def _card(place: Any) -> dict[str, Any]:
+def card_of(place: Any) -> dict[str, Any]:
+    """One place as the agent and the client both read it."""
     card = project(place, _CARD_FIELDS)
     blurb = (getattr(place, "blurb", None) or "").strip()
     card["blurb"] = blurb[:MAX_BLURB_CHARS] or None
     return card
+
+
+def catalogue_rows(
+    place_ids: list[int],
+    *,
+    categories: list[str],
+    area: str | None,
+    repos: Any,
+    limit: int = constants.MAX_CATALOGUE_PLACES,
+) -> tuple[list[Any], bool]:
+    """The places of a catalogue: every one the named codes cover in the territory —
+    the request itself, not the agent's reading of it. A request with no code to
+    retrieve by leaves the list to the places the agent named. The flag says the list
+    was cut, at `limit` or at the pool a code was read from.
+    """
+    if categories:
+        rows, error, _message = fetch(
+            repos, lambda store: _catalogue_by_code(store, categories, area, limit)
+        )
+        if error is None and rows:
+            return rows
+
+    chosen, error, _message = fetch(repos, lambda store: store.places.get_by_ids(place_ids))
+    found = chosen if error is None and chosen else []
+    return found, len(found) >= limit
+
+
+def _catalogue_by_code(
+    store: Any, categories: list[str], area: str | None, limit: int
+) -> tuple[list[Any], bool]:
+    """Each code ranked on its own, so no one code can crowd another out of the list."""
+    codes = store.taxonomy.db_values(categories)
+    box = store.areas.bbox(area) if area else None
+    rankings = [
+        hits
+        for code in codes
+        if (hits := _category_hits(store, [code], box, constants.RETRIEVAL_POOL_SIZE))
+    ]
+    if not rankings:
+        return [], False
+    fused = rrf_fuse(rankings, k=constants.RRF_K)
+    top = [pid for pid, _ in sorted(fused.items(), key=lambda kv: kv[1], reverse=True)[:limit]]
+    rows = store.places.get_by_ids(top)
+    order = {pid: rank for rank, pid in enumerate(top)}
+    rows.sort(key=lambda row: order.get(row.id or 0, len(order)))
+    truncated = any(len(hits) >= constants.RETRIEVAL_POOL_SIZE for hits in rankings)
+    return rows, truncated or len(rows) >= limit
 
 
 def _inside(lat: float, lon: float, box: tuple[float, float, float, float]) -> bool:
@@ -193,7 +241,7 @@ def find_places(
         rows = store.places.get_by_ids(top)
         order = {pid: rank for rank, pid in enumerate(top)}
         rows.sort(key=lambda row: order.get(row.id or 0, len(order)))
-        return [_card(place) for place in rows]
+        return [card_of(place) for place in rows]
 
     rows, error, message = fetch(repos, run)
     if error is not None:

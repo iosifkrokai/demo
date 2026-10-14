@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from typing import Any
 
 from pydantic_ai import RunContext
@@ -20,7 +20,7 @@ from core import cache, constants
 from core.errors import NoRoutePossibleError, UpstreamUnavailableError
 from db.store.errors import StorageUnavailableError
 from routing.cost import build_cost, refinement_cost
-from routing.models import CategoryFacts, LatLon, WalkProblem, WalkRequest
+from routing.models import Candidate, CategoryFacts, LatLon, WalkProblem, WalkRequest
 from routing.optimize import optimize, order_after_prune, prune_unroutable, valhalla_order
 from routing.render import render
 from routing.stops import candidate_of
@@ -87,6 +87,122 @@ def _stop(card: Any, visit_minutes: int) -> dict[str, Any]:
     }
 
 
+def _stops_and_services(
+    candidates: list[Candidate], taxonomy: CategoryFacts, keep: set[int]
+) -> tuple[list[Candidate], list[Candidate]]:
+    """Split the candidates into the stops of the walk and the services beside it.
+
+    A service is a place the walk rests at, not a sight of it, so it is not a stop —
+    unless the request pinned it by id, which is a person saying they want to go there.
+    """
+    stops: list[Candidate] = []
+    services: list[Candidate] = []
+    for candidate in candidates:
+        if candidate.id not in keep and taxonomy.is_service(candidate.category):
+            services.append(candidate)
+        else:
+            stops.append(candidate)
+    return stops, services
+
+
+@dataclass(frozen=True)
+class MeasureSetup:
+    """What a measurement needs besides the stops and the request itself."""
+
+    repos: Any
+    provenance: dict[str, Any]
+    facts: CategoryFacts | None = None
+    preserve_order: bool = False
+    deadline_s: float | None = None
+
+
+def measure_candidates(
+    candidates: list[Candidate],
+    request: WalkRequest,
+    setup: MeasureSetup,
+) -> dict[str, Any]:
+    """Order — unless told not to — and measure stops the caller already holds.
+
+    Takes stops rather than ids, because a client holds points that are not in the
+    catalogue. `preserve_order` makes its order the answer: nothing reorders it and
+    nothing is dropped to fit a budget — a walk that no longer fits says so instead.
+    A service — a café, a hotel — is where the walk passes, not where it stops: it is
+    dropped here unless the request asked for it by name, and the drop is reported.
+    """
+    costing = costing_for(request.profile)
+    provenance = setup.provenance
+    present = {c.id for c in candidates}
+    missing = [i for i in request.stop_ids if i not in present]
+    taxonomy = _facts(setup.repos, setup.facts)
+    candidates, services = _stops_and_services(
+        candidates, taxonomy, keep={*(request.must_keep_ids or [])}
+    )
+    keep = [i for i in (request.must_keep_ids or []) if i in {c.id for c in candidates}]
+    constraints = request.constraints(keep=keep)
+    if services:
+        provenance["services_not_stops"] = [c.name for c in services]
+    info: dict[str, Any] = {}
+
+    try:
+        if keep:
+            candidates, cost = refinement_cost(candidates, constraints, costing, taxonomy)
+        else:
+            candidates, cost = build_cost(candidates, constraints, costing, taxonomy)
+        problem = WalkProblem(candidates, cost, constraints, costing)
+        if setup.preserve_order:
+            info = {"algorithm": "as_sent", "order": list(range(len(candidates)))}
+            route = list(candidates)
+        else:
+            route, info = optimize(problem)
+
+        if not setup.preserve_order and (
+            setup.deadline_s is None or setup.deadline_s >= constants.VALHALLA_ORDER_MIN_LEFT_S
+        ):
+            route, info = valhalla_order(
+                route,
+                info,
+                problem,
+                timeout=constants.VALHALLA_ORDER_TIMEOUT_S,
+                retries=constants.VALHALLA_ORDER_RETRIES,
+            )
+        planned = len(route)
+        route, prune_report = prune_unroutable(route, candidates, cost, constraints.must_visit_ids)
+        info = order_after_prune(info, route, candidates)
+        plan = validate(route, cost, constraints, info, prune_report=prune_report)
+    except NoRoutePossibleError as exc:
+        provenance["reason_code"] = "no_route_possible"
+        message = (
+            _services_only_message(services)
+            if services and len(candidates) < constants.MIN_LEG_POINTS
+            else _no_route_message(info, request.origin, str(exc))
+        )
+        return envelope("plan_walk", [], provenance, error="no_route", message=message)
+
+    shape, summary = _drawn(route, request, costing, provenance)
+    visits = {c.id: v for c, v in zip(candidates, cost.visit_minutes, strict=False)}
+    stops = [_stop(card, visits.get(card.id) or 0) for card in plan.route]
+    provenance["algorithm"] = info.get("algorithm")
+    provenance["stops_dropped"] = plan.stops_dropped
+    provenance["unroutable"] = [p.name for p in prune_report]
+    provenance["missing_ids"] = missing
+    provenance["rendered_walk_seconds"] = summary.get("time")
+
+    return envelope(
+        "plan_walk",
+        stops,
+        provenance,
+        capped=bool(provenance.get("capped") or planned > len(plan.route)),
+    ) | {
+        "walk_minutes": round(plan.walk_seconds / 60),
+        "visit_minutes": plan.visit_seconds // 60,
+        "total_minutes": plan.total_seconds // 60,
+        "fits_budget": plan.fits_budget,
+        "length_km": summary.get("length"),
+        "shape": shape or None,
+        "round_trip": request.round_trip,
+    }
+
+
 def plan_walk(
     request: WalkRequest,
     *,
@@ -143,59 +259,11 @@ def plan_walk(
             message=f"fewer than two of the given stops exist (missing: {missing})",
         )
 
-    keep = [i for i in (request.must_keep_ids or []) if i in by_id]
-    constraints = request.constraints(keep=keep)
-    taxonomy = _facts(repos, facts)
-    info: dict[str, Any] = {}
-
-    try:
-        if keep:
-            candidates, cost = refinement_cost(candidates, constraints, costing, taxonomy)
-        else:
-            candidates, cost = build_cost(candidates, constraints, costing, taxonomy)
-        problem = WalkProblem(candidates, cost, constraints, costing)
-        route, info = optimize(problem)
-
-        if deadline_s is None or deadline_s >= constants.VALHALLA_ORDER_MIN_LEFT_S:
-            route, info = valhalla_order(
-                route,
-                info,
-                problem,
-                timeout=constants.VALHALLA_ORDER_TIMEOUT_S,
-                retries=constants.VALHALLA_ORDER_RETRIES,
-            )
-        planned = len(route)
-        route, prune_report = prune_unroutable(route, candidates, cost, constraints.must_visit_ids)
-        info = order_after_prune(info, route, candidates)
-        plan = validate(route, cost, constraints, info, prune_report=prune_report)
-    except NoRoutePossibleError as exc:
-        provenance["reason_code"] = "no_route_possible"
-        message = _no_route_message(info, request.origin, str(exc))
-        return envelope("plan_walk", [], provenance, error="no_route", message=message)
-
-    shape, summary = _drawn(route, request, costing, provenance)
-    walk_seconds = float(summary.get("time") or plan.walk_seconds or 0.0)
-    visits = {c.id: v for c, v in zip(candidates, cost.visit_minutes, strict=False)}
-    stops = [_stop(card, visits.get(card.id) or 0) for card in plan.route]
-    provenance["algorithm"] = info.get("algorithm")
-    provenance["stops_dropped"] = plan.stops_dropped
-    provenance["unroutable"] = [p.name for p in prune_report]
-    provenance["missing_ids"] = missing
-
-    answer = envelope(
-        "plan_walk",
-        stops,
-        provenance,
-        capped=bool(provenance.get("capped") or planned > len(plan.route)),
-    ) | {
-        "walk_minutes": round(walk_seconds / 60),
-        "visit_minutes": plan.visit_seconds // 60,
-        "total_minutes": plan.total_seconds // 60,
-        "fits_budget": plan.fits_budget,
-        "length_km": summary.get("length"),
-        "shape": shape or None,
-        "round_trip": request.round_trip,
-    }
+    answer = measure_candidates(
+        candidates,
+        request,
+        MeasureSetup(repos=repos, provenance=provenance, facts=facts, deadline_s=deadline_s),
+    )
     if answer.get("error") is None and answer.get("results"):
         cache.MEASURE_CACHE.put(key, answer)
     return answer
@@ -217,6 +285,18 @@ def _drawn(
         provenance["geometry"] = "valhalla unavailable"
         return {}, {}
     return shape, summary
+
+
+def _services_only_message(services: list[Candidate]) -> str:
+    """Why a request of nothing but services has no walk — the request, not the engine."""
+    shown = services[:3]
+    names = ", ".join(c.name for c in shown)
+    tail = " и другие" if len(shown) < len(services) else ""
+    return (
+        "Остановками прогулки не становятся кафе, гостиницы и подобное — сервис это то, "
+        f"мимо чего идём. Осмотр здесь не из чего собрать: {names}{tail}. "
+        "Добавьте достопримечательность."
+    )
 
 
 def _no_route_message(info: dict[str, Any], origin: LatLon | None, fallback: str) -> str:

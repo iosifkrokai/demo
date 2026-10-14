@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from core import constants
 from routing.models import LatLon, Photo
@@ -31,6 +31,8 @@ TransportOrAnyLiteral = Literal[
     "motorcycle",
     "any",
 ]
+
+MAX_STOPS = constants.VALHALLA_MAX_LOCATIONS
 
 OverallStatus = Literal["ready", "infeasible", "degraded", "pending"]
 
@@ -94,7 +96,7 @@ class GenerateReq(BaseModel):
     hard_services: list[str] = Field(default_factory=list)
     interests: list[str] = Field(default_factory=list)
     avoid: list[str] = Field(default_factory=list)
-    result_mode: Literal["route", "catalogue"] = "route"
+    result_mode: Literal["route", "catalogue"] | None = None
     round_trip: bool = False
 
     @field_validator("query")
@@ -109,6 +111,7 @@ class GenerateReq(BaseModel):
 class Place(BaseModel):
     id: int
     name: str
+    key: str | None = None
     category: str | None
     lat: float
     lon: float
@@ -223,9 +226,49 @@ class ThreadResponse(BaseModel):
     turns: list[ThreadTurn] = Field(default_factory=list)
 
 
+class RerouteStop(BaseModel):
+    """One stop the client is showing: a place it found, a point it placed, or both.
+
+    `key` is the client's own name for it, echoed back in the order it was measured.
+    """
+
+    key: str = Field(min_length=1, max_length=64)
+    place_id: int | None = None
+    lat: float | None = None
+    lon: float | None = None
+    name: str | None = Field(default=None, max_length=200)
+
+    @model_validator(mode="after")
+    def _can_be_measured(self) -> RerouteStop:
+        if self.place_id is None and (self.lat is None or self.lon is None):
+            raise ValueError("a stop needs a place_id, or both a lat and a lon")
+        return self
+
+
 class RerouteReq(BaseModel):
-    point_ids: list[int] = Field(min_length=2, max_length=10)
+    """POST /routes/reroute body: the route the client holds, to be measured."""
+
+    stops: list[RerouteStop] = Field(default_factory=list, max_length=MAX_STOPS)
+    point_ids: list[int] = Field(default_factory=list, max_length=MAX_STOPS)
     profile: TransportLiteral | None = None
+    origin: LatLon | None = None
+    round_trip: bool = False
+    time_budget_minutes: int | None = Field(default=None, ge=0, le=constants.MAX_BUDGET_MIN)
+    preserve_order: bool = False
+
+    @model_validator(mode="after")
+    def _one_list_of_stops(self) -> RerouteReq:
+        if self.stops and self.point_ids:
+            raise ValueError("give stops or point_ids, not both")
+        if len(self.stops or self.point_ids) < constants.MIN_LEG_POINTS:
+            raise ValueError("at least two stops are needed to measure a walk")
+        return self
+
+    def as_stops(self) -> list[RerouteStop]:
+        """The stops in the client's order, whichever body it sent."""
+        if self.stops:
+            return self.stops
+        return [RerouteStop(key=str(pid), place_id=pid) for pid in self.point_ids]
 
 
 class ExplainReq(BaseModel):

@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import math
+from itertools import permutations
 
 import pytest
 from pydantic import ValidationError
 
 from core import constants
 from core.errors import UpstreamUnavailableError
+from routing.cost import leg_seconds, route_legs
 from routing.models import (
     Candidate,
     CostMatrix,
@@ -17,7 +19,7 @@ from routing.models import (
     ResolvedConstraints,
     WalkProblem,
 )
-from routing.optimize import optimize
+from routing.optimize import optimize, polish
 from routing.valhalla import constants as valhalla
 from routing.valhalla.matrix import is_route_failure
 from routing.valhalla.types import RouteResult, RouteStatus, is_unknown_time, is_unreachable_time
@@ -66,6 +68,16 @@ def test_route_failure_recognises_the_tour_not_the_connection() -> None:
 def test_snap_radii_start_broad_and_widen() -> None:
     assert valhalla.ROUTE_SNAP_RADII_M[0] == valhalla.LOCATION_SNAP_RADIUS_M
     assert list(valhalla.ROUTE_SNAP_RADII_M) == sorted(valhalla.ROUTE_SNAP_RADII_M)
+
+
+def test_the_matrix_asks_without_a_radius_first() -> None:
+    """A radius lets the engine pick the cheapest edge within reach rather than the
+    nearest one, which folds two places on one street onto a single edge and turns a
+    ninety-metre walk into no time at all. It is a last resort, not a starting point.
+    """
+    assert valhalla.MATRIX_SNAP_RADII_M[0] is None
+    assert list(valhalla.MATRIX_SNAP_RADII_M[1:]) == sorted(valhalla.MATRIX_SNAP_RADII_M[1:])
+    assert set(valhalla.MATRIX_SNAP_RADII_M[1:]) == set(valhalla.ROUTE_SNAP_RADII_M)
 
 
 def test_precision_is_the_polyline_scale() -> None:
@@ -173,3 +185,111 @@ def test_an_unknown_leg_is_not_an_unreachable_one_for_the_anchor() -> None:
     assert plan.fits_budget is True
     assert plan.trace["walk_times_unknown"] == 1
     assert plan.walk_seconds < constants.UNREACHABLE_S
+
+
+def _street_stops(count: int) -> list[Candidate]:
+    """A street's worth of stops; where each one stands is the caller's business."""
+    return [_candidate(i + 1, 53.67 + i * 0.001, 23.83) for i in range(count)]
+
+
+def _line_cost(positions: list[int], step_s: float = 120.0) -> tuple[CostMatrix, float]:
+    """A matrix along one street, candidate `i` standing at `positions[i]` steps in.
+
+    Nothing beats walking a street end to end, so the best order is known without
+    enumerating anything: it is the street order, and it costs the whole span.
+    """
+    n = len(positions)
+    walk = [[abs(positions[i] - positions[j]) * step_s for j in range(n)] for i in range(n)]
+    anchor = OriginAnchor(
+        from_origin=[p * step_s for p in positions], to_origin=[p * step_s for p in positions]
+    )
+    return _cost(walk, anchor), max(positions) * step_s
+
+
+def _walked(order: list[int], cost: CostMatrix) -> float:
+    """The walking time of an index order, the sum the polish minimises."""
+    return sum(
+        leg_seconds(cost.walk_seconds, cost.anchor, a, b)
+        for a, b in route_legs(order, False, cost.anchor)
+    )
+
+
+def test_a_polish_reaches_the_order_an_exhaustive_search_would() -> None:
+    """A local search has to land where enumeration lands, or it is only a nicer
+    seed: this is the same instance, checked against every order there is."""
+    stops = _street_stops(5)
+    cost = _cost(
+        [
+            [0.0, 900.0, 700.0, 300.0, 800.0],
+            [900.0, 0.0, 200.0, 600.0, 100.0],
+            [700.0, 200.0, 0.0, 400.0, 300.0],
+            [300.0, 600.0, 400.0, 0.0, 500.0],
+            [800.0, 100.0, 300.0, 500.0, 0.0],
+        ],
+        OriginAnchor(from_origin=[1000.0, 2000.0, 500.0, 1500.0, 2500.0], to_origin=[0.0] * 5),
+    )
+    problem = WalkProblem(stops, cost, ResolvedConstraints(time_budget_minutes=None))
+
+    best = min(permutations(range(5)), key=lambda order: _walked(list(order), cost))
+
+    assert _walked(polish([0, 1, 2, 3, 4], problem), cost) == pytest.approx(
+        _walked(list(best), cost)
+    )
+
+
+def test_the_optimizer_does_not_leave_a_walk_to_be_improved() -> None:
+    """Eight stops is past the point of enumeration, so this is the branch a real
+    refinement takes: regret insertion seeds the order from the stops that must stay
+    and, until the polish, that seed was the answer it returned.
+    """
+    stops = _street_stops(8)
+    cost, best = _line_cost([3, 7, 0, 5, 2, 6, 1, 4])
+    problem = WalkProblem(stops, cost, ResolvedConstraints(time_budget_minutes=None))
+
+    route, info = optimize(problem)
+
+    assert _walked([c.id - 1 for c in route], cost) == pytest.approx(best)
+    assert info["polished"] is True
+
+
+def test_the_polish_is_the_same_answer_every_run() -> None:
+    """No dice and no randomness: the same walk is ordered the same way twice."""
+    stops = _street_stops(7)
+    cost, _ = _line_cost([4, 1, 6, 0, 3, 5, 2])
+    problem = WalkProblem(stops, cost, ResolvedConstraints(time_budget_minutes=None))
+
+    first, _ = optimize(problem)
+    second, _ = optimize(problem)
+
+    assert [c.id for c in first] == [c.id for c in second]
+
+
+def test_a_polish_is_a_permutation_of_what_it_was_given() -> None:
+    """Reordering can neither invent a stop the refinement did not ask for nor lose
+    one it did."""
+    stops = _street_stops(8)
+    cost, _ = _line_cost([3, 7, 0, 5, 2, 6, 1, 4])
+    must = [stops[2].id, stops[5].id, stops[6].id]
+    constraints = ResolvedConstraints(time_budget_minutes=None, must_visit_ids=must)
+    problem = WalkProblem(stops, cost, constraints)
+
+    route, _ = optimize(problem)
+
+    assert {c.id for c in route} == {c.id for c in stops}
+    assert set(must) <= {c.id for c in route}
+
+
+def test_a_polish_leaves_a_walk_the_budget_had_to_trim_alone() -> None:
+    """The trim happens before the polish, so the polish must accept the walk it is
+    handed: a route that costs more than the budget allows is not an improvement.
+    """
+    stops = _street_stops(8)
+    cost, _ = _line_cost([3, 7, 0, 5, 2, 6, 1, 4])
+    constraints = ResolvedConstraints(time_budget_minutes=35)
+    problem = WalkProblem(stops, cost, constraints)
+
+    route, info = optimize(problem)
+    plan = validate(route, cost, constraints, info)
+
+    assert len(route) < len(stops)
+    assert plan.fits_budget is True

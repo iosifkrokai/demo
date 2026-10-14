@@ -171,7 +171,8 @@ def _merge(
         if slug.strip() and slug.strip() not in areas:
             areas.append(slug.strip())
 
-    mode = reading.outcome if reading.outcome in ("route", "catalogue") else brief.result_mode
+    read_mode = reading.outcome if reading.outcome in ("route", "catalogue") else "route"
+    mode = brief.result_mode or read_mode
 
     return TripRequirements(
         locale=brief.locale,

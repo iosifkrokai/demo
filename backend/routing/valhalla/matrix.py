@@ -16,18 +16,26 @@ from core.errors import UpstreamUnavailableError
 from . import http
 from .constants import (
     DISTANCE_LIMIT_MARKERS,
-    LOCATION_SNAP_RADIUS_M,
     MATRIX_FALLBACK_BUDGET_S,
     MATRIX_FALLBACK_MAX_ROUTE_CALLS,
     MATRIX_MAX_SOURCES,
     MATRIX_MAX_TARGETS,
     MATRIX_PATH_LIMIT_M,
+    MATRIX_SNAP_RADII_M,
     ROUTE_FAILURE_MARKERS,
-    ROUTE_SNAP_RADII_M,
     costing_for,
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _with_radius(locations: list[dict[str, Any]], radius: int | None) -> list[dict[str, Any]]:
+    """Attach a snap radius only when one was asked for: an explicit radius lets
+    the engine fold two nearby places onto one edge.
+    """
+    if radius is None:
+        return list(locations)
+    return [{**loc, "radius": radius} for loc in locations]
 
 
 def _is_distance_limit_error(exc: Exception) -> bool:
@@ -66,10 +74,10 @@ def _matrix_via_route(
     radius: int | None = None,
 ) -> float:
     """Fallback: single pair via GET /route."""
-    snap = radius or LOCATION_SNAP_RADIUS_M
+    pairs = _with_radius([source, target], radius)
     payload = {
         "costing": costing,
-        "locations": [{**source, "radius": snap}, {**target, "radius": snap}],
+        "locations": pairs,
         "units": "kilometers",
         "alternates": 0,
         "directions_options": {"units": "kilometers"},
@@ -94,11 +102,10 @@ def _matrix_chunk(
     radius: int | None = None,
 ) -> list[list[float]]:
     """Single chunk: issue one /sources_to_targets request and return its matrix."""
-    snap = radius or LOCATION_SNAP_RADIUS_M
     payload = {
         "costing": costing,
-        "sources": [{**loc, "radius": snap} for loc in sources],
-        "targets": [{**loc, "radius": snap} for loc in targets],
+        "sources": _with_radius(sources, radius),
+        "targets": _with_radius(targets, radius),
         "units": "kilometers",
     }
     body = http.request_with_retry(
@@ -129,7 +136,7 @@ def _matrix_chunk_resilient(
 ) -> list[list[float]]:
     """A chunk request, retried with a wider snap radius, then per-pair /route."""
     last_exc: Exception | None = None
-    for radius in ROUTE_SNAP_RADII_M:
+    for radius in MATRIX_SNAP_RADII_M:
         try:
             return _matrix_chunk(sources, targets, costing, timeout, radius=radius)
         except UpstreamUnavailableError as exc:
@@ -210,7 +217,7 @@ def _matrix_via_route_resilient(
 ) -> float:
     """One pair via /route, widening the snap radius only for a snap failure."""
     last_exc: Exception | None = None
-    for radius in ROUTE_SNAP_RADII_M:
+    for radius in MATRIX_SNAP_RADII_M:
         try:
             return _matrix_via_route(source, target, costing, timeout, radius=radius)
         except UpstreamUnavailableError as exc:

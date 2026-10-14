@@ -154,8 +154,7 @@ def read_thread(session_id: str, request: Request) -> Any:
 
 @router.post("/routes/reroute", response_model=RouteResponse)
 def reroute(req: RerouteReq, request: Request) -> RouteResponse:
-    """Route the points the client already holds. No model, no prompt."""
-    deps.require_llm()
+    """Measure and order the points the client already holds. No model, no prompt."""
     return deps.guarded(responses.reroute_response, req=req, repos=deps.get_repos(request))
 
 

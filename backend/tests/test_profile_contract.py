@@ -44,6 +44,22 @@ def test_the_models_transport_stands_only_when_no_control_was_used() -> None:
     assert _contract(None, "bicycle").costing == "bicycle"
 
 
+def _mode(brief_mode: str | None, outcome: str | None) -> str:
+    brief = ReaderBrief(locale="ru", result_mode=brief_mode)
+    return _merge("прогулка", brief, PlanSubmission(outcome=outcome), set(), None).result_mode
+
+
+def test_a_result_mode_the_tourist_chose_beats_the_models_reading() -> None:
+    """«Каталог» picked in the interface is a list, whatever the model made of it."""
+    assert _mode("catalogue", "route") == "catalogue"
+    assert _mode("route", "catalogue") == "route"
+
+
+def test_a_result_mode_nobody_chose_is_the_models_to_read() -> None:
+    assert _mode(None, "catalogue") == "catalogue"
+    assert _mode(None, None) == "route"
+
+
 @pytest.mark.parametrize(
     ("profile", "costing"),
     [

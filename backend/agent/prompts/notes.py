@@ -39,7 +39,8 @@ def _ui_note(brief: ReaderBrief) -> str:
         fixed.append(f"interests={brief.interests}")
     if brief.avoid:
         fixed.append(f"avoid={brief.avoid}")
-    fixed.append(f"result_mode={brief.result_mode}")
+    if brief.result_mode:
+        fixed.append(f"result_mode={brief.result_mode}")
     if not fixed:
         return ""
     return (

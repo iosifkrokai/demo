@@ -6,6 +6,7 @@ from typing import Any
 
 from agent.schema import PlanSubmission
 from agent.tools import envelope
+from agent.tools.places import card_of, catalogue_rows
 from agent.tools.plan import plan_walk
 from agent.tools.verify import verdicts_of
 from routing.models import TripRequirements, WalkRequest
@@ -31,9 +32,7 @@ def _problems(verdicts: list[dict[str, Any]]) -> list[dict[str, str]]:
 
 def _evidence(repos: Any, contract: TripRequirements, shape: Any) -> ServiceAlongEvidence | None:
     """Measure the services beside the line, for the codes the request named."""
-    codes = sorted(
-        {r.code for r in contract.requirements if r.kind in ("service", "interest") and r.code}
-    )
+    codes = _named_codes(contract)
     if not codes or not shape or repos is None:
         return None
     try:
@@ -51,6 +50,19 @@ def _evidence(repos: Any, contract: TripRequirements, shape: Any) -> ServiceAlon
     return ServiceAlongEvidence(measured=True, by_code=by_code)
 
 
+def _named_codes(contract: TripRequirements) -> list[str]:
+    """Every category code the request named, services included."""
+    return sorted(
+        {r.code for r in contract.requirements if r.kind in ("service", "interest") and r.code}
+    )
+
+
+def _catalogue_codes(contract: TripRequirements) -> list[str]:
+    """What a catalogue is of: every code the request named, minus what it forbade."""
+    forbidden = set(contract.avoid_codes())
+    return [code for code in _named_codes(contract) if code not in forbidden]
+
+
 def submit_plan(
     request: WalkRequest,
     submission: PlanSubmission,
@@ -60,7 +72,13 @@ def submit_plan(
     contract: TripRequirements,
     deadline_s: float | None = None,
 ) -> dict[str, Any]:
-    """Measure and verify the finished plan; the status is code's, not the model's."""
+    """Measure and verify the finished plan; the status is code's, not the model's.
+
+    The verdicts are read off the route that was measured, not off the ids that were
+    asked for: the planner drops stops — a budget too small for the walk, a point
+    nothing reaches, a service that is not a stop — and a requirement proved by a stop
+    the walk does not contain would be a satisfied nobody can see.
+    """
     result_mode = contract.result_mode
     narrative = submission.narrative
     provenance: dict[str, Any] = {
@@ -71,11 +89,19 @@ def submit_plan(
     contract.unknowns = list(submission.unknowns)
 
     if result_mode == "catalogue":
-        rows = repos.places.get_by_ids(request.stop_ids)
+        rows, capped = catalogue_rows(
+            list(request.stop_ids),
+            categories=_catalogue_codes(contract),
+            area=contract.areas[0] if contract.areas else None,
+            repos=repos,
+        )
         places = [candidate_of(row, 0.0) for row in rows]
         verify_catalogue(contract, places, facts=facts)
         answer = verdicts_of(contract)
-        return envelope("submit_plan", answer["verdicts"], provenance) | {
+        provenance["capped"] = capped
+        return envelope(
+            "submit_plan", [card_of(row) for row in rows], provenance, capped=capped
+        ) | {
             "ok": answer["status"] == "ready",
             "problems": _problems(answer["verdicts"]),
             "narrative": narrative,
@@ -93,7 +119,7 @@ def submit_plan(
             message=measured.get("message"),
         )
 
-    stops = [candidate_of(row, 0.0) for row in repos.places.get_by_ids(request.stop_ids)]
+    stops = list(measured.get("results") or ())
     shape = measured.get("shape")
     verify(
         contract,

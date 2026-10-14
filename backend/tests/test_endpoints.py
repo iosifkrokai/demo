@@ -117,11 +117,25 @@ def test_progress_for_an_untracked_run_is_a_404(api: httpx.Client) -> None:
     assert response.json() == {"reason": "unknown_progress_id"}
 
 
-def test_reroute_returns_a_route(live_stack, api: httpx.Client) -> None:
-    live_stack.require("llm")
+def test_reroute_returns_a_route(api: httpx.Client) -> None:
+    """A client editing its own route must not need an interpreter for it, so this
+    asks for no model (no ``live_stack.require("llm")``) and skips nothing."""
     response = api.post("/routes/reroute", json={"point_ids": _place_ids(api, 2)})
     assert response.status_code == 200, response.text
     _carries(response.json(), RouteResponse)
+    budget = response.json()["budget"]
+    assert budget["walk_minutes"] + budget["visit_minutes"] == budget["total_minutes"]
+
+
+def test_reroute_measures_the_order_the_client_sent(api: httpx.Client) -> None:
+    ids = _place_ids(api, 3)
+    stops = [{"key": f"w{index}", "place_id": place_id} for index, place_id in enumerate(ids)]
+    response = api.post(
+        "/routes/reroute", json={"stops": stops, "preserve_order": True, "profile": "pedestrian"}
+    )
+    assert response.status_code == 200, response.text
+    assert [point["key"] for point in response.json()["points"]] == ["w0", "w1", "w2"]
+    assert [point["id"] for point in response.json()["points"]] == ids
 
 
 def test_explain_returns_an_explanation(live_stack, api: httpx.Client) -> None:

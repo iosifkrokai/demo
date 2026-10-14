@@ -7,6 +7,8 @@ PRECISION = 1e6
 LOCATION_SNAP_RADIUS_M = 100
 
 ROUTE_SNAP_RADII_M = (LOCATION_SNAP_RADIUS_M, 500, 2000, 5000)
+
+MATRIX_SNAP_RADII_M: tuple[int | None, ...] = (None, *ROUTE_SNAP_RADII_M)
 LOCATE_RADIUS_M = 5000
 LOCATE_SNAP_RADIUS_M = 500
 SNAP_ERROR_MARKERS = ("candidate edge", "for destination label", "for origin label")

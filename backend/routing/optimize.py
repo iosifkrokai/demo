@@ -29,6 +29,7 @@ log = logging.getLogger(__name__)
 
 BRUTE_FORCE_MAX = 6
 REGRET_INSERTION_MAX = 12
+OR_OPT_MAX_SEGMENT = 3
 
 
 NN_STARTS = 5
@@ -84,6 +85,14 @@ def optimize(problem: WalkProblem) -> tuple[list[Candidate], dict[str, Any]]:
         }
         order = new_order
 
+    order = polish(order, problem)
+    info = {
+        **info,
+        "order": order,
+        "polished": True,
+        "walk_seconds": walk_cost(order, problem.matrix),
+        "total_seconds": int(_order_total(order, problem)),
+    }
     info = _report_missing_must(info, order, candidates, constraints)
     return [candidates[i] for i in order], info
 
@@ -220,9 +229,6 @@ def _budget_constrain(
         to_remove = _most_saving(removable, route, total_of)
         route.remove(to_remove)
         dropped += 1
-
-    if dropped:
-        route = _two_opt(route, problem.matrix)
 
     return route, dropped
 
@@ -469,6 +475,57 @@ def _two_opt(order: list[int], matrix: list[list[float]]) -> list[int]:
     return order
 
 
+def polish(order: list[int], problem: WalkProblem) -> list[int]:
+    """The order, improved until neither a reversal nor a shift shortens the walk.
+
+    A reversal never moves the ends, so the shift is the one move that can decide
+    where the walk begins.
+    """
+    if len(order) < constants.MIN_TOUR_STOPS:
+        return order
+    previous: list[int] | None = None
+    while previous != order:
+        previous = list(order)
+        order = _two_opt(order, problem.matrix)
+        order = _or_opt(order, problem)
+    return order
+
+
+def _or_opt(order: list[int], problem: WalkProblem) -> list[int]:
+    """Lift a short run of stops out and put it back where it costs least."""
+    current = _order_total(order, problem)
+    improved = True
+    while improved:
+        improved = False
+        for length in range(1, OR_OPT_MAX_SEGMENT + 1):
+            for start in range(len(order) - length + 1):
+                block = order[start : start + length]
+                rest = order[:start] + order[start + length :]
+                for insert in range(len(rest) + 1):
+                    if insert == start:
+                        continue
+                    candidate = rest[:insert] + block + rest[insert:]
+                    total = _order_total(candidate, problem)
+                    if total + 1e-6 >= current:
+                        continue
+                    if _over_budget(candidate, problem):
+                        continue
+                    order, current, improved = candidate, total, True
+                    break
+                if improved:
+                    break
+            if improved:
+                break
+    return order
+
+
+def _over_budget(order: list[int], problem: WalkProblem) -> bool:
+    """True when a reordered route no longer fits the budget that decides."""
+    if problem.budget_s is None:
+        return False
+    return _measured_total(order, problem) > problem.budget_s
+
+
 def valhalla_order(
     route: list[Candidate],
     info: dict[str, Any],
@@ -477,7 +534,9 @@ def valhalla_order(
     timeout: float | None = None,
     retries: int | None = None,
 ) -> tuple[list[Candidate], dict[str, Any]]:
-    """Let Valhalla order the walk when nothing pins the sequence."""
+    """Let Valhalla order the walk when nothing pins the sequence. Skipped when the
+    tourist's own start is known: the engine cannot weigh the leg out of it.
+    """
     if problem.anchor is not None:
         return route, {**info, "valhalla_order": "skipped_origin_known"}
     if len(route) < constants.MIN_TOUR_STOPS:
@@ -492,11 +551,15 @@ def valhalla_order(
     if len(v_order) != len(route) or sorted(v_order) != list(range(len(route))):
         return route, info
     planned = list(info.get("order") or range(len(route)))
+    order = polish([planned[i] for i in v_order], problem)
+    at = {candidate_idx: k for k, candidate_idx in enumerate(planned)}
     return (
-        [route[i] for i in v_order],
+        [route[at[i]] for i in order],
         {
             **info,
-            "order": [planned[i] for i in v_order],
+            "order": order,
+            "walk_seconds": walk_cost(order, problem.matrix),
+            "total_seconds": int(_order_total(order, problem)),
             "algorithm": f"{info.get('algorithm')}+valhalla",
         },
     )

@@ -40,6 +40,12 @@ def base_rules(categories: Sequence[Any], areas: Sequence[Any]) -> str:
         "- A named place the user wants to SEE (a landmark, a museum, one "
         "specific church, 'Мирский замок') is a `must_visit`: call find_places "
         "and give its name and place_id.\n"
+        "- A café, a hotel, a toilet, a bus stop is a SERVICE: the walk passes it "
+        "rather than stopping at it, so `plan_walk` drops it and names it under "
+        "`services_not_stops`. That is expected, not an error to work around. The "
+        "one exception is a service the user asked to walk INTO ('зайти в кафе "
+        "«Публіка»', 'пообедать в…'): put its id in `must_keep_ids` of both "
+        "`plan_walk` and the submission, or the walk will not contain it.\n"
         "- A named TERRITORY is the scope of the walk, not a stop: a district, a "
         "quarter, a town, the oblast ('Старый город', 'Коложа', 'Слоним', "
         "'Гродненская область'). Call find_areas and put the canonical slug it "
@@ -75,7 +81,9 @@ def base_rules(categories: Sequence[Any], areas: Sequence[Any]) -> str:
         '  • "catalogue" — the user asks for EVERY one of a category across a '
         "territory («все костёлы Гродненской области», «все замки области»): that "
         "is a list to choose from, not a walk, and a pedestrian tour over 200 km "
-        "is not an answer to it.\n"
+        "is not an answer to it. Submit the `ordered_ids` of everything that "
+        "answers it, as find_places returned them; a catalogue is the one answer "
+        "that is not a walk, so no plan_walk and no budget.\n"
         '  • "refuse" — ONLY when the request names a place outside the served '
         "region (Гродненская область, Belarus): then set `refusal_reason` to one "
         "short sentence in the request's language, list those names in "

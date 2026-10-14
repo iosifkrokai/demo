@@ -68,6 +68,6 @@ class ReaderBrief:
     hard_services: tuple[str, ...] = ()
     interests: tuple[str, ...] = ()
     avoid: tuple[str, ...] = ()
-    result_mode: ResultMode = "route"
+    result_mode: ResultMode | None = None
     round_trip: bool = False
     context: RefinementBrief | None = None
