@@ -69,7 +69,10 @@ Order of a full apply — validate, upsert by natural key, embed locally, report
    (`CURATED_TWIN_RADIUS_M`) is **not** applied to any of them — the seed prints it
    as ambiguous, because a name is not a place.
 5. `areas` (project polygon + one row per district) and `place_sources` (one row
-   per `(provider, external_id)`).
+   per `(provider, external_id)`). The registry is the file: the polygon follows the
+   row that declares it, and an area the file does not declare is deleted — an older
+   seed vintage's row of the same name would otherwise resolve before the file's own
+   and hand the planner a code the data disowns.
 6. `categories` (from `taxonomy.csv`, key `code`) and `itineraries` +
    `itinerary_stops` (from `itineraries.json`, key `id`) — the two reference files
    projected, see above; embeddings last, from the local CPU model.

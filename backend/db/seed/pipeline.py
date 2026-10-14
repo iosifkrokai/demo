@@ -227,15 +227,18 @@ def apply_place_aliases(conn: psycopg.Connection, path: Path | None = None) -> d
     return {"written": written, "declared": len(entries), "unresolved": sorted(set(unresolved))}
 
 
-def load_areas(conn: psycopg.Connection, geo_dir: Path | None = None) -> int:
+def load_areas(conn: psycopg.Connection, geo_dir: Path | None = None) -> dict[str, int]:
     """Idempotently write the named-area registry from `areas.json`.
 
     The polygon follows the row: only an area whose `geometry` names a border file
     gets that ring, and the others keep `geom = NULL`. The file is the whole truth,
-    so an area whose geometry it no longer declares has any earlier ring cleared.
+    so an area whose geometry it no longer declares has any earlier ring cleared, and
+    an area it does not declare at all is deleted — a name resolving to a row no file
+    holds would hand the planner a code the data disowns. The caller commits.
     """
     directory = geo_dir or GEO_DIR
     document = json.loads((directory / "areas.json").read_text(encoding="utf-8"))
+    declared = [area["slug"] for area in document["areas"]]
 
     written = 0
     with conn.cursor() as cur:
@@ -273,7 +276,9 @@ def load_areas(conn: psycopg.Connection, geo_dir: Path | None = None) -> int:
                 ),
             )
             written += 1
-    return written
+        cur.execute("DELETE FROM areas WHERE code <> ALL(%s)", (declared,))
+        removed = cur.rowcount
+    return {"written": written, "removed": removed}
 
 
 def _area_geometry(

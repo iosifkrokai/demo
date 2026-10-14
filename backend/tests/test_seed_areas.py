@@ -108,3 +108,44 @@ def test_a_polygon_less_area_is_still_a_registry_row(conn: Any) -> None:
 
     assert row == ("Старый город", "city-quarter", False)
     assert "Старый город" in aliases
+
+
+def _legacy(conn: Any, code: str, name: str) -> None:
+    """A row an earlier seed vintage wrote, which no file declares any more."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "INSERT INTO areas (code, name_ru, kind, is_project_area, geom) "
+            "VALUES (%s, %s, 'project-area', false, "
+            "        ST_GeogFromText('MULTIPOLYGON(((20 50, 21 50, 21 51, 20 51, 20 50)))'))",
+            (code, name),
+        )
+
+
+def test_an_area_no_file_declares_is_deleted_with_its_ring(conn: Any) -> None:
+    """«Гродненская область» resolves to the code the file holds, not to a row of the
+    same name that an older seed left with its own ring — the file is the registry."""
+    from db.seed.pipeline import load_areas
+
+    _legacy(conn, "test:legacy-voblast", "Гродненская область")
+
+    landed = load_areas(conn, GEO_DIR)
+
+    assert landed["removed"] >= 1
+    with conn.cursor() as cur:
+        cur.execute("SELECT count(*) FROM areas WHERE code = 'test:legacy-voblast'")
+        assert cur.fetchone()[0] == 0
+        cur.execute("SELECT count(*) FROM areas WHERE code = 'grodno-oblast'")
+        assert cur.fetchone()[0] == 1
+
+
+def test_the_table_holds_exactly_the_areas_the_file_declares(conn: Any) -> None:
+    from db.seed.pipeline import load_areas
+
+    declared = json.loads((GEO_DIR / "areas.json").read_text(encoding="utf-8"))["areas"]
+
+    landed = load_areas(conn, GEO_DIR)
+
+    assert landed["written"] == len(declared)
+    with conn.cursor() as cur:
+        cur.execute("SELECT count(*) FROM areas")
+        assert cur.fetchone()[0] == len(declared)

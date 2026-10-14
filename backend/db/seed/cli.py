@@ -59,7 +59,9 @@ def _write_registries(conn: Any, *, areas: bool) -> dict[str, Any]:
 
     written: dict[str, Any] = {"areas_written": 0}
     if areas:
-        written["areas_written"] = pipeline.load_areas(conn, GEO_DIR)
+        landed = pipeline.load_areas(conn, GEO_DIR)
+        written["areas_written"] = landed["written"]
+        written["areas_undeclared_removed"] = landed["removed"]
     written["aliases_written"] = pipeline.apply_place_aliases(conn)
     written["categories_written"] = pipeline.load_categories(conn, taxonomy_mod.all_categories())
     written["itineraries_written"] = pipeline.load_itineraries(
