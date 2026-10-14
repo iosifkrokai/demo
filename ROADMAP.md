@@ -119,15 +119,33 @@ product says nothing about accessibility, and neither should the ТЗ.
 
 ## 6. The tiles carry no elevation, so the hill options do nothing
 
-`use_hills` and `max_grade` changed no route we tried, a 165 km one included, and the
-reason is in the data: the config points at `/custom_files/elevation_data`, that directory
-does not exist, and the engine has no elevation to work with — `/height` answers `null` for
-every point today (the `−500.0` sentinel is what it reports for a configured but empty
-directory).
+`use_hills` and `max_grade` changed no route we tried, a 165 km one included. There are two
+reasons, and the second makes the first moot for a walk:
 
-Enabling it means rebuilding the valhalla image with elevation, which downloads a DEM for
-the whole country; the compose service sets `tile_urls` and nothing else. Until then the
-product must not promise anything about hills or climbs, and neither should the ТЗ.
+- **Nobody is offering them.** The backend never sends either option — the only
+  `costing_options` it composes is `routing/valhalla/constants.py::costing_options_for`, for
+  a step-free walk. The frontend *carries* the Valhalla demo's parameter catalogue
+  (`settings-panel/settings-options.ts`, 1088 lines: Use Hills, Avoid Bad Surface,
+  bicycle_type…, with `filterProfileSettings` and a `settingsPanelOpen` slice in
+  `common-store`), and **no component renders any of it**: `settingsPanelOpen` is read by
+  one test stub and by nothing else in `frontend/src`. So the control a user would turn does
+  not exist — the product is silent about hills by construction, not by luck, and what is
+  left is dead weight (a cleanup item of its own).
+- **Both are the bicycle costing's options**, described in their own text as "a cyclist's
+  desire to tackle hills", while a walk is priced `pedestrian`. Had the DEM been there, a
+  pedestrian experiment would still have shown nothing — and Valhalla silently accepts
+  unknown costing options, so the mismatch passes for a working knob.
+
+The data side is as measured before: the config points at `/custom_files/elevation_data`,
+that directory does not exist, and `/height` answers `null` for every point today — the
+`−500.0` sentinel is what it reports for a configured but empty directory.
+
+The cost of enabling it has numbers now (2026-10-14): one skadi cell (1°×1°) is **~4.5 MB**,
+12 cells cover the oblast and about 60 the PBF's bbox, and the `elevation-tiles-prod`
+bucket served **459 KB in 25 s (18 KB/s)** — roughly **50 minutes** of download for the
+oblast, **4 hours** for the country, plus a tile rebuild and a valhalla restart with no
+routing while it runs. Measured and declined (2026-10-14): not worth it for a product that
+asks no hill question, and the ТЗ must not ask one either.
 
 ## 7. The curated overlay reaches 17 of its 76 names
 
