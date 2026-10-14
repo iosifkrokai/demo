@@ -59,11 +59,15 @@ same place: the close-duplicate review found nine pairs of «замок» that a
 pillboxes and ДОТы, swept into the castle category by the same tags — the category name is
 the defect there, not the pairing.
 
-## 3. A dead column
+## 3. A dead column — decided: it stays empty
 
-- `places.description` — declared in the schema and selected, but never written by the seed
-  and never shown. Either populate it or drop it, which needs a migration: a decision
-  before it is a task.
+- `places.description` — declared in the schema (`db/models/place.py`) and selected
+  (`db/store/columns.py`), never written by the seed and never shown anywhere. **Decision
+  (2026-10-14): leave it.** There is no source to populate it from — the prose the project
+  does hold is `blurb` and `fun_facts`, written from the curated overlay and the extract —
+  and dropping it would spend a migration on a column that costs a nullable field. What
+  would change the decision is item 1: if the administration's reply carries descriptions,
+  they arrive with their own tables and their own shape, and the slot is there for them.
 
 The two dead functions that sat here (`is_name_dup`, the Nominatim branch of
 `resolve_district`) and the `seed prune` subcommand that nothing could satisfy any more are
