@@ -52,8 +52,18 @@ def _relative_to_backend(path: Path) -> str:
         return str(path)
 
 
+def _routes_report() -> Path | None:
+    """The newest routes report: a live run writes to reports/, a replay into its date."""
+    found = [
+        p
+        for p in (REPORTS / "report.json", _latest_under(SNAPSHOTS, "report.json"))
+        if p is not None and p.exists()
+    ]
+    return max(found, key=lambda p: p.stat().st_mtime) if found else None
+
+
 def read_routes(path: Path | None = None) -> dict[str, Any]:
-    path = path or _latest_under(SNAPSHOTS, "report.json")
+    path = path or _routes_report()
     if path is None or not path.exists():
         return {
             "layer": "quality/cases/routes",

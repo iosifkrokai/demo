@@ -3,11 +3,21 @@
 from __future__ import annotations
 
 OLD_TOWN = (53.6778, 23.8295)
+SCAN = 200
 
 
 def _stops(repos, limit: int = 5) -> list:
-    found = repos.places.nearby(OLD_TOWN[0], OLD_TOWN[1], radius_km=1.5, limit=limit)
-    return [row for row in found if row.id is not None]
+    """Real rows near one another that can hold a walk — services are not stops.
+
+    The nearest rows to the old town are mostly cafés and bus stops, so the scan is
+    wide and the services are dropped, exactly as the planner drops them.
+    """
+    from routing.models import CategoryFacts
+
+    facts = CategoryFacts.from_rows(repos.taxonomy.all())
+    found = repos.places.nearby(OLD_TOWN[0], OLD_TOWN[1], radius_km=1.5, limit=SCAN)
+    rows = [row for row in found if row.id is not None and not facts.is_service(row.category)]
+    return rows[:limit]
 
 
 def test_a_present_stop_satisfies_a_must_visit(db_repos) -> None:
@@ -103,7 +113,7 @@ def test_submit_refuses_to_call_an_impossible_plan_ready(db_repos) -> None:
 
     stops = _stops(db_repos, 4)
     answer = submit_plan(
-        WalkRequest([row.id for row in stops], budget_minutes=15),
+        WalkRequest([row.id for row in stops], budget_minutes=180),
         PlanSubmission(),
         repos=db_repos,
         facts=_facts(db_repos),
@@ -122,3 +132,61 @@ def _facts(repos):
     from routing.models import CategoryFacts
 
     return CategoryFacts.from_rows(repos.taxonomy.all())
+
+
+def test_a_catalogue_submits_the_places_themselves(db_repos) -> None:
+    """The answer to «все костёлы области» is places, not the verdicts about them:
+    a response builder reads cards, and a verdict carries no id to be read."""
+    from agent.schema import PlanSubmission
+    from agent.tools.submit import submit_plan
+    from routing.models import Requirement, TripRequirements, WalkRequest
+
+    rows = [row for row in db_repos.places.with_category(["костёл"]) if row.id is not None][:5]
+    assert len(rows) >= 2, "the catalogue needs костёлы to hold"
+    ids = [row.id for row in rows]
+    contract = TripRequirements(
+        result_mode="catalogue",
+        areas=["grodno-oblast"],
+        requirements=[Requirement(kind="interest", code="костёл")],
+    )
+
+    answer = submit_plan(
+        WalkRequest(ids),
+        PlanSubmission(ordered_ids=ids),
+        repos=db_repos,
+        facts=_facts(db_repos),
+        contract=contract,
+    )
+
+    cards = answer["results"]
+    assert all(card["id"] for card in cards), "every entry is a place with an id"
+    assert set(ids) <= {card["id"] for card in cards}, "the agent's own list is inside it"
+    assert {card["category"] for card in cards} == {"костёл"}
+    assert answer["verdicts"], "the verdicts still ride along at the top level"
+    assert answer.get("error") is None
+
+
+def test_a_catalogue_left_empty_by_the_agent_is_built_by_the_code(db_repos) -> None:
+    """The list is the request's, not the model's memory: an area and a code are
+    enough to answer «все костёлы области», so nobody has to enumerate them."""
+    from agent.schema import PlanSubmission
+    from agent.tools.submit import submit_plan
+    from routing.models import Requirement, TripRequirements, WalkRequest
+
+    contract = TripRequirements(
+        result_mode="catalogue",
+        areas=["grodno-oblast"],
+        requirements=[Requirement(kind="interest", code="костёл")],
+    )
+
+    answer = submit_plan(
+        WalkRequest([]),
+        PlanSubmission(),
+        repos=db_repos,
+        facts=_facts(db_repos),
+        contract=contract,
+    )
+
+    assert len(answer["results"]) >= 10
+    assert {card["category"] for card in answer["results"]} == {"костёл"}
+    assert all(card["id"] for card in answer["results"])

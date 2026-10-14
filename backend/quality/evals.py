@@ -161,11 +161,12 @@ def run_services() -> dict[str, Any]:
     """Does the measurement tell the truth about what lies beside the line?"""
 
     checks: list[dict[str, Any]] = []
-    places = PostgresPlaceRepository()
+    repos = _repositories()
     near_gate = 0
     try:
+        service_codes = tuple(repos.taxonomy.service_codes())
         for case in _load("services_along"):
-            case_checks, ties = _service_checks(places, case)
+            case_checks, ties = _service_checks(repos.places, case, service_codes)
             checks.extend(case_checks)
             near_gate += ties
     except StorageUnavailableError as exc:
@@ -175,23 +176,30 @@ def run_services() -> dict[str, Any]:
             "skipped": f"нет доступа к базе: {type(exc).__name__}: {exc}",
         }
     finally:
-        places.close()
+        repos.close()
 
     return {"stage": "services", "checks": checks, "skipped": None, "near_gate_points": near_gate}
 
 
-def _service_checks(places: Any, case: Any) -> tuple[list[dict[str, Any]], int]:
-    """Every check one services_along case makes of its own response."""
+def _service_checks(
+    places: Any, case: Any, service_codes: tuple[str, ...]
+) -> tuple[list[dict[str, Any]], int]:
+    """Every check one services_along case makes of its own response.
+
+    ``service_codes`` is the taxonomy's own list, as the API hands it in: without it
+    the store rejects every requested code and answers an empty catalogue of services.
+    """
     checks: list[dict[str, Any]] = []
     raw = case.raw
     shape = raw["shape"]
     line = [(lat, lon) for lon, lat in shape["coordinates"]]
-    codes = list(raw["categories"])
+    codes = services_mod.service_codes(raw["categories"], service_codes)
     gate = float(raw.get("gate_m") or services_mod.threshold_for(raw.get("profile", "pedestrian")))
 
     answer = places.services_along(
         shape,
         categories=codes,
+        service_category_codes=service_codes,
         profile=raw.get("profile", "pedestrian"),
         max_off_line_m=gate,
         limit=raw.get("limit", services_mod.MAX_SERVICES),
@@ -328,6 +336,7 @@ def _service_checks(places: Any, case: Any) -> tuple[list[dict[str, Any]], int]:
         wider = places.services_along(
             shape,
             categories=codes,
+            service_category_codes=service_codes,
             profile=raw["profile"],
             max_off_line_m=gate * 3,
             limit=max(cap_here, cap_here * 3),

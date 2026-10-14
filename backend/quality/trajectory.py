@@ -9,11 +9,13 @@ import inspect
 import json
 import os
 import sys
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field, is_dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from unittest import mock
+
+from pydantic import BaseModel
 
 BACKEND = Path(__file__).resolve().parent.parent
 if str(BACKEND) not in sys.path:
@@ -35,6 +37,7 @@ from agent.tools import (  # noqa: E402
 from db.store.areas import PostgresAreaRepository  # noqa: E402
 from db.store.places import PostgresPlaceRepository  # noqa: E402
 from db.store.registry import Repositories  # noqa: E402
+from routing.models import CategoryFacts  # noqa: E402
 
 QUALITY = BACKEND / "quality"
 CASES = QUALITY / "cases" / "trajectory.jsonl"
@@ -42,6 +45,8 @@ REPORTS = QUALITY / "reports"
 DEFAULT_OUT = REPORTS / "trajectory.json"
 
 FAKE_KEY = "trajectory-offline"
+
+DISCOVER_SCAN = 200
 
 TOOL_TARGETS: dict[str, tuple[Any, str]] = {
     "find_areas": (areas_mod, "find_areas"),
@@ -213,12 +218,26 @@ def _script_steps(case: dict[str, Any], ids: list[int]) -> list[ModelResponse]:
 
 
 def _record_args(fn: Any, args: tuple[Any, ...], kwargs: dict[str, Any]) -> dict[str, Any]:
-    """The named arguments of a tool call, plumbing (repos/facts) left out."""
+    """The named arguments of a tool call, plumbing (repos/facts) left out.
+
+    A request object taken as a single argument is recorded as its own fields: those
+    are what the agent passed, and an envelope of ours is not an argument of anyone's.
+    """
     try:
         bound = inspect.signature(fn).bind(*args, **kwargs)
     except TypeError:
         return {"_positional": list(args)} if args else {}
-    return {k: v for k, v in bound.arguments.items() if k not in PLUMBING_ARGS}
+    out: dict[str, Any] = {}
+    for name, value in bound.arguments.items():
+        if name in PLUMBING_ARGS:
+            continue
+        if is_dataclass(value) and not isinstance(value, type):
+            out.update(asdict(value))
+        elif isinstance(value, BaseModel):
+            out[name] = value.model_dump()
+        else:
+            out[name] = value
+    return out
 
 
 def _make_wrapper(record: list[ToolStep], name: str, original: Any) -> Any:
@@ -262,16 +281,17 @@ def run_case(case: dict[str, Any], repos: Any) -> Trajectory:
     discover = case.get("discover")
     if discover:
         near = discover["near"]
+        facts = CategoryFacts.from_rows(repos.taxonomy.all())
         ids = [
             row.id
             for row in repos.places.nearby(
                 float(near[0]),
                 float(near[1]),
                 radius_km=float(discover["radius_km"]),
-                limit=int(discover["limit"]),
+                limit=DISCOVER_SCAN,
             )
-            if row.id is not None
-        ]
+            if row.id is not None and not facts.is_service(row.category)
+        ][: int(discover["limit"])]
 
     steps = _script_steps(case, ids)
 

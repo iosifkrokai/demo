@@ -7,15 +7,49 @@ import pytest
 from core import constants
 
 OLD_TOWN = (53.6778, 23.8295)
+SCAN = 200
+
+
+def _facts(repos):
+    from routing.models import CategoryFacts
+
+    return CategoryFacts.from_rows(repos.taxonomy.all())
+
+
+def _nearby(repos, limit: int = SCAN) -> list:
+    return repos.places.nearby(OLD_TOWN[0], OLD_TOWN[1], radius_km=1.5, limit=limit)
 
 
 def _sight_ids(repos, limit: int = 5) -> list[int]:
-    """Hand-picked stops: real rows near one another, chosen by a query, not by a model."""
-    found = repos.places.nearby(OLD_TOWN[0], OLD_TOWN[1], radius_km=1.5, limit=limit)
-    ids = [row.id for row in found if row.id is not None]
-    if len(ids) < 3:
-        pytest.skip("not enough places in the dataset to build a walk")
+    """Hand-picked stops: real rows near one another, chosen by a query, not by a model.
+
+    Services are left out: the walk is not measured through them, so asking for a café
+    would make the route shorter than the ids and the count assertions below untrue.
+    The old town's nearest rows are mostly services, hence the wide scan.
+    """
+    facts = _facts(repos)
+    ids = [
+        row.id
+        for row in _nearby(repos)
+        if row.id is not None and not facts.is_service(row.category)
+    ][:limit]
+    if len(ids) < 2:
+        pytest.skip("not enough sights in the dataset to build a walk")
     return ids
+
+
+def _service_ids(repos, count: int = 1) -> list[int]:
+    facts = _facts(repos)
+    ids = [
+        row.id for row in _nearby(repos) if row.id is not None and facts.is_service(row.category)
+    ]
+    if len(ids) < count:
+        pytest.skip("not enough services near the old town")
+    return ids[:count]
+
+
+def _service_id(repos) -> int:
+    return _service_ids(repos)[0]
 
 
 def test_a_handful_of_stops_becomes_a_measured_walk(db_repos) -> None:
@@ -47,6 +81,50 @@ def test_too_few_stops_is_an_error_not_a_crash(db_repos) -> None:
     assert answer["results"] == []
 
 
+def test_a_service_is_not_a_stop(db_repos) -> None:
+    """A café or a hotel is where the walk passes, not where it stops."""
+    from agent.tools.plan import plan_walk
+    from routing.models import WalkRequest
+
+    ids = [*_sight_ids(db_repos), _service_id(db_repos)]
+    answer = plan_walk(WalkRequest(ids, budget_minutes=180), repos=db_repos)
+
+    assert answer.get("error") is None, answer.get("message")
+    assert ids[-1] not in {stop["id"] for stop in answer["results"]}
+    assert answer["provenance"]["services_not_stops"]
+
+
+def test_a_service_asked_for_by_id_stays_a_stop(db_repos) -> None:
+    """A pinned service is a person saying they want to go there — the rule yields."""
+    from agent.tools.plan import plan_walk
+    from routing.models import WalkRequest
+
+    service = _service_id(db_repos)
+    ids = [service, *_sight_ids(db_repos)]
+    answer = plan_walk(
+        WalkRequest(ids, budget_minutes=180, must_keep_ids=[service]), repos=db_repos
+    )
+
+    assert answer.get("error") is None, answer.get("message")
+    assert service in {stop["id"] for stop in answer["results"]}
+    assert not answer["provenance"].get("services_not_stops")
+
+
+def test_a_walk_of_nothing_but_services_says_so(db_repos) -> None:
+    """The request is what has no stop, not the routing engine — the message says which."""
+    from agent.tools.plan import plan_walk
+    from routing.models import WalkRequest
+
+    services = _service_ids(db_repos, count=2)
+
+    answer = plan_walk(WalkRequest(services, budget_minutes=180), repos=db_repos)
+
+    assert answer.get("error") == "no_route"
+    assert answer["results"] == []
+    assert answer["provenance"]["reason_code"] == "no_route_possible"
+    assert "Остановками прогулки не становятся" in answer["message"]
+
+
 def test_must_keep_stops_are_never_dropped(db_repos) -> None:
     """A refinement's pinned stop survives a budget that cannot hold everything."""
     from agent.tools.plan import plan_walk
@@ -66,10 +144,7 @@ def test_the_profile_reaches_the_engine(db_repos) -> None:
     from agent.tools.plan import plan_walk
     from routing.models import WalkRequest
 
-    found = db_repos.places.nearby(OLD_TOWN[0], OLD_TOWN[1], radius_km=1.5, limit=2)
-    ids = [row.id for row in found if row.id is not None]
-    if len(ids) < 2:
-        pytest.skip("not enough places in the dataset to measure a pair")
+    ids = _sight_ids(db_repos, limit=2)
 
     walk = plan_walk(WalkRequest(ids, budget_minutes=180), repos=db_repos)
     bike = plan_walk(WalkRequest(ids, budget_minutes=180, profile="bicycle"), repos=db_repos)

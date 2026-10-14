@@ -83,25 +83,46 @@ def test_a_box_with_nothing_in_it_returns_nothing(db_repos) -> None:
     assert answer["results"] == []
 
 
-def test_one_area_scoped_search_yields_enough_stops_to_plan(db_repos) -> None:
-    """The prompt tells the model one area-scoped search is the whole candidate set."""
+def test_an_area_scoped_search_boxes_itself_to_the_territory(db_repos) -> None:
+    """The area decides the box every signal is asked for.
+
+    It does NOT decide much today: `areas.json` gives a polygon to the oblast alone,
+    and the seed writes that oblast ring onto every area row, so the box behind
+    `grodno-old-town` is the whole voblast and only the ranking narrows anything.
+    """
+
     from agent.tools.places import Where, find_places
-    from agent.tools.plan import plan_walk
-    from routing.models import WalkRequest
 
     found = find_places(
-        "достопримечательности",
+        "",
+        ["памятник", "замок", "храм", "музей", "архитектура"],
         repos=db_repos,
         limit=8,
         where=Where(area="grodno-old-town"),
     )
-    assert found.get("error") is None, found.get("message")
-    ids = [card["id"] for card in found["results"]]
-    assert len(ids) >= 3, "one search did not yield enough stops to choose a walk"
 
-    walk = plan_walk(WalkRequest(ids, budget_minutes=120), repos=db_repos)
-    assert walk.get("error") is None, walk.get("message")
-    assert walk["count"] >= 2
+    assert found.get("error") is None, found.get("message")
+    assert found["provenance"]["area"] == "grodno-old-town"
+    assert len(found["results"]) >= 3, "one search did not yield a set to choose from"
+
+
+def test_a_search_scoped_by_radius_ranks_around_the_point(db_repos) -> None:
+    """A point is a signal, not a fence: the other signals are free to win a place
+    from anywhere in the territory, so this asserts the ranking ran, not a distance.
+    """
+    from agent.tools.places import Where, find_places
+
+    found = find_places(
+        "",
+        ["памятник", "замок", "храм", "музей", "архитектура"],
+        repos=db_repos,
+        limit=8,
+        where=Where(near_lat=53.6778, near_lon=23.8295, radius_m=1500),
+    )
+
+    assert found.get("error") is None, found.get("message")
+    assert "nearby" in found["provenance"]["signals"]
+    assert found["results"], "a search around a dense old town returns nothing"
 
 
 def test_the_project_area_has_a_boundary(db_repos) -> None:
