@@ -13,6 +13,7 @@ import userEvent from '@testing-library/user-event';
 const mockStoreState = vi.hoisted(() => ({
   waypoints: [] as Record<string, unknown>[],
   placeDetails: {} as Record<string, unknown>,
+  catalogue: null as unknown[] | null,
   results: { data: null, show: {} } as {
     data: unknown;
     show: Record<string, boolean>;
@@ -36,6 +37,7 @@ const mockStoreState = vi.hoisted(() => ({
   setRouteSummary: vi.fn(),
   setRecalculating: vi.fn(),
   applyReroute: vi.fn(),
+  setCatalogue: vi.fn(),
   setPlaceDetails: vi.fn(),
   addEmptyWaypointToEnd: vi.fn(),
   addToHistory: vi.fn(),
@@ -193,6 +195,43 @@ const AGENT_ANSWER = {
   },
 };
 
+/** The agent's answer for a catalogue request: places to choose, no walk. */
+const CATALOGUE_ANSWER = {
+  result_mode: 'catalogue',
+  points: [
+    {
+      id: 201,
+      name: 'Костёл Святого Франциска Ксаверия',
+      category: 'костёл',
+      town: 'Гродно',
+      lat: 53.6789,
+      lon: 23.8312,
+      blurb: 'Самый старый костёл города',
+    },
+    {
+      id: 202,
+      name: 'Церковь Бориса и Глеба',
+      category: 'церковь',
+      town: 'Гродно',
+      lat: 53.6785,
+      lon: 23.8275,
+    },
+    {
+      id: 203,
+      name: 'Костёл Девы Марии',
+      category: 'костёл',
+      town: 'Островец',
+      lat: 54.6121,
+      lon: 25.9554,
+    },
+  ],
+  costing: null,
+  summary: {},
+  budget: null,
+  shape: {},
+  status: 'ready',
+};
+
 const askField = () =>
   screen.getByRole('textbox', { name: 'что хотите посмотреть' });
 
@@ -242,6 +281,7 @@ describe('Sidebar', () => {
     });
     mockStoreState.waypoints = [];
     mockStoreState.placeDetails = {};
+    mockStoreState.catalogue = null;
     mockStoreState.results = { data: null, show: {} };
     mockStoreState.refinementLog = [];
     mockStoreState.routeSnapshots = [];
@@ -278,6 +318,12 @@ describe('Sidebar', () => {
       mockStoreState.roundTrip = value;
       notifyMockStore();
     });
+    mockStoreState.setCatalogue.mockImplementation(
+      (places: unknown[] | null) => {
+        mockStoreState.catalogue = places;
+        notifyMockStore();
+      }
+    );
     mockGetState.mockReturnValue(mockStoreState);
   });
 
@@ -1330,6 +1376,69 @@ describe('Sidebar', () => {
       'В базе не нашлось туалетов — маршрут построен без них.'
     );
   });
+
+  it('рисует каталожный ответ списком мест, а не панелью маршрута', async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => CATALOGUE_ANSWER,
+    }));
+    stubAgentFetch(fetchMock);
+
+    const user = userEvent.setup({ delay: null });
+    render(<Sidebar />);
+
+    const refetchesBefore = mockRefetch.mock.calls.length;
+    const resetsBefore = mockStoreState.resetRoute.mock.calls.length;
+
+    await user.type(askField(), 'костёлы и церкви области');
+    await user.click(buildButton());
+
+    expect(await screen.findByTestId('catalogue-list')).toBeInTheDocument();
+    const places = mockStoreState.setCatalogue.mock.calls.at(-1)?.[0] as Array<{
+      name: string;
+    }>;
+    expect(places.map((p) => p.name)).toEqual([
+      'Костёл Святого Франциска Ксаверия',
+      'Церковь Бориса и Глеба',
+      'Костёл Девы Марии',
+    ]);
+    expect(screen.getByTestId('catalogue-place-201')).toHaveTextContent(
+      'Костёл Святого Франциска Ксаверия'
+    );
+    expect(screen.getByText('3 места')).toBeInTheDocument();
+
+    expect(screen.queryByTestId('waypoint-list')).toBeNull();
+    expect(screen.queryByTestId('plan-empty')).toBeNull();
+    expect(screen.queryByTestId('route-progress')).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Маршрут' })).toBeNull();
+    expect(screen.queryByText('точки')).toBeNull();
+    expect(screen.queryByText('длина')).toBeNull();
+    expect(screen.queryByText('мин в пути')).toBeNull();
+    expect(mockRefetch.mock.calls.length).toBe(refetchesBefore);
+    expect(mockStoreState.resetRoute.mock.calls.length).toBe(resetsBefore + 1);
+  });
+
+  it('сбрасывает каталог, когда приходит обычный маршрут', async () => {
+    const { fetchMock } = agentFetch();
+    mockStoreState.catalogue = [
+      { id: 201, name: 'Костёл', category: 'костёл', lat: 53.6, lon: 23.8 },
+    ];
+
+    const user = userEvent.setup({ delay: null });
+    render(<Sidebar />);
+
+    await user.type(askField(), 'замки Гродно');
+    await user.click(buildButton());
+
+    await waitFor(() =>
+      expect(mockStoreState.setCatalogue).toHaveBeenCalledWith(null)
+    );
+    await waitFor(() =>
+      expect(screen.queryByTestId('catalogue-list')).toBeNull()
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId('waypoint-list')).toBeInTheDocument();
+  });
 });
 
 /** Focusable elements in DOM order — that is exactly the tab order. */
@@ -1347,6 +1456,7 @@ describe('Sidebar — felt quality', () => {
     });
     mockStoreState.routeHistory = [];
     mockStoreState.waypoints = [];
+    mockStoreState.catalogue = null;
     mockStoreState.timeBudget = 0;
     mockStoreState.roundTrip = false;
     mockStoreState.manualOrder = false;
@@ -1379,6 +1489,12 @@ describe('Sidebar — felt quality', () => {
       mockStoreState.roundTrip = value;
       notifyMockStore();
     });
+    mockStoreState.setCatalogue.mockImplementation(
+      (places: unknown[] | null) => {
+        mockStoreState.catalogue = places;
+        notifyMockStore();
+      }
+    );
     mockGetState.mockReturnValue(mockStoreState);
   });
 

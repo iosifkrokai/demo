@@ -1,5 +1,6 @@
 import type {
   ActiveWaypoint,
+  AgentPoint,
   ParsedDirectionsGeometry,
 } from '@/components/types';
 import type { Photo } from '@/api/types';
@@ -276,6 +277,8 @@ export interface DirectionsState {
   routeSummary: RoutePanelSummary | null;
   /** True while a re-measure is on the wire. */
   recalculating: boolean;
+  /** The places a catalogue answer returned: a choice of points, not a walk. */
+  catalogue: AgentPoint[] | null;
 }
 
 interface DirectionsActions {
@@ -341,6 +344,8 @@ interface DirectionsActions {
   setCosting: (costing: string | null) => void;
   setRouteSummary: (summary: RoutePanelSummary | null) => void;
   setRecalculating: (recalculating: boolean) => void;
+  /** Hold the places of a catalogue answer; `null` clears them for a route. */
+  setCatalogue: (places: AgentPoint[] | null) => void;
   /** Take the server's order and numbers for the route it just measured, at once. */
   applyReroute: (params: {
     keys: string[];
@@ -374,6 +379,7 @@ export const useDirectionsStore = create<DirectionsStore>()(
       costing: null,
       routeSummary: null,
       recalculating: false,
+      catalogue: null,
 
       setManualOrder: (manualOrder) =>
         set(
@@ -427,6 +433,15 @@ export const useDirectionsStore = create<DirectionsStore>()(
           },
           undefined,
           'setRecalculating'
+        ),
+
+      setCatalogue: (places) =>
+        set(
+          (state) => {
+            state.catalogue = places;
+          },
+          undefined,
+          'setCatalogue'
         ),
 
       applyReroute: ({ keys, summary }) =>
@@ -938,6 +953,7 @@ export const useDirectionsStore = create<DirectionsStore>()(
             state.results = { data: null, show: { '0': true } };
             state.activeRouteIndex = 0;
             state.isOptimized = false;
+            state.catalogue = null;
           },
           undefined,
           'resetRoute'

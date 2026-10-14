@@ -352,6 +352,14 @@ export const sidebarArea = {
         pinnedHint: 'уточнение не будет убирать эту точку',
         remove: 'удалить',
       },
+      catalogue: {
+        title: 'Каталог мест',
+        intro:
+          'Это выбор мест, а не готовая прогулка — нажмите на место, чтобы показать его на карте.',
+        count_one: '{{count}} место',
+        count_few: '{{count}} места',
+        count_many: '{{count}} мест',
+      },
     },
   },
   en: {
@@ -580,6 +588,13 @@ export const sidebarArea = {
         pinnedHint: 'a refinement will not remove this stop',
         remove: 'delete',
       },
+      catalogue: {
+        title: 'Place catalogue',
+        intro:
+          'These are places to choose from, not a ready walk — tap a place to show it on the map.',
+        count_one: '{{count}} place',
+        count_other: '{{count}} places',
+      },
     },
   },
 } satisfies LocaleArea<{
@@ -588,5 +603,6 @@ export const sidebarArea = {
     plan: Record<string, string>;
     summary: Record<string, string>;
     waypoints: Record<string, string>;
+    catalogue: Record<string, string>;
   };
 }>;

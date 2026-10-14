@@ -323,6 +323,8 @@ export interface PlanInterpretation {
 
 /** POST /routes/generate — either a ready plan or the honest reason there is none. */
 export interface AgentRouteResponse {
+  /** `route` a walkable itinerary, `catalogue` a list of places to choose from. */
+  result_mode?: ResultMode;
   points?: AgentPoint[];
   budget?: AgentBudget;
   costing?: string | null;
