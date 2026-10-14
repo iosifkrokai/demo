@@ -12,6 +12,7 @@ from typing import Any
 DEFAULT_TTL_S = 5 * 60
 
 INTERPRETING_REQUEST = "interpreting_request"
+REPAIRING_ROUTE = "repairing_route"
 DRAWING_LINE = "drawing_line"
 DONE = "done"
 

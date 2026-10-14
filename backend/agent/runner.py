@@ -74,12 +74,13 @@ def _time_capability() -> ProcessHistory[PlanningDeps]:
     return ProcessHistory(processor)
 
 
-def _build_prompt(query: str, brief: Any) -> str:
+def _build_prompt(query: str, brief: Any, *, repair: str | None = None) -> str:
     """The text handed to the model, built in one place."""
-    return (
+    prompt = (
         f"locale={brief.locale}\n{_request_note(brief)}\nrequest={query!r}\n"
         "Plan the walk for this request, then submit it with submit_plan."
     )
+    return prompt if repair is None else f"{prompt}\n{repair}"
 
 
 def _record_model_failure(reason: str, prompt: str = "") -> None:
@@ -138,7 +139,12 @@ def _run_with_timeout(fn: Any, timeout_s: float) -> tuple[Any, str | None]:
 
 
 def _run_agent(
-    query: str, brief: ReaderBrief, deps: PlanningDeps, wall_clock_s: float | None = None
+    query: str,
+    brief: ReaderBrief,
+    deps: PlanningDeps,
+    wall_clock_s: float | None = None,
+    *,
+    repair: str | None = None,
 ) -> tuple[PlanSubmission | None, str | None]:
     """Run one bounded planning pass. Returns (submission, failure_reason)."""
     try:
@@ -157,7 +163,10 @@ def _run_agent(
     def call() -> Any:
         agent = _build_agent(model, brief, deps)
         return agent.run_sync(
-            prompt, deps=deps, usage_limits=usage_limits, model_settings=model_settings
+            _build_prompt(query, brief, repair=repair),
+            deps=deps,
+            usage_limits=usage_limits,
+            model_settings=model_settings,
         )
 
     bound = effective_wall_clock(wall_clock_s)

@@ -2,20 +2,56 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
+import pytest
+
+from agent import runner
 from agent.client import plan_with_agent
 from agent.models import ReaderBrief
+from routing.models import CategoryFacts
 
 if TYPE_CHECKING:
-    from tests.conftest import FakeModel
+    from tests.conftest import FakeModel, LiveStack
 
 OLD_TOWN = (53.6778, 23.8295)
+
+NEARBY_LIMIT = 200
 
 
 def _ids(repos, limit: int = 4) -> list[int]:
     found = repos.places.nearby(OLD_TOWN[0], OLD_TOWN[1], radius_km=1.5, limit=limit)
     return [row.id for row in found if row.id is not None]
+
+
+def _nearby(repos) -> list[Any]:
+    return repos.places.nearby(OLD_TOWN[0], OLD_TOWN[1], radius_km=1.2, limit=NEARBY_LIMIT)
+
+
+def _sights(repos, limit: int = 3) -> list[int]:
+    """Real sights, not services: the walk of a request that names a territory."""
+    facts = CategoryFacts.from_rows(repos.taxonomy.all())
+    rows = [row for row in _nearby(repos) if not facts.is_service(row.category or "")]
+    return [row.id for row in rows[:limit] if row.id is not None]
+
+
+def _service(repos, category: str) -> int:
+    """One real place of a service category near the old town."""
+    for row in _nearby(repos):
+        if (row.category or "") == category and row.id is not None:
+            return int(row.id)
+    pytest.fail(f"no {category} near the old town in this database")
+
+
+def _spy(seen: list[str | None]):
+    """A `_run_agent` that records the repair note each pass was handed."""
+    real = runner._run_agent
+
+    def spy(query, brief, deps, *, wall_clock_s=None, repair=None):
+        seen.append(repair)
+        return real(query, brief, deps, wall_clock_s=wall_clock_s, repair=repair)
+
+    return spy
 
 
 def test_a_submission_replays_without_a_provider(fake_model: FakeModel, db_repos) -> None:
@@ -142,16 +178,14 @@ def test_the_run_carries_a_live_deadline_and_region(
     fake_model: FakeModel, db_repos, monkeypatch
 ) -> None:
     """`seconds_left()` stops being infinite: the deadline reaches the tools."""
-    from agent import runner
-
     left: list[float] = []
     bbox: list[tuple[float, float, float, float] | None] = []
     real = runner._run_agent
 
-    def spy(query, brief, deps, *, wall_clock_s=None):
+    def spy(query, brief, deps, *, wall_clock_s=None, repair=None):
         left.append(deps.seconds_left())
         bbox.append(deps.region_bbox)
-        return real(query, brief, deps, wall_clock_s=wall_clock_s)
+        return real(query, brief, deps, wall_clock_s=wall_clock_s, repair=repair)
 
     monkeypatch.setattr(runner, "_run_agent", spy)
     ids = _ids(db_repos)
@@ -192,3 +226,74 @@ def test_time_short_appends_a_submit_nudge_once() -> None:
         isinstance(p, UserPromptPart) and p.content == SUBMIT_NUDGE for p in nudged[-1].parts
     )
     assert _submission_nudge(nudged, 5) is nudged
+
+
+def test_a_route_that_breaks_a_hard_rule_is_rebuilt_once(
+    fake_model: FakeModel, db_repos, monkeypatch, live_stack: LiveStack
+) -> None:
+    """An exclusion the walk breaks is fixed in one more pass, not shipped as it is."""
+    live_stack.require("valhalla")
+    sights = _sights(db_repos)
+    cafe = _service(db_repos, "кафе")
+    seen: list[str | None] = []
+    monkeypatch.setattr(runner, "_run_agent", _spy(seen))
+    fake_model.finish(ordered_ids=[*sights, cafe], must_keep_ids=[cafe], budget_minutes=240)
+    fake_model.finish(ordered_ids=sights, budget_minutes=240)
+    brief = ReaderBrief(locale="ru", avoid=("кафе",))
+
+    outcome = plan_with_agent("два часа пешком, без кафе", brief, repos=db_repos)
+
+    assert outcome is not None
+    assert outcome.status == "ready"
+    assert [repair is None for repair in seen] == [True, False]
+    assert "avoid_violated" in (seen[1] or "")
+
+
+def test_a_route_that_breaks_nothing_is_not_rebuilt(
+    fake_model: FakeModel, db_repos, monkeypatch
+) -> None:
+    """Nothing to repair: the model is asked once, and the second step stays unspent."""
+    seen: list[str | None] = []
+    monkeypatch.setattr(runner, "_run_agent", _spy(seen))
+    fake_model.finish(ordered_ids=_sights(db_repos), budget_minutes=240)
+
+    outcome = plan_with_agent("два часа пешком", ReaderBrief(locale="ru"), repos=db_repos)
+
+    assert outcome is not None
+    assert seen == [None]
+
+
+def test_a_refusal_is_never_rebuilt(fake_model: FakeModel, db_repos, monkeypatch) -> None:
+    """Outside the region is an answer, not a bad plan: it gets no second pass."""
+    seen: list[str | None] = []
+    monkeypatch.setattr(runner, "_run_agent", _spy(seen))
+    fake_model.finish(outcome="refuse", refusal_reason="Вильнюс — вне региона")
+
+    outcome = plan_with_agent("прогулка по Вильнюсу", ReaderBrief(locale="ru"), repos=db_repos)
+
+    assert outcome is not None
+    assert outcome.refused is True
+    assert seen == [None]
+
+
+def test_a_second_try_that_helps_nothing_is_dropped(
+    fake_model: FakeModel, db_repos, monkeypatch
+) -> None:
+    """Both passes break the same rule: what the tourist gets is the first one."""
+    sights = _sights(db_repos)
+    cafe = _service(db_repos, "кафе")
+    seen: list[str | None] = []
+    monkeypatch.setattr(runner, "_run_agent", _spy(seen))
+    fake_model.finish(
+        ordered_ids=[*sights, cafe], must_keep_ids=[cafe], budget_minutes=240, narrative="первый"
+    )
+    fake_model.finish(
+        ordered_ids=[*sights, cafe], must_keep_ids=[cafe], budget_minutes=240, narrative="второй"
+    )
+    brief = ReaderBrief(locale="ru", avoid=("кафе",))
+
+    outcome = plan_with_agent("два часа пешком, без кафе", brief, repos=db_repos)
+
+    assert outcome is not None
+    assert len(seen) == 2
+    assert outcome.submission.narrative == "первый"

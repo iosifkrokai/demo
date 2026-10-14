@@ -36,6 +36,14 @@ def test_the_one_search_rule_names_the_cap_the_tool_enforces() -> None:
     assert f"up to {MAX_PLACES_PER_FIND} real stops" in text
 
 
+def test_the_prompt_names_the_tool_that_judges_a_requirement() -> None:
+    """The verdict is the code's: the model is told which tool speaks it, and when."""
+    text = _instructions().lower()
+    assert "never decide whether a requirement is satisfied" in text
+    assert "check_requirements" in text
+    assert "before you submit" in text
+
+
 def test_the_worked_old_town_shape_is_a_three_call_path() -> None:
     """The worked shape spells the short path out, so 'choose the stops yourself'
     does not read as a licence to search each sight in turn."""

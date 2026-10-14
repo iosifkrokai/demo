@@ -16,6 +16,7 @@ from routing.models import (
 __all__ = [
     "INFEASIBLE_REASONS",
     "REASON_CODES",
+    "REPAIRABLE_REASONS",
     "geometry_ok",
     "overall_status",
     "verify",
@@ -94,6 +95,18 @@ INFEASIBLE_REASONS: frozenset[str] = frozenset(
         REASON_MUST_VISIT_ABSENT,
         REASON_MUST_VISIT_OUTSIDE,
         REASON_HARD_SERVICE_ABSENT,
+    }
+)
+
+REPAIRABLE_REASONS: frozenset[str] = frozenset(
+    {
+        REASON_MUST_VISIT_ABSENT,
+        REASON_MUST_VISIT_UNSPECIFIED,
+        REASON_HARD_SERVICE_ABSENT,
+        REASON_INTEREST_ABSENT,
+        REASON_AVOID_VIOLATED,
+        REASON_CODE_UNSPECIFIED,
+        REASON_CODE_UNKNOWN,
     }
 )
 

@@ -106,6 +106,7 @@ def _plan(req: GenerateReq, request: Request) -> RouteResponse:
         brief,
         repos=repos,
         wall_clock_s=(constants.REFINE_DEADLINE_S if refinement else None),
+        on_repair=lambda: progress.RUNS.mark(req.progress_id, progress.REPAIRING_ROUTE),
     )
     if outcome is None:
         raise InterpretationUnavailableError("the request could not be planned")
