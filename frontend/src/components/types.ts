@@ -269,6 +269,8 @@ export interface AgentPoint {
   visit_minutes?: number | null;
   opening_hours?: string | null;
   ticket_price?: string | null;
+  /** `true` when admission is free; `false`/absent when paid or unknown. */
+  is_free?: boolean | null;
   town?: string | null;
   district?: string | null;
 }
@@ -298,6 +300,13 @@ export type PlanRequirementReason =
   | 'interest_absent'
   | 'avoid_honoured'
   | 'avoid_violated'
+  | 'free_entry_proven'
+  | 'paid_stop_on_route'
+  | 'admission_unknown'
+  | 'open_at_visit'
+  | 'closed_at_visit'
+  | 'hours_unknown'
+  | 'visit_time_unknown'
   | 'route_missing'
   | 'geometry_missing';
 

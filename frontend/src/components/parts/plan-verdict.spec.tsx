@@ -156,4 +156,28 @@ describe('PlanVerdict', () => {
     );
     expect(container).not.toBeEmptyDOMElement();
   });
+  it('вид требования без кода и имени назван по-русски, а не как код', () => {
+    render(
+      <PlanVerdict
+        response={response({
+          status: 'degraded',
+          interpretation: interpretation({
+            status: 'degraded',
+            unmet: [
+              requirement({
+                kind: 'free',
+                code: null,
+                name: null,
+                reason: 'paid_stop_on_route',
+              }),
+            ],
+          }),
+        })}
+      />
+    );
+
+    const verdict = screen.getByTestId('plan-verdict');
+    expect(verdict).toHaveTextContent('бесплатный вход');
+    expect(verdict).toHaveTextContent('на маршруте есть платный вход');
+  });
 });

@@ -26,9 +26,19 @@ const KNOWN_REASONS: readonly PlanRequirementReason[] = [
   'interest_absent',
   'avoid_honoured',
   'avoid_violated',
+  'free_entry_proven',
+  'paid_stop_on_route',
+  'admission_unknown',
+  'open_at_visit',
+  'closed_at_visit',
+  'hours_unknown',
+  'visit_time_unknown',
   'route_missing',
   'geometry_missing',
 ];
+
+/** The two kinds that carry no code: a fact about the stop, not a category. */
+const KIND_LABELS: readonly string[] = ['free', 'open'];
 
 /** The reason as a short label; the code itself is never shown to the tourist. */
 const reasonLabel = (
@@ -40,8 +50,12 @@ const reasonLabel = (
     : t('sidebar.status.reasonFallback');
 
 /** What the requirement is called on screen: the name, else the code, else the kind. */
-const requirementName = (item: PlanRequirement): string =>
-  item.name || item.code || item.kind;
+const requirementName = (item: PlanRequirement, t: TFunction): string =>
+  item.name ||
+  item.code ||
+  (KIND_LABELS.includes(item.kind)
+    ? t(`sidebar.status.kind.${item.kind}`)
+    : item.kind);
 
 /** The agent's verdict: why the route could not be built or which request went unmet. */
 export const PlanVerdict = ({ response }: PlanVerdictProps) => {
@@ -55,7 +69,7 @@ export const PlanVerdict = ({ response }: PlanVerdictProps) => {
     <ul className="mt-1 list-disc space-y-0.5 pl-4">
       {unmet.map((item, i) => (
         <li key={i}>
-          {requirementName(item)} — {reasonLabel(item.reason, t)}
+          {requirementName(item, t)} — {reasonLabel(item.reason, t)}
         </li>
       ))}
     </ul>
@@ -66,7 +80,10 @@ export const PlanVerdict = ({ response }: PlanVerdictProps) => {
       (item) => item.reason === 'must_visit_outside_coverage'
     );
     if (outside.length > 0) {
-      const names = outside.map(requirementName).filter(Boolean).join(', ');
+      const names = outside
+        .map((item) => requirementName(item, t))
+        .filter(Boolean)
+        .join(', ');
       return (
         <div
           data-testid="plan-verdict"
