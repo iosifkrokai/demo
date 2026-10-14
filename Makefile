@@ -59,9 +59,6 @@ fetch: ## re-acquire OSM sights/services into backend/db/data/*.csv
 photos: ## resolve photo columns from Wikimedia
 	$(SEED) photos --apply
 
-prune: ## list rows outside the region (dry run; add APPLY=1 to delete)
-	$(SEED) prune $(if $(APPLY),--apply,)
-
 admin: ## create the first administrator: make admin EMAIL=boss@example.com
 	@test -n "$(EMAIL)" || { echo "usage: make admin EMAIL=boss@example.com" >&2; exit 2; }
 	$(SEED) admin --email "$(EMAIL)"

@@ -33,10 +33,9 @@ JSON, `--no-embed` skips the embedding pass.
 | `python -m db.seed` | validate → upsert → embed → report (the normal path) |
 | `python -m db.seed fetch --source osm\|poi\|all` | re-acquire OSM rows over Overpass into `backend/db/data/places/*.csv` — the only networked step |
 | `python -m db.seed photos --apply` | resolve photo columns and write them into `places` |
-| `python -m db.seed prune` | list rows outside the project area (add `--apply` to delete) |
 | `python -m db.seed admin --email …` | create or promote the first administrator |
 
-`make seed` / `make fetch` / `make photos` / `make prune` / `make admin` wrap these
+`make seed` / `make fetch` / `make photos` / `make admin` wrap these
 and run them in the compose `seed` service. They rebuild that image first: it sits
 under a compose profile, so `make up` never touches it and it would otherwise drift
 to code older than the schema. With a warm BuildKit cache the rebuild is seconds; a

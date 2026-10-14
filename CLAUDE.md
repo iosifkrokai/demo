@@ -86,6 +86,9 @@ pass you should ignore.
   is not a defect, while any *other* homoglyph still is.
 - **Frontend:** do not fork `frontend/src/components/ui/*`; every size, radius and
   colour comes from the tokens in `frontend/src/index.css`. See `frontend/DESIGN.md`.
+- **No comments.** New code carries no `#` and no `//` commentary. When something
+  genuinely has to be said, one short docstring line says it — what the thing is
+  for, not how it works. The code is the explanation.
 
 ## Where the rest is written down
 
