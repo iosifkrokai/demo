@@ -20,6 +20,7 @@ _COLUMNS = (
     "visit_minutes",
     "aliases_ru",
     "aliases_en",
+    "highlight",
 )
 
 
@@ -27,6 +28,15 @@ def _split(value: str) -> tuple[str, ...]:
     """Split a '|'-separated CSV field into a tuple, dropping empties."""
     parts = [p.strip() for p in (value or "").split(_LIST_SEP)]
     return tuple(p for p in parts if p)
+
+
+def _flag(value: str) -> bool:
+    """A CSV column the taxonomy spells 'true'/'false'."""
+    if value == "true":
+        return True
+    if value == "false":
+        return False
+    raise ValueError(f"taxonomy flag must be true|false, got {value!r}")
 
 
 def read_categories(path: Path | None = None) -> tuple[Category, ...]:
@@ -50,7 +60,7 @@ def read_categories(path: Path | None = None) -> tuple[Category, ...]:
             raise ValueError(
                 f"taxonomy row has {len(row)} columns, expected {len(_COLUMNS)}: {row}"
             )
-        code, ru, en, role, osm_tags, visit_minutes, aliases_ru, aliases_en = row
+        code, ru, en, role, osm_tags, visit_minutes, aliases_ru, aliases_en, highlight = row
         if role not in ("sight", "service"):
             raise ValueError(f"taxonomy role must be sight|service, got {role!r} for {code!r}")
         categories.append(
@@ -63,6 +73,7 @@ def read_categories(path: Path | None = None) -> tuple[Category, ...]:
                 visit_minutes=int(visit_minutes),
                 aliases_ru=_split(aliases_ru),
                 aliases_en=_split(aliases_en),
+                highlight=_flag(highlight),
             )
         )
 

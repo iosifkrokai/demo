@@ -21,3 +21,4 @@ class Category:
     visit_minutes: int
     aliases_ru: tuple[str, ...] = ()
     aliases_en: tuple[str, ...] = ()
+    highlight: bool = False

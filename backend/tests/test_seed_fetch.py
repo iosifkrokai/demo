@@ -106,3 +106,11 @@ def test_the_catch_all_tags_still_answer_when_nothing_sharper_does() -> None:
     assert sight_tag_to_category({"historic": "castle"}) == "замок"
     assert sight_tag_to_category({"building": "castle"}) == "замок"
     assert sight_tag_to_category({"amenity": "cafe"}) is None
+
+
+def test_a_stairway_belongs_to_the_steps_dataset_and_no_overpass_fetch() -> None:
+    """`highway=steps` comes from the local extract, not from a sight/service fetch."""
+    from db.seed.osm_tags import service_tag_to_category, sight_tag_to_category
+
+    assert sight_tag_to_category({"highway": "steps"}) is None
+    assert service_tag_to_category({"highway": "steps"}) is None

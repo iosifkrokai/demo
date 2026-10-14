@@ -312,19 +312,25 @@ def _border_wkt(meta: dict[str, Any]) -> str | None:
 
 
 def load_categories(conn: psycopg.Connection, categories: Iterable[Any]) -> int:
-    """Idempotently write the taxonomy. `code` is the natural key."""
+    """Idempotently write the taxonomy. `code` is the natural key.
+
+    Every projected column is written on conflict too, `highlight` included: what the
+    map shows beside a route by default is a decision in the file, not one made once by
+    a migration, and a flag the file changes has to reach the database on the next seed.
+    """
     written = 0
     with conn.cursor() as cur:
         for cat in categories:
             cur.execute(
                 """
                 INSERT INTO categories (code, ru, en, role, osm_tags, visit_minutes,
-                                        aliases_ru, aliases_en)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                                        aliases_ru, aliases_en, highlight)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (code) DO UPDATE
                     SET ru = EXCLUDED.ru, en = EXCLUDED.en, role = EXCLUDED.role,
                         osm_tags = EXCLUDED.osm_tags, visit_minutes = EXCLUDED.visit_minutes,
-                        aliases_ru = EXCLUDED.aliases_ru, aliases_en = EXCLUDED.aliases_en
+                        aliases_ru = EXCLUDED.aliases_ru, aliases_en = EXCLUDED.aliases_en,
+                        highlight = EXCLUDED.highlight
                 """,
                 (
                     cat.code,
@@ -335,6 +341,7 @@ def load_categories(conn: psycopg.Connection, categories: Iterable[Any]) -> int:
                     cat.visit_minutes,
                     list(cat.aliases_ru),
                     list(cat.aliases_en),
+                    bool(cat.highlight),
                 ),
             )
             written += 1

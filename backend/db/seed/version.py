@@ -13,6 +13,7 @@ VERSIONED_FILES: tuple[str, ...] = (
     "places/places_osm_raw.csv",
     "places/places_poi.csv",
     "places/places_curated.csv",
+    "places/places_steps.csv",
     "taxonomy.csv",
     "itineraries.json",
     "geo/areas.json",

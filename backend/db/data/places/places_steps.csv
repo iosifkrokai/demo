@@ -1,0 +1,1557 @@
+# name|category|district|town|lat|lon|blurb|fun_fact|fun_facts|opening_hours|ticket_price|visit_minutes|links|source_url
+|лестница|||53.643725|23.849738|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=12 (OpenStreetMap)""]"|||1|[]|osm:way/29153929
+|лестница|||53.682918|23.826825|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=65 (OpenStreetMap)""]"|||1|[]|osm:way/29162380
+|лестница|||53.676643|23.823739|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/33398229
+|лестница|||53.684737|23.832735|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=53 (OpenStreetMap)""]"|||1|[]|osm:way/33739537
+|лестница|||53.683477|23.830654|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/33743704
+|лестница|||53.683917|23.840188|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)""]"|||1|[]|osm:way/33816946
+|лестница|||53.683307|23.838243|||[]|||1|[]|osm:way/33817482
+|лестница|||53.683822|23.837833|||"[""ramp=no (OpenStreetMap)""]"|||1|[]|osm:way/33817485
+|лестница|||53.683612|23.835596|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)""]"|||1|[]|osm:way/33817609
+|лестница|||53.678548|23.822872|||[]|||1|[]|osm:way/34132675
+|лестница|||53.673605|23.830682|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/34831837
+|лестница|||53.680473|23.806038|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/36793513
+|лестница|||53.678962|23.818308|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)""]"|||1|[]|osm:way/37560980
+|лестница|||53.678583|23.817647|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)""]"|||1|[]|osm:way/37560981
+|лестница|||53.804174|24.185495|||[]|||1|[]|osm:way/37561392
+|лестница|||53.680810|23.815901|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=5 (OpenStreetMap)""]"|||1|[]|osm:way/37746358
+|лестница|||53.680286|23.825862|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)""]"|||1|[]|osm:way/37746953
+|лестница|||53.680377|23.825581|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)""]"|||1|[]|osm:way/37746954
+|лестница|||53.680468|23.825299|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)""]"|||1|[]|osm:way/37746955
+|лестница|||53.676595|23.841098|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)""]"|||1|[]|osm:way/37765644
+|лестница|||53.676622|23.841267|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)""]"|||1|[]|osm:way/37765648
+|лестница|||53.686796|23.848342|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=30 (OpenStreetMap)""]"|||1|[]|osm:way/38188085
+|лестница|||53.686588|23.849002|||[]|||1|[]|osm:way/38188087
+|лестница|||53.686351|23.849726|||[]|||1|[]|osm:way/38188089
+|лестница|||53.675922|23.802082|||[]|||1|[]|osm:way/38651594
+|лестница|||53.671847|23.848702|||[]|||1|[]|osm:way/38652750
+|лестница|||53.671854|23.848602|||[]|||1|[]|osm:way/38652752
+|лестница|||53.673385|23.849766|||[]|||1|[]|osm:way/41863599
+|лестница|||53.659861|23.848846|||[]|||1|[]|osm:way/42090194
+|лестница|||53.712917|23.846763|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=9 (OpenStreetMap)""]"|||1|[]|osm:way/42253803
+|лестница|||53.712857|23.846812|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=9 (OpenStreetMap)""]"|||1|[]|osm:way/42253804
+|лестница|||53.712971|23.846714|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=9 (OpenStreetMap)""]"|||1|[]|osm:way/42253805
+|лестница|||53.712753|23.846826|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=4 (OpenStreetMap)""]"|||1|[]|osm:way/42254191
+|лестница|||53.696098|23.803268|||[]|||1|[]|osm:way/43109727
+|лестница|||53.695038|23.802813|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/43110931
+|лестница|||53.707083|23.815765|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=29 (OpenStreetMap)""]"|||1|[]|osm:way/43143222
+|лестница|||53.707174|23.816305|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=36 (OpenStreetMap)""]"|||1|[]|osm:way/43143226
+|лестница|||53.707252|23.815698|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=27 (OpenStreetMap)""]"|||1|[]|osm:way/43143228
+|лестница|||53.707345|23.816236|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=31 (OpenStreetMap)""]"|||1|[]|osm:way/43143230
+|лестница|||53.696266|23.805316|||"[""handrail=no (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=9 (OpenStreetMap)""]"|||1|[]|osm:way/43188559
+|лестница|||53.696340|23.805018|||"[""handrail=yes (OpenStreetMap)"", ""ramp=separate (OpenStreetMap)"", ""step_count=16 (OpenStreetMap)""]"|||1|[]|osm:way/43188560
+|лестница|||53.696164|23.805273|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=14 (OpenStreetMap)""]"|||1|[]|osm:way/43188562
+|лестница|||53.696072|23.805367|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=6 (OpenStreetMap)""]"|||1|[]|osm:way/43188564
+|лестница|||53.693240|23.801769|||[]|||1|[]|osm:way/43189568
+|лестница|||53.693894|23.801682|||[]|||1|[]|osm:way/43189571
+|лестница|||53.693637|23.801668|||[]|||1|[]|osm:way/43189572
+|лестница|||53.698367|23.806449|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=31 (OpenStreetMap)""]"|||1|[]|osm:way/43931688
+|лестница|||53.712018|23.846833|||[]|||1|[]|osm:way/45095400
+|лестница|||53.680627|23.807359|||[]|||1|[]|osm:way/45302040
+|лестница|||53.677832|23.805403|||[]|||1|[]|osm:way/45327263
+|лестница|||53.684164|23.836548|||[]|||1|[]|osm:way/52040021
+|лестница|||53.684286|23.836058|||[]|||1|[]|osm:way/52040024
+|лестница|||53.649530|23.845277|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=16 (OpenStreetMap)""]"|||1|[]|osm:way/55752764
+|лестница|||53.649108|23.845432|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=18 (OpenStreetMap)""]"|||1|[]|osm:way/55752766
+|лестница|||53.656509|23.857239|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)""]"|||1|[]|osm:way/58436507
+|лестница|||53.674960|23.828014|||[]|||1|[]|osm:way/62011990
+|лестница|||53.672111|23.828994|||[]|||1|[]|osm:way/62011999
+|лестница|||53.672289|23.828393|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/62012000
+|лестница|||53.674941|23.827363|||[]|||1|[]|osm:way/62012003
+|лестница|||53.675706|23.827660|||[]|||1|[]|osm:way/62012007
+|лестница|||53.674626|23.828316|||[]|||1|[]|osm:way/62012009
+|лестница|||53.672231|23.828502|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/62012010
+|лестница|||53.675056|23.826862|||[]|||1|[]|osm:way/62012013
+|лестница|||53.675586|23.828207|||[]|||1|[]|osm:way/62012016
+|лестница|||53.674808|23.826193|||[]|||1|[]|osm:way/62012018
+|лестница|||53.654129|23.840921|||[]|||1|[]|osm:way/62334580
+|лестница|||53.703727|23.807380|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=14 (OpenStreetMap)""]"|||1|[]|osm:way/67602415
+|лестница|||53.704093|23.807075|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=13 (OpenStreetMap)""]"|||1|[]|osm:way/67602418
+|лестница|||53.703693|23.807709|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=16 (OpenStreetMap)""]"|||1|[]|osm:way/67602423
+|лестница|||53.703722|23.807911|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=16 (OpenStreetMap)""]"|||1|[]|osm:way/67602425
+|лестница|||53.677019|23.830162|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)""]"|||1|[]|osm:way/67614651
+|лестница|||53.677236|23.829859|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=26 (OpenStreetMap)""]"|||1|[]|osm:way/67614674
+|лестница|||53.679172|23.828032|||[]|||1|[]|osm:way/67617097
+|лестница|||53.678906|23.829111|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=4 (OpenStreetMap)""]"|||1|[]|osm:way/67617106
+|лестница|||53.679199|23.828573|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=11 (OpenStreetMap)""]"|||1|[]|osm:way/67617108
+|лестница|||53.676910|23.826318|||[]|||1|[]|osm:way/69906555
+|лестница|||53.700016|23.817853|||"[""handrail=yes (OpenStreetMap)"", ""step_count=8 (OpenStreetMap)""]"|||1|[]|osm:way/71911775
+|лестница|||53.700129|23.818303|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=5 (OpenStreetMap)""]"|||1|[]|osm:way/71911777
+|лестница|||53.700314|23.816384|||"[""handrail=no (OpenStreetMap)"", ""step_count=6 (OpenStreetMap)""]"|||1|[]|osm:way/71912570
+|лестница|||53.672488|23.837986|||[]|||1|[]|osm:way/83665320
+|лестница|||53.672176|23.837665|||[]|||1|[]|osm:way/83665326
+|лестница|||53.704056|23.818641|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=25 (OpenStreetMap)""]"|||1|[]|osm:way/91280208
+|лестница|||53.703775|23.817923|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=21 (OpenStreetMap)""]"|||1|[]|osm:way/91280219
+|лестница|||53.095984|25.320921|||[]|||1|[]|osm:way/98910710
+|лестница|||53.087059|25.321743|||[]|||1|[]|osm:way/98933600
+|лестница|||53.083082|25.306953|||[]|||1|[]|osm:way/99044134
+|лестница|||53.083089|25.305040|||[]|||1|[]|osm:way/99044846
+|лестница|||53.084625|25.308915|||[]|||1|[]|osm:way/99054930
+|лестница|||54.424123|25.924227|||[]|||1|[]|osm:way/100301114
+|лестница|||54.423989|25.924683|||[]|||1|[]|osm:way/100301118
+|лестница|||54.424068|25.923926|||[]|||1|[]|osm:way/100301130
+|лестница|||53.684402|23.857410|||[]|||1|[]|osm:way/103522534
+|лестница|||53.675365|23.829711|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/109703851
+|лестница|||53.662141|23.831360|||[]|||1|[]|osm:way/117922271
+|лестница|||53.664645|23.840083|||[]|||1|[]|osm:way/117926949
+|лестница|||53.673965|23.828326|||[]|||1|[]|osm:way/117931879
+|лестница|||53.673889|23.823153|||[]|||1|[]|osm:way/117932953
+|лестница|||53.673747|23.821480|||[]|||1|[]|osm:way/117933359
+|лестница|||53.673047|23.820519|||[]|||1|[]|osm:way/117934791
+|лестница|||53.658305|23.835251|||[]|||1|[]|osm:way/117937278
+|лестница|||53.658497|23.835622|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/117937279
+|лестница|||53.658888|23.836177|||[]|||1|[]|osm:way/117937281
+|лестница|||53.654056|23.836894|||[]|||1|[]|osm:way/118020011
+|лестница|||53.654719|23.835874|||[]|||1|[]|osm:way/118020016
+|лестница|||53.654026|23.836967|||[]|||1|[]|osm:way/118020022
+|лестница|||53.658987|23.835759|||[]|||1|[]|osm:way/118023766
+|лестница|||53.659067|23.835842|||[]|||1|[]|osm:way/118023767
+|лестница|||53.658928|23.838045|||[]|||1|[]|osm:way/118023770
+|лестница|||53.675372|23.812368|||[]|||1|[]|osm:way/118028962
+|лестница|||53.674802|23.815466|||[]|||1|[]|osm:way/118028969
+|лестница|||53.666047|23.826726|||[]|||1|[]|osm:way/118086664
+|лестница|||53.666236|23.826381|||"[""handrail=yes (OpenStreetMap)"", ""step_count=8 (OpenStreetMap)""]"|||1|[]|osm:way/118086666
+|лестница|||53.664846|23.840263|||[]|||1|[]|osm:way/120511124
+|лестница|||53.665963|23.838023|||[]|||1|[]|osm:way/120511125
+|лестница|||53.887321|25.303513|||[]|||1|[]|osm:way/121901683
+|лестница|||53.162032|24.799385|||[]|||1|[]|osm:way/125215012
+|лестница|||53.892464|25.315705|||[]|||1|[]|osm:way/126775017
+|лестница|||53.892142|25.315655|||[]|||1|[]|osm:way/126775027
+|лестница|||53.699913|23.805228|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=43 (OpenStreetMap)""]"|||1|[]|osm:way/157167284
+|лестница|||53.696210|23.819818|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=37 (OpenStreetMap)""]"|||1|[]|osm:way/158853059
+|лестница|||53.695576|23.822533|||[]|||1|[]|osm:way/158853251
+|лестница|||53.698293|23.818782|||"[""handrail=yes (OpenStreetMap)"", ""ramp=separate (OpenStreetMap)""]"|||1|[]|osm:way/158853571
+|лестница|||53.660467|23.779857|||[]|||1|[]|osm:way/159474004
+|лестница|||53.711606|23.849394|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=8 (OpenStreetMap)""]"|||1|[]|osm:way/164330451
+|лестница|||53.685518|23.857590|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/165987696
+|лестница|||53.712621|23.840277|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=20 (OpenStreetMap)""]"|||1|[]|osm:way/166688834
+|лестница|||53.715449|23.840938|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=10 (OpenStreetMap)""]"|||1|[]|osm:way/166702894
+|лестница|||53.708582|23.848431|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=8 (OpenStreetMap)""]"|||1|[]|osm:way/166806572
+|лестница|||53.709450|23.857055|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=9 (OpenStreetMap)""]"|||1|[]|osm:way/167678719
+|лестница|||53.709802|23.859913|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=16 (OpenStreetMap)""]"|||1|[]|osm:way/167678720
+|лестница|||53.710461|23.859674|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=27 (OpenStreetMap)""]"|||1|[]|osm:way/167678724
+|лестница|||53.709298|23.856048|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)""]"|||1|[]|osm:way/172714005
+|лестница|||53.708784|23.856305|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)""]"|||1|[]|osm:way/172714008
+|лестница|||53.654100|23.838413|||[]|||1|[]|osm:way/173199528
+|лестница|||53.653856|23.838606|||[]|||1|[]|osm:way/173199529
+|лестница|||53.654248|23.839026|||[]|||1|[]|osm:way/173199531
+|лестница|||53.654238|23.841549|||[]|||1|[]|osm:way/173199532
+|лестница|||53.653973|23.839187|||[]|||1|[]|osm:way/173199534
+|лестница|||53.654460|23.843116|||[]|||1|[]|osm:way/173199540
+|лестница|||53.657015|23.836096|||[]|||1|[]|osm:way/173202216
+|лестница|||53.658045|23.850793|||[]|||1|[]|osm:way/173209353
+|лестница|||53.657667|23.850542|||[]|||1|[]|osm:way/173209355
+|лестница|||53.654477|23.847087|||[]|||1|[]|osm:way/173209357
+|лестница|||53.657101|23.850376|||[]|||1|[]|osm:way/173209362
+|лестница|||53.654975|23.846052|||[]|||1|[]|osm:way/173209369
+|лестница|||53.713492|23.849889|||"[""handrail=no (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=3 (OpenStreetMap)""]"|||1|[]|osm:way/173869456
+|лестница|||53.712155|23.846029|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)""]"|||1|[]|osm:way/173869462
+|лестница|||53.711369|23.849828|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=5 (OpenStreetMap)""]"|||1|[]|osm:way/173869464
+|лестница|||53.709408|23.858339|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=4 (OpenStreetMap)""]"|||1|[]|osm:way/189600538
+|лестница|||53.710203|23.858648|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=11 (OpenStreetMap)""]"|||1|[]|osm:way/189600540
+|лестница|||53.154113|24.447749|||[]|||1|[]|osm:way/193513583
+|лестница|||53.161628|24.454936|||[]|||1|[]|osm:way/193513588
+|лестница|||53.651172|23.837364|||[]|||1|[]|osm:way/193952298
+|лестница|||53.651070|23.837247|||[]|||1|[]|osm:way/193952303
+|лестница|||53.161781|24.452943|||[]|||1|[]|osm:way/198511504
+|лестница|||53.164844|24.458238|||[]|||1|[]|osm:way/199105874
+|лестница|||53.162252|24.799063|||[]|||1|[]|osm:way/199563542
+|лестница|||53.695806|23.820137|||[]|||1|[]|osm:way/200539814
+|лестница|||53.648855|23.840714|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/220957448
+|лестница|||53.651949|23.842712|||[]|||1|[]|osm:way/221002484
+|лестница|||53.651821|23.843198|||[]|||1|[]|osm:way/221002486
+|лестница|||53.652795|23.846556|||[]|||1|[]|osm:way/221002487
+|лестница|||53.652432|23.843810|||[]|||1|[]|osm:way/221002489
+|лестница|||53.649422|23.844364|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)""]"|||1|[]|osm:way/221651838
+|лестница|||53.649243|23.846120|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=14 (OpenStreetMap)""]"|||1|[]|osm:way/221651839
+|лестница|||53.655045|23.855924|||[]|||1|[]|osm:way/225137410
+|лестница|||53.695609|23.810093|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=7 (OpenStreetMap)""]"|||1|[]|osm:way/226425318
+|лестница|||53.710057|23.804293|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=9 (OpenStreetMap)""]"|||1|[]|osm:way/226744914
+|лестница|||53.702236|23.802571|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=13 (OpenStreetMap)""]"|||1|[]|osm:way/227384035
+|лестница|||53.702176|23.802597|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=15 (OpenStreetMap)""]"|||1|[]|osm:way/227384037
+|лестница|||53.701999|23.800883|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=7 (OpenStreetMap)""]"|||1|[]|osm:way/227384038
+|лестница|||53.701954|23.800902|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=7 (OpenStreetMap)""]"|||1|[]|osm:way/227384039
+|лестница|||53.704753|23.815334|||"[""handrail=no (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=6 (OpenStreetMap)""]"|||1|[]|osm:way/227384040
+|лестница|||53.695725|23.839564|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=7 (OpenStreetMap)""]"|||1|[]|osm:way/227621313
+|лестница|||53.675228|23.803928|||[]|||1|[]|osm:way/227855158
+|лестница|||53.657016|23.858343|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=36 (OpenStreetMap)""]"|||1|[]|osm:way/228187556
+|лестница|||53.646445|23.824185|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/228275827
+|лестница|||53.690642|23.835091|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/228425605
+|лестница|||53.670896|23.861575|||"[""handrail=no (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=5 (OpenStreetMap)""]"|||1|[]|osm:way/228447213
+|лестница|||53.675398|23.802481|||[]|||1|[]|osm:way/228447217
+|лестница|||53.675515|23.801621|||[]|||1|[]|osm:way/228447220
+|лестница|||53.684143|23.805010|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)""]"|||1|[]|osm:way/232109640
+|лестница|||53.684432|23.804030|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)""]"|||1|[]|osm:way/232109642
+|лестница|||53.607243|24.737860|||[]|||1|[]|osm:way/250194215
+|лестница|||53.607169|24.741702|||[]|||1|[]|osm:way/251030011
+|лестница|||53.608145|24.741560|||[]|||1|[]|osm:way/251030435
+|лестница|||53.608072|24.741394|||[]|||1|[]|osm:way/251030437
+|лестница|||53.693457|23.826897|||[]|||1|[]|osm:way/251757506
+|лестница|||53.655996|23.843973|||[]|||1|[]|osm:way/255666103
+|лестница|||53.655881|23.844057|||[]|||1|[]|osm:way/255666106
+|лестница|||53.711539|23.859445|||"[""handrail=yes (OpenStreetMap)"", ""ramp=separate (OpenStreetMap)"", ""step_count=8 (OpenStreetMap)""]"|||1|[]|osm:way/256538542
+|лестница|||53.697222|23.819445|||[]|||1|[]|osm:way/256538547
+|лестница|||53.648540|23.846867|||[]|||1|[]|osm:way/257590098
+|лестница|||53.683477|23.840059|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=5 (OpenStreetMap)""]"|||1|[]|osm:way/263392008
+|лестница|||53.686246|23.845417|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=9 (OpenStreetMap)""]"|||1|[]|osm:way/263392010
+|лестница|||53.648793|23.846567|||"[""handrail=no (OpenStreetMap)""]"|||1|[]|osm:way/267970321
+|лестница|||53.702596|23.802467|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=9 (OpenStreetMap)""]"|||1|[]|osm:way/275173122
+|лестница|||53.697703|23.825426|||[]|||1|[]|osm:way/278922674
+|лестница|||53.697370|23.824921|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/278922676
+|лестница|||53.698575|23.820989|||"[""handrail=yes (OpenStreetMap)"", ""step_count=8 (OpenStreetMap)""]"|||1|[]|osm:way/278922677
+|лестница|||53.881964|25.292364|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/281117830
+|лестница|||53.882863|25.294910|||"[""ramp=yes (OpenStreetMap)"", ""step_count=70 (OpenStreetMap)""]"|||1|[]|osm:way/281117832
+|лестница|||53.164829|24.459039|||[]|||1|[]|osm:way/284660174
+|лестница|||53.684772|23.829421|||"[""handrail=yes (OpenStreetMap)"", ""ramp=separate (OpenStreetMap)"", ""step_count=19 (OpenStreetMap)""]"|||1|[]|osm:way/285411760
+|лестница|||53.684289|23.836188|||[]|||1|[]|osm:way/285411763
+|лестница|||53.261036|24.416405|||[]|||1|[]|osm:way/286489491
+|лестница|||53.674335|23.826947|||[]|||1|[]|osm:way/288384633
+|лестница|||53.674566|23.825565|||[]|||1|[]|osm:way/288384635
+|лестница|||53.674449|23.825262|||[]|||1|[]|osm:way/288384636
+|лестница|||53.707675|23.799977|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=10 (OpenStreetMap)""]"|||1|[]|osm:way/292703768
+|лестница|||53.695178|23.795561|||[]|||1|[]|osm:way/293236879
+|лестница|||53.643518|23.861385|||[]|||1|[]|osm:way/294856941
+|лестница|||53.652383|23.841943|||[]|||1|[]|osm:way/302366261
+|лестница|||53.715111|23.842339|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/305481749
+|лестница|||54.423232|26.525486|||[]|||1|[]|osm:way/313571565
+|лестница|||53.282225|24.410570|||[]|||1|[]|osm:way/313656423
+|лестница|||53.282299|24.410431|||[]|||1|[]|osm:way/313656425
+|лестница|||53.685791|23.813887|||[]|||1|[]|osm:way/319631439
+|лестница|||53.685822|23.815597|||[]|||1|[]|osm:way/319631948
+|лестница|||53.160936|24.445040|||[]|||1|[]|osm:way/321517706
+|лестница|||54.310445|26.282049|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=3 (OpenStreetMap)""]"|||1|[]|osm:way/325919823
+|лестница|||53.144591|24.822113|||[]|||1|[]|osm:way/328020180
+|лестница|||53.193713|24.843830|||[]|||1|[]|osm:way/328131328
+|лестница|||53.145306|24.819183|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/329422424
+|лестница|||53.148530|24.824039|||[]|||1|[]|osm:way/329428724
+|лестница|||53.144650|24.819549|||[]|||1|[]|osm:way/330543738
+|лестница|||53.144735|24.819976|||[]|||1|[]|osm:way/330543739
+|лестница|||53.145282|24.821399|||[]|||1|[]|osm:way/330543743
+|лестница|||53.673187|23.832066|||[]|||1|[]|osm:way/338006844
+|лестница|||53.673330|23.831621|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/338006847
+|лестница|||53.673867|23.829624|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/338014315
+|лестница|||53.673896|23.828876|||"[""handrail=yes (OpenStreetMap)"", ""ramp=separate (OpenStreetMap)"", ""step_count=18 (OpenStreetMap)""]"|||1|[]|osm:way/338016699
+|лестница|||53.673453|23.829262|||[]|||1|[]|osm:way/338025254
+|лестница|||53.672947|23.829765|||[]|||1|[]|osm:way/338027964
+|лестница|||53.672470|23.828773|||[]|||1|[]|osm:way/338027967
+|лестница|||53.672710|23.829162|||[]|||1|[]|osm:way/338027972
+|лестница|||53.672578|23.828106|||[]|||1|[]|osm:way/338035193
+|лестница|||53.672216|23.828382|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/338035196
+|лестница|||53.673213|23.826826|||[]|||1|[]|osm:way/338035200
+|лестница|||53.672326|23.828550|||[]|||1|[]|osm:way/338035203
+|лестница|||53.671603|23.825275|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/338038125
+|лестница|||53.671408|23.825754|||[]|||1|[]|osm:way/338038128
+|лестница|||53.674801|23.828127|||[]|||1|[]|osm:way/338039497
+|лестница|||53.680365|23.855045|||[]|||1|[]|osm:way/341028116
+|лестница|||53.684249|23.855930|||[]|||1|[]|osm:way/341028413
+|лестница|||53.684161|23.854766|||[]|||1|[]|osm:way/341030414
+|лестница|||53.680111|23.858403|||[]|||1|[]|osm:way/341030416
+|лестница|||53.680216|23.856963|||[]|||1|[]|osm:way/341030417
+|лестница|||53.674545|23.860399|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/341031150
+|лестница|||53.679131|23.861764|||[]|||1|[]|osm:way/341032438
+|лестница|||53.679040|23.862254|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)""]"|||1|[]|osm:way/341033355
+|лестница|||53.412219|24.886345|||[]|||1|[]|osm:way/345669450
+|лестница|||53.709047|23.859572|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=9 (OpenStreetMap)""]"|||1|[]|osm:way/359674817
+|лестница|||53.688179|23.847762|||[]|||1|[]|osm:way/359865534
+|лестница|||53.688134|23.848124|||[]|||1|[]|osm:way/359865537
+|лестница|||53.684175|23.833994|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=5 (OpenStreetMap)""]"|||1|[]|osm:way/359884281
+|лестница|||53.683751|23.833938|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)""]"|||1|[]|osm:way/359884282
+|лестница|||53.683926|23.833961|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=4 (OpenStreetMap)""]"|||1|[]|osm:way/359884283
+|лестница|||53.683473|23.833905|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)""]"|||1|[]|osm:way/359884284
+|лестница|||53.648732|23.839623|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/360765838
+|лестница|||53.648472|23.840877|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/360765844
+|лестница|||53.688067|23.835261|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=12 (OpenStreetMap)""]"|||1|[]|osm:way/360990664
+|лестница|||53.645349|23.843063|||[]|||1|[]|osm:way/361211485
+|лестница|||53.645217|23.842885|||[]|||1|[]|osm:way/361211489
+|лестница|||53.676262|23.825216|||[]|||1|[]|osm:way/361323281
+|лестница|||53.644184|23.852857|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=8 (OpenStreetMap)""]"|||1|[]|osm:way/362164627
+|лестница|||53.645952|23.847079|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=9 (OpenStreetMap)""]"|||1|[]|osm:way/362165786
+|лестница|||53.646286|23.846688|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=13 (OpenStreetMap)""]"|||1|[]|osm:way/362165790
+|лестница|||53.706807|23.858794|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=11 (OpenStreetMap)""]"|||1|[]|osm:way/362562297
+|лестница|||54.311101|26.284230|||[]|||1|[]|osm:way/362581424
+|лестница|||53.709651|23.850148|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=7 (OpenStreetMap)""]"|||1|[]|osm:way/362667854
+|лестница|||53.710437|23.850787|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=16 (OpenStreetMap)""]"|||1|[]|osm:way/362667856
+|лестница|||53.647238|23.838859|||[]|||1|[]|osm:way/363006042
+|лестница|||53.685708|23.835940|||[]|||1|[]|osm:way/363611129
+|лестница|||53.648540|23.838343|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)""]"|||1|[]|osm:way/363879056
+|лестница|||53.671697|23.861525|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)""]"|||1|[]|osm:way/365257960
+|лестница|||53.671045|23.861687|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)""]"|||1|[]|osm:way/365257967
+|лестница|||53.670153|23.860458|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/365410098
+|лестница|||53.700733|23.828589|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=11 (OpenStreetMap)""]"|||1|[]|osm:way/369080587
+|лестница|||53.700658|23.827874|||"[""handrail=yes (OpenStreetMap)"", ""ramp=separate (OpenStreetMap)"", ""step_count=12 (OpenStreetMap)""]"|||1|[]|osm:way/369080589
+|лестница|||53.882498|25.294022|||[]|||1|[]|osm:way/369151050
+|лестница|||53.882496|25.293895|||[]|||1|[]|osm:way/369151052
+|лестница|||53.604659|25.843555|||[]|||1|[]|osm:way/369443361
+|лестница|||53.891126|25.306744|||"[""step_count=4 (OpenStreetMap)""]"|||1|[]|osm:way/369473163
+|лестница|||53.891073|25.306746|||"[""step_count=3 (OpenStreetMap)""]"|||1|[]|osm:way/369473164
+|лестница|||53.891691|25.296023|||[]|||1|[]|osm:way/369624066
+|лестница|||53.898295|25.307079|||"[""step_count=23 (OpenStreetMap)""]"|||1|[]|osm:way/372327975
+|лестница|||53.886229|25.287223|||[]|||1|[]|osm:way/372327976
+|лестница|||53.887839|25.289882|||[]|||1|[]|osm:way/372327977
+|лестница|||53.887642|25.290236|||[]|||1|[]|osm:way/372327978
+|лестница|||53.886043|25.287609|||[]|||1|[]|osm:way/372327979
+|лестница|||53.897940|25.306021|||"[""step_count=23 (OpenStreetMap)""]"|||1|[]|osm:way/372327980
+|лестница|||53.694586|23.821081|||"[""handrail=no (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=5 (OpenStreetMap)""]"|||1|[]|osm:way/376291178
+|лестница|||53.696869|23.849547|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=2 (OpenStreetMap)""]"|||1|[]|osm:way/376349263
+|лестница|||53.686845|23.859717|||[]|||1|[]|osm:way/376362588
+|лестница|||53.700028|23.849490|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=7 (OpenStreetMap)""]"|||1|[]|osm:way/376490438
+|лестница|||53.699449|23.849434|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=9 (OpenStreetMap)""]"|||1|[]|osm:way/376490441
+|лестница|||53.696867|23.850915|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=10 (OpenStreetMap)""]"|||1|[]|osm:way/376496637
+|лестница|||53.696958|23.847903|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=9 (OpenStreetMap)""]"|||1|[]|osm:way/376498834
+|лестница|||53.699677|23.846592|||[]|||1|[]|osm:way/376515972
+|лестница|||53.680913|23.859535|||[]|||1|[]|osm:way/376518491
+|лестница|||53.686533|23.860236|||[]|||1|[]|osm:way/376525710
+|лестница|||53.687495|23.858017|||[]|||1|[]|osm:way/376525711
+|лестница|||53.687501|23.858965|||[]|||1|[]|osm:way/376525714
+|лестница|||53.698020|23.839642|||"[""handrail=no (OpenStreetMap)""]"|||1|[]|osm:way/376527290
+|лестница|||53.702932|23.818649|||[]|||1|[]|osm:way/376555593
+|лестница|||53.703150|23.819741|||[]|||1|[]|osm:way/376555594
+|лестница|||53.696057|23.850040|||[]|||1|[]|osm:way/376872806
+|лестница|||53.673224|23.826331|||[]|||1|[]|osm:way/376990258
+|лестница|||53.730770|25.008595|||[]|||1|[]|osm:way/377649816
+|лестница|||53.701303|23.840667|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=8 (OpenStreetMap)""]"|||1|[]|osm:way/379727640
+|лестница|||53.698609|23.840036|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=15 (OpenStreetMap)""]"|||1|[]|osm:way/379782323
+|лестница|||53.698717|23.840042|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=14 (OpenStreetMap)""]"|||1|[]|osm:way/379782326
+|лестница|||53.704226|23.816175|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=20 (OpenStreetMap)""]"|||1|[]|osm:way/379968523
+|лестница|||53.704481|23.806983|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=11 (OpenStreetMap)""]"|||1|[]|osm:way/379969848
+|лестница|||53.696523|23.855384|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=12 (OpenStreetMap)""]"|||1|[]|osm:way/380036956
+|лестница|||53.699451|23.850366|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=10 (OpenStreetMap)""]"|||1|[]|osm:way/380080731
+|лестница|||53.691187|23.846601|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=2 (OpenStreetMap)""]"|||1|[]|osm:way/381185825
+|лестница|||53.285274|23.941630|||[]|||1|[]|osm:way/381466075
+|лестница|||53.703872|23.809022|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=11 (OpenStreetMap)""]"|||1|[]|osm:way/382629260
+|лестница|||53.703915|23.809316|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=13 (OpenStreetMap)""]"|||1|[]|osm:way/382629261
+|лестница|||53.700435|23.847488|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=9 (OpenStreetMap)""]"|||1|[]|osm:way/385811793
+|лестница|||53.700458|23.847525|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=8 (OpenStreetMap)""]"|||1|[]|osm:way/385811794
+|лестница|||53.701409|23.844945|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=6 (OpenStreetMap)""]"|||1|[]|osm:way/386120739
+|лестница|||53.887324|25.303589|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=20 (OpenStreetMap)""]"|||1|[]|osm:way/386674586
+|лестница|||54.438477|26.512633|||[]|||1|[]|osm:way/388051014
+|лестница|||53.671944|23.822866|||[]|||1|[]|osm:way/396029907
+|лестница|||53.674062|23.823209|||[]|||1|[]|osm:way/396029911
+|лестница|||53.674830|23.822486|||"[""handrail=both (OpenStreetMap)""]"|||1|[]|osm:way/396029914
+|лестница|||53.674751|23.822561|||"[""handrail=both (OpenStreetMap)""]"|||1|[]|osm:way/396029917
+|лестница|||53.667862|23.800537|||[]|||1|[]|osm:way/399479104
+|лестница|||53.697085|23.817408|||[]|||1|[]|osm:way/400739104
+|лестница|||53.676829|23.841121|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=33 (OpenStreetMap)""]"|||1|[]|osm:way/401290277
+|лестница|||53.074623|25.307770|||[]|||1|[]|osm:way/402456464
+|лестница|||53.674023|23.823043|||[]|||1|[]|osm:way/404680124
+|лестница|||53.694229|23.823141|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/409576496
+|лестница|||53.905602|25.253308|||"[""ramp=bad (OpenStreetMap)"", ""step_count=15 (OpenStreetMap)""]"|||1|[]|osm:way/414485279
+|лестница|||53.905503|25.252920|||"[""step_count=12 (OpenStreetMap)""]"|||1|[]|osm:way/414485280
+|лестница|||53.904682|25.257112|||"[""ramp=no (OpenStreetMap)"", ""step_count=7 (OpenStreetMap)""]"|||1|[]|osm:way/414485281
+|лестница|||53.675418|23.838861|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=8 (OpenStreetMap)""]"|||1|[]|osm:way/424121414
+|лестница|||54.623011|25.939018|||[]|||1|[]|osm:way/428577284
+|лестница|||53.451805|26.473494|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/429889553
+|лестница|||53.451546|26.473977|||[]|||1|[]|osm:way/429889556
+|лестница|||53.451222|26.473877|||[]|||1|[]|osm:way/429889563
+|лестница|||54.677508|26.356059|||[]|||1|[]|osm:way/430292408
+|лестница|||53.685329|23.814322|||[]|||1|[]|osm:way/438293431
+|лестница|||53.685172|23.814384|||[]|||1|[]|osm:way/438293481
+|лестница|||53.731484|25.461486|||[]|||1|[]|osm:way/442471208
+|лестница|||53.618089|23.835919|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=3 (OpenStreetMap)""]"|||1|[]|osm:way/444734429
+|лестница|||53.148345|24.815344|||[]|||1|[]|osm:way/455560446
+|лестница|||53.680977|23.863562|||[]|||1|[]|osm:way/473273344
+|лестница|||53.671189|23.800459|||[]|||1|[]|osm:way/475688797
+|лестница|||53.671275|23.799943|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=4 (OpenStreetMap)""]"|||1|[]|osm:way/475688799
+|лестница|||53.670953|23.801585|||[]|||1|[]|osm:way/475688803
+|лестница|||53.671171|23.801552|||[]|||1|[]|osm:way/475688805
+|лестница|||53.670661|23.802392|||[]|||1|[]|osm:way/475688807
+|лестница|||53.670838|23.802466|||[]|||1|[]|osm:way/475688809
+|лестница|||53.671345|23.799499|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=4 (OpenStreetMap)""]"|||1|[]|osm:way/475688814
+|лестница|||53.671312|23.799734|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=3 (OpenStreetMap)""]"|||1|[]|osm:way/475688817
+|лестница|||53.702999|23.818621|||[]|||1|[]|osm:way/476313766
+|лестница|||53.148415|24.820850|||[]|||1|[]|osm:way/481857083
+|лестница|||53.149844|24.817108|||[]|||1|[]|osm:way/483889637
+|лестница|||53.149817|24.816864|||[]|||1|[]|osm:way/483889638
+|лестница|||53.464749|24.285085|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)""]"|||1|[]|osm:way/485461039
+|лестница|||53.662020|23.770299|||"[""handrail=no (OpenStreetMap)"", ""step_count=15 (OpenStreetMap)""]"|||1|[]|osm:way/487404404
+|лестница|||53.602617|25.826624|||[]|||1|[]|osm:way/492606441
+|лестница|||53.903200|25.256514|||[]|||1|[]|osm:way/493212099
+|лестница|||53.902735|25.254070|||"[""ramp=yes (OpenStreetMap)"", ""step_count=10 (OpenStreetMap)""]"|||1|[]|osm:way/493212101
+|лестница|||53.895142|25.289499|||[]|||1|[]|osm:way/493233822
+|лестница|||53.894709|25.289406|||[]|||1|[]|osm:way/493233823
+|лестница|||53.424043|24.624435|||[]|||1|[]|osm:way/495515764
+|лестница|||53.715021|23.841526|||"[""handrail=yes (OpenStreetMap)"", ""step_count=10 (OpenStreetMap)""]"|||1|[]|osm:way/496428073
+|лестница|||53.712394|23.867911|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/496696703
+|лестница|||53.705409|23.858021|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=14 (OpenStreetMap)""]"|||1|[]|osm:way/496696730
+|лестница|||53.711652|23.849060|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)""]"|||1|[]|osm:way/496698461
+|лестница|||53.711276|23.849068|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)""]"|||1|[]|osm:way/496698468
+|лестница|||53.713859|23.846119|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=10 (OpenStreetMap)""]"|||1|[]|osm:way/496890209
+|лестница|||53.714847|23.842340|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)""]"|||1|[]|osm:way/496890213
+|лестница|||53.895415|25.318282|||"[""step_count=10 (OpenStreetMap)""]"|||1|[]|osm:way/497920623
+|лестница|||53.899819|25.314664|||[]|||1|[]|osm:way/497920632
+|лестница|||53.693107|23.824101|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=28 (OpenStreetMap)""]"|||1|[]|osm:way/498032615
+|лестница|||53.695892|23.841445|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/498803074
+|лестница|||53.686779|23.836666|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=20 (OpenStreetMap)""]"|||1|[]|osm:way/498822304
+|лестница|||53.695244|23.846509|||"[""handrail=no (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=5 (OpenStreetMap)""]"|||1|[]|osm:way/498822323
+|лестница|||53.695225|23.846149|||"[""handrail=no (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=6 (OpenStreetMap)""]"|||1|[]|osm:way/498822324
+|лестница|||53.700852|23.840703|||"[""handrail=no (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=4 (OpenStreetMap)""]"|||1|[]|osm:way/498827331
+|лестница|||53.704879|23.839535|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=29 (OpenStreetMap)""]"|||1|[]|osm:way/498827339
+|лестница|||53.704698|23.839534|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=31 (OpenStreetMap)""]"|||1|[]|osm:way/498827340
+|лестница|||53.694502|23.838971|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/499047102
+|лестница|||53.695652|23.838677|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/499048811
+|лестница|||53.693632|23.828009|||[]|||1|[]|osm:way/499051461
+|лестница|||53.674288|23.960085|||[]|||1|[]|osm:way/501166217
+|лестница|||53.714975|23.854909|||"[""handrail=yes (OpenStreetMap)"", ""step_count=5 (OpenStreetMap)""]"|||1|[]|osm:way/503625071
+|лестница|||53.705940|23.856296|||[]|||1|[]|osm:way/503629243
+|лестница|||53.715533|23.843684|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/504847708
+|лестница|||53.678354|23.819461|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)""]"|||1|[]|osm:way/504865430
+|лестница|||53.695987|23.840517|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/505065566
+|лестница|||53.696113|23.840305|||[]|||1|[]|osm:way/505067832
+|лестница|||53.696206|23.840242|||[]|||1|[]|osm:way/505067833
+|лестница|||53.699813|23.841095|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=16 (OpenStreetMap)""]"|||1|[]|osm:way/505082372
+|лестница|||53.701556|23.840226|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=10 (OpenStreetMap)""]"|||1|[]|osm:way/505082692
+|лестница|||53.712886|23.814892|||"[""handrail=yes (OpenStreetMap)"", ""step_count=16 (OpenStreetMap)""]"|||1|[]|osm:way/505246185
+|лестница|||53.712835|23.814909|||"[""handrail=yes (OpenStreetMap)"", ""step_count=16 (OpenStreetMap)""]"|||1|[]|osm:way/505246186
+|лестница|||53.712536|23.815106|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=20 (OpenStreetMap)""]"|||1|[]|osm:way/505246190
+|лестница|||53.711655|23.815382|||"[""handrail=yes (OpenStreetMap)"", ""ramp=separate (OpenStreetMap)"", ""step_count=18 (OpenStreetMap)""]"|||1|[]|osm:way/505246194
+|лестница|||53.711723|23.815353|||"[""handrail=yes (OpenStreetMap)"", ""ramp=separate (OpenStreetMap)"", ""step_count=18 (OpenStreetMap)""]"|||1|[]|osm:way/505246195
+|лестница|||53.675397|23.852434|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/505576463
+|лестница|||53.689600|23.844093|||[]|||1|[]|osm:way/505696250
+|лестница|||53.895576|25.291454|||"[""step_count=10 (OpenStreetMap)""]"|||1|[]|osm:way/506093936
+|лестница|||53.897345|25.286219|||"[""ramp=yes (OpenStreetMap)"", ""step_count=2 (OpenStreetMap)""]"|||1|[]|osm:way/506093950
+|лестница|||53.895746|25.291449|||"[""ramp=yes (OpenStreetMap)"", ""step_count=10 (OpenStreetMap)""]"|||1|[]|osm:way/506093959
+|лестница|||53.895626|25.291426|||"[""step_count=10 (OpenStreetMap)""]"|||1|[]|osm:way/506093960
+|лестница|||53.894052|25.310278|||[]|||1|[]|osm:way/506103526
+|лестница|||53.898615|25.307026|||"[""step_count=3 (OpenStreetMap)""]"|||1|[]|osm:way/506103568
+|лестница|||53.898293|25.305977|||"[""step_count=1 (OpenStreetMap)""]"|||1|[]|osm:way/506103569
+|лестница|||53.898217|25.305583|||"[""step_count=4 (OpenStreetMap)""]"|||1|[]|osm:way/506103571
+|лестница|||53.898844|25.307613|||"[""step_count=5 (OpenStreetMap)""]"|||1|[]|osm:way/506103573
+|лестница|||53.899290|25.308119|||"[""step_count=6 (OpenStreetMap)""]"|||1|[]|osm:way/506103574
+|лестница|||53.898217|25.304496|||"[""step_count=6 (OpenStreetMap)""]"|||1|[]|osm:way/506103577
+|лестница|||53.892307|25.314752|||"[""step_count=3 (OpenStreetMap)""]"|||1|[]|osm:way/506239596
+|лестница|||53.892598|25.315048|||"[""ramp=yes (OpenStreetMap)"", ""step_count=0 (OpenStreetMap)""]"|||1|[]|osm:way/506239601
+|лестница|||53.892037|25.315126|||[]|||1|[]|osm:way/506239608
+|лестница|||53.893707|25.318942|||[]|||1|[]|osm:way/506239616
+|лестница|||53.891453|25.309681|||"[""ramp=yes (OpenStreetMap)"", ""step_count=3 (OpenStreetMap)""]"|||1|[]|osm:way/506240311
+|лестница|||53.700557|23.825448|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)""]"|||1|[]|osm:way/507939502
+|лестница|||53.654658|23.805933|||[]|||1|[]|osm:way/508167689
+|лестница|||53.886156|23.986610|||[]|||1|[]|osm:way/510715302
+|лестница|||53.886032|23.986594|||[]|||1|[]|osm:way/510715303
+|лестница|||53.705205|23.806681|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=24 (OpenStreetMap)""]"|||1|[]|osm:way/510786552
+|лестница|||53.709800|23.816119|||"[""handrail=yes (OpenStreetMap)"", ""step_count=19 (OpenStreetMap)""]"|||1|[]|osm:way/511774802
+|лестница|||53.709761|23.816136|||"[""handrail=yes (OpenStreetMap)"", ""step_count=19 (OpenStreetMap)""]"|||1|[]|osm:way/511774803
+|лестница|||53.710980|23.815649|||"[""handrail=yes (OpenStreetMap)"", ""ramp=separate (OpenStreetMap)"", ""step_count=18 (OpenStreetMap)""]"|||1|[]|osm:way/511774809
+|лестница|||53.710910|23.815676|||"[""handrail=yes (OpenStreetMap)"", ""ramp=separate (OpenStreetMap)"", ""step_count=18 (OpenStreetMap)""]"|||1|[]|osm:way/511774810
+|лестница|||53.706510|23.826790|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/511774857
+|лестница|||53.711220|23.839438|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=8 (OpenStreetMap)""]"|||1|[]|osm:way/512075377
+|лестница|||53.644092|23.872255|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/513853616
+|лестница|||53.637099|23.860800|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)""]"|||1|[]|osm:way/513864335
+|лестница|||53.646803|23.848357|||[]|||1|[]|osm:way/514260447
+|лестница|||53.899269|25.308042|||"[""step_count=5 (OpenStreetMap)""]"|||1|[]|osm:way/514305771
+|лестница|||53.898244|25.304595|||"[""step_count=5 (OpenStreetMap)""]"|||1|[]|osm:way/514305774
+|лестница|||53.897655|25.303467|||"[""step_count=3 (OpenStreetMap)""]"|||1|[]|osm:way/514305776
+|лестница|||53.889273|25.292292|||"[""step_count=5 (OpenStreetMap)""]"|||1|[]|osm:way/514305779
+|лестница|||53.889291|25.291882|||"[""step_count=7 (OpenStreetMap)""]"|||1|[]|osm:way/514305781
+|лестница|||53.889238|25.291326|||"[""ramp=yes (OpenStreetMap)"", ""step_count=8 (OpenStreetMap)""]"|||1|[]|osm:way/514305789
+|лестница|||53.647932|23.824498|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)""]"|||1|[]|osm:way/515221016
+|лестница|||53.649412|23.822825|||"[""handrail=no (OpenStreetMap)"", ""step_count=3 (OpenStreetMap)""]"|||1|[]|osm:way/515221026
+|лестница|||53.653471|23.845259|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/516118015
+|лестница|||53.654927|23.846323|||[]|||1|[]|osm:way/516118033
+|лестница|||53.654878|23.846302|||[]|||1|[]|osm:way/516118036
+|лестница|||53.654794|23.846644|||[]|||1|[]|osm:way/516118040
+|лестница|||53.654764|23.846595|||[]|||1|[]|osm:way/516118042
+|лестница|||53.655887|23.844157|||[]|||1|[]|osm:way/516118047
+|лестница|||53.657984|23.852079|||[]|||1|[]|osm:way/516181857
+|лестница|||53.658965|23.843945|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/516181906
+|лестница|||53.662883|23.832286|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/516388546
+|лестница|||53.670125|23.831209|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/516406436
+|лестница|||53.670299|23.824284|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=7 (OpenStreetMap)""]"|||1|[]|osm:way/516631806
+|лестница|||53.750745|24.214333|||[]|||1|[]|osm:way/516714692
+|лестница|||53.644895|23.858603|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=7 (OpenStreetMap)""]"|||1|[]|osm:way/517774366
+|лестница|||53.665532|23.826809|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/518586109
+|лестница|||53.644431|23.858375|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=8 (OpenStreetMap)""]"|||1|[]|osm:way/519590734
+|лестница|||53.727444|23.781512|||[]|||1|[]|osm:way/519758660
+|лестница|||53.064707|25.038310|||"[""step_count=4 (OpenStreetMap)""]"|||1|[]|osm:way/519964260
+|лестница|||54.481121|26.406979|||[]|||1|[]|osm:way/520534196
+|лестница|||54.481221|26.406974|||[]|||1|[]|osm:way/520534197
+|лестница|||53.144437|24.830439|||[]|||1|[]|osm:way/520965479
+|лестница|||53.643876|23.818154|||[]|||1|[]|osm:way/524926459
+|лестница|||53.643721|23.818101|||[]|||1|[]|osm:way/524926460
+|лестница|||53.643783|23.817568|||[]|||1|[]|osm:way/524926463
+|лестница|||53.644722|23.818858|||[]|||1|[]|osm:way/524926465
+|лестница|||53.644605|23.819133|||[]|||1|[]|osm:way/524926466
+|лестница|||53.644462|23.818943|||[]|||1|[]|osm:way/524926467
+|лестница|||53.701387|23.826545|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/525331391
+|лестница|||53.686590|23.832100|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=6 (OpenStreetMap)""]"|||1|[]|osm:way/525335964
+|лестница|||53.686739|23.832080|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=3 (OpenStreetMap)""]"|||1|[]|osm:way/525335965
+|лестница|||53.645695|23.846090|||[]|||1|[]|osm:way/525464865
+|лестница|||53.684708|23.839961|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=3 (OpenStreetMap)""]"|||1|[]|osm:way/525560965
+|лестница|||53.684398|23.839002|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=4 (OpenStreetMap)""]"|||1|[]|osm:way/525560966
+|лестница|||53.684770|23.840226|||"[""handrail=yes (OpenStreetMap)"", ""ramp=separate (OpenStreetMap)"", ""step_count=6 (OpenStreetMap)""]"|||1|[]|osm:way/525560969
+|лестница|||53.658912|23.837934|||[]|||1|[]|osm:way/526553112
+|лестница|||53.685421|23.829218|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=6 (OpenStreetMap)""]"|||1|[]|osm:way/526710191
+|лестница|||53.644327|23.863128|||[]|||1|[]|osm:way/526882554
+|лестница|||53.681904|23.831623|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=10 (OpenStreetMap)""]"|||1|[]|osm:way/527857998
+|лестница|||53.682309|23.831942|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=22 (OpenStreetMap)""]"|||1|[]|osm:way/527858002
+|лестница|||53.628638|23.853156|||[]|||1|[]|osm:way/527944825
+|лестница|||53.630766|23.851008|||[]|||1|[]|osm:way/527944827
+|лестница|||53.630516|23.850978|||[]|||1|[]|osm:way/527944828
+|лестница|||53.229988|24.450015|||[]|||1|[]|osm:way/531055408
+|лестница|||53.147706|24.821929|||[]|||1|[]|osm:way/531472585
+|лестница|||53.147674|24.822192|||[]|||1|[]|osm:way/531472586
+|лестница|||53.146420|24.818719|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)""]"|||1|[]|osm:way/531472588
+|лестница|||53.709055|23.802578|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=5 (OpenStreetMap)""]"|||1|[]|osm:way/531882658
+|лестница|||53.709070|23.802591|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=5 (OpenStreetMap)""]"|||1|[]|osm:way/531882659
+|лестница|||53.709198|23.802191|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=14 (OpenStreetMap)""]"|||1|[]|osm:way/531882665
+|лестница|||53.144561|24.818938|||[]|||1|[]|osm:way/532565875
+|лестница|||53.148693|24.819046|||[]|||1|[]|osm:way/532565910
+|лестница|||53.148659|24.818695|||[]|||1|[]|osm:way/532565911
+|лестница|||54.148150|25.321770|||[]|||1|[]|osm:way/532938045
+|лестница|||54.148251|25.321480|||[]|||1|[]|osm:way/532938046
+|лестница|||54.056754|25.293742|||[]|||1|[]|osm:way/533323396
+|лестница|||53.148217|24.819689|||[]|||1|[]|osm:way/533656184
+|лестница|||53.148499|24.819614|||[]|||1|[]|osm:way/533656186
+|лестница|||53.149953|24.821096|||[]|||1|[]|osm:way/534301763
+|лестница|||53.656962|23.841309|||[]|||1|[]|osm:way/535792501
+|лестница|||53.701361|23.811856|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/536508268
+|лестница|||53.669705|23.818836|||[]|||1|[]|osm:way/536680289
+|лестница|||53.704824|23.815635|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=6 (OpenStreetMap)""]"|||1|[]|osm:way/536696320
+|лестница|||53.686138|23.834299|||[]|||1|[]|osm:way/536721841
+|лестница|||53.147696|24.816852|||[]|||1|[]|osm:way/537212731
+|лестница|||53.148076|24.815412|||[]|||1|[]|osm:way/537212734
+|лестница|||53.703999|23.808805|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=6 (OpenStreetMap)""]"|||1|[]|osm:way/537248973
+|лестница|||53.692814|23.824871|||[]|||1|[]|osm:way/537522224
+|лестница|||53.695882|23.820428|||"[""handrail=no (OpenStreetMap)"", ""step_count=3 (OpenStreetMap)""]"|||1|[]|osm:way/537523332
+|лестница|||53.684906|23.841066|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=21 (OpenStreetMap)""]"|||1|[]|osm:way/537787833
+|лестница|||53.682810|23.834305|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=12 (OpenStreetMap)""]"|||1|[]|osm:way/538694177
+|лестница|||53.681806|23.835762|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=12 (OpenStreetMap)""]"|||1|[]|osm:way/538791666
+|лестница|||53.682302|23.836469|||[]|||1|[]|osm:way/538791667
+|лестница|||53.682202|23.836171|||[]|||1|[]|osm:way/538797860
+|лестница|||53.682110|23.827567|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=79 (OpenStreetMap)""]"|||1|[]|osm:way/539905990
+|лестница|||53.682512|23.827433|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=28 (OpenStreetMap)""]"|||1|[]|osm:way/539905992
+|лестница|||53.663364|23.795136|||[]|||1|[]|osm:way/540751273
+|лестница|||53.149932|24.817948|||[]|||1|[]|osm:way/544611034
+|лестница|||53.148271|24.815432|||[]|||1|[]|osm:way/544611066
+|лестница|||52.988704|24.857311|||[]|||1|[]|osm:way/544996742
+|лестница|||53.712454|23.840650|||[]|||1|[]|osm:way/548945716
+|лестница|||53.451642|26.473461|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/549031770
+|лестница|||53.451420|26.474708|||[]|||1|[]|osm:way/549031773
+|лестница|||53.692688|23.823209|||"[""handrail=yes (OpenStreetMap)"", ""ramp=separate (OpenStreetMap)"", ""step_count=8 (OpenStreetMap)""]"|||1|[]|osm:way/549310041
+|лестница|||53.693654|23.826260|||[]|||1|[]|osm:way/549321703
+|лестница|||53.685784|23.834893|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=14 (OpenStreetMap)""]"|||1|[]|osm:way/549484364
+|лестница|||53.685920|23.834862|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=11 (OpenStreetMap)""]"|||1|[]|osm:way/549484365
+|лестница|||53.617835|23.811056|||[]|||1|[]|osm:way/549695586
+|лестница|||53.260790|24.430157|||[]|||1|[]|osm:way/549966745
+|лестница|||53.681783|23.831550|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=6 (OpenStreetMap)""]"|||1|[]|osm:way/552235475
+|лестница|||53.682374|23.831945|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=7 (OpenStreetMap)""]"|||1|[]|osm:way/552235479
+|лестница|||53.098264|25.081586|||[]|||1|[]|osm:way/553103672
+|лестница|||53.705953|23.811095|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=9 (OpenStreetMap)""]"|||1|[]|osm:way/555303095
+|лестница|||53.673066|23.845569|||[]|||1|[]|osm:way/555309540
+|лестница|||53.643978|23.853105|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=15 (OpenStreetMap)""]"|||1|[]|osm:way/555312886
+|лестница|||53.643675|23.849621|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=12 (OpenStreetMap)""]"|||1|[]|osm:way/555312890
+|лестница|||53.644534|23.858244|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=4 (OpenStreetMap)""]"|||1|[]|osm:way/555312892
+|лестница|||53.643855|23.859135|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=8 (OpenStreetMap)""]"|||1|[]|osm:way/555312894
+|лестница|||53.643524|23.859561|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=8 (OpenStreetMap)""]"|||1|[]|osm:way/555312895
+|лестница|||53.681182|23.863698|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/556768294
+|лестница|||53.695167|23.794593|||[]|||1|[]|osm:way/556770213
+|лестница|||53.602322|25.826241|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)""]"|||1|[]|osm:way/560081501
+|лестница|||53.644336|23.866151|||[]|||1|[]|osm:way/560771085
+|лестница|||53.643860|23.864374|||[]|||1|[]|osm:way/560771087
+|лестница|||53.674957|23.805606|||[]|||1|[]|osm:way/560827771
+|лестница|||53.152047|24.890491|||[]|||1|[]|osm:way/561086228
+|лестница|||53.647115|23.849840|||[]|||1|[]|osm:way/561311910
+|лестница|||53.013168|25.344892|||[]|||1|[]|osm:way/561554099
+|лестница|||53.013329|25.343717|||[]|||1|[]|osm:way/561554100
+|лестница|||53.014327|25.343726|||[]|||1|[]|osm:way/561554103
+|лестница|||53.675314|23.828381|||[]|||1|[]|osm:way/565122822
+|лестница|||53.641093|23.844754|||[]|||1|[]|osm:way/565154689
+|лестница|||53.714148|23.861922|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/566175831
+|лестница|||53.681605|23.832077|||[]|||1|[]|osm:way/568320598
+|лестница|||53.147787|24.813568|||[]|||1|[]|osm:way/568347378
+|лестница|||53.147770|24.813438|||[]|||1|[]|osm:way/568347381
+|лестница|||53.641176|23.861356|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/568494939
+|лестница|||53.247373|24.195609|||[]|||1|[]|osm:way/569360854
+|лестница|||53.260431|24.104776|||[]|||1|[]|osm:way/569635757
+|лестница|||53.260463|24.104915|||[]|||1|[]|osm:way/569635758
+|лестница|||53.260373|24.104890|||[]|||1|[]|osm:way/569635759
+|лестница|||53.498765|24.055133|||[]|||1|[]|osm:way/569994488
+|лестница|||53.672280|23.870846|||[]|||1|[]|osm:way/570074919
+|лестница|||53.685936|23.847888|||"[""handrail=no (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=25 (OpenStreetMap)""]"|||1|[]|osm:way/571634319
+|лестница|||53.670168|23.849614|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/572544632
+|лестница|||53.641904|23.844467|||[]|||1|[]|osm:way/572590887
+|лестница|||53.681157|23.823746|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/573302662
+|лестница|||53.674058|23.852422|||[]|||1|[]|osm:way/573730776
+|лестница|||53.147357|24.821969|||[]|||1|[]|osm:way/575561126
+|лестница|||53.147221|24.821930|||[]|||1|[]|osm:way/575561128
+|лестница|||53.147016|24.821870|||[]|||1|[]|osm:way/575561130
+|лестница|||53.147538|24.822022|||[]|||1|[]|osm:way/575561131
+|лестница|||53.140648|24.812806|||[]|||1|[]|osm:way/575688326
+|лестница|||53.641821|23.844002|||[]|||1|[]|osm:way/576467483
+|лестница|||53.677590|23.824702|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/576892927
+|лестница|||53.687285|23.847795|||"[""handrail=no (OpenStreetMap)""]"|||1|[]|osm:way/576896313
+|лестница|||53.687383|23.847481|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)""]"|||1|[]|osm:way/576896315
+|лестница|||53.677006|23.841664|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=13 (OpenStreetMap)""]"|||1|[]|osm:way/576900277
+|лестница|||53.676213|23.839185|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)""]"|||1|[]|osm:way/576900280
+|лестница|||53.675695|23.839106|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)""]"|||1|[]|osm:way/576900281
+|лестница|||53.675249|23.830339|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)""]"|||1|[]|osm:way/576900283
+|лестница|||53.676203|23.859141|||[]|||1|[]|osm:way/578938475
+|лестница|||53.670522|23.824102|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=10 (OpenStreetMap)""]"|||1|[]|osm:way/578956931
+|лестница|||53.672691|23.868752|||"[""handrail=no (OpenStreetMap)""]"|||1|[]|osm:way/581696732
+|лестница|||53.672336|23.870406|||[]|||1|[]|osm:way/581696738
+|лестница|||53.671860|23.869780|||[]|||1|[]|osm:way/581696740
+|лестница|||53.672151|23.869864|||[]|||1|[]|osm:way/581696753
+|лестница|||53.669509|23.859708|||[]|||1|[]|osm:way/582335043
+|лестница|||53.645124|23.868506|||[]|||1|[]|osm:way/582603186
+|лестница|||53.644715|23.867654|||[]|||1|[]|osm:way/582603188
+|лестница|||53.645200|23.866851|||[]|||1|[]|osm:way/582603196
+|лестница|||53.656853|23.840578|||[]|||1|[]|osm:way/582657993
+|лестница|||53.656805|23.841698|||[]|||1|[]|osm:way/582657997
+|лестница|||53.657100|23.840958|||[]|||1|[]|osm:way/582658003
+|лестница|||53.640698|23.861171|||[]|||1|[]|osm:way/582663775
+|лестница|||53.894814|25.290375|||"[""step_count=8 (OpenStreetMap)""]"|||1|[]|osm:way/583421329
+|лестница|||53.894905|25.290959|||"[""step_count=7 (OpenStreetMap)""]"|||1|[]|osm:way/583421333
+|лестница|||53.701425|23.845523|||"[""handrail=yes (OpenStreetMap)"", ""ramp=separate (OpenStreetMap)"", ""step_count=9 (OpenStreetMap)""]"|||1|[]|osm:way/584280403
+|лестница|||53.162198|24.799281|||[]|||1|[]|osm:way/584756335
+|лестница|||53.891084|25.308571|||"[""ramp=yes (OpenStreetMap)"", ""step_count=5 (OpenStreetMap)""]"|||1|[]|osm:way/585047175
+|лестница|||53.891184|25.308389|||"[""ramp=no (OpenStreetMap)"", ""step_count=5 (OpenStreetMap)""]"|||1|[]|osm:way/585047176
+|лестница|||53.891279|25.308216|||"[""ramp=yes (OpenStreetMap)"", ""step_count=5 (OpenStreetMap)""]"|||1|[]|osm:way/585047177
+|лестница|||53.890973|25.308226|||"[""ramp=yes (OpenStreetMap)"", ""step_count=5 (OpenStreetMap)""]"|||1|[]|osm:way/585047180
+|лестница|||53.891073|25.308046|||"[""ramp=yes (OpenStreetMap)"", ""step_count=5 (OpenStreetMap)""]"|||1|[]|osm:way/585047181
+|лестница|||53.677941|23.806263|||[]|||1|[]|osm:way/585928495
+|лестница|||53.677714|23.805984|||[]|||1|[]|osm:way/585928497
+|лестница|||53.678001|23.806388|||[]|||1|[]|osm:way/585928498
+|лестница|||53.888448|25.303185|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)""]"|||1|[]|osm:way/587091158
+|лестница|||53.887023|25.305069|||"[""ramp=yes (OpenStreetMap)"", ""step_count=4 (OpenStreetMap)""]"|||1|[]|osm:way/587091162
+|лестница|||53.675208|23.779947|||[]|||1|[]|osm:way/587329296
+|лестница|||53.685412|23.846824|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)""]"|||1|[]|osm:way/587332462
+|лестница|||53.769203|23.819527|||"[""handrail=no (OpenStreetMap)""]"|||1|[]|osm:way/587926401
+|лестница|||53.810664|23.863427|||[]|||1|[]|osm:way/587932233
+|лестница|||53.888413|25.303795|||[]|||1|[]|osm:way/587997124
+|лестница|||53.888526|25.303669|||"[""handrail=no (OpenStreetMap)"", ""step_count=9 (OpenStreetMap)""]"|||1|[]|osm:way/587997125
+|лестница|||53.888499|25.303130|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)""]"|||1|[]|osm:way/587997126
+|лестница|||53.887984|25.302829|||"[""ramp=no (OpenStreetMap)""]"|||1|[]|osm:way/587997128
+|лестница|||53.888002|25.303407|||"[""ramp=no (OpenStreetMap)"", ""step_count=8 (OpenStreetMap)""]"|||1|[]|osm:way/587997131
+|лестница|||53.887773|25.303631|||"[""ramp=no (OpenStreetMap)"", ""step_count=3 (OpenStreetMap)""]"|||1|[]|osm:way/587997135
+|лестница|||53.669962|23.859446|||[]|||1|[]|osm:way/588713593
+|лестница|||53.670266|23.859558|||[]|||1|[]|osm:way/588713594
+|лестница|||53.675333|23.853122|||[]|||1|[]|osm:way/588713598
+|лестница|||53.891819|25.253029|||"[""step_count=7 (OpenStreetMap)""]"|||1|[]|osm:way/589561641
+|лестница|||53.905398|25.252492|||"[""ramp=no (OpenStreetMap)"", ""step_count=3 (OpenStreetMap)""]"|||1|[]|osm:way/589561645
+|лестница|||53.891193|25.296698|||"[""ramp=no (OpenStreetMap)"", ""step_count=7 (OpenStreetMap)""]"|||1|[]|osm:way/591116601
+|лестница|||53.893639|25.276927|||"[""ramp=yes (OpenStreetMap)"", ""step_count=5 (OpenStreetMap)""]"|||1|[]|osm:way/591116604
+|лестница|||53.891205|25.306745|||"[""ramp=yes (OpenStreetMap)"", ""step_count=3 (OpenStreetMap)""]"|||1|[]|osm:way/592950589
+|лестница|||53.895444|25.301530|||"[""ramp=no (OpenStreetMap)"", ""step_count=5 (OpenStreetMap)""]"|||1|[]|osm:way/592950592
+|лестница|||53.895494|25.301516|||"[""ramp=no (OpenStreetMap)"", ""step_count=4 (OpenStreetMap)""]"|||1|[]|osm:way/592950595
+|лестница|||53.883062|25.294625|||"[""ramp=yes (OpenStreetMap)"", ""step_count=70 (OpenStreetMap)""]"|||1|[]|osm:way/593320082
+|лестница|||53.662146|23.892145|||[]|||1|[]|osm:way/593413419
+|лестница|||53.681824|23.830898|||[]|||1|[]|osm:way/594114109
+|лестница|||53.701797|23.833440|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/594205494
+|лестница|||53.701756|23.834234|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/594205507
+|лестница|||53.701479|23.834276|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/594205510
+|лестница|||53.701632|23.834131|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/594205517
+|лестница|||53.701606|23.834134|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/594205520
+|лестница|||53.659625|23.818531|||[]|||1|[]|osm:way/594749844
+|лестница|||53.022186|24.967808|||[]|||1|[]|osm:way/595913273
+|лестница|||53.709696|23.800956|||"[""handrail=yes (OpenStreetMap)"", ""ramp=separate (OpenStreetMap)"", ""step_count=11 (OpenStreetMap)""]"|||1|[]|osm:way/596470547
+|лестница|||53.709774|23.800923|||"[""handrail=yes (OpenStreetMap)"", ""ramp=separate (OpenStreetMap)"", ""step_count=7 (OpenStreetMap)""]"|||1|[]|osm:way/596780896
+|лестница|||53.018487|25.021123|||[]|||1|[]|osm:way/597508575
+|лестница|||53.065955|25.023674|||[]|||1|[]|osm:way/597508677
+|лестница|||53.681614|23.811429|||[]|||1|[]|osm:way/598036808
+|лестница|||53.681718|23.809710|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/598036813
+|лестница|||53.658366|23.830045|||[]|||1|[]|osm:way/598494457
+|лестница|||53.658175|23.830173|||[]|||1|[]|osm:way/598494460
+|лестница|||53.470750|25.405246|||[]|||1|[]|osm:way/601816467
+|лестница|||53.470575|25.404154|||[]|||1|[]|osm:way/601816470
+|лестница|||53.470588|25.404268|||[]|||1|[]|osm:way/601816472
+|лестница|||53.223055|25.562869|||[]|||1|[]|osm:way/602486145
+|лестница|||53.545984|25.723962|||[]|||1|[]|osm:way/602555094
+|лестница|||53.701591|23.850683|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=17 (OpenStreetMap)""]"|||1|[]|osm:way/603286729
+|лестница|||53.673611|23.828405|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=11 (OpenStreetMap)""]"|||1|[]|osm:way/603526424
+|лестница|||53.673650|23.828500|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=12 (OpenStreetMap)""]"|||1|[]|osm:way/603526426
+|лестница|||53.673692|23.828605|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=12 (OpenStreetMap)""]"|||1|[]|osm:way/603526428
+|лестница|||53.676698|23.822234|||[]|||1|[]|osm:way/604070824
+|лестница|||53.896332|25.284248|||"[""step_count=3 (OpenStreetMap)""]"|||1|[]|osm:way/604156896
+|лестница|||53.896056|25.284385|||"[""step_count=3 (OpenStreetMap)""]"|||1|[]|osm:way/604156897
+|лестница|||53.896190|25.284318|||"[""step_count=3 (OpenStreetMap)""]"|||1|[]|osm:way/604156900
+|лестница|||53.896946|25.285378|||[]|||1|[]|osm:way/604156907
+|лестница|||53.897256|25.285314|||"[""ramp=yes (OpenStreetMap)""]"|||1|[]|osm:way/604156910
+|лестница|||53.013525|24.777595|||[]|||1|[]|osm:way/604980998
+|лестница|||53.702347|23.800864|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)""]"|||1|[]|osm:way/606150996
+|лестница|||53.173215|25.153117|||[]|||1|[]|osm:way/606402579
+|лестница|||53.698880|23.810004|||[]|||1|[]|osm:way/606412524
+|лестница|||53.698880|23.809992|||[]|||1|[]|osm:way/606412525
+|лестница|||53.096072|25.318816|||[]|||1|[]|osm:way/606690512
+|лестница|||53.104536|25.292994|||[]|||1|[]|osm:way/606690537
+|лестница|||53.705201|23.840518|||"[""handrail=yes (OpenStreetMap)"", ""ramp=separate (OpenStreetMap)"", ""step_count=8 (OpenStreetMap)""]"|||1|[]|osm:way/607496806
+|лестница|||53.705265|23.840530|||"[""handrail=yes (OpenStreetMap)"", ""ramp=separate (OpenStreetMap)"", ""step_count=8 (OpenStreetMap)""]"|||1|[]|osm:way/607496807
+|лестница|||53.701425|23.845152|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=8 (OpenStreetMap)""]"|||1|[]|osm:way/608151852
+|лестница|||53.702589|23.839268|||[]|||1|[]|osm:way/608151867
+|лестница|||53.700024|23.840150|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/608151868
+|лестница|||53.699740|23.840136|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/608151870
+|лестница|||53.700319|23.840153|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=10 (OpenStreetMap)""]"|||1|[]|osm:way/608151871
+|лестница|||53.699206|23.840116|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)""]"|||1|[]|osm:way/608151872
+|лестница|||53.644999|23.852917|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=10 (OpenStreetMap)""]"|||1|[]|osm:way/608411233
+|лестница|||53.646956|23.848851|||[]|||1|[]|osm:way/608453366
+|лестница|||53.645084|23.864498|||[]|||1|[]|osm:way/608458367
+|лестница|||53.701254|23.849158|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=8 (OpenStreetMap)""]"|||1|[]|osm:way/608569799
+|лестница|||53.646608|23.848477|||[]|||1|[]|osm:way/608715063
+|лестница|||53.673931|23.825367|||[]|||1|[]|osm:way/608956182
+|лестница|||53.684971|23.834799|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=4 (OpenStreetMap)""]"|||1|[]|osm:way/609216137
+|лестница|||53.702072|23.850800|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=6 (OpenStreetMap)""]"|||1|[]|osm:way/609463011
+|лестница|||53.702070|23.850474|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=5 (OpenStreetMap)""]"|||1|[]|osm:way/609463013
+|лестница|||53.701819|23.850485|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=4 (OpenStreetMap)""]"|||1|[]|osm:way/609463016
+|лестница|||53.701257|23.848247|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=8 (OpenStreetMap)""]"|||1|[]|osm:way/609771381
+|лестница|||53.680028|23.831009|||[]|||1|[]|osm:way/610003618
+|лестница|||53.646446|23.848465|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/610014845
+|лестница|||53.646495|23.847067|||[]|||1|[]|osm:way/610014855
+|лестница|||53.645866|23.846550|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/610014856
+|лестница|||53.645874|23.845986|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/610014864
+|лестница|||53.646908|23.848297|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/610014866
+|лестница|||53.649598|23.851735|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=7 (OpenStreetMap)""]"|||1|[]|osm:way/610014877
+|лестница|||53.700272|23.850744|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=9 (OpenStreetMap)""]"|||1|[]|osm:way/610192591
+|лестница|||53.691055|23.773361|||[]|||1|[]|osm:way/612083335
+сломана|лестница|||53.699656|23.773635|||"[""handrail=no (OpenStreetMap)""]"|||1|[]|osm:way/612083339
+|лестница|||53.710700|23.852291|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=12 (OpenStreetMap)""]"|||1|[]|osm:way/612392256
+|лестница|||53.711229|23.852214|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=14 (OpenStreetMap)""]"|||1|[]|osm:way/612392257
+|лестница|||53.606590|24.083115|||[]|||1|[]|osm:way/613126622
+|лестница|||53.165887|24.726262|||[]|||1|[]|osm:way/613509622
+|лестница|||53.601465|25.829710|||[]|||1|[]|osm:way/613937595
+|лестница|||53.702890|23.802493|||"[""handrail=no (OpenStreetMap)""]"|||1|[]|osm:way/614263603
+|лестница|||53.702808|23.802727|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/614263605
+|лестница|||53.702701|23.802898|||[]|||1|[]|osm:way/614263606
+|лестница|||53.702203|23.800278|||[]|||1|[]|osm:way/614263613
+|лестница|||53.701948|23.800384|||[]|||1|[]|osm:way/614263615
+|лестница|||53.701884|23.799027|||[]|||1|[]|osm:way/614263619
+|лестница|||53.122372|24.947406|||[]|||1|[]|osm:way/614287485
+|лестница|||53.707538|23.856298|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=6 (OpenStreetMap)""]"|||1|[]|osm:way/614298619
+|лестница|||53.674010|23.962417|||[]|||1|[]|osm:way/615606281
+|лестница|||53.895701|25.255044|||"[""ramp=no (OpenStreetMap)"", ""step_count=11 (OpenStreetMap)""]"|||1|[]|osm:way/617949397
+|лестница|||53.704108|23.847196|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=9 (OpenStreetMap)""]"|||1|[]|osm:way/618795952
+|лестница|||53.616066|23.809353|||[]|||1|[]|osm:way/619878246
+|лестница|||53.613416|23.817820|||[]|||1|[]|osm:way/619878253
+|лестница|||53.617104|23.809224|||[]|||1|[]|osm:way/619885969
+|лестница|||53.618264|23.809398|||[]|||1|[]|osm:way/619885973
+|лестница|||53.618316|23.813513|||[]|||1|[]|osm:way/619885986
+|лестница|||53.618738|23.813248|||[]|||1|[]|osm:way/619885987
+|лестница|||53.623586|23.801107|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)""]"|||1|[]|osm:way/619891020
+|лестница|||53.622188|23.800436|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)""]"|||1|[]|osm:way/620163588
+|лестница|||53.160975|24.785943|||[]|||1|[]|osm:way/620846590
+|лестница|||53.663006|23.830904|||[]|||1|[]|osm:way/620955802
+|лестница|||53.880726|25.291515|||[]|||1|[]|osm:way/624241334
+|лестница|||53.695143|23.802765|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/624747431
+|лестница|||53.896710|25.268111|||"[""ramp=no (OpenStreetMap)"", ""step_count=14 (OpenStreetMap)""]"|||1|[]|osm:way/625893641
+|лестница|||53.896849|25.268088|||"[""ramp=no (OpenStreetMap)"", ""step_count=17 (OpenStreetMap)""]"|||1|[]|osm:way/625893642
+|лестница|||53.899277|25.260607|||"[""ramp=yes (OpenStreetMap)"", ""step_count=6 (OpenStreetMap)""]"|||1|[]|osm:way/625893643
+|лестница|||53.662323|23.838942|||[]|||1|[]|osm:way/626003897
+|лестница|||53.662446|23.839223|||[]|||1|[]|osm:way/626003900
+|лестница|||53.660776|23.836131|||[]|||1|[]|osm:way/626014271
+|лестница|||53.705887|23.806439|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=4 (OpenStreetMap)""]"|||1|[]|osm:way/626288898
+|лестница|||53.705880|23.806410|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=26 (OpenStreetMap)""]"|||1|[]|osm:way/626288900
+|лестница|||53.705235|23.806694|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=5 (OpenStreetMap)""]"|||1|[]|osm:way/626288903
+|лестница|||53.696372|23.832961|||[]|||1|[]|osm:way/626516831
+|лестница|||53.696353|23.832999|||[]|||1|[]|osm:way/626516832
+|лестница|||53.700468|23.804171|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=7 (OpenStreetMap)""]"|||1|[]|osm:way/626766342
+|лестница|||53.697722|23.810799|||[]|||1|[]|osm:way/626929447
+|лестница|||53.694831|23.807082|||"[""step_count=2 (OpenStreetMap)""]"|||1|[]|osm:way/627632902
+|лестница|||53.672436|23.813987|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/628099146
+|лестница|||53.674845|23.850913|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/628897562
+|лестница|||53.673684|23.850763|||[]|||1|[]|osm:way/628897568
+|лестница|||53.640843|23.860607|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=5 (OpenStreetMap)""]"|||1|[]|osm:way/629886658
+|лестница|||53.700728|23.804936|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=28 (OpenStreetMap)""]"|||1|[]|osm:way/629977250
+|лестница|||53.698837|23.810326|||[]|||1|[]|osm:way/629977263
+|лестница|||53.699003|23.810285|||[]|||1|[]|osm:way/629977265
+|лестница|||53.706637|23.810752|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=10 (OpenStreetMap)""]"|||1|[]|osm:way/630635803
+|лестница|||53.700569|23.840187|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=6 (OpenStreetMap)""]"|||1|[]|osm:way/631135178
+|лестница|||53.712965|23.846320|||[]|||1|[]|osm:way/631401720
+|лестница|||53.702099|23.814892|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=20 (OpenStreetMap)""]"|||1|[]|osm:way/631636471
+|лестница|||53.701558|23.845035|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=7 (OpenStreetMap)""]"|||1|[]|osm:way/633683327
+|лестница|||53.901119|25.260015|||"[""ramp=no (OpenStreetMap)"", ""step_count=11 (OpenStreetMap)""]"|||1|[]|osm:way/633804058
+|лестница|||53.710348|23.849289|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=9 (OpenStreetMap)""]"|||1|[]|osm:way/638837670
+|лестница|||53.706681|23.838083|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=7 (OpenStreetMap)""]"|||1|[]|osm:way/640683578
+|лестница|||53.706681|23.838610|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=3 (OpenStreetMap)""]"|||1|[]|osm:way/640683579
+|лестница|||53.890836|25.249626|||"[""step_count=4 (OpenStreetMap)""]"|||1|[]|osm:way/640760818
+|лестница|||53.890998|25.250572|||"[""step_count=1 (OpenStreetMap)""]"|||1|[]|osm:way/640760820
+|лестница|||53.146878|24.464707|||[]|||1|[]|osm:way/640957542
+|лестница|||53.695333|23.803983|||[]|||1|[]|osm:way/641020843
+|лестница|||53.214863|24.737571|||[]|||1|[]|osm:way/641313191
+|лестница|||53.672830|23.828073|||[]|||1|[]|osm:way/641555010
+|лестница|||53.676362|23.838495|||[]|||1|[]|osm:way/643968492
+|лестница|||53.686512|23.833789|||[]|||1|[]|osm:way/651695248
+|лестница|||53.676428|23.838892|||[]|||1|[]|osm:way/651760439
+|лестница|||53.574103|26.344818|||[]|||1|[]|osm:way/654022749
+|лестница|||53.574578|26.343812|||"[""handrail=no (OpenStreetMap)"", ""step_count=1 (OpenStreetMap)""]"|||1|[]|osm:way/654025921
+|лестница|||53.702357|23.844656|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=12 (OpenStreetMap)""]"|||1|[]|osm:way/655101450
+|лестница|||53.671614|23.801596|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=5 (OpenStreetMap)""]"|||1|[]|osm:way/656337215
+|лестница|||53.698292|23.833703|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/656826197
+|лестница|||53.697331|23.828836|||"[""handrail=no (OpenStreetMap)"", ""ramp=separate (OpenStreetMap)""]"|||1|[]|osm:way/656826201
+|лестница|||53.697475|23.828936|||[]|||1|[]|osm:way/656826203
+|лестница|||53.156864|24.814710|||[]|||1|[]|osm:way/657924345
+|лестница|||53.156789|24.814671|||[]|||1|[]|osm:way/657924346
+|лестница|||53.152081|24.572180|||[]|||1|[]|osm:way/658177177
+|лестница|||53.712198|23.847111|||"[""handrail=yes (OpenStreetMap)"", ""step_count=13 (OpenStreetMap)""]"|||1|[]|osm:way/658582335
+|лестница|||53.149604|24.816070|||[]|||1|[]|osm:way/659340315
+|лестница|||53.149626|24.816275|||[]|||1|[]|osm:way/659340318
+|лестница|||53.895513|25.291534|||"[""step_count=10 (OpenStreetMap)""]"|||1|[]|osm:way/660879143
+|лестница|||53.895681|25.291421|||"[""step_count=10 (OpenStreetMap)""]"|||1|[]|osm:way/660879144
+|лестница|||53.656988|23.829144|||[]|||1|[]|osm:way/662497539
+|лестница|||53.701002|23.825308|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/664224893
+|лестница|||53.682808|23.830702|||[]|||1|[]|osm:way/664261855
+|лестница|||53.680185|23.827918|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/664261878
+|лестница|||53.679977|23.827908|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/664261880
+|лестница|||53.677426|23.840039|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=8 (OpenStreetMap)""]"|||1|[]|osm:way/664512492
+|лестница|||53.677375|23.842382|||[]|||1|[]|osm:way/664512505
+|лестница|||53.677232|23.842922|||[]|||1|[]|osm:way/664512523
+|лестница|||53.890366|25.298376|||[]|||1|[]|osm:way/664577024
+|лестница|||53.890397|25.298640|||[]|||1|[]|osm:way/664577026
+|лестница|||53.674839|23.840984|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=11 (OpenStreetMap)""]"|||1|[]|osm:way/667044788
+|лестница|||53.672294|23.839343|||[]|||1|[]|osm:way/667044837
+|лестница|||53.672320|23.839968|||[]|||1|[]|osm:way/667044842
+|лестница|||53.662486|23.814276|||[]|||1|[]|osm:way/668737463
+|лестница|||53.701059|23.812464|||[]|||1|[]|osm:way/672559616
+|лестница|||53.693636|23.823534|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=6 (OpenStreetMap)""]"|||1|[]|osm:way/672767897
+|лестница|||53.670666|23.864086|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=9 (OpenStreetMap)""]"|||1|[]|osm:way/674203447
+|лестница|||53.697745|23.845438|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=23 (OpenStreetMap)""]"|||1|[]|osm:way/675891573
+|лестница|||53.673881|23.828224|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/676531378
+|лестница|||53.686879|23.853261|||[]|||1|[]|osm:way/676936371
+|лестница|||53.691826|23.825222|||[]|||1|[]|osm:way/677530820
+|лестница|||53.670662|23.835777|||[]|||1|[]|osm:way/677541722
+|лестница|||53.695575|23.825910|||[]|||1|[]|osm:way/678963909
+|лестница|||53.657511|23.842436|||[]|||1|[]|osm:way/683346689
+|лестница|||53.093775|25.243998|||[]|||1|[]|osm:way/683369116
+|лестница|||53.638176|23.857671|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=11 (OpenStreetMap)""]"|||1|[]|osm:way/683787916
+|лестница|||53.685505|23.846649|||[]|||1|[]|osm:way/684019591
+|лестница|||53.685513|23.846589|||[]|||1|[]|osm:way/684019593
+|лестница|||53.638920|23.862443|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/684019802
+|лестница|||53.639716|23.863952|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=10 (OpenStreetMap)""]"|||1|[]|osm:way/684019803
+|лестница|||53.675046|23.825708|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)""]"|||1|[]|osm:way/684269840
+|лестница|||53.694033|23.838718|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=8 (OpenStreetMap)""]"|||1|[]|osm:way/685080727
+|лестница|||53.672112|23.847385|||[]|||1|[]|osm:way/685196510
+|лестница|||53.694546|23.839015|||[]|||1|[]|osm:way/685871624
+|лестница|||53.001883|25.352016|||[]|||1|[]|osm:way/686041854
+|лестница|||53.012542|25.345971|||[]|||1|[]|osm:way/686041861
+|лестница|||53.689715|23.836180|||"[""handrail=no (OpenStreetMap)""]"|||1|[]|osm:way/686353220
+|лестница|||53.682460|23.831919|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=11 (OpenStreetMap)""]"|||1|[]|osm:way/686684922
+|лестница|||53.678787|23.846684|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/688226711
+|лестница|||53.708304|23.860639|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)""]"|||1|[]|osm:way/688508085
+|лестница|||53.623631|23.771351|||[]|||1|[]|osm:way/689110744
+|лестница|||53.700582|23.845057|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=12 (OpenStreetMap)""]"|||1|[]|osm:way/689154229
+|лестница|||53.700488|23.845058|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)""]"|||1|[]|osm:way/689154230
+|лестница|||53.682206|23.831588|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)""]"|||1|[]|osm:way/689379779
+|лестница|||53.672565|23.765537|||[]|||1|[]|osm:way/690943419
+|лестница|||53.679225|23.810230|||[]|||1|[]|osm:way/691103161
+|лестница|||53.713154|23.849949|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=7 (OpenStreetMap)""]"|||1|[]|osm:way/691199128
+|лестница|||53.713448|23.850011|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=7 (OpenStreetMap)""]"|||1|[]|osm:way/691199133
+|лестница|||53.713395|23.849908|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=10 (OpenStreetMap)""]"|||1|[]|osm:way/691199135
+|лестница|||53.691252|23.798470|||[]|||1|[]|osm:way/692356479
+|лестница|||53.671608|23.831029|||[]|||1|[]|osm:way/692414120
+|лестница|||53.695504|23.774275|||[]|||1|[]|osm:way/692639666
+|лестница|||53.695446|23.774274|||[]|||1|[]|osm:way/692639668
+|лестница|||53.695471|23.774335|||[]|||1|[]|osm:way/692639670
+|лестница|||53.695614|23.773403|||[]|||1|[]|osm:way/692639679
+|лестница|||53.696116|23.775413|||[]|||1|[]|osm:way/692639692
+|лестница|||53.694891|23.775592|||[]|||1|[]|osm:way/692639696
+|лестница|||53.700806|23.851894|||"[""handrail=no (OpenStreetMap)"", ""ramp=separate (OpenStreetMap)"", ""step_count=9 (OpenStreetMap)""]"|||1|[]|osm:way/692940899
+|лестница|||53.718276|23.863604|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=11 (OpenStreetMap)""]"|||1|[]|osm:way/693052944
+|лестница|||53.701463|23.811996|||[]|||1|[]|osm:way/693635521
+|лестница|||53.701510|23.812156|||[]|||1|[]|osm:way/693635523
+|лестница|||53.701488|23.811986|||[]|||1|[]|osm:way/693635524
+|лестница|||53.701485|23.812165|||[]|||1|[]|osm:way/693635525
+|лестница|||53.658362|23.847268|||[]|||1|[]|osm:way/694815350
+|лестница|||53.658647|23.847297|||[]|||1|[]|osm:way/694815353
+|лестница|||53.659137|23.849109|||"[""handrail=no (OpenStreetMap)""]"|||1|[]|osm:way/694815356
+|лестница|||53.655092|23.843312|||[]|||1|[]|osm:way/694828368
+|лестница|||53.656700|23.841547|||[]|||1|[]|osm:way/694828390
+|лестница|||53.656958|23.840853|||[]|||1|[]|osm:way/694828392
+|лестница|||53.656851|23.841185|||[]|||1|[]|osm:way/694828394
+|лестница|||53.697006|23.819955|||"[""ramp=no (OpenStreetMap)""]"|||1|[]|osm:way/694829991
+|лестница|||53.693095|23.828111|||"[""handrail=yes (OpenStreetMap)"", ""ramp=separate (OpenStreetMap)"", ""step_count=10 (OpenStreetMap)""]"|||1|[]|osm:way/694830003
+|лестница|||53.691187|23.833408|||[]|||1|[]|osm:way/694830020
+|лестница|||53.648973|23.858454|||[]|||1|[]|osm:way/695864230
+|лестница|||53.668213|23.820712|||"[""handrail=yes (OpenStreetMap)"", ""ramp=separate (OpenStreetMap)"", ""step_count=9 (OpenStreetMap)""]"|||1|[]|osm:way/695996246
+|лестница|||53.668343|23.820697|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/695996247
+|лестница|||53.686946|23.835210|||"[""handrail=yes (OpenStreetMap)"", ""ramp=separate (OpenStreetMap)""]"|||1|[]|osm:way/696039624
+|лестница|||53.659522|23.837577|||[]|||1|[]|osm:way/696507792
+|лестница|||53.649234|23.849541|||[]|||1|[]|osm:way/696516741
+|лестница|||53.642780|23.849949|||[]|||1|[]|osm:way/697011191
+|лестница|||53.893160|25.277229|||"[""step_count=10 (OpenStreetMap)""]"|||1|[]|osm:way/697517961
+|лестница|||53.893754|25.273902|||"[""step_count=5 (OpenStreetMap)""]"|||1|[]|osm:way/697517965
+|лестница|||53.652177|23.735222|||[]|||1|[]|osm:way/697877628
+|лестница|||53.697754|23.840924|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=9 (OpenStreetMap)""]"|||1|[]|osm:way/698013809
+|лестница|||53.715436|23.845477|||[]|||1|[]|osm:way/698913961
+|лестница|||53.707484|23.850690|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=15 (OpenStreetMap)""]"|||1|[]|osm:way/699055586
+|лестница|||53.710003|23.850169|||"[""handrail=yes (OpenStreetMap)"", ""ramp=separate (OpenStreetMap)"", ""step_count=7 (OpenStreetMap)""]"|||1|[]|osm:way/699261556
+|лестница|||53.145296|24.425825|||[]|||1|[]|osm:way/699360800
+|лестница|||53.511949|24.154091|||[]|||1|[]|osm:way/699393476
+|лестница|||53.711971|23.859439|||[]|||1|[]|osm:way/699457611
+|лестница|||53.643156|23.843603|||[]|||1|[]|osm:way/699990774
+|лестница|||53.673056|23.845304|||[]|||1|[]|osm:way/700209014
+|лестница|||53.675669|23.852577|||[]|||1|[]|osm:way/700414629
+|лестница|||53.675667|23.853440|||[]|||1|[]|osm:way/700414631
+|лестница|||53.679853|23.812866|||[]|||1|[]|osm:way/700570711
+|лестница|||53.028951|24.109726|||[]|||1|[]|osm:way/700865649
+|лестница|||53.638109|23.865064|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/700954205
+|лестница|||54.256375|26.015792|||[]|||1|[]|osm:way/702316429
+|лестница|||53.646473|23.867892|||[]|||1|[]|osm:way/704006055
+|лестница|||53.693478|23.824544|||[]|||1|[]|osm:way/704222830
+|лестница|||53.693352|23.824994|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/704222838
+|лестница|||53.675413|23.853340|||[]|||1|[]|osm:way/704398668
+|лестница|||53.564652|23.870156|||[]|||1|[]|osm:way/706075737
+|лестница|||53.891097|25.297985|||[]|||1|[]|osm:way/707540630
+|лестница|||53.891538|25.297861|||[]|||1|[]|osm:way/707540631
+|лестница|||53.712846|23.857801|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/708294959
+|лестница|||53.712797|23.857849|||"[""handrail=yes (OpenStreetMap)"", ""ramp=separate (OpenStreetMap)"", ""step_count=11 (OpenStreetMap)""]"|||1|[]|osm:way/708294961
+|лестница|||53.711623|23.852075|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=8 (OpenStreetMap)""]"|||1|[]|osm:way/708294972
+|лестница|||53.712682|23.842912|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/709025128
+|лестница|||53.869046|25.247560|||[]|||1|[]|osm:way/709070630
+|лестница|||53.679520|23.859568|||[]|||1|[]|osm:way/710571639
+|лестница|||53.359654|24.453989|||[]|||1|[]|osm:way/711027636
+|лестница|||53.689527|23.844287|||"[""handrail=no (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=4 (OpenStreetMap)""]"|||1|[]|osm:way/714444531
+|лестница|||53.664927|23.886813|||[]|||1|[]|osm:way/714446640
+|лестница|||53.717767|23.865957|||"[""step_count=3 (OpenStreetMap)""]"|||1|[]|osm:way/714883924
+|лестница|||53.717767|23.865587|||"[""step_count=3 (OpenStreetMap)""]"|||1|[]|osm:way/714883929
+|лестница|||53.420590|24.556656|||[]|||1|[]|osm:way/717764647
+|лестница|||53.705981|23.823130|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=18 (OpenStreetMap)""]"|||1|[]|osm:way/718274226
+|лестница|||53.681819|23.832331|||[]|||1|[]|osm:way/718990506
+|лестница|||53.609269|24.738146|||[]|||1|[]|osm:way/719312627
+|лестница|||53.608417|24.738806|||[]|||1|[]|osm:way/719312628
+|лестница|||53.704844|23.815780|||"[""handrail=no (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=4 (OpenStreetMap)""]"|||1|[]|osm:way/719475092
+|лестница|||53.692784|23.827595|||[]|||1|[]|osm:way/719974909
+|лестница|||53.698634|23.817381|||[]|||1|[]|osm:way/720315570
+|лестница|||53.698600|23.817346|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/720315572
+|лестница|||53.698309|23.801237|||[]|||1|[]|osm:way/720538274
+|лестница|||53.706954|23.800344|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=3 (OpenStreetMap)""]"|||1|[]|osm:way/721724338
+|лестница|||53.706547|23.800983|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=20 (OpenStreetMap)""]"|||1|[]|osm:way/721724339
+|лестница|||53.893282|25.278015|||[]|||1|[]|osm:way/722838429
+|лестница|||53.676783|23.838370|||"[""handrail=yes (OpenStreetMap)"", ""ramp=separate (OpenStreetMap)"", ""step_count=6 (OpenStreetMap)""]"|||1|[]|osm:way/724092218
+|лестница|||53.675817|23.841491|||[]|||1|[]|osm:way/725141717
+|лестница|||53.013020|25.345673|||[]|||1|[]|osm:way/725277197
+|лестница|||53.703522|23.850241|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=11 (OpenStreetMap)""]"|||1|[]|osm:way/727330333
+|лестница|||53.647767|23.828358|||[]|||1|[]|osm:way/727413725
+|лестница|||53.694651|23.804335|||[]|||1|[]|osm:way/727413776
+|лестница|||53.695434|23.803628|||[]|||1|[]|osm:way/727413779
+|лестница|||53.690430|23.831338|||[]|||1|[]|osm:way/729404850
+|лестница|||53.672501|23.809468|||[]|||1|[]|osm:way/729737800
+|лестница|||53.705721|23.815950|||"[""handrail=no (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=3 (OpenStreetMap)""]"|||1|[]|osm:way/731900952
+|лестница|||53.711679|23.848491|||[]|||1|[]|osm:way/732158252
+|лестница|||53.705281|23.816317|||"[""handrail=no (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=6 (OpenStreetMap)""]"|||1|[]|osm:way/732737887
+|лестница|||53.705376|23.816276|||"[""handrail=no (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=6 (OpenStreetMap)""]"|||1|[]|osm:way/732737889
+|лестница|||53.705063|23.816272|||"[""handrail=no (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=6 (OpenStreetMap)""]"|||1|[]|osm:way/732737891
+|лестница|||53.702078|23.846710|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=17 (OpenStreetMap)""]"|||1|[]|osm:way/733532909
+|лестница|||53.704895|23.851944|||"[""handrail=no (OpenStreetMap)"", ""step_count=3 (OpenStreetMap)""]"|||1|[]|osm:way/733933780
+|лестница|||53.697060|23.835010|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=10 (OpenStreetMap)""]"|||1|[]|osm:way/734274097
+|лестница|||53.696366|23.834022|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/734274100
+|лестница|||53.676536|23.838969|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/735131738
+|лестница|||53.676545|23.838915|||[]|||1|[]|osm:way/735131739
+|лестница|||53.710437|23.797905|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/736900470
+|лестница|||53.707561|23.811974|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=5 (OpenStreetMap)""]"|||1|[]|osm:way/737811226
+|лестница|||53.636868|23.849609|||[]|||1|[]|osm:way/741755065
+|лестница|||53.419388|24.541401|||[]|||1|[]|osm:way/742251479
+|лестница|||53.932513|25.780332|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=2 (OpenStreetMap)""]"|||1|[]|osm:way/743249492
+|лестница|||53.932393|25.780340|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=13 (OpenStreetMap)""]"|||1|[]|osm:way/743249496
+|лестница|||53.167224|24.519547|||[]|||1|[]|osm:way/743354479
+|лестница|||53.891110|25.307051|||"[""step_count=3 (OpenStreetMap)""]"|||1|[]|osm:way/743547891
+|лестница|||53.890909|25.306622|||"[""step_count=3 (OpenStreetMap)""]"|||1|[]|osm:way/743547892
+|лестница|||53.719688|23.864026|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/744431715
+|лестница|||53.719691|23.864416|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/744431716
+|лестница|||53.524127|23.855949|||[]|||1|[]|osm:way/744558935
+|лестница|||53.652284|23.855996|||[]|||1|[]|osm:way/746505063
+|лестница|||53.644274|23.842983|||[]|||1|[]|osm:way/746615404
+|лестница|||53.709791|23.803643|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=2 (OpenStreetMap)""]"|||1|[]|osm:way/747225173
+|лестница|||53.710056|23.804062|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=11 (OpenStreetMap)""]"|||1|[]|osm:way/747225183
+|лестница|||53.710032|23.804288|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=10 (OpenStreetMap)""]"|||1|[]|osm:way/747225184
+|лестница|||53.710073|23.804213|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=11 (OpenStreetMap)""]"|||1|[]|osm:way/747225185
+|лестница|||53.710026|23.803905|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=11 (OpenStreetMap)""]"|||1|[]|osm:way/747225186
+|лестница|||53.710024|23.804236|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=1 (OpenStreetMap)""]"|||1|[]|osm:way/747225187
+|лестница|||53.709974|23.803905|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=6 (OpenStreetMap)""]"|||1|[]|osm:way/747225188
+|лестница|||53.709992|23.803870|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=7 (OpenStreetMap)""]"|||1|[]|osm:way/747225191
+|лестница|||53.670350|23.812982|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=6 (OpenStreetMap)""]"|||1|[]|osm:way/751808827
+|лестница|||53.662055|23.844810|||[]|||1|[]|osm:way/754030028
+|лестница|||53.653345|23.839017|||[]|||1|[]|osm:way/754069585
+|лестница|||53.672477|23.821067|||[]|||1|[]|osm:way/754369438
+|лестница|||53.614987|23.820765|||[]|||1|[]|osm:way/756557980
+|лестница|||53.692631|23.832753|||[]|||1|[]|osm:way/758571086
+|лестница|||53.698518|23.840813|||"[""handrail=no (OpenStreetMap)""]"|||1|[]|osm:way/759015805
+|лестница|||53.687001|23.848626|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=29 (OpenStreetMap)""]"|||1|[]|osm:way/759039126
+|лестница|||53.694563|23.838863|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/759175235
+|лестница|||53.698531|23.840078|||[]|||1|[]|osm:way/759236029
+|лестница|||53.686516|23.846703|||"[""handrail=no (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)""]"|||1|[]|osm:way/759347147
+|лестница|||53.686380|23.848114|||[]|||1|[]|osm:way/759348480
+|лестница|||53.714441|23.841483|||[]|||1|[]|osm:way/759673564
+|лестница|||53.659864|23.753348|||[]|||1|[]|osm:way/761231951
+|лестница|||53.013092|25.342007|||[]|||1|[]|osm:way/761647091
+|лестница|||53.012695|25.342472|||[]|||1|[]|osm:way/761647094
+|лестница|||53.066385|24.771878|||[]|||1|[]|osm:way/761698916
+|лестница|||53.675785|23.843777|||[]|||1|[]|osm:way/762015419
+|лестница|||53.675581|23.844518|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/762015430
+|лестница|||53.643747|23.841240|||[]|||1|[]|osm:way/763120409
+|лестница|||53.706191|23.810493|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=7 (OpenStreetMap)""]"|||1|[]|osm:way/765364139
+|лестница|||53.705402|23.840864|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=6 (OpenStreetMap)""]"|||1|[]|osm:way/765430241
+|лестница|||53.705401|23.840673|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=7 (OpenStreetMap)""]"|||1|[]|osm:way/765430244
+|лестница|||53.674191|23.853032|||[]|||1|[]|osm:way/765726724
+|лестница|||53.678987|23.839439|||[]|||1|[]|osm:way/765780602
+|лестница|||53.650627|23.847020|||[]|||1|[]|osm:way/767764847
+|лестница|||53.450688|26.473641|||"[""handrail=no (OpenStreetMap)""]"|||1|[]|osm:way/768134480
+|лестница|||53.450740|26.474149|||"[""handrail=no (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)""]"|||1|[]|osm:way/768134482
+|лестница|||53.784545|25.541241|||[]|||1|[]|osm:way/772125524
+|лестница|||53.696201|23.822504|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/772723464
+|лестница|||53.681864|23.823947|||[]|||1|[]|osm:way/773102313
+|лестница|||53.681905|23.823768|||[]|||1|[]|osm:way/773102316
+|лестница|||53.682001|23.824307|||"[""handrail=no (OpenStreetMap)""]"|||1|[]|osm:way/773102320
+|лестница|||53.679455|23.831123|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/780141297
+|лестница|||53.707377|23.800875|||[]|||1|[]|osm:way/783754874
+|лестница|||53.706967|23.797263|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=4 (OpenStreetMap)""]"|||1|[]|osm:way/783754889
+|лестница|||53.602245|25.380053|||[]|||1|[]|osm:way/785060296
+|лестница|||53.077374|25.396437|||[]|||1|[]|osm:way/785993421
+|лестница|||53.680734|23.842279|||[]|||1|[]|osm:way/786600409
+|лестница|||53.158242|24.427880|||[]|||1|[]|osm:way/786949776
+|лестница|||53.259208|24.430636|||[]|||1|[]|osm:way/787710684
+|лестница|||53.259108|24.430018|||[]|||1|[]|osm:way/787710687
+|лестница|||53.258933|24.430092|||[]|||1|[]|osm:way/787710689
+|лестница|||53.168447|24.437670|||[]|||1|[]|osm:way/787710717
+|лестница|||53.619983|23.818821|||[]|||1|[]|osm:way/787945597
+|лестница|||53.697060|23.939341|||[]|||1|[]|osm:way/788421905
+|лестница|||53.697694|23.810653|||"[""handrail=yes (OpenStreetMap)"", ""step_count=20 (OpenStreetMap)""]"|||1|[]|osm:way/788511192
+|лестница|||53.697667|23.810405|||"[""step_count=15 (OpenStreetMap)""]"|||1|[]|osm:way/788511193
+|лестница|||53.413137|24.890190|||[]|||1|[]|osm:way/789256221
+|лестница|||53.171620|24.420254|||[]|||1|[]|osm:way/791646301
+|лестница|||53.892890|25.296546|||[]|||1|[]|osm:way/793353109
+|лестница|||53.893210|25.296056|||[]|||1|[]|osm:way/793353113
+|лестница|||53.892981|25.295273|||[]|||1|[]|osm:way/793353114
+|лестница|||53.686747|23.878821|||[]|||1|[]|osm:way/794486024
+|лестница|||53.666324|23.840203|||[]|||1|[]|osm:way/799145924
+|лестница|||53.463860|25.587152|||[]|||1|[]|osm:way/800332959
+|лестница|||53.463213|25.585581|||[]|||1|[]|osm:way/800333010
+|лестница|||53.663201|23.797394|||[]|||1|[]|osm:way/802044977
+|лестница|||53.697209|24.017161|||[]|||1|[]|osm:way/802718476
+|лестница|||53.646951|23.782540|||[]|||1|[]|osm:way/803104454
+|лестница|||53.658137|23.806390|||[]|||1|[]|osm:way/803108263
+|лестница|||53.658311|23.806867|||[]|||1|[]|osm:way/803108265
+|лестница|||53.676468|23.819541|||[]|||1|[]|osm:way/803384458
+|лестница|||53.676552|23.819603|||[]|||1|[]|osm:way/803384461
+|лестница|||53.677058|23.817626|||[]|||1|[]|osm:way/803483600
+|лестница|||53.680836|23.859724|||[]|||1|[]|osm:way/804543154
+|лестница|||53.707642|23.799739|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=4 (OpenStreetMap)""]"|||1|[]|osm:way/813405279
+|лестница|||53.680070|23.862005|||"[""handrail=yes (OpenStreetMap)"", ""step_count=10 (OpenStreetMap)""]"|||1|[]|osm:way/815480763
+|лестница|||53.675576|23.851417|||[]|||1|[]|osm:way/817489241
+|лестница|||53.653046|23.853040|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/817514143
+|лестница|||54.515931|26.180491|||"[""ramp=no (OpenStreetMap)"", ""step_count=3 (OpenStreetMap)""]"|||1|[]|osm:way/820409850
+|лестница|||54.515966|26.180391|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=4 (OpenStreetMap)""]"|||1|[]|osm:way/820409851
+|лестница|||53.083278|25.294815|||[]|||1|[]|osm:way/820918740
+|лестница|||53.084941|25.315118|||[]|||1|[]|osm:way/823758193
+|лестница|||53.087840|25.308502|||[]|||1|[]|osm:way/823758220
+|лестница|||53.088144|25.309223|||[]|||1|[]|osm:way/823758222
+|лестница|||53.690820|23.823310|||[]|||1|[]|osm:way/827076234
+|лестница|||53.701463|23.819416|||[]|||1|[]|osm:way/827077457
+|лестница|||53.150063|24.807153|||[]|||1|[]|osm:way/827909424
+|лестница|||53.116412|25.156777|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=5 (OpenStreetMap)""]"|||1|[]|osm:way/827909432
+|лестница|||53.116456|25.156983|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=9 (OpenStreetMap)""]"|||1|[]|osm:way/827909439
+|лестница|||53.116442|25.156994|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=9 (OpenStreetMap)""]"|||1|[]|osm:way/827909440
+|лестница|||53.032470|24.075321|||[]|||1|[]|osm:way/829435234
+|лестница|||53.882624|25.739430|||[]|||1|[]|osm:way/831145904
+|лестница|||53.716691|23.836799|||[]|||1|[]|osm:way/831383030
+|лестница|||53.083571|25.295682|||[]|||1|[]|osm:way/832479392
+|лестница|||53.083409|25.295219|||[]|||1|[]|osm:way/832479394
+|лестница|||53.878769|25.329531|||[]|||1|[]|osm:way/832860726
+|лестница|||53.405777|24.535400|||[]|||1|[]|osm:way/834292650
+|лестница|||53.706871|23.842063|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=6 (OpenStreetMap)""]"|||1|[]|osm:way/835098976
+|лестница|||53.653862|23.849126|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/835840632
+|лестница|||53.653254|23.850661|||[]|||1|[]|osm:way/835840633
+|лестница|||53.653722|23.853226|||[]|||1|[]|osm:way/835840634
+|лестница|||53.596433|25.818369|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)""]"|||1|[]|osm:way/839668344
+|лестница|||53.706884|23.841113|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=4 (OpenStreetMap)""]"|||1|[]|osm:way/839736049
+|лестница|||54.412911|26.037604|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/840133155
+|лестница|||53.089069|25.321890|||[]|||1|[]|osm:way/843032519
+|лестница|||53.088966|25.321974|||[]|||1|[]|osm:way/843032520
+|лестница|||53.089171|25.321860|||[]|||1|[]|osm:way/843032521
+|лестница|||53.348228|25.486739|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)""]"|||1|[]|osm:way/846102995
+|лестница|||53.685175|23.854586|||[]|||1|[]|osm:way/846573527
+|лестница|||53.705247|23.840175|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=3 (OpenStreetMap)""]"|||1|[]|osm:way/854525606
+|лестница|||53.153197|24.448296|||[]|||1|[]|osm:way/854663876
+|лестница|||54.255896|26.014823|||"[""step_count=5 (OpenStreetMap)""]"|||1|[]|osm:way/854980823
+|лестница|||54.515916|26.180467|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=9 (OpenStreetMap)""]"|||1|[]|osm:way/854980839
+|лестница|||54.379042|26.383626|||"[""handrail=both (OpenStreetMap)"", ""step_count=16 (OpenStreetMap)""]"|||1|[]|osm:way/854980857
+|лестница|||53.259920|24.430369|||[]|||1|[]|osm:way/859176187
+|лестница|||53.259790|24.430427|||[]|||1|[]|osm:way/859176189
+|лестница|||53.259625|24.430504|||[]|||1|[]|osm:way/859176191
+|лестница|||53.259355|24.430651|||[]|||1|[]|osm:way/859176193
+|лестница|||53.706712|23.838618|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=12 (OpenStreetMap)""]"|||1|[]|osm:way/860583934
+|лестница|||53.940450|25.245732|||[]|||1|[]|osm:way/860592420
+|лестница|||53.705391|23.840575|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=8 (OpenStreetMap)""]"|||1|[]|osm:way/862500406
+|лестница|||53.450828|26.473603|||[]|||1|[]|osm:way/864483604
+|лестница|||53.709702|23.801001|||"[""handrail=yes (OpenStreetMap)"", ""ramp=separate (OpenStreetMap)"", ""step_count=11 (OpenStreetMap)""]"|||1|[]|osm:way/864984573
+|лестница|||53.662437|23.814747|||"[""ramp=separate (OpenStreetMap)""]"|||1|[]|osm:way/868466735
+|лестница|||53.662442|23.814662|||"[""ramp=no (OpenStreetMap)"", ""step_count=6 (OpenStreetMap)""]"|||1|[]|osm:way/868466736
+|лестница|||53.861901|23.623056|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/868466741
+|лестница|||53.861827|23.622894|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/868466742
+|лестница|||53.863509|23.628723|||"[""handrail=both (OpenStreetMap)"", ""ramp=no (OpenStreetMap)""]"|||1|[]|osm:way/868466751
+|лестница|||53.678432|23.818448|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=3 (OpenStreetMap)""]"|||1|[]|osm:way/868466753
+|лестница|||53.905098|25.316076|||[]|||1|[]|osm:way/868526179
+|лестница|||53.905220|25.315817|||[]|||1|[]|osm:way/868526180
+|лестница|||53.170724|24.424797|||[]|||1|[]|osm:way/870695135
+|лестница|||53.171452|24.421192|||[]|||1|[]|osm:way/870695141
+|лестница|||53.869852|23.757238|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=5 (OpenStreetMap)""]"|||1|[]|osm:way/871934837
+|лестница|||53.869812|23.757089|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=5 (OpenStreetMap)""]"|||1|[]|osm:way/871934838
+|лестница|||53.870241|23.756705|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=14 (OpenStreetMap)""]"|||1|[]|osm:way/871934840
+|лестница|||53.870290|23.756801|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=14 (OpenStreetMap)""]"|||1|[]|osm:way/871934841
+|лестница|||53.869767|23.757114|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=14 (OpenStreetMap)""]"|||1|[]|osm:way/871934844
+|лестница|||53.869813|23.757282|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=14 (OpenStreetMap)""]"|||1|[]|osm:way/871934845
+|лестница|||53.499150|24.052877|||[]|||1|[]|osm:way/872939820
+|лестница|||53.685628|23.880222|||[]|||1|[]|osm:way/873389945
+|лестница|||53.908150|25.317140|||[]|||1|[]|osm:way/874003555
+|лестница|||53.909484|25.323443|||[]|||1|[]|osm:way/874003562
+|лестница|||53.350818|24.623733|||[]|||1|[]|osm:way/875057859
+|лестница|||53.350907|24.623781|||[]|||1|[]|osm:way/875057860
+|лестница|||53.611641|24.743633|||[]|||1|[]|osm:way/875098026
+|лестница|||53.611401|24.743824|||[]|||1|[]|osm:way/875098028
+|лестница|||53.608545|24.739156|||[]|||1|[]|osm:way/875098041
+|лестница|||53.674530|23.859683|||[]|||1|[]|osm:way/891739915
+|лестница|||53.719308|23.867955|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=19 (OpenStreetMap)""]"|||1|[]|osm:way/894421911
+|лестница|||53.678829|23.824791|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)""]"|||1|[]|osm:way/895285980
+|лестница|||54.251643|26.020175|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)""]"|||1|[]|osm:way/904883508
+|лестница|||53.678951|23.841645|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)""]"|||1|[]|osm:way/923477221
+|лестница|||53.679226|23.841809|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)""]"|||1|[]|osm:way/923477223
+|лестница|||53.679350|23.841900|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/923477227
+|лестница|||53.650586|23.846392|||[]|||1|[]|osm:way/924139946
+|лестница|||53.168839|24.458142|||[]|||1|[]|osm:way/927022689
+|лестница|||53.291437|24.409133|||[]|||1|[]|osm:way/927059319
+|лестница|||53.257655|24.431385|||[]|||1|[]|osm:way/927059329
+|лестница|||53.698874|23.808265|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=6 (OpenStreetMap)""]"|||1|[]|osm:way/927666422
+|лестница|||53.698118|24.008616|||[]|||1|[]|osm:way/928146478
+|лестница|||53.697940|24.008565|||[]|||1|[]|osm:way/928146481
+|лестница|||53.596387|24.261137|||[]|||1|[]|osm:way/929619965
+|лестница|||53.597670|24.261562|||[]|||1|[]|osm:way/929619971
+|лестница|||53.894508|25.301451|||[]|||1|[]|osm:way/934510784
+|лестница|||53.689028|23.844414|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=3 (OpenStreetMap)""]"|||1|[]|osm:way/935422270
+|лестница|||53.863787|25.739840|||[]|||1|[]|osm:way/935863020
+|лестница|||53.680065|23.826513|||[]|||1|[]|osm:way/941536371
+|лестница|||53.462940|25.891587|||[]|||1|[]|osm:way/949087647
+|лестница|||53.459612|25.885916|||[]|||1|[]|osm:way/949087655
+|лестница|||53.459654|25.885839|||[]|||1|[]|osm:way/949087656
+|лестница|||53.467089|25.993476|||[]|||1|[]|osm:way/949306118
+|лестница|||53.708438|23.840881|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=24 (OpenStreetMap)""]"|||1|[]|osm:way/949793860
+|лестница|||53.720737|23.875032|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=10 (OpenStreetMap)""]"|||1|[]|osm:way/954391863
+|лестница|||53.720901|23.875645|||"[""handrail=yes (OpenStreetMap)"", ""ramp=separate (OpenStreetMap)"", ""step_count=22 (OpenStreetMap)""]"|||1|[]|osm:way/954391866
+|лестница|||53.718333|23.867357|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/954422626
+|лестница|||53.682630|23.836536|||[]|||1|[]|osm:way/956951840
+|лестница|||53.681924|23.836549|||[]|||1|[]|osm:way/956951849
+|лестница|||53.719028|23.867491|||"[""handrail=yes (OpenStreetMap)"", ""ramp=separate (OpenStreetMap)"", ""step_count=12 (OpenStreetMap)""]"|||1|[]|osm:way/957236721
+|лестница|||53.719028|23.867031|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=5 (OpenStreetMap)""]"|||1|[]|osm:way/957236726
+|лестница|||53.677698|23.840747|||[]|||1|[]|osm:way/962055927
+|лестница|||53.677718|23.840813|||[]|||1|[]|osm:way/962055928
+|лестница|||53.678073|23.839859|||[]|||1|[]|osm:way/962055930
+|лестница|||53.721532|23.873908|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=3 (OpenStreetMap)""]"|||1|[]|osm:way/962849727
+|лестница|||53.806274|25.509671|||"[""handrail=no (OpenStreetMap)"", ""step_count=3 (OpenStreetMap)""]"|||1|[]|osm:way/967253013
+|лестница|||53.083426|25.323685|||[]|||1|[]|osm:way/968235336
+|лестница|||53.681138|23.835567|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)""]"|||1|[]|osm:way/970656001
+|лестница|||53.678234|23.863120|||[]|||1|[]|osm:way/974766387
+|лестница|||53.677614|23.862871|||[]|||1|[]|osm:way/974766389
+|лестница|||54.311415|26.285050|||[]|||1|[]|osm:way/975594396
+|лестница|||54.310084|26.288095|||[]|||1|[]|osm:way/975594408
+|лестница|||54.251651|26.020365|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)""]"|||1|[]|osm:way/975666705
+|лестница|||54.251571|26.020354|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)""]"|||1|[]|osm:way/975666706
+|лестница|||54.251600|26.020342|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)""]"|||1|[]|osm:way/975666707
+|лестница|||54.251589|26.020117|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)""]"|||1|[]|osm:way/975666709
+|лестница|||53.141589|24.631118|||[]|||1|[]|osm:way/977345701
+|лестница|||53.708353|23.841013|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=26 (OpenStreetMap)""]"|||1|[]|osm:way/977572860
+|лестница|||53.693816|23.847792|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=22 (OpenStreetMap)""]"|||1|[]|osm:way/978712046
+|лестница|||53.292120|23.930814|||[]|||1|[]|osm:way/978734288
+|лестница|||53.679096|23.818326|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=2 (OpenStreetMap)""]"|||1|[]|osm:way/980847145
+|лестница|||53.678721|23.818274|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)""]"|||1|[]|osm:way/980847148
+|лестница|||53.678816|23.818217|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)""]"|||1|[]|osm:way/980847153
+|лестница|||53.678521|23.816934|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/980938137
+|лестница|||53.678425|23.817071|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/980938138
+|лестница|||53.679664|23.816929|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/981180806
+|лестница|||53.679809|23.817142|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/981180813
+|лестница|||53.679675|23.817498|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/981180816
+|лестница|||53.681171|23.820489|||[]|||1|[]|osm:way/981507630
+|лестница|||53.887526|25.302340|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)""]"|||1|[]|osm:way/987807991
+|лестница|||53.887447|25.302504|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=4 (OpenStreetMap)""]"|||1|[]|osm:way/987807993
+|лестница|||53.887314|25.302531|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=5 (OpenStreetMap)""]"|||1|[]|osm:way/987807994
+|лестница|||53.887522|25.303603|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=35 (OpenStreetMap)""]"|||1|[]|osm:way/987808002
+|лестница|||53.887103|25.302299|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/987808004
+|лестница|||54.007602|25.603915|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=5 (OpenStreetMap)""]"|||1|[]|osm:way/987808019
+|лестница|||53.996510|25.385477|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=6 (OpenStreetMap)""]"|||1|[]|osm:way/987808025
+|лестница|||53.997502|25.385987|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)""]"|||1|[]|osm:way/987808029
+|лестница|||53.997507|25.385972|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=4 (OpenStreetMap)""]"|||1|[]|osm:way/987808031
+|лестница|||53.997746|25.385878|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=5 (OpenStreetMap)""]"|||1|[]|osm:way/987808035
+|лестница|||53.888528|25.303820|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=8 (OpenStreetMap)""]"|||1|[]|osm:way/987808042
+|лестница|||53.887030|25.302464|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=5 (OpenStreetMap)""]"|||1|[]|osm:way/987808045
+|лестница|||53.886974|25.303417|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)""]"|||1|[]|osm:way/987808048
+|лестница|||53.683056|23.831809|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/995560757
+|лестница|||53.667060|23.929316|||[]|||1|[]|osm:way/996969650
+|лестница|||53.719152|23.865545|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=17 (OpenStreetMap)""]"|||1|[]|osm:way/997477474
+|лестница|||53.705874|23.823018|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=8 (OpenStreetMap)""]"|||1|[]|osm:way/999071956
+|лестница|||53.677001|23.824138|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/1001089296
+|лестница|||53.691784|23.825850|||[]|||1|[]|osm:way/1006558429
+|лестница|||53.691767|23.825833|||[]|||1|[]|osm:way/1006558430
+|лестница|||53.720671|23.865378|||"[""handrail=yes (OpenStreetMap)"", ""ramp=separate (OpenStreetMap)"", ""step_count=11 (OpenStreetMap)""]"|||1|[]|osm:way/1009545338
+|лестница|||53.699500|23.801370|||[]|||1|[]|osm:way/1010244166
+|лестница|||53.700459|23.838044|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/1010263700
+|лестница|||53.699150|23.833168|||[]|||1|[]|osm:way/1010263720
+|лестница|||53.694178|23.829877|||[]|||1|[]|osm:way/1010263750
+|лестница|||53.695110|23.820479|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=18 (OpenStreetMap)""]"|||1|[]|osm:way/1010287481
+|лестница|||53.695836|23.792725|||[]|||1|[]|osm:way/1010287528
+|лестница|||53.720834|23.864646|||"[""handrail=no (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=4 (OpenStreetMap)""]"|||1|[]|osm:way/1011274431
+|лестница|||53.687595|23.834392|||[]|||1|[]|osm:way/1012174426
+|лестница|||53.687697|23.834536|||[]|||1|[]|osm:way/1012174428
+|лестница|||53.700610|23.853230|||"[""handrail=no (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=7 (OpenStreetMap)""]"|||1|[]|osm:way/1013040379
+|лестница|||53.681481|23.830056|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=20 (OpenStreetMap)""]"|||1|[]|osm:way/1014078595
+|лестница|||53.713374|23.839566|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=12 (OpenStreetMap)""]"|||1|[]|osm:way/1014321046
+|лестница|||53.680844|23.787760|||[]|||1|[]|osm:way/1018514019
+|лестница|||53.705315|23.831195|||[]|||1|[]|osm:way/1021990010
+|лестница|||53.674489|23.797544|||[]|||1|[]|osm:way/1022886812
+|лестница|||53.657311|23.810446|||[]|||1|[]|osm:way/1023981623
+|лестница|||53.702810|23.857740|||"[""ramp=yes (OpenStreetMap)""]"|||1|[]|osm:way/1037842877
+|лестница|||53.720491|23.871414|||"[""handrail=yes (OpenStreetMap)"", ""ramp=separate (OpenStreetMap)"", ""step_count=19 (OpenStreetMap)""]"|||1|[]|osm:way/1039568077
+|лестница|||53.680911|23.827305|||[]|||1|[]|osm:way/1041663936
+|лестница|||53.680835|23.827418|||[]|||1|[]|osm:way/1041663938
+|лестница|||53.571893|24.191207|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/1042236594
+|лестница|||53.116838|24.363330|||[]|||1|[]|osm:way/1047813916
+|лестница|||53.663878|23.841300|||[]|||1|[]|osm:way/1047823082
+|лестница|||53.144420|24.815184|||[]|||1|[]|osm:way/1051994383
+|лестница|||53.704083|23.809312|||[]|||1|[]|osm:way/1054086670
+|лестница|||53.148905|24.816043|||[]|||1|[]|osm:way/1054776652
+|лестница|||53.148709|24.816103|||[]|||1|[]|osm:way/1054776654
+|лестница|||53.719476|23.875575|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=18 (OpenStreetMap)""]"|||1|[]|osm:way/1056109507
+|лестница|||53.682191|23.889393|||[]|||1|[]|osm:way/1056683242
+|лестница|||53.692849|23.867033|||[]|||1|[]|osm:way/1056691365
+|лестница|||53.687449|23.848691|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/1056691367
+|лестница|||53.679152|23.839523|||[]|||1|[]|osm:way/1058655674
+|лестница|||53.682187|23.840395|||"[""handrail=no (OpenStreetMap)""]"|||1|[]|osm:way/1059873443
+|лестница|||53.656591|23.802126|||[]|||1|[]|osm:way/1059890503
+|лестница|||53.656808|23.899674|||[]|||1|[]|osm:way/1062738369
+|лестница|||53.696844|23.827093|||[]|||1|[]|osm:way/1062831777
+|лестница|||53.862902|23.737337|||[]|||1|[]|osm:way/1067718115
+|лестница|||53.869686|23.674014|||[]|||1|[]|osm:way/1067718119
+|лестница|||53.148011|24.814863|||[]|||1|[]|osm:way/1071483001
+|лестница|||53.701483|23.826270|||[]|||1|[]|osm:way/1071839895
+|лестница|||53.700840|23.816285|||[]|||1|[]|osm:way/1072050992
+|лестница|||53.720977|23.882826|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=19 (OpenStreetMap)""]"|||1|[]|osm:way/1075569456
+|лестница|||53.721123|23.878553|||"[""handrail=yes (OpenStreetMap)"", ""ramp=separate (OpenStreetMap)"", ""step_count=20 (OpenStreetMap)""]"|||1|[]|osm:way/1075569458
+|лестница|||53.703226|23.845279|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=5 (OpenStreetMap)""]"|||1|[]|osm:way/1077054749
+|лестница|||53.703124|23.845347|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=15 (OpenStreetMap)""]"|||1|[]|osm:way/1077054752
+|лестница|||53.703435|23.845353|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=10 (OpenStreetMap)""]"|||1|[]|osm:way/1077054754
+|лестница|||53.703216|23.844865|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=11 (OpenStreetMap)""]"|||1|[]|osm:way/1077054757
+|лестница|||53.702931|23.845274|||"[""handrail=no (OpenStreetMap)""]"|||1|[]|osm:way/1077054759
+|лестница|||53.430064|24.456550|||[]|||1|[]|osm:way/1077660863
+|лестница|||54.475019|26.372270|||"[""handrail=no (OpenStreetMap)""]"|||1|[]|osm:way/1077755223
+|лестница|||53.890472|25.298216|||[]|||1|[]|osm:way/1078089006
+|лестница|||53.467677|26.024319|||"[""handrail=no (OpenStreetMap)""]"|||1|[]|osm:way/1078267392
+|лестница|||53.466798|26.024347|||[]|||1|[]|osm:way/1078267393
+|лестница|||53.660177|23.805610|||[]|||1|[]|osm:way/1078816505
+|лестница|||53.719924|23.874274|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=6 (OpenStreetMap)""]"|||1|[]|osm:way/1078879052
+|лестница|||53.624526|23.771860|||[]|||1|[]|osm:way/1079679321
+|лестница|||53.695443|23.824687|||[]|||1|[]|osm:way/1080842694
+|лестница|||53.696486|23.831791|||[]|||1|[]|osm:way/1080842710
+|лестница|||53.696398|23.832197|||[]|||1|[]|osm:way/1080842712
+|лестница|||53.610552|24.740965|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=16 (OpenStreetMap)""]"|||1|[]|osm:way/1080926159
+|лестница|||53.721108|23.882821|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=18 (OpenStreetMap)""]"|||1|[]|osm:way/1081007697
+|лестница|||53.704557|23.839350|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=20 (OpenStreetMap)""]"|||1|[]|osm:way/1084414149
+|лестница|||53.700854|23.829699|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=10 (OpenStreetMap)""]"|||1|[]|osm:way/1085814316
+|лестница|||53.700926|23.830251|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=10 (OpenStreetMap)""]"|||1|[]|osm:way/1085814318
+|лестница|||53.700878|23.829921|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=10 (OpenStreetMap)""]"|||1|[]|osm:way/1085814321
+|лестница|||53.700798|23.829296|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=2 (OpenStreetMap)""]"|||1|[]|osm:way/1085814324
+|лестница|||53.704514|23.851426|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=7 (OpenStreetMap)""]"|||1|[]|osm:way/1086220852
+|лестница|||53.703657|23.845286|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)""]"|||1|[]|osm:way/1086226338
+|лестница|||53.695904|23.847172|||"[""handrail=no (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=10 (OpenStreetMap)""]"|||1|[]|osm:way/1087429870
+|лестница|||53.707595|23.842665|||[]|||1|[]|osm:way/1088156790
+|лестница|||53.719757|23.879226|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=6 (OpenStreetMap)""]"|||1|[]|osm:way/1088453196
+|лестница|||53.698338|23.815176|||[]|||1|[]|osm:way/1092361583
+|лестница|||53.423247|24.538186|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=8 (OpenStreetMap)""]"|||1|[]|osm:way/1092424386
+|лестница|||53.418775|24.540728|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=4 (OpenStreetMap)""]"|||1|[]|osm:way/1092424387
+|лестница|||53.418838|24.540946|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=5 (OpenStreetMap)""]"|||1|[]|osm:way/1092424388
+|лестница|||53.730867|24.770886|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=6 (OpenStreetMap)""]"|||1|[]|osm:way/1092424406
+|лестница|||53.761912|24.826982|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=2 (OpenStreetMap)""]"|||1|[]|osm:way/1092424411
+|лестница|||53.602690|24.976057|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=5 (OpenStreetMap)""]"|||1|[]|osm:way/1092424424
+|лестница|||53.602606|24.975477|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=3 (OpenStreetMap)""]"|||1|[]|osm:way/1092424427
+|лестница|||53.602437|24.975629|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=3 (OpenStreetMap)""]"|||1|[]|osm:way/1092424429
+|лестница|||53.409749|24.547830|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=21 (OpenStreetMap)""]"|||1|[]|osm:way/1092424446
+|лестница|||53.409724|24.547803|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=21 (OpenStreetMap)""]"|||1|[]|osm:way/1092424447
+|лестница|||53.409743|24.547800|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=21 (OpenStreetMap)""]"|||1|[]|osm:way/1092424448
+|лестница|||53.600848|24.957830|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=5 (OpenStreetMap)""]"|||1|[]|osm:way/1092424463
+|лестница|||53.707411|23.856189|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=4 (OpenStreetMap)""]"|||1|[]|osm:way/1093461952
+|лестница|||53.671787|23.761597|||[]|||1|[]|osm:way/1096343842
+|лестница|||53.894859|25.301231|||[]|||1|[]|osm:way/1097430574
+|лестница|||53.894640|25.301396|||[]|||1|[]|osm:way/1097430575
+|лестница|||53.719544|23.873261|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=23 (OpenStreetMap)""]"|||1|[]|osm:way/1102167802
+|лестница|||53.720981|23.880628|||"[""handrail=yes (OpenStreetMap)"", ""ramp=separate (OpenStreetMap)"", ""step_count=16 (OpenStreetMap)""]"|||1|[]|osm:way/1102212335
+|лестница|||53.720980|23.878556|||"[""handrail=yes (OpenStreetMap)"", ""ramp=separate (OpenStreetMap)"", ""step_count=20 (OpenStreetMap)""]"|||1|[]|osm:way/1102212338
+|лестница|||53.718093|23.868661|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)""]"|||1|[]|osm:way/1102215668
+|лестница|||53.721110|23.880622|||"[""handrail=yes (OpenStreetMap)"", ""ramp=separate (OpenStreetMap)"", ""step_count=22 (OpenStreetMap)""]"|||1|[]|osm:way/1102219854
+|лестница|||53.720981|23.878500|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=20 (OpenStreetMap)""]"|||1|[]|osm:way/1102219857
+|лестница|||53.719653|23.882678|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/1102437155
+|лестница|||53.674753|23.774492|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/1102577526
+|лестница|||53.721122|23.878497|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=20 (OpenStreetMap)""]"|||1|[]|osm:way/1103179662
+|лестница|||53.670764|23.835347|||[]|||1|[]|osm:way/1103429832
+|лестница|||53.698317|23.948748|||[]|||1|[]|osm:way/1104704093
+|лестница|||53.595435|25.819008|||[]|||1|[]|osm:way/1109086265
+|лестница|||53.593073|25.829878|||[]|||1|[]|osm:way/1109086266
+|лестница|||53.678219|23.831066|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=15 (OpenStreetMap)""]"|||1|[]|osm:way/1110716953
+|лестница|||53.678277|23.831085|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=16 (OpenStreetMap)""]"|||1|[]|osm:way/1110716954
+|лестница|||53.689535|23.857893|||[]|||1|[]|osm:way/1111528441
+|лестница|||53.641484|23.861692|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)""]"|||1|[]|osm:way/1112450138
+|лестница|||53.641764|23.861352|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)""]"|||1|[]|osm:way/1112450139
+|лестница|||54.727048|26.009557|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=3 (OpenStreetMap)""]"|||1|[]|osm:way/1113151426
+|лестница|||54.727495|26.009339|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=6 (OpenStreetMap)""]"|||1|[]|osm:way/1113151427
+|лестница|||54.727318|26.009735|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=7 (OpenStreetMap)""]"|||1|[]|osm:way/1113151431
+|лестница|||54.307147|26.285365|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)""]"|||1|[]|osm:way/1113151434
+|лестница|||54.306931|26.285093|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=17 (OpenStreetMap)""]"|||1|[]|osm:way/1113151436
+|лестница|||53.159151|24.471255|||[]|||1|[]|osm:way/1117558292
+|лестница|||53.670137|23.819458|||[]|||1|[]|osm:way/1121909062
+|лестница|||53.677664|23.832684|||[]|||1|[]|osm:way/1125438241
+|лестница|||53.707092|23.857802|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=2 (OpenStreetMap)""]"|||1|[]|osm:way/1125487055
+|лестница|||53.707524|23.840790|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=4 (OpenStreetMap)""]"|||1|[]|osm:way/1125506224
+|лестница|||53.707901|23.842278|||[]|||1|[]|osm:way/1125506228
+|лестница|||53.707912|23.842802|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=12 (OpenStreetMap)""]"|||1|[]|osm:way/1125506229
+|лестница|||53.646916|23.780943|||[]|||1|[]|osm:way/1125698558
+|лестница|||53.678265|23.833909|||[]|||1|[]|osm:way/1125806206
+|лестница|||53.678764|23.833643|||[]|||1|[]|osm:way/1125806212
+|лестница|||53.678858|23.834158|||[]|||1|[]|osm:way/1125806218
+|лестница|||53.693611|23.833263|||[]|||1|[]|osm:way/1125915900
+|лестница|||53.693644|23.833607|||[]|||1|[]|osm:way/1125915902
+|лестница|||53.693666|23.833775|||[]|||1|[]|osm:way/1125915903
+|лестница|||53.694037|23.834392|||[]|||1|[]|osm:way/1125915904
+|лестница|||53.675786|23.830791|||"[""step_count=5 (OpenStreetMap)""]"|||1|[]|osm:way/1126204526
+|лестница|||53.678256|23.836763|||[]|||1|[]|osm:way/1126227480
+|лестница|||53.679727|23.834137|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/1126347626
+|лестница|||53.672378|23.794611|||[]|||1|[]|osm:way/1126363320
+|лестница|||53.675065|23.827334|||[]|||1|[]|osm:way/1126470278
+|лестница|||53.675037|23.827356|||[]|||1|[]|osm:way/1126470279
+|лестница|||53.675053|23.827291|||[]|||1|[]|osm:way/1126470280
+|лестница|||53.451341|26.469705|||[]|||1|[]|osm:way/1134049765
+|лестница|||53.648755|23.825334|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)""]"|||1|[]|osm:way/1138518908
+|лестница|||53.648853|23.825441|||[]|||1|[]|osm:way/1138518909
+|лестница|||53.683314|23.863331|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/1144805954
+|лестница|||53.683897|23.867682|||[]|||1|[]|osm:way/1144805966
+|лестница|||53.683797|23.867699|||[]|||1|[]|osm:way/1144805967
+|лестница|||53.674024|23.834531|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/1144969782
+|лестница|||53.700179|23.791100|||[]|||1|[]|osm:way/1149212688
+|лестница|||53.685651|23.832915|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=3 (OpenStreetMap)""]"|||1|[]|osm:way/1150965029
+|лестница|||53.721466|23.864190|||[]|||1|[]|osm:way/1157288451
+|лестница|||53.496715|24.313249|||[]|||1|[]|osm:way/1159865021
+|лестница|||53.672341|23.814487|||[]|||1|[]|osm:way/1161399242
+|лестница|||53.721094|23.881984|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=10 (OpenStreetMap)""]"|||1|[]|osm:way/1162445447
+|лестница|||53.721094|23.881917|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=11 (OpenStreetMap)""]"|||1|[]|osm:way/1162445448
+|лестница|||53.721002|23.881989|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=9 (OpenStreetMap)""]"|||1|[]|osm:way/1162445452
+|лестница|||53.721003|23.881923|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=8 (OpenStreetMap)""]"|||1|[]|osm:way/1162445453
+|лестница|||53.675727|23.832989|||"[""handrail=no (OpenStreetMap)""]"|||1|[]|osm:way/1163383342
+|лестница|||54.430254|25.952909|||[]|||1|[]|osm:way/1167617674
+|лестница|||54.426200|25.927919|||[]|||1|[]|osm:way/1167617677
+|лестница|||53.710286|23.840158|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/1169894000
+|лестница|||53.674789|23.773403|||[]|||1|[]|osm:way/1171664659
+|лестница|||53.681538|23.828847|||"[""step_count=1 (OpenStreetMap)""]"|||1|[]|osm:way/1175590919
+|лестница|||53.671540|23.830984|||[]|||1|[]|osm:way/1178041691
+|лестница|||53.671495|23.831488|||[]|||1|[]|osm:way/1178041694
+|лестница|||53.671419|23.831438|||[]|||1|[]|osm:way/1178041695
+|лестница|||53.671193|23.832404|||[]|||1|[]|osm:way/1178041700
+|лестница|||53.671062|23.832948|||[]|||1|[]|osm:way/1178041701
+|лестница|||53.894981|25.324183|||[]|||1|[]|osm:way/1178723237
+|лестница|||53.894953|25.324051|||[]|||1|[]|osm:way/1178723238
+|лестница|||53.894829|25.323529|||[]|||1|[]|osm:way/1178723239
+|лестница|||53.894818|25.323492|||[]|||1|[]|osm:way/1178723240
+|лестница|||53.695306|23.820551|||[]|||1|[]|osm:way/1184451476
+|лестница|||53.705698|23.828903|||[]|||1|[]|osm:way/1185100704
+|лестница|||54.481194|26.393540|||[]|||1|[]|osm:way/1186846664
+|лестница|||54.483448|26.399466|||[]|||1|[]|osm:way/1186846671
+|лестница|||53.700724|23.827849|||"[""handrail=yes (OpenStreetMap)"", ""ramp=separate (OpenStreetMap)""]"|||1|[]|osm:way/1190411235
+|лестница|||53.701821|23.816221|||"[""handrail=yes (OpenStreetMap)"", ""ramp=separate (OpenStreetMap)"", ""step_count=4 (OpenStreetMap)""]"|||1|[]|osm:way/1192099855
+|лестница|||53.725335|23.899599|||[]|||1|[]|osm:way/1193240120
+|лестница|||53.725479|23.899830|||[]|||1|[]|osm:way/1193240122
+|лестница|||53.695781|23.833356|||[]|||1|[]|osm:way/1193427562
+|лестница|||53.695612|23.834803|||[]|||1|[]|osm:way/1193427567
+|лестница|||53.695475|23.835071|||[]|||1|[]|osm:way/1193427569
+|лестница|||53.661842|23.781320|||[]|||1|[]|osm:way/1196318726
+|лестница|||53.601513|25.830634|||[]|||1|[]|osm:way/1197031836
+|лестница|||53.691370|23.846545|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/1198893529
+|лестница|||53.680526|23.826667|||[]|||1|[]|osm:way/1198923168
+|лестница|||53.694584|23.835854|||"[""handrail=no (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=5 (OpenStreetMap)""]"|||1|[]|osm:way/1200702096
+|лестница|||53.694615|23.836616|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=6 (OpenStreetMap)""]"|||1|[]|osm:way/1200702097
+|лестница|||53.695735|23.837040|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/1200702101
+|лестница|||54.316507|26.139337|||[]|||1|[]|osm:way/1201040302
+|лестница|||53.697078|23.818695|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=10 (OpenStreetMap)""]"|||1|[]|osm:way/1206366082
+|лестница|||53.722571|23.875167|||[]|||1|[]|osm:way/1207736483
+|лестница|||53.669514|23.851486|||[]|||1|[]|osm:way/1208878049
+|лестница|||53.658158|23.840019|||[]|||1|[]|osm:way/1210003874
+|лестница|||53.697846|23.836144|||"[""handrail=no (OpenStreetMap)""]"|||1|[]|osm:way/1212144026
+|лестница|||53.650852|23.856176|||[]|||1|[]|osm:way/1212510292
+|лестница|||53.705778|23.800443|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=7 (OpenStreetMap)""]"|||1|[]|osm:way/1212987441
+|лестница|||53.706888|23.836641|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=4 (OpenStreetMap)""]"|||1|[]|osm:way/1214313958
+|лестница|||53.678240|23.888129|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/1216246879
+|лестница|||53.153409|24.478879|||[]|||1|[]|osm:way/1219356511
+|лестница|||53.148992|24.823777|||[]|||1|[]|osm:way/1219610860
+|лестница|||53.675261|23.850344|||[]|||1|[]|osm:way/1223807925
+|лестница|||54.613222|25.959210|||[]|||1|[]|osm:way/1224022908
+|лестница|||53.680165|23.830588|||"[""handrail=no (OpenStreetMap)"", ""step_count=2 (OpenStreetMap)""]"|||1|[]|osm:way/1226123651
+|лестница|||53.680122|23.830717|||"[""handrail=no (OpenStreetMap)"", ""step_count=2 (OpenStreetMap)""]"|||1|[]|osm:way/1226123653
+|лестница|||53.702317|23.798575|||"[""handrail=no (OpenStreetMap)"", ""step_count=4 (OpenStreetMap)""]"|||1|[]|osm:way/1226412646
+|лестница|||53.691115|23.796028|||[]|||1|[]|osm:way/1234413344
+|лестница|||53.709441|23.840137|||"[""handrail=yes (OpenStreetMap)"", ""step_count=2 (OpenStreetMap)""]"|||1|[]|osm:way/1238804098
+|лестница|||53.708854|23.840884|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/1238804120
+|лестница|||53.708766|23.840884|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/1238804121
+|лестница|||53.714797|23.842420|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/1240125895
+|лестница|||53.713773|23.843659|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/1240986143
+|лестница|||53.700322|23.810679|||[]|||1|[]|osm:way/1245496702
+|лестница|||53.719415|23.866422|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)""]"|||1|[]|osm:way/1248771775
+|лестница|||53.705944|23.799483|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=16 (OpenStreetMap)""]"|||1|[]|osm:way/1255968000
+|лестница|||53.159880|24.787257|||[]|||1|[]|osm:way/1257112701
+|лестница|||53.718024|23.875004|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=14 (OpenStreetMap)""]"|||1|[]|osm:way/1259743129
+|лестница|||53.718469|23.874747|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/1259743133
+|лестница|||53.152503|24.818946|||[]|||1|[]|osm:way/1265617628
+|лестница|||53.716200|23.876339|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/1267941898
+|лестница|||53.719368|23.879045|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=12 (OpenStreetMap)""]"|||1|[]|osm:way/1267945240
+|лестница|||53.681799|23.832880|||[]|||1|[]|osm:way/1270892431
+|лестница|||53.683634|23.863825|||[]|||1|[]|osm:way/1271577199
+|лестница|||53.710341|23.859217|||[]|||1|[]|osm:way/1272425444
+|лестница|||53.710383|23.859578|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=9 (OpenStreetMap)""]"|||1|[]|osm:way/1272425446
+|лестница|||53.713826|23.850001|||[]|||1|[]|osm:way/1277860843
+|лестница|||53.713877|23.850046|||[]|||1|[]|osm:way/1277860844
+|лестница|||53.711215|23.854513|||[]|||1|[]|osm:way/1277860868
+|лестница|||53.699373|23.854532|||"[""handrail=no (OpenStreetMap)"", ""step_count=3 (OpenStreetMap)""]"|||1|[]|osm:way/1280149739
+|лестница|||54.311227|26.286061|||[]|||1|[]|osm:way/1284821003
+|лестница|||53.699134|23.831761|||"[""handrail=no (OpenStreetMap)"", ""step_count=2 (OpenStreetMap)""]"|||1|[]|osm:way/1289001574
+|лестница|||53.655911|23.760642|||[]|||1|[]|osm:way/1292480761
+|лестница|||53.664459|23.779991|||[]|||1|[]|osm:way/1292480768
+|лестница|||53.688749|23.828609|||[]|||1|[]|osm:way/1294731120
+|лестница|||53.701246|23.834879|||[]|||1|[]|osm:way/1295825618
+|лестница|||53.701215|23.834278|||[]|||1|[]|osm:way/1295825619
+|лестница|||53.897203|25.277651|||[]|||1|[]|osm:way/1297590248
+|лестница|||53.704036|23.843158|||[]|||1|[]|osm:way/1299889639
+|лестница|||53.150895|24.458973|||[]|||1|[]|osm:way/1306247958
+|лестница|||53.037025|24.094742|||[]|||1|[]|osm:way/1306257373
+|лестница|||53.036978|24.094649|||[]|||1|[]|osm:way/1306257375
+|лестница|||53.844058|25.239241|||[]|||1|[]|osm:way/1306332096
+|лестница|||53.142503|24.425741|||[]|||1|[]|osm:way/1307111807
+|лестница|||53.661263|23.780368|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/1307113290
+|лестница|||53.162006|24.454848|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/1307129680
+|лестница|||53.161803|24.453812|||[]|||1|[]|osm:way/1307129681
+|лестница|||53.168641|24.436480|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=21 (OpenStreetMap)""]"|||1|[]|osm:way/1307129725
+|лестница|||53.545588|25.520248|||[]|||1|[]|osm:way/1308655265
+|лестница|||53.657666|23.850776|||[]|||1|[]|osm:way/1308862105
+|лестница|||53.678382|23.838977|||[]|||1|[]|osm:way/1309075266
+|лестница|||53.169193|24.242307|||[]|||1|[]|osm:way/1309570340
+|лестница|||53.169167|24.241993|||[]|||1|[]|osm:way/1309570341
+|лестница|||53.701653|23.851543|||[]|||1|[]|osm:way/1312692013
+|лестница|||53.035763|24.095011|||[]|||1|[]|osm:way/1315421913
+|лестница|||54.578148|26.432285|||[]|||1|[]|osm:way/1317790339
+|лестница|||53.154774|24.448784|||[]|||1|[]|osm:way/1317971641
+|лестница|||53.665434|23.782016|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/1320445788
+|лестница|||53.665425|23.781341|||"[""step_count=6 (OpenStreetMap)""]"|||1|[]|osm:way/1320445789
+|лестница|||53.663737|23.780253|||[]|||1|[]|osm:way/1321900124
+|лестница|||53.663099|23.783360|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/1322940930
+|лестница|||53.663334|23.783479|||[]|||1|[]|osm:way/1322940931
+|лестница|||53.665493|23.849874|||[]|||1|[]|osm:way/1323931310
+|лестница|||53.638062|23.857471|||[]|||1|[]|osm:way/1325466911
+|лестница|||53.664477|23.860333|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)""]"|||1|[]|osm:way/1325499889
+|лестница|||53.442108|23.929942|||[]|||1|[]|osm:way/1330840020
+|лестница|||53.644820|23.774222|||[]|||1|[]|osm:way/1330895559
+|лестница|||53.661342|23.773727|||[]|||1|[]|osm:way/1339101655
+|лестница|||54.476450|26.393098|||[]|||1|[]|osm:way/1344821550
+|лестница|||54.476525|26.391682|||[]|||1|[]|osm:way/1344821553
+|лестница|||53.715846|23.840943|||[]|||1|[]|osm:way/1346836965
+|лестница|||53.715382|23.839534|||[]|||1|[]|osm:way/1346836967
+|лестница|||53.647276|23.865796|||[]|||1|[]|osm:way/1347400111
+|лестница|||53.713306|23.801640|||[]|||1|[]|osm:way/1347830413
+|лестница|||53.083195|25.502451|||[]|||1|[]|osm:way/1348550130
+|лестница|||53.029312|24.110854|||[]|||1|[]|osm:way/1349751536
+|лестница|||53.422336|24.629655|||[]|||1|[]|osm:way/1352857045
+|лестница|||53.348173|25.487122|||"[""ramp=no (OpenStreetMap)""]"|||1|[]|osm:way/1364973768
+|лестница|||53.491474|25.702123|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)""]"|||1|[]|osm:way/1364973771
+|лестница|||53.797356|23.660963|||"[""handrail=yes (OpenStreetMap)"", ""ramp=no (OpenStreetMap)""]"|||1|[]|osm:way/1382363787
+|лестница|||53.829788|23.645798|||[]|||1|[]|osm:way/1382363788
+|лестница|||53.660416|23.773466|||[]|||1|[]|osm:way/1388806286
+|лестница|||53.663309|23.777786|||[]|||1|[]|osm:way/1388873927
+|лестница|||53.656116|23.776548|||[]|||1|[]|osm:way/1395789224
+|лестница|||53.655974|23.776905|||[]|||1|[]|osm:way/1395789230
+|лестница|||53.698000|23.820928|||[]|||1|[]|osm:way/1395985160
+|лестница|||53.908809|25.256516|||[]|||1|[]|osm:way/1396728083
+|лестница|||53.572974|24.189349|||[]|||1|[]|osm:way/1410706141
+|лестница|||53.665018|23.783142|||[]|||1|[]|osm:way/1412589610
+|лестница|||53.665177|23.782465|||[]|||1|[]|osm:way/1412589613
+|лестница|||53.665080|23.781379|||[]|||1|[]|osm:way/1413527511
+|лестница|||53.665028|23.781458|||[]|||1|[]|osm:way/1413527512
+|лестница|||53.639713|23.864577|||[]|||1|[]|osm:way/1413530570
+|лестница|||53.639860|23.864618|||[]|||1|[]|osm:way/1413530574
+|лестница|||53.639886|23.864633|||[]|||1|[]|osm:way/1413530575
+|лестница|||53.724275|23.886460|||[]|||1|[]|osm:way/1414539806
+|лестница|||53.724928|23.887438|||[]|||1|[]|osm:way/1414539809
+|лестница|||54.072032|24.839234|||"[""handrail=yes (OpenStreetMap)"", ""step_count=2 (OpenStreetMap)""]"|||1|[]|osm:way/1415647152
+|лестница|||53.721151|23.869823|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=22 (OpenStreetMap)""]"|||1|[]|osm:way/1417604351
+|лестница|||53.722579|23.879867|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/1419615742
+|лестница|||53.660969|23.772276|||[]|||1|[]|osm:way/1422367728
+|лестница|||53.659663|23.776711|||[]|||1|[]|osm:way/1424223942
+|лестница|||53.659566|23.776628|||"[""handrail=no (OpenStreetMap)""]"|||1|[]|osm:way/1424223943
+|лестница|||53.658539|23.775185|||[]|||1|[]|osm:way/1424223949
+|лестница|||54.573564|26.617669|||"[""handrail=no (OpenStreetMap)"", ""step_count=9 (OpenStreetMap)""]"|||1|[]|osm:way/1424645279
+|лестница|||54.573918|26.617348|||"[""handrail=no (OpenStreetMap)"", ""step_count=4 (OpenStreetMap)""]"|||1|[]|osm:way/1424645283
+|лестница|||54.573619|26.617827|||"[""handrail=yes (OpenStreetMap)"", ""step_count=6 (OpenStreetMap)""]"|||1|[]|osm:way/1424645285
+|лестница|||53.719859|23.866397|||[]|||1|[]|osm:way/1426201736
+|лестница|||53.718290|23.863410|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/1426791297
+|лестница|||53.878052|25.330420|||"[""handrail=no (OpenStreetMap)""]"|||1|[]|osm:way/1429004243
+|лестница|||53.877306|25.332212|||"[""handrail=no (OpenStreetMap)""]"|||1|[]|osm:way/1429004246
+|лестница|||53.701048|23.802936|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=15 (OpenStreetMap)""]"|||1|[]|osm:way/1429065199
+|лестница|||54.348289|26.438205|||[]|||1|[]|osm:way/1442469345
+|лестница|||53.652827|23.797327|||[]|||1|[]|osm:way/1443036984
+|лестница|||53.651691|23.853739|||[]|||1|[]|osm:way/1444727584
+|лестница|||54.769728|26.322197|||"[""handrail=no (OpenStreetMap)""]"|||1|[]|osm:way/1446754389
+|лестница|||53.660490|23.777650|||"[""handrail=no (OpenStreetMap)""]"|||1|[]|osm:way/1447227823
+|лестница|||53.662937|23.778783|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/1447227826
+|лестница|||54.078610|25.215836|||[]|||1|[]|osm:way/1450677274
+|лестница|||53.675969|23.838900|||[]|||1|[]|osm:way/1455011161
+|лестница|||53.675280|23.838717|||[]|||1|[]|osm:way/1455011164
+|лестница|||53.681044|23.827297|||[]|||1|[]|osm:way/1464112176
+|лестница|||53.697075|23.841077|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/1467038358
+|лестница|||53.678071|23.820584|||[]|||1|[]|osm:way/1473624972
+|лестница|||53.678316|23.821008|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/1473624973
+|лестница|||53.684205|23.862385|||[]|||1|[]|osm:way/1482067279
+|лестница|||53.326941|23.820359|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/1486906823
+|лестница|||53.702076|23.841525|||"[""handrail=no (OpenStreetMap)"", ""ramp=no (OpenStreetMap)"", ""step_count=4 (OpenStreetMap)""]"|||1|[]|osm:way/1488590494
+|лестница|||54.719931|26.537285|||[]|||1|[]|osm:way/1499097952
+|лестница|||53.288110|23.945063|||[]|||1|[]|osm:way/1523762412
+|лестница|||53.087169|25.325295|||[]|||1|[]|osm:way/1525433620
+|лестница|||53.094706|25.322006|||[]|||1|[]|osm:way/1525436859
+|лестница|||53.094164|25.319149|||[]|||1|[]|osm:way/1525436863
+|лестница|||53.094773|25.319280|||[]|||1|[]|osm:way/1525436870
+|лестница|||53.741020|24.213080|||[]|||1|[]|osm:way/1526800900
+|лестница|||53.653109|23.776997|||[]|||1|[]|osm:way/1527281726
+|лестница|||54.611826|25.967305|||[]|||1|[]|osm:way/1529190034
+|лестница|||53.295934|23.837072|||[]|||1|[]|osm:way/1529348115
+|лестница|||53.677138|23.828677|||[]|||1|[]|osm:way/1531731871
+|лестница|||53.676614|23.827459|||[]|||1|[]|osm:way/1531731872
+|лестница|||53.639246|23.862654|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)""]"|||1|[]|osm:way/1532410508
+|лестница|||53.674095|23.880323|||[]|||1|[]|osm:way/1540353652
+|лестница|||53.724700|23.880500|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/1541244036
+|лестница|||53.724755|23.880636|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/1541244040
+|лестница|||53.095967|25.321710|||[]|||1|[]|osm:way/1549906144
+|лестница|||53.717956|23.875196|||"[""handrail=yes (OpenStreetMap)"", ""ramp=yes (OpenStreetMap)"", ""step_count=9 (OpenStreetMap)""]"|||1|[]|osm:way/1560117689
+|лестница|||53.719033|23.874009|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/1560120117
+Лесвіца сядзібы Шафнагеляў|лестница|||54.461466|26.201562|||[]|||1|[]|osm:way/1561270775
+|лестница|||54.461412|26.201671|||"[""handrail=no (OpenStreetMap)""]"|||1|[]|osm:way/1561270776
+|лестница|||53.161569|24.464847|||[]|||1|[]|osm:way/1561466509
+|лестница|||53.160940|24.459068|||[]|||1|[]|osm:way/1561480360
+|лестница|||53.161167|24.459207|||[]|||1|[]|osm:way/1561480364
+|лестница|||53.160900|24.459467|||[]|||1|[]|osm:way/1561480365
+|лестница|||53.167273|24.489835|||[]|||1|[]|osm:way/1561480377
+|лестница|||53.167310|24.490033|||[]|||1|[]|osm:way/1561480378
+|лестница|||53.167304|24.490180|||[]|||1|[]|osm:way/1561480379
+|лестница|||53.166983|24.490367|||[]|||1|[]|osm:way/1561480380
+|лестница|||53.167202|24.490239|||[]|||1|[]|osm:way/1561480381
+|лестница|||53.167093|24.490302|||[]|||1|[]|osm:way/1561480382
+|лестница|||53.163235|24.474369|||[]|||1|[]|osm:way/1561480392
+|лестница|||53.162495|24.466996|||[]|||1|[]|osm:way/1561480403
+|лестница|||53.163232|24.467291|||[]|||1|[]|osm:way/1561480408
+|лестница|||53.160321|24.462864|||[]|||1|[]|osm:way/1561491132
+|лестница|||53.165033|24.458233|||[]|||1|[]|osm:way/1561502806
+|лестница|||53.161970|24.458580|||[]|||1|[]|osm:way/1561669750
+|лестница|||53.161947|24.459966|||[]|||1|[]|osm:way/1561669754
+|лестница|||53.162089|24.459474|||[]|||1|[]|osm:way/1561669755
+|лестница|||53.163340|24.460643|||[]|||1|[]|osm:way/1561669759
+|лестница|||53.163321|24.460018|||[]|||1|[]|osm:way/1561669760
+|лестница|||53.162371|24.457391|||[]|||1|[]|osm:way/1561669777
+|лестница|||53.159228|24.457542|||[]|||1|[]|osm:way/1561669798
+|лестница|||53.703418|23.850101|||[]|||1|[]|osm:way/1562620117
+|лестница|||53.154676|24.449739|||[]|||1|[]|osm:way/1564260122
+|лестница|||53.162392|24.462263|||[]|||1|[]|osm:way/1564418535
+|лестница|||53.156550|24.450883|||[]|||1|[]|osm:way/1564418551
+|лестница|||53.156346|24.450657|||[]|||1|[]|osm:way/1564418552
+|лестница|||53.682434|23.810905|||[]|||1|[]|osm:way/1564773293
+|лестница|||53.154678|24.449824|||[]|||1|[]|osm:way/1564777002
+|лестница|||53.154631|24.448896|||[]|||1|[]|osm:way/1564777003
+|лестница|||53.154625|24.448921|||[]|||1|[]|osm:way/1564777005
+|лестница|||53.154667|24.448868|||[]|||1|[]|osm:way/1564777006
+|лестница|||53.154722|24.449166|||[]|||1|[]|osm:way/1564777009
+|лестница|||53.154695|24.449072|||[]|||1|[]|osm:way/1564777011
+|лестница|||53.679042|23.863467|||[]|||1|[]|osm:way/1565022180
+|лестница|||53.673852|23.826721|||[]|||1|[]|osm:way/1566293338
+|лестница|||53.673688|23.827152|||"[""handrail=yes (OpenStreetMap)""]"|||1|[]|osm:way/1566293341
+|лестница|||53.673761|23.827203|||[]|||1|[]|osm:way/1566293342
+|лестница|||53.673881|23.827303|||[]|||1|[]|osm:way/1566293345

@@ -42,6 +42,7 @@ def category_from_row(row: Mapping[str, Any]) -> Category:
         osm_tags=tuple(cat.osm_tags),
         aliases_ru=tuple(cat.aliases_ru),
         aliases_en=tuple(cat.aliases_en),
+        highlight=bool(cat.highlight),
     )
 
 

@@ -78,7 +78,13 @@ class PostgresCategoryRepository(PostgresRepository):
         return tuple(cat.code for cat in self.all())
 
     def service_codes(self) -> tuple[str, ...]:
-        return tuple(cat.code for cat in self.all() if cat.role == "service")
+        """The service categories highlighted by default, as the taxonomy marks them.
+
+        A role of `service` is not enough: stairways are a service the catalogue holds
+        and the map does not show unasked, so the highlight flag — not the role — is
+        what the default reads.
+        """
+        return tuple(cat.code for cat in self.all() if cat.role == "service" and cat.highlight)
 
     def get(self, code: str) -> Category | None:
         """The category behind a code or a resolvable term, else None."""

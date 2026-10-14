@@ -40,7 +40,12 @@ def threshold_for(profile: str, max_off_line_m: float | None = None) -> float:
 
 
 def service_codes(categories: Iterable[str] | None, known: Sequence[str]) -> list[str]:
-    """The categories that count as services, given the taxonomy's own service list."""
+    """The categories a service request means, given the taxonomy's default list.
+
+    ``known`` is the highlighted service list the repository hands in, so no categories
+    named means exactly those — a stairway is a service the taxonomy does not highlight
+    and this default does not show.
+    """
     allowed = set(known)
     if categories is None:
         return list(known)

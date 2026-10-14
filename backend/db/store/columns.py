@@ -55,6 +55,7 @@ CATEGORY_COLUMNS: tuple[str, ...] = (
     "visit_minutes",
     "aliases_ru",
     "aliases_en",
+    "highlight",
 )
 
 CATEGORY_SELECT = ", ".join(CATEGORY_COLUMNS)

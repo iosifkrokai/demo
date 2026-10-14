@@ -74,6 +74,9 @@ BBOX = {"south": 52.75, "west": 23.35, "north": 54.80, "east": 27.00}
 
 SIGHT_TAXONOMY = frozenset(c.code for c in taxonomy.all_categories() if c.role == "sight")
 SERVICE_TAXONOMY = frozenset(c.code for c in taxonomy.all_categories() if c.role == "service")
+STEPS_TAXONOMY = frozenset(
+    c.code for c in taxonomy.all_categories() if "highway=steps" in c.osm_tags
+)
 
 
 MIN_BUCKET_ROWS = 2
@@ -261,6 +264,13 @@ def validate_osm_service(row: dict[str, Any]) -> list[str]:
     )
 
 
+def validate_osm_steps(row: dict[str, Any]) -> list[str]:
+    """osm: rows — stairways and the like, visit_minutes optional (NULL)."""
+    return _validate_common(
+        row, taxonomy_codes=STEPS_TAXONOMY, prefixes=("osm:",), visit_required=False
+    )
+
+
 def normalize_city_region(row: dict[str, Any]) -> dict[str, Any]:
     return _normalize_common(row, visit_required=True)
 
@@ -270,6 +280,10 @@ def normalize_osm_sight(row: dict[str, Any]) -> dict[str, Any]:
 
 
 def normalize_osm_service(row: dict[str, Any]) -> dict[str, Any]:
+    return _normalize_common(row, visit_required=False)
+
+
+def normalize_osm_steps(row: dict[str, Any]) -> dict[str, Any]:
     return _normalize_common(row, visit_required=False)
 
 
@@ -302,7 +316,7 @@ class Dataset:
 
 
 def default_datasets() -> list[Dataset]:
-    """The four CSV datasets, in apply order (hand-authored, then OSM)."""
+    """The CSV datasets, in apply order (hand-authored, then OSM)."""
     return [
         Dataset(
             "city",
@@ -347,6 +361,17 @@ def default_datasets() -> list[Dataset]:
             category_source=SOURCE_AUTO,
             fatal_invalid=False,
             optional=True,
+            license="ODbL 1.0 (OpenStreetMap contributors)",
+        ),
+        Dataset(
+            "steps",
+            filename="places_steps.csv",
+            prefix="osm:",
+            reader=_read_pipe,
+            validator=validate_osm_steps,
+            normalizer=normalize_osm_steps,
+            category_source=SOURCE_AUTO,
+            fatal_invalid=False,
             license="ODbL 1.0 (OpenStreetMap contributors)",
         ),
     ]
