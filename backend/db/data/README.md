@@ -60,7 +60,14 @@ Order of a full apply — validate, upsert by natural key, embed locally, report
    out-of-area rows are quarantined and counted, not published (exit stays 0).
 3. `osm_poi:` — same; optional (a checkout without `db.seed fetch` has no services).
 4. `places_curated.csv` — matched by name, applied last, `category_source =
-   'curated'`; each name also becomes a `place_aliases(locale='ru')` row.
+   'curated'`; each name also becomes a `place_aliases(locale='ru')` row. Its rows
+   reach their target by name alone, so three things are deliberate: a row a
+   *previous* seed marked is unmarked first (`pipeline.reset_curated`) — the flag is
+   protection, and one left behind would never be rewritten again; a name several
+   rows answer to is resolved by evidence, the hand-authored row first and then the
+   lowest id; and a name whose candidates stand kilometres apart
+   (`CURATED_TWIN_RADIUS_M`) is **not** applied to any of them — the seed prints it
+   as ambiguous, because a name is not a place.
 5. `areas` (project polygon + one row per district) and `place_sources` (one row
    per `(provider, external_id)`).
 6. `categories` (from `taxonomy.csv`, key `code`) and `itineraries` +

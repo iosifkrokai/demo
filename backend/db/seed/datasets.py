@@ -46,6 +46,13 @@ SAME_OBJECT_RADIUS_M = 30.0
 
 TWIN_RADIUS_M = 5.0
 
+# A curated row reaches its target by name and nothing else — the CSV carries no
+# coordinate and no id — so a name several automatic rows answer to is a guess unless
+# they stand together. Measured on the committed files: «Еврейское кладбище» is three
+# cemeteries 70 to 190 km apart, while the only other shared names are a hand-authored
+# row beside its OSM twin.
+CURATED_TWIN_RADIUS_M = 2000.0
+
 COLUMNS = [
     "name",
     "category",
@@ -390,22 +397,44 @@ def read_curated(path: Path) -> list[dict[str, Any]]:
     ]
 
 
-def match_place(name: str, db_rows: list[dict[str, Any]]) -> dict[str, Any] | None:
-    """Find the DB row for a curated name.
-    Match on equality first, then case-insensitive containment (not by id).
+def _widest_gap_m(rows: list[dict[str, Any]]) -> float:
+    """The widest distance between any two of the rows, or 0 for a single row."""
+    widest = 0.0
+    for index, first in enumerate(rows):
+        for second in rows[index + 1 :]:
+            gap = haversine_m(first["lat"], first["lon"], second["lat"], second["lon"])
+            widest = max(widest, gap)
+    return widest
+
+
+def match_place(name: str, db_rows: list[dict[str, Any]]) -> tuple[dict[str, Any] | None, str]:
+    """The row a curated name means, and how the code knows: ``exact`` | ``contains`` |
+    ``fuzzy`` | ``ambiguous`` | ``none``.
+
+    Equality first, then containment (never by id). Several rows answering to one name
+    are resolved by evidence, not by the order the heap returned them: a hand-authored
+    row is the place the curated text was written for, and automatic rows are the same
+    object only while they stand together — three cemeteries 70 km apart under one name
+    are three places, and the overlay says ``ambiguous`` rather than picking one.
     """
     n = name.lower()
-    exact = [r for r in db_rows if r["name"].strip().lower() == n]
-    if exact:
-        return exact[0]
-    contains = [r for r in db_rows if n in r["name"].lower()]
+    ordered = sorted(db_rows, key=lambda r: (r.get("category_source") != SOURCE_DATASET, r["id"]))
+    named = [r for r in ordered if r["name"].strip().lower() == n]
+    if named:
+        hand = [r for r in named if r.get("category_source") == SOURCE_DATASET]
+        if hand:
+            return hand[0], "exact"
+        if len(named) == 1 or _widest_gap_m(named) <= CURATED_TWIN_RADIUS_M:
+            return named[0], "exact"
+        return None, "ambiguous"
+    contains = [r for r in ordered if n in r["name"].lower()]
     if len(contains) == 1:
-        return contains[0]
+        return contains[0], "contains"
     stripped = n.replace("бывший", "").replace("в гродно", "").strip()
-    fuzzy = [r for r in db_rows if stripped in r["name"].lower()]
+    fuzzy = [r for r in ordered if stripped in r["name"].lower()]
     if fuzzy:
-        return fuzzy[0]
-    return None
+        return fuzzy[0], "fuzzy"
+    return None, "none"
 
 
 def load_dataset(ds: Dataset) -> list[dict[str, Any]]:

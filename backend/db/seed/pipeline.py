@@ -15,7 +15,7 @@ from psycopg import sql
 from core.paths import GEO_DIR, PHOTOS_DIR, PLACE_ALIASES_JSON
 from db.store.datasets import DATA_VERSION_ROW
 
-from .datasets import SOURCE_AUTO, Dataset, match_place, read_place_alias_entries
+from .datasets import SOURCE_AUTO, SOURCE_CURATED, Dataset, match_place, read_place_alias_entries
 
 PROVIDER_BY_PREFIX = {
     "city": "planetabelarus",
@@ -110,21 +110,54 @@ def apply_dataset(
     return {"inserted": inserted, "updated": updated}
 
 
+def reset_curated(conn: psycopg.Connection, records: list[dict[str, Any]]) -> dict[str, Any]:
+    """Give every curated row back to its dataset, so the overlay is applied afresh.
+
+    The CSV is applied by name on every seed, so a row an earlier run marked and this
+    one does not choose would otherwise stay marked for good — and that flag is
+    protection, which means a wrong one is never rewritten again. A curated row no
+    dataset of this run holds is left alone and counted: the seed does not unset what it
+    cannot account for. The caller commits.
+    """
+    known = {str(r["source_url"]): r["_category_source"] for r in records}
+    reset = 0
+    unknown = 0
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT id, source_url FROM places WHERE category_source = %s", (SOURCE_CURATED,)
+        )
+        for place_id, source_url in cur.fetchall() or ():
+            source = known.get(str(source_url))
+            if source is None:
+                unknown += 1
+                continue
+            cur.execute("UPDATE places SET category_source = %s WHERE id = %s", (source, place_id))
+            reset += 1
+    return {"reset": reset, "unknown": unknown}
+
+
 def apply_curated_rows(conn: psycopg.Connection, curated: list[dict[str, Any]]) -> dict[str, Any]:
     """Apply the curated CSV by name and mark its rows as curated.
     Sets ``category_source='curated'`` so later auto-classification cannot rewrite them.
     """
     with conn.cursor() as cur:
-        cur.execute("SELECT id, name, category, blurb, fun_fact, fun_facts, links FROM places")
+        cur.execute(
+            "SELECT id, name, category, blurb, fun_fact, fun_facts, links, lat, lon, "
+            "       category_source FROM places"
+        )
         cols = [d.name for d in cur.description or ()]
         db_rows = [dict(zip(cols, r, strict=True)) for r in cur.fetchall() or []]
 
         matched = updated = 0
         unmatched: list[str] = []
+        ambiguous: list[str] = []
         for row in curated:
-            current = match_place(row["name"], db_rows)
-            if not current:
-                unmatched.append(row["name"])
+            current, status = match_place(row["name"], db_rows)
+            if current is None:
+                if status == "ambiguous":
+                    ambiguous.append(row["name"])
+                else:
+                    unmatched.append(row["name"])
                 continue
             matched += 1
             fields = ("name", "category", "blurb", "fun_fact", "fun_facts", "links")
@@ -155,6 +188,8 @@ def apply_curated_rows(conn: psycopg.Connection, curated: list[dict[str, Any]]) 
             "updated": updated,
             "unmatched": unmatched[:50],
             "unmatched_count": len(unmatched),
+            "ambiguous": ambiguous[:50],
+            "ambiguous_count": len(ambiguous),
         }
 
 

@@ -101,6 +101,7 @@ def cmd_apply(args: argparse.Namespace) -> int:
         try:
             with pipeline.connect(_dsn(args)) as conn:
                 pipeline.allow_curated_category_change(conn)
+                uncurated = pipeline.reset_curated(conn, collected["records"])
                 totals = {"inserted": 0, "updated": 0}
                 for ds in datasets:
                     rows = [r for r in collected["records"] if r["_dataset"] == ds.name]
@@ -129,6 +130,7 @@ def cmd_apply(args: argparse.Namespace) -> int:
                     {
                         "upserted": totals,
                         **registries,
+                        "curated_reset": uncurated,
                         "embedded": embedded,
                         "embeddings_skipped": args.no_embed,
                         "merged_removed": merged_rows,
@@ -187,6 +189,14 @@ def _print_summary(report: dict[str, Any]) -> None:
             f"category_source={ds['category_source']}){note}"
         )
     print("  coverage: " + ", ".join(f"{k}={v['share']}" for k, v in report["coverage"].items()))
+    curated = report["curated"]
+    if curated.get("applied"):
+        print(
+            f"  curated: {curated['matched']} applied of {curated['rows']}, "
+            f"{curated['unmatched_count']} unmatched, {curated.get('ambiguous_count', 0)} ambiguous"
+        )
+        for name in curated.get("ambiguous") or []:
+            print(f"    a curated name with no single row behind it: {name}")
     if "data_version" in report:
         print(f"  data_version: {report['data_version']}")
     if "db" in report:
