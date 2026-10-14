@@ -3,14 +3,17 @@
 What is known and deliberately not done. Each entry says what it is, why it is parked,
 and where the evidence lives — so picking one up does not mean rediscovering it.
 
-Every entry below was checked against the working tree on 2026-10-14, and the five that
+Every entry below was checked against the working tree on 2026-10-14, and the eight that
 were closed that day — the close-duplicate list, the area that did not narrow a search,
 `place_aliases` unread, the benchmark's coincidence rule, the frontend's missing
-`result_mode` — are in § *Closed* at the bottom. The list is renumbered after every such
-pass, so numbers are dense and an entry's number does not survive it.
+`result_mode`, the English names, the service-only highlighting, and the empty
+requirement vocabulary — are in § *Closed* at the bottom. The list is renumbered after
+every such pass, so numbers are dense and an entry's number does not survive it.
 
-Five of the eleven entries below are waiting on a **decision**, not on hands: 2, 3, 6, 7
-and 11. Entry 8 is blocked by 7. The rest are work (4, 5, 9, 10) or an outside block (1).
+Three of the eight entries below are waiting on a **decision**, not on hands: 2 (what to
+call a boulder), 4 (populate or drop a column) and 8 (re-author or prune the curated
+prose). Entry 5 is blocked by a vocabulary nobody has asked for yet. The rest are work
+(3, 6, 7) or an outside block (1).
 
 ## 1. Authoritative data from the administration
 
@@ -51,26 +54,7 @@ same place: the close-duplicate review found nine pairs of «замок» that a
 pillboxes and ДОТы, swept into the castle category by the same tags — the category name is
 the defect there, not the pairing.
 
-## 3. English names
-
-`place_aliases(locale='en')` exists, is read since 2026-10-14 by the retrieval alias signal,
-and needs no migration — but there is no source for it. OSM carries `name:en`; the
-14-column dataset shape has nowhere to put it, so this needs either a column or a sidecar
-file. Coverage today: 0 English names in the sets (nothing writes an `en` row at all),
-against 3370 objects tagged `name:en` inside the oblast (item 10).
-
-## 4. Highlighting along a route is services-only
-
-`services_along` (`db/store/places.py`) orders points along the route by
-`ST_LineLocatePoint` and reports `along_fraction` and `off_line_m`; it is wired into the
-submit path and the map endpoint. `service_codes` (`db/store/services.py`) filters it to
-`role=service`, so cafés, restaurants, toilets, hotels and stops are highlighted and
-nothing else can be. Opening it to other categories is a small change, and what the ТЗ
-promises the addressee about infrastructure depends on it — but for infrastructure there is
-barely anything to highlight yet: the catalogue holds 3 such objects, while OSM has 1560
-stairways and 6953 crossings in the oblast (item 10).
-
-## 5. Names for the unnamed stops
+## 3. Names for the unnamed stops
 
 1273 transport stops and 303 toilets carry a generated label («Остановка», «Туалет»)
 because OSM leaves them unnamed, and 4 of the toilets carry a street hint in the name at
@@ -83,10 +67,14 @@ Two ways out, neither taken:
   answers a client that asks for ~1300 streets slowly, and the answers were mixed — real
   streets, road refs (`Р42`), and at least one railway platform name. The client and its
   tile cache are out of `overpass.py`; the code is in history if the idea comes back.
-- a local OSM extract, as the photo-hints stage already uses, which answers the same
-  question without a network pass.
+- a local OSM extract, which is now the proven way in: `db/seed/aliases_en.py` reads the
+  350 MB `valhalla-data/belarus-latest.osm.pbf` in ten seconds with pyosmium, filtering in
+  C++, and the same pass can carry `addr:street` for the stop nodes we hold. pyosmium is
+  not in `pyproject.toml` (a pyproject change rebuilds the image and re-downloads the
+  embedding model), so install it in the venv: `uv pip install --python .venv/bin/python
+  osmium`.
 
-## 6. A dead column
+## 4. A dead column
 
 - `places.description` — declared in the schema and selected, but never written by the seed
   and never shown. Either populate it or drop it, which needs a migration: a decision
@@ -97,26 +85,7 @@ The two dead functions that sat here (`is_name_dup`, the Nominatim branch of
 deleted, not parked — pruning is the sweep over the datasets (`pipeline.prune_stale`, with
 `--no-prune` to keep everything), and since 2026-10-14 `load_areas` sweeps the same way.
 
-## 7. The planner reads almost nothing the catalogue holds
-
-Building a route consumes coordinates, the category (through the taxonomy's role and its
-default visit time), `visit_minutes` when a row has one, the area polygon, and the walk
-matrix (`routing/cost.py`). The rest of a place row is payload: `blurb`, `fun_fact`,
-`fun_facts`, `links`, `photo_*`, `town` and `district` are displayed and never computed on,
-while `opening_hours` and `ticket_price` reach the model and the card as opaque strings —
-`agent/tools/places.py` projects them into the tool result, and nothing anywhere parses
-them back.
-
-What is really missing is vocabulary. `RequirementKind` is
-`must_visit | service | interest | avoid` (`routing/models.py:178`), and every verdict is
-reached from the presence of a place, a category code and the route geometry
-(`routing/verify.py`). There is no kind for *free*, *open now*, *step-free* or *with kids*.
-So the fields the administration is being asked for — accessibility, structured hours,
-prices — would arrive into a planner with nowhere to put them. Putting a field in the
-catalogue and letting it constrain a route are two different tasks, and only the first one
-is close.
-
-## 8. Steps can be avoided today; nothing asks the engine to
+## 5. Steps can be avoided today; nothing asks the engine to
 
 Valhalla's pedestrian costing takes `step_penalty` and it works. Between the two ends of
 way/37560981 — a 92 m stairway tagged `handrail=yes`, `incline=down` — the route is 95 m by
@@ -125,16 +94,17 @@ default, **2.02 km** with `step_penalty=3600`, and 95 m again with `step_penalty
 The obstacle is not data: the oblast holds 1560 `highway=steps` ways, about 700 of them
 inside Grodno, 382 with `handrail`, 276 with `ramp`, 248 with `step_count`. The obstacle is
 the promise — a detour can be twenty times longer, so "без лестниц" is only honest with its
-price shown, and the request has no requirement kind to ask for it yet (item 7). One path
-already forwards options like this: the frontend's own manual-directions request
-(`frontend/src/utils/valhalla.ts`), which is not the planner.
+price shown. The vocabulary for it is half there: `free` and `open` are requirement kinds
+since 2026-10-14, and a `step_free` one would need the route's own edges checked for steps,
+which nothing does yet. One path already forwards options like this: the frontend's own
+manual-directions request (`frontend/src/utils/valhalla.ts`), which is not the planner.
 
 Remember one trap before touching costing options: Valhalla **silently accepts unknown
 `costing_options`** — `{"nonsense_option": 7}` answered 200 with the same route. A typo in
 an option name would pass unnoticed, so a tune can only be checked by comparing routes,
 never by the status code.
 
-## 9. The tiles carry no elevation, so the hill options do nothing
+## 6. The tiles carry no elevation, so the hill options do nothing
 
 `use_hills` and `max_grade` changed no route we tried, a 165 km one included, and the
 reason is in the data: the config points at `/custom_files/elevation_data`, that directory
@@ -146,7 +116,7 @@ Enabling it means rebuilding the valhalla image with elevation, which downloads 
 the whole country; the compose service sets `tile_urls` and nothing else. Until then the
 product must not promise anything about hills or climbs, and neither should the ТЗ.
 
-## 10. What OSM already knows, which we could seed ourselves
+## 7. What OSM already knows, which we could seed ourselves
 
 Measured against the oblast boundary (OSM relation 59275), not against the fetch's
 rectangle:
@@ -155,28 +125,29 @@ rectangle:
 |---|---|---|
 | `opening_hours` | 6366 | structured hours — we hold 593, and 460 of those are already in OSM syntax (`Mo-Su 10:00-22:00`, `24/7`) |
 | `highway=crossing` | 6953 | the infrastructure sheet's crossings |
-| `highway=steps` | 1560 | the same sheet's stairways (item 8) |
-| `name:en` | 3370 | English names (item 3) |
+| `highway=steps` | 1560 | the same sheet's stairways (item 5) |
 | `wheelchair` | 1729 | accessibility, every object type — an upper bound, not a count of sights |
 
-Two more things are already inside the catalogue and thrown away. `ticket_price` is the raw
-`fee`/`charge` tag (`db/seed/osm_tags.py:240`): 73 rows say `no` — admission is free — 34 say
-`yes`, and 32 more say «вход свободный». Fifteen carry a literal `—`, which the ТЗ forbids
-in the reply for exactly this reason: a dash reads as a value, and ours already has them.
-And the 460 OSM-syntax hour strings are a schedule waiting for a parser — the same parser
-the administration's structured hours would need.
+`name:en` left this table: 295 English names are read out of the local extract and searchable
+since 2026-10-14. Two of the facts we already hold used to be thrown away, and neither is
+any more. `ticket_price` is the raw `fee`/`charge` tag, and the reading of it is a column
+now (`places.is_free`: 107 free, 53 paid, 8390 unknown); the fifteen rows that carried a
+literal `—` — which the ТЗ forbids in the reply precisely because a dash reads as a value —
+are empty, and `osm_tags.ticket_price_of` refuses punctuation at the source. The 460
+OSM-syntax hour strings are parsed by `core/hours.py` and read by the `open` requirement.
+
+What is left is the **infrastructure set**: stairways, crossings, lifts and the like, which
+the catalogue holds three of and the schema has a sheet for. Seeding them is what makes the
+sheet in the administration's schema stop being empty, and it is the other half of item 5 —
+there is nothing to highlight along a route and nothing to route around until these objects
+exist.
 
 Enrichment from OSM is a fact with a source, not a guess — but it must never be presented as
 administration-confirmed. `place_sources` already keys by `(provider, external_id)` per
 place, so an OSM value and an official one can sit side by side and be told apart;
 `verified_at` (item 1) is the empty slot for "confirmed by".
 
-Cheapest first, if this is picked up: the free/paid flag (one column, plus deleting the
-fifteen dashes), then the hours parser — which the administration's reply needs anyway —
-then the infrastructure set, which is the only way the sheet in the schema stops being
-empty.
-
-## 11. The curated overlay reaches 17 of its 76 names
+## 8. The curated overlay reaches 17 of its 76 names
 
 `places_curated.csv` holds 76 rows, and each reaches its target by name and nothing else —
 the CSV carries no coordinate and no id. Applied on 2026-10-14: **17 matched, 58 matched
@@ -198,6 +169,25 @@ and re-authoring them is editorial work.
 
 Dropped from this list on 2026-10-14, so nobody re-adds them:
 
+- **English names had no source.** OSM held them and the 14-column shape had nowhere to put
+  them. `db/seed/aliases_en.py` reads `name:en` out of the local extract by OSM identity and
+  writes a committed sidecar; 295 names land (59 were the row's own name in Latin), and a
+  normal seed loads them into `place_aliases(locale='en')`, which the alias signal already
+  read. «Lida castle» and «Transfiguration Church» reach their rows from an English query
+  alone. Three do not resolve — their OSM rows were shadowed by a hand-authored place, and
+  the Mir castle's English name is one of them, which the seed reports rather than hides.
+- **Highlighting along a route was services-only.** `places_along` measures any named
+  category against the line and consults no role; `services_along` stays as the service
+  default the submit path and the evals call. «Что по пути» about museums answers three of
+  them where it used to answer `no_service_categories`.
+- **The planner had no vocabulary for what the catalogue holds.** `RequirementKind` gained
+  `free` and `open`, both decided by code re-reading the measured route: `free` reads
+  `ticket_price` through `core/prices.py::free_entry` (a walk must be free stop by stop — one
+  paid stop is `unmet`, a price nobody wrote down `uncertain` — while a catalogue only has to
+  hold free places), and `open` reads `opening_hours` through `core/hours.py`, a parser for
+  the 509 of 593 rows it understands exactly and `None` for the rest. The moment is an
+  argument (`PlanningDeps.now`), never a clock read inside the verifier, and both kinds are
+  repairable. What is *not* closed with it: gaining a `step_free` kind, which is item 5.
 - **the close-duplicate list** (`db/data/duplicate_review.md`). Read as a list at last: of the
   102 pairs closer than 30 m, **4 are one object, 91 two objects, 7 unclear**, and none of
   them is inside the city of Grodno — so the city-side risk that made this worth reading did
@@ -232,10 +222,11 @@ Dropped from this list on 2026-10-14, so nobody re-adds them:
 - **the curated overlay picking an arbitrary twin.** `match_place` takes the hand-authored
   row first, then the lowest id, and refuses a name spread over kilometres; the seed resets
   every `curated` flag before it re-applies them, so a flag left by an earlier run no longer
-  protects a row for ever. What is left of it is item 11.
-- **«недорого» is answerable only through the free/paid flag.** Background for the
-  administration's schema — which carries that flag, and a structured `prices` array
-  besides — not a task.
+  protects a row for ever. What is left of it is item 8.
+- **«недорого» is answerable only through the free/paid flag.** Answerable now: `places.is_free`
+  is written by the seed and shown on the card, and a `free` requirement can constrain a walk.
+  The administration's structured `prices` array is still the richer source, and item 1 is
+  where it arrives.
 - **the catalogue 500 on `result_mode: catalogue`, the three harness lies** (services,
   trajectory, and the routes layer of the one-page report), **and the Mir/Grodno
   duplicates.** Fixed; the compliance rate over two runs of a stochastic agent is
