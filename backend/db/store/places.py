@@ -14,7 +14,7 @@ import psycopg
 from core import constants
 from db.models.place import Place
 from db.store.base import PostgresRepository
-from db.store.columns import PLACE_SELECT, PLACE_WRITE_COLUMNS
+from db.store.columns import PLACE_COLUMNS, PLACE_SELECT, PLACE_WRITE_COLUMNS
 from db.store.errors import DuplicateSourceError
 from db.store.mappers import place_from_row, place_payload
 from db.store.services import (
@@ -50,6 +50,8 @@ _BESIDE_LINE = """
 """
 
 _WORD = re.compile(r"[а-яёa-z]{3,}\d*")
+
+_ALIAS_SELECT = ", ".join(f"p.{column}" for column in PLACE_COLUMNS)
 
 
 class PostgresPlaceRepository(PostgresRepository):
@@ -168,6 +170,49 @@ class PostgresPlaceRepository(PostgresRepository):
         with self._cursor() as cur:
             cur.execute(sql, params)
             return [(place_from_row(row), float(row["_name_sim"])) for row in cur.fetchall()]
+
+    def by_alias(
+        self,
+        query: str,
+        limit: int = 5,
+        region_bbox: Sequence[float] | None = None,
+    ) -> list[tuple[Place, float]]:
+        """Trigram search over the other names a place answers to, best first."""
+        words = re.findall(r"[а-яёa-z]{2,}", query.lower())
+        if not words:
+            return []
+
+        sim_expr = " + ".join(
+            ["GREATEST(similarity(a.alias, %s), word_similarity(%s, a.alias))"] * len(words)
+        )
+        conditions = " OR ".join(["a.alias ILIKE %s OR a.alias %%> %s"] * len(words))
+
+        bbox_clause = ""
+        bbox_params: list[Any] = []
+        if region_bbox and len(region_bbox) == constants.BBOX_COORDS:
+            south, west, north, east = region_bbox
+            bbox_clause = " WHERE p.geom && ST_MakeEnvelope(%s, %s, %s, %s, 4326)"
+            bbox_params = [west, south, east, north]
+
+        sim_params = [word for word in words for _ in range(2)]
+        cond_params = [value for word in words for value in (f"%{word}%", word)]
+        params: list[Any] = [*sim_params, *cond_params, *bbox_params, limit]
+
+        sql = f"""
+            SELECT {_ALIAS_SELECT}, s.alias_sim
+              FROM places p
+              JOIN (
+                  SELECT a.place_id, MAX(({sim_expr})) AS alias_sim
+                    FROM place_aliases a
+                   WHERE {conditions}
+                   GROUP BY a.place_id
+              ) s ON s.place_id = p.id{bbox_clause}
+             ORDER BY s.alias_sim DESC
+             LIMIT %s
+        """
+        with self._cursor() as cur:
+            cur.execute(sql, params)
+            return [(place_from_row(row), float(row["alias_sim"])) for row in cur.fetchall()]
 
     def nearby(
         self, lat: float, lon: float, radius_km: float = 12.0, limit: int = 50

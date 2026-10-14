@@ -24,7 +24,7 @@ from db.embeddings import model as embeddings_model
 from db.embeddings.query import embed_query
 from routing.select import rrf_fuse
 
-SIGNALS = ("embedding", "category", "nearby")
+SIGNALS = ("embedding", "alias", "category", "nearby")
 
 MAX_FACTS_PER_CALL = 1
 MAX_LINKS_PER_PLACE = 3
@@ -78,6 +78,14 @@ def _text_hits(store: Any, query: str, box: Any, pool: int) -> list[tuple[int, f
     if not qvec:
         return None
     found = store.places.by_embedding(qvec, limit=pool, region_bbox=box)
+    return [(place.id, score) for place, score in found if _in_box(place, box)]
+
+
+def _alias_hits(store: Any, query: str, box: Any, pool: int) -> list[tuple[int, float]] | None:
+    """The other names a place answers to, matched as trigrams — no model needed."""
+    if not query.strip():
+        return None
+    found = store.places.by_alias(query, limit=pool, region_bbox=box)
     return [(place.id, score) for place, score in found if _in_box(place, box)]
 
 
@@ -228,6 +236,7 @@ def find_places(
         pool = constants.RETRIEVAL_POOL_SIZE
         hits = (
             _text_hits(store, query, box, pool),
+            _alias_hits(store, query, box, pool),
             _category_hits(store, db_cats, box, pool),
             _near_hits(store, near, box, pool),
         )
