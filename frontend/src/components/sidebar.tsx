@@ -17,6 +17,7 @@ import {
   Minus,
   Plus,
   RotateCcw,
+  Wand2,
   Route as RouteIcon,
   Search,
   SlidersHorizontal,
@@ -44,6 +45,8 @@ import {
   type Waypoint,
 } from '@/stores/directions-store';
 import { useDirectionsQuery } from '@/hooks/use-directions-queries';
+import { useRouteRecalculate } from '@/hooks/use-route-recalculate';
+import { summaryOf } from '@/utils/route-summary';
 import { GuidePanel, guideRouteKey, type GuideStop } from './guide-panel';
 import { MobileSection } from './mobile/mobile-section';
 import { MOBILE_MAX_WIDTH } from './mobile/use-is-mobile';
@@ -384,6 +387,11 @@ export const Sidebar = ({
   const resetRoute = useDirectionsStore((s) => s.resetRoute);
   const pushRefinement = useDirectionsStore((s) => s.pushRefinement);
   const { refetch: refetchDirections } = useDirectionsQuery();
+  const { recalculate, cancel: cancelRecalculate } = useRouteRecalculate();
+  const setManualOrder = useDirectionsStore((s) => s.setManualOrder);
+  const setCosting = useDirectionsStore((s) => s.setCosting);
+  const manualOrder = useDirectionsStore((s) => s.manualOrder);
+  const recalculating = useDirectionsStore((s) => s.recalculating);
 
   const resetSettings = useCommonStore((s) => s.resetSettings);
   const navigate = useNavigate({ from: '/$activeTab' });
@@ -394,7 +402,8 @@ export const Sidebar = ({
   const setGuidingStore = useCommonStore((s) => s.setGuiding);
   const setPlacesVisible = useCommonStore((s) => s.setPlacesVisible);
   const placeDetails = useDirectionsStore((s) => s.placeDetails);
-  const [timeBudget, setTimeBudget] = useState(0);
+  const timeBudget = useDirectionsStore((s) => s.timeBudget);
+  const setTimeBudget = useDirectionsStore((s) => s.setTimeBudget);
   const [transport, setTransport] = useState<'' | Profile>('');
   const [mirroredCosting, setMirroredCosting] = useState<Profile | null>(null);
 
@@ -408,7 +417,8 @@ export const Sidebar = ({
   const [interests, setInterests] = useState<string[]>([]);
   const [avoid, setAvoid] = useState<string[]>([]);
   const [resultMode, setResultMode] = useState<ResultMode>('route');
-  const [roundTrip, setRoundTrip] = useState(false);
+  const roundTrip = useDirectionsStore((s) => s.roundTrip);
+  const setRoundTrip = useDirectionsStore((s) => s.setRoundTrip);
   const [me, setMe] = useState<{ lat: number; lon: number } | null>(null);
   const [geoState, setGeoState] = useState<
     'idle' | 'locating' | 'ok' | 'denied'
@@ -440,21 +450,10 @@ export const Sidebar = ({
     kind: 'ok' | 'err' | 'warn';
     text: string;
   } | null>(null);
-  const [summary, setSummary] = useState<{
-    stops: number;
-    km: number | null;
-    /** summary.time_seconds — the time actually spent on the legs. */
-    travelMinutes: number;
-    /** budget.walk_minutes — the agent's own estimate of the walking time. */
-    walkMinutes: number;
-    visitMinutes: number;
-    budgetMinutes: number | null;
-    fits: boolean;
-  } | null>(null);
+  const summary = useDirectionsStore((s) => s.routeSummary);
+  const setSummary = useDirectionsStore((s) => s.setRouteSummary);
   const [verdict, setVerdict] = useState<AgentRouteResponse | null>(null);
 
-  const lastQueryRef = useRef<string | null>(null);
-  const replanRef = useRef<() => void>(() => {});
   const transportRef = useRef<'' | Profile>('');
 
   const [manualQuery, setManualQuery] = useState('');
@@ -513,7 +512,7 @@ export const Sidebar = ({
     el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
   }, [query]);
 
-  /** Pick a transport. */
+  /** Pick a transport. Another profile is the same walk measured again, not a new one. */
   const setTransportEverywhere = useCallback(
     (value: '' | Profile, replan = true) => {
       const changed = transportRef.current !== value;
@@ -521,10 +520,14 @@ export const Sidebar = ({
       setTransport(value);
       if (value === '') return;
       setMirroredCosting(value);
+      const costing = buildTransportOptions(t).find(
+        (o) => o.value === value
+      )?.costing;
+      setCosting(costing ?? value);
       resetSettings(value);
-      if (replan && changed && lastQueryRef.current) replanRef.current();
+      if (replan && changed) recalculate();
     },
-    [resetSettings]
+    [recalculate, resetSettings, setCosting, t]
   );
 
   useEffect(() => {
@@ -580,7 +583,7 @@ export const Sidebar = ({
           meWaypoint(coords.lat, coords.lon, t('sidebar.ui.myLocation')),
           ...current.filter((w) => w.id !== ME_WAYPOINT_ID),
         ]);
-        if (!silent) refetchDirections();
+        if (!silent) recalculate();
         return coords;
       } catch (err) {
         const code = (err as GeolocationPositionError | undefined)?.code;
@@ -589,7 +592,7 @@ export const Sidebar = ({
         return null;
       }
     },
-    [refetchDirections, setWaypoint, t]
+    [recalculate, setWaypoint, t]
   );
 
   const childrenAges = useMemo(
@@ -703,7 +706,8 @@ export const Sidebar = ({
     );
     setSummary(null);
     setVerdict(null);
-    refetchDirections();
+    setManualOrder(false);
+    recalculate();
   };
 
   /** Show a ready-made route on the map. */
@@ -767,7 +771,8 @@ export const Sidebar = ({
     );
     setSummary(null);
     setVerdict(null);
-    refetchDirections();
+    setManualOrder(false);
+    recalculate();
     setMode('plan');
   };
 
@@ -779,6 +784,7 @@ export const Sidebar = ({
     abortRef.current = controller;
     setBusy(true);
     setStage('requesting');
+    cancelRecalculate();
     const requestProgressId = newProgressId();
     setProgressId(requestProgressId);
     setStatus(null);
@@ -961,21 +967,7 @@ export const Sidebar = ({
       setStage('drawing');
       const drawing = refetchDirections();
 
-      const visitMins =
-        data.budget?.visit_minutes ??
-        pts.reduce((s, p) => s + (p.visit_minutes ?? 15), 0);
-      const travelMins = Math.round((data.summary?.time_seconds ?? 0) / 60);
-      const walkMins = data.budget?.walk_minutes ?? travelMins;
-      lastQueryRef.current = q;
-      setSummary({
-        stops: pts.length,
-        km: data.summary?.length_km ?? null,
-        travelMinutes: travelMins,
-        walkMinutes: walkMins,
-        visitMinutes: visitMins,
-        budgetMinutes: data.budget?.budget_minutes ?? null,
-        fits: data.budget?.fits ?? true,
-      });
+      setSummary(summaryOf(data));
 
       addToHistory({
         query: q,
@@ -1050,13 +1042,18 @@ export const Sidebar = ({
     }
   };
 
-  replanRef.current = () => {
-    const q = lastQueryRef.current;
-    if (q) void submitPrompt(q);
+  /** Hand a hand-ordered route back to the planner, at once rather than debounced. */
+  const optimiseOrder = () => {
+    setManualOrder(false);
+    recalculate(0);
   };
 
+  const hasQuery = query.trim().length > 0;
+  const refresh = !hasQuery && summary !== null && waypoints.length > 1;
+  const refreshing = refresh && recalculating;
+
   const reset = () => {
-    lastQueryRef.current = null;
+    setManualOrder(false);
     const empties: Waypoint[] = [
       { id: '0', userInput: '', geocodeResults: [] },
       { id: '1', userInput: '', geocodeResults: [] },
@@ -1069,7 +1066,6 @@ export const Sidebar = ({
     setStatus(null);
     setSummary(null);
     setVerdict(null);
-    refetchDirections();
   };
 
   const manualAdd = async () => {
@@ -1105,7 +1101,8 @@ export const Sidebar = ({
         } satisfies Waypoint,
       ];
       setWaypoint(next);
-      refetchDirections();
+      setManualOrder(false);
+      recalculate();
       setManualQuery('');
     } catch (e) {
       setManualErr(e instanceof Error ? e.message : String(e));
@@ -1379,7 +1376,10 @@ export const Sidebar = ({
                     <Chip
                       key={option.value}
                       selected={timeBudget === option.value}
-                      onClick={() => setTimeBudget(option.value)}
+                      onClick={() => {
+                        setTimeBudget(option.value);
+                        recalculate();
+                      }}
                       data-testid={`budget-${option.value}`}
                     >
                       {option.label}
@@ -1641,7 +1641,10 @@ export const Sidebar = ({
                       />
                       <Chip
                         selected={roundTrip}
-                        onClick={() => setRoundTrip((v) => !v)}
+                        onClick={() => {
+                          setRoundTrip(!roundTrip);
+                          recalculate();
+                        }}
                         data-testid="round-trip"
                         className="mt-0.5 self-start"
                       >
@@ -1656,19 +1659,44 @@ export const Sidebar = ({
             <section className="flex flex-col gap-2.5">
               <PlanVerdict response={verdict} />
               {hasRoute && (
-                <div className="flex items-center justify-between gap-2">
-                  <h2 className="text-label font-semibold">
-                    {t('sidebar.ui.route')}
-                  </h2>
-                  <button
-                    type="button"
-                    onClick={reset}
-                    className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-meta text-muted-foreground transition-colors hover:bg-muted hover:text-foreground max-md:min-h-11 pointer-coarse:min-h-11"
-                    title={t('sidebar.plan.resetHint')}
-                  >
-                    <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
-                    {t('sidebar.plan.reset')}
-                  </button>
+                <div className="flex flex-col gap-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <h2 className="text-label font-semibold">
+                      {t('sidebar.ui.route')}
+                    </h2>
+                    <div className="flex items-center gap-1">
+                      {manualOrder && (
+                        <button
+                          type="button"
+                          onClick={optimiseOrder}
+                          data-testid="optimise-order"
+                          className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-meta text-muted-foreground transition-colors hover:bg-muted hover:text-foreground max-md:min-h-11 pointer-coarse:min-h-11"
+                          title={t('sidebar.plan.optimiseHint')}
+                        >
+                          <Wand2 className="h-3.5 w-3.5" aria-hidden="true" />
+                          {t('sidebar.plan.optimiseOrder')}
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={reset}
+                        className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-meta text-muted-foreground transition-colors hover:bg-muted hover:text-foreground max-md:min-h-11 pointer-coarse:min-h-11"
+                        title={t('sidebar.plan.resetHint')}
+                      >
+                        <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
+                        {t('sidebar.plan.reset')}
+                      </button>
+                    </div>
+                  </div>
+                  {recalculating && (
+                    <p
+                      role="status"
+                      data-testid="recalculating"
+                      className="text-meta text-muted-foreground"
+                    >
+                      {t('sidebar.plan.recalculating')}
+                    </p>
+                  )}
                 </div>
               )}
 
@@ -1970,8 +1998,8 @@ export const Sidebar = ({
           <Button
             type="button"
             data-testid="build-route"
-            onClick={() => submitPrompt()}
-            disabled={busy || !query.trim()}
+            onClick={() => (refresh ? recalculate(0) : submitPrompt())}
+            disabled={busy || refreshing || !(hasQuery || refresh)}
             className={cn(
               'h-12 w-full rounded-xl text-body font-semibold transition hover:brightness-[0.97] active:scale-[0.99] motion-reduce:active:scale-100 disabled:opacity-40',
               canGuide
@@ -1979,10 +2007,18 @@ export const Sidebar = ({
                 : 'bg-primary text-primary-foreground'
             )}
           >
-            {busy && (
+            {(busy || refreshing) && (
               <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
             )}
-            {busy ? t('sidebar.ui.plan') : t('sidebar.ui.build')}
+            {busy
+              ? t('sidebar.ui.plan')
+              : refresh
+                ? t(
+                    refreshing
+                      ? 'sidebar.ui.refreshingRoute'
+                      : 'sidebar.ui.refreshRoute'
+                  )
+                : t('sidebar.ui.build')}
           </Button>
         </footer>
       )}

@@ -114,6 +114,8 @@ type SidebarShape = {
     | 'point'
     | 'plan'
     | 'build'
+    | 'refreshRoute'
+    | 'refreshingRoute'
     | 'start'
     | 'myLocation',
     string
@@ -276,6 +278,8 @@ export const sidebarArea = {
         point: 'точка',
         plan: 'Строю маршрут…',
         build: 'Подобрать маршрут',
+        refreshRoute: 'Обновить маршрут',
+        refreshingRoute: 'Обновляю маршрут…',
         start: 'старт маршрута',
         myLocation: 'Моё местоположение',
       },
@@ -298,6 +302,9 @@ export const sidebarArea = {
         resultTypeAria: 'тип результата',
         reset: 'сброс',
         resetHint: 'очистить маршрут',
+        recalculating: 'пересчитываю маршрут…',
+        optimiseOrder: 'оптимизировать порядок',
+        optimiseHint: 'порядок точек задан вручную — вернуть его планировщику',
         length: 'длина',
         travelMinutes: 'мин в пути',
         travelSummary: 'в пути ~{{value}}',
@@ -499,6 +506,8 @@ export const sidebarArea = {
         point: 'stop',
         plan: 'Building the route…',
         build: 'Plan my route',
+        refreshRoute: 'Refresh the route',
+        refreshingRoute: 'Refreshing the route…',
         start: 'route start',
         myLocation: 'My location',
       },
@@ -521,6 +530,10 @@ export const sidebarArea = {
         resultTypeAria: 'result type',
         reset: 'reset',
         resetHint: 'clear the route',
+        recalculating: 're-measuring the route…',
+        optimiseOrder: 'optimise the order',
+        optimiseHint:
+          'the stops are in the order you put them in — hand them back to the planner',
         length: 'length',
         travelMinutes: 'min travelling',
         travelSummary: 'travelling ~{{value}}',

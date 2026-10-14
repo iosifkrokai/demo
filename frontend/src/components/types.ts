@@ -247,8 +247,16 @@ export interface ValhallaRouteResponse {
 }
 
 /** One stop of an agent-planned route, as POST /routes/generate returns it. */
+/** A line as GeoJSON spells it: coordinates are `[lon, lat]`. */
+export interface GeoLineString {
+  type?: string;
+  coordinates?: number[][];
+}
+
 export interface AgentPoint {
   id: number;
+  /** The client's own name for the stop, echoed back; absent for a catalogued stop. */
+  key?: string | null;
   name: string;
   category?: string | null;
   lat: number;
@@ -318,6 +326,8 @@ export interface AgentRouteResponse {
   points?: AgentPoint[];
   budget?: AgentBudget;
   costing?: string | null;
+  /** The drawn line, when the answer carries one. */
+  shape?: GeoLineString | null;
   summary?: { length_km?: number | null; time_seconds?: number | null };
   status?: RoutePlanStatus;
   interpretation?: PlanInterpretation;

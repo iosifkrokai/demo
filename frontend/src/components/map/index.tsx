@@ -43,10 +43,8 @@ import {
 import { useServicesAlong } from '@/hooks/use-services-along';
 import { usePlaces } from '@/hooks/use-places';
 import type { Place } from '@/api/types';
-import {
-  useDirectionsQuery,
-  useSetWaypointFromCoords,
-} from '@/hooks/use-directions-queries';
+import { useSetWaypointFromCoords } from '@/hooks/use-directions-queries';
+import { useRouteRecalculate } from '@/hooks/use-route-recalculate';
 
 const { center, zoom: zoom_initial } = getInitialMapPosition();
 
@@ -125,8 +123,8 @@ export const MapComponent = () => {
   const provenance = routeProvenance(routeResult);
   const missingVerifiedLine = isMissingVerifiedLine(routeResult);
 
-  const { refetch: refetchDirections } = useDirectionsQuery();
   const { setWaypointFromCoords } = useSetWaypointFromCoords();
+  const { recalculate } = useRouteRecalculate();
   const [routeHoverPopup, setRouteHoverPopup] = useState<{
     lng: number;
     lat: number;
@@ -217,10 +215,10 @@ export const MapComponent = () => {
         object.latLng.lat,
         object.index
       ).then(() => {
-        refetchDirections();
+        recalculate();
       });
     },
-    [setWaypointFromCoords, refetchDirections]
+    [setWaypointFromCoords, recalculate]
   );
 
   /** The panel's handle does both: it closes what is open, opens what is not. */

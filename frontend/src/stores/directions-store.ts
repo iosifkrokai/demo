@@ -234,6 +234,19 @@ const adoptThreadTurn = (state: DirectionsState, turn: ThreadTurn): void => {
   state.isOptimized = false;
 };
 
+/** The numbers under the route heading, written by a plan and by a re-measure both. */
+export interface RoutePanelSummary {
+  stops: number;
+  km: number | null;
+  /** The time actually spent on the legs. */
+  travelMinutes: number;
+  /** The walking time the planner itself counted. */
+  walkMinutes: number;
+  visitMinutes: number;
+  budgetMinutes: number | null;
+  fits: boolean;
+}
+
 export interface DirectionsState {
   successful: boolean;
   highlightSegment: HighlightSegment;
@@ -253,6 +266,16 @@ export interface DirectionsState {
   thread: ThreadJournal | null;
   /** Which revision the map currently shows; -1 before any journal is loaded. */
   threadRevision: number;
+  /** True once the user has ordered the stops by hand: a re-measure keeps that order. */
+  manualOrder: boolean;
+  /** What a re-measure is asked for, kept here so any component can ask for one. */
+  roundTrip: boolean;
+  timeBudget: number;
+  /** The transport the route on screen is measured with, when one is known. */
+  costing: string | null;
+  routeSummary: RoutePanelSummary | null;
+  /** True while a re-measure is on the wire. */
+  recalculating: boolean;
 }
 
 interface DirectionsActions {
@@ -312,6 +335,17 @@ interface DirectionsActions {
   refreshThread: (sessionId: string) => Promise<void>;
   /** Full reset: stops, details, exclusions, log, history of edits, line. */
   resetRoute: () => void;
+  setManualOrder: (manualOrder: boolean) => void;
+  setRoundTrip: (roundTrip: boolean) => void;
+  setTimeBudget: (minutes: number) => void;
+  setCosting: (costing: string | null) => void;
+  setRouteSummary: (summary: RoutePanelSummary | null) => void;
+  setRecalculating: (recalculating: boolean) => void;
+  /** Take the server's order and numbers for the route it just measured, at once. */
+  applyReroute: (params: {
+    keys: string[];
+    summary: RoutePanelSummary | null;
+  }) => void;
 }
 
 type DirectionsStore = DirectionsState & DirectionsActions;
@@ -334,6 +368,83 @@ export const useDirectionsStore = create<DirectionsStore>()(
       routeSnapshots: [],
       thread: null,
       threadRevision: -1,
+      manualOrder: false,
+      roundTrip: false,
+      timeBudget: 0,
+      costing: null,
+      routeSummary: null,
+      recalculating: false,
+
+      setManualOrder: (manualOrder) =>
+        set(
+          (state) => {
+            state.manualOrder = manualOrder;
+          },
+          undefined,
+          'setManualOrder'
+        ),
+
+      setRoundTrip: (roundTrip) =>
+        set(
+          (state) => {
+            state.roundTrip = roundTrip;
+          },
+          undefined,
+          'setRoundTrip'
+        ),
+
+      setTimeBudget: (minutes) =>
+        set(
+          (state) => {
+            state.timeBudget = minutes;
+          },
+          undefined,
+          'setTimeBudget'
+        ),
+
+      setCosting: (costing) =>
+        set(
+          (state) => {
+            state.costing = costing;
+          },
+          undefined,
+          'setCosting'
+        ),
+
+      setRouteSummary: (summary) =>
+        set(
+          (state) => {
+            state.routeSummary = summary;
+          },
+          undefined,
+          'setRouteSummary'
+        ),
+
+      setRecalculating: (recalculating) =>
+        set(
+          (state) => {
+            state.recalculating = recalculating;
+          },
+          undefined,
+          'setRecalculating'
+        ),
+
+      applyReroute: ({ keys, summary }) =>
+        set(
+          (state) => {
+            const rank = new Map(keys.map((key, index) => [key, index]));
+            const me = state.waypoints.filter((w) => w.id === ME_WAYPOINT_ID);
+            const rest = state.waypoints.filter((w) => w.id !== ME_WAYPOINT_ID);
+            const rankOf = (waypoint: Waypoint) =>
+              rank.get(waypoint.id) ?? Number.MAX_SAFE_INTEGER;
+            rest.sort((a, b) => rankOf(a) - rankOf(b));
+            state.waypoints = [...me, ...rest];
+            state.routeSummary = summary;
+            state.recalculating = false;
+          },
+          undefined,
+          'applyReroute'
+        ),
 
       updateInclineDecline: (inclineDeclineTotal) =>
         set(

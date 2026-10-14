@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { useSyncExternalStore } from 'react';
 import {
   fireEvent,
   render,
@@ -21,7 +22,20 @@ const mockStoreState = vi.hoisted(() => ({
   routeSnapshots: [] as unknown[],
   excludedPlaceIds: [] as number[],
   thread: null as unknown,
+  manualOrder: false,
+  roundTrip: false,
+  timeBudget: 0,
+  costing: null as string | null,
+  routeSummary: null as unknown,
+  recalculating: false,
   setWaypoint: vi.fn(),
+  setManualOrder: vi.fn(),
+  setRoundTrip: vi.fn(),
+  setTimeBudget: vi.fn(),
+  setCosting: vi.fn(),
+  setRouteSummary: vi.fn(),
+  setRecalculating: vi.fn(),
+  applyReroute: vi.fn(),
   setPlaceDetails: vi.fn(),
   addEmptyWaypointToEnd: vi.fn(),
   addToHistory: vi.fn(),
@@ -35,7 +49,16 @@ const mockStoreState = vi.hoisted(() => ({
   refreshThread: vi.fn(),
 }));
 const mockSetWaypoint = mockStoreState.setWaypoint;
+
+/** The mock is a real store to React: a setter re-renders its readers. */
+const mockStoreListeners = vi.hoisted(() => new Set<() => void>());
+const mockStoreVersion = vi.hoisted(() => ({ current: 0 }));
+const notifyMockStore = () => {
+  mockStoreVersion.current += 1;
+  mockStoreListeners.forEach((listener) => listener());
+};
 const mockRefetch = vi.hoisted(() => vi.fn());
+const mockSetAgentRoute = vi.hoisted(() => vi.fn());
 const mockGetState = vi.hoisted(() =>
   vi.fn((): Record<string, unknown> => mockStoreState)
 );
@@ -44,6 +67,7 @@ const mockResetSettings = vi.hoisted(() => vi.fn());
 
 vi.mock('@/hooks/use-directions-queries', () => ({
   useDirectionsQuery: () => ({ refetch: mockRefetch }),
+  setAgentRoute: mockSetAgentRoute,
 }));
 
 const mockItineraries = vi.hoisted(() => ({
@@ -100,8 +124,18 @@ vi.mock('@/stores/common-store', () => ({
 vi.mock('@/stores/directions-store', () => ({
   ME_WAYPOINT_ID: 'me',
   useDirectionsStore: Object.assign(
-    (selector: (s: Record<string, unknown>) => unknown) =>
-      selector(mockStoreState),
+    (selector: (s: Record<string, unknown>) => unknown) => {
+      useSyncExternalStore(
+        (onChange: () => void) => {
+          mockStoreListeners.add(onChange);
+          return () => {
+            mockStoreListeners.delete(onChange);
+          };
+        },
+        () => mockStoreVersion.current
+      );
+      return selector(mockStoreState);
+    },
     { getState: mockGetState }
   ),
 }));
@@ -212,11 +246,38 @@ describe('Sidebar', () => {
     mockStoreState.refinementLog = [];
     mockStoreState.routeSnapshots = [];
     mockStoreState.excludedPlaceIds = [];
+    mockStoreState.timeBudget = 0;
+    mockStoreState.roundTrip = false;
+    mockStoreState.manualOrder = false;
+    mockStoreState.costing = null;
+    mockStoreState.routeSummary = null;
+    mockStoreState.recalculating = false;
     mockStoreState.setWaypoint.mockImplementation(
       (next: Record<string, unknown>[]) => {
         mockStoreState.waypoints = next;
+        notifyMockStore();
       }
     );
+    mockStoreState.setRouteSummary.mockImplementation((summary: unknown) => {
+      mockStoreState.routeSummary = summary;
+      notifyMockStore();
+    });
+    mockStoreState.setCosting.mockImplementation((costing: string | null) => {
+      mockStoreState.costing = costing;
+      notifyMockStore();
+    });
+    mockStoreState.setManualOrder.mockImplementation((value: boolean) => {
+      mockStoreState.manualOrder = value;
+      notifyMockStore();
+    });
+    mockStoreState.setTimeBudget.mockImplementation((minutes: number) => {
+      mockStoreState.timeBudget = minutes;
+      notifyMockStore();
+    });
+    mockStoreState.setRoundTrip.mockImplementation((value: boolean) => {
+      mockStoreState.roundTrip = value;
+      notifyMockStore();
+    });
     mockGetState.mockReturnValue(mockStoreState);
   });
 
@@ -330,7 +391,7 @@ describe('Sidebar', () => {
     expect(body.query).toBe('замки Гродно');
   });
 
-  it('re-plans the route when the transport changes', async () => {
+  it('measures the route again when the transport changes, without the model', async () => {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars -- the test reads calls[i][1]
     const fetchMock = vi.fn(async (_url: string, _init: RequestInit) => ({
       ok: true,
@@ -348,9 +409,37 @@ describe('Sidebar', () => {
     await user.click(screen.getByTestId('transport-car'));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
-    const body = JSON.parse(String(fetchMock.mock.calls[1]![1].body));
+    const [url, init] = fetchMock.mock.calls[1]!;
+    expect(String(url)).toContain('/routes/reroute');
+    const body = JSON.parse(String((init as RequestInit).body));
     expect(body.profile).toBe('auto');
-    expect(body.query).toBe('замки Гродно');
+    expect(body.query).toBeUndefined();
+  });
+
+  it('turns the footer button into «обновить маршрут» once there is a route', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- the test reads calls[i][1]
+    const fetchMock = vi.fn(async (_url: string, _init: RequestInit) => ({
+      ok: true,
+      json: async () => ({ ...AGENT_ANSWER, costing: 'pedestrian' }),
+    }));
+    stubAgentFetch(fetchMock);
+
+    const user = userEvent.setup({ delay: null });
+    render(<Sidebar />);
+
+    await user.type(askField(), 'замки Гродно');
+    await user.click(buildButton());
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+
+    const action = screen.getByTestId('build-route');
+    expect(action).toBeEnabled();
+    expect(action).toHaveTextContent('Обновить маршрут');
+
+    await user.click(action);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const [url] = fetchMock.mock.calls[1]!;
+    expect(String(url)).toContain('/routes/reroute');
   });
 
   it('starts the planned route at my position and numbers the stops from 1', async () => {
@@ -394,6 +483,7 @@ describe('Sidebar', () => {
 
     const snapshot = vi.fn();
     mockGetState.mockReturnValue({
+      ...mockStoreState,
       waypoints: [
         {
           id: 'me',
@@ -1178,6 +1268,7 @@ describe('Sidebar', () => {
     expect(JSON.parse(sentBodies[0]!).hard_services).toEqual(['туалет']);
 
     mockGetState.mockReturnValue({
+      ...mockStoreState,
       waypoints: [
         {
           id: 'me',
@@ -1256,11 +1347,38 @@ describe('Sidebar — felt quality', () => {
     });
     mockStoreState.routeHistory = [];
     mockStoreState.waypoints = [];
+    mockStoreState.timeBudget = 0;
+    mockStoreState.roundTrip = false;
+    mockStoreState.manualOrder = false;
+    mockStoreState.costing = null;
+    mockStoreState.routeSummary = null;
+    mockStoreState.recalculating = false;
     mockStoreState.setWaypoint.mockImplementation(
       (next: Record<string, unknown>[]) => {
         mockStoreState.waypoints = next;
+        notifyMockStore();
       }
     );
+    mockStoreState.setRouteSummary.mockImplementation((summary: unknown) => {
+      mockStoreState.routeSummary = summary;
+      notifyMockStore();
+    });
+    mockStoreState.setCosting.mockImplementation((costing: string | null) => {
+      mockStoreState.costing = costing;
+      notifyMockStore();
+    });
+    mockStoreState.setManualOrder.mockImplementation((value: boolean) => {
+      mockStoreState.manualOrder = value;
+      notifyMockStore();
+    });
+    mockStoreState.setTimeBudget.mockImplementation((minutes: number) => {
+      mockStoreState.timeBudget = minutes;
+      notifyMockStore();
+    });
+    mockStoreState.setRoundTrip.mockImplementation((value: boolean) => {
+      mockStoreState.roundTrip = value;
+      notifyMockStore();
+    });
     mockGetState.mockReturnValue(mockStoreState);
   });
 

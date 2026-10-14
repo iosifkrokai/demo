@@ -7,7 +7,7 @@ import {
   useDirectionsStore,
   type Waypoint,
 } from '@/stores/directions-store';
-import { useDirectionsQuery } from '@/hooks/use-directions-queries';
+import { useRouteRecalculate } from '@/hooks/use-route-recalculate';
 import { useVisitOverrides } from '@/hooks/use-visit-overrides';
 import { PlaceIcon } from './parts/place-icon';
 import { useCommonStore } from '@/stores/common-store';
@@ -38,7 +38,8 @@ export const WaypointList = ({ onChanged }: Props) => {
   const excludeStops = useDirectionsStore((s) => s.excludeStops);
   const placeDetails = useDirectionsStore((s) => s.placeDetails);
   const focusOn = useCommonStore((s) => s.focusOn);
-  const { refetch } = useDirectionsQuery();
+  const setManualOrder = useDirectionsStore((s) => s.setManualOrder);
+  const { recalculate } = useRouteRecalculate();
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const routeKey = useMemo(() => plannerVisitKey(waypoints), [waypoints]);
   const { overrides, setVisitMinutes, effectiveMinutesFor } =
@@ -47,7 +48,7 @@ export const WaypointList = ({ onChanged }: Props) => {
   const update = (next: Waypoint[]) => {
     setWaypoint(next);
     onChanged();
-    refetch();
+    recalculate();
   };
 
   const move = (from: number, to: number) => {
@@ -64,6 +65,7 @@ export const WaypointList = ({ onChanged }: Props) => {
     const [moved] = next.splice(from, 1);
     if (!moved) return;
     next.splice(to, 0, moved);
+    setManualOrder(true);
     update(next);
   };
 
@@ -72,7 +74,7 @@ export const WaypointList = ({ onChanged }: Props) => {
     doRemoveWaypoint({ index: i });
     if (placeId != null) excludeStops({ placeIds: [placeId] });
     onChanged();
-    refetch();
+    recalculate();
   };
 
   /** Pin a stop so refinement keeps it (`pinned` → `context.base_points`). */
