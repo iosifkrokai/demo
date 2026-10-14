@@ -13,3 +13,7 @@ PHOTOS_DIR = DATA_DIR / "photos"
 
 TAXONOMY_CSV = DATA_DIR / "taxonomy.csv"
 ITINERARIES_JSON = DATA_DIR / "itineraries.json"
+EXCLUDED_NAMES_JSON = DATA_DIR / "excluded_names.json"
+TOWN_NAMES_JSON = DATA_DIR / "town_names.json"
+PLACE_ALIASES_JSON = DATA_DIR / "place_aliases.json"
+PLACE_MERGES_JSON = DATA_DIR / "place_merges.json"

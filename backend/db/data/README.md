@@ -2,10 +2,11 @@
 
 Data is code: every dataset is a versioned text file, and the Postgres database is
 a *projection* rebuilt from them by one idempotent command. Layout: `places/`
-(datasets), `geo/` (map geometry), `photos/` (photo hints + resolution), plus
-`taxonomy.csv` and `itineraries.json` — the last two are projected into the
-`categories` and `itineraries`/`itinerary_stops` tables (see below), not read from
-disk at runtime.
+(datasets), `geo/` (map geometry), `photos/` (photo hints + resolution), `external/`
+(the contract for data an outside body sends — the reply's JSON Schema and a filled
+example, not a dataset and not read by the seed), plus `taxonomy.csv` and
+`itineraries.json` — the last two are projected into the `categories` and
+`itineraries`/`itinerary_stops` tables (see below), not read from disk at runtime.
 
 Sight and service rows share the pipe-delimited 14-column shape:
 
@@ -65,6 +66,7 @@ Order of a full apply — validate, upsert by natural key, embed locally, report
 6. `categories` (from `taxonomy.csv`, key `code`) and `itineraries` +
    `itinerary_stops` (from `itineraries.json`, key `id`) — the two reference files
    projected, see above; embeddings last, from the local CPU model.
+7. rows the files no longer carry are deleted — `pipeline.prune_stale`, see below.
 
 Two rules drop a row before the upsert, both in memory (`datasets.resolve_shadowed`,
 `datasets.resolve_twins`) so the report and the projection agree, and both report
@@ -84,6 +86,29 @@ the region has lines of identically named ДОТы and блиндажи a hundre
 and nearly every bus stop has a same-named counterpart across the road. The
 remaining same-name pairs are left alone on purpose — collapsing on the name would
 delete real objects.
+
+Two files name a place by hand where no rule can see it, and neither is a relaxation
+of the above. `place_aliases.json` gives a hand-authored row the other names it
+answers to — «Парк Мир» and «Замковый комплекс Мир» are the Mir castle under another
+spelling — so the first rule can shadow by a name the row does not carry; the radius
+is unchanged. `place_merges.json` states one pair outright, for two rows whose names
+*and* categories differ and which are still one object; the losing row is dropped and
+its source kept, exactly as in the first rule. A declaration naming a row the data no
+longer holds is reported in the `merged` block's `stale_declarations` rather than
+silently ignored, so neither file can rot into a comment. The equivalent for the
+services is not in the data but in the planner: a `role = 'service'` place — a café,
+a hotel, a bus stop — is not a stop of a walk unless the request pinned it by id,
+and the drops are reported.
+
+A third rule drops rows *after* the upsert, in the database
+(`pipeline.prune_stale`): an **automatic row no dataset carries any more** is
+deleted. An upsert cannot notice a row leaving the files — OSM dropping an object,
+or `fetch` filtering one out as an excluded name — so without this the projection
+keeps rows the CSVs do not have, forever. Two kinds survive: a hand-authored row,
+and any row something still refers to, a visit (`visited_places`) or an itinerary
+stop naming it by `source_url`. An absent dataset blocks the sweep entirely, since
+a file nobody could read is not evidence its rows are gone. `--no-prune` keeps
+them all; the count lands in the report as `stale_pruned`.
 
 Idempotency: `places` upserts on `source_url`, `place_sources` on
 `(provider, external_id)`, `place_aliases` on `(place_id, lower(alias), locale)`,

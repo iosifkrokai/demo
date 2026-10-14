@@ -4,7 +4,6 @@ Turns raw OSM tags into a canonical category, a name and a 14-column places row.
 
 from __future__ import annotations
 
-import math
 from typing import Any
 
 from . import taxonomy
@@ -22,7 +21,6 @@ def visit_minutes_for(category: str) -> int:
 
 
 SOURCE_PREFIX = "osm_poi:"
-DEDUP_RADIUS_M = 150.0
 
 AMENITY_CATEGORY = {
     "cafe": "кафе",
@@ -45,37 +43,65 @@ RAILWAY_CATEGORY = {
     "tram_stop": "остановка транспорта",
 }
 
+# Labels generated for services OSM leaves unnamed. They name a *kind*, not an
+# object: a hundred rows reading «Остановка» are a hundred different stops, so
+# anything looking for one object mapped twice must not read them as evidence
+# (`datasets.find_suspected_duplicates`).
+FALLBACK_LABEL_BY_CATEGORY = {"туалет": "Туалет", "остановка транспорта": "Остановка"}
+SERVICE_FALLBACK_LABELS = frozenset(FALLBACK_LABEL_BY_CATEGORY.values())
+
+
+def is_fallback_name(name: str | None) -> bool:
+    """True for a generated service label, with or without its street hint."""
+    head = (name or "").strip().split("(", 1)[0].strip()
+    return head in SERVICE_FALLBACK_LABELS
+
+
 Row = dict[str, str | float | None]
 
 
 def sight_tag_to_category(tags: dict[str, str]) -> str | None:
-    """Map OSM tags → our sight category, or None."""
+    """Map OSM tags → our sight category, or None.
+
+    The order is the mapping. Worship and church buildings are read *before* the two
+    catch-all tags (`tourism=attraction`, `historic=archaeological_site`): reading those
+    first put 419 churches, chapels and synagogues into `архитектура`, because OSM tags a
+    notable church as an attraction — and «покажи костёлы» then missed them.
+    """
     return (
-        _historic_category(tags.get("historic", ""))
-        or _tourism_category(tags.get("tourism", ""))
-        or _worship_category(tags)
+        _worship_category(tags)
         or _building_category(tags)
+        or _historic_category(tags.get("historic", ""))
+        or _tourism_category(tags.get("tourism", ""))
+        or _generic_category(tags)
     )
 
 
 def _historic_category(historic: str) -> str | None:
-    """What the `historic` key alone settles."""
+    """What the `historic` key alone settles — named kinds only, not the catch-all."""
     if historic in ("castle", "manor", "ruins"):
         return "замок"
     if historic in ("monastery", "monastic_architecture"):
         return "монастырь"
     if historic in ("memorial", "monument"):
         return "памятник"
-    if historic == "archaeological_site":
-        return "архитектура"
     return None
 
 
 def _tourism_category(tourism: str) -> str | None:
-    """What the `tourism` key alone settles."""
+    """What the `tourism` key alone settles — named kinds only, not the catch-all."""
     if tourism == "museum":
         return "музей"
-    if tourism == "attraction":
+    return None
+
+
+def _generic_category(tags: dict[str, str]) -> str | None:
+    """The two catch-all tags, read last: what is left without a sharper answer.
+
+    `tourism=attraction` and `historic=archaeological_site` say "worth seeing", not what
+    the thing is, so every other mapping speaks first and this one only catches the rest.
+    """
+    if tags.get("tourism") == "attraction" or tags.get("historic") == "archaeological_site":
         return "архитектура"
     return None
 
@@ -87,10 +113,9 @@ def _worship_category(tags: dict[str, str]) -> str | None:
     religion = tags.get("religion", "")
     if religion == "christian":
         return _christian_rite(tags.get("denomination", ""))
-    if religion == "muslim":
-        return "храм"
-    if religion == "jewish":
-        return "архитектура"
+    # A mosque, a synagogue, a shrine: `храм` is where the taxonomy puts them — «синагога»,
+    # «кирха» and «каплица» are its own aliases, which is why synagogues read as
+    # `архитектура` before.
     return "храм"
 
 
@@ -102,11 +127,16 @@ def _christian_rite(denomination: str) -> str:
 
 
 def _building_category(tags: dict[str, str]) -> str | None:
-    """A church building is a костёл for Catholics and a церковь for anyone else."""
+    """A church building is a костёл for Catholics and a церковь for anyone else.
+
+    A worship building whose religion is not tagged Christian still reads as a place of
+    worship, not as plain architecture: «часовня» and «каплица» are `храм` in the
+    taxonomy, and 89 chapels sat in `архитектура` for want of this.
+    """
     building = tags.get("building", "")
     if building in ("church", "cathedral", "chapel"):
         if tags.get("religion", "") != "christian":
-            return "архитектура"
+            return "храм"
         return (
             "костёл"
             if tags.get("denomination", "") in ("catholic", "roman_catholic")
@@ -148,41 +178,19 @@ def sight_name(tags: dict[str, str]) -> str | None:
 def service_name(tags: dict[str, str], category: str) -> str | None:
     """Name: ``name`` else ``name:ru``.
     Toilets and transport stops fall back to «Туалет» / «Остановка»; others dropped.
+
+    The fallback carries the street when OSM knows it — the only thing that tells two
+    unnamed stops apart offline, and what keeps the catalogue from showing a hundred
+    identical «Остановка» rows.
     """
     name = tags.get("name") or tags.get("name:ru")
     if name:
         return name.strip()
-    if category in ("туалет", "остановка транспорта"):
-        label = "Туалет" if category == "туалет" else "Остановка"
+    label = FALLBACK_LABEL_BY_CATEGORY.get(category)
+    if label:
         street = (tags.get("addr:street") or "").strip()
         return f"{label} ({street})" if street else label
     return None
-
-
-def _haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    """Metres between two lat/lon points (local copy: imports no seed.* module)."""
-    earth_radius_m = 6371000
-    phi1, phi2 = math.radians(lat1), math.radians(lat2)
-    dphi = math.radians(lat2 - lat1)
-    dlam = math.radians(lon2 - lon1)
-    a = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlam / 2) ** 2
-    return earth_radius_m * 2 * math.asin(math.sqrt(a))
-
-
-def is_name_dup(
-    row: dict[str, Any], existing: list[dict[str, Any]], threshold_m: float = DEDUP_RADIUS_M
-) -> bool:
-    """True when an existing place shares the exact name within threshold_m."""
-    for ex in existing:
-        if (
-            ex["name"] == row["name"]
-            and _haversine_m(
-                float(row["lat"]), float(row["lon"]), float(ex["lat"]), float(ex["lon"])
-            )
-            < threshold_m
-        ):
-            return True
-    return False
 
 
 def sight_element_to_row(element: dict[str, Any]) -> Row | None:

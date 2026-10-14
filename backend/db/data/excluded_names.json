@@ -1,0 +1,20 @@
+{
+  "description": "Names that are not names. The source carries text that identifies no object — a placeholder, a vandal edit, a batch import that left one string on dozens of unrelated things. A row under such a name is dropped by `seed fetch` (db/seed/cli.py) and the committed datasets are checked against this list by tests/test_seed_merge.py, so the same text cannot come back through a re-fetch unnoticed.",
+  "why_not_heuristic": "A pattern (mixed script, repetition) was rejected: 204 names in the OSM sets are legitimately mixed-script (a Belarusian or Polish form beside the Russian one) and generic names like «Столовая» or «Часовня» are real. Judging those in code would drop good rows. A list with a reason per entry is reviewable and stays honest about being a judgement call.",
+  "names": [
+    {
+      "name": "Заўжды цікаVа",
+      "seen": 60,
+      "category": "кафе",
+      "source": "openstreetmap",
+      "reason": "Placeholder text («всегда интересно») written with Latin letters inside Belarusian words, carried by 61 cafés across the voblast — the same string on unrelated objects is a batch import or an edit, not a name."
+    },
+    {
+      "name": "Заўжды ЦiкаVa",
+      "seen": 1,
+      "category": "кафе",
+      "source": "openstreetmap",
+      "reason": "The same placeholder as «Заўжды цікаVа» in another capitalisation; listed separately because matching is on the normalised name, and the two differ in which letters are Latin."
+    }
+  ]
+}

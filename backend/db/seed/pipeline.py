@@ -12,16 +12,10 @@ from typing import Any, LiteralString
 import psycopg
 from psycopg import sql
 
-from core.paths import GEO_DIR, PHOTOS_DIR
+from core.paths import GEO_DIR, PHOTOS_DIR, PLACE_ALIASES_JSON
 from db.store.datasets import DATA_VERSION_ROW
 
-from .datasets import (
-    PROTECTED_CATEGORY_SOURCES,
-    SOURCE_AUTO,
-    Dataset,
-    match_place,
-)
-from .geofence import inside_project_area
+from .datasets import SOURCE_AUTO, Dataset, match_place, read_place_alias_entries
 
 PROVIDER_BY_PREFIX = {
     "city": "planetabelarus",
@@ -29,11 +23,6 @@ PROVIDER_BY_PREFIX = {
     "osm": "openstreetmap",
     "osm_poi": "openstreetmap",
 }
-
-
-def curated_category_is_protected(category_source: str | None) -> bool:
-    """True when automatic classification must not touch this row's category."""
-    return (category_source or SOURCE_AUTO) in PROTECTED_CATEGORY_SOURCES
 
 
 def upsert_sql() -> LiteralString:
@@ -167,6 +156,40 @@ def apply_curated_rows(conn: psycopg.Connection, curated: list[dict[str, Any]]) 
             "unmatched": unmatched[:50],
             "unmatched_count": len(unmatched),
         }
+
+
+def apply_place_aliases(conn: psycopg.Connection, path: Path | None = None) -> dict[str, Any]:
+    """Write the declared aliases of every hand-authored row into ``place_aliases``.
+
+    The file is the whole truth for the rows it writes: an alias it no longer names is
+    deleted, so editing the file is enough. A file that is absent is not a declaration
+    and leaves the table alone. An alias whose row is not in the database is reported,
+    since the file claiming a place the seed never wrote is a fact worth seeing. The
+    caller commits.
+    """
+    source = path or PLACE_ALIASES_JSON
+    if not source.is_file():
+        return {"skipped": "no place_aliases.json"}
+    entries = read_place_alias_entries(source)
+    label = source.name
+    unresolved: list[str] = []
+    written = 0
+    with conn.cursor() as cur:
+        cur.execute("DELETE FROM place_aliases WHERE source = %s", (label,))
+        for entry in entries:
+            cur.execute(
+                """
+                INSERT INTO place_aliases (place_id, alias, locale, source)
+                SELECT id, %s, %s, %s FROM places WHERE source_url = %s
+                ON CONFLICT (place_id, lower(alias), locale) DO NOTHING
+                """,
+                (entry["alias"], entry["locale"], label, entry["source_url"]),
+            )
+            written += cur.rowcount
+            cur.execute("SELECT 1 FROM places WHERE source_url = %s", (entry["source_url"],))
+            if cur.fetchone() is None:
+                unresolved.append(entry["source_url"])
+    return {"written": written, "declared": len(entries), "unresolved": sorted(set(unresolved))}
 
 
 def load_areas(conn: psycopg.Connection, geo_dir: Path | None = None) -> int:
@@ -371,15 +394,23 @@ def apply_shadowed(
     return removed
 
 
-def prune_foreign(conn: psycopg.Connection, *, apply: bool = False) -> int:
-    """Drop places outside the project area; returns the number found (deleted if apply).
-    The ingest filters now, so this only cleans older DBs.
-    """
+def prune_stale(
+    conn: psycopg.Connection, current_urls: Iterable[str], *, apply: bool = False
+) -> int:
+    """Count (delete with ``apply``) the automatic rows no dataset carries any more."""
     with conn.cursor() as cur:
-        cur.execute("SELECT id, name, category, district, lat, lon FROM places")
-        rows = cur.fetchall()
-        foreign = [r for r in rows if not inside_project_area(float(r[4]), float(r[5]))]
-        if apply and foreign:
-            ids = [r[0] for r in foreign]
-            cur.execute("DELETE FROM places WHERE id = ANY(%s)", (ids,))
-    return len(foreign)
+        cur.execute(
+            """
+            SELECT p.source_url FROM places p
+            WHERE p.category_source = %s
+              AND p.source_url <> ALL(%s)
+              AND NOT EXISTS (SELECT 1 FROM visited_places v WHERE v.place_id = p.id)
+              AND NOT EXISTS (
+                    SELECT 1 FROM itinerary_stops s WHERE s.source_url = p.source_url)
+            """,
+            (SOURCE_AUTO, list(current_urls)),
+        )
+        stale = [r[0] for r in cur.fetchall() or []]
+        if apply and stale:
+            cur.execute("DELETE FROM places WHERE source_url = ANY(%s)", (stale,))
+    return len(stale)

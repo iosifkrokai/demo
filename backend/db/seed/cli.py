@@ -34,6 +34,18 @@ def _dsn(args: argparse.Namespace) -> str:
     return args.database_url or os.environ.get("DATABASE_URL", DEFAULT_DSN)
 
 
+def _prune_stale(conn: Any, collected: dict[str, Any], *, skip: bool) -> int | str:
+    """Delete the automatic rows no dataset carries any more, or say why nothing was."""
+    if skip:
+        return "skipped (--no-prune)"
+    absent = [d["name"] for d in collected["datasets"] if d.get("missing")]
+    if absent:
+        return f"skipped (datasets absent: {', '.join(absent)})"
+    from . import pipeline
+
+    return pipeline.prune_stale(conn, [r["source_url"] for r in collected["records"]], apply=True)
+
+
 def _count_by(rows: list[dict[str, Any]], key: str) -> dict[str, int]:
     out: dict[str, int] = {}
     for r in rows:
@@ -41,13 +53,31 @@ def _count_by(rows: list[dict[str, Any]], key: str) -> dict[str, int]:
     return out
 
 
-def _collect(datasets: list[Dataset]) -> tuple[dict[str, Any], list[dict[str, Any]]]:
-    """The valid records to project, and the ones another record shadows."""
+def _write_registries(conn: Any, *, areas: bool) -> dict[str, Any]:
+    """Write what is not a row of a dataset: the places' declared aliases and the taxonomies."""
+    from . import pipeline
+
+    written: dict[str, Any] = {"areas_written": 0}
+    if areas:
+        written["areas_written"] = pipeline.load_areas(conn, GEO_DIR)
+    written["aliases_written"] = pipeline.apply_place_aliases(conn)
+    written["categories_written"] = pipeline.load_categories(conn, taxonomy_mod.all_categories())
+    written["itineraries_written"] = pipeline.load_itineraries(
+        conn, itineraries_mod.load_itineraries()
+    )
+    written["photos_written"] = pipeline.apply_photos(conn, PHOTOS_DIR)
+    return written
+
+
+def _collect(datasets: list[Dataset]) -> tuple[dict[str, Any], list[dict[str, Any]], list[str]]:
+    """The valid records to project, the ones another record shadows, and the
+    declarations the data no longer holds."""
     collected = collect_records(datasets)
-    kept, hand = ds_mod.resolve_shadowed(collected["records"])
+    kept, hand = ds_mod.resolve_shadowed(collected["records"], aliases=ds_mod.load_place_aliases())
     kept, twins = ds_mod.resolve_twins(kept)
+    kept, declared, stale = ds_mod.resolve_declared_merges(kept, ds_mod.load_declared_merges())
     collected["records"] = kept
-    return collected, [*hand, *twins]
+    return collected, [*hand, *twins, *declared], stale
 
 
 def cmd_apply(args: argparse.Namespace) -> int:
@@ -62,7 +92,7 @@ def cmd_apply(args: argparse.Namespace) -> int:
         "by_category": _count_by(curated, "category") if curated else {},
     }
 
-    collected, shadowed = _collect(datasets)
+    collected, shadowed, stale_merges = _collect(datasets)
     data_version = version_mod.content_version()
 
     merged_rows = 0
@@ -83,14 +113,8 @@ def cmd_apply(args: argparse.Namespace) -> int:
                 if curated:
                     curated_stats.update(pipeline.apply_curated_rows(conn, curated))
                     curated_stats["applied"] = True
-                areas_written = 0
-                if not args.no_areas:
-                    areas_written = pipeline.load_areas(conn, GEO_DIR)
-                categories_written = pipeline.load_categories(conn, taxonomy_mod.all_categories())
-                itineraries_written = pipeline.load_itineraries(
-                    conn, itineraries_mod.load_itineraries()
-                )
-                photos_written = pipeline.apply_photos(conn, PHOTOS_DIR)
+                registries = _write_registries(conn, areas=not args.no_areas)
+                pruned = _prune_stale(conn, collected, skip=args.no_prune)
                 pipeline.record_data_version(conn, data_version)
                 conn.commit()
 
@@ -104,13 +128,11 @@ def cmd_apply(args: argparse.Namespace) -> int:
                 db_stats.update(
                     {
                         "upserted": totals,
-                        "areas_written": areas_written,
-                        "categories_written": categories_written,
-                        "itineraries_written": itineraries_written,
-                        "photos_written": photos_written,
+                        **registries,
                         "embedded": embedded,
                         "embeddings_skipped": args.no_embed,
                         "merged_removed": merged_rows,
+                        "stale_pruned": pruned,
                     }
                 )
         except Exception as exc:
@@ -126,6 +148,7 @@ def cmd_apply(args: argparse.Namespace) -> int:
             db_stats=db_stats,
             data_version=data_version,
             merged=shadowed,
+            stale_merges=stale_merges,
         ),
     )
     _print_summary(report)
@@ -147,12 +170,15 @@ def cmd_apply(args: argparse.Namespace) -> int:
 
 def _print_summary(report: dict[str, Any]) -> None:
     t = report["totals"]
+    dup = report["suspected_duplicates"]
     print(
         f"[seed] mode={report['mode']} records={t['records']} "
         f"geofence_rejects={t['geofence_rejects']} invalid={t['invalid']} "
-        f"duplicates={report['suspected_duplicates']['count']} "
+        f"duplicates={dup['count']} namesakes={dup['namesakes']['count']} "
         f"merged={report['merged']['count']}"
     )
+    for declaration in report["merged"].get("stale_declarations") or []:
+        print(f"    declared merge not in the data: {declaration}")
     for ds in report["datasets"]:
         note = " (absent — run `seed fetch`)" if ds.get("missing") else ""
         print(
@@ -165,6 +191,30 @@ def _print_summary(report: dict[str, Any]) -> None:
         print(f"  data_version: {report['data_version']}")
     if "db" in report:
         print(f"  db: {report['db']}")
+
+
+def _drop_excluded_names(rows: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], int]:
+    """Rows whose name is on the exclusion list (data, not a pattern — see the file)."""
+    excluded = ds_mod.load_excluded_names()
+    if not excluded:
+        return rows, 0
+    kept = [r for r in rows if not ds_mod.is_excluded_name(r.get("name"), excluded)]
+    return kept, len(rows) - len(kept)
+
+
+def _previous_districts(path: Path) -> dict[str, str]:
+    """``source_url → district`` from the snapshot the fetch is about to replace.
+
+    Read before writing, so a re-fetch keeps the districts already resolved instead of
+    blanking the column (`overpass.fill_districts`).
+    """
+    if not path.is_file():
+        return {}
+    return {
+        row["source_url"]: str(row.get("district") or "").strip()
+        for row in ds_mod.read_pipe_csv(path)
+        if str(row.get("district") or "").strip()
+    }
 
 
 def cmd_fetch(args: argparse.Namespace) -> int:
@@ -189,6 +239,7 @@ def cmd_fetch(args: argparse.Namespace) -> int:
             ("poi", overpass.SERVICE_QUERY, osm_tags.service_element_to_row, "places_poi.csv")
         )
 
+    town_names = ds_mod.load_town_names()
     for name, template, to_row, filename in sources:
         query = overpass.build_overpass_query(template, bbox)
         elements = overpass.fetch_overpass(
@@ -199,8 +250,19 @@ def cmd_fetch(args: argparse.Namespace) -> int:
             return 1
         rows = [row for el in elements if (row := to_row(el))]
         out_path = out_dir / filename
+        rows, excluded = _drop_excluded_names(rows)
+        districts = overpass.fill_districts(rows, _previous_districts(out_path))
+        towns = overpass.fill_town_names(rows, town_names.get)
+        note = f", {excluded} dropped (excluded names)" if excluded else ""
+        tail = " (dry-run, not written)" if args.dry_run else ""
+        print(
+            f"[seed] fetch {name}: {len(rows)} rows{note} — district: "
+            f"{districts['carried']} kept from the previous snapshot, "
+            f"{districts['derived']} from the nearest raion; town: "
+            f"{towns['translated']} translated, {towns['kept']} left as the source spelled "
+            f"them{tail}"
+        )
         if args.dry_run:
-            print(f"[seed] fetch {name}: {len(rows)} rows (dry-run, not written)")
             continue
         overpass.write_pipe_csv(rows, out_path, COLUMNS)
         print(f"[seed] fetch {name}: wrote {len(rows)} rows to {out_path}")
@@ -220,19 +282,6 @@ def cmd_photos(args: argparse.Namespace) -> int:
         dsn=_dsn(args) if args.apply else None,
     )
     print(f"[seed] photos ({args.stage}): {done}")
-    return 0
-
-
-def cmd_prune(args: argparse.Namespace) -> int:
-    from . import pipeline
-
-    with pipeline.connect(_dsn(args)) as conn:
-        found = pipeline.prune_foreign(conn, apply=args.apply)
-        conn.commit()
-        if not args.apply:
-            print(f"[seed] prune: {found} foreign rows (dry-run — pass --apply to delete)")
-        else:
-            print(f"[seed] prune: deleted {found} foreign rows")
     return 0
 
 
@@ -265,6 +314,11 @@ def _add_apply_flags(p: argparse.ArgumentParser) -> None:
         help="Skip embeddings (local model; still works without it).",
     )
     p.add_argument("--no-areas", action="store_true", help="Do not (re)load areas.")
+    p.add_argument(
+        "--no-prune",
+        action="store_true",
+        help="Keep rows the datasets no longer carry (they are dropped by default).",
+    )
     p.add_argument("--database-url", default=None, help="Override DATABASE_URL.")
 
 
@@ -313,11 +367,6 @@ def build_arg_parser() -> argparse.ArgumentParser:
     a.add_argument("--input-json", type=Path, default=None)
     a.add_argument("--out-dir", type=Path, default=PLACES_DIR)
     a.set_defaults(func=None)
-
-    pr = sub.add_parser("prune", help="Drop places outside the project area.")
-    pr.add_argument("--apply", action="store_true", help="Actually delete.")
-    pr.add_argument("--database-url", default=None)
-    pr.set_defaults(func=cmd_prune)
 
     ad = sub.add_parser("admin", help="Create or promote the first administrator.")
     ad.add_argument("--email", required=True)
