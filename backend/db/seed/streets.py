@@ -26,7 +26,7 @@ from typing import Any
 
 from core.paths import PLACE_STREETS_JSON
 
-from .datasets import collect_records, default_datasets
+from .datasets import collapse, collect_records, default_datasets
 from .osm_tags import is_fallback_name
 
 PBF = os.environ.get("OSM_PBF")
@@ -432,7 +432,7 @@ def run_stage(
         datasets = default_datasets()
         if data_dir is not None:
             datasets = [d.with_data_dir(data_dir) for d in datasets]
-        rows = collect_records(datasets)["records"]
+        rows, _, _ = collapse(collect_records(datasets)["records"])
 
     targets = collect_targets(rows)
     print(f"целей (строк без имени): {len(targets)}")

@@ -19,13 +19,13 @@ def _way(osm_id: int, lat: float, lon: float, **tags: str) -> dict[str, Any]:
     return {"type": "way", "id": osm_id, "center": {"lat": lat, "lon": lon}, "tags": tags}
 
 
-def test_a_stairway_way_becomes_an_unnamed_row_with_its_facts() -> None:
+def test_a_stairway_way_becomes_a_row_with_its_facts() -> None:
     from db.seed.steps import element_to_row
 
     row = element_to_row(_way(123, GRODNO[0], GRODNO[1], handrail="yes", step_count="12"))
 
     assert row is not None
-    assert row["name"] == ""
+    assert row["name"] == "Лестница"
     assert row["category"] == "лестница"
     assert row["source_url"] == "osm:way/123"
     assert row["lat"] == f"{GRODNO[0]:.6f}"
@@ -38,7 +38,10 @@ def test_a_stairway_way_becomes_an_unnamed_row_with_its_facts() -> None:
     assert "step_count=12 (OpenStreetMap)" in facts
 
 
-def test_the_name_osm_holds_is_kept_and_nothing_is_invented() -> None:
+def test_the_name_osm_holds_is_kept_and_the_rest_carry_a_generated_label() -> None:
+    """A name OSM states wins; where it states none, the label names the kind —
+    the same generated label the stops and toilets carry, not an invented name."""
+    from db.seed.osm_tags import is_fallback_name
     from db.seed.steps import element_to_row
 
     named = element_to_row(_way(7, GRODNO[0], GRODNO[1], name="Спуск к Неману"))
@@ -47,7 +50,7 @@ def test_the_name_osm_holds_is_kept_and_nothing_is_invented() -> None:
     assert named is not None
     assert named["name"] == "Спуск к Неману"
     assert unnamed is not None
-    assert unnamed["name"] == ""
+    assert is_fallback_name(str(unnamed["name"]))
 
 
 def test_a_stairway_without_handrail_or_ramp_carries_no_fun_facts() -> None:

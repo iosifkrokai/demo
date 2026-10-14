@@ -20,7 +20,7 @@ from typing import Any
 
 from core.paths import PLACES_DIR
 
-from . import taxonomy
+from . import osm_tags, taxonomy
 from .datasets import BBOX, COLUMNS
 from .geofence import inside_project_area
 
@@ -95,7 +95,7 @@ def element_to_row(element: dict[str, Any]) -> Row | None:
     osm_id = element.get("id")
     facts = facts_of(tags)
     return {
-        "name": (tags.get("name") or "").strip(),
+        "name": osm_tags.service_name(tags, CATEGORY) or "",
         "category": CATEGORY,
         "district": "",
         "town": (tags.get("addr:city") or tags.get("addr:village") or "").strip(),

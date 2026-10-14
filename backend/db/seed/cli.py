@@ -83,11 +83,9 @@ def _collect(datasets: list[Dataset]) -> tuple[dict[str, Any], list[dict[str, An
     """The valid records to project, the ones another record shadows, and the
     declarations the data no longer holds."""
     collected = collect_records(datasets)
-    kept, hand = ds_mod.resolve_shadowed(collected["records"], aliases=ds_mod.load_place_aliases())
-    kept, twins = ds_mod.resolve_twins(kept)
-    kept, declared, stale = ds_mod.resolve_declared_merges(kept, ds_mod.load_declared_merges())
+    kept, shadowed, stale = ds_mod.collapse(collected["records"])
     collected["records"] = kept
-    return collected, [*hand, *twins, *declared], stale
+    return collected, shadowed, stale
 
 
 def cmd_apply(args: argparse.Namespace) -> int:

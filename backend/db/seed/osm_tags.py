@@ -51,7 +51,11 @@ RAILWAY_CATEGORY = {
 # object: a hundred rows reading «Остановка» are a hundred different stops, so
 # anything looking for one object mapped twice must not read them as evidence
 # (`datasets.find_suspected_duplicates`).
-FALLBACK_LABEL_BY_CATEGORY = {"туалет": "Туалет", "остановка транспорта": "Остановка"}
+FALLBACK_LABEL_BY_CATEGORY = {
+    "туалет": "Туалет",
+    "остановка транспорта": "Остановка",
+    "лестница": "Лестница",
+}
 SERVICE_FALLBACK_LABELS = frozenset(FALLBACK_LABEL_BY_CATEGORY.values())
 
 

@@ -809,6 +809,21 @@ def resolve_declared_merges(
     return kept, shadowed, stale
 
 
+def collapse(
+    records: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[str]]:
+    """The records the seed projects: the hand-authored rows, twins and declared pairs applied.
+
+    The one place the three rules are put in order, so a stage that names rows by identity
+    (``streets``) sees the same set the projection will — a row that has been collapsed
+    cannot keep a name or a street the seed is about to drop.
+    """
+    kept, hand = resolve_shadowed(records, aliases=load_place_aliases())
+    kept, twins = resolve_twins(kept)
+    kept, declared, stale = resolve_declared_merges(kept, load_declared_merges())
+    return kept, [*hand, *twins, *declared], stale
+
+
 def _share(part: int, total: int) -> dict[str, Any]:
     return {"count": part, "total": total, "share": round(part / total, 4) if total else None}
 

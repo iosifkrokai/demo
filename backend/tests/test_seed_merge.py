@@ -321,17 +321,26 @@ def test_the_collapse_never_touches_hand_authored_rows() -> None:
 
 
 def test_the_committed_files_collapse_exactly_these_twins() -> None:
+    """The collapse over the committed sets, pinning the count so a new rule shows up here.
+
+    The 38 stairways are all «Лестница»: OSM splits one staircase into ways a metre apart
+    (osm:way/606412524 and its neighbour 606412525 are 0.8 m, some pairs exactly 0.0 m),
+    which the rule reads as the one object they are. The bound below is two radii, not one:
+    a dropped row is measured to the row that kept it, which may be a neighbour of the
+    group's head rather than the head itself.
+    """
     from db.seed.datasets import TWIN_RADIUS_M, collect_records, default_datasets, resolve_twins
 
     collected = collect_records(default_datasets())
     _, twins = resolve_twins(collected["records"])
 
-    assert len(twins) == 15
-    assert all(entry["distance_m"] < TWIN_RADIUS_M for entry in twins)
+    assert len(twins) == 53
+    assert all(entry["distance_m"] <= 2 * TWIN_RADIUS_M for entry in twins)
     assert all(entry["rule"] == "same object" for entry in twins)
     assert {entry["name"] for entry in twins} == {
         "Остановка",
         "Туалет",
+        "Лестница",
         "Вострава",
         "Наваспаск",
         "Шостакі",

@@ -996,13 +996,6 @@
       "source": "osm_street"
     },
     {
-      "source_url": "osm_poi:node/7260502564",
-      "name": "Остановка",
-      "street": "улица Карла Маркса",
-      "dist_m": 10.8,
-      "source": "osm_street"
-    },
-    {
       "source_url": "osm_poi:node/7260502647",
       "name": "Остановка",
       "street": "улица Карла Маркса",
