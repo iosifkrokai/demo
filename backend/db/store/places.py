@@ -22,6 +22,7 @@ from db.store.services import (
     MAX_SERVICES,
     empty_answer,
     item_of,
+    named_codes,
     route_line,
     service_codes,
     threshold_for,
@@ -322,6 +323,29 @@ class PostgresPlaceRepository(PostgresRepository):
                     out[place_id] = list(arr)
             return out
 
+    def places_along(
+        self,
+        shape: dict[str, Any],
+        *,
+        categories: Sequence[str] | None = None,
+        profile: str = DEFAULT_PROFILE,
+        max_off_line_m: float | None = None,
+        limit: int = MAX_SERVICES,
+    ) -> dict[str, Any]:
+        """Places of any named categories beside a route line, ordered along it.
+
+        The codes reach the line query as they are, whatever their role: a museum and a
+        café are measured the same way. Nothing here is a detour, only «beside the line».
+        """
+        return self._beside_line(
+            shape,
+            named_codes(categories),
+            profile,
+            max_off_line_m,
+            limit,
+            reason="no_category_codes",
+        )
+
     def services_along(
         self,
         shape: dict[str, Any],
@@ -332,22 +356,42 @@ class PostgresPlaceRepository(PostgresRepository):
         max_off_line_m: float | None = None,
         limit: int = MAX_SERVICES,
     ) -> dict[str, Any]:
-        """Services lying beside a route line, ordered along it."""
-        line = route_line(shape)
+        """Services beside a route line — the default the API and the planner ask for."""
         codes = service_codes(categories, service_category_codes)
+        return self._beside_line(
+            shape,
+            codes,
+            profile,
+            max_off_line_m,
+            limit,
+            reason="no_service_categories",
+        )
+
+    def _beside_line(
+        self,
+        shape: dict[str, Any],
+        codes: Sequence[str],
+        profile: str,
+        max_off_line_m: float | None,
+        limit: int,
+        *,
+        reason: str,
+    ) -> dict[str, Any]:
+        """One line query for both the service default and any named category."""
+        line = route_line(shape)
         if not codes:
-            return empty_answer(codes, profile, max_off_line_m, reason="no_service_categories")
+            return empty_answer(codes, profile, max_off_line_m, reason=reason)
 
         threshold = threshold_for(profile, max_off_line_m)
         cap = max(1, int(limit))
         with self._cursor() as cur:
-            cur.execute(_BESIDE_LINE, (json.dumps(line), codes, threshold, cap))
+            cur.execute(_BESIDE_LINE, (json.dumps(line), list(codes), threshold, cap))
             rows = [dict(row) for row in cur.fetchall()]
 
         line_m = float(rows[0]["line_m"]) if rows else 0.0
         items = [item_of(row, line_m) for row in rows]
         log.info(
-            "services_along: %d of at most %d beside a %.0f m line (%.0f m off-line gate)",
+            "places_along: %d of at most %d beside a %.0f m line (%.0f m off-line gate)",
             len(items),
             cap,
             line_m,
@@ -359,7 +403,7 @@ class PostgresPlaceRepository(PostgresRepository):
             "not_measured": "detour_walking_time",
             "detour_confirmed": False,
             "profile": profile,
-            "categories": codes,
+            "categories": list(codes),
             "max_off_line_m": threshold,
             "line_m": round(line_m),
             "result_cap": cap,

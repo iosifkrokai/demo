@@ -1,4 +1,4 @@
-"""What counts as a service beside a route, and how far off the line it may be."""
+"""What may be highlighted beside a route, and how far off the line it may be."""
 
 from __future__ import annotations
 
@@ -45,6 +45,11 @@ def service_codes(categories: Iterable[str] | None, known: Sequence[str]) -> lis
     if categories is None:
         return list(known)
     return [code for code in categories if code in allowed]
+
+
+def named_codes(categories: Iterable[str] | None) -> list[str]:
+    """The category codes a caller named, kept as given — role is not consulted."""
+    return [str(code) for code in categories or () if code]
 
 
 def route_line(shape: Any) -> dict[str, Any]:
