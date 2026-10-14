@@ -228,12 +228,14 @@ def apply_place_aliases(conn: psycopg.Connection, path: Path | None = None) -> d
 
 
 def load_areas(conn: psycopg.Connection, geo_dir: Path | None = None) -> int:
-    """Idempotently write the named-area registry from `areas.json`."""
+    """Idempotently write the named-area registry from `areas.json`.
+
+    The polygon follows the row: only an area whose `geometry` names a border file
+    gets that ring, and the others keep `geom = NULL`. The file is the whole truth,
+    so an area whose geometry it no longer declares has any earlier ring cleared.
+    """
     directory = geo_dir or GEO_DIR
     document = json.loads((directory / "areas.json").read_text(encoding="utf-8"))
-    border = directory / "grodno_border.json"
-    border_meta = json.loads(border.read_text(encoding="utf-8")) if border.exists() else {}
-    geometry = _border_wkt(border_meta)
 
     written = 0
     with conn.cursor() as cur:
@@ -242,6 +244,7 @@ def load_areas(conn: psycopg.Connection, geo_dir: Path | None = None) -> int:
             aliases = [
                 term for locale in ("ru", "en") for term in area.get("aliases", {}).get(locale, [])
             ]
+            geometry, source, license_ = _area_geometry(directory, area)
             cur.execute(
                 """
                 INSERT INTO areas (code, name_ru, name_en, aliases, kind, source,
@@ -253,7 +256,7 @@ def load_areas(conn: psycopg.Connection, geo_dir: Path | None = None) -> int:
                         aliases = EXCLUDED.aliases, kind = EXCLUDED.kind,
                         source = EXCLUDED.source, license = EXCLUDED.license,
                         note = EXCLUDED.note, is_project_area = EXCLUDED.is_project_area,
-                        geom = COALESCE(EXCLUDED.geom, areas.geom)
+                        geom = EXCLUDED.geom
                 """,
                 (
                     slug,
@@ -261,8 +264,8 @@ def load_areas(conn: psycopg.Connection, geo_dir: Path | None = None) -> int:
                     area.get("name_en"),
                     aliases,
                     area.get("kind") or "district",
-                    border_meta.get("source"),
-                    border_meta.get("license"),
+                    source,
+                    license_,
                     area.get("geometry_note"),
                     bool(area.get("is_project_area")),
                     geometry,
@@ -271,6 +274,21 @@ def load_areas(conn: psycopg.Connection, geo_dir: Path | None = None) -> int:
             )
             written += 1
     return written
+
+
+def _area_geometry(
+    directory: Path, area: dict[str, Any]
+) -> tuple[str | None, str | None, str | None]:
+    """(wkt, source, license) from the border file this area's `geometry` names."""
+    name = (area.get("geometry") or {}).get("source")
+    path = directory / name if name else None
+    if path is None or not path.is_file():
+        return None, None, None
+    meta = json.loads(path.read_text(encoding="utf-8"))
+    wkt = _border_wkt(meta)
+    if wkt is None:
+        return None, None, None
+    return wkt, meta.get("source"), meta.get("license")
 
 
 def _border_wkt(meta: dict[str, Any]) -> str | None:
