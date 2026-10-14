@@ -11,10 +11,12 @@ vocabulary, the names for the unnamed stops, and the empty infrastructure sheet 
 § *Closed* at the bottom. The list is renumbered after every such pass, so numbers are
 dense and an entry's number does not survive it.
 
-Two of the seven entries below are waiting on a **decision**, not on hands: 2 (what to call
-a boulder) and 3 (populate or drop a column). Entry 7 is editorial. Entries 1 and 5 are
-waiting on one outside thing, the administration's reply — 5 because its premise was
-measured away on 2026-10-14. The rest are work (4, 6).
+Of the eight entries below, 3 is **decided** (the column stays empty) and 6 has a decided
+*no* (elevation is not worth four hours of download for a question nobody asks), so both
+stay listed only as the record of a measurement. Entries 1 and 5 wait on one outside thing,
+the administration's reply — 5 because its premise was measured away on 2026-10-14. Entry 7
+is measured and split: seven rows are a mechanism, fifty-two are editorial. Entry 8 is a
+decision nobody has made yet. The rest is work (2, 4).
 
 ## 1. Authoritative data from the administration
 
@@ -187,6 +189,26 @@ That splits the entry in two, and each half has a different size:
   re-author them against the sets that exist, or to accept the CSV as a record of an older
   vintage and prune it. Both are editing, not engineering; the seed names the count every
   run so the silence stays visible until someone decides.
+
+## 8. A settings surface nothing can open
+
+`frontend/src/components/settings-panel/settings-options.ts` is the Valhalla demo's whole
+parameter catalogue — 1088 lines of Use Hills, Avoid Bad Surface, bicycle_type, truck
+dimensions and the rest — with `utils/filter-profile-settings.ts` (90 lines) to cut it to
+one profile, a `settings` slice plus `settingsPanelOpen` in `stores/common-store.ts`, and
+`PossibleSettings` in `components/types.ts`. **No component renders any of it**: the whole
+tree holds one reader of `settingsPanelOpen`, a test stub.
+
+It is not quite dead, which is what makes it a decision rather than a deletion: the client's
+hand-built route still takes its `costing_options` from those defaults
+(`hooks/use-directions-queries.ts` → `filterProfileSettings(profile || 'bicycle', rawSettings)`),
+and that `|| 'bicycle'` is a second oddity — a walking product whose client-side line
+defaults to a cyclist. Either give the product a settings panel (which then has to say
+truthfully what each knob does — item 6 is what happens when nobody checks), or delete the
+catalogue and let the client route send the one option it actually needs.
+
+Found 2026-10-14 while measuring item 6; nothing depends on it, so it stays until someone
+decides which of the two it is.
 
 ## Closed
 
