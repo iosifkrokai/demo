@@ -17,6 +17,7 @@ import urllib.error
 import urllib.request
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
+from functools import lru_cache
 from http import HTTPStatus
 from itertools import pairwise
 from pathlib import Path
@@ -26,6 +27,7 @@ BACKEND = Path(__file__).parent.parent.resolve()
 QUALITY = BACKEND / "quality"
 BENCH_ROUTES = QUALITY / "cases" / "routes"
 BENCH_GOLDEN = QUALITY / "cases" / "compliance"
+DUPLICATE_EXCEPTIONS = QUALITY / "cases" / "duplicate_exceptions.json"
 BENCH_OUT = QUALITY / "reports"
 BENCH_SNAPSHOTS = BENCH_OUT / "snapshots"
 
@@ -194,6 +196,7 @@ class LegSanity:
     n_unreachable_legs: int = 0
     duplicate_pairs: list[dict[str, Any]] = field(default_factory=list)
     n_duplicate_stops: int = 0
+    n_legitimate_adjacent: int = 0
     geometry_missing: bool = False
 
 
@@ -611,8 +614,39 @@ def result_matches_stop(golden: GoldenRoute, our_stops: list[OurStop], golden_id
     return any(haversine_km(gs.lat, gs.lon, o.lat, o.lon) <= MATCH_RADIUS_KM for o in our_stops)
 
 
+@lru_cache(maxsize=4)
+def _load_duplicate_exceptions(path_str: str) -> dict[frozenset[str], dict[str, Any]]:
+    """Read the hand-authored legitimate-neighbour list, keyed by normalised name pair."""
+    path = Path(path_str)
+    data = json.loads(path.read_text(encoding="utf-8"))
+    out: dict[frozenset[str], dict[str, Any]] = {}
+    for entry in data.get("pairs", []):
+        names = entry.get("names") or []
+        try:
+            norm_a, norm_b = (norm_name(n) for n in names)
+        except ValueError as exc:
+            raise ValueError(
+                f"{path}: an exception needs exactly two names, got {names!r}"
+            ) from exc
+        if not norm_a or not norm_b or norm_a == norm_b:
+            raise ValueError(
+                f"{path}: exception names must normalise to two distinct names: {names!r}"
+            )
+        key = frozenset({norm_a, norm_b})
+        if key in out:
+            raise ValueError(f"{path}: duplicate exception for {names!r}")
+        out[key] = entry
+    return out
+
+
+def duplicate_exceptions(path: Path | None = None) -> dict[frozenset[str], dict[str, Any]]:
+    """The declared legitimate neighbours the duplicate rule consults."""
+    return _load_duplicate_exceptions(str(path or DUPLICATE_EXCEPTIONS))
+
+
 def find_duplicate_stop_pairs(our_stops: list[OurStop]) -> list[dict[str, Any]]:
-    """Pairs of returned stops that are the same physical POI, in visit order."""
+    """Pairs of returned stops the rule flags, marked when declared legitimate."""
+    exceptions = duplicate_exceptions()
     pairs: list[dict[str, Any]] = []
     for i in range(len(our_stops)):
         for j in range(i + 1, len(our_stops)):
@@ -621,6 +655,7 @@ def find_duplicate_stop_pairs(our_stops: list[OurStop]) -> list[dict[str, Any]]:
             rule = _duplicate_rule(a.name, b.name, dist_m)
             if rule is None:
                 continue
+            entry = exceptions.get(frozenset((norm_name(a.name), norm_name(b.name))))
             pairs.append(
                 {
                     "our_stop_indices": [i, j],
@@ -629,6 +664,8 @@ def find_duplicate_stop_pairs(our_stops: list[OurStop]) -> list[dict[str, Any]]:
                     "dist_m": round(dist_m, 1),
                     "name_similarity": round(name_similarity(a.name, b.name), 3),
                     "rule": rule,
+                    "excluded": entry is not None,
+                    "exception_reason": entry.get("reason") if entry else None,
                 }
             )
     return pairs
@@ -667,7 +704,8 @@ def leg_sanity(
         leg.over_cap = True
 
     leg.duplicate_pairs = find_duplicate_stop_pairs(our_stops)
-    leg.n_duplicate_stops = len(leg.duplicate_pairs)
+    leg.n_duplicate_stops = sum(1 for p in leg.duplicate_pairs if not p["excluded"])
+    leg.n_legitimate_adjacent = sum(1 for p in leg.duplicate_pairs if p["excluded"])
     leg.geometry_missing = "shape" in (raw or {}) and not raw.get("shape")
     return leg
 
@@ -869,14 +907,15 @@ def _leg_failures(leg: LegSanity) -> list[Failure]:
         )
     if leg.geometry_missing:
         out.append(Failure(kind="geometry_missing", detail="response carried an empty shape"))
-    if leg.n_duplicate_stops:
+    duplicate_pairs = [p for p in leg.duplicate_pairs if not p["excluded"]]
+    if duplicate_pairs:
         names = "; ".join(
             f"{p['names'][0]} ~ {p['names'][1]} ({p['dist_m']:.0f} m, {p['rule']})"
-            for p in leg.duplicate_pairs
+            for p in duplicate_pairs
         )
         out.append(
             Failure(
-                kind="duplicate_stop", detail=f"{leg.n_duplicate_stops} duplicate pair(s): {names}"
+                kind="duplicate_stop", detail=f"{len(duplicate_pairs)} duplicate pair(s): {names}"
             )
         )
     if leg.over_cap:
@@ -1261,6 +1300,7 @@ def failure_summary(groups: list[list[RunRecord]]) -> dict[str, Any]:
     gated: list[dict[str, Any]] = []
     defects: list[dict[str, Any]] = []
     details: list[dict[str, Any]] = []
+    legitimate: list[dict[str, Any]] = []
     total_runs = 0
     for g in groups:
         for rec in g:
@@ -1270,12 +1310,25 @@ def failure_summary(groups: list[list[RunRecord]]) -> dict[str, Any]:
                 row = {"case": rec.case, "repeat": rec.repeat, **f.as_dict()}
                 (gated if f.gated else defects).append(row)
                 details.append(row)
+            for p in rec.result.leg.duplicate_pairs:
+                if p["excluded"]:
+                    legitimate.append(
+                        {
+                            "case": rec.case,
+                            "repeat": rec.repeat,
+                            "names": p["names"],
+                            "dist_m": p["dist_m"],
+                            "rule": p["rule"],
+                            "reason": p["exception_reason"],
+                        }
+                    )
     return {
         "total_runs": total_runs,
         "n_failed_runs": len(gated),
         "gated_runs": len(gated),
         "by_kind": by_kind,
         "leg_sanity_defects": len(defects),
+        "legitimate_adjacent": legitimate,
         "gated": gated,
         "details": details,
     }
@@ -1455,6 +1508,17 @@ def print_failures(summary: dict[str, Any], overall: dict[str, Any] | None = Non
     )
     for row in defects:
         print(f"    ! {row['case']}#{row['repeat']}: {row['detail']}")
+    legitimate = summary.get("legitimate_adjacent") or []
+    if legitimate:
+        print(
+            f"  legitimate neighbours the rule would flag — declared two objects, "
+            f"not counted: {len(legitimate)}"
+        )
+        for row in legitimate:
+            print(
+                f"    ~ {row['case']}#{row['repeat']}: {row['names'][0]} ~ "
+                f"{row['names'][1]} ({row['dist_m']:.0f} m, {row['rule']})"
+            )
     if overall:
         rec = overall.get("recall_at_k", {})
         print(f"  headline (for reference only): Rec@K {_ci_cell(rec)}")
@@ -1606,7 +1670,10 @@ def write_json_report(
             "duplicates": (
                 f"same POI twice inside one route: <{DUPLICATE_RADIUS_M:.0f} m "
                 f"(any name), identical normalised name <{DUPLICATE_NAME_RADIUS_M:.0f} m, "
-                f"or name token overlap >= {DUPLICATE_SIM} <{DUPLICATE_SIM_RADIUS_M:.0f} m"
+                f"or name token overlap >= {DUPLICATE_SIM} <{DUPLICATE_SIM_RADIUS_M:.0f} m. "
+                "A pair listed in quality/cases/duplicate_exceptions.json is still "
+                "reported but marked `excluded` and is not counted — the rule fired, the "
+                "pair is declared two objects (see leg_sanity.duplicate_pairs)."
             ),
             "hard_failures": (
                 f"gated kinds {sorted(GATED_FAILURE_KINDS)} are dropped from every "

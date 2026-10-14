@@ -1,0 +1,49 @@
+{
+  "description": "Pairs of returned stops that the harness's duplicate rule flags but a human has decided are two different objects standing close. The rule (`coincident` under 150 m, any name; `same_name` under the name radius; `same_name_near` on token overlap) is deliberately wide because distance alone cannot tell one object mapped twice from two objects that stand together — it must stay wide to catch the twins. It is the pairs that are named here, not the rule that is relaxed: a pair in this file is still reported, marked `excluded`, with the rule it would have fired, but it is not counted as a duplicate and does not raise `duplicate_stop`. A pair the file does not hold is judged exactly as before.",
+  "why_a_list_and_not_a_rule": "Shrinking `coincident` to a smaller radius, or requiring the two categories to overlap, was rejected: in the same 2026-10-14 run the rule caught two real duplicates at 34 m and 89 m, and the pair that prompted it — a museum and the castle row that had borrowed its name — differed by category and name, so a category test would have missed it too. The Grodno museum that is one object twice sits 49 m from the street it names; a real twin sits at 34 m; no radius separates the two. Whether two rows are one object is a judgement about the object, so it is stated per pair, with the names, the distance and the two source rows, and can be reviewed.",
+  "scope": "One entry per pair the harness has actually printed from a run. The key is the unordered pair of stop names as the wire spells them; the source rows are recorded as evidence. A pair whose stop name is later edited drops out of the file loudly — the rule fires again — rather than silently covering a renamed object. Only a pair of two different objects belongs here; a genuine twin belongs in db/data/place_merges.json instead.",
+  "pairs": [
+    {
+      "names": ["Фарный костёл Святого Франциска Ксаверия", "Музей истории города Гродно"],
+      "dist_m": 102.4,
+      "source_urls": ["city:farny", "city:city-history-museum"],
+      "categories": ["костёл", "музей"],
+      "reason": "The Jesuit church of St Francis Xavier and the city-history museum in the former town-duma building are two buildings on two hand-authored rows, a church against a museum. Both are stops of one walk (quality case «grodno_no_budget_full_day»). The museological museum that was one object mapped twice is a different, third row (`Гродненский государственный историко-археологический музей`, id 789) and is not this pair."
+    },
+    {
+      "names": ["Фарный костёл Святого Франциска Ксаверия", "Историческая застройка ул. Замковая"],
+      "dist_m": 148.0,
+      "source_urls": ["city:farny", "osm:node/2788680524"],
+      "categories": ["костёл", "архитектура"],
+      "reason": "A named church against the OSM ensemble of Zamkovaya street's historic houses — a specific building against the fabric of the street it stands on, written under a different category and a different source. Both stops of «grodno_no_budget_full_day»."
+    },
+    {
+      "names": ["Музей истории города Гродно", "Историческая застройка ул. Замковая"],
+      "dist_m": 48.6,
+      "source_urls": ["city:city-history-museum", "osm:node/2788680524"],
+      "categories": ["музей", "архитектура"],
+      "reason": "The museum occupies one house on Zamkovaya; the OSM row is the ensemble of the street's houses, not that house — two stops a visitor can want separately, a museum to enter and a street to walk. Different categories, different rows, 49 m apart."
+    },
+    {
+      "names": ["Церковь Рождества Богородицы", "Историческая застройка ул. Замковая"],
+      "dist_m": 101.2,
+      "source_urls": ["osm:way/69906569", "osm:node/2788680524"],
+      "categories": ["церковь", "архитектура"],
+      "reason": "A specific temple against the street's architectural ensemble, two OSM elements under different categories. Both stops of «grodno_old_town»."
+    },
+    {
+      "names": ["Монастырь доминиканцев", "Историческая застройка улицы Советская"],
+      "dist_m": 107.3,
+      "source_urls": ["osm:node/2788681618", "osm:node/2788680554"],
+      "categories": ["архитектура", "архитектура"],
+      "reason": "Two OSM elements that share the category «архитектура» but not the object: a named monastery against the ensemble of Sovetskaya street's houses. Distance cannot separate them; the names can. Both stops of «grodno_sovetskaya_refine»."
+    },
+    {
+      "names": ["Часовня-усыпальница Святополк-Мирских", "Мирский замок"],
+      "dist_m": 119.2,
+      "source_urls": ["osm:way/128322210", "region:mir-castle"],
+      "categories": ["костёл", "замок"],
+      "reason": "The Mir princes' burial chapel is a separate structure beside the castle — one a костёл, one a замок, two OSM/hand rows. The real Mir duplicate (the OSM «Замковый комплекс Мир» node that carries the ensemble's name) is folded onto the castle by db/data/place_aliases.json, not here. Both stops of «mir»."
+    }
+  ]
+}

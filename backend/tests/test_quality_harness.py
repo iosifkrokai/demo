@@ -10,6 +10,14 @@ from agent.tools.plan import plan_walk
 from quality import report as report_mod
 from quality.evals import _load, _service_checks
 from quality.report import read_routes
+from quality.runner import (
+    OurStop,
+    _leg_failures,
+    duplicate_exceptions,
+    find_duplicate_stop_pairs,
+    leg_sanity,
+    norm_name,
+)
 from quality.trajectory import _record_args
 from routing.models import WalkRequest
 
@@ -84,6 +92,82 @@ def test_a_replayed_routes_run_is_still_found(monkeypatch, tmp_path) -> None:
 
     assert got["measured"] is True
     assert got["source"].endswith("snapshots/2026-01-01/report.json")
+
+
+def test_one_object_twice_in_a_metre_is_still_a_duplicate() -> None:
+    """The rule keeps its teeth: two stops of the same name a metre apart, not in
+    the exception list, are still `coincident`/`same_name` and still count."""
+    stops = [
+        OurStop(name="Мирский замок", lat=53.4517, lon=26.4736, place_id=1),
+        OurStop(name="Мирский замок", lat=53.45171, lon=26.4736, place_id=2),
+    ]
+
+    pairs = find_duplicate_stop_pairs(stops)
+
+    assert len(pairs) == 1
+    assert pairs[0]["rule"] in {"coincident", "same_name"}
+    assert pairs[0]["excluded"] is False
+    assert leg_sanity(stops, {}, {}).n_duplicate_stops == 1
+
+
+def test_a_declared_pair_of_neighbours_is_not_a_duplicate() -> None:
+    """A pair named in the exception file is still reported, with the rule it would
+    have fired, but it is `excluded` and raises no `duplicate_stop`."""
+    stops = [
+        OurStop(
+            name="Фарный костёл Святого Франциска Ксаверия",
+            lat=53.6787,
+            lon=23.8279,
+            place_id=4,
+        ),
+        OurStop(name="Музей истории города Гродно", lat=53.6783, lon=23.8265, place_id=12),
+    ]
+
+    pairs = find_duplicate_stop_pairs(stops)
+
+    assert len(pairs) == 1
+    assert pairs[0]["rule"] == "coincident"
+    assert pairs[0]["excluded"] is True
+    assert pairs[0]["exception_reason"]
+
+    leg = leg_sanity(stops, {}, {})
+    assert leg.n_duplicate_stops == 0
+    assert leg.n_legitimate_adjacent == 1
+    assert "duplicate_stop" not in [f.kind for f in _leg_failures(leg)]
+
+
+def test_a_real_duplicate_still_fails_beside_an_excluded_pair() -> None:
+    """An exception covers one pair only: a genuine twin in the same route is still
+    counted, and the excluded pair does not hide it."""
+    stops = [
+        OurStop(
+            name="Фарный костёл Святого Франциска Ксаверия",
+            lat=53.6787,
+            lon=23.8279,
+            place_id=4,
+        ),
+        OurStop(name="Музей истории города Гродно", lat=53.6783, lon=23.8265, place_id=12),
+        OurStop(name="Мирский замок", lat=53.4517, lon=26.4736, place_id=56),
+        OurStop(name="Мирский замок", lat=53.45171, lon=26.4736, place_id=57),
+    ]
+
+    leg = leg_sanity(stops, {}, {})
+
+    assert leg.n_duplicate_stops == 1
+    assert leg.n_legitimate_adjacent == 1
+    kinds = [f.kind for f in _leg_failures(leg)]
+    assert kinds.count("duplicate_stop") == 1
+
+
+def test_the_exception_list_parses_and_names_distinct_pairs() -> None:
+    """The list is a reviewable file: every entry is two distinct normalised names."""
+    exceptions = duplicate_exceptions()
+
+    assert len(exceptions) == 6
+    for entry in exceptions.values():
+        assert entry["reason"].strip()
+        assert entry["source_urls"]
+        assert len({norm_name(n) for n in entry["names"]}) == 2
 
 
 def test_the_services_stage_asks_for_the_taxonomy_the_codes_come_from(db_repos) -> None:
