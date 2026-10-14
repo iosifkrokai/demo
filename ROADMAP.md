@@ -12,8 +12,9 @@ vocabulary, the names for the unnamed stops, and the empty infrastructure sheet 
 dense and an entry's number does not survive it.
 
 Two of the seven entries below are waiting on a **decision**, not on hands: 2 (what to call
-a boulder) and 3 (populate or drop a column). Entry 7 is editorial. The rest are work
-(4, 5, 6) or an outside block (1).
+a boulder) and 3 (populate or drop a column). Entry 7 is editorial. Entries 1 and 5 are
+waiting on one outside thing, the administration's reply — 5 because its premise was
+measured away on 2026-10-14. The rest are work (4, 6).
 
 ## 1. Authoritative data from the administration
 
@@ -89,16 +90,32 @@ Remember one trap before touching costing options: Valhalla **silently accepts u
 an option name would pass unnoticed, so a tune can only be checked by comparing routes,
 never by the status code.
 
-## 5. Nothing knows whether a place is step-free
+## 5. Nothing knows whether a place is step-free — and OSM cannot tell it
 
-The administration's schema asks for accessibility and the catalogue answers nothing: OSM
-tags `wheelchair` on 1729 objects inside the oblast, and our rows carry none of it. The
-same shape of task as the stairways — read the tag from the local extract into a fact, and
-let a requirement be decided by it — with two differences worth knowing before starting:
-`wheelchair` is an upper bound, not a count of sights (it is stated on shops, banks and
-benches), and `yes` does not mean step-free (a ramp at the door does not cover the stairs
-inside). So the honest first step is the same as item 4's cost question: state what the
-data says, attribute it to OSM, and never promise more than the tag does.
+The administration's schema asks for accessibility and the catalogue answers nothing, so
+reading OSM's `wheelchair` tag looked like the same shape of task as the stairways: extract
+the tag, hold it as a fact, decide a requirement by it. Measured on 2026-10-14 before it
+was built (the same `KeyFilter` pass the stairways use), the move does not carry.
+
+The extract holds **16051** wheelchair-tagged objects, **1723** of them inside the project
+area, and **183** of those map to our categories at all — of which **179** are rows in the
+catalogue today: **84 туалет, 43 кафе, 18 ресторан, 8 гостиница, 3 остановка**, and on the
+sight side **8 архитектура, 5 костёл, 4 церковь, 3 памятник, 3 музей** — **23 sights**, none
+of them a замок or a монастырь. The other 1540 are objects the catalogue deliberately does
+not hold: 1098 match nothing we map (benches, vending machines, waste baskets, bicycle
+parking), then footways, convenience shops, pharmacies, banks, ATMs, crossings and parking
+spaces. And what *is* stated is not clean: 23 objects read `wheelchair=дд`, one `Киоск`,
+one carries opening hours in the field.
+
+So the fact is cheap and would still answer "unknown" for 98% of the catalogue — a
+`wheelchair_access` requirement decided by it would look measured while resting on two
+dozen sights and a hundred toilets. Two further reasons not to promise anything from the
+tag: it is an upper bound rather than a count of sights (it is stated on benches), and
+`yes` does not mean step-free (a ramp at the door does not cover the stairs inside).
+
+The source that can carry this is item 1: the administration's schema has an accessibility
+block, so the fact arrives on the places that matter, with a body behind it. Until then the
+product says nothing about accessibility, and neither should the ТЗ.
 
 ## 6. The tiles carry no elevation, so the hill options do nothing
 
