@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Literal
 
 from pydantic import BaseModel, Field
@@ -13,7 +14,7 @@ from routing.models import CategoryFacts, LatLon
 if TYPE_CHECKING:
     from db.store.registry import Repositories
 
-RequirementKindL = Literal["must_visit", "service", "interest", "avoid"]
+RequirementKindL = Literal["must_visit", "service", "interest", "avoid", "free", "open"]
 StrengthL = Literal["hard", "soft"]
 
 
@@ -63,6 +64,7 @@ class PlanningDeps:
     facts: CategoryFacts = field(default_factory=CategoryFacts)
     deadline_at: float | None = None
     region_bbox: tuple[float, float, float, float] | None = None
+    now: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     def seconds_left(self) -> float:
         """Seconds until this run's deadline; infinite when it has none."""

@@ -84,6 +84,8 @@ def _stop(card: Any, visit_minutes: int) -> dict[str, Any]:
         "lat": card.lat,
         "lon": card.lon,
         "visit_minutes": visit_minutes,
+        "opening_hours": card.opening_hours,
+        "ticket_price": card.ticket_price,
     }
 
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
@@ -175,7 +176,9 @@ class ValidatedPlan(BaseModel):
 ResultMode = Literal["route", "catalogue"]
 
 
-RequirementKind = Literal["must_visit", "service", "interest", "avoid"]
+RequirementKind = Literal["must_visit", "service", "interest", "avoid", "free", "open"]
+
+CODE_LESS_KINDS: frozenset[str] = frozenset({"free", "open"})
 
 REASON_MUST_VISIT_OUTSIDE = "must_visit_outside_coverage"
 
@@ -226,6 +229,8 @@ class TripRequirements(BaseModel):
 
     locale: Literal["ru", "en"] = "ru"
     raw_query: str = ""
+
+    at: datetime | None = None
 
     party: PartyComposition = Field(default_factory=PartyComposition)
 

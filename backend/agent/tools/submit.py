@@ -96,7 +96,7 @@ def submit_plan(
             repos=repos,
         )
         places = [candidate_of(row, 0.0) for row in rows]
-        verify_catalogue(contract, places, facts=facts)
+        verify_catalogue(contract, places, facts=facts, at=contract.at)
         answer = verdicts_of(contract)
         provenance["capped"] = capped
         return envelope(
@@ -127,6 +127,7 @@ def submit_plan(
         shape,
         _evidence(repos, contract, shape),
         facts=facts,
+        at=contract.at,
     )
     answer = verdicts_of(contract)
 

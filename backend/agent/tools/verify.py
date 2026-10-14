@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 from pydantic_ai import RunContext
@@ -31,7 +32,7 @@ def verdicts_of(contract: TripRequirements) -> dict[str, Any]:
     }
 
 
-def check_requirements(
+def check_requirements(  # noqa: PLR0913 — the tool's whole surface, all four of them
     requirement_specs: list[dict[str, Any]],
     stop_ids: list[int],
     *,
@@ -39,6 +40,7 @@ def check_requirements(
     facts: Any,
     geometry: dict[str, Any] | None = None,
     unknowns: list[str] | None = None,
+    at: datetime | None = None,
 ) -> dict[str, Any]:
     """Report which requirements the given stops provably satisfy, and why not."""
     provenance: dict[str, Any] = {
@@ -62,7 +64,7 @@ def check_requirements(
     contract = requirements_from(requirement_specs)
     contract.unknowns = list(unknowns or [])
     stops = [candidate_of(row, 0.0) for row in (rows or [])]
-    verify(contract, {"route": stops, "trace": {}}, geometry, facts=facts)
+    verify(contract, {"route": stops, "trace": {}}, geometry, facts=facts, at=at)
 
     answer = verdicts_of(contract)
     return envelope("check_requirements", answer["verdicts"], provenance) | answer
@@ -87,4 +89,5 @@ def register_check_requirements(agent: Any, _remember: Remember) -> None:
             facts=ctx.deps.facts,
             geometry=geometry,
             unknowns=unknowns,
+            at=ctx.deps.now,
         )

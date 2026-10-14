@@ -151,7 +151,7 @@ class RouteSummary(BaseModel):
 class RequirementSignal(BaseModel):
     """One requirement as the client renders it — codes only, never prose."""
 
-    kind: Literal["must_visit", "service", "interest", "avoid"]
+    kind: Literal["must_visit", "service", "interest", "avoid", "free", "open"]
     strength: Literal["hard", "soft"] = "soft"
     code: str | None = None
     name: str | None = None

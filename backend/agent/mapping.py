@@ -8,6 +8,7 @@ from agent.models import PartyComposition, ReaderBrief, Requirement, TripRequire
 from agent.schema import PlanSubmission
 from core import constants
 from db.store.registry import Repositories
+from routing.models import CODE_LESS_KINDS
 
 log = logging.getLogger(__name__)
 
@@ -62,7 +63,22 @@ def _reading_requirements(
     unsupported: list[str] = []
     for item in reading.requirements:
         code = None
-        if item.kind != "must_visit":
+        if item.kind == "must_visit":
+            if not (item.name or "").strip():
+                unsupported.append(item.kind)
+                continue
+            if not (isinstance(item.place_id, int) and item.place_id in observed):
+                territory = (
+                    repos.areas.resolve((item.name or "").strip()) if repos is not None else None
+                )
+                if territory:
+                    log.info(
+                        "interpretation: must_visit %r — территория (%s), не остановка",
+                        item.name,
+                        territory,
+                    )
+                    continue
+        elif item.kind not in CODE_LESS_KINDS:
             code = (
                 repos.taxonomy.resolve_code(item.code or item.name or "")
                 if repos is not None
@@ -71,20 +87,6 @@ def _reading_requirements(
             if code is None:
                 ask = (item.code or item.name or item.text or item.kind).strip()
                 unsupported.append(ask)
-                continue
-        elif not (item.name or "").strip():
-            unsupported.append(item.kind)
-            continue
-        elif not (isinstance(item.place_id, int) and item.place_id in observed):
-            territory = (
-                repos.areas.resolve((item.name or "").strip()) if repos is not None else None
-            )
-            if territory:
-                log.info(
-                    "interpretation: must_visit %r — территория (%s), не остановка",
-                    item.name,
-                    territory,
-                )
                 continue
 
         place_id = None
@@ -99,7 +101,7 @@ def _reading_requirements(
                 kind=item.kind,
                 strength=item.strength,
                 code=code,
-                label=code or item.name,
+                label=code or item.name or item.kind,
                 name=item.name if item.kind == "must_visit" else None,
                 place_id=place_id,
                 text=_verbatim(item.text, query),

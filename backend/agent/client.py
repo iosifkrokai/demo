@@ -99,6 +99,7 @@ def _attempt(
     if submission is None:
         return None
     contract = mapping._merge(query, brief, submission, deps.observed_ids, deps.repos)
+    contract.at = deps.now
     if submission.outcome == "refuse":
         return AgentOutcome(
             submission=submission, requirements=contract, measured=_refused(submission)
