@@ -27,6 +27,7 @@ def candidate_of(place: Place, rrf_score: float) -> Candidate:
         links=parse_links(place.links),
         opening_hours=place.opening_hours,
         ticket_price=place.ticket_price,
+        is_free=place.is_free,
         town=place.town,
         district=place.district,
         photo=_photo_model(place),

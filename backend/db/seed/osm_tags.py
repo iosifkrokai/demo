@@ -4,12 +4,16 @@ Turns raw OSM tags into a canonical category, a name and a 14-column places row.
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from . import taxonomy
 from .geofence import inside_project_area
 
 DEFAULT_VISIT_MINUTES = 20
+
+_TICKET_TAGS = ("charge", "fee")
+_PUNCTUATION_ONLY = re.compile(r"^[\W_]+$", re.UNICODE)
 
 
 def visit_minutes_for(category: str) -> int:
@@ -175,6 +179,19 @@ def sight_name(tags: dict[str, str]) -> str | None:
     return None
 
 
+def ticket_price_of(tags: dict[str, str]) -> str:
+    """The ``fee``/``charge`` tag as a price, or "" when it is only punctuation.
+
+    A lone dash reads as a value though it says nothing, so it never becomes a price
+    — the reply forbids it, and ``ticket_price`` keeps it out at the source.
+    """
+    for key in _TICKET_TAGS:
+        value = (tags.get(key) or "").strip()
+        if value and not _PUNCTUATION_ONLY.match(value):
+            return value
+    return ""
+
+
 def service_name(tags: dict[str, str], category: str) -> str | None:
     """Name: ``name`` else ``name:ru``.
     Toilets and transport stops fall back to «Туалет» / «Остановка»; others dropped.
@@ -237,7 +254,7 @@ def sight_element_to_row(element: dict[str, Any]) -> Row | None:
         "fun_fact": "",
         "fun_facts": "[]",
         "opening_hours": tags.get("opening_hours", ""),
-        "ticket_price": tags.get("charge") or tags.get("fee", ""),
+        "ticket_price": ticket_price_of(tags),
         "visit_minutes": str(visit_minutes_for(category)),
         "links": "[]",
         "source_url": source_url,
@@ -281,7 +298,7 @@ def service_element_to_row(element: dict[str, Any]) -> Row | None:
         "fun_fact": "",
         "fun_facts": "[]",
         "opening_hours": tags.get("opening_hours", ""),
-        "ticket_price": tags.get("charge") or tags.get("fee", ""),
+        "ticket_price": ticket_price_of(tags),
         "visit_minutes": None,
         "links": "[]",
         "source_url": f"{SOURCE_PREFIX}{osm_type}/{osm_id}",

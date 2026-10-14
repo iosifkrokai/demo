@@ -44,6 +44,7 @@ _CARD_FIELDS = (
     "lon",
     "visit_minutes",
     "opening_hours",
+    "is_free",
 )
 _FACT_FIELDS = (
     "name",

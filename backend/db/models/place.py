@@ -20,6 +20,7 @@ class Place:
     links: str | None = None
     opening_hours: str | None = None
     ticket_price: str | None = None
+    is_free: bool | None = None
     visit_minutes: int | None = None
     district: str | None = None
     town: str | None = None

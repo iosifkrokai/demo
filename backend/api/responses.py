@@ -78,6 +78,7 @@ def to_places(
             links=p.links,
             opening_hours=p.opening_hours,
             ticket_price=p.ticket_price,
+            is_free=p.is_free,
             town=p.town,
             district=p.district,
             photo=p.photo,

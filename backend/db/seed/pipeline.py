@@ -13,6 +13,7 @@ import psycopg
 from psycopg import sql
 
 from core.paths import GEO_DIR, PHOTOS_DIR, PLACE_ALIASES_JSON
+from core.prices import free_entry
 from db.store.datasets import DATA_VERSION_ROW
 
 from .datasets import SOURCE_AUTO, SOURCE_CURATED, Dataset, match_place, read_place_alias_entries
@@ -39,11 +40,11 @@ def upsert_sql() -> LiteralString:
     return f"""
         INSERT INTO places (name, category, category_source, district, town, lat, lon,
                             blurb, fun_fact, fun_facts, opening_hours, ticket_price,
-                            visit_minutes, links, source_url)
+                            is_free, visit_minutes, links, source_url)
         VALUES (%(name)s, %(category)s, %(_category_source)s, %(district)s, %(town)s,
                 %(lat)s, %(lon)s, %(blurb)s, %(fun_fact)s, %(fun_facts)s,
-                %(opening_hours)s, %(ticket_price)s, %(visit_minutes)s, %(links)s,
-                %(source_url)s)
+                %(opening_hours)s, %(ticket_price)s, %(is_free)s, %(visit_minutes)s,
+                %(links)s, %(source_url)s)
         ON CONFLICT (source_url) DO UPDATE SET
             name = EXCLUDED.name,
             category = {guarded_cat},
@@ -53,6 +54,7 @@ def upsert_sql() -> LiteralString:
             fun_fact = EXCLUDED.fun_fact, fun_facts = EXCLUDED.fun_facts,
             opening_hours = EXCLUDED.opening_hours,
             ticket_price = EXCLUDED.ticket_price,
+            is_free = EXCLUDED.is_free,
             visit_minutes = EXCLUDED.visit_minutes, links = EXCLUDED.links
     """
 
@@ -89,6 +91,7 @@ def apply_dataset(
     inserted = updated = 0
     with conn.cursor() as cur:
         for r in records:
+            r["is_free"] = free_entry(r.get("ticket_price"))
             cur.execute("SELECT 1 FROM places WHERE source_url = %s", (r["source_url"],))
             was_new = cur.fetchone() is None
             cur.execute(sql.SQL(statement), r)

@@ -13,6 +13,7 @@ PLACE_COLUMNS: tuple[str, ...] = (
     "links",
     "opening_hours",
     "ticket_price",
+    "is_free",
     "visit_minutes",
     "district",
     "town",

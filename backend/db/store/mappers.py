@@ -123,4 +123,5 @@ def place_payload(place: Place) -> dict[str, Any]:
         "links": parse_links(place.links),
         "photo": photo_of(place),
         "ticket_price": place.ticket_price,
+        "is_free": place.is_free,
     }

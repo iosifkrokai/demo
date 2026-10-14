@@ -123,6 +123,7 @@ class Place(BaseModel):
     visit_minutes: int | None = None
     opening_hours: str | None = None
     ticket_price: str | None = None
+    is_free: bool | None = None
     town: str | None = None
     district: str | None = None
 

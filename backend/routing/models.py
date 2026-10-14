@@ -81,6 +81,7 @@ class Candidate(BaseModel):
     photo: Photo | None = None
     opening_hours: str | None = None
     ticket_price: str | None = None
+    is_free: bool | None = None
     town: str | None = None
     district: str | None = None
     visit_minutes_db: int | None = None
