@@ -164,10 +164,29 @@ hand-authored row standing beside their OSM twin.)
 
 So three quarters of the curated prose — blurbs, fun facts, links — is written and lands
 nowhere, and every seed says so (`curated: 17 applied of 76, 58 unmatched, 1 ambiguous`).
-Two ways out, neither taken: give the CSV a `source_url` column so a row names its target
-and the name becomes a hint, or prune the CSV to what the sets hold. The first helps only
-where the object exists under another name — most of the 58 do not exist in the sets at all,
-and re-authoring them is editorial work.
+
+Measured 2026-10-14, searching the extract itself for every one of the 58 names (nodes and
+ways by `name`/`name:ru`/`name:be`/`old_name` inside the project area, and relations by name
+alone, since relation geometry needs an area file): **6 of the 58 exist in the extract, and
+52 exist nowhere in the data at all** — no relation either. The six are Grodno old-town
+houses the catalogue never took in because nothing about them reads as a sight
+(`way/29130252` «Дом мастера», `way/29125040` «Дом купца Муравьева», `way/29125221` «Дом
+масонов», `way/29125264` «Дом врача Тальгейма», `node/320409660` «Пожарная каланча», and a
+pair of nodes named «Дом офицеров»).
+
+That splits the entry in two, and each half has a different size:
+
+- **7 rows (6 + the ambiguous cemetery) are a mechanism**: the overlay cannot name an OSM
+  object that no dataset holds. A `source_url` column would not be enough on its own — the
+  row the id names does not exist — so this is "let a curated row *bring in* one extract
+  object by id, the way `planner/…` reads what the sets already have". Worth doing only
+  together with the other half, since 7 rows is not a reason to build it.
+- **52 rows are editorial, and no mechanism helps.** «Здание доминиканской школы», «Домовая
+  церковь Коложской иконы Божией Матери», «Главная хоральная синагога» — prose written for
+  a vintage the sets no longer hold, or for objects OSM never mapped. The options are to
+  re-author them against the sets that exist, or to accept the CSV as a record of an older
+  vintage and prune it. Both are editing, not engineering; the seed names the count every
+  run so the silence stays visible until someone decides.
 
 ## Closed
 
