@@ -90,6 +90,8 @@ export interface RouteHistoryPlace {
   visitMinutes?: number | null;
   openingHours?: string | null;
   ticketPrice?: string | null;
+  /** `true` when admission is free; `false`/absent when paid or unknown. */
+  isFree?: boolean | null;
   town?: string | null;
   district?: string | null;
   /** The point's picture with its credit — absent when the point has none. */
@@ -106,6 +108,8 @@ export interface PlaceDetails {
   visitMinutes: number | null;
   openingHours?: string | null;
   ticketPrice?: string | null;
+  /** `true` when admission is free; `false`/absent when paid or unknown. */
+  isFree?: boolean | null;
   town?: string | null;
   district?: string | null;
   /** The point's picture with its credit — absent when the point has none. */
@@ -209,6 +213,7 @@ const detailsFromStop = (
   visitMinutes: stop.visit_minutes ?? existing?.visitMinutes ?? null,
   openingHours: existing?.openingHours ?? null,
   ticketPrice: existing?.ticketPrice ?? null,
+  isFree: existing?.isFree ?? null,
   town: stop.town ?? existing?.town ?? null,
   district: existing?.district ?? null,
   photo: existing?.photo ?? null,

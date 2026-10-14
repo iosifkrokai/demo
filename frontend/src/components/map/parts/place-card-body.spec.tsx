@@ -171,4 +171,24 @@ describe('PlaceCardBody', () => {
 
     expect(onClose).toHaveBeenCalledTimes(1);
   });
+
+  it('says «вход свободный» only when admission is known to be free', () => {
+    const free = render(
+      <PlaceCardBody
+        details={details({ isFree: true, ticketPrice: 'no' })}
+        onClose={() => {}}
+      />
+    );
+    expect(screen.getByText('Вход свободный')).toBeInTheDocument();
+    expect(screen.queryByText('no')).not.toBeInTheDocument();
+    free.unmount();
+
+    for (const isFree of [false, null, undefined]) {
+      const view = render(
+        <PlaceCardBody details={details({ isFree })} onClose={() => {}} />
+      );
+      expect(screen.queryByText('Вход свободный')).not.toBeInTheDocument();
+      view.unmount();
+    }
+  });
 });

@@ -71,6 +71,7 @@ const placeToDetails = (place: Place): PlaceDetails => ({
   visitMinutes: place.visit_minutes,
   openingHours: place.opening_hours,
   ticketPrice: place.ticket_price,
+  isFree: place.is_free ?? null,
   town: place.town,
   district: place.district,
   photo: place.photo,

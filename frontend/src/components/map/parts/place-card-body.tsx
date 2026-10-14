@@ -93,6 +93,12 @@ export function PlaceCardBody({
             {fmtMin(details.visitMinutes)}
           </Badge>
         )}
+        {details.isFree === true && (
+          <Badge variant="outline" className="gap-1">
+            <Ticket className={mobile ? 'size-3.5' : 'size-3'} />
+            {t('map.freeEntry')}
+          </Badge>
+        )}
       </div>
 
       <VisitedToggle placeId={placeId} />
@@ -121,7 +127,7 @@ export function PlaceCardBody({
               {details.openingHours}
             </div>
           )}
-          {details.ticketPrice && (
+          {details.isFree !== true && details.ticketPrice && (
             <div className="flex items-center gap-1.5">
               <Ticket
                 className={mobile ? 'size-3.5 shrink-0' : 'size-3 shrink-0'}

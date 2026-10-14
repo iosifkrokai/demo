@@ -167,7 +167,7 @@ describe('PlanVerdict', () => {
               requirement({
                 kind: 'free',
                 code: null,
-                name: null,
+                name: '',
                 reason: 'paid_stop_on_route',
               }),
             ],
