@@ -124,6 +124,22 @@ the `data_version`. The seed reads it on every apply (`cli._write_registries`,
 `pipeline.apply_place_aliases`); retrieval matches it through the alias signal in
 `db/store/places.py::by_alias`.
 
+`place_streets.json` is a sidecar of another kind: the street hint the rows OSM leaves
+unnamed have no column for. 1273 transport stops and 303 toilets carry a generated label
+(«Остановка», «Туалет») because the extract names neither, and the catalogue shows a
+thousand identical rows. The file holds, per row, the nearest *named* road to its point
+and the distance to it — measured from the local extract's own roads
+(`python -m db.seed streets`), not a geocoder's reply — and only for the rows the answer
+is unambiguous for: the road is the nearest of all roads within 15 m, is a name rather
+than a road number (`Р42`), and no differently named road stands within 40 m. It is
+generated, not typed. The seed overlays each hint on the row's `name` *after* the dataset
+upsert (`cli._write_registries`, `pipeline.apply_place_streets`), so the CSV's own label
+cannot win the name back on the next seed; the update fires only where the row still
+carries the label the file extends, so a row the data has since given a real name is left
+alone, and `is_fallback_name` already tolerates the extended label. The measurement
+behind the file — how many rows get a street, land on a number instead of a name, or find
+nothing at 15/25/50/100 m — is printed by the stage.
+
 A third rule drops rows *after* the upsert, in the database
 (`pipeline.prune_stale`): an **automatic row no dataset carries any more** is
 deleted. An upsert cannot notice a row leaving the files — OSM dropping an object,

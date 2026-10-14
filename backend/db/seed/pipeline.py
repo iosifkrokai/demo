@@ -12,7 +12,7 @@ from typing import Any, LiteralString
 import psycopg
 from psycopg import sql
 
-from core.paths import GEO_DIR, PHOTOS_DIR, PLACE_ALIASES_JSON
+from core.paths import GEO_DIR, PHOTOS_DIR, PLACE_ALIASES_JSON, PLACE_STREETS_JSON
 from core.prices import free_entry
 from db.store.datasets import DATA_VERSION_ROW
 
@@ -426,6 +426,33 @@ def apply_photos(conn: psycopg.Connection, photos_dir: Path | None = None) -> in
     from .photos import apply_to_db
 
     return apply_to_db(conn, json.loads(path.read_text(encoding="utf-8")))
+
+
+def apply_place_streets(conn: psycopg.Connection, path: Path | None = None) -> dict[str, Any]:
+    """Overlay the committed ``place_streets.json`` on the generated service labels.
+
+    The dataset upsert writes «Остановка» back from the CSV on every seed, so the street
+    hint must be laid on *after* it or the next seed would win the name back. The update
+    fires only where the row still carries the label the file extends, so a row the data
+    has since given a real name is left alone, and a re-run changes nothing. A file that
+    is absent is not a declaration and leaves the names as the CSVs wrote them. The
+    caller commits.
+    """
+    from .streets import read_place_street_entries
+
+    source = path or PLACE_STREETS_JSON
+    if not source.is_file():
+        return {"skipped": f"no {source.name}"}
+    entries = read_place_street_entries(source)
+    written = 0
+    with conn.cursor() as cur:
+        for entry in entries:
+            cur.execute(
+                "UPDATE places SET name = %s WHERE source_url = %s AND name = %s",
+                (f"{entry['name']} ({entry['street']})", entry["source_url"], entry["name"]),
+            )
+            written += cur.rowcount
+    return {"written": written, "declared": len(entries)}
 
 
 def apply_shadowed(

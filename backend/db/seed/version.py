@@ -21,6 +21,7 @@ VERSIONED_FILES: tuple[str, ...] = (
     "place_aliases.json",
     "place_aliases_en.json",
     "place_merges.json",
+    "place_streets.json",
 )
 
 _ABSENT = b"<absent>"

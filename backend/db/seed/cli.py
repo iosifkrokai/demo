@@ -11,7 +11,13 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from core.paths import GEO_DIR, PHOTOS_DIR, PLACE_ALIASES_EN_JSON, PLACES_DIR
+from core.paths import (
+    GEO_DIR,
+    PHOTOS_DIR,
+    PLACE_ALIASES_EN_JSON,
+    PLACE_STREETS_JSON,
+    PLACES_DIR,
+)
 
 from . import (
     datasets as ds_mod,
@@ -69,6 +75,7 @@ def _write_registries(conn: Any, *, areas: bool) -> dict[str, Any]:
         conn, itineraries_mod.load_itineraries()
     )
     written["photos_written"] = pipeline.apply_photos(conn, PHOTOS_DIR)
+    written["streets_written"] = pipeline.apply_place_streets(conn)
     return written
 
 
@@ -314,6 +321,22 @@ def cmd_aliases_en(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_streets(args: argparse.Namespace) -> int:
+    from . import streets
+
+    stats = streets.run_stage(
+        pbf_path=args.pbf,
+        out=args.out,
+        data_dir=args.data_dir,
+        apply=args.apply,
+        dsn=_dsn(args) if args.apply else None,
+    )
+    print(f"[seed] streets: {stats['ok']} rows written for {stats['targets']} unnamed services")
+    if args.apply:
+        print(f"[seed] streets: {stats['db']}")
+    return 0
+
+
 def cmd_admin(args: argparse.Namespace) -> int:
     from .admin import create_admin
 
@@ -396,6 +419,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
     en.add_argument("--apply", action="store_true", help="Write the aliases into the DB.")
     en.add_argument("--database-url", default=None)
     en.set_defaults(func=cmd_aliases_en)
+
+    st = sub.add_parser("streets", help="Measure unnamed stops/toilets against the local extract.")
+    st.add_argument("--pbf", type=Path, default=None, help="OSM PBF extract (default: $OSM_PBF).")
+    st.add_argument("--out", type=Path, default=PLACE_STREETS_JSON)
+    st.add_argument("--data-dir", type=Path, default=PLACES_DIR)
+    st.add_argument("--apply", action="store_true", help="Overlay the hints on the DB.")
+    st.add_argument("--database-url", default=None)
+    st.set_defaults(func=cmd_streets)
 
     a = sub.add_parser("all", help="fetch, then apply.")
     _add_apply_flags(a)
