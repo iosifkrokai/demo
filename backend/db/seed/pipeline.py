@@ -194,17 +194,18 @@ def apply_curated_rows(conn: psycopg.Connection, curated: list[dict[str, Any]]) 
 
 
 def apply_place_aliases(conn: psycopg.Connection, path: Path | None = None) -> dict[str, Any]:
-    """Write the declared aliases of every hand-authored row into ``place_aliases``.
+    """Write one alias file's declared names into ``place_aliases``.
 
     The file is the whole truth for the rows it writes: an alias it no longer names is
     deleted, so editing the file is enough. A file that is absent is not a declaration
-    and leaves the table alone. An alias whose row is not in the database is reported,
-    since the file claiming a place the seed never wrote is a fact worth seeing. The
-    caller commits.
+    and leaves the table alone. The delete is scoped by the file's own name, so the
+    English sidecar and the hand-authored file cannot sweep each other's rows. An alias
+    whose row is not in the database is reported, since the file claiming a place the
+    seed never wrote is a fact worth seeing. The caller commits.
     """
     source = path or PLACE_ALIASES_JSON
     if not source.is_file():
-        return {"skipped": "no place_aliases.json"}
+        return {"skipped": f"no {source.name}"}
     entries = read_place_alias_entries(source)
     label = source.name
     unresolved: list[str] = []

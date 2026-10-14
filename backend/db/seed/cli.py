@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from core.paths import GEO_DIR, PHOTOS_DIR, PLACES_DIR
+from core.paths import GEO_DIR, PHOTOS_DIR, PLACE_ALIASES_EN_JSON, PLACES_DIR
 
 from . import (
     datasets as ds_mod,
@@ -63,6 +63,7 @@ def _write_registries(conn: Any, *, areas: bool) -> dict[str, Any]:
         written["areas_written"] = landed["written"]
         written["areas_undeclared_removed"] = landed["removed"]
     written["aliases_written"] = pipeline.apply_place_aliases(conn)
+    written["aliases_en_written"] = pipeline.apply_place_aliases(conn, PLACE_ALIASES_EN_JSON)
     written["categories_written"] = pipeline.load_categories(conn, taxonomy_mod.all_categories())
     written["itineraries_written"] = pipeline.load_itineraries(
         conn, itineraries_mod.load_itineraries()
@@ -297,6 +298,22 @@ def cmd_photos(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_aliases_en(args: argparse.Namespace) -> int:
+    from . import aliases_en
+
+    stats = aliases_en.run_stage(
+        pbf_path=args.pbf,
+        out=args.out,
+        data_dir=args.data_dir,
+        apply=args.apply,
+        dsn=_dsn(args) if args.apply else None,
+    )
+    print(f"[seed] aliases-en: {stats['written']} aliases for {stats['matched']} named objects")
+    if args.apply:
+        print(f"[seed] aliases-en: {stats['db']}")
+    return 0
+
+
 def cmd_admin(args: argparse.Namespace) -> int:
     from .admin import create_admin
 
@@ -371,6 +388,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
     ph.add_argument("--data-dir", type=Path, default=PHOTOS_DIR)
     ph.add_argument("--database-url", default=None)
     ph.set_defaults(func=cmd_photos)
+
+    en = sub.add_parser("aliases-en", help="Read OSM name:en into the English alias sidecar.")
+    en.add_argument("--pbf", type=Path, default=None, help="OSM PBF extract (default: $OSM_PBF).")
+    en.add_argument("--out", type=Path, default=PLACE_ALIASES_EN_JSON)
+    en.add_argument("--data-dir", type=Path, default=PLACES_DIR)
+    en.add_argument("--apply", action="store_true", help="Write the aliases into the DB.")
+    en.add_argument("--database-url", default=None)
+    en.set_defaults(func=cmd_aliases_en)
 
     a = sub.add_parser("all", help="fetch, then apply.")
     _add_apply_flags(a)

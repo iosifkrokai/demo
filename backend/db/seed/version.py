@@ -19,6 +19,7 @@ VERSIONED_FILES: tuple[str, ...] = (
     "geo/grodno_border.json",
     "photos/place_photos.json",
     "place_aliases.json",
+    "place_aliases_en.json",
     "place_merges.json",
 )
 

@@ -110,6 +110,20 @@ services is not in the data but in the planner: a `role = 'service'` place — a
 a hotel, a bus stop — is not a stop of a walk unless the request pinned it by id,
 and the drops are reported.
 
+`place_aliases_en.json` is the same shape and the same table for the other language:
+the English names our OSM objects answer to, read from the local extract's `name:en`
+tag — the 14-column dataset has no column for a translated name, so it travels
+beside the dataset the way `place_aliases.json` does. It is generated, not typed:
+`python -m db.seed aliases-en` walks a PBF, keeps the `name:en` of the objects we
+hold (`osm:`/`osm_poi:` `source_url`), and writes the file; a value that repeats the
+row's own name yields no alias, and the first of a semicolon list wins. Both files
+land in `place_aliases` under their own `source` label, so the sweep that removes
+names a file no longer declares (`DELETE ... WHERE source = <file name>`) cannot
+touch the other's rows. It is versioned like the CSVs, so a regenerated file moves
+the `data_version`. The seed reads it on every apply (`cli._write_registries`,
+`pipeline.apply_place_aliases`); retrieval matches it through the alias signal in
+`db/store/places.py::by_alias`.
+
 A third rule drops rows *after* the upsert, in the database
 (`pipeline.prune_stale`): an **automatic row no dataset carries any more** is
 deleted. An upsert cannot notice a row leaving the files — OSM dropping an object,
@@ -159,5 +173,6 @@ Three layers, enforced in `db/seed/pipeline.py` and pinned by
 RU/EN name-script, opening-hours/ticket, geofence rejects, duplicates, pending
 embeddings); the report is honest — unknown stays unknown, rejects are counted, not
 published. Known gaps it exposes: `opening_hours` / `ticket_price` are too sparse
-for an "open now" or price filter, there are no EN names/aliases yet, and
-same-name-within-radius pairs are merge candidates, not proof.
+for an "open now" or price filter, the EN names in `place_aliases_en.json` cover only
+the objects OSM itself tagged `name:en`, and same-name-within-radius pairs are merge
+candidates, not proof.
