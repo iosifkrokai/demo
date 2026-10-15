@@ -90,13 +90,12 @@ reasons, and the second makes the first moot for a walk:
 
 - **Nobody is offering them.** The backend never sends either option — the only
   `costing_options` it composes is `routing/valhalla/constants.py::costing_options_for`, for
-  a step-free walk. The frontend *carries* the Valhalla demo's parameter catalogue
+  a step-free walk. The frontend *carried* the Valhalla demo's parameter catalogue
   (`settings-panel/settings-options.ts`, 1088 lines: Use Hills, Avoid Bad Surface,
   bicycle_type…, with `filterProfileSettings` and a `settingsPanelOpen` slice in
-  `common-store`), and **no component renders any of it**: `settingsPanelOpen` is read by
-  one test stub and by nothing else in `frontend/src`. So the control a user would turn does
-  not exist — the product is silent about hills by construction, not by luck, and what is
-  left is dead weight (a cleanup item of its own).
+  `common-store`) and **no component ever rendered any of it**; the catalogue and the slice
+  left with the panel in `f535790`, so nothing is left to clean up. The control a user would
+  turn does not exist — the product is silent about hills by construction, not by luck.
 - **Both are the bicycle costing's options**, described in their own text as "a cyclist's
   desire to tackle hills", while a walk is priced `pedestrian`. Had the DEM been there, a
   pedestrian experiment would still have shown nothing — and Valhalla silently accepts
