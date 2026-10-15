@@ -10,6 +10,7 @@ import pytest
 
 GRODNO = (53.6778, 23.8295)
 FAR_AWAY = (49.0, 20.0)
+SOUTH_OF_THE_BOX = (52.745484, 24.496117)
 
 HIGHLIGHTED_SERVICES = {"кафе", "ресторан", "туалет", "гостиница", "остановка транспорта"}
 
@@ -83,12 +84,20 @@ def test_a_stairway_outside_the_project_area_is_dropped() -> None:
 
 
 def test_a_stairway_inside_the_oblast_ring_but_outside_the_fetch_box_is_dropped() -> None:
-    """The datasets' own validators hold the fetch rectangle; a row past it would be a reject."""
+    """Two gates hold the ingest and they do not coincide: the ring is the project area,
+    the box is the fetch rectangle.
+
+    The box's north edge went up to 55.01 on 2026-10-15 so that it covers the ring's own
+    north (55.0043), which the finds dataset needs; the ring still dips below the box in
+    the south, and that residue is the case pinned here.
+    """
+    from db.seed.datasets import BBOX
     from db.seed.geofence import inside_project_area
     from db.seed.steps import element_to_row
 
-    assert inside_project_area(54.857177, 26.322450)
-    assert element_to_row(_way(1, 54.857177, 26.322450)) is None
+    assert SOUTH_OF_THE_BOX[0] < BBOX["south"]
+    assert inside_project_area(*SOUTH_OF_THE_BOX)
+    assert element_to_row(_way(1, *SOUTH_OF_THE_BOX)) is None
 
 
 def test_line_center_is_the_bounding_box_middle() -> None:
