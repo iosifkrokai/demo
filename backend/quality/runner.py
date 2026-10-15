@@ -42,6 +42,8 @@ CHECK_MISSING_MANDATORY_CATEGORY = "missing_mandatory_category"
 CHECK_FORBIDDEN_CATEGORY_PRESENT = "forbidden_category_present"
 CHECK_MISSING_NAMED_PLACE = "missing_named_place"
 CHECK_REQUIREMENT_UNMET = "requirement_unmet"
+CHECK_REQUIREMENT_STATUS = "requirement_status"
+CHECK_MOMENT_APPLIED = "moment_not_applied"
 CHECK_OUT_OF_REGION_POINT = "out_of_region_point"
 CHECK_OVER_BUDGET = "over_budget"
 CHECK_RESULT_MODE = "result_mode_mismatch"
@@ -55,6 +57,8 @@ CHECK_PRIORITY: tuple[str, ...] = (
     CHECK_FORBIDDEN_CATEGORY_PRESENT,
     CHECK_MISSING_NAMED_PLACE,
     CHECK_REQUIREMENT_UNMET,
+    CHECK_REQUIREMENT_STATUS,
+    CHECK_MOMENT_APPLIED,
     CHECK_OUT_OF_REGION_POINT,
     CHECK_OVER_BUDGET,
     CHECK_RESULT_MODE,
@@ -68,11 +72,17 @@ if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 
 from core import constants as agent_constants  # noqa: E402
+from core.hours import parse_moment  # noqa: E402
 from core.paths import ITINERARIES_JSON  # noqa: E402
 from db.seed import datasets as ds_mod, itineraries as itin_mod  # noqa: E402
 from db.seed.geofence import inside_project_area  # noqa: E402
 from db.seed.taxonomy import all_categories  # noqa: E402
-from routing.models import Requirement, RequirementKind, TripRequirements  # noqa: E402
+from routing.models import (  # noqa: E402
+    Requirement,
+    RequirementKind,
+    RequirementStatus,
+    TripRequirements,
+)
 from routing.optimize import max_leg_seconds  # noqa: E402
 from routing.valhalla.constants import VALHALLA_COSTINGS, costing_for  # noqa: E402
 from routing.verify import overall_status  # noqa: E402
@@ -93,6 +103,7 @@ LEG_SPEED_KMH = {
 }
 DUPLICATE_NAME_RADIUS_M = float(agent_constants.DUPLICATE_NAME_RADIUS_M)
 REQUIREMENT_KINDS = frozenset(get_args(RequirementKind))
+REQUIREMENT_STATUSES = frozenset(get_args(RequirementStatus))
 
 STAGE1_PROXY_RADIUS_M = 250.0
 
@@ -2049,7 +2060,7 @@ def load_golden_map() -> dict[str, GoldenRoute]:
 
 GOLDEN_REQUIRED_TOP = frozenset({"id", "locale", "query", "filters", "expectations"})
 GOLDEN_OPTIONAL_TOP = frozenset({"parity_group"})
-GOLDEN_OPTIONAL_FILTER_KEYS = frozenset({"profile"})
+GOLDEN_OPTIONAL_FILTER_KEYS = frozenset({"profile", "at"})
 GOLDEN_FILTER_KEYS = frozenset(
     {
         "party_children",
@@ -2075,6 +2086,7 @@ GOLDEN_OPTIONAL_EXPECTATIONS = frozenset(
     {
         "must_contain_names",
         "must_satisfy_requirement_kinds",
+        "requirement_status",
         "expected_result_mode",
         "allow_empty",
         "min_places",
@@ -2190,11 +2202,26 @@ def _golden_filters(data: dict[str, Any], where: str) -> list[str]:
     return (
         _filter_keys(filters, where)
         + _filter_profile(filters, where)
+        + _filter_moment(filters, where)
         + _filter_overlap(filters, where)
         + _filter_budget(filters, where)
         + _filter_result_mode(filters, where)
         + _filter_origin(filters, where)
     )
+
+
+def _filter_moment(filters: dict[str, Any], where: str) -> list[str]:
+    """The moment the walk is planned for, as a Grodno wall clock or an instant."""
+    moment = filters.get("at")
+    if moment is None:
+        return []
+    if not isinstance(moment, str):
+        return [f"{where}: filters.at must be null or an ISO moment, got {moment!r}"]
+    try:
+        parse_moment(moment)
+    except ValueError:
+        return [f"{where}: filters.at {moment!r} is not an ISO moment"]
+    return []
 
 
 def _filter_profile(filters: dict[str, Any], where: str) -> list[str]:
@@ -2323,6 +2350,23 @@ def _expectation_codes(exp: dict[str, Any], where: str) -> list[str]:
             f"{where}: expectations.must_contain_names must be a non-empty "
             "list of non-empty strings when present"
         )
+    wanted = exp.get("requirement_status")
+    if wanted is not None:
+        if not isinstance(wanted, dict) or not wanted:
+            errs.append(f"{where}: expectations.requirement_status must be a non-empty object")
+        else:
+            errs += [
+                f"{where}: expectations.requirement_status {kind!r} is not one of "
+                f"{sorted(REQUIREMENT_KINDS)}"
+                for kind in wanted
+                if kind not in REQUIREMENT_KINDS
+            ]
+            errs += [
+                f"{where}: expectations.requirement_status[{kind!r}] must be one of "
+                f"{sorted(REQUIREMENT_STATUSES)}, not {status!r}"
+                for kind, status in wanted.items()
+                if status not in REQUIREMENT_STATUSES
+            ]
     kinds = exp.get("must_satisfy_requirement_kinds")
     if kinds is not None:
         if not _name_list_ok(kinds):
@@ -2618,6 +2662,10 @@ def evaluate_compliance(
         checks[CHECK_MISSING_NAMED_PLACE] = _named_check(exp, points)
     if exp.get("must_satisfy_requirement_kinds"):
         checks[CHECK_REQUIREMENT_UNMET] = _requirement_check(raw, exp)
+    if exp.get("requirement_status"):
+        checks[CHECK_REQUIREMENT_STATUS] = _requirement_status_check(raw, exp)
+    if case.filters.get("at"):
+        checks[CHECK_MOMENT_APPLIED] = _moment_check(raw, case.filters.get("at"))
     if exp.get("in_region"):
         checks[CHECK_OUT_OF_REGION_POINT] = _region_check(points)
     checks[CHECK_OVER_BUDGET] = _budget_check(raw, points, exp)
@@ -2743,6 +2791,35 @@ def _requirement_check(raw: dict[str, Any], exp: dict[str, Any]) -> dict[str, An
     if unmet:
         return _fail(f"the plan left {unmet} unmet; it read {declared}")
     return _ok(f"read and met {wanted}: {declared}")
+
+
+def _requirement_status_check(raw: dict[str, Any], exp: dict[str, Any]) -> dict[str, Any]:
+    """The exact statuses a case demands. `must_satisfy_requirement_kinds` passes on
+    `uncertain`, so a condition that has to be PROVEN needs this one."""
+    wanted = {str(k): str(v) for k, v in (exp.get("requirement_status") or {}).items()}
+    interpretation = raw.get("interpretation")
+    if not isinstance(interpretation, dict):
+        return _unverified(f"the response carries no interpretation to read {sorted(wanted)} in")
+    declared = {
+        str(s.get("kind")): str(s.get("status"))
+        for s in (interpretation.get("requirements") or [])
+        if isinstance(s, dict)
+    }
+    wrong = {k: declared.get(k, "absent") for k, v in wanted.items() if declared.get(k) != v}
+    if wrong:
+        return _fail(f"expected {wanted}, read {wrong}")
+    return _ok(f"read {sorted(wanted)} as asked")
+
+
+def _moment_check(raw: dict[str, Any], chosen: Any) -> dict[str, Any]:
+    """Whether the answer was checked against the moment the case asked for."""
+    interpretation = raw.get("interpretation")
+    echoed = interpretation.get("at") if isinstance(interpretation, dict) else None
+    if not echoed:
+        return _fail("the response does not say which moment it was checked against")
+    if parse_moment(str(echoed)) != parse_moment(str(chosen)):
+        return _fail(f"checked against {echoed}, the case asked for {chosen}")
+    return _ok(f"checked against {echoed}")
 
 
 def _region_check(points: list[dict[str, Any]]) -> dict[str, Any]:
@@ -2901,6 +2978,9 @@ def build_golden_request(case: GoldenCase) -> dict[str, Any]:
     profile = filters.get("profile")
     if profile:
         payload["profile"] = profile
+    moment = filters.get("at")
+    if moment:
+        payload["at"] = moment
     return payload
 
 

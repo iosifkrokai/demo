@@ -49,7 +49,8 @@ non-zero when *no* layer has numbers.
   The ask box's starter chips are these requests (and the ready-made walks'
   `query_ru`) taken word for word, so what the demo offers is what the set measures:
   `tests/test_hint_contract.py` fails the moment a chip is reworded, dropped or
-  mistyped, and a request that no chip offers is a failure too. One consequence
+  mistyped, and a request that no chip offers is a failure too — a request that names
+  a moment being the one exception, since a chip cannot carry an hour. One consequence
   worth knowing: a chip is clicked with no filters at all, while a case may state
   a budget or an `avoid` its own words already imply — the chip's text is the
   promise, the filters are how the case pins it.
@@ -96,13 +97,15 @@ non-zero when *no* layer has numbers.
     "time_budget_minutes": 120,    //   int 0..MAX_BUDGET_MIN | null
     "origin": {"lat": 53.6778, "lon": 23.8295},  // {lat, lon} | null
     "result_mode": "route",        //   "route" | "catalogue"
-    "profile": "pedestrian"        // optional — "pedestrian" | "bicycle" | "auto" | …
+    "profile": "pedestrian",       // optional — "pedestrian" | "bicycle" | "auto" | …
+    "at": "2026-10-20T11:00"       // optional — the moment the walk is planned for
   },
   "expectations": {                // required — machine-checkable conditions
     "must_contain_categories": ["туалет"],      // each must appear in the plan
     "must_not_contain_categories": [],          // none may appear
     "must_contain_names": ["Фарный"],           // optional — substring of a stop name
     "must_satisfy_requirement_kinds": ["free"], // optional — condition kinds, not codes
+    "requirement_status": {"open": "satisfied"}, // optional — exact statuses, kind by kind
     "expected_status": ["ready", "infeasible"], // required — non-empty
     "expected_result_mode": "catalogue",        // optional
     "max_total_minutes": 120,                   // int > 0 | null (null = no cap)
@@ -135,6 +138,15 @@ handle is the kind itself. The check reads the wire's own
 passes, because few places have a price written down and that is the honest answer.
 A response with no interpretation leaves the check unverified rather than green.
 
+`requirement_status` is the one expectation that demands a *proof* rather than a
+verdict: `must_satisfy_requirement_kinds` passes on `uncertain`, so a condition whose
+whole point is to be decided — «открытые в это время» — needs the status named, kind by
+kind, and `uncertain` then fails like any other mismatch. A case that names a moment
+(`filters.at`) additionally gets the `moment_not_applied` check: the response echoes the
+moment it was checked against, and a run measured against another hour is a failure, not
+a coincidence. A wall clock is read as Grodno time (`core/hours.parse_moment`), for the
+case and for the request alike.
+
 Cases sharing a `parity_group` are one request in RU and EN: exactly one case per
 locale, identical `filters` and `expectations` (only `status_note` may differ), and
 two different queries each written in its own script. At run time the group is
@@ -152,6 +164,8 @@ mandatory-category outcome; the stop lists are deliberately not compared.
 | `forbidden_category_present` | an `avoid` / `must_not_contain_categories` code is present |
 | `missing_named_place` | a `must_contain_names` token matches no stop |
 | `requirement_unmet` | a `must_satisfy_requirement_kinds` kind was not read, or was left unmet |
+| `requirement_status` | a `requirement_status` kind carries another status — `uncertain` included |
+| `moment_not_applied` | the answer was checked against another moment than the case named |
 | `out_of_region_point` | a returned point is outside Grodno ADM1 |
 | `over_budget` | `max_total_minutes` exceeded |
 | `result_mode_mismatch` | `expected_result_mode` not met |

@@ -85,8 +85,15 @@ def test_the_parsers_see_every_chip() -> None:
 
 def test_the_russian_starters_are_the_requests_the_benchmark_measures() -> None:
     """The chips and the measured requests are the same set — no invented wording,
-    and no case left without a way to be tapped."""
-    measured = {case.query for case in load_golden_cases() if case.locale == "ru"}
+    and no case left without a way to be tapped. A case that names a moment
+    (`filters.at`) is the one exception, and for a reason rather than for convenience:
+    a chip carries text and a transport, not an hour, and «открытые в это время» is a
+    request only a moment makes meaningful."""
+    measured = {
+        case.query
+        for case in load_golden_cases()
+        if case.locale == "ru" and not case.filters.get("at")
+    }
     measured |= {route.query_ru for route in load_curated_routes()}
 
     chips, _refine = _ask("ru")
