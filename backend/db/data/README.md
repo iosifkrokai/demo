@@ -3,8 +3,9 @@
 Data is code: every dataset is a versioned text file, and the Postgres database is
 a *projection* rebuilt from them by one idempotent command. Layout: `places/`
 (datasets), `geo/` (map geometry), `photos/` (photo hints + resolution), `external/`
-(the contract for data an outside body sends — the reply's JSON Schema and a filled
-example, not a dataset and not read by the seed), plus `taxonomy.csv` and
+(the contract for data an outside body sends — the reply's JSON Schema, a filled example
+and the Excel form built from them by `make external-form`, not a dataset and not read by
+the seed), plus `taxonomy.csv` and
 `itineraries.json` — the last two are projected into the `categories` and
 `itineraries`/`itinerary_stops` tables (see below), not read from disk at runtime.
 
@@ -18,6 +19,17 @@ name|category|district|town|lat|lon|blurb|fun_fact|fun_facts|opening_hours|ticke
 only** — `source_url` is what to check them against. Services carry `visit_minutes`
 empty (NULL): stops *beside* a route, not sights. `places/places_curated.csv` uses
 a 7-column shape (`id|normalized_name|category|blurb|fun_fact|fun_facts|links`).
+
+`district` is **derived, not authored**: it is the polygon the point falls in, read from
+`geo/districts_border.json` (OSM `admin_level=6` boundaries, ODbL, one polygon per raion
+plus the city of Grodno) by `db/seed/districts.py`. `make fetch` re-derives the whole
+column on every run, which is how it stays true — the column used to be "the nearest raion
+centre", and a border is not a Voronoi of centres: that answer was wrong for one row in
+three, including every cafe inside Grodno, which is in the city, not in the raion around
+it. A point outside every polygon takes the nearest ring within 500 m (OSM's rings do not
+tile perfectly), and beyond that the old nearest-centre fallback, so a row is never left
+without a district. `tests/test_seed_districts.py` fails if a committed row disagrees with
+the polygon it stands in.
 
 ## Two more files become tables: the taxonomy and the curated walks
 
@@ -37,8 +49,14 @@ onto reference tables the service reads instead of the files:
   is the same natural key `places` is matched on — never a database id a re-seed
   could renumber. Written by `db.seed.pipeline.load_itineraries`: the walk upserts
   on `id`, `position` is the file order, and the stops are rewritten wholesale
-  (delete-then-insert) so a walk that drops a stop drops it here too. The
-  catalogue serves them through `db/store/itineraries.py`.
+  (delete-then-insert) so a walk that drops a stop drops it here too; the file is
+  also the registry, so a walk the file no longer carries is deleted, its stops
+  cascading with it. The catalogue serves them through `db/store/itineraries.py`.
+  A stop is a `source_url` no seed step validates — an unknown key is dropped by
+  the catalogue and shows up only as the «часть точек не нашлась» banner on a live
+  stack — so `tests/test_itineraries_contract.py` checks every stop against the
+  projected records, and the same file is what `quality/cases/curated/` measures the
+  planner against.
 
 Both tables, and the `areas.note` / `areas.is_project_area` columns `areas.json`
 needed, arrive in the Alembic revision `0002_taxonomy_itineraries`.

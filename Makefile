@@ -21,7 +21,7 @@ BACKEND := cd backend && .venv/bin
 FRONTEND := cd frontend && npm
 
 .PHONY: help check up down ps logs seed fetch photos prune admin migrate \
-        test test-backend test-frontend quality lint
+        test test-backend test-frontend quality lint external-form external-read
 
 help: ## show this help
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) \
@@ -68,6 +68,15 @@ migrate: ## apply the Alembic migrations to the database (upgrade head)
 
 quality: ## regenerate the one-page quality report (reads what the runs wrote)
 	$(BACKEND)/python -m quality.report
+
+external-form: ## rebuild the Excel form we send out, from the reply's JSON Schema
+	cd backend && uv run --with openpyxl --with jsonschema python -m db.external_form build
+	cd backend && uv run --with openpyxl --with jsonschema python -m db.external_form verify
+
+external-read: ## turn a filled form back into JSON: make external-read FORM=path.xlsx [OUT=path.json]
+	@test -n "$(FORM)" || { echo "usage: make external-read FORM=filled.xlsx [OUT=reply.json]" >&2; exit 2; }
+	cd backend && uv run --with openpyxl --with jsonschema python -m db.external_form read "$(FORM)" \
+		$(if $(OUT),--out "$(OUT)",)
 
 test: test-backend test-frontend ## run every gate
 

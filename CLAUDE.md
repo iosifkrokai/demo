@@ -12,6 +12,8 @@ backend/     the service — api (HTTP) · agent (the planner) · routing (the
              db/  — the persistence side: models (rows) · store (repositories)
                     · seed (the projection) · alembic · connection.py
                     · embeddings (the local model) · data (the datasets)
+                    · external_form.py (the filled-in form we send out, off the
+                      contract in db/data/external/)
 frontend/    React + Vite + MapLibre, talked to over nginx
 docker-compose.yml   the whole stack, including the db image (inline)
 ```
