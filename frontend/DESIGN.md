@@ -90,8 +90,12 @@ for cards, panels, popups, and `rounded-t-3xl` for the mobile sheet.
   icon, name `text-label`, meta on the right; hover reveals icon buttons (remove,
   pin). Drag handle on the left, `cursor-grab`; 1px `bg-border` guide between the circles.
 - **Empty state**: centred muted icon + one line of what will happen here, plus the
-  hint chips (`замки`, `костёлы`, `монастыри`, `где поесть`). Never a bare blank
-  panel. The ask field's placeholder is the question itself
+  hint chips. The chips are whole requests, not keywords — the twenty-two the
+  benchmark measures (see `backend/quality/README.md`), each filling the field with a
+  sentence like «два замка и Советская улица в Гродно, часа на четыре» and setting the
+  transport that sentence asks for. They wrap on desktop (`md:flex-wrap`) and scroll in
+  one row on mobile, where each is capped at `max-md:max-w-[12rem]` and truncated.
+  Never a bare blank panel. The ask field's placeholder is the question itself
   (`Что хотите посмотреть?`) — no trailing ellipsis.
 - **Loading**: skeleton rows (`animate-pulse rounded-xl bg-muted h-12`) — not a spinner in the middle.
 - **Layout**: panel 360–400px on desktop (`bg-background`, `border-r border-border`,

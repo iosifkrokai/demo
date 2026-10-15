@@ -235,6 +235,62 @@ const CATALOGUE_ANSWER = {
 const askField = () =>
   screen.getByRole('textbox', { name: 'что хотите посмотреть' });
 
+/** Every starter the ask box offers, and the request each one fills in. */
+const baseHintChips = [
+  ['old-town-castles', 'два замка и Советская улица в Гродно, часа на четыре'],
+  [
+    'museums-rainy-day',
+    'куда пойти в Гродно в дождь, музеи под крышей, часа на три',
+  ],
+  ['family-with-kids', 'Гродно с детьми: замки, парк и зоопарк, на полдня'],
+  [
+    'four-faiths',
+    'костёл, синагога, монастырь и церкви старого Гродно, часа на три',
+  ],
+  ['free-old-town-walk', 'что посмотреть в Гродно бесплатно, часа на три'],
+  [
+    'tyzenhauz-north',
+    'Городница и век Тызенгауза, прогулка по северному Гродно, часа на три',
+  ],
+  [
+    'bicycle-canal',
+    'Августовский канал на велосипеде: Сопоцкин и шлюзы, часа на четыре',
+  ],
+  ['augustow-canal-bike', 'Августовский канал на велосипеде, часа на четыре'],
+  ['palaces-day', 'дворцы и усадьбы запада области на машине, на весь день'],
+  [
+    'castles-lida-krevo-golshany',
+    'замки Лиды, Крево и Гольшан за день на машине',
+  ],
+  ['mir-novogrudok', 'Мир и Новогрудок за день: два замка и Мицкевич'],
+  ['west-palaces-and-churches', 'дворцы и храмы запада области на машине'],
+  ['synagogues-day', 'синагоги Гродно, Лиды и Слонима на машине'],
+  ['castles-half-day', 'замки Гродненской области на полдня'],
+  ['museums-budget', 'музеи Гродно на два часа'],
+  [
+    'family-walk',
+    'старый Гродно, двое детей, два часа, туалет обязателен, кафе если по пути',
+  ],
+  [
+    'avoid-temples',
+    'семейная прогулка по Гродно без храмов и костёлов: парк и зоопарк',
+  ],
+  [
+    'named-farnyi',
+    'прогулка по старому Гродно с обязательной остановкой у Фарного костёла',
+  ],
+  [
+    'free-old-town',
+    'Гродно бесплатно: только то, куда вход свободный, часа на три',
+  ],
+  ['all-churches-catalogue', 'все костёлы и церкви Гродненской области'],
+  ['vague-no-anchor', 'что-нибудь интересное'],
+  [
+    'out-of-region-vilnius',
+    'Вильнюс: Кафедральный собор Святого Станислава — маршрут пешком',
+  ],
+] as const;
+
 /** The sticky footer's main action. */
 const buildButton = () =>
   screen.getByRole('button', { name: /подобрать маршрут/i });
@@ -673,13 +729,7 @@ describe('Sidebar', () => {
     expect(
       screen.getByPlaceholderText('Что хотите посмотреть?')
     ).toBeInTheDocument();
-    for (const [id, said] of [
-      ['old-town', 'Старый город за два часа пешком'],
-      ['castles-churches', 'Замки и костёлы Гродно'],
-      ['food', 'Где поесть в центре, недорого'],
-      ['evening', 'Вечерняя прогулка по Советской'],
-      ['with-children', 'С детьми: парки и замки'],
-    ] as const) {
+    for (const [id, said] of baseHintChips) {
       expect(screen.getByTestId(`hint-${id}`)).toHaveTextContent(said);
     }
     expect(buildButton()).toBeDisabled();
@@ -691,9 +741,9 @@ describe('Sidebar', () => {
     const action = buildButton();
     expect(action.closest('footer')).not.toBeNull();
     expect(action.closest('.slim-scroll')).toBeNull();
-    const hints = screen.getByTestId('hint-old-town').parentElement;
+    const hints = screen.getByTestId('hint-old-town-castles').parentElement;
     expect(hints?.getAttribute('role')).toBe('group');
-    expect(hints?.querySelectorAll('button').length).toBe(5);
+    expect(hints?.querySelectorAll('button').length).toBe(baseHintChips.length);
     expect(hints?.className).toContain('max-md:flex-nowrap');
     expect(hints?.className).toContain('max-md:overflow-x-auto');
   });
@@ -729,6 +779,7 @@ describe('Sidebar', () => {
     render(<Sidebar />);
 
     for (const [id, said] of [
+      ['refine-add-cafe-toilet', 'добавь кофейню и туалет'],
       ['refine-add-cafe', 'добавь кафе по пути'],
       ['refine-remove-museum', 'убери музей из маршрута'],
       ['refine-shorter', 'сделай короче — часа на два'],
@@ -737,7 +788,9 @@ describe('Sidebar', () => {
     ] as const) {
       expect(screen.getByTestId(`hint-${id}`)).toHaveTextContent(said);
     }
-    expect(screen.queryByTestId('hint-old-town')).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId('hint-old-town-castles')
+    ).not.toBeInTheDocument();
     expect(
       screen.getByPlaceholderText('Что уточнить? «добавь кофейню»')
     ).toBeInTheDocument();
@@ -751,13 +804,41 @@ describe('Sidebar', () => {
     const user = userEvent.setup({ delay: null });
     render(<Sidebar />);
 
-    await user.click(screen.getByTestId('hint-old-town'));
-    expect(askField()).toHaveValue('Старый город за два часа пешком');
+    await user.click(screen.getByTestId('hint-old-town-castles'));
+    expect(askField()).toHaveValue(
+      'два замка и Советская улица в Гродно, часа на четыре'
+    );
     expect(fetchMock).not.toHaveBeenCalled();
 
     await user.type(askField(), '{Enter}');
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
-    expect(body(0).query).toBe('Старый город за два часа пешком');
+    expect(body(0).query).toBe(
+      'два замка и Советская улица в Гродно, часа на четыре'
+    );
+  });
+
+  it('takes the transport from the chip, so a bicycle hint is a bicycle route', async () => {
+    const { fetchMock, body } = agentFetch();
+
+    const user = userEvent.setup({ delay: null });
+    render(<Sidebar />);
+
+    await user.click(screen.getByTestId('hint-bicycle-canal'));
+    await user.type(askField(), '{Enter}');
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(body(0).profile).toBe('bicycle');
+  });
+
+  it('states the walking transport on a walking hint instead of leaving it open', async () => {
+    const { fetchMock, body } = agentFetch();
+
+    const user = userEvent.setup({ delay: null });
+    render(<Sidebar />);
+
+    await user.click(screen.getByTestId('hint-old-town-castles'));
+    await user.type(askField(), '{Enter}');
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(body(0).profile).toBe('pedestrian');
   });
 
   it('sends the time budget the tourist picked', async () => {
@@ -1529,13 +1610,7 @@ describe('Sidebar — felt quality', () => {
       expect(tabs.className).toMatch(/pointer-coarse:h-11/);
       expect(tabs.className).toMatch(/pointer-coarse:max-md:h-10/);
     }
-    for (const id of [
-      'old-town',
-      'castles-churches',
-      'food',
-      'evening',
-      'with-children',
-    ]) {
+    for (const [id] of baseHintChips) {
       const chip = screen.getByTestId(`hint-${id}`);
       expect(chip.className).toMatch(/max-md:h-10/);
       expect(chip.className).toMatch(/pointer-coarse:max-md:h-10/);
@@ -1544,7 +1619,7 @@ describe('Sidebar — felt quality', () => {
     expect(screen.getByTestId('mode-plan').className).toMatch(
       /pointer-coarse:h-11/
     );
-    expect(screen.getByTestId('hint-old-town').className).toMatch(
+    expect(screen.getByTestId('hint-old-town-castles').className).toMatch(
       /pointer-coarse:h-11/
     );
   });
