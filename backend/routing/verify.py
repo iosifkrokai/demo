@@ -59,6 +59,10 @@ REASON_OPEN_CLOSED = "closed_at_visit"
 REASON_OPEN_UNKNOWN = "hours_unknown"
 REASON_OPEN_NOT_DATED = "visit_time_unknown"
 
+REASON_STEP_FREE_PROVEN = "step_free_proven"
+REASON_STEPS_ON_ROUTE = "steps_on_route"
+REASON_STEPS_UNKNOWN = "steps_unknown"
+
 REASON_CODE_UNSPECIFIED = "category_code_unspecified"
 REASON_CODE_UNKNOWN = "category_code_unknown"
 
@@ -73,6 +77,28 @@ class ServiceAlongEvidence(NamedTuple):
 
     measured: bool
     by_code: dict[str, list[dict[str, Any]]]
+
+
+class StepsAlong(NamedTuple):
+    """What the catalogue's stairways say about the drawn line.
+
+    ``measured=False`` is the data the code could not consult — a missing line or an
+    unreachable catalogue — and it is ``uncertain``, never ``unmet``.
+    """
+
+    measured: bool
+    steps: list[dict[str, Any]]
+
+
+def steps_evidence(repos: Any, shape: Any) -> StepsAlong:
+    """The stairways the route runs over, or the honest word that they were not read."""
+    if repos is None or not shape:
+        return StepsAlong(measured=False, steps=[])
+    try:
+        answer = repos.places.steps_along(shape)
+    except Exception:
+        return StepsAlong(measured=False, steps=[])
+    return StepsAlong(measured=True, steps=list(answer.get("items") or []))
 
 
 REASON_CODES: frozenset[str] = frozenset(
@@ -101,6 +127,9 @@ REASON_CODES: frozenset[str] = frozenset(
         REASON_OPEN_CLOSED,
         REASON_OPEN_UNKNOWN,
         REASON_OPEN_NOT_DATED,
+        REASON_STEP_FREE_PROVEN,
+        REASON_STEPS_ON_ROUTE,
+        REASON_STEPS_UNKNOWN,
         REASON_CODE_UNSPECIFIED,
         REASON_CODE_UNKNOWN,
         REASON_ROUTE_MISSING,
@@ -130,6 +159,8 @@ REPAIRABLE_REASONS: frozenset[str] = frozenset(
         REASON_FREE_UNKNOWN,
         REASON_OPEN_CLOSED,
         REASON_OPEN_UNKNOWN,
+        REASON_STEPS_ON_ROUTE,
+        REASON_STEPS_UNKNOWN,
     }
 )
 
@@ -486,7 +517,25 @@ def _verify_open(
     _set(r, "satisfied", _ids_of(opened), REASON_OPEN_OK)
 
 
-def verify(
+def _verify_step_free(r: Requirement, steps: StepsAlong | None, route_present: bool) -> None:
+    """Whether the measured line runs over a stairway. The verdict is about the walk's
+    own geometry — ``steps_along`` re-read it — never about the costing option that
+    built it, so a route that still crosses a staircase is ``unmet`` how ever it was asked
+    for. Without the stairway data the answer is ``uncertain``, not a claim.
+    """
+    if not route_present:
+        _set(r, "uncertain", [], REASON_ROUTE_MISSING)
+        return
+    if steps is None or not steps.measured:
+        _set(r, "uncertain", [], REASON_STEPS_UNKNOWN)
+        return
+    if steps.steps:
+        _set(r, "unmet", _ids_of(steps.steps), REASON_STEPS_ON_ROUTE)
+        return
+    _set(r, "satisfied", [], REASON_STEP_FREE_PROVEN)
+
+
+def verify(  # noqa: PLR0913 — the verdict's whole input: route, line, and what was measured
     requirements: TripRequirements,
     plan: Any,
     geometry: Any,
@@ -494,6 +543,7 @@ def verify(
     *,
     facts: CategoryFacts,
     at: datetime | None = None,
+    steps_along: StepsAlong | None = None,
 ) -> list[Requirement]:
     """Statuses are written onto the requirement objects *in place* and the same
     list is returned; every requirement leaves resolved.
@@ -528,6 +578,8 @@ def verify(
             _verify_free(r, stops, route_present, geom_ok)
         elif r.kind == "open":
             _verify_open(r, stops, route_present, geom_ok, at)
+        elif r.kind == "step_free":
+            _verify_step_free(r, steps_along, route_present)
         else:
             _set(r, "uncertain", [], REASON_CODE_UNSPECIFIED)
 
@@ -557,6 +609,8 @@ def verify_catalogue(
             _catalogue_free(r, places, empty=empty)
         elif r.kind == "open":
             _catalogue_open(r, places, empty=empty, at=at)
+        elif r.kind == "step_free":
+            _catalogue_step_free(r)
         elif not r.code:
             _set(r, "uncertain", [], REASON_CODE_UNSPECIFIED)
         elif code is None:
@@ -646,6 +700,13 @@ def _catalogue_open(r: Requirement, places: list[Any], *, empty: bool, at: datet
         _set(r, "uncertain", _ids_of(unknown), REASON_OPEN_UNKNOWN)
         return
     _set(r, "unmet", _ids_of(closed), REASON_OPEN_CLOSED)
+
+
+def _catalogue_step_free(r: Requirement) -> None:
+    """A catalogue is a set of places to choose from; a walk's stairways are not a
+    property of that list, so nothing here can prove the choice step-free.
+    """
+    _set(r, "uncertain", [], REASON_STEPS_UNKNOWN)
 
 
 def _catalogue_avoid(

@@ -533,6 +533,7 @@ def valhalla_order(
     *,
     timeout: float | None = None,
     retries: int | None = None,
+    costing_options: dict[str, Any] | None = None,
 ) -> tuple[list[Candidate], dict[str, Any]]:
     """Let Valhalla order the walk when nothing pins the sequence. Skipped when the
     tourist's own start is known: the engine cannot weigh the leg out of it.
@@ -544,7 +545,11 @@ def valhalla_order(
     coords = [{"lat": c.lat, "lon": c.lon} for c in route]
     try:
         v_order, _, _ = valhalla_optimized_route(
-            coords, costing=problem.costing, timeout=timeout, retries=retries
+            coords,
+            costing=problem.costing,
+            timeout=timeout,
+            retries=retries,
+            costing_options=costing_options,
         )
     except UpstreamUnavailableError:
         return route, info

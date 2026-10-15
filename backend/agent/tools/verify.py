@@ -11,7 +11,7 @@ from agent.schema import PlanningDeps
 from agent.tools import ERR_BAD_ARGUMENT, Remember, ToolAnswer, envelope, fetch
 from routing.models import Requirement, TripRequirements
 from routing.stops import candidate_of
-from routing.verify import overall_status, verify, verify_summary
+from routing.verify import overall_status, steps_evidence, verify, verify_summary
 
 MAX_SPECS_PER_CALL = 20
 
@@ -64,7 +64,8 @@ def check_requirements(  # noqa: PLR0913 — the tool's whole surface, all four 
     contract = requirements_from(requirement_specs)
     contract.unknowns = list(unknowns or [])
     stops = [candidate_of(row, 0.0) for row in (rows or [])]
-    verify(contract, {"route": stops, "trace": {}}, geometry, facts=facts, at=at)
+    steps = steps_evidence(repos, geometry) if contract.of_kind("step_free") else None
+    verify(contract, {"route": stops, "trace": {}}, geometry, facts=facts, at=at, steps_along=steps)
 
     answer = verdicts_of(contract)
     return envelope("check_requirements", answer["verdicts"], provenance) | answer

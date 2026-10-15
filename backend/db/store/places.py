@@ -20,6 +20,9 @@ from db.store.mappers import place_from_row, place_payload
 from db.store.services import (
     DEFAULT_PROFILE,
     MAX_SERVICES,
+    MAX_STEPS_ON_ROUTE,
+    STEP_CATEGORY,
+    STEP_ON_LINE_M,
     empty_answer,
     item_of,
     named_codes,
@@ -344,6 +347,30 @@ class PostgresPlaceRepository(PostgresRepository):
             max_off_line_m,
             limit,
             reason="no_category_codes",
+        )
+
+    def steps_along(
+        self,
+        shape: dict[str, Any],
+        *,
+        profile: str = DEFAULT_PROFILE,
+        max_off_line_m: float | None = None,
+        limit: int = MAX_STEPS_ON_ROUTE,
+    ) -> dict[str, Any]:
+        """Stairways the drawn line runs over — the walk's own geometry, re-read.
+
+        The gate is the measured distance from the line to a stairway's own point, and
+        it is the same line query the services use; a normal walk keeps its stairways
+        off the line, so a hit means the route climbs one.
+        """
+        gate = STEP_ON_LINE_M if max_off_line_m is None else max_off_line_m
+        return self._beside_line(
+            shape,
+            [STEP_CATEGORY],
+            profile,
+            gate,
+            limit,
+            reason="no_stairways",
         )
 
     def services_along(

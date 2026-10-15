@@ -89,6 +89,7 @@ def _route_request(
     language: str,
     timeout: float | None,
     radius: int,
+    costing_options: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     locs = [{**loc, "radius": radius} for loc in locations]
     payload = {
@@ -99,6 +100,8 @@ def _route_request(
         "alternates": 0,
         "directions_options": {"units": "kilometers"},
     }
+    if costing_options:
+        payload["costing_options"] = costing_options
     return http.request_with_retry(
         "GET",
         f"{settings.VALHALLA_URL.rstrip('/')}/route",
@@ -113,6 +116,7 @@ def optimized_route(
     language: str = "ru",
     timeout: float | None = None,
     retries: int | None = None,
+    costing_options: dict[str, Any] | None = None,
 ) -> tuple[list[int], dict[str, Any], dict[str, Any] | None]:
     """Valhalla's own stop ordering: GET /optimized_route."""
     costing = costing_for(costing)
@@ -126,6 +130,8 @@ def optimized_route(
         "language": language,
         "directions_options": {"units": "kilometers"},
     }
+    if costing_options:
+        payload["costing_options"] = costing_options
     body = http.request_with_retry(
         "GET",
         f"{settings.VALHALLA_URL.rstrip('/')}/optimized_route",
@@ -148,6 +154,7 @@ def route_through(
     costing: str = "pedestrian",
     language: str = "ru",
     timeout: float | None = None,
+    costing_options: dict[str, Any] | None = None,
 ) -> RouteResult:
     """Call GET /route. Locations are [{lat, lon, type}], first/last 'break'."""
     costing = costing_for(costing)
@@ -176,7 +183,7 @@ def route_through(
     last_exc: Exception | None = None
     for radius in ROUTE_SNAP_RADII_M:
         try:
-            body = _route_request(locs, costing, language, timeout, radius)
+            body = _route_request(locs, costing, language, timeout, radius, costing_options)
         except UpstreamUnavailableError as exc:
             if not is_route_failure(exc):
                 return RouteResult(
@@ -195,7 +202,9 @@ def route_through(
         if len(subset) < constants.MIN_LEG_POINTS:
             break
         try:
-            body = _route_request(subset, costing, language, timeout, ROUTE_SNAP_RADII_M[-1])
+            body = _route_request(
+                subset, costing, language, timeout, ROUTE_SNAP_RADII_M[-1], costing_options
+            )
         except UpstreamUnavailableError as exc:
             last_exc = exc
             continue

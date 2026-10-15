@@ -117,6 +117,7 @@ class WalkRequest:
     round_trip: bool = False
     must_keep_ids: list[int] | None = None
     locale: str = "ru"
+    step_free: bool = False
 
     def constraints(self, *, keep: list[int] | None = None) -> ResolvedConstraints:
         """This request, as the rules the routing layer reads."""
@@ -177,9 +178,9 @@ class ValidatedPlan(BaseModel):
 ResultMode = Literal["route", "catalogue"]
 
 
-RequirementKind = Literal["must_visit", "service", "interest", "avoid", "free", "open"]
+RequirementKind = Literal["must_visit", "service", "interest", "avoid", "free", "open", "step_free"]
 
-CODE_LESS_KINDS: frozenset[str] = frozenset({"free", "open"})
+CODE_LESS_KINDS: frozenset[str] = frozenset({"free", "open", "step_free"})
 
 REASON_MUST_VISIT_OUTSIDE = "must_visit_outside_coverage"
 

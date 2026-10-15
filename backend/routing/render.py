@@ -21,6 +21,7 @@ def render(
     origin: LatLon | None = None,
     locale: str = "ru",
     round_trip: bool = False,
+    costing_options: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any], str]:
     """Call Valhalla /route. Returns (shape_geojson, summary_dict, status_code)."""
     if len(route) < constants.MIN_LEG_POINTS:
@@ -35,10 +36,12 @@ def render(
             len(locations),
             constants.VALHALLA_MAX_LOCATIONS,
         )
-        return _leg_by_leg(pts, costing, locale)
+        return _leg_by_leg(pts, costing, locale, costing_options)
 
     try:
-        result = route_through(locations, costing=costing, language=locale)
+        result = route_through(
+            locations, costing=costing, language=locale, costing_options=costing_options
+        )
     except UpstreamUnavailableError as exc:
         log.warning("route: /route failed for the whole tour (%s) — trying legs", exc)
         result = None
@@ -54,7 +57,7 @@ def render(
     ):
         return {}, {}, "no_route_exists"
 
-    return _leg_by_leg(pts, costing, locale)
+    return _leg_by_leg(pts, costing, locale, costing_options)
 
 
 def _points(
@@ -94,10 +97,13 @@ def _tour_answer(result: Any, locale: str) -> tuple[dict[str, Any], dict[str, An
 
 
 def _leg_by_leg(
-    pts: list[tuple[float, float]], costing: str, locale: str
+    pts: list[tuple[float, float]],
+    costing: str,
+    locale: str,
+    costing_options: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any], str]:
     """Draw every leg on its own; a tour with no drawable leg is its own status."""
-    shape, summary, leg_status = _render_legs(pts, costing, locale)
+    shape, summary, leg_status = _render_legs(pts, costing, locale, costing_options)
     if leg_status == "usable" and shape.get("coordinates"):
         return shape, summary, "usable"
     log.warning("route: no leg of the tour could be drawn — empty shape")
@@ -118,7 +124,10 @@ def _verify_maneuver_fields(maneuvers: list[dict[str, Any]]) -> list[str]:
 
 
 def _render_legs(
-    pts: list[tuple[float, float]], costing: str, locale: str
+    pts: list[tuple[float, float]],
+    costing: str,
+    locale: str,
+    costing_options: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any], str]:
     """Draw every consecutive pair on its own and keep the legs that route."""
     coords: list[list[float]] = []
@@ -132,7 +141,9 @@ def _render_legs(
             {"lat": b_lat, "lon": b_lon, "type": "break"},
         ]
         try:
-            result = route_through(pair, costing=costing, language=locale)
+            result = route_through(
+                pair, costing=costing, language=locale, costing_options=costing_options
+            )
         except UpstreamUnavailableError:
             continue
 

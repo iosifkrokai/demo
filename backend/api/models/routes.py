@@ -149,10 +149,20 @@ class RouteSummary(BaseModel):
     time_seconds: float | None = None
 
 
+class StepFreeInfo(BaseModel):
+    """What a step-free walk cost, measured against the same stops taken directly."""
+
+    walk_minutes: int
+    without_steps_minutes: int
+    detour_minutes: int
+    length_km: float | None = None
+    without_steps_length_km: float | None = None
+
+
 class RequirementSignal(BaseModel):
     """One requirement as the client renders it — codes only, never prose."""
 
-    kind: Literal["must_visit", "service", "interest", "avoid", "free", "open"]
+    kind: Literal["must_visit", "service", "interest", "avoid", "free", "open", "step_free"]
     strength: Literal["hard", "soft"] = "soft"
     code: str | None = None
     name: str | None = None
@@ -206,6 +216,7 @@ class RouteResponse(BaseModel):
     costing: str | None = None
     changes: RouteChanges | None = None
     alternatives: list[PlannedAlternative] | None = None
+    step_free: StepFreeInfo | None = None
     debug: dict[str, Any] | None = None
 
 

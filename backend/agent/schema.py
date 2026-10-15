@@ -14,7 +14,9 @@ from routing.models import CategoryFacts, LatLon
 if TYPE_CHECKING:
     from db.store.registry import Repositories
 
-RequirementKindL = Literal["must_visit", "service", "interest", "avoid", "free", "open"]
+RequirementKindL = Literal[
+    "must_visit", "service", "interest", "avoid", "free", "open", "step_free"
+]
 StrengthL = Literal["hard", "soft"]
 
 

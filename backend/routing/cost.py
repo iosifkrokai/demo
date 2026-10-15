@@ -6,6 +6,7 @@ import itertools
 import math
 from collections.abc import Collection
 from dataclasses import dataclass
+from typing import Any
 
 from core import constants
 from core.errors import NoRoutePossibleError, UpstreamUnavailableError
@@ -69,14 +70,19 @@ def _measure_anchor(
     coords: list[dict[str, float]],
     costing: str,
     deadline: float | None,
+    costing_options: dict[str, Any] | None = None,
 ) -> OriginAnchor | None:
     """Measure the tourist's own two legs, through the same matrix call as the rest."""
     if origin is None or not coords:
         return None
     point = snap_locations([{"lat": origin.lat, "lon": origin.lon}], costing=costing)
     try:
-        from_origin = time_matrix(point, coords, costing=costing, deadline=deadline)
-        to_origin = time_matrix(coords, point, costing=costing, deadline=deadline)
+        from_origin = time_matrix(
+            point, coords, costing=costing, deadline=deadline, costing_options=costing_options
+        )
+        to_origin = time_matrix(
+            coords, point, costing=costing, deadline=deadline, costing_options=costing_options
+        )
     except UpstreamUnavailableError:
         return None
     if len(from_origin) != 1 or len(from_origin[0]) != len(coords):
@@ -95,6 +101,7 @@ def compute_cost_matrix(
     costing: str,
     facts: CategoryFacts,
     deadline: float | None = None,
+    costing_options: dict[str, Any] | None = None,
 ) -> CostMatrix:
     """Valhalla sources_to_targets + visit times, with sanity pre-filter."""
     if not candidates:
@@ -102,8 +109,10 @@ def compute_cost_matrix(
 
     coords = [{"lat": c.lat, "lon": c.lon} for c in candidates]
     coords = snap_locations(coords, costing=costing)
-    anchor = _measure_anchor(constraints.origin, coords, costing, deadline)
-    matrix = time_matrix(coords, coords, costing=costing, deadline=deadline)
+    anchor = _measure_anchor(constraints.origin, coords, costing, deadline, costing_options)
+    matrix = time_matrix(
+        coords, coords, costing=costing, deadline=deadline, costing_options=costing_options
+    )
 
     if not matrix or len(matrix) != len(candidates):
         raise UpstreamUnavailableError(
@@ -130,7 +139,7 @@ def compute_cost_matrix(
         visits = [visits[i] for i in keep_idx]
         coords = [{"lat": c.lat, "lon": c.lon} for c in candidates]
         coords = snap_locations(coords, costing=costing)
-        matrix = time_matrix(coords, coords, costing=costing)
+        matrix = time_matrix(coords, coords, costing=costing, costing_options=costing_options)
 
     return CostMatrix(
         walk_seconds=matrix,
@@ -352,13 +361,16 @@ def refinement_cost(
     constraints: ResolvedConstraints,
     costing: str,
     facts: CategoryFacts,
+    costing_options: dict[str, Any] | None = None,
 ) -> tuple[list[Candidate], CostMatrix]:
     """Never raises and never drops a stop the user kept: falls back to straight-line
     legs if the pre-filter would remove one.
     """
     base_ids = {c.id for c in route}
     try:
-        cost = compute_cost_matrix(route, constraints, costing, facts)
+        cost = compute_cost_matrix(
+            route, constraints, costing, facts, costing_options=costing_options
+        )
     except (UpstreamUnavailableError, NoRoutePossibleError):
         return route, _synthetic_cost(route, costing, facts, constraints.origin)
 
@@ -381,9 +393,12 @@ def build_cost(
     constraints: ResolvedConstraints,
     costing: str,
     facts: CategoryFacts,
+    costing_options: dict[str, Any] | None = None,
 ) -> tuple[list[Candidate], CostMatrix]:
     """Cost matrix, aligned to the candidates, minus what Valhalla cannot reach."""
-    cost = compute_cost_matrix(candidates, constraints, costing, facts)
+    cost = compute_cost_matrix(
+        candidates, constraints, costing, facts, costing_options=costing_options
+    )
     if cost.indices != list(range(len(candidates))):
         candidates = [candidates[i] for i in cost.indices]
     candidates, cost = drop_unreachable(candidates, cost)

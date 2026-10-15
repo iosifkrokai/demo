@@ -18,6 +18,12 @@ DEFAULT_PROFILE = "pedestrian"
 MAX_SERVICES = 12
 MAX_LINE_POINTS = 2000
 
+STEP_CATEGORY = "лестница"
+
+MAX_STEPS_ON_ROUTE = 50
+
+STEP_ON_LINE_M = 1.0
+
 _PROFILE_ALIASES: dict[str, str] = {
     "pedestrian": "pedestrian",
     "bicycle": "bicycle",

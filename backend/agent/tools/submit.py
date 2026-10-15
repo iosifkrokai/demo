@@ -11,7 +11,12 @@ from agent.tools.plan import plan_walk
 from agent.tools.verify import verdicts_of
 from routing.models import TripRequirements, WalkRequest
 from routing.stops import candidate_of
-from routing.verify import ServiceAlongEvidence, verify, verify_catalogue
+from routing.verify import (
+    ServiceAlongEvidence,
+    steps_evidence,
+    verify,
+    verify_catalogue,
+)
 
 MAX_SERVICES_MEASURED = 24
 
@@ -128,6 +133,7 @@ def submit_plan(
         _evidence(repos, contract, shape),
         facts=facts,
         at=contract.at,
+        steps_along=steps_evidence(repos, shape),
     )
     answer = verdicts_of(contract)
 
@@ -146,5 +152,6 @@ def submit_plan(
         "total_minutes": measured["total_minutes"],
         "fits_budget": measured["fits_budget"],
         "shape": measured.get("shape"),
+        "step_free": measured.get("step_free"),
         **answer,
     }

@@ -33,12 +33,15 @@ const KNOWN_REASONS: readonly PlanRequirementReason[] = [
   'closed_at_visit',
   'hours_unknown',
   'visit_time_unknown',
+  'step_free_proven',
+  'steps_on_route',
+  'steps_unknown',
   'route_missing',
   'geometry_missing',
 ];
 
-/** The two kinds that carry no code: a fact about the stop, not a category. */
-const KIND_LABELS: readonly string[] = ['free', 'open'];
+/** The kinds that carry no code: a fact about the walk, not a category. */
+const KIND_LABELS: readonly string[] = ['free', 'open', 'step_free'];
 
 /** The reason as a short label; the code itself is never shown to the tourist. */
 const reasonLabel = (

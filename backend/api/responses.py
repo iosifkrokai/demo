@@ -24,6 +24,7 @@ from api.models.routes import (
     RouteChanges,
     RouteResponse,
     RouteSummary,
+    StepFreeInfo,
 )
 from core import constants
 from core.errors import NoRoutePossibleError, UpstreamUnavailableError
@@ -226,6 +227,40 @@ def alternatives_sentence(offers: list[PlannedAlternative], walk_s: float) -> st
     )
 
 
+def _span(minutes: int) -> str:
+    """Minutes as the panel spells a duration."""
+    hours, mins = divmod(int(minutes), 60)
+    if not hours:
+        return f"{mins} мин"
+    return f"{hours} ч {mins} мин" if mins else f"{hours} ч"
+
+
+def step_free_info(measured: dict[str, Any]) -> StepFreeInfo | None:
+    """The measured price of a step-free detour, when one was asked for and taken."""
+    raw = measured.get("step_free")
+    if not isinstance(raw, dict):
+        return None
+    return StepFreeInfo(
+        walk_minutes=int(raw.get("walk_minutes") or 0),
+        without_steps_minutes=int(raw.get("without_steps_minutes") or 0),
+        detour_minutes=int(raw.get("detour_minutes") or 0),
+        length_km=raw.get("length_km"),
+        without_steps_length_km=raw.get("without_steps_length_km"),
+    )
+
+
+def step_free_sentence(info: StepFreeInfo) -> str:
+    """The detour's price in the request's language: a step-free claim is only honest
+    with what the detour cost shown beside it.
+    """
+    here = _span(info.walk_minutes)
+    plain = _span(info.without_steps_minutes)
+    if info.length_km is not None and info.without_steps_length_km is not None:
+        here = f"{here} / {info.length_km:.1f} км"
+        plain = f"{plain} / {info.without_steps_length_km:.1f} км"
+    return f"Без лестниц путь длиннее: около {here} в обход, против {plain} по обычному маршруту."
+
+
 def render_tour(
     route: list[Candidate],
     *,
@@ -281,6 +316,11 @@ def route_response(
     if offers and narrative:
         narrative = f"{narrative}\n\n{alternatives_sentence(offers, walk_s)}"
 
+    step_free = step_free_info(measured)
+    if step_free is not None and step_free.detour_minutes > 0:
+        sentence = step_free_sentence(step_free)
+        narrative = f"{narrative}\n\n{sentence}" if narrative else sentence
+
     points = to_places(route, facts)
 
     return RouteResponse(
@@ -301,6 +341,7 @@ def route_response(
         interpretation=interpretation(contract, outcome.status),
         costing=costing,
         changes=route_changes(previous or (), points),
+        step_free=step_free,
         debug={
             "requirements_source": contract.source,
             "problems": outcome.problems,

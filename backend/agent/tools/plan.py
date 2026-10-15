@@ -24,7 +24,7 @@ from routing.models import Candidate, CategoryFacts, LatLon, WalkProblem, WalkRe
 from routing.optimize import optimize, order_after_prune, prune_unroutable, valhalla_order
 from routing.render import render
 from routing.stops import candidate_of
-from routing.valhalla.constants import costing_for
+from routing.valhalla.constants import costing_for, costing_options_for
 from routing.validate import validate
 
 MAX_STOPS_PER_CALL = constants.VALHALLA_MAX_LOCATIONS
@@ -46,6 +46,7 @@ def _measure_key(request: WalkRequest, *, data_version: str, regime: str = "orde
             where,
             request.locale,
             keep,
+            "steps" if request.step_free else "any_step",
             regime,
         )
     )
@@ -132,6 +133,7 @@ def measure_candidates(
     dropped here unless the request asked for it by name, and the drop is reported.
     """
     costing = costing_for(request.profile)
+    options = costing_options_for(request.profile, request.step_free)
     provenance = setup.provenance
     present = {c.id for c in candidates}
     missing = [i for i in request.stop_ids if i not in present]
@@ -147,9 +149,13 @@ def measure_candidates(
 
     try:
         if keep:
-            candidates, cost = refinement_cost(candidates, constraints, costing, taxonomy)
+            candidates, cost = refinement_cost(
+                candidates, constraints, costing, taxonomy, costing_options=options
+            )
         else:
-            candidates, cost = build_cost(candidates, constraints, costing, taxonomy)
+            candidates, cost = build_cost(
+                candidates, constraints, costing, taxonomy, costing_options=options
+            )
         problem = WalkProblem(candidates, cost, constraints, costing)
         if setup.preserve_order:
             info = {"algorithm": "as_sent", "order": list(range(len(candidates)))}
@@ -166,6 +172,7 @@ def measure_candidates(
                 problem,
                 timeout=constants.VALHALLA_ORDER_TIMEOUT_S,
                 retries=constants.VALHALLA_ORDER_RETRIES,
+                costing_options=options,
             )
         planned = len(route)
         route, prune_report = prune_unroutable(route, candidates, cost, constraints.must_visit_ids)
@@ -180,7 +187,7 @@ def measure_candidates(
         )
         return envelope("plan_walk", [], provenance, error="no_route", message=message)
 
-    shape, summary = _drawn(route, request, costing, provenance)
+    shape, summary = _drawn(route, request, costing, provenance, options)
     visits = {c.id: v for c, v in zip(candidates, cost.visit_minutes, strict=False)}
     stops = [_stop(card, visits.get(card.id) or 0) for card in plan.route]
     provenance["algorithm"] = info.get("algorithm")
@@ -219,6 +226,7 @@ def plan_walk(
         "profile": costing,
         "round_trip": request.round_trip,
         "budget_minutes": request.budget_minutes,
+        "step_free": request.step_free,
         "result_cap": MAX_STOPS_PER_CALL,
     }
 
@@ -266,13 +274,39 @@ def plan_walk(
         request,
         MeasureSetup(repos=repos, provenance=provenance, facts=facts, deadline_s=deadline_s),
     )
+    if request.step_free and answer.get("error") is None and answer.get("results"):
+        baseline = measure_candidates(
+            candidates,
+            replace(request, step_free=False),
+            MeasureSetup(repos=repos, provenance={}, facts=facts, deadline_s=deadline_s),
+        )
+        if baseline.get("error") is None and baseline.get("results"):
+            answer["step_free"] = _step_free_price(answer, baseline)
     if answer.get("error") is None and answer.get("results"):
         cache.MEASURE_CACHE.put(key, answer)
     return answer
 
 
+def _step_free_price(step_free: dict[str, Any], baseline: dict[str, Any]) -> dict[str, Any]:
+    """What the step-free walk cost, measured against the same stops taken directly."""
+    here = int(step_free.get("walk_minutes") or 0)
+    plain = int(baseline.get("walk_minutes") or 0)
+    return {
+        "requested": True,
+        "walk_minutes": here,
+        "without_steps_minutes": plain,
+        "detour_minutes": max(0, here - plain),
+        "length_km": step_free.get("length_km"),
+        "without_steps_length_km": baseline.get("length_km"),
+    }
+
+
 def _drawn(
-    route: list[Any], request: WalkRequest, costing: str, provenance: dict[str, Any]
+    route: list[Any],
+    request: WalkRequest,
+    costing: str,
+    provenance: dict[str, Any],
+    costing_options: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Ask Valhalla to draw the walk; a service that cannot is not a failed plan."""
     try:
@@ -282,6 +316,7 @@ def _drawn(
             origin=request.origin,
             locale=request.locale,
             round_trip=request.round_trip,
+            costing_options=costing_options,
         )
     except UpstreamUnavailableError:
         provenance["geometry"] = "valhalla unavailable"
@@ -316,7 +351,7 @@ def register_plan_walk(agent: Any, _remember: Remember) -> None:
     """Advertise ``plan_walk`` to the agent."""
 
     @agent.tool(name="plan_walk")
-    def _plan_walk(
+    def _plan_walk(  # noqa: PLR0913 — the tool's whole surface, stops plus the levers
         ctx: RunContext[PlanningDeps],
         stop_ids: list[int],
         *,
@@ -324,6 +359,7 @@ def register_plan_walk(agent: Any, _remember: Remember) -> None:
         profile: str = "pedestrian",
         round_trip: bool = False,
         must_keep_ids: list[int] | None = None,
+        step_free: bool = False,
     ) -> ToolAnswer:
         """Order chosen stops into the shortest feasible walk and measure it."""
         return plan_walk(
@@ -335,6 +371,7 @@ def register_plan_walk(agent: Any, _remember: Remember) -> None:
                 round_trip=round_trip,
                 must_keep_ids=must_keep_ids,
                 locale=ctx.deps.locale,
+                step_free=step_free,
             ),
             repos=ctx.deps.repos,
             facts=ctx.deps.facts,

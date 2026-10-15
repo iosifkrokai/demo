@@ -240,6 +240,7 @@ def _measured(
             round_trip=submission.round_trip or brief.round_trip,
             must_keep_ids=keep,
             locale=brief.locale,
+            step_free=bool(contract.of_kind("step_free")),
         ),
         submission,
         repos=deps.repos,

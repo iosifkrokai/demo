@@ -286,6 +286,15 @@ export interface AgentBudget {
 /** What the planner managed with the request — or that it is still working. */
 export type RoutePlanStatus = 'ready' | 'degraded' | 'infeasible' | 'pending';
 
+/** What a step-free walk cost, measured against the same stops taken directly. */
+export interface StepFreeInfo {
+  walk_minutes: number;
+  without_steps_minutes: number;
+  detour_minutes: number;
+  length_km?: number | null;
+  without_steps_length_km?: number | null;
+}
+
 /** Why a requirement went unmet. */
 export type PlanRequirementReason =
   | 'must_visit_on_route'
@@ -307,6 +316,9 @@ export type PlanRequirementReason =
   | 'closed_at_visit'
   | 'hours_unknown'
   | 'visit_time_unknown'
+  | 'step_free_proven'
+  | 'steps_on_route'
+  | 'steps_unknown'
   | 'route_missing'
   | 'geometry_missing';
 
@@ -341,6 +353,8 @@ export interface AgentRouteResponse {
   shape?: GeoLineString | null;
   summary?: { length_km?: number | null; time_seconds?: number | null };
   status?: RoutePlanStatus;
+  /** The measured price of a step-free detour, present only when one was taken. */
+  step_free?: StepFreeInfo | null;
   interpretation?: PlanInterpretation;
 }
 

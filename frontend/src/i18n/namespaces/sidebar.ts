@@ -210,12 +210,16 @@ export const sidebarArea = {
           closed_at_visit: 'в это время остановка закрыта',
           hours_unknown: 'часы работы не указаны в данных',
           visit_time_unknown: 'время прогулки не названо',
+          step_free_proven: 'на пути нет лестниц',
+          steps_on_route: 'на маршруте есть лестницы',
+          steps_unknown: 'лестницы не удалось проверить',
           route_missing: 'маршрут не построен',
           geometry_missing: 'нет геометрии маршрута',
         },
         kind: {
           free: 'бесплатный вход',
           open: 'открыто в это время',
+          step_free: 'без лестниц',
         },
       },
       geo: {
@@ -461,12 +465,16 @@ export const sidebarArea = {
           closed_at_visit: 'a stop is closed at that hour',
           hours_unknown: 'the data states no opening hours',
           visit_time_unknown: 'the walk has no stated time',
+          step_free_proven: 'no stairs on the route',
+          steps_on_route: 'the route crosses stairs',
+          steps_unknown: 'the stairs could not be checked',
           route_missing: 'no route was built',
           geometry_missing: 'no route geometry',
         },
         kind: {
           free: 'free admission',
           open: 'open at the time',
+          step_free: 'step-free',
         },
       },
       geo: {
