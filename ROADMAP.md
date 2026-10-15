@@ -7,15 +7,11 @@ Nothing that is built is listed here: a closed entry leaves the file, and what c
 the commit that did the work. The list is renumbered after every pass, so numbers are dense
 and an entry's number does not survive it.
 
-Every entry below was checked against the working tree on 2026-10-14, except 6 and 7, which
-the 2026-10-15 measurements left. Of the seven, 2 is **decided** (the column stays empty) and
-4 has a decided *no* (elevation is not worth four hours of download for a question nobody
-asks), so both stay listed only as the record of a measurement. Entries 1 and 3 wait on one
-outside thing, the administration's reply — 3 because its premise was measured away on
-2026-10-14. Entry 5 is measured and split: seven rows are a mechanism, fifty-two are
-editorial. Entry 6 is what the curated layer's five live runs left: the leg it was parked on
-is gone with the coordinates, and the ceiling it meets is the planner's own. Nothing below is
-work in hand.
+Every entry below was checked against the working tree on 2026-10-15. Of the four, 2 is
+**decided** (the column stays empty) and 4 has a decided *no* (elevation is not worth four
+hours of download for a question nobody asks), so both stay listed only as the record of a
+measurement. Entries 1 and 3 wait on one outside thing, the administration's reply — 3
+because its premise was measured away on 2026-10-14. Nothing below is work in hand.
 
 ## 1. Authoritative data from the administration
 
@@ -116,77 +112,3 @@ bucket served **459 KB in 25 s (18 KB/s)** — roughly **50 minutes** of downloa
 oblast, **4 hours** for the country, plus a tile rebuild and a valhalla restart with no
 routing while it runs. Measured and declined (2026-10-14): not worth it for a product that
 asks no hill question, and the ТЗ must not ask one either.
-
-## 5. The curated overlay reaches 17 of its 76 names
-
-`places_curated.csv` holds 76 rows, and each reaches its target by name and nothing else —
-the CSV carries no coordinate and no id. Applied on 2026-10-14: **17 matched, 58 matched
-nothing at all** («Здание доминиканской школы», «Дом офицеров», «Домовая церковь Коложской
-иконы Божией Матери» — prose written for a data vintage the sets no longer hold), and one
-was refused as **ambiguous**: «Еврейское кладбище» is three cemeteries 70 to 190 km apart,
-so `datasets.match_place` reports the name instead of putting one city's text on another's
-grave. («Дом-музей Элизы Ожешко» and «Свято-Покровский кафедральный собор» resolve to the
-hand-authored row standing beside their OSM twin.)
-
-So three quarters of the curated prose — blurbs, fun facts, links — is written and lands
-nowhere, and every seed says so (`curated: 17 applied of 76, 58 unmatched, 1 ambiguous`).
-
-Measured 2026-10-14, searching the extract itself for every one of the 58 names (nodes and
-ways by `name`/`name:ru`/`name:be`/`old_name` inside the project area, and relations by name
-alone, since relation geometry needs an area file): **6 of the 58 exist in the extract, and
-52 exist nowhere in the data at all** — no relation either. The six are Grodno old-town
-houses the catalogue never took in because nothing about them reads as a sight
-(`way/29130252` «Дом мастера», `way/29125040` «Дом купца Муравьева», `way/29125221` «Дом
-масонов», `way/29125264` «Дом врача Тальгейма», `node/320409660` «Пожарная каланча», and a
-pair of nodes named «Дом офицеров»).
-
-That splits the entry in two, and each half has a different size:
-
-- **7 rows (6 + the ambiguous cemetery) are a mechanism**: the overlay cannot name an OSM
-  object that no dataset holds. A `source_url` column would not be enough on its own — the
-  row the id names does not exist — so this is "let a curated row *bring in* one extract
-  object by id, the way `planner/…` reads what the sets already have". Worth doing only
-  together with the other half, since 7 rows is not a reason to build it.
-- **52 rows are editorial, and no mechanism helps.** «Здание доминиканской школы», «Домовая
-  церковь Коложской иконы Божией Матери», «Главная хоральная синагога» — prose written for
-  a vintage the sets no longer hold, or for objects OSM never mapped. The options are to
-  re-author them against the sets that exist, or to accept the CSV as a record of an older
-  vintage and prune it. Both are editing, not engineering; the seed names the count every
-  run so the silence stays visible until someone decides.
-
-## 6. The curated layer's flake is the planner's tool ceiling, not the map
-
-Re-measured 2026-10-15 with five live `--curated` runs (11 walks each, 55 runs). The leg this
-entry was parked on is gone. No run flagged a leg past the engine's bound and none flagged an
-empty shape, and no hop comes anywhere near the bound: `synagogues-trail`'s longest leg is
-**98.8 km** (Гродно → Лида, then Лида → Слоним 87.9 km; the widest pair, Гродно ↔ Слоним, is
-118.5 km) and `castles-lida-krevo-golshany`'s is 61.9 km. The 210.1 km leg was measured before
-`3256c34` re-laid the region coordinates, and it does not reproduce.
-
-What survives is the agent's own ceiling. Three of the 55 runs answered 503 «the request could
-not be planned», and the agent log names the cause every time — `UsageLimitExceeded: The next
-tool call(s) would exceed the tool_calls_limit of 12 (tool_calls=13)`, i.e. `MAX_TOOL_CALLS`.
-Only one of the three is a regional auto walk (`synagogues-trail`); the other two are city
-walks (`free-old-town`, `four-faiths`), so multi-town geometry is not what the limit catches.
-`castles-lida-krevo-golshany` answered with three stops on all five runs; `synagogues-trail`
-answered four times (all three towns once) and refused once, and its two-stop answers sit
-inside the sibling case's own `min_places=2` (`cases/compliance/synagogues_day.json`), whose
-note already records the same cap.
-
-Neither case wants trimming: both fit the map, and the only ceiling they meet is the planner's.
-So the work is the tool budget on a longer request — the budget `synagogues_day` already drops
-«за день» for. Reported by the 2026-10-15 measurement, so nothing here is silent.
-
-## 7. The fetch window is narrower than the box the data is judged against
-
-`db/seed/overpass.py::DEFAULT_BBOX` (north 54.80) is what `make fetch` asks Overpass for;
-`db/seed/datasets.py::BBOX` (north 55.01) is what the ingest accepts. The widening was
-deliberate — `region:mihalishki-church` stands at 54.814 and a hand-authored row out of box is
-fatal — so the fetch asks for 23 km less latitude than the product claims to cover. Nothing
-committed is wrong with it today (the datasets are files, not a live refetch), but the next
-`make fetch` would not see that far north.
-
-It is the third copy of the same number and the only live one, found 2026-10-15 while deleting
-`GRODNO_BBOX`, the copy nothing read. Aligning the window to the validator is one line and a
-refetch — a decision rather than a task, because a refetch changes which OSM objects the
-datasets would hold.
