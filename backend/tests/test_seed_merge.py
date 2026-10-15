@@ -123,8 +123,9 @@ def test_the_committed_files_merge_exactly_these_pairs() -> None:
         ("osm:node/10572806384", "region:mir-castle"),
         ("osm:way/243087446", "region:lyubcha-castle"),
         ("osm:way/29125014", "city:choral-synagogue"),
+        ("osm:relation/5755161", "region:lida-castle"),
     }
-    assert len(kept) == len(collected["records"]) - 5
+    assert len(kept) == len(collected["records"]) - 6
 
 
 def test_an_alias_shadows_the_automatic_row_that_answers_to_it() -> None:
