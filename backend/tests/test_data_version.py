@@ -48,11 +48,20 @@ def test_the_seed_stamps_a_version_the_planner_reads_back() -> None:
         pytest.skip(f"database not reachable: {type(exc).__name__}")
 
     repo = PostgresDatasetRepository()
+    touchable = False
+    restored: tuple[str, object] | None = None
     try:
         with conn.cursor() as cur:
             cur.execute("SELECT to_regclass('data_versions')")
             if cur.fetchone()[0] is None:
                 pytest.skip("data_versions is not migrated in this database")
+            touchable = True
+
+            cur.execute(
+                "SELECT version, updated_at FROM data_versions WHERE name = %s",
+                (DATA_VERSION_ROW,),
+            )
+            restored = cur.fetchone()
 
             pipeline.record_data_version(conn, "test-digest-1")
             cur.execute(
@@ -76,5 +85,19 @@ def test_the_seed_stamps_a_version_the_planner_reads_back() -> None:
         finally:
             fresh.close()
     finally:
+        if touchable:
+            with conn.cursor() as cur:
+                if restored is None:
+                    cur.execute("DELETE FROM data_versions WHERE name = %s", (DATA_VERSION_ROW,))
+                else:
+                    cur.execute(
+                        """
+                        INSERT INTO data_versions (name, version, updated_at) VALUES (%s, %s, %s)
+                        ON CONFLICT (name) DO UPDATE SET
+                            version = EXCLUDED.version,
+                            updated_at = EXCLUDED.updated_at
+                        """,
+                        (DATA_VERSION_ROW, restored[0], restored[1]),
+                    )
         repo.close()
         conn.close()
