@@ -14,9 +14,15 @@ from typing import Any
 
 import httpx
 
+from .datasets import BBOX
 from .districts import district_at
 
-DEFAULT_BBOX: tuple[float, float, float, float] = (23.35, 52.75, 27.00, 54.80)
+DEFAULT_BBOX: tuple[float, float, float, float] = (
+    BBOX["west"],
+    BBOX["south"],
+    BBOX["east"],
+    BBOX["north"],
+)
 
 OVERPASS_ENDPOINTS = [
     "https://overpass-api.de/api/interpreter",
