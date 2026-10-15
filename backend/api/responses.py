@@ -27,10 +27,9 @@ from api.models.routes import (
     StepFreeInfo,
 )
 from core import constants
-from core.errors import NoRoutePossibleError, UpstreamUnavailableError
+from core.errors import NoRoutePossibleError
 from routing.cost import visit_time_minutes
 from routing.models import Candidate, CategoryFacts, WalkRequest
-from routing.render import render
 from routing.stops import candidate_of
 from routing.valhalla.constants import costing_for
 
@@ -259,26 +258,6 @@ def step_free_sentence(info: StepFreeInfo) -> str:
         here = f"{here} / {info.length_km:.1f} км"
         plain = f"{plain} / {info.without_steps_length_km:.1f} км"
     return f"Без лестниц путь длиннее: около {here} в обход, против {plain} по обычному маршруту."
-
-
-def render_tour(
-    route: list[Candidate],
-    *,
-    costing: str,
-    origin: Any,
-    round_trip: bool = False,
-) -> tuple[dict[str, Any], dict[str, Any]]:
-    """Draw the tour, never failing the request over geometry."""
-    try:
-        shape, summary, status = render(
-            route, costing=costing, origin=origin, round_trip=round_trip
-        )
-        if status != "usable":
-            log.info("render returned status: %s", status)
-        return shape, summary
-    except UpstreamUnavailableError as exc:
-        log.warning("render failed (%s) — answering without geometry", exc)
-        return {}, {}
 
 
 def route_response(

@@ -285,20 +285,6 @@ def answer_from_ranked(
     return StreetAnswer("ok", road.name, dist, None)
 
 
-def answer_for(
-    roads: Iterable[Road],
-    lat: float,
-    lon: float,
-    *,
-    threshold_m: float = STREET_THRESHOLD_M,
-    ambiguity_m: float = STREET_AMBIGUITY_M,
-) -> StreetAnswer:
-    """``answer_from_ranked`` for a set of roads already known to be near the point."""
-    return answer_from_ranked(
-        rank_roads(roads, lat, lon), threshold_m=threshold_m, ambiguity_m=ambiguity_m
-    )
-
-
 def collect_targets(records: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
     """The stop and toilet rows still carrying a generated label with no street hint."""
     targets: list[dict[str, Any]] = []

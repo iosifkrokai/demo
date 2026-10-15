@@ -29,18 +29,9 @@ def test_a_district_centre_stands_in_its_own_district() -> None:
 
 
 def test_a_point_outside_every_boundary_answers_nothing() -> None:
-    from db.seed.districts import distance_to_border_m, district_at
+    from db.seed.districts import district_at
 
     assert district_at(*MINSK) is None
-    assert distance_to_border_m(*MINSK) is None
-
-
-def test_a_point_far_from_a_border_reports_the_distance() -> None:
-    from db.seed.districts import distance_to_border_m
-
-    metres = distance_to_border_m(*LYUBCHA)
-    assert metres is not None
-    assert metres > 1000
 
 
 def test_every_area_that_had_a_shape_withheld_now_has_one() -> None:

@@ -108,23 +108,3 @@ def _segment_distance_m(lat: float, lon: float, start: list[float], end: list[fl
     length = dx * dx + dy * dy
     along = 0.0 if length == 0 else max(0.0, min(1.0, -(ax * dx + ay * dy) / length))
     return math.hypot(ax + along * dx, ay + along * dy)
-
-
-def distance_to_border_m(lat: float, lon: float) -> float | None:
-    """Metres to the nearest border of the polygon that answers :func:`district_at`.
-
-    A point whose border is a few metres away is a point both neighbours can argue about,
-    so the callers that rewrite committed data report those rows instead of deciding alone.
-    """
-    name = district_at(lat, lon)
-    if name is None:
-        return None
-    for district in districts():
-        if district["name_ru"] != name:
-            continue
-        return min(
-            _segment_distance_m(lat, lon, ring[index], ring[index + 1])
-            for ring in _all_rings(district)
-            for index in range(len(ring) - 1)
-        )
-    return None

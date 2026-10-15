@@ -18,8 +18,6 @@ from .districts import district_at
 
 DEFAULT_BBOX: tuple[float, float, float, float] = (23.35, 52.75, 27.00, 54.80)
 
-CACHE_DIR = Path(__file__).resolve().parent.parent / ".cache" / "nominatim"
-
 OVERPASS_ENDPOINTS = [
     "https://overpass-api.de/api/interpreter",
     "https://overpass.kumi.systems/api/interpreter",

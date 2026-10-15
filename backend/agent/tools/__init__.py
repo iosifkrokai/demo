@@ -12,8 +12,6 @@ ERR_EMPTY_QUERY = "empty_query"
 ERR_BAD_ARGUMENT = "bad_argument"
 ERR_NOT_FOUND = "not_found"
 ERR_DB_UNAVAILABLE = "db_unavailable"
-ERR_AREA_REGISTRY = "area_registry_unavailable"
-ERR_NOT_IMPLEMENTED = "not_implemented"
 
 ToolAnswer = dict[str, Any]
 Remember = Callable[[Any, ToolAnswer], ToolAnswer]

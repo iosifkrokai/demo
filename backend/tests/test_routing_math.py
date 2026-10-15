@@ -10,7 +10,7 @@ from pydantic import ValidationError
 
 from core import constants
 from core.errors import UpstreamUnavailableError
-from routing.cost import leg_seconds, route_legs
+from routing.cost import drop_unreachable, leg_seconds, route_legs
 from routing.models import (
     Candidate,
     CostMatrix,
@@ -22,7 +22,7 @@ from routing.models import (
 from routing.optimize import optimize, polish
 from routing.valhalla import constants as valhalla
 from routing.valhalla.matrix import is_route_failure
-from routing.valhalla.types import RouteResult, RouteStatus, is_unknown_time, is_unreachable_time
+from routing.valhalla.types import RouteResult, RouteStatus
 from routing.validate import validate
 
 
@@ -35,17 +35,49 @@ def test_route_status_values_are_the_codes_the_wire_speaks() -> None:
 
 def test_unreachable_time_is_the_alone_sentinel() -> None:
     """Only UNREACHABLE_S costs a stop; a real time never reads as it."""
-    assert is_unreachable_time(float(constants.UNREACHABLE_S)) is True
-    assert is_unreachable_time(0.0) is False
-    assert is_unreachable_time(125.0) is False
+    unreachable = float(constants.UNREACHABLE_S)
+    candidates = [
+        Candidate(id=1, name="один", category="музей", lat=53.68, lon=23.83),
+        Candidate(id=2, name="два", category="музей", lat=53.69, lon=23.84),
+        Candidate(id=3, name="три", category="музей", lat=53.70, lon=23.85),
+    ]
+    matrix = CostMatrix(
+        walk_seconds=[
+            [0.0, 125.0, unreachable],
+            [125.0, 0.0, unreachable],
+            [unreachable, unreachable, 0.0],
+        ],
+        visit_minutes=[10, 10, 10],
+        indices=[0, 1, 2],
+    )
+
+    kept, _ = drop_unreachable(candidates, matrix)
+
+    assert [c.id for c in kept] == [1, 2]
 
 
 def test_unknown_time_is_the_nan_we_could_not_ask_for() -> None:
     """UNKNOWN_S means "not measured" and must not be confused with a real 0.0."""
-    assert math.isnan(constants.UNKNOWN_S)
-    assert is_unknown_time(constants.UNKNOWN_S) is True
-    assert is_unknown_time(0.0) is False
-    assert is_unreachable_time(constants.UNKNOWN_S) is False
+    unknown = constants.UNKNOWN_S
+    assert math.isnan(unknown)
+    candidates = [
+        Candidate(id=1, name="один", category="музей", lat=53.68, lon=23.83),
+        Candidate(id=2, name="два", category="музей", lat=53.69, lon=23.84),
+        Candidate(id=3, name="три", category="музей", lat=53.70, lon=23.85),
+    ]
+    matrix = CostMatrix(
+        walk_seconds=[
+            [0.0, unknown, unknown],
+            [unknown, 0.0, unknown],
+            [unknown, unknown, 0.0],
+        ],
+        visit_minutes=[10, 10, 10],
+        indices=[0, 1, 2],
+    )
+
+    kept, _ = drop_unreachable(candidates, matrix)
+
+    assert [c.id for c in kept] == [1, 2, 3]
 
 
 def test_a_route_result_carries_its_status_and_geometry() -> None:

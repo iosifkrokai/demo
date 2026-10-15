@@ -6,8 +6,6 @@ import math
 
 from routing.models import Candidate
 
-TRACE_NAMES_MAX = 15
-
 
 def distance_m(a: Candidate, b: Candidate) -> float:
     """Equirectangular distance in metres (fine at city scale)."""

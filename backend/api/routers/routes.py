@@ -33,8 +33,6 @@ log = logging.getLogger(__name__)
 
 router = APIRouter(tags=["routes"])
 
-NO_PLAN = "no_plan"
-
 
 def _identity(request: Request) -> str | None:
     """The namespace a run belongs to: the hash of the session that named it."""

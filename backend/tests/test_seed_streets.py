@@ -28,9 +28,11 @@ def _east_west(name: str, *, at_lat: float = LAT, named: bool = True) -> Any:
 
 
 def test_a_point_on_one_named_road_gets_that_street() -> None:
-    from db.seed.streets import answer_for
+    from db.seed.streets import answer_from_ranked, rank_roads
 
-    answer = answer_for([_east_west("Советская улица")], _north(10), LON + 0.001)
+    answer = answer_from_ranked(
+        rank_roads([_east_west("Советская улица")], _north(10), LON + 0.001)
+    )
 
     assert answer.status == "ok"
     assert answer.street == "Советская улица"
@@ -38,10 +40,10 @@ def test_a_point_on_one_named_road_gets_that_street() -> None:
 
 
 def test_a_second_differently_named_road_nearby_is_ambiguous() -> None:
-    from db.seed.streets import answer_for
+    from db.seed.streets import answer_from_ranked, rank_roads
 
     roads = [_east_west("Советская улица"), _east_west("Мира улица", at_lat=_north(30))]
-    answer = answer_for(roads, _north(10), LON + 0.001)
+    answer = answer_from_ranked(rank_roads(roads, _north(10), LON + 0.001))
 
     assert answer.status == "ambiguous"
     assert answer.street == "Советская улица"
@@ -51,21 +53,23 @@ def test_a_second_differently_named_road_nearby_is_ambiguous() -> None:
 
 def test_the_same_street_mapped_twice_is_not_ambiguous() -> None:
     """A street split into two ways still answers with one name."""
-    from db.seed.streets import answer_for
+    from db.seed.streets import answer_from_ranked, rank_roads
 
     roads = [
         _east_west("Советская улица"),
         _east_west("Советская улица", at_lat=_north(30)),
     ]
-    answer = answer_for(roads, _north(10), LON + 0.001)
+    answer = answer_from_ranked(rank_roads(roads, _north(10), LON + 0.001))
 
     assert answer.status == "ok"
 
 
 def test_a_road_number_instead_of_a_name_is_refused() -> None:
-    from db.seed.streets import answer_for
+    from db.seed.streets import answer_from_ranked, rank_roads
 
-    answer = answer_for([_east_west("Р42", named=False)], _north(10), LON + 0.001)
+    answer = answer_from_ranked(
+        rank_roads([_east_west("Р42", named=False)], _north(10), LON + 0.001)
+    )
 
     assert answer.status == "number"
     assert answer.street == "Р42"
@@ -73,33 +77,35 @@ def test_a_road_number_instead_of_a_name_is_refused() -> None:
 
 def test_a_number_road_between_the_point_and_a_named_street_wins() -> None:
     """A stop that sits on a numbered road is not named after the street behind it."""
-    from db.seed.streets import answer_for
+    from db.seed.streets import answer_from_ranked, rank_roads
 
     roads = [
         _east_west("Р42", at_lat=_north(5), named=False),
         _east_west("Советская улица", at_lat=LAT),
     ]
-    answer = answer_for(roads, _north(10), LON + 0.001)
+    answer = answer_from_ranked(rank_roads(roads, _north(10), LON + 0.001))
 
     assert answer.status == "number"
 
 
 def test_a_road_beyond_the_threshold_is_nothing() -> None:
-    from db.seed.streets import answer_for
+    from db.seed.streets import answer_from_ranked, rank_roads
 
-    answer = answer_for([_east_west("Советская улица")], _north(111), LON + 0.001)
+    answer = answer_from_ranked(
+        rank_roads([_east_west("Советская улица")], _north(111), LON + 0.001)
+    )
 
     assert answer.status == "none"
     assert answer.street is None
 
 
 def test_the_answer_does_not_depend_on_the_order_of_the_roads() -> None:
-    from db.seed.streets import answer_for
+    from db.seed.streets import answer_from_ranked, rank_roads
 
     roads = [_east_west("Советская улица"), _east_west("Мира улица", at_lat=_north(30))]
 
-    first = answer_for(roads, _north(10), LON + 0.001)
-    second = answer_for(list(reversed(roads)), _north(10), LON + 0.001)
+    first = answer_from_ranked(rank_roads(roads, _north(10), LON + 0.001))
+    second = answer_from_ranked(rank_roads(list(reversed(roads)), _north(10), LON + 0.001))
 
     assert first == second
 
