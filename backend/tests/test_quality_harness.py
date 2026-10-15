@@ -7,15 +7,22 @@ import os
 
 from agent.tools.places import Where, find_places
 from agent.tools.plan import plan_walk
+from db.seed import cli, datasets as ds_mod, itineraries as itin_mod
 from quality import report as report_mod
 from quality.evals import _load, _service_checks
-from quality.report import read_routes
+from quality.report import read_curated, read_routes
 from quality.runner import (
+    BENCH_CURATED,
+    BENCH_CURATED_OUT,
     OurStop,
+    _check_curated_case,
     _leg_failures,
+    _report_dir,
     duplicate_exceptions,
     find_duplicate_stop_pairs,
+    leg_cap_km,
     leg_sanity,
+    load_curated_routes,
     norm_name,
 )
 from quality.trajectory import _record_args
@@ -160,10 +167,15 @@ def test_a_real_duplicate_still_fails_beside_an_excluded_pair() -> None:
 
 
 def test_the_exception_list_parses_and_names_distinct_pairs() -> None:
-    """The list is a reviewable file: every entry is two distinct normalised names."""
+    """The list is a reviewable file: every entry is two distinct normalised names.
+
+    The count is pinned so a pair cannot be declared without someone seeing the number
+    move: 6 after the 2026-10-14 review, 17 after the curated walks printed eleven more
+    on 2026-10-15.
+    """
     exceptions = duplicate_exceptions()
 
-    assert len(exceptions) == 6
+    assert len(exceptions) == 17
     for entry in exceptions.values():
         assert entry["reason"].strip()
         assert entry["source_urls"]
@@ -180,3 +192,89 @@ def test_the_services_stage_asks_for_the_taxonomy_the_codes_come_from(db_repos) 
 
     membership = next(c for c in checks if c["check"] == "membership_agrees")
     assert membership["ok"] is True, membership["detail"]
+
+
+def test_a_ready_made_walk_is_measured_without_copying_its_stops() -> None:
+    """A curated case is a sidecar plus the itinerary: the stops come from the
+    datasets the seed projects, so a walk and its benchmark cannot disagree."""
+    routes = load_curated_routes()
+    walks = {walk["id"]: walk for walk in itin_mod.load_itineraries()}
+    collected, _shadowed, _stale = cli._collect(ds_mod.default_datasets())
+    places = {r["source_url"]: r for r in collected["records"]}
+
+    assert routes, "the curated set is empty"
+    for route in routes:
+        walk = walks[route.case]
+        assert route.profile == walk["transport"]
+        assert route.budget_minutes > 0
+        assert route.origin == (route.stops[0].lat, route.stops[0].lon)
+        for stop, key in zip(route.stops, walk["stops"], strict=True):
+            assert (stop.lat, stop.lon) == (places[key]["lat"], places[key]["lon"])
+
+
+def test_a_sidecar_carrying_what_nothing_reads_is_refused(tmp_path) -> None:
+    """The file holds the query and the budget; a field the loader ignores would
+    sit there looking like it did something."""
+    case = tmp_path / "old-town-castles.json"
+    good = {"id": "old-town-castles", "query_ru": "Гродно", "budget_minutes": 120}
+    assert _check_curated_case(good, case) == []
+
+    assert _check_curated_case({**good, "note": "ok", "profile": "auto"}, case) == [
+        f"{case}: unknown key 'profile'"
+    ]
+    assert _check_curated_case({**good, "id": "other"}, case) == [
+        f"{case}: id must be 'old-town-castles', not 'other'"
+    ]
+    assert _check_curated_case({**good, "budget_minutes": 600}, case) == [
+        f"{case}: budget_minutes must be an int in 1..480"
+    ]
+    assert _check_curated_case({k: v for k, v in good.items() if k != "query_ru"}, case) == [
+        f"{case}: missing key 'query_ru'"
+    ]
+
+
+def test_a_curated_run_is_filed_under_the_cases_it_measured(monkeypatch, tmp_path) -> None:
+    """A report names its own set: a curated run must not overwrite the benchmark
+    walks' numbers under the benchmark walks' name."""
+
+    class Args:
+        report_dir = None
+
+    assert _report_dir(Args(), tmp_path, ["old-town-castles"]) == BENCH_CURATED_OUT
+    assert _report_dir(Args(), tmp_path, ["grodno_old_town"]) == tmp_path
+    assert BENCH_CURATED.name == "curated"
+
+
+def test_the_leg_cap_follows_the_transport() -> None:
+    """5 km on foot is a defect by bicycle and no defect at all by car."""
+    stops = [
+        OurStop(name="Лида", lat=53.8872, lon=25.3028),
+        OurStop(name="Крево", lat=54.3093, lon=26.2825),
+    ]
+
+    assert leg_cap_km("pedestrian") < leg_cap_km("bicycle") < leg_cap_km("auto")
+    assert leg_sanity(stops, {}, {}, "pedestrian").over_cap is True
+    assert leg_sanity(stops, {}, {}, "bicycle").over_cap is True
+    assert leg_sanity(stops, {}, {}, "auto").over_cap is False
+    assert leg_sanity(stops, {}, {}, "auto").max_leg_km_straight > 45.0
+
+
+def test_the_curated_row_reads_the_set_its_report_names(monkeypatch, tmp_path) -> None:
+    """A report carries `cases_dir`, so the one-pager cannot label a curated run as
+    the benchmark walks — or the other way round."""
+    reports = tmp_path / "reports"
+    (reports / "curated").mkdir(parents=True)
+    body = {"overall": {"recall_at_k": {"mean": 0.5}}, "n_runs": 1}
+    curated = reports / "curated" / "report.json"
+    curated.write_text(json.dumps({**body, "cases_dir": "quality/cases/curated"}))
+    routes = reports / "report.json"
+    routes.write_text(json.dumps({**body, "cases_dir": "quality/cases/routes"}))
+
+    monkeypatch.setattr(report_mod, "REPORTS", reports)
+    monkeypatch.setattr(report_mod, "SNAPSHOTS", reports / "snapshots")
+    monkeypatch.setattr(report_mod, "CURATED", curated)
+
+    assert read_routes()["layer"] == "quality/cases/routes"
+    assert read_routes()["source"].endswith("reports/report.json")
+    assert read_curated()["layer"] == "quality/cases/curated"
+    assert read_curated()["measured"] is True
