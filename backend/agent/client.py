@@ -72,7 +72,14 @@ def plan_with_agent(
         return None
 
     deps = _deps(brief, repos, wall_clock_s)
-    first = _attempt(text, brief, deps, wall_clock_s, repair=None)
+    first, failure = _attempt(text, brief, deps, wall_clock_s, repair=None)
+    if first is None and failure == runner.TOOL_BUDGET_FAILURE:
+        left = _remaining_s(deps, wall_clock_s)
+        if left is not None and left < constants.REPAIR_MIN_LEFT_S:
+            log.info("agent_plan: the tool budget went on a run with %.0fs left — no plan", left)
+        else:
+            log.info("agent_plan: the model spent its tool budget — one more pass")
+            first, _failure = _attempt(text, brief, deps, left, repair=_budget_text())
     if first is None or first.refused:
         return first
 
@@ -81,7 +88,7 @@ def plan_with_agent(
         return first
     if on_repair is not None:
         on_repair()
-    second = _attempt(text, brief, deps, _remaining_s(deps, wall_clock_s), repair=note)
+    second, _failure = _attempt(text, brief, deps, _remaining_s(deps, wall_clock_s), repair=note)
     if second is None:
         return first
     return _better(first, second)
@@ -94,19 +101,22 @@ def _attempt(
     wall_clock_s: float | None,
     *,
     repair: str | None,
-) -> AgentOutcome | None:
+) -> tuple[AgentOutcome | None, str | None]:
     """One whole try: the model's answer, its contract, and the code's measurement."""
-    submission = _submission(query, brief, deps, wall_clock_s, repair=repair)
+    submission, failure = _submission(query, brief, deps, wall_clock_s, repair=repair)
     if submission is None:
-        return None
+        return None, failure
     contract = mapping._merge(query, brief, submission, deps.observed_ids, deps.repos)
     contract.at = deps.now
     contract.at_chosen = deps.at_chosen
     if submission.outcome == "refuse":
-        return AgentOutcome(
-            submission=submission, requirements=contract, measured=_refused(submission)
+        return (
+            AgentOutcome(
+                submission=submission, requirements=contract, measured=_refused(submission)
+            ),
+            None,
         )
-    return _measured(brief, deps, submission, contract)
+    return _measured(brief, deps, submission, contract), None
 
 
 def _remaining_s(deps: PlanningDeps, wall_clock_s: float | None) -> float | None:
@@ -136,6 +146,17 @@ def _repair_note(outcome: AgentOutcome, deps: PlanningDeps) -> str | None:
         deps.seconds_left(),
     )
     return _repair_text(failed, outcome.measured, fits is False)
+
+
+def _budget_text() -> str:
+    """The note handed to the pass that runs after one spent more calls than it had."""
+    return (
+        f"Your previous pass was thrown away: it went past the budget of "
+        f"{constants.MAX_TOOL_CALLS} tool calls and no plan was taken from it. This pass is "
+        "the last one, and the whole budget is yours to spend again — one call per "
+        "distinct need, never the same query twice, and whatever stays unverified goes "
+        "into `unknowns` rather than into another call."
+    )
 
 
 def _repair_text(failed: list[Requirement], measured: dict[str, Any], over_budget: bool) -> str:
@@ -211,7 +232,7 @@ def _submission(
     wall_clock_s: float | None,
     *,
     repair: str | None = None,
-) -> PlanSubmission | None:
+) -> tuple[PlanSubmission | None, str | None]:
     """The model's answer, or None with the reason already logged."""
     try:
         submission, failure = runner._run_agent(
@@ -219,10 +240,10 @@ def _submission(
         )
     except Exception as exc:
         log.warning("agent_plan: unexpected failure: %s: %s", type(exc).__name__, exc)
-        return None
+        return None, type(exc).__name__
     if submission is None:
         log.info("agent_plan: no usable submission (%s) — no plan", failure)
-    return submission
+    return submission, failure
 
 
 def _measured(

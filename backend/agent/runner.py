@@ -121,6 +121,9 @@ def _build_agent(model: Any, brief: ReaderBrief, deps: PlanningDeps) -> Any:
     return agent
 
 
+TOOL_BUDGET_FAILURE = "UsageLimitExceeded"
+
+
 def _run_with_timeout(fn: Any, timeout_s: float) -> tuple[Any, str | None]:
     """Run `fn()` with a wall-clock bound. Returns (result, failure_reason)."""
     ex = ThreadPoolExecutor(max_workers=1, thread_name_prefix="agent-plan")
