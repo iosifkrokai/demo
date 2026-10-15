@@ -15,10 +15,10 @@ def _row(source_url: str, lat: float, lon: float, **rest: Any) -> dict[str, Any]
     return {"source_url": source_url, "lat": lat, "lon": lon, "district": "", **rest}
 
 
-def test_a_refetch_keeps_the_district_from_the_previous_snapshot() -> None:
+def test_a_refetch_keeps_the_district_only_where_no_boundary_answers() -> None:
     from db.seed.overpass import fill_districts
 
-    rows = [_row("osm:node/1", 53.10, 25.30)]
+    rows = [_row("osm:node/1", 53.9000, 27.5667)]
     stats = fill_districts(rows, {"osm:node/1": "Слонимский район"})
 
     assert rows[0]["district"] == "Слонимский район"

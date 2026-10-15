@@ -14,6 +14,8 @@ from typing import Any
 
 import httpx
 
+from .districts import district_at
+
 DEFAULT_BBOX: tuple[float, float, float, float] = (23.35, 52.75, 27.00, 54.80)
 
 CACHE_DIR = Path(__file__).resolve().parent.parent / ".cache" / "nominatim"
@@ -126,10 +128,16 @@ def fill_town_names(
 
 
 def resolve_district(lat: float, lon: float, tags: dict[str, str]) -> str:
-    """District: OSM ``addr:district`` when tagged, else the nearest raion centre."""
+    """District: OSM ``addr:district`` when tagged, then the committed boundary, then the
+    nearest raion centre — the last one only for a point outside every boundary we hold.
+    """
     d = tags.get("addr:district", "")
     if d:
         return d.replace(" район", "").strip()
+
+    inside = district_at(lat, lon)
+    if inside:
+        return inside
 
     nearest = min(RAION_CENTRES, key=lambda r: haversine_m(lat, lon, *RAION_CENTRES[r]))
     return f"{nearest} район"
@@ -140,10 +148,12 @@ def fill_districts(
 ) -> dict[str, int]:
     """Give every row a district, offline.
 
-    The Overpass rows carry no ``addr:district`` on these objects, so the previous
-    snapshot is the best evidence available: an exact match on ``source_url`` keeps the
-    district it already had. A genuinely new point falls back to the raion whose centre
-    is nearest.
+    The Overpass rows carry no ``addr:district`` on these objects, so the committed
+    boundary answers first: it is the only source that knows where a border runs, and a
+    snapshot carried from an older fetch may hold the nearest-centre answer that boundary
+    has since corrected. Outside every boundary the previous snapshot is the best evidence
+    left — an exact match on ``source_url`` keeps the district it already had — and a
+    genuinely new point falls back to the raion whose centre is nearest.
 
     A re-fetch that skipped this would write ``district: ""`` over every sight, which is
     why it runs before the file is written. Returns the counts for the fetch report.
@@ -153,11 +163,14 @@ def fill_districts(
     for row in rows:
         if str(row.get("district") or "").strip():
             continue
-        district = known.get(str(row.get("source_url")))
+        lat, lon = float(row["lat"]), float(row["lon"])
+        district = district_at(lat, lon)
         if district:
+            derived += 1
+        elif district := known.get(str(row.get("source_url"))):
             carried += 1
         else:
-            district = resolve_district(float(row["lat"]), float(row["lon"]), {})
+            district = resolve_district(lat, lon, {})
             derived += 1
         row["district"] = district
     return {"carried": carried, "derived": derived}

@@ -70,7 +70,7 @@ COLUMNS = [
     "source_url",
 ]
 
-BBOX = {"south": 52.75, "west": 23.35, "north": 54.80, "east": 27.00}
+BBOX = {"south": 52.75, "west": 23.35, "north": 55.01, "east": 27.00}
 
 SIGHT_TAXONOMY = frozenset(c.code for c in taxonomy.all_categories() if c.role == "sight")
 SERVICE_TAXONOMY = frozenset(c.code for c in taxonomy.all_categories() if c.role == "service")

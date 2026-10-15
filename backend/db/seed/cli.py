@@ -276,7 +276,7 @@ def cmd_fetch(args: argparse.Namespace) -> int:
         print(
             f"[seed] fetch {name}: {len(rows)} rows{note} — district: "
             f"{districts['carried']} kept from the previous snapshot, "
-            f"{districts['derived']} from the nearest raion; town: "
+            f"{districts['derived']} resolved without it; town: "
             f"{towns['translated']} translated, {towns['kept']} left as the source spelled "
             f"them{tail}"
         )
