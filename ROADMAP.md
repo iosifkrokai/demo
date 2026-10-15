@@ -3,22 +3,19 @@
 What is known and deliberately not done. Each entry says what it is, why it is parked,
 and where the evidence lives — so picking one up does not mean rediscovering it.
 
-Every entry below was checked against the working tree on 2026-10-14, and the ten that
-were closed that day — the close-duplicate list, the area that did not narrow a search,
-`place_aliases` unread, the benchmark's coincidence rule, the frontend's missing
-`result_mode`, the English names, the service-only highlighting, the empty requirement
-vocabulary, the names for the unnamed stops, and the empty infrastructure sheet — are in
-§ *Closed* at the bottom. The list is renumbered after every such pass, so numbers are
-dense and an entry's number does not survive it.
+Nothing that is built is listed here: a closed entry leaves the file, and what closed it is
+the commit that did the work. The list is renumbered after every pass, so numbers are dense
+and an entry's number does not survive it.
 
-Of the nine entries below, 2 is **decided** (the column stays empty) and 4 has a decided
-*no* (elevation is not worth four hours of download for a question nobody asks), so both
-stay listed only as the record of a measurement. Entries 1 and 3 wait on one outside thing,
-the administration's reply — 3 because its premise was measured away on 2026-10-14. Entry 5
-is measured and split: seven rows are a mechanism, fifty-two are editorial. Entries 6 to 9
-are what the 2026-10-15 measurements left behind: a settings surface nothing can open, an
-English name a shadowed row loses, a box that disagrees with the box beside it, and two
-curated walks that ask for more than the product gives. Nothing below is work in hand.
+Every entry below was checked against the working tree on 2026-10-14. Of the nine, 2 is
+**decided** (the column stays empty) and 4 has a decided *no* (elevation is not worth four
+hours of download for a question nobody asks), so both stay listed only as the record of a
+measurement. Entries 1 and 3 wait on one outside thing, the administration's reply — 3
+because its premise was measured away on 2026-10-14. Entry 5 is measured and split: seven
+rows are a mechanism, fifty-two are editorial. Entries 6 to 9 are what the 2026-10-15
+measurements left behind: a settings surface nothing can open, an English name a shadowed
+row loses, a box that disagrees with the box beside it, and two curated walks that ask for
+more than the product gives. Nothing below is work in hand.
 
 ## 1. Authoritative data from the administration
 
@@ -227,189 +224,3 @@ So the case asks for something the product refuses: Гродно → Лида �
 leg inside the cap, and «замки Лиды, Крево и Гольшан за день» is close to the same edge.
 That is either a case that wants trimming to what the product serves, or a cap that is wrong
 for a day's drive — a decision, and the second run's numbers are the evidence for it.
-
-## Closed
-
-Dropped from this list on 2026-10-14, and three on 2026-10-15, so nobody re-adds them:
-
-- **the catalogue called things by the wrong name.** Closed 2026-10-15, and it was three
-  defects wearing one coat. `historic=ruins` is a *condition, not a type*, and it decided
-  «замок» for **222 rows** — pillboxes, watermills, a synagogue's ruin, every one of them a
-  castle. `historic=manor` was read as «замок» too, so 47 of the remaining 79 castles by
-  name were manor houses and palaces («Усадебный дом Тызенгаузов», «Дворец Радзивиллов»)
-  while `усадьба` — a category the taxonomy has always had, with `historic=manor` written
-  in its own `osm_tags` column — held nothing. And the natural objects had no category at
-  all: named boulders and cult stones sat in `архитектура`.
-
-  Two categories were added to `taxonomy.csv`, both `sight`, both `highlight=false`:
-  **«укрепление»** (`military=bunker|historic=fort`, aliases форт/бастион/редут/каземат/
-  блиндаж/дот/дзот/бункер/окоп) and **«валун»** (`natural=stone|natural=rock`, alias
-  камень). «крепость» is deliberately *not* claimed by «укрепление»: it is «замок»'s alias,
-  and no measurement separates the two, so the alias would raise `resolve_code`'s
-  "surface form maps to two codes" error rather than settle anything.
-
-  The counts, before → after: **замок 299 → 20**, **архитектура 931 → 903**, укрепление
-  0 → 169, валун 0 → 143, усадьба 0 → 59. Per rule, over the extract (hits / already rows /
-  new): `military=bunker` 56/33/23, `historic=fort` 17/5/12, the fort *name* rule
-  (ДОТ|ДЗОТ|блиндаж|бункер|форт|окоп|оборонит|убежище|опорный пункт) 146/128/18,
-  `historic=ruins` 224/222/2, `natural=stone|rock` 144/116/28.
-
-  Two tails the measurement names rather than hides. The fort rule is carried mostly by the
-  *name*, because OSM states the tags on a minority of objects — so it also catches
-  «Блиндажная» (likely a street) and «Урочище Форт». And `natural=stone` admits OSM's own
-  mis-tags: «Аллея активного долголетия», «Стройвектор», «Лидское Радио 70.3» are «валун»
-  today; a name corroboration would drop about 6 of the 28 additions, and the doctrine
-  prefers the tag, so they stay.
-
-  The mechanism is a new PBF stage (`db/seed/finds.py`) writing two files: a dataset
-  (`places_finds.csv`, 60 rows OSM's Overpass snapshot never held, applied after `osm`) and
-  a sidecar (`place_categories.json`, 427 corrections, `category_source='auto'` rows only,
-  changing the category and its default visit time and nothing else — no rename, no
-  re-embed). The sidecar is what changes a row already held, and that is the lesson worth
-  keeping: **a category in a committed CSV was written at fetch time**, so a mapping fix
-  reaches the database only through the overlay. Regenerating the sidecar also exposed a
-  defect in the stage itself — it read its own dataset as "rows the data already holds",
-  so a second run rewrote `places_finds.csv` empty and the next seed would have pruned 60
-  rows; `held_records` now leaves it out and a second run is byte-identical.
-
-  For the record: the categories work landed inside commit `048eac9` (the shared-index race
-  described under item 4), its own follow-up is `fd7a845`, and the manor and self-reading
-  defects were closed in `52d541d`.
-- **nothing asked the engine to avoid steps, and no verdict said whether the walk climbed
-  one.** Closed 2026-10-15. `step_free` is a requirement kind like `free`/`open` — no code,
-  no name — and the verdict is code re-reading the *measured* route against the catalogue's
-  stairways (`db/store/places.py::steps_along` through the same `_beside_line` query the
-  services use, at a gate of `STEP_ON_LINE_M = 1.0`). The engine is called with
-  `step_penalty=3600` for a step-free pedestrian walk and with nothing for any other
-  costing, and the price of the detour is reported only when the detour actually changed the
-  route.
-
-  The gate is the measurement, not the number: the existing along-route gate of 150 m
-  flagged **40 of 40** measured city route-sets as having a stairway "on" them and
-  `step_penalty` cleared none — it cannot tell *runs over* from *passes by*. At 1.0 m,
-  **12 of those 40** run over a stairway by default and the penalty clears 10 of the 12;
-  1.5 m adds 4 false positives, 2.0 m adds 8, and 1.0 m agrees exactly with Valhalla's own
-  «Take the stairs» maneuver (type 40). The detour is real and priced: way/37560981 goes
-  95 m → **2.02 km** (21×), 67 s → 1432 s through the app's own path.
-
-  Three honest limits, recorded because they shape any revisit. The catalogue holds one
-  point per stairway — the way's bbox centre (`db/seed/steps.py::line_center`) — so the
-  measurement is point-to-line and could miss a stairway crossed away from its centre; the
-  direct primitive is maneuver type 40, which needs no threshold at all, if this is ever
-  redone. A catalogue answer degrades to `uncertain`/`steps_unknown`, since a list of places
-  carries no stair fact, so the kind is route-only in practice. And on the city walks
-  measured the price was often **0** — the default pedestrian route already avoided the
-  stairway — so the 21× figure is a property of routing across that particular stairway, not
-  of typical sight-to-sight walks.
-
-  The trap that made this slow to verify is worth keeping: Valhalla **silently accepts
-  unknown `costing_options`** (`{"nonsense_option": 7}` answered 200 with an identical
-  route), so a tune can only be trusted by comparing routes, never by the status code.
-
-  For the record, since history should not lie: the implementation (22 files) landed inside
-  commit `e1729f2`, whose message is about one CSV column. A shared-index race — one worker
-  staged path-scoped, another committed — and it was left as it is rather than rewritten,
-  because four writers were live in this tree at the time.
-- **names for the unnamed stops.** 1273 stops and 303 toilets carried a generated label
-  because OSM leaves them unnamed, and `addr:street` — which `service_name` already read —
-  is stated on 4 of them. The remaining path, a nearest-street guess, was measured before it
-  was believed: of 1572 targets, 818 sit on a **road number** within 15 m (`Р42`, `М6`,
-  `Н6131` — the failure that made the Nominatim answers mixed) and 501 have no road that
-  close, leaving **210** unambiguous (one named street within 15 m, no differently named
-  street within 40 m), which the seed lays on as «Остановка (улица Адама Мицкевича)» —
-  201 stops and 8 toilets. The ~87% that get nothing are not a gap in the code: there is no
-  street to name them after, and inventing one is what this measurement refuses to do.
-- **the infrastructure sheet was empty.** Three objects against 1557 stairways in the
-  oblast. `places_steps.csv` brings them in from the local extract with the tags OSM states
-  as facts, `role = service` so they are highlighted beside a walk and never a stop of one.
-  Seeding them exposed a second defect with it: the default highlight was "every
-  `role = service` category", so the map would have shown stairs instead of cafés; the
-  default is now a column in `taxonomy.csv` the seed projects. **Crossings are not in and
-  must not be added quietly** — 6953 of them would grow the catalogue by 80% and serve no
-  walk; the ТЗ sheet is not a reason to make them places.
-- **English names had no source.** OSM held them and the 14-column shape had nowhere to put
-  them. `db/seed/aliases_en.py` reads `name:en` out of the local extract by OSM identity and
-  writes a committed sidecar; 295 names land (59 were the row's own name in Latin), and a
-  normal seed loads them into `place_aliases(locale='en')`, which the alias signal already
-  read. «Lida castle» and «Transfiguration Church» reach their rows from an English query
-  alone. Three do not resolve — their OSM rows were shadowed by a hand-authored place, and
-  the Mir castle's English name is one of them, which the seed reports rather than hides.
-- **highlighting along a route was services-only.** `places_along` measures any named
-  category against the line and consults no role; `services_along` stays as the service
-  default the submit path and the evals call. «Что по пути» about museums answers three of
-  them where it used to answer `no_service_categories`.
-- **the planner had no vocabulary for what the catalogue holds.** `RequirementKind` gained
-  `free` and `open`, both decided by code re-reading the measured route: `free` reads
-  `ticket_price` through `core/prices.py::free_entry` (a walk must be free stop by stop — one
-  paid stop is `unmet`, a price nobody wrote down `uncertain` — while a catalogue only has to
-  hold free places), and `open` reads `opening_hours` through `core/hours.py`, a parser for
-  the 509 of 593 rows it understands exactly and `None` for the rest. The moment is an
-  argument (`PlanningDeps.now`), never a clock read inside the verifier, and both kinds are
-  repairable. The `step_free` kind that was *not* closed with it landed the next day, in the
-  entry above.
-- **the close-duplicate list** (`db/data/duplicate_review.md`). Read as a list at last: of the
-  102 pairs closer than 30 m, **4 are one object, 91 two objects, 7 unclear**, and none of
-  them is inside the city of Grodno — so the city-side risk that made this worth reading did
-  not materialise. 79 of the 91 are two stop positions on one road sharing a street or
-  village name, which is the «street and stop on it» case; the rest are the Smorgon line of
-  World War I bunkers, mapped structure by structure. The four one-object pairs (a cemetery
-  node beside its own way, a stop node beside its platform relation, a feature split by a
-  raion border) are the material for a human decision, and a merge is still a hand-authored
-  `place_merges.json` entry — none was made on the strength of this document alone.
-- **an area did not narrow a search, and the registry answered with rows no file held.**
-  `load_areas` wrote the oblast ring onto every row, so `bbox('grodno-old-town')` was the
-  whole voblast; it now writes a polygon only where `areas.json` declares one and deletes the
-  codes it does not declare — 19 rows of older vintages (eighteen `district:<слаг>` from a
-  writer that is nowhere in the tree, one `grodno-voblast` from the `0002` revision) had been
-  resolving before the file's own rows, because `resolve` answers with the first match
-  ordered by `kind, code`.
-- **`place_aliases` was written and never read.** `by_alias` reads it as trigrams, no model
-  needed, and `find_places` ranks it as a fourth signal it reports honestly: «Парк Мир» now
-  reaches «Мирский замок», which no vector signal could bring in.
-- **the benchmark's coincidence rule flagged legitimate neighbours.** The rule is unchanged
-  and the pairs are named in `quality/cases/duplicate_exceptions.json`; a declared pair is
-  still reported, marked `excluded`, with the reason, so the silence is visible. Replayed over
-  the 2026-10-14 snapshot: `duplicate_stop` 6 pairs in 4 of 8 runs → 0, every route metric
-  byte-identical. The 2026-10-15 live run printed **eleven more**, all of them two distinct
-  objects — the four Гродница landmarks of the curated «tyzenhauz-north» (an ensemble row
-  against the church, the theatre and the park inside it, 37–109 m), the three Советская
-  museums (29–103 m, все «музей», name similarity 0.17–0.25), «Старый замок» against
-  «Памятник Витовту» (105 m) and the Августовский canal museum against the lock it explains
-  (70 m). All eleven are declared in the same file, with the two source rows and the reason
-  per pair, and the harness's pin moved 6 → 17 so a declaration cannot pass unseen.
-
-  **The list does not converge, and that is worth knowing before it is read as closed.** The
-  next run of the same two layers — the agent is stochastic, so its routes differ — printed
-  four pairs none of the eleven covered («Музей истории города Гродно» against «Музей истории
-  религии» 72 m; «Памятник Витовту» against the историко-археологический музей 102 m; «Адам
-  Мицкевич» against «Новогрудский замок (руины)» 139 m; and four inside one Шафнагели estate
-  — a barn and the mill 54 m, a gate and a belfry 21 m). They are the same kind of pair, and
-  declaring them is the same judgement. A dense old town will print new ones for as long as
-  the rule stays wide — which the file argues it must, because a radius or a category test
-  misses the real twins it exists to catch. So the count is a running record, not a finish
-  line.
-- **the frontend had no `result_mode`.** A catalogue answer now renders as a list of places —
-  count, one honest line, a card per place — with no line, no budget and no refinement
-  history, and a route answer clears it.
-- **a route could answer `ready` over its budget.** The self-repair attempt is in the tree
-  (`1fada84`): a route the code itself called bad gets one more attempt, with the verdicts
-  handed back to the model. **Measured 2026-10-15** on the live stack: `--golden` scores
-  **1.000 — 16 of 16 units, 14 cases and 2 ru/en parity groups — with `castles_half_day`
-  passing**, and one check the API cannot answer is named rather than assumed
-  (`out_of_region_vilnius:over_budget`: the response carries no total). The same run gives
-  trajectory 5/5, evals 100% over four stages (one known gap visible and not counted), and
-  the two route layers — benchmark Rec@K 0.648 [0.423, 0.821] over 8 cases, curated 0.694
-  [0.518, 0.845] over 11 — against the 2026-09-26 reference 0.711 ± 0.150. `duplicate_stop`
-  was the only defect class either layer printed, and it is declared above.
-- **the curated overlay picking an arbitrary twin.** `match_place` takes the hand-authored
-  row first, then the lowest id, and refuses a name spread over kilometres; the seed resets
-  every `curated` flag before it re-applies them, so a flag left by an earlier run no longer
-  protects a row for ever. What is left of it is item 5.
-- **«недорого» is answerable only through the free/paid flag.** Answerable now: `places.is_free`
-  is written by the seed and shown on the card, and a `free` requirement can constrain a walk.
-  The administration's structured `prices` array is still the richer source, and item 1 is
-  where it arrives.
-- **the catalogue 500 on `result_mode: catalogue`, the three harness lies** (services,
-  trajectory, and the routes layer of the one-page report), **and the Mir/Grodno
-  duplicates.** Fixed; the compliance rate over two runs of a stochastic agent is
-  0.750–0.917.
