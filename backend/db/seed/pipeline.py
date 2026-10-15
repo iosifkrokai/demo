@@ -5,7 +5,7 @@ Every dataset upserts through :func:`upsert_sql`, so the curated guard holds.
 from __future__ import annotations
 
 import json
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from pathlib import Path
 from typing import Any, LiteralString
 
@@ -222,15 +222,41 @@ def apply_curated_rows(conn: psycopg.Connection, curated: list[dict[str, Any]]) 
         }
 
 
+def resolve_alias_place(
+    source_url: str,
+    by_source_url: Mapping[str, int],
+    by_identity: Mapping[str, int],
+) -> int | None:
+    """The place an alias's ``source_url`` names: the row itself, or the survivor that
+    took its identity in ``place_sources`` when a hand-authored row shadowed it.
+    """
+    if source_url in by_source_url:
+        return by_source_url[source_url]
+    src = source_fields(source_url)
+    return by_identity.get(f"{src['provider']}/{src['external_id']}")
+
+
+def _alias_lookups(cur: Any) -> tuple[dict[str, int], dict[str, int]]:
+    """``(place by source_url, place by provider/external_id)`` for the alias stage."""
+    cur.execute("SELECT source_url, id FROM places")
+    by_source_url = {str(url): int(pid) for url, pid in cur.fetchall()}
+    cur.execute("SELECT provider, external_id, place_id FROM place_sources")
+    by_identity = {
+        f"{provider}/{external_id}": int(pid) for provider, external_id, pid in cur.fetchall()
+    }
+    return by_source_url, by_identity
+
+
 def apply_place_aliases(conn: psycopg.Connection, path: Path | None = None) -> dict[str, Any]:
     """Write one alias file's declared names into ``place_aliases``.
 
     The file is the whole truth for the rows it writes: an alias it no longer names is
     deleted, so editing the file is enough. A file that is absent is not a declaration
     and leaves the table alone. The delete is scoped by the file's own name, so the
-    English sidecar and the hand-authored file cannot sweep each other's rows. An alias
-    whose row is not in the database is reported, since the file claiming a place the
-    seed never wrote is a fact worth seeing. The caller commits.
+    English sidecar and the hand-authored file cannot sweep each other's rows. A row the
+    seed shadowed is gone from ``places`` but its identity survives in ``place_sources``,
+    so the alias lands on the survivor; an alias neither finds is reported, since the file
+    claiming a place the seed never wrote is a fact worth seeing. The caller commits.
     """
     source = path or PLACE_ALIASES_JSON
     if not source.is_file():
@@ -241,19 +267,21 @@ def apply_place_aliases(conn: psycopg.Connection, path: Path | None = None) -> d
     written = 0
     with conn.cursor() as cur:
         cur.execute("DELETE FROM place_aliases WHERE source = %s", (label,))
+        by_source_url, by_identity = _alias_lookups(cur)
         for entry in entries:
+            place_id = resolve_alias_place(entry["source_url"], by_source_url, by_identity)
+            if place_id is None:
+                unresolved.append(entry["source_url"])
+                continue
             cur.execute(
                 """
                 INSERT INTO place_aliases (place_id, alias, locale, source)
-                SELECT id, %s, %s, %s FROM places WHERE source_url = %s
+                VALUES (%s, %s, %s, %s)
                 ON CONFLICT (place_id, lower(alias), locale) DO NOTHING
                 """,
-                (entry["alias"], entry["locale"], label, entry["source_url"]),
+                (place_id, entry["alias"], entry["locale"], label),
             )
             written += cur.rowcount
-            cur.execute("SELECT 1 FROM places WHERE source_url = %s", (entry["source_url"],))
-            if cur.fetchone() is None:
-                unresolved.append(entry["source_url"])
     return {"written": written, "declared": len(entries), "unresolved": sorted(set(unresolved))}
 
 

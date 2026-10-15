@@ -140,6 +140,19 @@ def test_the_written_document_reads_back_as_english_aliases(tmp_path: Path) -> N
     ]
 
 
+def test_an_alias_of_a_shadowed_row_resolves_through_the_survivors_source() -> None:
+    """A row the seed shadowed is gone from ``places`` but its identity lives on in
+    ``place_sources``; the English name must land on the survivor, not be dropped."""
+    from db.seed.pipeline import resolve_alias_place
+
+    by_source_url = {"region:mir-castle": 56}
+    by_identity = {"openstreetmap/relation/1579104": 56}
+
+    assert resolve_alias_place("region:mir-castle", by_source_url, by_identity) == 56
+    assert resolve_alias_place("osm:relation/1579104", by_source_url, by_identity) == 56
+    assert resolve_alias_place("osm:relation/9999999", by_source_url, by_identity) is None
+
+
 @pytest.fixture
 def conn() -> Iterator[Any]:
     """A connection to the real schema, or a skip. Everything it does is rolled back."""
@@ -219,3 +232,28 @@ def test_applying_the_english_file_twice_leaves_one_row(conn: Any, tmp_path: Pat
             "SELECT count(*) FROM place_aliases WHERE place_id = %s AND locale = 'en'", (place_id,)
         )
         assert cur.fetchone()[0] == 1
+
+
+def test_an_alias_keyed_on_a_shadowed_row_lands_on_its_survivor(conn: Any, tmp_path: Path) -> None:
+    """The row is gone from ``places`` but its ``place_sources`` identity moved to the
+    survivor, so the English name is attached to the place the visitor belongs in."""
+    from db.seed import pipeline
+
+    shadowed_url = f"osm:relation/{uuid4().int}"
+    survivor = _place(conn, f"test:aliases-en/survivor-{uuid4().hex}")
+    src = pipeline.source_fields(shadowed_url)
+    with conn.cursor() as cur:
+        cur.execute(
+            "INSERT INTO place_sources (place_id, provider, external_id, url) "
+            "VALUES (%s, %s, %s, %s)",
+            (survivor, src["provider"], src["external_id"], src["url"]),
+        )
+
+    path = _alias_file(tmp_path / "place_aliases_en.json", shadowed_url, "Mir Castle")
+    stats = pipeline.apply_place_aliases(conn, path)
+
+    assert stats["written"] == 1
+    assert stats["unresolved"] == []
+    with conn.cursor() as cur:
+        cur.execute("SELECT alias, locale FROM place_aliases WHERE place_id = %s", (survivor,))
+        assert cur.fetchall() == [("Mir Castle", "en")]
