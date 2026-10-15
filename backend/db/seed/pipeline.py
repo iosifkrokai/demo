@@ -26,6 +26,21 @@ PROVIDER_BY_PREFIX = {
 }
 
 
+def stale_embedding(name_expr: str, blurb_expr: str) -> str:
+    """The SQL that drops a row's vector when the text it was built from changes.
+
+    A vector is a projection of ``embeddings.embedded_text`` — the row's name and blurb and
+    nothing else — so a writer that renames a row must clear it in the same statement.
+    Otherwise the row keeps answering to its old name for ever: ``embed_missing`` only ever
+    fills ``NULL``, and it runs after every writer in the seed, so clearing is enough.
+    """
+    return (
+        f"CASE WHEN places.name IS DISTINCT FROM {name_expr} "
+        f"OR places.blurb IS DISTINCT FROM {blurb_expr} "
+        "THEN NULL ELSE places.embedding END"
+    )
+
+
 def upsert_sql() -> LiteralString:
     """INSERT ... ON CONFLICT (source_url) DO UPDATE that respects curation."""
     protected = "places.category_source IN ('curated', 'dataset')"
@@ -37,6 +52,7 @@ def upsert_sql() -> LiteralString:
         f"CASE WHEN {protected} AND EXCLUDED.category_source = 'auto' "
         "THEN places.category_source ELSE EXCLUDED.category_source END"
     )
+    stale = stale_embedding("EXCLUDED.name", "EXCLUDED.blurb")
     return f"""
         INSERT INTO places (name, category, category_source, district, town, lat, lon,
                             blurb, fun_fact, fun_facts, opening_hours, ticket_price,
@@ -55,7 +71,8 @@ def upsert_sql() -> LiteralString:
             opening_hours = EXCLUDED.opening_hours,
             ticket_price = EXCLUDED.ticket_price,
             is_free = EXCLUDED.is_free,
-            visit_minutes = EXCLUDED.visit_minutes, links = EXCLUDED.links
+            visit_minutes = EXCLUDED.visit_minutes, links = EXCLUDED.links,
+            embedding = {stale}
     """
 
 
@@ -170,7 +187,10 @@ def apply_curated_rows(conn: psycopg.Connection, curated: list[dict[str, Any]]) 
                 UPDATE places
                    SET name = %(name)s, category = %(category)s, blurb = %(blurb)s,
                        fun_fact = %(fun_fact)s, fun_facts = %(fun_facts)s,
-                       links = %(links)s, category_source = 'curated'
+                       links = %(links)s, category_source = 'curated',
+                       embedding = """
+                + stale_embedding("%(name)s", "%(blurb)s")
+                + """
                  WHERE id = %(id)s
                 """,
                 dict(row, id=current["id"]),
@@ -455,8 +475,14 @@ def apply_place_streets(conn: psycopg.Connection, path: Path | None = None) -> d
     with conn.cursor() as cur:
         for entry in entries:
             cur.execute(
-                "UPDATE places SET name = %s WHERE source_url = %s AND name = %s",
-                (f"{entry['name']} ({entry['street']})", entry["source_url"], entry["name"]),
+                "UPDATE places SET name = %(named)s, embedding = "
+                + stale_embedding("%(named)s", "places.blurb")
+                + " WHERE source_url = %(url)s AND name = %(label)s",
+                {
+                    "named": f"{entry['name']} ({entry['street']})",
+                    "url": entry["source_url"],
+                    "label": entry["name"],
+                },
             )
             written += cur.rowcount
     return {"written": written, "declared": len(entries)}

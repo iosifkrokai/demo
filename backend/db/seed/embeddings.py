@@ -18,6 +18,16 @@ class PlaceBackfill(Protocol):
     def commit(self) -> None: ...
 
 
+def embedded_text(name: str, blurb: str | None) -> str:
+    """The text a row's vector is a projection of.
+
+    Its two fields are the whole of the staleness rule: a rename or a new blurb makes the
+    stored vector describe a place that no longer exists, and the writers of those two
+    columns clear it (`pipeline.upsert_sql`, the streets overlay, the curated overlay).
+    """
+    return f"{name}. {blurb or ''}"
+
+
 def embed_missing(places: PlaceBackfill, *, batch: int = DB_BATCH) -> int:
     """Embed every row with ``embedding IS NULL``; returns how many were written."""
     pending = places.rows_missing_embedding()
@@ -27,7 +37,7 @@ def embed_missing(places: PlaceBackfill, *, batch: int = DB_BATCH) -> int:
     done = 0
     for i in range(0, len(pending), batch):
         chunk = pending[i : i + batch]
-        texts = [f"{name}. {blurb or ''}" for _, name, blurb in chunk]
+        texts = [embedded_text(name, blurb) for _, name, blurb in chunk]
         vectors = embed_documents(texts)
         for (pid, _, _), vec in zip(chunk, vectors, strict=True):
             places.upsert_embedding(pid, vec)
