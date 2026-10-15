@@ -76,6 +76,7 @@ def _write_registries(conn: Any, *, areas: bool) -> dict[str, Any]:
     )
     written["photos_written"] = pipeline.apply_photos(conn, PHOTOS_DIR)
     written["streets_written"] = pipeline.apply_place_streets(conn)
+    written["categories_overlaid"] = pipeline.apply_place_categories(conn)
     return written
 
 

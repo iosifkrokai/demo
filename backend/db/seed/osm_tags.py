@@ -15,6 +15,11 @@ DEFAULT_VISIT_MINUTES = 20
 _TICKET_TAGS = ("charge", "fee")
 _PUNCTUATION_ONLY = re.compile(r"^[\W_]+$", re.UNICODE)
 
+_FORT_NAME = re.compile(
+    r"\bдот\b|\bдзот\b|блиндаж|бункер|\bфорт\b|окоп|оборонит|убежищ|опорн\w*\s+пункт",
+    re.IGNORECASE,
+)
+
 
 def visit_minutes_for(category: str) -> int:
     """Default visit time (minutes) for a taxonomy category, else the fallback."""
@@ -48,9 +53,11 @@ RAILWAY_CATEGORY = {
 }
 
 # Labels generated for services OSM leaves unnamed. They name a *kind*, not an
-# object: a hundred rows reading «Остановка» are a hundred different stops, so
-# anything looking for one object mapped twice must not read them as evidence
-# (`datasets.find_suspected_duplicates`).
+# object: a hundred rows reading «Остановка» are a hundred different stops, so the
+# duplicate *review* must not read them as evidence of anything
+# (`datasets.find_suspected_duplicates`, whose list would otherwise be flooded).
+# `resolve_twins` still collapses two of a kind standing on top of each other —
+# that is a question of distance, and at five metres the answer is one object.
 FALLBACK_LABEL_BY_CATEGORY = {
     "туалет": "Туалет",
     "остановка транспорта": "Остановка",
@@ -75,19 +82,61 @@ def sight_tag_to_category(tags: dict[str, str]) -> str | None:
     catch-all tags (`tourism=attraction`, `historic=archaeological_site`): reading those
     first put 419 churches, chapels and synagogues into `архитектура`, because OSM tags a
     notable church as an attraction — and «покажи костёлы» then missed them.
+
+    Fortifications come before the named `historic` kinds so a pillbox named as a ruin
+    reads as one, and boulders come after them so a memorial stone stays a памятник. A
+    bare `historic=ruins` is a *condition*, not a type: it is not read here at all and
+    falls through to whatever else the tags say, the boulder predicate included — only
+    what nothing can type reaches the catch-all.
     """
     return (
         _worship_category(tags)
         or _building_category(tags)
+        or _fortification_category(tags)
         or _historic_category(tags.get("historic", ""))
         or _tourism_category(tags.get("tourism", ""))
+        or _boulder_category(tags)
         or _generic_category(tags)
     )
 
 
+def _fortification_category(tags: dict[str, str]) -> str | None:
+    """A fort, pillbox, blindage or trench: the tags OSM states, else the name.
+
+    `military=bunker` and `historic=fort` are the only fortification tags the extract
+    carries in any number, and they are on a minority of the objects — the name is the
+    only evidence a «ДОТ Гродненского УР» or a «Блиндаж 1-ой мировой войны» carries.
+    """
+    if tags.get("military") == "bunker" or tags.get("historic") == "fort":
+        return "укрепление"
+    if _FORT_NAME.search(_source_name(tags)):
+        return "укрепление"
+    return None
+
+
+def _boulder_category(tags: dict[str, str]) -> str | None:
+    """A named boulder or cult stone: OSM's `natural=stone` and `natural=rock`."""
+    if tags.get("natural") in ("stone", "rock"):
+        return "валун"
+    return None
+
+
+def _source_name(tags: dict[str, str]) -> str:
+    """The name the tags carry, in the order `sight_name` prefers it."""
+    for key in ("name:ru", "name", "name:be"):
+        value = (tags.get(key) or "").strip()
+        if value:
+            return value
+    return ""
+
+
 def _historic_category(historic: str) -> str | None:
-    """What the `historic` key alone settles — named kinds only, not the catch-all."""
-    if historic in ("castle", "manor", "ruins"):
+    """What the `historic` key alone settles — named kinds only, not the catch-all.
+
+    A castle in ruins is still a castle, and stays `замок`; `historic=ruins` on its own
+    decides nothing, so a pillbox or a mill's ruin does not become a castle by it.
+    """
+    if historic in ("castle", "manor"):
         return "замок"
     if historic in ("monastery", "monastic_architecture"):
         return "монастырь"
@@ -104,12 +153,17 @@ def _tourism_category(tourism: str) -> str | None:
 
 
 def _generic_category(tags: dict[str, str]) -> str | None:
-    """The two catch-all tags, read last: what is left without a sharper answer.
+    """The catch-all tags, read last: what is left without a sharper answer.
 
-    `tourism=attraction` and `historic=archaeological_site` say "worth seeing", not what
-    the thing is, so every other mapping speaks first and this one only catches the rest.
+    `tourism=attraction`, `historic=archaeological_site` and `historic=ruins` say "worth
+    seeing" or "damaged", not what the thing is, so every other mapping speaks first and
+    this one only catches the rest — a watermill's ruin, a nameless archaeological site.
     """
-    if tags.get("tourism") == "attraction" or tags.get("historic") == "archaeological_site":
+    if (
+        tags.get("tourism") == "attraction"
+        or tags.get("historic") == "archaeological_site"
+        or tags.get("historic") == "ruins"
+    ):
         return "архитектура"
     return None
 

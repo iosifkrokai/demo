@@ -374,6 +374,18 @@ def default_datasets() -> list[Dataset]:
             fatal_invalid=False,
             license="ODbL 1.0 (OpenStreetMap contributors)",
         ),
+        Dataset(
+            "finds",
+            filename="places_finds.csv",
+            prefix="osm:",
+            reader=_read_pipe,
+            validator=validate_osm_sight,
+            normalizer=normalize_osm_sight,
+            category_source=SOURCE_AUTO,
+            fatal_invalid=False,
+            optional=True,
+            license="ODbL 1.0 (OpenStreetMap contributors)",
+        ),
     ]
 
 

@@ -12,7 +12,13 @@ from typing import Any, LiteralString
 import psycopg
 from psycopg import sql
 
-from core.paths import GEO_DIR, PHOTOS_DIR, PLACE_ALIASES_JSON, PLACE_STREETS_JSON
+from core.paths import (
+    GEO_DIR,
+    PHOTOS_DIR,
+    PLACE_ALIASES_JSON,
+    PLACE_CATEGORIES_JSON,
+    PLACE_STREETS_JSON,
+)
 from core.prices import free_entry
 from db.store.datasets import DATA_VERSION_ROW
 
@@ -26,7 +32,7 @@ PROVIDER_BY_PREFIX = {
 }
 
 
-def stale_embedding(name_expr: str, blurb_expr: str) -> str:
+def stale_embedding(name_expr: LiteralString, blurb_expr: LiteralString) -> LiteralString:
     """The SQL that drops a row's vector when the text it was built from changes.
 
     A vector is a projection of ``embeddings.embedded_text`` — the row's name and blurb and
@@ -369,10 +375,15 @@ def load_categories(conn: psycopg.Connection, categories: Iterable[Any]) -> int:
 
 
 def load_itineraries(conn: psycopg.Connection, itineraries: Iterable[Any]) -> int:
-    """Idempotently write the curated walks and their named stops."""
+    """Idempotently write the curated walks and their named stops.
+
+    The file is the registry: a walk it no longer carries is deleted, and its stops
+    with it (the foreign key cascades), so a dropped route cannot stay in the product.
+    """
+    items = list(itineraries)
     written = 0
     with conn.cursor() as cur:
-        for position, item in enumerate(itineraries):
+        for position, item in enumerate(items):
             cur.execute(
                 """
                 INSERT INTO itineraries (id, title, blurb, transport, position)
@@ -397,6 +408,10 @@ def load_itineraries(conn: psycopg.Connection, itineraries: Iterable[Any]) -> in
                     (item["id"], ordinal, source_url),
                 )
             written += 1
+        if items:
+            cur.execute(
+                "DELETE FROM itineraries WHERE id <> ALL(%s)", ([item["id"] for item in items],)
+            )
     return written
 
 
@@ -483,6 +498,34 @@ def apply_place_streets(conn: psycopg.Connection, path: Path | None = None) -> d
                     "url": entry["source_url"],
                     "label": entry["name"],
                 },
+            )
+            written += cur.rowcount
+    return {"written": written, "declared": len(entries)}
+
+
+def apply_place_categories(conn: psycopg.Connection, path: Path | None = None) -> dict[str, Any]:
+    """Overlay the committed ``place_categories.json`` on the OSM rows' categories.
+
+    The dataset upsert writes the snapshot's ``historic=ruins`` category back on every
+    seed, so the re-derived category must be laid on *after* it or the next seed would
+    win it back. Only an automatic row is re-labelled — a curated or dataset category is
+    a human's and the trigger would revert the write — and nothing but the category and
+    its default visit time changes, so no name is renamed and no vector re-embedded. A
+    file that is absent is not a declaration. The caller commits.
+    """
+    from .finds import read_place_category_entries
+
+    source = path or PLACE_CATEGORIES_JSON
+    if not source.is_file():
+        return {"skipped": f"no {source.name}"}
+    entries = read_place_category_entries(source)
+    written = 0
+    with conn.cursor() as cur:
+        for entry in entries:
+            cur.execute(
+                "UPDATE places SET category = %s, visit_minutes = coalesce(%s, visit_minutes) "
+                "WHERE source_url = %s AND category_source = 'auto'",
+                (entry["category"], entry["visit_minutes"], entry["source_url"]),
             )
             written += cur.rowcount
     return {"written": written, "declared": len(entries)}

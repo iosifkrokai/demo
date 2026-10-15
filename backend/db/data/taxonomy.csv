@@ -35,6 +35,8 @@ code,ru,en,role,osm_tags,visit_minutes,aliases_ru,aliases_en,highlight
 архитектура,архитектура,architecture,sight,historic=building|tourism=attraction,20,здание|здания,building,false
 инфраструктура,инфраструктура,infrastructure,sight,man_made=bridge|man_made=tower,10,мост|башня|набережная|шлюз,bridge|tower,false
 кладбище,кладбище,cemetery,sight,landuse=cemetery|amenity=grave_yard,15,некрополь,necropolis,false
+укрепление,укрепление,fortification,sight,military=bunker|historic=fort,15,форт|бастион|редут|каземат|блиндаж|дот|дзот|бункер|окоп,fort|fortification|bunker|pillbox,false
+валун,валун,boulder,sight,natural=stone|natural=rock,10,камень,stone|boulder,false
 кафе,кафе,cafe,service,amenity=cafe|amenity=fast_food,40,кофейня|кофе|кофейни,coffee|coffee shop,true
 ресторан,ресторан,restaurant,service,amenity=restaurant,60,столовая|обед|поесть,dining|canteen,true
 туалет,туалет,toilet,service,amenity=toilets,10,уборная|санузел|ватерклозет,wc|restroom|toilets,true

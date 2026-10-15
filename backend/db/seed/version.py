@@ -14,6 +14,7 @@ VERSIONED_FILES: tuple[str, ...] = (
     "places/places_poi.csv",
     "places/places_curated.csv",
     "places/places_steps.csv",
+    "places/places_finds.csv",
     "taxonomy.csv",
     "itineraries.json",
     "geo/areas.json",
@@ -23,6 +24,7 @@ VERSIONED_FILES: tuple[str, ...] = (
     "place_aliases_en.json",
     "place_merges.json",
     "place_streets.json",
+    "place_categories.json",
 )
 
 _ABSENT = b"<absent>"

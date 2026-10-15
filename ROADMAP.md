@@ -11,12 +11,12 @@ vocabulary, the names for the unnamed stops, and the empty infrastructure sheet 
 § *Closed* at the bottom. The list is renumbered after every such pass, so numbers are
 dense and an entry's number does not survive it.
 
-Of the eight entries below, 3 is **decided** (the column stays empty) and 6 has a decided
+Of the seven entries below, 3 is **decided** (the column stays empty) and 5 has a decided
 *no* (elevation is not worth four hours of download for a question nobody asks), so both
-stay listed only as the record of a measurement. Entries 1 and 5 wait on one outside thing,
-the administration's reply — 5 because its premise was measured away on 2026-10-14. Entry 7
-is measured and split: seven rows are a mechanism, fifty-two are editorial. Entry 8 is a
-decision nobody has made yet. The rest is work (2, 4).
+stay listed only as the record of a measurement. Entries 1 and 4 wait on one outside thing,
+the administration's reply — 4 because its premise was measured away on 2026-10-14. Entry 6
+is measured and split: seven rows are a mechanism, fifty-two are editorial. Entry 7 is a
+decision nobody has made yet. The work in hand is 2.
 
 ## 1. Authoritative data from the administration
 
@@ -76,27 +76,7 @@ The two dead functions that sat here (`is_name_dup`, the Nominatim branch of
 deleted, not parked — pruning is the sweep over the datasets (`pipeline.prune_stale`, with
 `--no-prune` to keep everything), and since 2026-10-14 `load_areas` sweeps the same way.
 
-## 4. Steps can be avoided today; nothing asks the engine to
-
-Valhalla's pedestrian costing takes `step_penalty` and it works. Between the two ends of
-way/37560981 — a 92 m stairway tagged `handrail=yes`, `incline=down` — the route is 95 m by
-default, **2.02 km** with `step_penalty=3600`, and 95 m again with `step_penalty=0`.
-
-Both halves of the obstacle are now smaller. The **data** exists: 1556 stairways are in the
-catalogue since 2026-10-14 (`places_steps.csv`, `highway=steps`, 633 tagged `handrail`, 479
-`ramp`, 464 `step_count`), highlighted beside a route and never a stop of one. The
-**vocabulary** has a shape to copy: `free` and `open` are requirement kinds, and a
-`step_free` one would be the third. What is missing is the verdict — nothing checks the
-route's own edges for steps, so a `step_free` claim would be about the costing option and
-not about the walk — and the promise: a detour can be twenty times longer, so "без лестниц"
-is only honest with its price shown.
-
-Remember one trap before touching costing options: Valhalla **silently accepts unknown
-`costing_options`** — `{"nonsense_option": 7}` answered 200 with the same route. A typo in
-an option name would pass unnoticed, so a tune can only be checked by comparing routes,
-never by the status code.
-
-## 5. Nothing knows whether a place is step-free — and OSM cannot tell it
+## 4. Nothing knows whether a place is step-free — and OSM cannot tell it
 
 The administration's schema asks for accessibility and the catalogue answers nothing, so
 reading OSM's `wheelchair` tag looked like the same shape of task as the stairways: extract
@@ -123,7 +103,7 @@ The source that can carry this is item 1: the administration's schema has an acc
 block, so the fact arrives on the places that matter, with a body behind it. Until then the
 product says nothing about accessibility, and neither should the ТЗ.
 
-## 6. The tiles carry no elevation, so the hill options do nothing
+## 5. The tiles carry no elevation, so the hill options do nothing
 
 `use_hills` and `max_grade` changed no route we tried, a 165 km one included. There are two
 reasons, and the second makes the first moot for a walk:
@@ -153,7 +133,7 @@ oblast, **4 hours** for the country, plus a tile rebuild and a valhalla restart 
 routing while it runs. Measured and declined (2026-10-14): not worth it for a product that
 asks no hill question, and the ТЗ must not ask one either.
 
-## 7. The curated overlay reaches 17 of its 76 names
+## 6. The curated overlay reaches 17 of its 76 names
 
 `places_curated.csv` holds 76 rows, and each reaches its target by name and nothing else —
 the CSV carries no coordinate and no id. Applied on 2026-10-14: **17 matched, 58 matched
@@ -190,7 +170,7 @@ That splits the entry in two, and each half has a different size:
   vintage and prune it. Both are editing, not engineering; the seed names the count every
   run so the silence stays visible until someone decides.
 
-## 8. A settings surface nothing can open
+## 7. A settings surface nothing can open
 
 `frontend/src/components/settings-panel/settings-options.ts` is the Valhalla demo's whole
 parameter catalogue — 1088 lines of Use Hills, Avoid Bad Surface, bicycle_type, truck
@@ -204,16 +184,51 @@ hand-built route still takes its `costing_options` from those defaults
 (`hooks/use-directions-queries.ts` → `filterProfileSettings(profile || 'bicycle', rawSettings)`),
 and that `|| 'bicycle'` is a second oddity — a walking product whose client-side line
 defaults to a cyclist. Either give the product a settings panel (which then has to say
-truthfully what each knob does — item 6 is what happens when nobody checks), or delete the
+truthfully what each knob does — item 5 is what happens when nobody checks), or delete the
 catalogue and let the client route send the one option it actually needs.
 
-Found 2026-10-14 while measuring item 6; nothing depends on it, so it stays until someone
+Found 2026-10-14 while measuring item 5; nothing depends on it, so it stays until someone
 decides which of the two it is.
 
 ## Closed
 
-Dropped from this list on 2026-10-14, so nobody re-adds them:
+Dropped from this list on 2026-10-14, and two on 2026-10-15, so nobody re-adds them:
 
+- **nothing asked the engine to avoid steps, and no verdict said whether the walk climbed
+  one.** Closed 2026-10-15. `step_free` is a requirement kind like `free`/`open` — no code,
+  no name — and the verdict is code re-reading the *measured* route against the catalogue's
+  stairways (`db/store/places.py::steps_along` through the same `_beside_line` query the
+  services use, at a gate of `STEP_ON_LINE_M = 1.0`). The engine is called with
+  `step_penalty=3600` for a step-free pedestrian walk and with nothing for any other
+  costing, and the price of the detour is reported only when the detour actually changed the
+  route.
+
+  The gate is the measurement, not the number: the existing along-route gate of 150 m
+  flagged **40 of 40** measured city route-sets as having a stairway "on" them and
+  `step_penalty` cleared none — it cannot tell *runs over* from *passes by*. At 1.0 m,
+  **12 of those 40** run over a stairway by default and the penalty clears 10 of the 12;
+  1.5 m adds 4 false positives, 2.0 m adds 8, and 1.0 m agrees exactly with Valhalla's own
+  «Take the stairs» maneuver (type 40). The detour is real and priced: way/37560981 goes
+  95 m → **2.02 km** (21×), 67 s → 1432 s through the app's own path.
+
+  Three honest limits, recorded because they shape any revisit. The catalogue holds one
+  point per stairway — the way's bbox centre (`db/seed/steps.py::line_center`) — so the
+  measurement is point-to-line and could miss a stairway crossed away from its centre; the
+  direct primitive is maneuver type 40, which needs no threshold at all, if this is ever
+  redone. A catalogue answer degrades to `uncertain`/`steps_unknown`, since a list of places
+  carries no stair fact, so the kind is route-only in practice. And on the city walks
+  measured the price was often **0** — the default pedestrian route already avoided the
+  stairway — so the 21× figure is a property of routing across that particular stairway, not
+  of typical sight-to-sight walks.
+
+  The trap that made this slow to verify is worth keeping: Valhalla **silently accepts
+  unknown `costing_options`** (`{"nonsense_option": 7}` answered 200 with an identical
+  route), so a tune can only be trusted by comparing routes, never by the status code.
+
+  For the record, since history should not lie: the implementation (22 files) landed inside
+  commit `e1729f2`, whose message is about one CSV column. A shared-index race — one worker
+  staged path-scoped, another committed — and it was left as it is rather than rewritten,
+  because four writers were live in this tree at the time.
 - **names for the unnamed stops.** 1273 stops and 303 toilets carried a generated label
   because OSM leaves them unnamed, and `addr:street` — which `service_name` already read —
   is stated on 4 of them. The remaining path, a nearest-street guess, was measured before it
@@ -249,7 +264,8 @@ Dropped from this list on 2026-10-14, so nobody re-adds them:
   hold free places), and `open` reads `opening_hours` through `core/hours.py`, a parser for
   the 509 of 593 rows it understands exactly and `None` for the rest. The moment is an
   argument (`PlanningDeps.now`), never a clock read inside the verifier, and both kinds are
-  repairable. What is *not* closed with it: a `step_free` kind, which is item 4.
+  repairable. The `step_free` kind that was *not* closed with it landed the next day, in the
+  entry above.
 - **the close-duplicate list** (`db/data/duplicate_review.md`). Read as a list at last: of the
   102 pairs closer than 30 m, **4 are one object, 91 two objects, 7 unclear**, and none of
   them is inside the city of Grodno — so the city-side risk that made this worth reading did
@@ -284,7 +300,7 @@ Dropped from this list on 2026-10-14, so nobody re-adds them:
 - **the curated overlay picking an arbitrary twin.** `match_place` takes the hand-authored
   row first, then the lowest id, and refuses a name spread over kilometres; the seed resets
   every `curated` flag before it re-applies them, so a flag left by an earlier run no longer
-  protects a row for ever. What is left of it is item 7.
+  protects a row for ever. What is left of it is item 6.
 - **«недорого» is answerable only through the free/paid flag.** Answerable now: `places.is_free`
   is written by the seed and shown on the card, and a `free` requirement can constrain a walk.
   The administration's structured `prices` array is still the richer source, and item 1 is
