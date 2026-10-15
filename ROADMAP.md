@@ -11,12 +11,12 @@ vocabulary, the names for the unnamed stops, and the empty infrastructure sheet 
 § *Closed* at the bottom. The list is renumbered after every such pass, so numbers are
 dense and an entry's number does not survive it.
 
-Of the seven entries below, 3 is **decided** (the column stays empty) and 5 has a decided
+Of the six entries below, 2 is **decided** (the column stays empty) and 4 has a decided
 *no* (elevation is not worth four hours of download for a question nobody asks), so both
-stay listed only as the record of a measurement. Entries 1 and 4 wait on one outside thing,
-the administration's reply — 4 because its premise was measured away on 2026-10-14. Entry 6
-is measured and split: seven rows are a mechanism, fifty-two are editorial. Entry 7 is a
-decision nobody has made yet. The work in hand is 2.
+stay listed only as the record of a measurement. Entries 1 and 3 wait on one outside thing,
+the administration's reply — 3 because its premise was measured away on 2026-10-14. Entry 5
+is measured and split: seven rows are a mechanism, fifty-two are editorial. Entry 6 is a
+decision nobody has made yet. Nothing below is work in hand.
 
 ## 1. Authoritative data from the administration
 
@@ -46,22 +46,7 @@ Hours and prices are no longer the obstacle they were: the catalogue has a parse
 (`core/hours.py`) and a fact (`places.is_free`) for both, so an official value has
 somewhere to land and something to compare against.
 
-## 2. `архитектура` still holds things that are not architecture
-
-The mapping order was wrong — the two catch-all tags (`tourism=attraction`,
-`historic=archaeological_site`) were read before worship and church buildings, so 419
-churches, chapels and synagogues sat in `архитектура` and «покажи костёлы» could not find
-them. That is fixed (`sight_tag_to_category`), and the refreshed snapshot shows what it did:
-928 rows in `архитектура` today, against 2070 before the re-fetch.
-
-What is left still contains natural objects — named boulders, trees and springs (126 rows
-match boulder/stone/tree/spring words). The taxonomy has no category for those; `памятник`
-is the nearest, and the choice was parked rather than guessed. A second class sits in the
-same place: the close-duplicate review found nine pairs of «замок» that are World War I
-pillboxes and ДОТы, swept into the castle category by the same tags — the category name is
-the defect there, not the pairing.
-
-## 3. A dead column — decided: it stays empty
+## 2. A dead column — decided: it stays empty
 
 - `places.description` — declared in the schema (`db/models/place.py`) and selected
   (`db/store/columns.py`), never written by the seed and never shown anywhere. **Decision
@@ -76,7 +61,7 @@ The two dead functions that sat here (`is_name_dup`, the Nominatim branch of
 deleted, not parked — pruning is the sweep over the datasets (`pipeline.prune_stale`, with
 `--no-prune` to keep everything), and since 2026-10-14 `load_areas` sweeps the same way.
 
-## 4. Nothing knows whether a place is step-free — and OSM cannot tell it
+## 3. Nothing knows whether a place is step-free — and OSM cannot tell it
 
 The administration's schema asks for accessibility and the catalogue answers nothing, so
 reading OSM's `wheelchair` tag looked like the same shape of task as the stairways: extract
@@ -103,7 +88,7 @@ The source that can carry this is item 1: the administration's schema has an acc
 block, so the fact arrives on the places that matter, with a body behind it. Until then the
 product says nothing about accessibility, and neither should the ТЗ.
 
-## 5. The tiles carry no elevation, so the hill options do nothing
+## 4. The tiles carry no elevation, so the hill options do nothing
 
 `use_hills` and `max_grade` changed no route we tried, a 165 km one included. There are two
 reasons, and the second makes the first moot for a walk:
@@ -133,7 +118,7 @@ oblast, **4 hours** for the country, plus a tile rebuild and a valhalla restart 
 routing while it runs. Measured and declined (2026-10-14): not worth it for a product that
 asks no hill question, and the ТЗ must not ask one either.
 
-## 6. The curated overlay reaches 17 of its 76 names
+## 5. The curated overlay reaches 17 of its 76 names
 
 `places_curated.csv` holds 76 rows, and each reaches its target by name and nothing else —
 the CSV carries no coordinate and no id. Applied on 2026-10-14: **17 matched, 58 matched
@@ -170,7 +155,7 @@ That splits the entry in two, and each half has a different size:
   vintage and prune it. Both are editing, not engineering; the seed names the count every
   run so the silence stays visible until someone decides.
 
-## 7. A settings surface nothing can open
+## 6. A settings surface nothing can open
 
 `frontend/src/components/settings-panel/settings-options.ts` is the Valhalla demo's whole
 parameter catalogue — 1088 lines of Use Hills, Avoid Bad Surface, bicycle_type, truck
@@ -184,16 +169,59 @@ hand-built route still takes its `costing_options` from those defaults
 (`hooks/use-directions-queries.ts` → `filterProfileSettings(profile || 'bicycle', rawSettings)`),
 and that `|| 'bicycle'` is a second oddity — a walking product whose client-side line
 defaults to a cyclist. Either give the product a settings panel (which then has to say
-truthfully what each knob does — item 5 is what happens when nobody checks), or delete the
+truthfully what each knob does — item 4 is what happens when nobody checks), or delete the
 catalogue and let the client route send the one option it actually needs.
 
-Found 2026-10-14 while measuring item 5; nothing depends on it, so it stays until someone
+Found 2026-10-14 while measuring item 4; nothing depends on it, so it stays until someone
 decides which of the two it is.
 
 ## Closed
 
-Dropped from this list on 2026-10-14, and two on 2026-10-15, so nobody re-adds them:
+Dropped from this list on 2026-10-14, and three on 2026-10-15, so nobody re-adds them:
 
+- **the catalogue called things by the wrong name.** Closed 2026-10-15, and it was three
+  defects wearing one coat. `historic=ruins` is a *condition, not a type*, and it decided
+  «замок» for **222 rows** — pillboxes, watermills, a synagogue's ruin, every one of them a
+  castle. `historic=manor` was read as «замок» too, so 47 of the remaining 79 castles by
+  name were manor houses and palaces («Усадебный дом Тызенгаузов», «Дворец Радзивиллов»)
+  while `усадьба` — a category the taxonomy has always had, with `historic=manor` written
+  in its own `osm_tags` column — held nothing. And the natural objects had no category at
+  all: named boulders and cult stones sat in `архитектура`.
+
+  Two categories were added to `taxonomy.csv`, both `sight`, both `highlight=false`:
+  **«укрепление»** (`military=bunker|historic=fort`, aliases форт/бастион/редут/каземат/
+  блиндаж/дот/дзот/бункер/окоп) and **«валун»** (`natural=stone|natural=rock`, alias
+  камень). «крепость» is deliberately *not* claimed by «укрепление»: it is «замок»'s alias,
+  and no measurement separates the two, so the alias would raise `resolve_code`'s
+  "surface form maps to two codes" error rather than settle anything.
+
+  The counts, before → after: **замок 299 → 20**, **архитектура 931 → 903**, укрепление
+  0 → 169, валун 0 → 143, усадьба 0 → 59. Per rule, over the extract (hits / already rows /
+  new): `military=bunker` 56/33/23, `historic=fort` 17/5/12, the fort *name* rule
+  (ДОТ|ДЗОТ|блиндаж|бункер|форт|окоп|оборонит|убежище|опорный пункт) 146/128/18,
+  `historic=ruins` 224/222/2, `natural=stone|rock` 144/116/28.
+
+  Two tails the measurement names rather than hides. The fort rule is carried mostly by the
+  *name*, because OSM states the tags on a minority of objects — so it also catches
+  «Блиндажная» (likely a street) and «Урочище Форт». And `natural=stone` admits OSM's own
+  mis-tags: «Аллея активного долголетия», «Стройвектор», «Лидское Радио 70.3» are «валун»
+  today; a name corroboration would drop about 6 of the 28 additions, and the doctrine
+  prefers the tag, so they stay.
+
+  The mechanism is a new PBF stage (`db/seed/finds.py`) writing two files: a dataset
+  (`places_finds.csv`, 60 rows OSM's Overpass snapshot never held, applied after `osm`) and
+  a sidecar (`place_categories.json`, 427 corrections, `category_source='auto'` rows only,
+  changing the category and its default visit time and nothing else — no rename, no
+  re-embed). The sidecar is what changes a row already held, and that is the lesson worth
+  keeping: **a category in a committed CSV was written at fetch time**, so a mapping fix
+  reaches the database only through the overlay. Regenerating the sidecar also exposed a
+  defect in the stage itself — it read its own dataset as "rows the data already holds",
+  so a second run rewrote `places_finds.csv` empty and the next seed would have pruned 60
+  rows; `held_records` now leaves it out and a second run is byte-identical.
+
+  For the record: the categories work landed inside commit `048eac9` (the shared-index race
+  described under item 4), its own follow-up is `fd7a845`, and the manor and self-reading
+  defects were closed in `52d541d`.
 - **nothing asked the engine to avoid steps, and no verdict said whether the walk climbed
   one.** Closed 2026-10-15. `step_free` is a requirement kind like `free`/`open` — no code,
   no name — and the verdict is code re-reading the *measured* route against the catalogue's
@@ -300,7 +328,7 @@ Dropped from this list on 2026-10-14, and two on 2026-10-15, so nobody re-adds t
 - **the curated overlay picking an arbitrary twin.** `match_place` takes the hand-authored
   row first, then the lowest id, and refuses a name spread over kilometres; the seed resets
   every `curated` flag before it re-applies them, so a flag left by an earlier run no longer
-  protects a row for ever. What is left of it is item 6.
+  protects a row for ever. What is left of it is item 5.
 - **«недорого» is answerable only through the free/paid flag.** Answerable now: `places.is_free`
   is written by the seed and shown on the card, and a `free` requirement can constrain a walk.
   The administration's structured `prices` array is still the richer source, and item 1 is
