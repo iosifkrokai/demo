@@ -2,7 +2,6 @@
 
 import { ApiError, request as agentRequest } from './request';
 import {
-  STORAGE_DOWN_CODES,
   type AccountApiErrorCode,
   type AccountUser,
   type AdminPlaceInput,
@@ -33,10 +32,6 @@ export class AccountApiError extends Error {
     this.status = status;
   }
 }
-
-/** «The server cannot be reached / does not store» — never «the data is gone». */
-export const isStorageDown = (error: unknown): boolean =>
-  error instanceof AccountApiError && STORAGE_DOWN_CODES.includes(error.code);
 
 const KNOWN_CODES: readonly string[] = [
   'storage_unavailable',

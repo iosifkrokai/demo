@@ -8,7 +8,6 @@ import {
   readSimOptions,
   resetSim,
   setSimPath,
-  simSpeed,
   tick,
 } from './geo-sim';
 
@@ -57,7 +56,6 @@ describe('installGeoSim', () => {
 
     expect(installGeoSim('?sim=walk&sim-speed=10')).toBe(true);
     expect(isSimulating()).toBe(true);
-    expect(simSpeed()).toBe(10);
     expect(window.navigator.geolocation).not.toBe(realGeolocation);
   });
 

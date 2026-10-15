@@ -18,7 +18,7 @@ import { searchParamsSchema, isValidTab } from './utils/route-schemas';
 import type { Profile } from './stores/common-store';
 
 const defaultProfile = ((import.meta.env
-  .VITE_DEFAULT_COSTING_MODEL as string) || 'bicycle') as Profile;
+  .VITE_DEFAULT_COSTING_MODEL as string) || 'pedestrian') as Profile;
 
 /** While a lazy route's chunk is fetched: skeleton rows, per DESIGN.md — not a spinner. */
 const RoutePending = () => (
@@ -112,16 +112,7 @@ const activeTabRoute = createRoute({
   component: App,
   validateSearch: zodValidator(searchParamsSchema),
   search: {
-    middlewares: [
-      retainSearchParams([
-        'profile',
-        'style',
-        'use_ferry',
-        'use_highways',
-        'use_tolls',
-        'alternates',
-      ]),
-    ],
+    middlewares: [retainSearchParams(['profile', 'style'])],
   },
   beforeLoad: async (args) => {
     await requireAuth(args);

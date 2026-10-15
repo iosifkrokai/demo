@@ -65,7 +65,6 @@ const mockGetState = vi.hoisted(() =>
   vi.fn((): Record<string, unknown> => mockStoreState)
 );
 const mockNavigate = vi.hoisted(() => vi.fn());
-const mockResetSettings = vi.hoisted(() => vi.fn());
 
 vi.mock('@/hooks/use-directions-queries', () => ({
   useDirectionsQuery: () => ({ refetch: mockRefetch }),
@@ -107,7 +106,6 @@ vi.mock('@/stores/common-store', () => ({
       directionsPanelOpen: true,
       setDirectionsPanelOpen: vi.fn(),
       toggleDirections: vi.fn(),
-      resetSettings: mockResetSettings,
       focus: null,
       guideFix: null,
       guiding: false,
@@ -464,7 +462,6 @@ describe('Sidebar', () => {
     await user.type(askField(), 'костёлы области');
     await user.click(buildButton());
 
-    await waitFor(() => expect(mockResetSettings).toHaveBeenCalledWith('car'));
     await waitFor(() => expect(mockNavigate).toHaveBeenCalled());
     const search = mockNavigate.mock.calls.at(-1)![0].search({});
     expect(search.profile).toBe('car');

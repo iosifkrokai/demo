@@ -195,9 +195,3 @@ export type AccountApiErrorCode =
   | 'network_unavailable'
   | 'bad_response'
   | 'server_error';
-
-/** Codes that mean «the store is unreachable right now» — never a real answer. */
-export const STORAGE_DOWN_CODES: readonly AccountApiErrorCode[] = [
-  'storage_unavailable',
-  'network_unavailable',
-];

@@ -46,25 +46,3 @@ export async function register(): Promise<SWRegistrationResult> {
     return { registered: false, alreadyRegistered: false };
   }
 }
-
-/** Sends SKIP_WAITING to the waiting SW, then reloads the page. */
-export async function applyPendingUpdate(): Promise<void> {
-  const reg = await navigator.serviceWorker.getRegistration();
-  const worker = reg?.waiting;
-
-  if (!worker) return;
-
-  worker.postMessage({ type: 'SKIP_WAITING' });
-
-  await new Promise<void>((resolve) => {
-    navigator.serviceWorker.addEventListener(
-      'controllerchange',
-      () => resolve(),
-      {
-        once: true,
-      }
-    );
-  });
-
-  window.location.reload();
-}

@@ -494,7 +494,6 @@ export const Sidebar = ({
   const manualOrder = useDirectionsStore((s) => s.manualOrder);
   const recalculating = useDirectionsStore((s) => s.recalculating);
 
-  const resetSettings = useCommonStore((s) => s.resetSettings);
   const navigate = useNavigate({ from: '/$activeTab' });
 
   const [query, setQuery] = useState('');
@@ -627,10 +626,9 @@ export const Sidebar = ({
         (o) => o.value === value
       )?.costing;
       setCosting(costing ?? value);
-      resetSettings(value);
       if (replan && changed) recalculate();
     },
-    [recalculate, resetSettings, setCosting, t]
+    [recalculate, setCosting, t]
   );
 
   useEffect(() => {

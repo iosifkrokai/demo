@@ -4,8 +4,6 @@ import { toast } from 'sonner';
 import type {
   ActiveWaypoint,
   ActiveWaypoints,
-  IsochronesRequestParams,
-  Settings,
   ValhallaWarning,
 } from '@/components/types';
 import i18n from '@/i18n';
@@ -13,42 +11,30 @@ import { getBaseUrl } from './base-url';
 
 export const getValhallaUrl = () => getBaseUrl();
 
-export const buildLocateRequest = (
-  latLng: { lat: number; lng: number },
-  profile: Profile
-) => {
-  let valhalla_profile = profile;
-  if (profile === 'car') {
-    valhalla_profile = 'auto';
-  }
-  return {
-    costing: valhalla_profile,
-    locations: [{ lat: latLng.lat, lon: latLng.lng }],
+/** The costing tune the client's own line is drawn with: only the options that move it. */
+const CLIENT_COSTING_OPTIONS: Partial<Record<Profile, Record<string, number>>> =
+  {
+    pedestrian: {
+      step_penalty: 0,
+      service_penalty: 15,
+      use_tracks: 0,
+      use_living_streets: 0.5,
+      destination_only_penalty: 300,
+    },
+    bicycle: {
+      cycling_speed: 20,
+      use_roads: 0.5,
+    },
   };
-};
-
-export const buildHeightRequest = (latLngs: [number, number][]) => {
-  const shape = [];
-  for (const latLng of latLngs) {
-    shape.push({ lat: latLng[0], lon: latLng[1] });
-  }
-  return {
-    range: latLngs.length > 1,
-    shape,
-    id: 'valhalla_height',
-  };
-};
 
 export const buildDirectionsRequest = ({
   profile,
   activeWaypoints,
-  settings,
   dateTime,
   language,
 }: {
   profile: Profile;
   activeWaypoints: ActiveWaypoints;
-  settings: Settings;
   dateTime: { type: number; value: string };
   language: string;
 }) => {
@@ -62,12 +48,12 @@ export const buildDirectionsRequest = ({
     json: {
       costing: valhalla_profile,
       costing_options: {
-        [valhalla_profile]: { ...settings.costing },
+        [valhalla_profile]: CLIENT_COSTING_OPTIONS[profile] ?? {},
       },
-      exclude_polygons: settings.directions.exclude_polygons,
+      exclude_polygons: [],
       locations: makeLocations(activeWaypoints),
       units: 'kilometers',
-      alternates: settings.directions.alternates,
+      alternates: 2,
       id: 'valhalla_directions',
       language,
     },
@@ -77,36 +63,6 @@ export const buildDirectionsRequest = ({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (req.json as any).date_time = dateTime;
   }
-  return req;
-};
-
-export const buildOptimizedRouteRequest = ({
-  profile,
-  activeWaypoints,
-  settings,
-  language,
-}: {
-  profile: Profile;
-  activeWaypoints: ActiveWaypoints;
-  settings: Settings;
-  language: string;
-}) => {
-  let valhalla_profile = profile;
-  if (profile === 'car') {
-    valhalla_profile = 'auto';
-  }
-  const req = {
-    json: {
-      costing: valhalla_profile,
-      costing_options: {
-        [valhalla_profile]: { ...settings.costing },
-      },
-      locations: makeLocations(activeWaypoints),
-      units: 'kilometers',
-      id: 'valhalla_optimized_route',
-      language,
-    },
-  };
   return req;
 };
 
@@ -141,55 +97,6 @@ export const parseDirectionsGeometry = (data: {
   }
 
   return coordinates;
-};
-
-export const buildIsochronesRequest = ({
-  profile,
-  center,
-  settings,
-  denoise,
-  generalize,
-  maxRange,
-  interval,
-}: IsochronesRequestParams) => {
-  let valhalla_profile = profile;
-
-  if (profile === 'car') {
-    valhalla_profile = 'auto';
-  }
-
-  return {
-    json: {
-      polygons: true,
-      denoise,
-      generalize,
-      show_locations: true,
-      costing: valhalla_profile,
-      costing_options: {
-        [valhalla_profile]: { ...settings.costing },
-      },
-      contours: makeContours({ maxRange, interval }),
-      locations: makeLocations([center as ActiveWaypoint]),
-      units: 'kilometers',
-      id: `valhalla_isochrones_lonlat_${center.displaylnglat.toString()}_range_${maxRange.toString()}_interval_${interval.toString()}`,
-    },
-  };
-};
-
-export const makeContours = ({
-  maxRange,
-  interval,
-}: {
-  maxRange: number;
-  interval: number;
-}) => {
-  let contours = [];
-  while (maxRange > 0) {
-    contours.push({ time: maxRange });
-    maxRange -= interval;
-  }
-  contours = contours.reverse();
-  return contours;
 };
 
 export const WAYPOINT_SNAP_RADIUS_M = 500;

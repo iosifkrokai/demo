@@ -9,7 +9,6 @@ import type {
   SpokenInstruction,
   TripState,
   UserLocation,
-  VisualInstruction,
   NavigationSession,
 } from '@stadiamaps/ferrostar';
 import type {
@@ -411,11 +410,6 @@ export const isCompletelyOffRoute = (
 export const extractSpokenInstruction = (
   state: TripState | null
 ): SpokenInstruction | null => navigating(state)?.spokenInstruction ?? null;
-
-/** The next visual instruction (maneuver banner) from the Navigating state. */
-export const extractVisualInstruction = (
-  state: TripState | null
-): VisualInstruction | null => navigating(state)?.visualInstruction ?? null;
 
 /** Remaining steps from the Navigating state; `[0]` is the one being walked now. */
 export const extractRemainingSteps = (state: TripState | null): RouteStep[] =>

@@ -25,9 +25,6 @@ export const fmtDist = (metres: number) =>
     ? i18n.t('guide.km', { value: decimal(metres / 1000) })
     : i18n.t('guide.metres', { value: String(Math.round(metres)) });
 
-/** «3 остановки», «3 stops» — a count with its noun, inflected by the dictionary. */
-export const fmtStops = (count: number) => i18n.t('guide.stops', { count });
-
 /** The one honest wording for a failed `/routes/generate` request. */
 export const agentErrorMessage = (status: number, reason?: string | null) => {
   if (reason === 'llm_not_configured') return i18n.t('guide.agentNoReader');
