@@ -233,6 +233,7 @@ class TripRequirements(BaseModel):
     raw_query: str = ""
 
     at: datetime | None = None
+    at_chosen: bool = False
 
     party: PartyComposition = Field(default_factory=PartyComposition)
 

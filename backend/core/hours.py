@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta, timezone
 
 WALK_UTC_OFFSET = timedelta(hours=3)
 
@@ -107,6 +107,18 @@ def windows(text: str | None) -> list[Window] | None:
 def local_at(instant: datetime) -> datetime:
     """The wall clock in Grodno for an instant. Belarus is UTC+3 all year, no DST."""
     return instant + WALK_UTC_OFFSET
+
+
+def parse_moment(value: datetime | str) -> datetime:
+    """One instant from a wire value: a wall clock is Grodno time, an instant is placed.
+
+    The same rule for the request and for whoever compares two moments, so "10:00" means
+    ten in the morning in Grodno wherever it is read.
+    """
+    moment = value if isinstance(value, datetime) else datetime.fromisoformat(str(value))
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=timezone(WALK_UTC_OFFSET))
+    return moment.astimezone(UTC)
 
 
 def opens_at(text: str | None, when: datetime) -> bool | None:

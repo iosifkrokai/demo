@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Literal
 
 from routing.models import (
@@ -58,6 +59,7 @@ class ReaderBrief:
 
     locale: Literal["ru", "en"] = "ru"
     profile: str | None = None
+    at: datetime | None = None
     origin: tuple[float, float] | None = None
     region_bbox: tuple[float, float, float, float] | None = None
     time_budget_minutes: int | None = None

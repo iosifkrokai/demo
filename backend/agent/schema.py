@@ -67,6 +67,7 @@ class PlanningDeps:
     deadline_at: float | None = None
     region_bbox: tuple[float, float, float, float] | None = None
     now: datetime = field(default_factory=lambda: datetime.now(UTC))
+    at_chosen: bool = False
 
     def seconds_left(self) -> float:
         """Seconds until this run's deadline; infinite when it has none."""

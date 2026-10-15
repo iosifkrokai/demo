@@ -160,6 +160,7 @@ def interpretation(contract: TripRequirements | None, status: str | None) -> Int
         source=contract.source,
         locale=contract.locale,
         status=OVERALL_STATUSES.get(status or "", "pending"),
+        at=contract.at if contract.at_chosen else None,
         adults=contract.party.adults,
         children=contract.party.children,
         children_ages=list(contract.party.children_ages),
@@ -469,6 +470,7 @@ def reader_brief(req: GenerateReq) -> ReaderBrief:
     return ReaderBrief(
         locale=req.locale,
         profile=req.profile,
+        at=req.at,
         origin=origin,
         region_bbox=region_bbox,
         time_budget_minutes=req.time_budget_minutes,

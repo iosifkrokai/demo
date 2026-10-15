@@ -6,6 +6,7 @@ import logging
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from agent import llm, mapping, runner
@@ -100,6 +101,7 @@ def _attempt(
         return None
     contract = mapping._merge(query, brief, submission, deps.observed_ids, deps.repos)
     contract.at = deps.now
+    contract.at_chosen = deps.at_chosen
     if submission.outcome == "refuse":
         return AgentOutcome(
             submission=submission, requirements=contract, measured=_refused(submission)
@@ -193,6 +195,8 @@ def _deps(
         locale=brief.locale,
         origin=_origin(brief),
         region_bbox=brief.region_bbox,
+        now=brief.at or datetime.now(UTC),
+        at_chosen=brief.at is not None,
         deadline_at=time.monotonic() + runner.effective_wall_clock(wall_clock_s),
     )
     if repos is not None:

@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from core import constants
+from core.hours import parse_moment
 from routing.models import LatLon, Photo
+
+MOMENT_FLOOR = datetime(2020, 1, 1, tzinfo=UTC)
+MOMENT_CEILING = timedelta(days=730)
 
 TransportLiteral = Literal[
     "pedestrian",
@@ -78,6 +82,13 @@ class GenerateReq(BaseModel):
     progress_id: str | None = Field(default=None, max_length=64)
     session_id: str | None = Field(default=None, max_length=128)
     time_budget_minutes: int | None = Field(default=None, ge=0, le=constants.MAX_BUDGET_MIN)
+    at: datetime | None = Field(
+        default=None,
+        description=(
+            "When the walk is planned for: an ISO instant, or a wall clock the visitor "
+            "typed, read as Grodno time (UTC+3). Absent means the moment of the request."
+        ),
+    )
     origin: LatLon | None = None
     profile: TransportLiteral | None = None
     region_bbox: list[float] | None = Field(
@@ -98,6 +109,17 @@ class GenerateReq(BaseModel):
     avoid: list[str] = Field(default_factory=list)
     result_mode: Literal["route", "catalogue"] | None = None
     round_trip: bool = False
+
+    @field_validator("at")
+    @classmethod
+    def _a_placed_moment(cls, v: datetime | None) -> datetime | None:
+        """A wall clock the visitor typed is Grodno time; an instant is already placed."""
+        if v is None:
+            return None
+        moment = parse_moment(v)
+        if not MOMENT_FLOOR <= moment <= datetime.now(UTC) + MOMENT_CEILING:
+            raise ValueError("the moment is outside the years this planner covers")
+        return moment
 
     @field_validator("query")
     @classmethod
@@ -179,6 +201,10 @@ class Interpretation(BaseModel):
     locale: Literal["ru", "en"] = "ru"
     status: OverallStatus = "pending"
 
+    at: datetime | None = Field(
+        default=None,
+        description="The moment the walk was checked against, when the visitor chose one.",
+    )
     adults: int | None = None
     children: int | None = None
     children_ages: list[int] = Field(default_factory=list)

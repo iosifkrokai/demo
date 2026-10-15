@@ -6,6 +6,7 @@ from collections.abc import Sequence
 from typing import Any
 
 from agent.models import ReaderBrief
+from core.hours import local_at
 
 
 def _known_areas_note(areas: Sequence[Any]) -> str:
@@ -53,6 +54,9 @@ def _ui_note(brief: ReaderBrief) -> str:
 def _request_note(brief: ReaderBrief) -> str:
     """Facts the model needs and cannot find in the request text."""
     lines = [f"transport={brief.profile or 'unset'}"]
+    lines.append(
+        f"when={local_at(brief.at):%Y-%m-%d %H:%M}" if brief.at is not None else "when=now"
+    )
     if brief.origin is not None:
         lines.append(f"tourist_position={brief.origin[0]},{brief.origin[1]}")
     else:
