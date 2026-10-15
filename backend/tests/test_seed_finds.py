@@ -154,3 +154,21 @@ def test_the_committed_files_validate_as_the_new_dataset_and_sidecar() -> None:
     entries = read_place_category_entries()
     assert entries, "the committed place_categories.json is empty"
     assert all(entry["category"] for entry in entries)
+
+
+def test_the_stage_does_not_read_its_own_dataset() -> None:
+    """A second run must not treat its last output as rows the datasets already hold.
+
+    It did, and the result was a silently emptied `places_finds.csv`: 60 rows the next
+    seed would have pruned from the database.
+    """
+    from db.seed.datasets import default_datasets, load_dataset
+    from db.seed.finds import held_records
+
+    held = held_records()
+    finds = next(ds for ds in default_datasets() if ds.name == "finds")
+    written = load_dataset(finds)
+
+    assert written, "the committed dataset is empty — this test would pass vacuously"
+    assert not [row for row in written if row["source_url"] in held]
+    assert "osm:relation/1579104" in held or any(k.startswith("osm:") for k in held)

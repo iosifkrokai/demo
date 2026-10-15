@@ -387,6 +387,11 @@
       "visit_minutes": 20
     },
     {
+      "source_url": "osm:node/11129835932",
+      "category": "усадьба",
+      "visit_minutes": 30
+    },
+    {
       "source_url": "osm:node/11134638365",
       "category": "валун",
       "visit_minutes": 10
@@ -395,6 +400,11 @@
       "source_url": "osm:node/11174974662",
       "category": "архитектура",
       "visit_minutes": 20
+    },
+    {
+      "source_url": "osm:node/12089560276",
+      "category": "усадьба",
+      "visit_minutes": 30
     },
     {
       "source_url": "osm:node/12346963003",
@@ -542,6 +552,11 @@
       "visit_minutes": 20
     },
     {
+      "source_url": "osm:node/1552022694",
+      "category": "усадьба",
+      "visit_minutes": 30
+    },
+    {
       "source_url": "osm:node/1559149252",
       "category": "архитектура",
       "visit_minutes": 20
@@ -565,6 +580,51 @@
       "source_url": "osm:node/2788681665",
       "category": "архитектура",
       "visit_minutes": 20
+    },
+    {
+      "source_url": "osm:node/2788684405",
+      "category": "усадьба",
+      "visit_minutes": 30
+    },
+    {
+      "source_url": "osm:node/2788684418",
+      "category": "усадьба",
+      "visit_minutes": 30
+    },
+    {
+      "source_url": "osm:node/2788684461",
+      "category": "усадьба",
+      "visit_minutes": 30
+    },
+    {
+      "source_url": "osm:node/2788684496",
+      "category": "усадьба",
+      "visit_minutes": 30
+    },
+    {
+      "source_url": "osm:node/2788684608",
+      "category": "усадьба",
+      "visit_minutes": 30
+    },
+    {
+      "source_url": "osm:node/2788684713",
+      "category": "усадьба",
+      "visit_minutes": 30
+    },
+    {
+      "source_url": "osm:node/2788684725",
+      "category": "усадьба",
+      "visit_minutes": 30
+    },
+    {
+      "source_url": "osm:node/2788684755",
+      "category": "усадьба",
+      "visit_minutes": 30
+    },
+    {
+      "source_url": "osm:node/2788684897",
+      "category": "усадьба",
+      "visit_minutes": 30
     },
     {
       "source_url": "osm:node/2788685119",
@@ -702,6 +762,16 @@
       "visit_minutes": 10
     },
     {
+      "source_url": "osm:node/3810931885",
+      "category": "усадьба",
+      "visit_minutes": 30
+    },
+    {
+      "source_url": "osm:node/3810931886",
+      "category": "усадьба",
+      "visit_minutes": 30
+    },
+    {
       "source_url": "osm:node/3812377379",
       "category": "укрепление",
       "visit_minutes": 15
@@ -835,6 +905,11 @@
       "source_url": "osm:node/3812521653",
       "category": "укрепление",
       "visit_minutes": 15
+    },
+    {
+      "source_url": "osm:node/3813056198",
+      "category": "усадьба",
+      "visit_minutes": 30
     },
     {
       "source_url": "osm:node/3813581656",
@@ -1177,6 +1252,11 @@
       "visit_minutes": 10
     },
     {
+      "source_url": "osm:node/5401283826",
+      "category": "усадьба",
+      "visit_minutes": 30
+    },
+    {
       "source_url": "osm:node/5484526494",
       "category": "архитектура",
       "visit_minutes": 20
@@ -1217,6 +1297,11 @@
       "visit_minutes": 10
     },
     {
+      "source_url": "osm:node/5858769491",
+      "category": "усадьба",
+      "visit_minutes": 30
+    },
+    {
       "source_url": "osm:node/6269603107",
       "category": "архитектура",
       "visit_minutes": 20
@@ -1242,6 +1327,11 @@
       "visit_minutes": 15
     },
     {
+      "source_url": "osm:node/7729053340",
+      "category": "усадьба",
+      "visit_minutes": 30
+    },
+    {
       "source_url": "osm:node/7746667085",
       "category": "валун",
       "visit_minutes": 10
@@ -1255,6 +1345,11 @@
       "source_url": "osm:node/7995383153",
       "category": "валун",
       "visit_minutes": 10
+    },
+    {
+      "source_url": "osm:node/8042729079",
+      "category": "усадьба",
+      "visit_minutes": 30
     },
     {
       "source_url": "osm:node/8546399808",
@@ -1330,6 +1425,11 @@
       "source_url": "osm:node/9039780392",
       "category": "валун",
       "visit_minutes": 10
+    },
+    {
+      "source_url": "osm:node/9221661352",
+      "category": "усадьба",
+      "visit_minutes": 30
     },
     {
       "source_url": "osm:node/9270108834",
@@ -1507,6 +1607,11 @@
       "visit_minutes": 20
     },
     {
+      "source_url": "osm:way/1236097298",
+      "category": "усадьба",
+      "visit_minutes": 30
+    },
+    {
       "source_url": "osm:way/125664490",
       "category": "укрепление",
       "visit_minutes": 15
@@ -1527,9 +1632,24 @@
       "visit_minutes": 15
     },
     {
+      "source_url": "osm:way/1328788567",
+      "category": "усадьба",
+      "visit_minutes": 30
+    },
+    {
       "source_url": "osm:way/1338294967",
       "category": "архитектура",
       "visit_minutes": 20
+    },
+    {
+      "source_url": "osm:way/1351208029",
+      "category": "усадьба",
+      "visit_minutes": 30
+    },
+    {
+      "source_url": "osm:way/1382669335",
+      "category": "усадьба",
+      "visit_minutes": 30
     },
     {
       "source_url": "osm:way/1411022888",
@@ -1540,6 +1660,21 @@
       "source_url": "osm:way/1411022889",
       "category": "архитектура",
       "visit_minutes": 20
+    },
+    {
+      "source_url": "osm:way/1450650683",
+      "category": "усадьба",
+      "visit_minutes": 30
+    },
+    {
+      "source_url": "osm:way/1450650686",
+      "category": "усадьба",
+      "visit_minutes": 30
+    },
+    {
+      "source_url": "osm:way/1450655803",
+      "category": "усадьба",
+      "visit_minutes": 30
     },
     {
       "source_url": "osm:way/1474960705",
@@ -1597,6 +1732,26 @@
       "visit_minutes": 15
     },
     {
+      "source_url": "osm:way/173301464",
+      "category": "усадьба",
+      "visit_minutes": 30
+    },
+    {
+      "source_url": "osm:way/223339744",
+      "category": "усадьба",
+      "visit_minutes": 30
+    },
+    {
+      "source_url": "osm:way/228987556",
+      "category": "усадьба",
+      "visit_minutes": 30
+    },
+    {
+      "source_url": "osm:way/232800378",
+      "category": "усадьба",
+      "visit_minutes": 30
+    },
+    {
       "source_url": "osm:way/236285917",
       "category": "архитектура",
       "visit_minutes": 20
@@ -1612,6 +1767,11 @@
       "visit_minutes": 20
     },
     {
+      "source_url": "osm:way/265565755",
+      "category": "усадьба",
+      "visit_minutes": 30
+    },
+    {
       "source_url": "osm:way/265821492",
       "category": "архитектура",
       "visit_minutes": 20
@@ -1622,9 +1782,19 @@
       "visit_minutes": 20
     },
     {
+      "source_url": "osm:way/29125284",
+      "category": "усадьба",
+      "visit_minutes": 30
+    },
+    {
       "source_url": "osm:way/29165825",
       "category": "укрепление",
       "visit_minutes": 15
+    },
+    {
+      "source_url": "osm:way/294394336",
+      "category": "усадьба",
+      "visit_minutes": 30
     },
     {
       "source_url": "osm:way/311145512",
@@ -1632,9 +1802,24 @@
       "visit_minutes": 15
     },
     {
+      "source_url": "osm:way/317787510",
+      "category": "усадьба",
+      "visit_minutes": 30
+    },
+    {
       "source_url": "osm:way/321958421",
       "category": "архитектура",
       "visit_minutes": 20
+    },
+    {
+      "source_url": "osm:way/323446200",
+      "category": "усадьба",
+      "visit_minutes": 30
+    },
+    {
+      "source_url": "osm:way/334879713",
+      "category": "усадьба",
+      "visit_minutes": 30
     },
     {
       "source_url": "osm:way/374166209",
@@ -1672,6 +1857,16 @@
       "visit_minutes": 20
     },
     {
+      "source_url": "osm:way/377462066",
+      "category": "усадьба",
+      "visit_minutes": 30
+    },
+    {
+      "source_url": "osm:way/377583092",
+      "category": "усадьба",
+      "visit_minutes": 30
+    },
+    {
       "source_url": "osm:way/377611346",
       "category": "архитектура",
       "visit_minutes": 20
@@ -1690,6 +1885,11 @@
       "source_url": "osm:way/377828403",
       "category": "архитектура",
       "visit_minutes": 20
+    },
+    {
+      "source_url": "osm:way/377829583",
+      "category": "усадьба",
+      "visit_minutes": 30
     },
     {
       "source_url": "osm:way/377834467",
@@ -1717,9 +1917,19 @@
       "visit_minutes": 20
     },
     {
+      "source_url": "osm:way/381207239",
+      "category": "усадьба",
+      "visit_minutes": 30
+    },
+    {
       "source_url": "osm:way/381246207",
       "category": "архитектура",
       "visit_minutes": 20
+    },
+    {
+      "source_url": "osm:way/381453339",
+      "category": "усадьба",
+      "visit_minutes": 30
     },
     {
       "source_url": "osm:way/381461369",
@@ -1732,6 +1942,11 @@
       "visit_minutes": 20
     },
     {
+      "source_url": "osm:way/381501375",
+      "category": "усадьба",
+      "visit_minutes": 30
+    },
+    {
       "source_url": "osm:way/381722740",
       "category": "архитектура",
       "visit_minutes": 20
@@ -1740,6 +1955,16 @@
       "source_url": "osm:way/385564374",
       "category": "архитектура",
       "visit_minutes": 20
+    },
+    {
+      "source_url": "osm:way/388264636",
+      "category": "усадьба",
+      "visit_minutes": 30
+    },
+    {
+      "source_url": "osm:way/403459873",
+      "category": "усадьба",
+      "visit_minutes": 30
     },
     {
       "source_url": "osm:way/408876080",
@@ -1760,6 +1985,11 @@
       "source_url": "osm:way/481614889",
       "category": "архитектура",
       "visit_minutes": 20
+    },
+    {
+      "source_url": "osm:way/492075062",
+      "category": "усадьба",
+      "visit_minutes": 30
     },
     {
       "source_url": "osm:way/492606418",
@@ -1792,9 +2022,24 @@
       "visit_minutes": 15
     },
     {
+      "source_url": "osm:way/512947328",
+      "category": "усадьба",
+      "visit_minutes": 30
+    },
+    {
       "source_url": "osm:way/534517758",
       "category": "архитектура",
       "visit_minutes": 20
+    },
+    {
+      "source_url": "osm:way/551652212",
+      "category": "усадьба",
+      "visit_minutes": 30
+    },
+    {
+      "source_url": "osm:way/562575029",
+      "category": "усадьба",
+      "visit_minutes": 30
     },
     {
       "source_url": "osm:way/562575031",
@@ -1812,9 +2057,34 @@
       "visit_minutes": 20
     },
     {
+      "source_url": "osm:way/618064815",
+      "category": "усадьба",
+      "visit_minutes": 30
+    },
+    {
+      "source_url": "osm:way/656647850",
+      "category": "усадьба",
+      "visit_minutes": 30
+    },
+    {
+      "source_url": "osm:way/671578329",
+      "category": "усадьба",
+      "visit_minutes": 30
+    },
+    {
+      "source_url": "osm:way/678349716",
+      "category": "усадьба",
+      "visit_minutes": 30
+    },
+    {
       "source_url": "osm:way/678891679",
       "category": "архитектура",
       "visit_minutes": 20
+    },
+    {
+      "source_url": "osm:way/694636662",
+      "category": "усадьба",
+      "visit_minutes": 30
     },
     {
       "source_url": "osm:way/704880446",
@@ -1822,14 +2092,39 @@
       "visit_minutes": 20
     },
     {
+      "source_url": "osm:way/715565287",
+      "category": "усадьба",
+      "visit_minutes": 30
+    },
+    {
       "source_url": "osm:way/732467796",
       "category": "архитектура",
       "visit_minutes": 20
     },
     {
+      "source_url": "osm:way/783799480",
+      "category": "усадьба",
+      "visit_minutes": 30
+    },
+    {
+      "source_url": "osm:way/822287241",
+      "category": "усадьба",
+      "visit_minutes": 30
+    },
+    {
+      "source_url": "osm:way/868117852",
+      "category": "усадьба",
+      "visit_minutes": 30
+    },
+    {
       "source_url": "osm:way/89810359",
       "category": "укрепление",
       "visit_minutes": 15
+    },
+    {
+      "source_url": "osm:way/930806560",
+      "category": "усадьба",
+      "visit_minutes": 30
     },
     {
       "source_url": "osm:way/963503943",

@@ -72,6 +72,8 @@ COLUMNS = [
 
 BBOX = {"south": 52.75, "west": 23.35, "north": 55.01, "east": 27.00}
 
+FINDS_DATASET = "finds"
+
 SIGHT_TAXONOMY = frozenset(c.code for c in taxonomy.all_categories() if c.role == "sight")
 SERVICE_TAXONOMY = frozenset(c.code for c in taxonomy.all_categories() if c.role == "service")
 STEPS_TAXONOMY = frozenset(
@@ -375,7 +377,7 @@ def default_datasets() -> list[Dataset]:
             license="ODbL 1.0 (OpenStreetMap contributors)",
         ),
         Dataset(
-            "finds",
+            FINDS_DATASET,
             filename="places_finds.csv",
             prefix="osm:",
             reader=_read_pipe,

@@ -25,7 +25,7 @@ from typing import Any
 from core.paths import PLACE_CATEGORIES_JSON, PLACES_DIR
 
 from . import osm_tags, taxonomy
-from .datasets import BBOX, COLUMNS, collect_records, default_datasets
+from .datasets import BBOX, COLUMNS, FINDS_DATASET, collect_records, default_datasets
 from .geofence import inside_project_area
 from .overpass import resolve_district
 
@@ -243,6 +243,21 @@ def write_sidecar(entries: list[dict[str, Any]], path: Path) -> None:
     )
 
 
+def held_records(data_dir: Path | None = None) -> dict[str, dict[str, Any]]:
+    """The rows the *other* datasets hold, keyed by source_url.
+
+    This stage's own dataset is left out: a second run would otherwise find the rows it
+    wrote last time already committed, count every one of them as a row the datasets hold,
+    and rewrite the file empty — and the next seed would apply that, pruning them from the
+    database. Its output is not evidence about what the data holds; every other dataset is.
+    """
+    datasets = default_datasets()
+    if data_dir is not None:
+        datasets = [ds.with_data_dir(data_dir) for ds in datasets]
+    others = [ds for ds in datasets if ds.name != FINDS_DATASET]
+    return {r["source_url"]: r for r in collect_records(others)["records"]}
+
+
 def run_stage(
     *,
     pbf_path: Path | None = None,
@@ -255,10 +270,7 @@ def run_stage(
     if pbf is None:
         raise RuntimeError("стадии finds нужен PBF: передайте pbf_path или задайте OSM_PBF")
 
-    datasets = default_datasets()
-    if data_dir is not None:
-        datasets = [ds.with_data_dir(data_dir) for ds in datasets]
-    existing = {r["source_url"]: r for r in collect_records(datasets)["records"]}
+    existing = held_records(data_dir)
 
     elements = collect_elements(pbf)
     rows, corrections = split_objects(elements, existing)

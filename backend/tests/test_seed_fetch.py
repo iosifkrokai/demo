@@ -108,6 +108,30 @@ def test_the_catch_all_tags_still_answer_when_nothing_sharper_does() -> None:
     assert sight_tag_to_category({"amenity": "cafe"}) is None
 
 
+def test_a_manor_is_not_a_castle_and_a_palace_is_not_either() -> None:
+    """`historic=manor` read as `замок` put 59 manor houses and palaces in the castles.
+
+    The taxonomy gives `historic=manor` its own category (`усадьба`, whose `osm_tags`
+    column has said `historic=manor|place=estate` all along) and `palace` another, so the
+    code was contradicting the file that is the single source of category codes.
+    """
+    from db.seed.osm_tags import sight_tag_to_category
+
+    assert sight_tag_to_category({"historic": "manor"}) == "усадьба"
+    assert sight_tag_to_category({"historic": "palace"}) == "дворец"
+    assert sight_tag_to_category({"building": "palace"}) == "дворец"
+    assert sight_tag_to_category({"historic": "castle"}) == "замок"
+
+
+def test_a_ruin_is_not_a_castle_but_a_castle_in_ruins_still_is() -> None:
+    """`historic=ruins` is a condition, not a type: it decided `замок` for 222 rows."""
+    from db.seed.osm_tags import sight_tag_to_category
+
+    assert sight_tag_to_category({"historic": "ruins"}) == "архитектура"
+    assert sight_tag_to_category({"historic": "castle", "ruins": "yes"}) == "замок"
+    assert sight_tag_to_category({"building": "castle", "ruins": "yes"}) == "замок"
+
+
 def test_a_stairway_belongs_to_the_steps_dataset_and_no_overpass_fetch() -> None:
     """`highway=steps` comes from the local extract, not from a sight/service fetch."""
     from db.seed.osm_tags import service_tag_to_category, sight_tag_to_category

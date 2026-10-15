@@ -134,10 +134,16 @@ def _historic_category(historic: str) -> str | None:
     """What the `historic` key alone settles — named kinds only, not the catch-all.
 
     A castle in ruins is still a castle, and stays `замок`; `historic=ruins` on its own
-    decides nothing, so a pillbox or a mill's ruin does not become a castle by it.
+    decides nothing, so a pillbox or a mill's ruin does not become a castle by it. A manor
+    is not a castle either — the taxonomy gives `historic=manor` its own category, and
+    reading it as `замок` put 47 manor houses and palaces in the castles.
     """
-    if historic in ("castle", "manor"):
+    if historic == "castle":
         return "замок"
+    if historic == "manor":
+        return "усадьба"
+    if historic == "palace":
+        return "дворец"
     if historic in ("monastery", "monastic_architecture"):
         return "монастырь"
     if historic in ("memorial", "monument"):
@@ -206,6 +212,8 @@ def _building_category(tags: dict[str, str]) -> str | None:
         )
     if building == "castle":
         return "замок"
+    if building == "palace":
+        return "дворец"
     return None
 
 
