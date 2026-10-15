@@ -206,6 +206,13 @@ a box 23 km narrower than the one the data was fetched with.
 Either align it with the seed's or delete it as the dead constant it is. A decision, not a
 task — the same shape as item 2.
 
+One correction of the record, since a commit message cannot be rewritten: `fc4cfcb` took
+the widened line as "nobody claims it". The owner came forward the same day — it is the
+region-coordinate work's, and its reason is better than the one I inferred: a hand-authored
+row out of box is fatal, and `region:mihalishki-church` is legitimately at 54.814. So the
+widening stays, the steps test I re-pinned to the southern residue stays right, and only the
+provenance was wrong.
+
 ## 9. Two of the eleven curated walks ask for more than the product gives
 
 The curated layer ran twice on 2026-10-15 and gated a different run out each time: once
