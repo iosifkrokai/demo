@@ -21,17 +21,47 @@ CHIPS_REFINE = 6
 REFINE_FROM_BENCHMARK = "добавь кофейню и туалет"
 
 
+ENTRY = re.compile(r"(\w+)\s*:\s*(['\"])((?:[^\\]|\\.)*?)\2")
+
+
+def _block_body(text: str, start: int) -> str:
+    """The text between a block's braces, quoting and nesting respected."""
+    depth = 1
+    quote = ""
+    i = start
+    while i < len(text):
+        char = text[i]
+        if quote:
+            if char == "\\":
+                i += 2
+                continue
+            if char == quote:
+                quote = ""
+        elif char in "'\"":
+            quote = char
+        elif char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start:i]
+        i += 1
+    raise AssertionError("a dictionary block is not closed")
+
+
 def _block(text: str, name: str) -> dict[str, str]:
     """One `ask.<name>` block of a dictionary, entries only, or a loud failure."""
     start = re.search(rf"\b{name}\s*:\s*\{{", text)
     if start is None:
         raise AssertionError(f"no {name} block in the dictionary")
-    body = text[start.end() :]
-    body = body[: body.index("}")]
-    found = re.findall(r"(\w+)\s*:\s*(['\"])((?:[^\\]|\\.)*?)\2", body)
+    body = _block_body(text, start.end())
+    rest = ENTRY.sub("", body)
+    if rest.strip(" \t\n,"):
+        left = re.sub(r"[\s,]+", " ", rest).strip()
+        raise AssertionError(f"{name}: the reader left {left[:90]!r} unread")
     return {
         key: value.replace("\\'", "'").replace('\\"', '"').replace("\\\\", "\\")
-        for key, _quote, value in found
+        for key, _quote, value in ENTRY.findall(body)
     }
 
 

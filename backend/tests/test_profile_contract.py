@@ -18,7 +18,7 @@ from core.errors import UpstreamUnavailableError
 from routing.cost import _synthetic_cost
 from routing.geometry import distance_m
 from routing.models import Candidate, CategoryFacts
-from routing.optimize import _max_leg_seconds
+from routing.optimize import max_leg_seconds
 from routing.valhalla import http as valhalla_http, route as valhalla_route, snap as valhalla_snap
 from routing.valhalla.constants import VALHALLA_COSTINGS, costing_for
 
@@ -90,10 +90,10 @@ def test_every_profile_the_wire_offers_is_routable() -> None:
 
 def test_the_leg_rule_follows_the_costing_not_the_word() -> None:
     """Otherwise `profile="walk"` is measured as a walk but capped as a drive."""
-    assert _max_leg_seconds(3600, "walk") == _max_leg_seconds(3600, "pedestrian")
-    assert _max_leg_seconds(3600, "car") == _max_leg_seconds(3600, "auto")
+    assert max_leg_seconds(3600, "walk") == max_leg_seconds(3600, "pedestrian")
+    assert max_leg_seconds(3600, "car") == max_leg_seconds(3600, "auto")
     longest = constants.MAX_BUDGET_MIN * 60
-    assert _max_leg_seconds(longest, "pedestrian") != _max_leg_seconds(longest, "bicycle")
+    assert max_leg_seconds(longest, "pedestrian") != max_leg_seconds(longest, "bicycle")
 
 
 def test_a_bicycle_leg_is_capped_by_riding_distance_not_by_the_budget() -> None:
@@ -101,10 +101,10 @@ def test_a_bicycle_leg_is_capped_by_riding_distance_not_by_the_budget() -> None:
     ride = (constants.BICYCLE_LEG_KM / constants.BICYCLE_SPEED_KMH) * 3600
     longest = constants.MAX_BUDGET_MIN * 60
 
-    assert _max_leg_seconds(longest, "bicycle") == pytest.approx(ride)
-    assert _max_leg_seconds(None, "bicycle") == pytest.approx(ride)
-    assert _max_leg_seconds(None, "bicycle") < constants.DRIVE_LEG_FALLBACK_S
-    assert _max_leg_seconds(3 * 3600, "auto") == pytest.approx(3 * 3600)
+    assert max_leg_seconds(longest, "bicycle") == pytest.approx(ride)
+    assert max_leg_seconds(None, "bicycle") == pytest.approx(ride)
+    assert max_leg_seconds(None, "bicycle") < constants.DRIVE_LEG_FALLBACK_S
+    assert max_leg_seconds(3 * 3600, "auto") == pytest.approx(3 * 3600)
 
 
 def test_the_synthetic_fallback_walks_at_the_pedestrian_speed() -> None:

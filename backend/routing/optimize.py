@@ -200,7 +200,7 @@ def _budget_constrain(
     must_idx_set = {i for i in route if candidates[i].id in must_ids}
     dropped = 0
 
-    max_leg_s = _max_leg_seconds(problem.budget_s, problem.costing)
+    max_leg_s = max_leg_seconds(problem.budget_s, problem.costing)
 
     def total_of(r: list[int]) -> float:
         return _measured_total(r, problem)
@@ -233,7 +233,7 @@ def _budget_constrain(
     return route, dropped
 
 
-def _max_leg_seconds(budget_s: int | None, costing: str = "pedestrian") -> float:
+def max_leg_seconds(budget_s: int | None, costing: str = "pedestrian") -> float:
     """Maximum allowed time for a single leg, in seconds."""
     costing = costing_for(costing)
     if costing == "bicycle":
@@ -327,7 +327,7 @@ def _regret_insertion(
 
     iterations = 0
     skipped = 0
-    max_leg_s = _max_leg_seconds(problem.budget_s, problem.costing)
+    max_leg_s = max_leg_seconds(problem.budget_s, problem.costing)
     while remaining:
         cur_cost = _order_total(route, problem)
         if problem.budget_s is not None and cur_cost >= problem.budget_s:

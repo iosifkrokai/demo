@@ -69,11 +69,12 @@ if str(BACKEND) not in sys.path:
 
 from core import constants as agent_constants  # noqa: E402
 from core.paths import ITINERARIES_JSON  # noqa: E402
-from db.seed import cli, datasets as ds_mod, itineraries as itin_mod  # noqa: E402
+from db.seed import datasets as ds_mod, itineraries as itin_mod  # noqa: E402
 from db.seed.geofence import inside_project_area  # noqa: E402
 from db.seed.taxonomy import all_categories  # noqa: E402
 from routing.models import Requirement, RequirementKind, TripRequirements  # noqa: E402
-from routing.valhalla.constants import VALHALLA_COSTINGS  # noqa: E402
+from routing.optimize import max_leg_seconds  # noqa: E402
+from routing.valhalla.constants import VALHALLA_COSTINGS, costing_for  # noqa: E402
 from routing.verify import overall_status  # noqa: E402
 
 CANONICAL_CATEGORIES = {
@@ -84,10 +85,13 @@ CANONICAL_CODES_NORM = frozenset(CANONICAL_CATEGORIES)
 
 
 UNREACHABLE_S = float(agent_constants.UNREACHABLE_S)
-MAX_WALK_LEG_KM = float(agent_constants.MAX_WALK_LEG_KM)
 DUPLICATE_RADIUS_M = float(agent_constants.DUPLICATE_RADIUS_M)
+LEG_SPEED_KMH = {
+    "pedestrian": float(agent_constants.PEDESTRIAN_SPEED_KMH),
+    "bicycle": float(agent_constants.BICYCLE_SPEED_KMH),
+    "auto": float(agent_constants.AUTO_SPEED_KMH),
+}
 DUPLICATE_NAME_RADIUS_M = float(agent_constants.DUPLICATE_NAME_RADIUS_M)
-GRODNO_BBOX = dict(agent_constants.GRODNO_BBOX)
 REQUIREMENT_KINDS = frozenset(get_args(RequirementKind))
 
 STAGE1_PROXY_RADIUS_M = 250.0
@@ -202,6 +206,7 @@ class LegSanity:
     avg_speed_kmh: float | None = None
     max_leg_km: float | None = None
     max_leg_km_straight: float | None = None
+    cap_km: float | None = None
     over_cap: bool = False
     unreachable_sentinel: bool = False
     n_unreachable_legs: int = 0
@@ -697,24 +702,19 @@ def _duplicate_rule(name_a: str, name_b: str, dist_m: float) -> str | None:
     return None
 
 
-def leg_cap_km(profile: str | None) -> float:
-    """The longest single leg the engine itself allows, in km, for one transport.
+def leg_cap_km(profile: str | None, budget_minutes: int | None = None) -> float:
+    """The longest single leg the engine's own rule allows, in km, at this budget.
 
-    `routing/optimize._max_leg_seconds` states the same rule in seconds — 5 km on
-    foot, 20 km by bicycle, and a four-hour fallback for anything motorised — so a
-    driving leg is measured against the drive's own limit and a 155 km hop between
-    towns stops reading as a walking defect.
+    `routing.optimize.max_leg_seconds` states that rule in seconds and in terms of the
+    budget — a quarter of it capped at 5 km on foot or 20 km by bicycle, and the whole
+    budget for anything motorised (a four-hour fallback when the request names none) —
+    so the bound is read from there rather than restated, and converted at the speed
+    the engine prices that transport with.
     """
-    costing = str(profile or "").strip().lower()
-    if costing == "bicycle":
-        return float(agent_constants.BICYCLE_LEG_KM)
-    if costing not in ("", "pedestrian"):
-        return (
-            float(agent_constants.DRIVE_LEG_FALLBACK_S)
-            / 3600.0
-            * float(agent_constants.AUTO_SPEED_KMH)
-        )
-    return MAX_WALK_LEG_KM
+    costing = costing_for(str(profile or "").strip().lower())
+    budget_s = int(budget_minutes) * 60 if budget_minutes else None
+    speed = LEG_SPEED_KMH.get(costing, float(agent_constants.AUTO_SPEED_KMH))
+    return max_leg_seconds(budget_s, costing) / 3600.0 * speed
 
 
 def leg_sanity(
@@ -722,6 +722,7 @@ def leg_sanity(
     summary: dict[str, Any],
     raw: dict[str, Any],
     profile: str | None = None,
+    budget_minutes: int | None = None,
 ) -> LegSanity:
     """Is the returned route physically plausible, judging from the wire alone?"""
     leg = LegSanity(n_stops=len(our_stops))
@@ -733,7 +734,8 @@ def leg_sanity(
     if _is_num(length_km) and _is_num(time_s) and length_km > 0 and time_s > 0:
         leg.avg_speed_kmh = float(length_km) / (float(time_s) / 3600.0)
 
-    if leg.max_leg_km_straight is not None and leg.max_leg_km_straight > leg_cap_km(profile):
+    leg.cap_km = leg_cap_km(profile, budget_minutes)
+    if leg.max_leg_km_straight is not None and leg.max_leg_km_straight > leg.cap_km:
         leg.over_cap = True
 
     leg.duplicate_pairs = find_duplicate_stop_pairs(our_stops)
@@ -801,27 +803,6 @@ def route_origin(golden: GoldenRoute) -> tuple[float | None, float | None]:
     return lat, lon
 
 
-def evaluate(golden: GoldenRoute, base_url: str) -> EvaluationResult:
-    """One live run. Same scorer the replay path uses, via call_generate()."""
-    lat, lon = route_origin(golden)
-    t0 = time.monotonic()
-    try:
-        raw = call_generate(
-            base_url, golden.query_ru, golden.budget_minutes, lat, lon, golden.profile
-        )
-    except urllib.error.HTTPError as exc:
-        return score_response(
-            golden,
-            None,
-            http_status=exc.code,
-            api_error=_http_error_detail(exc),
-            latency_s=time.monotonic() - t0,
-        )
-    except urllib.error.URLError as exc:
-        return score_response(golden, None, api_error=str(exc), latency_s=time.monotonic() - t0)
-    return score_response(golden, raw, latency_s=time.monotonic() - t0)
-
-
 def _http_error_detail(exc: urllib.error.HTTPError) -> str:
     try:
         body = exc.read().decode("utf-8", "replace")
@@ -871,7 +852,9 @@ def score_response(
     _score_reference(result)
     _score_budget(result, summary, budget_info)
     result.stage = stage_split(golden, result.our_stops)
-    result.leg = leg_sanity(result.our_stops, summary, raw or {}, golden.profile)
+    result.leg = leg_sanity(
+        result.our_stops, summary, raw or {}, golden.profile, golden.budget_minutes
+    )
     result.failures.extend(_leg_failures(result.leg, golden.profile))
     return result
 
@@ -963,8 +946,8 @@ def _leg_failures(leg: LegSanity, profile: str | None = None) -> list[Failure]:
         out.append(
             Failure(
                 kind="leg_over_cap",
-                detail=f"a leg of {leg.max_leg_km_straight:.1f} km exceeds the cap of "
-                f"{leg_cap_km(profile):.1f} km for {profile or 'pedestrian'}",
+                detail=f"a leg of {leg.max_leg_km_straight:.1f} km exceeds the engine's cap of "
+                f"{leg.cap_km:.1f} km for {costing_for(profile)}",
             )
         )
     return out
@@ -1279,10 +1262,6 @@ COMPARE_METRICS: tuple[tuple[str, str], ...] = (
     ("walk_diff_min", "Δwalk min"),
     ("leg.max_leg_km_straight", "max leg km (straight)"),
 )
-
-
-def _results(groups: list[list[RunRecord]]) -> list[EvaluationResult]:
-    return [rec.result for g in groups for rec in g]
 
 
 def per_case_scores(groups: list[list[RunRecord]]) -> dict[str, dict[str, float | None]]:
@@ -1704,11 +1683,13 @@ def write_json_report(
                 "the longest straight-line hop between the returned stops. The wire "
                 "carries no per-leg figure any more (the old debug.trace.max_leg_seconds "
                 "went with the pipeline), so this is the offline leg-cap check, and the "
-                "cap is the one the engine itself applies per transport — "
-                f"{MAX_WALK_LEG_KM:g} km on foot, {float(agent_constants.BICYCLE_LEG_KM):g} km "
-                f"by bicycle, {leg_cap_km('auto'):g} km for anything motorised (the "
-                "drive's own four-hour fallback at its own speed). The straight line is a "
-                "lower bound on the real leg, not the leg itself."
+                "bound is the engine's own rule read from routing.optimize.max_leg_seconds "
+                "at the case's own profile and budget — a quarter of the budget up to "
+                f"{float(agent_constants.MAX_WALK_LEG_KM):g} km on foot or "
+                f"{float(agent_constants.BICYCLE_LEG_KM):g} km by bicycle, and the budget "
+                f"itself for anything motorised (a four-hour fallback, {leg_cap_km('auto'):g} km, "
+                "when the request names none). The straight line is a lower bound on the "
+                "real leg, not the leg itself."
             ),
             "n_unreachable_legs": (
                 "NOT MEASURABLE from the wire: the new response carries no cost matrix "
@@ -2015,8 +1996,9 @@ def load_curated_routes(
         return []
     source = itineraries_path or ITINERARIES_JSON
     walks = {walk["id"]: walk for walk in itin_mod.load_itineraries(source)}
-    collected, _shadowed, _stale = cli._collect(ds_mod.default_datasets())
-    places = {record["source_url"]: record for record in collected["records"]}
+    collected = ds_mod.collect_records(ds_mod.default_datasets())
+    kept, _shadowed, _stale = ds_mod.collapse(collected["records"])
+    places = {record["source_url"]: record for record in kept}
 
     routes: list[GoldenRoute] = []
     for path in sidecars:

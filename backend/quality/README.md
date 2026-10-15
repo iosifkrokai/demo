@@ -168,10 +168,13 @@ pool), so two route metrics the old pipeline fed are no longer measurable from a
 response: the walked per-leg figure (only the straight-line hop between stops is
 checked) and the exact unreachable-hop count (`n_unreachable_legs` stays 0, never
 guessed). Both are reported as such in `report.json`'s `metric_notes`. The leg-cap
-check that survives carries the engine's own per-transport limit rather than a
-walker's — 5 km on foot, `BICYCLE_LEG_KM` (20 km) by bicycle, and the drive's own
-four-hour fallback for anything motorised — so a 155 km hop between two towns is
-not a walking defect, and a straight-line leg past the limit still is.
+check that survives reads the engine's own bound rather than restating a walker's:
+`routing/optimize.max_leg_seconds` — a quarter of the request's budget up to 5 km on
+foot or `BICYCLE_LEG_KM` (20 km) by bicycle, and for anything motorised the whole
+budget, or the drive's four-hour fallback when the request names none — converted at
+the speed that transport is priced with. So a 155 km hop between two towns is not a
+walking defect, a 300 km one is a defect on a four-hour drive but not on a full day's,
+and a straight-line leg past the bound still is.
 
 ## Baseline: there is nothing to compare against
 

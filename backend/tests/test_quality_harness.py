@@ -259,6 +259,23 @@ def test_the_leg_cap_follows_the_transport() -> None:
     assert leg_sanity(stops, {}, {}, "auto").max_leg_km_straight > 45.0
 
 
+def test_the_leg_cap_is_the_budget_the_engine_was_given() -> None:
+    """The engine bounds a leg by a share of the request's own time, so the harness
+    must too: half a day on foot allows less than five kilometres, and a day's drive
+    allows the whole day rather than the four-hour fallback."""
+    assert leg_cap_km("pedestrian", 120) < leg_cap_km("pedestrian")
+    assert round(leg_cap_km("bicycle", 480), 6) == 20.0
+    assert round(leg_cap_km("auto", 480), 6) == 360.0
+    assert leg_cap_km("auto", 480) > leg_cap_km("auto")
+
+    stops = [
+        OurStop(name="Гродно", lat=53.6778, lon=23.8295),
+        OurStop(name="Слоним", lat=53.0936, lon=25.3177),
+    ]
+    assert leg_sanity(stops, {}, {}, "auto", 60).over_cap is True
+    assert leg_sanity(stops, {}, {}, "auto", 480).over_cap is False
+
+
 def test_the_curated_row_reads_the_set_its_report_names(monkeypatch, tmp_path) -> None:
     """A report carries `cases_dir`, so the one-pager cannot label a curated run as
     the benchmark walks — or the other way round."""
