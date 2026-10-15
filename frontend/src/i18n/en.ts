@@ -73,19 +73,6 @@ export const en: Dictionary = {
       withChildren: 'add something for the children',
     },
   },
-  transport: {
-    pedestrian: 'on foot',
-    bicycle: 'by bike',
-    auto: 'by car',
-    any: 'any way',
-  },
-  budget: {
-    '30': '30 min',
-    '60': '1 hr',
-    '120': '2 hrs',
-    '240': 'half a day',
-    any: 'no limit',
-  },
   actions: {
     closePanel: 'close the panel',
     build: 'Plan my route',

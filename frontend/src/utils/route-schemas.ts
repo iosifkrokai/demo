@@ -4,7 +4,8 @@ import { profileEnum } from '../stores/common-store';
 import { mapStyleSchema } from '../components/map/utils';
 
 export const searchParamsSchema = z.object({
-  profile: fallback(profileEnum.optional(), 'bicycle'),
+  profile: fallback(profileEnum.optional(), 'pedestrian'),
+  at: z.string().optional(),
   wps: z.string().optional(),
   range: z.number().optional(),
   interval: z.number().optional(),

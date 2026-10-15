@@ -29,6 +29,11 @@ import { cn } from '@/lib/utils';
 import { meWaypoint, storedMeCoords } from '@/utils/me-waypoint';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
 import { Textarea } from '@/components/ui/textarea';
 import {
   Sheet,
@@ -103,6 +108,22 @@ const buildTimeBudgetOptions = (t: TFunction) => [
   { value: 480, label: t('sidebar.budgets.b480') },
   { value: 0, label: t('sidebar.budgets.none') },
 ];
+
+const padTwo = (value: number) => String(value).padStart(2, '0');
+
+/** A `YYYY-MM-DDTHH:MM` wall-clock stamp in the device's own timezone. */
+const localStamp = (date: Date) =>
+  `${date.getFullYear()}-${padTwo(date.getMonth() + 1)}-${padTwo(
+    date.getDate()
+  )}T${padTwo(date.getHours())}:${padTwo(date.getMinutes())}`;
+
+/** The device's local moment at `hour`, `dayOffset` days from today. */
+const localMoment = (hour: number, dayOffset = 0) => {
+  const date = new Date();
+  date.setDate(date.getDate() + dayOffset);
+  date.setHours(hour, 0, 0, 0);
+  return localStamp(date);
+};
 
 /** Transport the tourist has. */
 const buildTransportOptions = (
@@ -508,6 +529,10 @@ export const Sidebar = ({
   const setTimeBudget = useDirectionsStore((s) => s.setTimeBudget);
   const [transport, setTransport] = useState<'' | Profile>('');
   const [mirroredCosting, setMirroredCosting] = useState<Profile | null>(null);
+  const dateTime = useCommonStore((s) => s.dateTime);
+  const updateDateTime = useCommonStore((s) => s.updateDateTime);
+  const [customOpen, setCustomOpen] = useState(false);
+  const [customValue, setCustomValue] = useState('');
 
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [partyAdults, setPartyAdults] = useState<number | null>(null);
@@ -564,6 +589,16 @@ export const Sidebar = ({
 
   const { t } = useTranslation();
   const panel = usePanelWidth();
+  const whenToday = localMoment(18);
+  const whenTomorrow = localMoment(10, 1);
+  const whenIsToday = dateTime.type === 1 && dateTime.value === whenToday;
+  const whenIsTomorrow = dateTime.type === 1 && dateTime.value === whenTomorrow;
+  const whenIsCustom = dateTime.type === 1 && !whenIsToday && !whenIsTomorrow;
+  /** A chosen departure: `type === 1`, the value the local wall-clock moment. */
+  const pickMoment = (value: string) => {
+    updateDateTime('type', 1);
+    updateDateTime('value', value);
+  };
   const tabs = useMemo(() => buildViews(t), [t]);
   const subtitles = useMemo(() => buildViewSubtitles(t), [t]);
   const hints = useMemo(
@@ -906,6 +941,7 @@ export const Sidebar = ({
         query: string;
         time_budget_minutes?: number;
         profile?: string;
+        at?: string;
         origin?: { lat: number; lon: number };
         party_adults?: number;
         party_children?: number;
@@ -932,6 +968,7 @@ export const Sidebar = ({
         session_id?: string;
       } = { query: q, progress_id: requestProgressId };
       if (timeBudget >= 15) body.time_budget_minutes = timeBudget;
+      if (dateTime.type === 1) body.at = dateTime.value;
       const chosen = buildTransportOptions(t).find(
         (o) => o.value === transportRef.current
       );
@@ -1527,6 +1564,75 @@ export const Sidebar = ({
                       {option.label}
                     </Chip>
                   ))}
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <span
+                  id="when-label"
+                  className="text-meta text-muted-foreground"
+                >
+                  {t('sidebar.ui.whenLabel')}
+                </span>
+                <div
+                  role="group"
+                  aria-labelledby="when-label"
+                  className="flex flex-wrap gap-1.5"
+                >
+                  <Chip
+                    selected={dateTime.type === -1}
+                    onClick={() => updateDateTime('type', -1)}
+                    data-testid="when-now"
+                  >
+                    {t('sidebar.when.now')}
+                  </Chip>
+                  <Chip
+                    selected={whenIsToday}
+                    onClick={() => pickMoment(whenToday)}
+                    data-testid="when-today"
+                  >
+                    {t('sidebar.when.today')}
+                  </Chip>
+                  <Chip
+                    selected={whenIsTomorrow}
+                    onClick={() => pickMoment(whenTomorrow)}
+                    data-testid="when-tomorrow"
+                  >
+                    {t('sidebar.when.tomorrow')}
+                  </Chip>
+                  <Popover
+                    open={customOpen}
+                    onOpenChange={(open) => {
+                      setCustomOpen(open);
+                      if (open) {
+                        setCustomValue(
+                          dateTime.type === 1 ? dateTime.value : ''
+                        );
+                      }
+                    }}
+                  >
+                    <PopoverTrigger asChild>
+                      <Chip selected={whenIsCustom} data-testid="when-custom">
+                        {t('sidebar.when.custom')}
+                      </Chip>
+                    </PopoverTrigger>
+                    <PopoverContent align="start" className="w-auto p-3">
+                      <input
+                        type="datetime-local"
+                        aria-label={t('sidebar.when.custom')}
+                        data-testid="when-custom-input"
+                        value={customValue}
+                        onChange={(event) => {
+                          setCustomValue(event.target.value);
+                          if (event.target.value) {
+                            pickMoment(event.target.value);
+                            setCustomOpen(false);
+                          }
+                        }}
+                        className="h-9 w-full min-w-0 rounded-md border border-input bg-transparent px-3 py-1 text-base outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] md:text-sm"
+                      />
+                    </PopoverContent>
+                  </Popover>
                 </div>
               </div>
 

@@ -24,9 +24,21 @@ describe('route-schemas', () => {
         expect(result.profile).toBeUndefined();
       });
 
-      it('should fallback to bicycle for invalid profile values', () => {
+      it('should fallback to pedestrian for invalid profile values', () => {
         const result = searchParamsSchema.parse({ profile: 'invalid' });
-        expect(result.profile).toBe('bicycle');
+        expect(result.profile).toBe('pedestrian');
+      });
+    });
+
+    describe('at field', () => {
+      it('should accept a wall-clock moment', () => {
+        const result = searchParamsSchema.parse({ at: '2026-05-01T18:00' });
+        expect(result.at).toBe('2026-05-01T18:00');
+      });
+
+      it('should allow undefined at', () => {
+        const result = searchParamsSchema.parse({});
+        expect(result.at).toBeUndefined();
       });
     });
 

@@ -112,7 +112,7 @@ const activeTabRoute = createRoute({
   component: App,
   validateSearch: zodValidator(searchParamsSchema),
   search: {
-    middlewares: [retainSearchParams(['profile', 'style'])],
+    middlewares: [retainSearchParams(['profile', 'style', 'at'])],
   },
   beforeLoad: async (args) => {
     await requireAuth(args);

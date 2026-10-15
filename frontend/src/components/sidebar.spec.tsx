@@ -100,25 +100,45 @@ vi.mock('@/hooks/use-places', () => ({
   }),
 }));
 
+const mockCommonState = vi.hoisted(() => ({
+  directionsPanelOpen: true,
+  focus: null as unknown,
+  guideFix: null as unknown,
+  guiding: false,
+  guideVoiceMuted: false,
+  guideTurnDistanceM: null as number | null,
+  placesVisible: false,
+  dateTime: { type: -1, value: '' } as { type: number; value: string },
+  setDirectionsPanelOpen: vi.fn(),
+  toggleDirections: vi.fn(),
+  focusOn: vi.fn(),
+  setGuideFix: vi.fn(),
+  setGuiding: vi.fn(),
+  setGuideVoiceMuted: vi.fn(),
+  setGuideTurnDistanceM: vi.fn(),
+  setPlacesVisible: vi.fn(),
+  updateDateTime: vi.fn(),
+}));
+const mockCommonListeners = vi.hoisted(() => new Set<() => void>());
+const mockCommonVersion = vi.hoisted(() => ({ current: 0 }));
+const notifyMockCommon = () => {
+  mockCommonVersion.current += 1;
+  mockCommonListeners.forEach((listener) => listener());
+};
+
 vi.mock('@/stores/common-store', () => ({
-  useCommonStore: (selector: (s: Record<string, unknown>) => unknown) =>
-    selector({
-      directionsPanelOpen: true,
-      setDirectionsPanelOpen: vi.fn(),
-      toggleDirections: vi.fn(),
-      focus: null,
-      guideFix: null,
-      guiding: false,
-      guideVoiceMuted: false,
-      guideTurnDistanceM: null,
-      focusOn: vi.fn(),
-      setGuideFix: vi.fn(),
-      setGuiding: vi.fn(),
-      setGuideVoiceMuted: vi.fn(),
-      setGuideTurnDistanceM: vi.fn(),
-      placesVisible: false,
-      setPlacesVisible: vi.fn(),
-    }),
+  useCommonStore: (selector: (s: Record<string, unknown>) => unknown) => {
+    useSyncExternalStore(
+      (onChange: () => void) => {
+        mockCommonListeners.add(onChange);
+        return () => {
+          mockCommonListeners.delete(onChange);
+        };
+      },
+      () => mockCommonVersion.current
+    );
+    return selector(mockCommonState);
+  },
 }));
 
 vi.mock('@/stores/directions-store', () => ({
@@ -321,6 +341,18 @@ const stubAgentFetch = (
   });
 };
 
+const pad2 = (value: number) => String(value).padStart(2, '0');
+
+/** The same wall-clock stamp the panel computes for a local preset. */
+const localMoment = (hour: number, dayOffset = 0) => {
+  const date = new Date();
+  date.setDate(date.getDate() + dayOffset);
+  date.setHours(hour, 0, 0, 0);
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(
+    date.getDate()
+  )}T${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
+};
+
 describe('Sidebar', () => {
   beforeEach(() => {
     vi.unstubAllGlobals();
@@ -376,6 +408,16 @@ describe('Sidebar', () => {
       (places: unknown[] | null) => {
         mockStoreState.catalogue = places;
         notifyMockStore();
+      }
+    );
+    mockCommonState.dateTime = { type: -1, value: '' };
+    mockCommonState.updateDateTime.mockImplementation(
+      (key: 'type' | 'value', value: string | number) => {
+        mockCommonState.dateTime =
+          key === 'type'
+            ? { ...mockCommonState.dateTime, type: Number(value) }
+            : { ...mockCommonState.dateTime, value: String(value) };
+        notifyMockCommon();
       }
     );
     mockGetState.mockReturnValue(mockStoreState);
@@ -871,6 +913,76 @@ describe('Sidebar', () => {
     await user.click(buildButton());
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
     expect('time_budget_minutes' in body(0)).toBe(false);
+  });
+
+  it('sends the departure moment the tourist picked', async () => {
+    const { fetchMock, body } = agentFetch();
+
+    const user = userEvent.setup({ delay: null });
+    render(<Sidebar />);
+
+    await user.click(screen.getByTestId('when-today'));
+    expect(screen.getByTestId('when-today')).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+
+    await user.type(askField(), 'замки Гродно');
+    await user.click(buildButton());
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(body(0).at).toBe(localMoment(18));
+  });
+
+  it('leaves the departure out of the body for «сейчас»', async () => {
+    const { fetchMock, body } = agentFetch();
+
+    const user = userEvent.setup({ delay: null });
+    render(<Sidebar />);
+
+    await user.type(askField(), 'замки Гродно');
+    await user.click(buildButton());
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect('at' in body(0)).toBe(false);
+  });
+
+  it('drops the moment once the tourist returns to «сейчас»', async () => {
+    const { fetchMock, body } = agentFetch();
+
+    const user = userEvent.setup({ delay: null });
+    render(<Sidebar />);
+
+    await user.click(screen.getByTestId('when-tomorrow'));
+    await user.click(screen.getByTestId('when-now'));
+    expect(screen.getByTestId('when-now')).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+
+    await user.type(askField(), 'замки Гродно');
+    await user.click(buildButton());
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect('at' in body(0)).toBe(false);
+  });
+
+  it('records a custom departure moment from the popover input', async () => {
+    const { fetchMock, body } = agentFetch();
+
+    const user = userEvent.setup({ delay: null });
+    render(<Sidebar />);
+
+    await user.click(screen.getByTestId('when-custom'));
+    const input = await screen.findByTestId('when-custom-input');
+    fireEvent.change(input, { target: { value: '2026-05-01T18:30' } });
+
+    expect(mockCommonState.dateTime).toEqual({
+      type: 1,
+      value: '2026-05-01T18:30',
+    });
+
+    await user.type(askField(), 'замки Гродно');
+    await user.click(buildButton());
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(body(0).at).toBe('2026-05-01T18:30');
   });
 
   it('shows the route summary numbers the answer came with', async () => {
@@ -1571,6 +1683,16 @@ describe('Sidebar — felt quality', () => {
       (places: unknown[] | null) => {
         mockStoreState.catalogue = places;
         notifyMockStore();
+      }
+    );
+    mockCommonState.dateTime = { type: -1, value: '' };
+    mockCommonState.updateDateTime.mockImplementation(
+      (key: 'type' | 'value', value: string | number) => {
+        mockCommonState.dateTime =
+          key === 'type'
+            ? { ...mockCommonState.dateTime, type: Number(value) }
+            : { ...mockCommonState.dateTime, value: String(value) };
+        notifyMockCommon();
       }
     );
     mockGetState.mockReturnValue(mockStoreState);

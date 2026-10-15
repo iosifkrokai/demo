@@ -8,6 +8,7 @@ type SidebarShape = {
     string
   >;
   transport: Record<'pedestrian' | 'bicycle' | 'car' | 'any', string>;
+  when: Record<'now' | 'today' | 'tomorrow' | 'custom', string>;
   resultModes: Record<'route' | 'catalogue', string>;
   interests: Record<
     | 'castles'
@@ -101,6 +102,7 @@ type SidebarShape = {
   ui: Record<
     | 'timeLabel'
     | 'transportLabel'
+    | 'whenLabel'
     | 'emptyStops'
     | 'emptyPoint'
     | 'guide'
@@ -141,6 +143,12 @@ export const sidebarArea = {
         bicycle: 'велосипед',
         car: 'машина',
         any: 'как удобно',
+      },
+      when: {
+        now: 'сейчас',
+        today: 'сегодня 18:00',
+        tomorrow: 'завтра 10:00',
+        custom: 'своё время',
       },
       resultModes: {
         route: 'маршрут',
@@ -279,6 +287,7 @@ export const sidebarArea = {
 
       ui: {
         timeLabel: 'сколько есть времени',
+        whenLabel: 'когда',
         transportLabel: 'на чём',
         emptyStops:
           'Здесь появятся остановки маршрута — или соберите его из точек вручную',
@@ -394,6 +403,12 @@ export const sidebarArea = {
         bicycle: 'by bike',
         car: 'by car',
         any: 'any way',
+      },
+      when: {
+        now: 'now',
+        today: 'today 18:00',
+        tomorrow: 'tomorrow 10:00',
+        custom: 'custom time',
       },
       resultModes: {
         route: 'route',
@@ -532,6 +547,7 @@ export const sidebarArea = {
 
       ui: {
         timeLabel: 'how much time you have',
+        whenLabel: 'when',
         transportLabel: 'how you travel',
         emptyStops: 'Route stops will appear here — or build one by hand',
         emptyPoint: 'an empty stop (pick it on the map)',
