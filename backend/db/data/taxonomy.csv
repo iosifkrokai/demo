@@ -22,7 +22,7 @@
 # Beginner note: lines starting with '#' and blank lines are comments; the
 # file itself is comma-separated UTF-8.
 code,ru,en,role,osm_tags,visit_minutes,aliases_ru,aliases_en,highlight
-замок,замок,castle,sight,historic=castle|historic=fort,40,крепость|цитадель|замки|замков,fortress|citadel,false
+замок,замок,castle,sight,historic=castle,40,крепость|цитадель|замки|замков,fortress|citadel,false
 костёл,костёл,catholic church,sight,amenity=place_of_worship|building=church,20,костел|костёлы,kościół,false
 церковь,церковь,orthodox church,sight,amenity=place_of_worship|building=church,20,церкви|церквей,orthodox church,false
 монастырь,монастырь,monastery,sight,amenity=place_of_worship|building=monastery,30,обитель|монастыри,friary|abbey,false
