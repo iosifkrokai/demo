@@ -7,15 +7,15 @@ Nothing that is built is listed here: a closed entry leaves the file, and what c
 the commit that did the work. The list is renumbered after every pass, so numbers are dense
 and an entry's number does not survive it.
 
-Every entry below was checked against the working tree on 2026-10-14. Of the nine, 2 is
-**decided** (the column stays empty) and 4 has a decided *no* (elevation is not worth four
-hours of download for a question nobody asks), so both stay listed only as the record of a
-measurement. Entries 1 and 3 wait on one outside thing, the administration's reply — 3
-because its premise was measured away on 2026-10-14. Entry 5 is measured and split: seven
-rows are a mechanism, fifty-two are editorial. Entries 6 to 9 are what the 2026-10-15
-measurements left behind: a settings surface nothing can open, an English name a shadowed
-row loses, a box that disagrees with the box beside it, and two curated walks that ask for
-more than the product gives. Nothing below is work in hand.
+Every entry below was checked against the working tree on 2026-10-14, except 6 and 7, which
+the 2026-10-15 measurements left. Of the seven, 2 is **decided** (the column stays empty) and
+4 has a decided *no* (elevation is not worth four hours of download for a question nobody
+asks), so both stay listed only as the record of a measurement. Entries 1 and 3 wait on one
+outside thing, the administration's reply — 3 because its premise was measured away on
+2026-10-14. Entry 5 is measured and split: seven rows are a mechanism, fifty-two are
+editorial. Entry 6 is what the curated layer's five live runs left: the leg it was parked on
+is gone with the coordinates, and the ceiling it meets is the planner's own. Nothing below is
+work in hand.
 
 ## 1. Authoritative data from the administration
 
@@ -154,73 +154,39 @@ That splits the entry in two, and each half has a different size:
   vintage and prune it. Both are editing, not engineering; the seed names the count every
   run so the silence stays visible until someone decides.
 
-## 6. A settings surface nothing can open
+## 6. The curated layer's flake is the planner's tool ceiling, not the map
 
-`frontend/src/components/settings-panel/settings-options.ts` is the Valhalla demo's whole
-parameter catalogue — 1088 lines of Use Hills, Avoid Bad Surface, bicycle_type, truck
-dimensions and the rest — with `utils/filter-profile-settings.ts` (90 lines) to cut it to
-one profile, a `settings` slice plus `settingsPanelOpen` in `stores/common-store.ts`, and
-`PossibleSettings` in `components/types.ts`. **No component renders any of it**: the whole
-tree holds one reader of `settingsPanelOpen`, a test stub.
+Re-measured 2026-10-15 with five live `--curated` runs (11 walks each, 55 runs). The leg this
+entry was parked on is gone. No run flagged a leg past the engine's bound and none flagged an
+empty shape, and no hop comes anywhere near the bound: `synagogues-trail`'s longest leg is
+**98.8 km** (Гродно → Лида, then Лида → Слоним 87.9 km; the widest pair, Гродно ↔ Слоним, is
+118.5 km) and `castles-lida-krevo-golshany`'s is 61.9 km. The 210.1 km leg was measured before
+`3256c34` re-laid the region coordinates, and it does not reproduce.
 
-It is not quite dead, which is what makes it a decision rather than a deletion: the client's
-hand-built route still takes its `costing_options` from those defaults
-(`hooks/use-directions-queries.ts` → `filterProfileSettings(profile || 'bicycle', rawSettings)`),
-and that `|| 'bicycle'` is a second oddity — a walking product whose client-side line
-defaults to a cyclist. Either give the product a settings panel (which then has to say
-truthfully what each knob does — item 4 is what happens when nobody checks), or delete the
-catalogue and let the client route send the one option it actually needs.
+What survives is the agent's own ceiling. Three of the 55 runs answered 503 «the request could
+not be planned», and the agent log names the cause every time — `UsageLimitExceeded: The next
+tool call(s) would exceed the tool_calls_limit of 12 (tool_calls=13)`, i.e. `MAX_TOOL_CALLS`.
+Only one of the three is a regional auto walk (`synagogues-trail`); the other two are city
+walks (`free-old-town`, `four-faiths`), so multi-town geometry is not what the limit catches.
+`castles-lida-krevo-golshany` answered with three stops on all five runs; `synagogues-trail`
+answered four times (all three towns once) and refused once, and its two-stop answers sit
+inside the sibling case's own `min_places=2` (`cases/compliance/synagogues_day.json`), whose
+note already records the same cap.
 
-Found 2026-10-14 while measuring item 4; nothing depends on it, so it stays until someone
-decides which of the two it is.
+Neither case wants trimming: both fit the map, and the only ceiling they meet is the planner's.
+So the work is the tool budget on a longer request — the budget `synagogues_day` already drops
+«за день» for. Reported by the 2026-10-15 measurement, so nothing here is silent.
 
-## 7. A shadowed row loses its English name
+## 7. The fetch window is narrower than the box the data is judged against
 
-`db/data/place_aliases_en.json` reaches a row by its own `source_url`, and a row the seed
-has shadowed — dropped from `places` when a hand-authored row claims the same place — is not
-there to be found. Every seed says so (`aliases_en_written: 292 written, 295 declared,
-unresolved: [...]`) and **four are unresolved today**: `osm:relation/1579104` («Mir Castle»),
-`osm:relation/5755161` («Lida castle», shadowed the moment the Lida row's coordinates were
-corrected) and two others. So two of the country's best-known castles answer an English
-query by name only if the Russian one happens to match.
+`db/seed/overpass.py::DEFAULT_BBOX` (north 54.80) is what `make fetch` asks Overpass for;
+`db/seed/datasets.py::BBOX` (north 55.01) is what the ingest accepts. The widening was
+deliberate — `region:mihalishki-church` stands at 54.814 and a hand-authored row out of box is
+fatal — so the fetch asks for 23 km less latitude than the product claims to cover. Nothing
+committed is wrong with it today (the datasets are files, not a live refetch), but the next
+`make fetch` would not see that far north.
 
-The fix is not in the JSON: after `apply_shadowed` the loser's identity is gone from
-`places` but not from `place_sources`, which still holds `external_id` and the provider.
-Resolving the alias through the survivor's `place_sources` row would attach «Mir Castle» to
-`region:mir-castle`, where the visitor looking for it belongs. Found 2026-10-15 by the
-districts/curated work; reported honestly by the seed in the meantime, so nothing is silent.
-
-## 8. A box that no longer agrees with the box next to it
-
-`core/constants.py::GRODNO_BBOX` says the north edge is 54.80; `db/seed/datasets.py::BBOX`
-says 55.01. Only one of them is read — the seed's, by the ingest — and the other is **read
-by nothing at all**: it is re-exported into `quality/runner.py` and never used there or
-anywhere else. The widening was deliberate (a hand-authored row, `region:mihalishki-church`
-at 54.814, is fatal when out of box), so the number that moved is the right one and the
-constant that stayed is a trap: whoever next reaches for "the area the product covers" gets
-a box 23 km narrower than the one the data was fetched with.
-
-Either align it with the seed's or delete it as the dead constant it is. A decision, not a
-task — the same shape as item 2.
-
-One correction of the record, since a commit message cannot be rewritten: `fc4cfcb` took
-the widened line as "nobody claims it". The owner came forward the same day — it is the
-region-coordinate work's, and its reason is better than the one I inferred: a hand-authored
-row out of box is fatal, and `region:mihalishki-church` is legitimately at 54.814. So the
-widening stays, the steps test I re-pinned to the southern residue stays right, and only the
-provenance was wrong.
-
-## 9. Two of the eleven curated walks ask for more than the product gives
-
-The curated layer ran twice on 2026-10-15 and gated a different run out each time: once
-`castles-lida-krevo-golshany` came back "the request could not be planned" (`api_error`) and
-once `synagogues-trail` returned an empty shape (`geometry_missing`) — both times on the
-regional **auto** walks, never on the six city ones. The same run also flagged a leg of
-**210.1 km** between two stops of `synagogues-trail` against the engine's own **180 km** cap
-for motorised transport (the cap is the drive's four-hour fallback at its own speed, and it
-is the product's, not the harness's).
-
-So the case asks for something the product refuses: Гродно → Лида → Слоним cannot be one
-leg inside the cap, and «замки Лиды, Крево и Гольшан за день» is close to the same edge.
-That is either a case that wants trimming to what the product serves, or a cap that is wrong
-for a day's drive — a decision, and the second run's numbers are the evidence for it.
+It is the third copy of the same number and the only live one, found 2026-10-15 while deleting
+`GRODNO_BBOX`, the copy nothing read. Aligning the window to the validator is one line and a
+refetch — a decision rather than a task, because a refetch changes which OSM objects the
+datasets would hold.
