@@ -8,9 +8,15 @@ from typing import Any
 
 import pytest
 
+from core.paths import DATA_DIR, PLACES_DIR
+from db.seed.datasets import collapse, collect_records, default_datasets, match_place, read_curated
+
 PREFIX = "test:curated/"
 HAND: dict[str, str] = {"category_source": "dataset"}
 AUTO: dict[str, str] = {"category_source": "auto"}
+
+CURATED_CSV = PLACES_DIR / "places_curated.csv"
+RETIRED_CSV = DATA_DIR / "curated_retired.csv"
 
 
 def _row(place_id: int, name: str, lat: float, lon: float, kind: dict[str, str]) -> dict[str, Any]:
@@ -58,6 +64,61 @@ def test_an_absent_name_is_not_ambiguous() -> None:
     rows = [_row(1, "Фарный костёл", 53.6778, 23.8295, AUTO)]
 
     assert match_place("Дом офицеров", rows) == (None, "none")
+
+
+def _projected_rows() -> list[dict[str, Any]]:
+    """The rows the seed projects, as ``match_place`` reads them.
+
+    Built from the committed datasets alone — ``--dry-run``'s view — so a curated row is
+    proven to resolve without a database, the way the file it lives in must.
+    """
+    collected = collect_records(default_datasets())
+    kept, _shadowed, _stale = collapse(collected["records"])
+    return [
+        {
+            "id": index,
+            "name": r["name"],
+            "category": r["category"],
+            "category_source": r["_category_source"],
+            "lat": r["lat"],
+            "lon": r["lon"],
+        }
+        for index, r in enumerate(kept)
+    ]
+
+
+def test_every_row_of_the_read_curated_file_still_resolves() -> None:
+    """The file the seed reads holds only the rows that reach a place; the prose written
+    for a vintage the data no longer carries was moved to ``curated_retired.csv``. A row
+    left here that resolves to nothing is a silent loss, not a retirement."""
+    rows = _projected_rows()
+    unresolved = sorted(
+        r["name"] for r in read_curated(CURATED_CSV) if match_place(r["name"], rows)[0] is None
+    )
+    assert not unresolved, f"a curated row in the read file resolves to nothing: {unresolved}"
+
+
+def test_the_retired_file_holds_only_rows_that_still_reach_nothing() -> None:
+    """The archive is the complement: a row in it that resolves again belongs back in the
+    read file, where the overlay would reach it again."""
+    rows = _projected_rows()
+    again = sorted(
+        r["name"] for r in read_curated(RETIRED_CSV) if match_place(r["name"], rows)[0] is not None
+    )
+    assert not again, f"an archived row resolves again — it belongs in the read file: {again}"
+
+
+def test_the_split_accounts_for_the_whole_file() -> None:
+    """The rows only moved: the read file and the archive are disjoint and add up to the
+    file as it was."""
+    kept = {r["id"] for r in read_curated(CURATED_CSV)}
+    retired = {r["id"] for r in read_curated(RETIRED_CSV)}
+    assert kept
+    assert retired
+    assert not (kept & retired)
+    assert len(kept) == 17
+    assert len(retired) == 59
+    assert len(kept) + len(retired) == 76
 
 
 @pytest.fixture

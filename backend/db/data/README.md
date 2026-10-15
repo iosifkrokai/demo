@@ -18,7 +18,10 @@ name|category|district|town|lat|lon|blurb|fun_fact|fun_facts|opening_hours|ticke
 `fun_facts` and `links` are JSON. `opening_hours` / `ticket_price` are **reference
 only** — `source_url` is what to check them against. Services carry `visit_minutes`
 empty (NULL): stops *beside* a route, not sights. `places/places_curated.csv` uses
-a 7-column shape (`id|normalized_name|category|blurb|fun_fact|fun_facts|links`).
+a 7-column shape (`id|normalized_name|category|blurb|fun_fact|fun_facts|links`) and
+holds only the rows that reach a place by name; the prose written for a data vintage
+the sets no longer carry is archived beside the datasets in `curated_retired.csv`
+(see below).
 
 `district` is **derived, not authored**: it is the polygon the point falls in, read from
 `geo/districts_border.json` (OSM `admin_level=6` boundaries, ODbL, one polygon per raion
@@ -86,6 +89,19 @@ Order of a full apply — validate, upsert by natural key, embed locally, report
    lowest id; and a name whose candidates stand kilometres apart
    (`CURATED_TWIN_RADIUS_M`) is **not** applied to any of them — the seed prints it
    as ambiguous, because a name is not a place.
+
+   The file holds only the rows that reach a place; a run reports zero unmatched and
+   zero ambiguous for it, and a row that resolves to nothing is a bug, not a data
+   vintage. The rows that reach nothing — prose written for objects the sets no
+   longer carry, or for objects OSM never mapped, plus the names no rule may resolve
+   — are kept verbatim in `curated_retired.csv` beside this file. That archive is
+   **not a dataset**: the seed reads its datasets from explicit filenames
+   (`datasets.default_datasets`, and `places_curated.csv` by name in `cli.cmd_apply`),
+   never by enumerating a directory, and the archive is in none of them — so nothing
+   reads it, and it is deliberately absent from `version.py`'s `VERSIONED_FILES`. The
+   version digest covers the *projected* inputs; an archived row cannot change the
+   projection, and hashing it would move `data_version` — and so miss the planner's
+   measurement cache — on an edit that changes nothing in the database.
 5. `areas` (project polygon + one row per district) and `place_sources` (one row
    per `(provider, external_id)`). The registry is the file: the polygon follows the
    row that declares it, and an area the file does not declare is deleted — an older

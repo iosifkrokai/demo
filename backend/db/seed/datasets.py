@@ -936,8 +936,9 @@ def build_coverage_report(collected: dict[str, Any], context: CoverageContext) -
             "explicit_en_aliases": _share(0, total),
             "note": (
                 "name-script proxy; explicit RU aliases come from the curated CSV, "
-                "EN aliases from place_aliases once a translation source exists "
-                "(see db.place_aliases after an apply)"
+                "which holds only the rows that reach a place — the applied set, and the "
+                "only one that can produce an alias; EN aliases from place_aliases once a "
+                "translation source exists (see db.place_aliases after an apply)"
             ),
         },
         "geofence_rejects": {

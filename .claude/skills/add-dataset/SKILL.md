@@ -37,6 +37,10 @@ idempotency is keyed on, so never invent a `source_url`.
 `places_curated.csv` is different: 7 columns
 (`id|normalized_name|category|blurb|fun_fact|fun_facts|links`), matched to a place
 **by name**, applied last. That is where hand-written categories and blurbs belong.
+Every row must reach a place by name and nothing else; the file holds only such rows,
+and a run reports zero unmatched and zero ambiguous for it. Prose that reaches
+nothing — written for a data vintage the sets no longer carry — is kept verbatim in
+`backend/db/data/curated_retired.csv`, which the seed never reads.
 
 ## Categories are protected
 
