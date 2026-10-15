@@ -1,6 +1,7 @@
 {
   "id": "synagogues-trail",
   "query_ru": "синагоги Гродно, Лиды и Слонима на машине",
-  "budget_minutes": 375,
-  "est_walk_minutes": 242
+  "budget_minutes": 225,
+  "est_walk_minutes": 155,
+  "note": "машина: три города и почти весь бюджет в дороге — обратный случай к предыдущему"
 }

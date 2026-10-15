@@ -1,6 +1,7 @@
 {
   "id": "family-with-kids",
   "query_ru": "Гродно с детьми: замки, парк и зоопарк, на полдня",
-  "budget_minutes": 585,
-  "est_walk_minutes": 385
+  "budget_minutes": 390,
+  "est_walk_minutes": 63,
+  "note": "сервисы по пути (кафе и туалет) и единственное длинное пешее плечо — к зоопарку"
 }

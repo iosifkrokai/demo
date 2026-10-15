@@ -1,6 +1,7 @@
 {
   "id": "west-palaces-and-churches",
   "query_ru": "дворцы и храмы запада области на машине",
-  "budget_minutes": 420,
-  "est_walk_minutes": 274
+  "budget_minutes": 330,
+  "est_walk_minutes": 160,
+  "note": "машина по западу области: Дятлово, Сынковичи, Щучин, Василишки"
 }

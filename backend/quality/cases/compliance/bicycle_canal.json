@@ -1,0 +1,24 @@
+{
+  "id": "bicycle_canal",
+  "locale": "ru",
+  "query": "Августовский канал на велосипеде: Сопоцкин и шлюзы, часа на четыре",
+  "filters": {
+    "party_children": null,
+    "hard_services": [],
+    "interests": [],
+    "avoid": [],
+    "time_budget_minutes": 240,
+    "origin": {"lat": 53.82875, "lon": 23.65737},
+    "result_mode": "route",
+    "profile": "bicycle"
+  },
+  "expectations": {
+    "must_contain_categories": [],
+    "must_not_contain_categories": [],
+    "expected_status": ["ready", "degraded", "pending"],
+    "max_total_minutes": 240,
+    "in_region": true,
+    "min_places": 3,
+    "status_note": "profile=bicycle — единственный кейс, который проходит не пешим costing'ом: до него quality мерил только pedestrian, и велосипедный путь движка не был покрыт ничем. Категорий кейс не называет намеренно: канал — это территория, а не набор кодов, и «Сопоцкин и шлюзы» словами пользователя не сводятся к одной категории таксономии; проверяется, что маршрут по каналу вообще собирается, приезжает из области и держится бюджета. min_places=3 — ниже настоящего маршрута (церковь в Сопоцкине, дворец Воловичей в Свяцке, шлюзы), но выше одной остановки, чтобы пустая сдача не прошла."
+  }
+}

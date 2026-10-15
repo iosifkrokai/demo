@@ -1,6 +1,7 @@
 {
   "id": "augustow-canal-bike",
   "query_ru": "Августовский канал на велосипеде, часа на четыре",
-  "budget_minutes": 360,
-  "est_walk_minutes": 231
+  "budget_minutes": 270,
+  "est_walk_minutes": 124,
+  "note": "велосипед: 27 км по Августовскому каналу — измеряет costing bicycle"
 }

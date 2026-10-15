@@ -1,0 +1,24 @@
+{
+  "id": "palaces_day",
+  "locale": "ru",
+  "query": "дворцы и усадьбы запада области на машине, на весь день",
+  "filters": {
+    "party_children": null,
+    "hard_services": [],
+    "interests": ["дворец", "усадьба"],
+    "avoid": [],
+    "time_budget_minutes": 480,
+    "origin": {"lat": 53.6778, "lon": 23.8295},
+    "result_mode": "route",
+    "profile": "auto"
+  },
+  "expectations": {
+    "must_contain_categories": ["дворец"],
+    "must_not_contain_categories": [],
+    "expected_status": ["ready", "degraded", "pending"],
+    "max_total_minutes": 480,
+    "in_region": true,
+    "min_places": 3,
+    "status_note": "profile=auto и «весь день»: кейс ловит машину, которой до него в наборе не было, — пеший costing на 200-километровой области даёт бессмыслицу, поэтому без профиля запрос неисполним по-настоящему. Обязателен только дворец: усадьба названа интересом, а в области её может заслонить дворец того же местечка (Дятлово — оба), и требовать обе категории значило бы требовать, чтобы агент взял именно два объекта одного урочища. min_places=3 — запад области даёт Дятлово, Слоним, Свяцк и Желудок, то есть заведомо больше."
+  }
+}

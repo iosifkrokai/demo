@@ -21,12 +21,14 @@ from functools import lru_cache
 from http import HTTPStatus
 from itertools import pairwise
 from pathlib import Path
-from typing import Any
+from typing import Any, get_args
 
 BACKEND = Path(__file__).parent.parent.resolve()
 QUALITY = BACKEND / "quality"
 BENCH_ROUTES = QUALITY / "cases" / "routes"
 BENCH_GOLDEN = QUALITY / "cases" / "compliance"
+BENCH_CURATED = QUALITY / "cases" / "curated"
+BENCH_CURATED_OUT = QUALITY / "reports" / "curated"
 DUPLICATE_EXCEPTIONS = QUALITY / "cases" / "duplicate_exceptions.json"
 BENCH_OUT = QUALITY / "reports"
 BENCH_SNAPSHOTS = BENCH_OUT / "snapshots"
@@ -39,6 +41,7 @@ CHECK_TOO_FEW_PLACES = "too_few_places"
 CHECK_MISSING_MANDATORY_CATEGORY = "missing_mandatory_category"
 CHECK_FORBIDDEN_CATEGORY_PRESENT = "forbidden_category_present"
 CHECK_MISSING_NAMED_PLACE = "missing_named_place"
+CHECK_REQUIREMENT_UNMET = "requirement_unmet"
 CHECK_OUT_OF_REGION_POINT = "out_of_region_point"
 CHECK_OVER_BUDGET = "over_budget"
 CHECK_RESULT_MODE = "result_mode_mismatch"
@@ -51,6 +54,7 @@ CHECK_PRIORITY: tuple[str, ...] = (
     CHECK_MISSING_MANDATORY_CATEGORY,
     CHECK_FORBIDDEN_CATEGORY_PRESENT,
     CHECK_MISSING_NAMED_PLACE,
+    CHECK_REQUIREMENT_UNMET,
     CHECK_OUT_OF_REGION_POINT,
     CHECK_OVER_BUDGET,
     CHECK_RESULT_MODE,
@@ -64,9 +68,12 @@ if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 
 from core import constants as agent_constants  # noqa: E402
+from core.paths import ITINERARIES_JSON  # noqa: E402
+from db.seed import cli, datasets as ds_mod, itineraries as itin_mod  # noqa: E402
 from db.seed.geofence import inside_project_area  # noqa: E402
 from db.seed.taxonomy import all_categories  # noqa: E402
-from routing.models import Requirement, TripRequirements  # noqa: E402
+from routing.models import Requirement, RequirementKind, TripRequirements  # noqa: E402
+from routing.valhalla.constants import VALHALLA_COSTINGS  # noqa: E402
 from routing.verify import overall_status  # noqa: E402
 
 CANONICAL_CATEGORIES = {
@@ -81,6 +88,7 @@ MAX_WALK_LEG_KM = float(agent_constants.MAX_WALK_LEG_KM)
 DUPLICATE_RADIUS_M = float(agent_constants.DUPLICATE_RADIUS_M)
 DUPLICATE_NAME_RADIUS_M = float(agent_constants.DUPLICATE_NAME_RADIUS_M)
 GRODNO_BBOX = dict(agent_constants.GRODNO_BBOX)
+REQUIREMENT_KINDS = frozenset(get_args(RequirementKind))
 
 STAGE1_PROXY_RADIUS_M = 250.0
 
@@ -138,6 +146,9 @@ class GoldenRoute:
     budget_minutes: int
     stops: list[GoldenStop]
     est_walk_minutes: int | None = None
+    profile: str | None = None
+    origin: tuple[float, float] | None = None
+    fingerprint: str | None = None
     path: Path = field(default=None)
     case: str = ""
 
@@ -350,6 +361,7 @@ class ReportInput:
     mode: str
     generated_at: str
     snapshot: dict[str, Any]
+    cases_dir: str = ""
     base_url: str = ""
     overall: dict[str, Any] = field(default_factory=dict)
     noise: dict[str, Any] = field(default_factory=dict)
@@ -685,12 +697,33 @@ def _duplicate_rule(name_a: str, name_b: str, dist_m: float) -> str | None:
     return None
 
 
+def leg_cap_km(profile: str | None) -> float:
+    """The longest single leg the engine itself allows, in km, for one transport.
+
+    `routing/optimize._max_leg_seconds` states the same rule in seconds — 5 km on
+    foot, 20 km by bicycle, and a four-hour fallback for anything motorised — so a
+    driving leg is measured against the drive's own limit and a 155 km hop between
+    towns stops reading as a walking defect.
+    """
+    costing = str(profile or "").strip().lower()
+    if costing == "bicycle":
+        return float(agent_constants.BICYCLE_LEG_KM)
+    if costing not in ("", "pedestrian"):
+        return (
+            float(agent_constants.DRIVE_LEG_FALLBACK_S)
+            / 3600.0
+            * float(agent_constants.AUTO_SPEED_KMH)
+        )
+    return MAX_WALK_LEG_KM
+
+
 def leg_sanity(
     our_stops: list[OurStop],
     summary: dict[str, Any],
     raw: dict[str, Any],
+    profile: str | None = None,
 ) -> LegSanity:
-    """Is the returned route physically walkable, judging from the wire alone?"""
+    """Is the returned route physically plausible, judging from the wire alone?"""
     leg = LegSanity(n_stops=len(our_stops))
     points = [(s.lat, s.lon) for s in our_stops]
     leg.max_leg_km_straight = max_leg_km(points)
@@ -700,7 +733,7 @@ def leg_sanity(
     if _is_num(length_km) and _is_num(time_s) and length_km > 0 and time_s > 0:
         leg.avg_speed_kmh = float(length_km) / (float(time_s) / 3600.0)
 
-    if leg.max_leg_km_straight is not None and leg.max_leg_km_straight > MAX_WALK_LEG_KM:
+    if leg.max_leg_km_straight is not None and leg.max_leg_km_straight > leg_cap_km(profile):
         leg.over_cap = True
 
     leg.duplicate_pairs = find_duplicate_stop_pairs(our_stops)
@@ -715,6 +748,7 @@ def build_request(
     budget_minutes: int | None,
     origin_lat: float | None = None,
     origin_lon: float | None = None,
+    profile: str | None = None,
 ) -> dict[str, Any]:
     """The exact body sent to POST /routes/generate (also what a row records)."""
     payload: dict[str, Any] = {
@@ -723,6 +757,8 @@ def build_request(
     }
     if origin_lat is not None and origin_lon is not None:
         payload["origin"] = {"lat": origin_lat, "lon": origin_lon}
+    if profile:
+        payload["profile"] = profile
     return payload
 
 
@@ -745,16 +781,19 @@ def call_generate(
     budget_minutes: int | None,
     origin_lat: float | None = None,
     origin_lon: float | None = None,
+    profile: str | None = None,
 ) -> dict[str, Any]:
     """POST /routes/generate → parsed dict (raw JSON)."""
     _status, raw = post_generate(
-        base_url, build_request(query, budget_minutes, origin_lat, origin_lon)
+        base_url, build_request(query, budget_minutes, origin_lat, origin_lon, profile)
     )
     return raw
 
 
 def route_origin(golden: GoldenRoute) -> tuple[float | None, float | None]:
-    """Origin estimate: the centroid of the reference stops."""
+    """Origin estimate: the case's own start, or the centroid of the reference stops."""
+    if golden.origin is not None:
+        return golden.origin
     if not golden.stops:
         return None, None
     lat = sum(s.lat for s in golden.stops) / len(golden.stops)
@@ -767,7 +806,9 @@ def evaluate(golden: GoldenRoute, base_url: str) -> EvaluationResult:
     lat, lon = route_origin(golden)
     t0 = time.monotonic()
     try:
-        raw = call_generate(base_url, golden.query_ru, golden.budget_minutes, lat, lon)
+        raw = call_generate(
+            base_url, golden.query_ru, golden.budget_minutes, lat, lon, golden.profile
+        )
     except urllib.error.HTTPError as exc:
         return score_response(
             golden,
@@ -830,8 +871,8 @@ def score_response(
     _score_reference(result)
     _score_budget(result, summary, budget_info)
     result.stage = stage_split(golden, result.our_stops)
-    result.leg = leg_sanity(result.our_stops, summary, raw or {})
-    result.failures.extend(_leg_failures(result.leg))
+    result.leg = leg_sanity(result.our_stops, summary, raw or {}, golden.profile)
+    result.failures.extend(_leg_failures(result.leg, golden.profile))
     return result
 
 
@@ -892,7 +933,7 @@ def _score_budget(
     result.budget_fit = bool(budget_info.get("fits", False))
 
 
-def _leg_failures(leg: LegSanity) -> list[Failure]:
+def _leg_failures(leg: LegSanity, profile: str | None = None) -> list[Failure]:
     out: list[Failure] = []
     if leg.unreachable_sentinel:
         out.append(
@@ -922,7 +963,8 @@ def _leg_failures(leg: LegSanity) -> list[Failure]:
         out.append(
             Failure(
                 kind="leg_over_cap",
-                detail=f"a leg exceeds MAX_WALK_LEG_KM={MAX_WALK_LEG_KM}",
+                detail=f"a leg of {leg.max_leg_km_straight:.1f} km exceeds the cap of "
+                f"{leg_cap_km(profile):.1f} km for {profile or 'pedestrian'}",
             )
         )
     return out
@@ -1035,7 +1077,8 @@ def golden_sha256(golden: GoldenRoute) -> str | None:
         return None
     cached = _GOLDEN_SHA_CACHE.get(golden.case)
     if cached is None:
-        cached = _sha256_text(golden.path.read_text(encoding="utf-8"))
+        text = golden.path.read_text(encoding="utf-8") + (golden.fingerprint or "")
+        cached = _sha256_text(text)
         _GOLDEN_SHA_CACHE[golden.case] = cached
     return cached
 
@@ -1622,6 +1665,7 @@ def write_json_report(
     report = {
         "schema": REPORT_SCHEMA,
         "mode": report.mode,
+        "cases_dir": report.cases_dir,
         "generated_at": report.generated_at,
         "n_routes": len(groups),
         "repeat": len(groups[0]) if groups else 0,
@@ -1659,9 +1703,12 @@ def write_json_report(
             "max_leg_km_straight": (
                 "the longest straight-line hop between the returned stops. The wire "
                 "carries no per-leg figure any more (the old debug.trace.max_leg_seconds "
-                "went with the pipeline), so this is the offline leg-cap check: a value "
-                f"over MAX_WALK_LEG_KM={MAX_WALK_LEG_KM} is a leg-sanity defect. It is a "
-                "lower bound on the walked leg, not the walked leg itself."
+                "went with the pipeline), so this is the offline leg-cap check, and the "
+                "cap is the one the engine itself applies per transport — "
+                f"{MAX_WALK_LEG_KM:g} km on foot, {float(agent_constants.BICYCLE_LEG_KM):g} km "
+                f"by bicycle, {leg_cap_km('auto'):g} km for anything motorised (the "
+                "drive's own four-hour fallback at its own speed). The straight line is a "
+                "lower bound on the real leg, not the leg itself."
             ),
             "n_unreachable_legs": (
                 "NOT MEASURABLE from the wire: the new response carries no cost matrix "
@@ -1907,6 +1954,7 @@ def load_golden_routes(routes_dir: Path) -> list[GoldenRoute]:
                 budget_minutes=data.get("budget_minutes", 120),
                 stops=stops,
                 est_walk_minutes=data.get("est_walk_minutes"),
+                profile=data.get("profile"),
                 path=p,
                 case=p.stem,
             )
@@ -1914,12 +1962,112 @@ def load_golden_routes(routes_dir: Path) -> list[GoldenRoute]:
     return routes
 
 
+CURATED_REQUIRED_KEYS = frozenset({"id", "query_ru", "budget_minutes"})
+CURATED_OPTIONAL_KEYS = frozenset({"est_walk_minutes", "note"})
+
+
+def _check_curated_case(data: Any, path: Path) -> list[str]:
+    """A sidecar carries the query and the budget, and nothing the data already holds."""
+    where = str(path)
+    if not isinstance(data, dict):
+        return [f"{where}: a curated case must be a JSON object"]
+    errs: list[str] = []
+    for key in sorted(set(data) - CURATED_REQUIRED_KEYS - CURATED_OPTIONAL_KEYS):
+        errs.append(f"{where}: unknown key {key!r}")
+    for key in sorted(CURATED_REQUIRED_KEYS - set(data)):
+        errs.append(f"{where}: missing key {key!r}")
+    case_id = data.get("id")
+    if "id" in data and (not isinstance(case_id, str) or case_id != path.stem):
+        errs.append(f"{where}: id must be {path.stem!r}, not {case_id!r}")
+    query = data.get("query_ru")
+    if "query_ru" in data and (not isinstance(query, str) or not query.strip()):
+        errs.append(f"{where}: query_ru must be a non-empty string")
+    budget = data.get("budget_minutes")
+    if "budget_minutes" in data and (
+        not _is_plain_int(budget, low=1) or budget > int(agent_constants.MAX_BUDGET_MIN)
+    ):
+        errs.append(
+            f"{where}: budget_minutes must be an int in 1..{int(agent_constants.MAX_BUDGET_MIN)}"
+        )
+    walk = data.get("est_walk_minutes")
+    if walk is not None and not _is_plain_int(walk, low=0):
+        errs.append(f"{where}: est_walk_minutes must be null or an int >= 0")
+    note = data.get("note")
+    if note is not None and (not isinstance(note, str) or not note.strip()):
+        errs.append(f"{where}: note must be a non-empty string when present")
+    return errs
+
+
+def load_curated_routes(
+    curated_dir: Path = BENCH_CURATED, itineraries_path: Path | None = None
+) -> list[GoldenRoute]:
+    """The ready-made routes as reference walks.
+
+    The stops are read from `db/data/itineraries.json` and resolved against the
+    datasets the seed projects — never copied into the case — so a walk and the
+    case that measures it cannot drift apart. A sidecar supplies only what the
+    data does not hold: the query words and the budget. Unknown keys are refused,
+    the way a compliance case refuses them, so a sidecar cannot carry a field
+    nothing reads.
+    """
+    sidecars = sorted(curated_dir.glob("*.json"))
+    if not sidecars:
+        return []
+    source = itineraries_path or ITINERARIES_JSON
+    walks = {walk["id"]: walk for walk in itin_mod.load_itineraries(source)}
+    collected, _shadowed, _stale = cli._collect(ds_mod.default_datasets())
+    places = {record["source_url"]: record for record in collected["records"]}
+
+    routes: list[GoldenRoute] = []
+    for path in sidecars:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if errs := _check_curated_case(data, path):
+            raise ValueError("; ".join(errs))
+        walk = walks.get(str(data.get("id")))
+        if walk is None:
+            raise ValueError(f"{path}: no itinerary {data.get('id')!r} in {source.name}")
+        unresolved = [key for key in walk["stops"] if key not in places]
+        if unresolved:
+            raise ValueError(f"{path}: a stop names a source_url no dataset holds: {unresolved}")
+        stops = [
+            GoldenStop(
+                name=places[key]["name"],
+                lat=places[key]["lat"],
+                lon=places[key]["lon"],
+                visit_minutes=places[key].get("visit_minutes"),
+            )
+            for key in walk["stops"]
+        ]
+        routes.append(
+            GoldenRoute(
+                name=walk["title"],
+                source=f"{source.name}#{walk['id']}",
+                query_ru=str(data["query_ru"]),
+                budget_minutes=int(data["budget_minutes"]),
+                stops=stops,
+                est_walk_minutes=data.get("est_walk_minutes"),
+                profile=walk.get("transport"),
+                origin=(stops[0].lat, stops[0].lon) if stops else None,
+                fingerprint="\n".join(
+                    f"{key}|{p.lat:.6f}|{p.lon:.6f}|{p.name}"
+                    for key, p in zip(walk["stops"], stops, strict=True)
+                ),
+                path=path,
+                case=walk["id"],
+            )
+        )
+    return routes
+
+
 def load_golden_map() -> dict[str, GoldenRoute]:
-    return {r.case: r for r in load_golden_routes(BENCH_ROUTES)}
+    """Every reference walk this tree knows: the benchmark's, and the ready-made ones."""
+    routes = [*load_golden_routes(BENCH_ROUTES), *load_curated_routes(BENCH_CURATED)]
+    return {r.case: r for r in routes}
 
 
 GOLDEN_REQUIRED_TOP = frozenset({"id", "locale", "query", "filters", "expectations"})
 GOLDEN_OPTIONAL_TOP = frozenset({"parity_group"})
+GOLDEN_OPTIONAL_FILTER_KEYS = frozenset({"profile"})
 GOLDEN_FILTER_KEYS = frozenset(
     {
         "party_children",
@@ -1931,6 +2079,7 @@ GOLDEN_FILTER_KEYS = frozenset(
         "result_mode",
     }
 )
+GOLDEN_ALL_FILTER_KEYS = GOLDEN_FILTER_KEYS | GOLDEN_OPTIONAL_FILTER_KEYS
 GOLDEN_REQUIRED_EXPECTATIONS = frozenset(
     {
         "must_contain_categories",
@@ -1943,6 +2092,7 @@ GOLDEN_REQUIRED_EXPECTATIONS = frozenset(
 GOLDEN_OPTIONAL_EXPECTATIONS = frozenset(
     {
         "must_contain_names",
+        "must_satisfy_requirement_kinds",
         "expected_result_mode",
         "allow_empty",
         "min_places",
@@ -2057,6 +2207,7 @@ def _golden_filters(data: dict[str, Any], where: str) -> list[str]:
         return [f"{where}: filters must be an object"]
     return (
         _filter_keys(filters, where)
+        + _filter_profile(filters, where)
         + _filter_overlap(filters, where)
         + _filter_budget(filters, where)
         + _filter_result_mode(filters, where)
@@ -2064,10 +2215,23 @@ def _golden_filters(data: dict[str, Any], where: str) -> list[str]:
     )
 
 
+def _filter_profile(filters: dict[str, Any], where: str) -> list[str]:
+    """The transport the tourist picked. Absent means the API's own default."""
+    profile = filters.get("profile")
+    if profile is None or profile in VALHALLA_COSTINGS:
+        return []
+    return [
+        (
+            f"{where}: filters.profile must be null or one of "
+            f"{sorted(VALHALLA_COSTINGS)}, got {profile!r}"
+        )
+    ]
+
+
 def _filter_keys(filters: dict[str, Any], where: str) -> list[str]:
     """The keys the schema names, the party size, and the codes to look for."""
     errs: list[str] = []
-    for key in sorted(set(filters) - GOLDEN_FILTER_KEYS):
+    for key in sorted(set(filters) - GOLDEN_ALL_FILTER_KEYS):
         errs.append(f"{where}: unknown filters key {key!r}")
     for key in sorted(GOLDEN_FILTER_KEYS - set(filters)):
         errs.append(f"{where}: missing filters key {key!r}")
@@ -2177,6 +2341,20 @@ def _expectation_codes(exp: dict[str, Any], where: str) -> list[str]:
             f"{where}: expectations.must_contain_names must be a non-empty "
             "list of non-empty strings when present"
         )
+    kinds = exp.get("must_satisfy_requirement_kinds")
+    if kinds is not None:
+        if not _name_list_ok(kinds):
+            errs.append(
+                f"{where}: expectations.must_satisfy_requirement_kinds must be a "
+                "non-empty list of non-empty strings when present"
+            )
+        else:
+            errs += [
+                f"{where}: expectations.must_satisfy_requirement_kinds {kind!r} is not "
+                f"one of {sorted(REQUIREMENT_KINDS)}"
+                for kind in kinds
+                if kind not in REQUIREMENT_KINDS
+            ]
     return errs
 
 
@@ -2456,6 +2634,8 @@ def evaluate_compliance(
     checks[CHECK_FORBIDDEN_CATEGORY_PRESENT] = _forbidden_check(exp, stop_codes)
     if exp.get("must_contain_names"):
         checks[CHECK_MISSING_NAMED_PLACE] = _named_check(exp, points)
+    if exp.get("must_satisfy_requirement_kinds"):
+        checks[CHECK_REQUIREMENT_UNMET] = _requirement_check(raw, exp)
     if exp.get("in_region"):
         checks[CHECK_OUT_OF_REGION_POINT] = _region_check(points)
     checks[CHECK_OVER_BUDGET] = _budget_check(raw, points, exp)
@@ -2560,6 +2740,27 @@ def _named_check(exp: dict[str, Any], points: list[dict[str, Any]]) -> dict[str,
     return _fail(
         f"missing named place(s) {missing_names}; plan names {[p.get('name') for p in points][:6]}"
     )
+
+
+def _requirement_check(raw: dict[str, Any], exp: dict[str, Any]) -> dict[str, Any]:
+    """Whether the kinds the case names were read out of the query and satisfied.
+
+    The answer comes from the wire's own reading (`interpretation.requirements`), so
+    the check sees what the parser understood, not what the case hoped for.
+    """
+    wanted = [str(k) for k in exp.get("must_satisfy_requirement_kinds") or []]
+    interpretation = raw.get("interpretation")
+    if not isinstance(interpretation, dict):
+        return _unverified(f"the response carries no interpretation to read {wanted} from")
+    signals = [s for s in (interpretation.get("requirements") or []) if isinstance(s, dict)]
+    declared = {str(s.get("kind")): str(s.get("status")) for s in signals}
+    missing = [k for k in wanted if k not in declared]
+    if missing:
+        return _fail(f"the reading declared no {missing} requirement; it read {sorted(declared)}")
+    unmet = [k for k in wanted if declared[k] == "unmet"]
+    if unmet:
+        return _fail(f"the plan left {unmet} unmet; it read {declared}")
+    return _ok(f"read and met {wanted}: {declared}")
 
 
 def _region_check(points: list[dict[str, Any]]) -> dict[str, Any]:
@@ -2715,6 +2916,9 @@ def build_golden_request(case: GoldenCase) -> dict[str, Any]:
     origin = filters.get("origin")
     if origin:
         payload["origin"] = {"lat": origin["lat"], "lon": origin["lon"]}
+    profile = filters.get("profile")
+    if profile:
+        payload["profile"] = profile
     return payload
 
 
@@ -3337,7 +3541,7 @@ def run_live(
 
 def _run_once(route: GoldenRoute, base_url: str, repeat: int, git_sha: str) -> RunRecord:
     lat, lon = route_origin(route)
-    request = build_request(route.query_ru, route.budget_minutes, lat, lon)
+    request = build_request(route.query_ru, route.budget_minutes, lat, lon, route.profile)
     t0 = time.monotonic()
     status: int | None = None
     raw: dict[str, Any] | None = None
@@ -3690,6 +3894,21 @@ def build_parser() -> argparse.ArgumentParser:
         f"(default: {BOOTSTRAP_SEED})",
     )
     parser.add_argument(
+        "--curated",
+        action="store_true",
+        help=(
+            "Score the READY-MADE routes (quality/cases/curated/*.json) instead of the "
+            "benchmark walks: each case asks the planner the same request the itinerary "
+            "answers, and the itinerary's own stops are the reference. Needs a live stack."
+        ),
+    )
+    parser.add_argument(
+        "--curated-dir",
+        default=None,
+        metavar="DIR",
+        help="Directory of curated cases (default: backend/quality/cases/curated)",
+    )
+    parser.add_argument(
         "--golden",
         action="store_true",
         help=(
@@ -3748,18 +3967,56 @@ class RunOutput:
 
 
 def _select_routes(args) -> list[GoldenRoute]:
-    routes = load_golden_routes(BENCH_ROUTES)
+    if args.curated:
+        source = Path(args.curated_dir) if args.curated_dir else BENCH_CURATED
+        routes = load_curated_routes(source)
+        if not routes:
+            print(f"No curated cases found in {source}", file=sys.stderr)
+            sys.exit(1)
+    else:
+        routes = load_golden_routes(BENCH_ROUTES)
+        if not routes:
+            print(f"No benchmark files found in {BENCH_ROUTES}", file=sys.stderr)
+            sys.exit(1)
     if args.case:
         wanted = set(args.case)
         routes = [r for r in routes if r.case in wanted]
         missing = wanted - {r.case for r in routes}
         if missing:
-            print(f"No benchmark file for case(s): {sorted(missing)}", file=sys.stderr)
+            print(f"No case file for case(s): {sorted(missing)}", file=sys.stderr)
             sys.exit(1)
-    if not routes:
-        print(f"No benchmark files found in {BENCH_ROUTES}", file=sys.stderr)
-        sys.exit(1)
     return routes
+
+
+def _cases_dir(cases: list[str]) -> Path | None:
+    """The one directory a run's cases come from, when they all come from one."""
+    goldens = load_golden_map()
+    dirs = {goldens[c].path.parent for c in cases if c in goldens and goldens[c].path}
+    dirs = {d for d in dirs if d is not None}
+    return dirs.pop() if len(dirs) == 1 else None
+
+
+def _relative_cases_dir(groups: list[list[RunRecord]]) -> str:
+    """The set the run scored, as a path from backend/ — the report names its own source."""
+    found = _cases_dir([g[0].case for g in groups if g])
+    if found is None:
+        return ""
+    try:
+        return str(found.relative_to(BACKEND))
+    except ValueError:
+        return str(found)
+
+
+def _report_dir(args, fallback: Path, cases: list[str]) -> Path:
+    """Where a run's reports land: an explicit dir, or the measured set's own.
+
+    A replay cannot be told its set by a flag, so the cases decide: rows that name the
+    ready-made walks are filed with them, and a report never overwrites the other
+    layer's numbers under the other layer's name.
+    """
+    if args.report_dir:
+        return Path(args.report_dir)
+    return BENCH_CURATED_OUT if _cases_dir(cases) == BENCH_CURATED else fallback
 
 
 def _live_output(args, routes: list[GoldenRoute]) -> RunOutput:
@@ -3770,11 +4027,12 @@ def _live_output(args, routes: list[GoldenRoute]) -> RunOutput:
         snapshot_dir = Path(args.snapshot)
     else:
         snapshot_dir = default_snapshot_dir()
+    out_dir = _report_dir(args, BENCH_OUT, [r.case for r in routes])
     print("Benchmark runner — live")
     print(f"API base URL: {args.base_url}")
     print(f"Runs per case: {args.repeat}")
     print(f"Snapshot: {snapshot_dir}" if snapshot_dir else "Snapshot: off")
-    print(f"Reports will be written to: {args.report_dir or BENCH_OUT}")
+    print(f"Reports will be written to: {out_dir}")
     preflight_or_exit(args.base_url)
     groups, meta = run_live(routes, args.base_url, args.repeat, snapshot_dir, args.append)
     n_rows = sum(len(g) for g in groups)
@@ -3782,7 +4040,7 @@ def _live_output(args, routes: list[GoldenRoute]) -> RunOutput:
         mode="live",
         groups=groups,
         meta=meta,
-        out_dir=Path(args.report_dir) if args.report_dir else BENCH_OUT,
+        out_dir=out_dir,
         snapshot=_snapshot_info(meta, snapshot_dir, n_rows) if snapshot_dir else {},
         generated_at=str(meta.get("started_at")),
     )
@@ -3809,7 +4067,7 @@ def _replay_output(args) -> RunOutput:
         mode="replay",
         groups=groups,
         meta=meta,
-        out_dir=Path(args.report_dir) if args.report_dir else snapshot_dir,
+        out_dir=_report_dir(args, snapshot_dir, [g[0].case for g in groups if g]),
         snapshot=_snapshot_info(meta, snapshot_dir, n_rows),
         generated_at=str(meta.get("started_at") or "unknown"),
         drift=drift,
@@ -3830,6 +4088,7 @@ def _emit(args, out: RunOutput) -> None:
         mode=out.mode,
         generated_at=out.generated_at,
         snapshot=out.snapshot,
+        cases_dir=_relative_cases_dir(out.groups),
         overall=overall,
         noise=noise,
         failures=failures,

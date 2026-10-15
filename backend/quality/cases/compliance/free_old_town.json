@@ -1,0 +1,23 @@
+{
+  "id": "free_old_town",
+  "locale": "ru",
+  "query": "Гродно бесплатно: только то, куда вход свободный, часа на три",
+  "filters": {
+    "party_children": null,
+    "hard_services": [],
+    "interests": [],
+    "avoid": [],
+    "time_budget_minutes": 180,
+    "origin": {"lat": 53.6778, "lon": 23.8295},
+    "result_mode": "route"
+  },
+  "expectations": {
+    "must_contain_categories": [],
+    "must_not_contain_categories": [],
+    "expected_status": ["ready", "degraded", "pending"],
+    "max_total_minutes": 180,
+    "in_region": true,
+    "must_satisfy_requirement_kinds": ["free"],
+    "status_note": "«бесплатно» — условие без кода и без имени, поэтому его нечем назвать в must_contain_categories: категорий у требования free нет, и кейс называет сам вид требования. Отсутствие требования в разборе — падение (запрос прочитан как обычная прогулка), unmet — тоже падение; uncertain проходит, потому что цена записана у немногих мест и честный ответ об этом говорит. Кейсов на free до него не было ни одного."
+  }
+}

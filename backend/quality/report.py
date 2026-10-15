@@ -15,6 +15,8 @@ QUALITY = BACKEND / "quality"
 REPORTS = QUALITY / "reports"
 SNAPSHOTS = REPORTS / "snapshots"
 COMPLIANCE = REPORTS / "compliance.json"
+CURATED = REPORTS / "curated" / "report.json"
+CURATED_DIR = "quality/cases/curated"
 EVALS_LAST = REPORTS / "evals_last.json"
 TRAJECTORY = REPORTS / "trajectory.json"
 VENV = BACKEND / ".venv" / "bin" / "python"
@@ -57,26 +59,45 @@ def _routes_report() -> Path | None:
     found = [
         p
         for p in (REPORTS / "report.json", _latest_under(SNAPSHOTS, "report.json"))
-        if p is not None and p.exists()
+        if p is not None and p.exists() and _cases_dir_of(p) != CURATED_DIR
     ]
     return max(found, key=lambda p: p.stat().st_mtime) if found else None
 
 
+def _cases_dir_of(path: Path) -> str:
+    """The set a report measured, as the report itself names it."""
+    try:
+        return str((json.loads(path.read_text(encoding="utf-8")) or {}).get("cases_dir") or "")
+    except (OSError, ValueError):
+        return ""
+
+
 def read_routes(path: Path | None = None) -> dict[str, Any]:
-    path = path or _routes_report()
+    return _geometry(
+        path or _routes_report(),
+        "quality/cases/routes",
+        "./.venv/bin/python -m quality --replay quality/reports/snapshots/<снимок>"
+        " --report-dir quality/reports/snapshots/<дата>",
+    )
+
+
+def read_curated(path: Path | None = None) -> dict[str, Any]:
+    return _geometry(
+        path or (CURATED if CURATED.exists() else None),
+        "quality/cases/curated",
+        "./.venv/bin/python -m quality --curated --snapshot",
+    )
+
+
+def _geometry(path: Path | None, layer: str, how: str) -> dict[str, Any]:
+    """One geometry measurement: which reference walk set it scored, and how it went."""
     if path is None or not path.exists():
-        return {
-            "layer": "quality/cases/routes",
-            "measured": False,
-            "how": "./.venv/bin/python -m quality --replay "
-            "quality/reports/snapshots/<снимок>"
-            " --report-dir quality/reports/snapshots/<дата>",
-        }
+        return {"layer": layer, "measured": False, "how": how}
     report = json.loads(path.read_text(encoding="utf-8"))
     overall = report.get("overall") or {}
     want = [m for m in ("recall_at_k", "kendall_tau", "detour_km", "stage.recall") if m in overall]
     return {
-        "layer": "quality/cases/routes",
+        "layer": str(report.get("cases_dir") or layer),
         "measured": True,
         "source": _relative_to_backend(path),
         "taken": _mtime(path),
@@ -247,6 +268,7 @@ def read_trajectory(path: Path | None = None) -> dict[str, Any]:
 
 def growth_points(
     routes: dict[str, Any],
+    curated: dict[str, Any],
     golden: dict[str, Any],
     evals: dict[str, Any],
     trajectory: dict[str, Any],
@@ -254,29 +276,31 @@ def growth_points(
     """Everything known-bad, sorted by the number of cases affected."""
     points: list[dict[str, Any]] = []
 
-    hard = routes.get("hard_failures") or {}
-    for kind, count in (hard.get("by_kind") or {}).items():
-        details = [
-            d.get("detail", "") for d in (hard.get("details") or []) if d.get("kind") == kind
-        ]
-        points.append(
-            {
-                "what": f"геометрия: {kind}",
-                "detail": "; ".join(details) or f"прогонов затронуто: {count}",
-                "affects": count,
-                "where": routes.get("source", "quality/cases/routes"),
-            }
-        )
-    if hard.get("leg_sanity_defects"):
-        points.append(
-            {
-                "what": "геометрия: дефекты самих ног оставлены в средних",
-                "detail": f"дефектных ног: {hard['leg_sanity_defects']} — выкинуть прогон "
-                f"значило бы спрятать проверку",
-                "affects": hard["leg_sanity_defects"],
-                "where": routes.get("source", "quality/cases/routes"),
-            }
-        )
+    for layer in (routes, curated):
+        hard = layer.get("hard_failures") or {}
+        where = layer.get("source", layer["layer"])
+        for kind, count in (hard.get("by_kind") or {}).items():
+            details = [
+                d.get("detail", "") for d in (hard.get("details") or []) if d.get("kind") == kind
+            ]
+            points.append(
+                {
+                    "what": f"геометрия: {kind}",
+                    "detail": "; ".join(details) or f"прогонов затронуто: {count}",
+                    "affects": count,
+                    "where": where,
+                }
+            )
+        if hard.get("leg_sanity_defects"):
+            points.append(
+                {
+                    "what": "геометрия: дефекты самих ног оставлены в средних",
+                    "detail": f"дефектных ног: {hard['leg_sanity_defects']} — выкинуть прогон "
+                    f"значило бы спрятать проверку",
+                    "affects": hard["leg_sanity_defects"],
+                    "where": where,
+                }
+            )
 
     for case in golden.get("failed_cases") or []:
         points.append(
@@ -351,30 +375,48 @@ NOT_MEASURED = [
 
 def render(
     routes: dict[str, Any],
+    curated: dict[str, Any],
     golden: dict[str, Any],
     evals: dict[str, Any],
     trajectory: dict[str, Any],
 ) -> str:
-    points = growth_points(routes, golden, evals, trajectory)
+    points = growth_points(routes, curated, golden, evals, trajectory)
     gaps = known_gaps(golden, evals)
-    caveats = _caveats(routes, golden, evals)
+    caveats = _caveats(routes, curated, golden, evals)
     return "\n".join(
-        _header(routes, golden, evals, trajectory)
+        _header(routes, curated, golden, evals, trajectory)
         + _growth_section(points)
         + _known_gaps_section(gaps)
         + _caveats_section(caveats)
-        + _tail_section(routes, golden, evals)
+        + _tail_section(routes, curated, golden, evals)
     )
+
+
+def _geometry_rows(layer: dict[str, Any], caption: str) -> list[str]:
+    """One layer row: the recall it measured, under the caption that names the reference."""
+    name = layer["layer"]
+    if not layer.get("measured"):
+        return [f"{name:<21} {'НЕ ИЗМЕРЯЛОСЬ':<38} —"]
+    rec = layer["metrics"].get("recall_at_k") or {}
+    number = (
+        f"Rec@K {rec.get('mean'):.3f} [{rec.get('lo'):.3f}, {rec.get('hi'):.3f}]"
+        if rec.get("mean") is not None
+        else "метрик нет"
+    )
+    return [
+        f"{name:<21} {number:<38} {layer['taken']}",
+        f"{'':<21} {caption:<38} n={layer.get('n_runs')}",
+    ]
 
 
 def _header(
     routes: dict[str, Any],
+    curated: dict[str, Any],
     golden: dict[str, Any],
     evals: dict[str, Any],
     trajectory: dict[str, Any],
 ) -> list[str]:
     """The table: one row per layer, and what it did or did not measure."""
-    out: list[str] = []
     out: list[str] = []
     out.append("")
     out.append("КАЧЕСТВО ГИДА — ОДНА СТРАНИЦА")
@@ -384,19 +426,8 @@ def _header(
     out.append("СЛОЙ                  ЧИСЛО                                  СНЯТО")
     out.append("-" * 66)
 
-    if routes.get("measured"):
-        rec = routes["metrics"].get("recall_at_k") or {}
-        number = (
-            f"Rec@K {rec.get('mean'):.3f} [{rec.get('lo'):.3f}, {rec.get('hi'):.3f}]"
-            if rec.get("mean") is not None
-            else "метрик нет"
-        )
-        out.append(f"{'quality/cases/routes':<21} {number:<38} {routes['taken']}")
-        out.append(
-            f"{'':<21} {'(геометрия против эталонной прогулки)':<38} n={routes.get('n_runs')}"
-        )
-    else:
-        out.append(f"{'quality/cases/routes':<21} {'НЕ ИЗМЕРЯЛОСЬ':<38} —")
+    out += _geometry_rows(routes, "(геометрия против эталонной прогулки)")
+    out += _geometry_rows(curated, "(геометрия против готовых маршрутов)")
 
     if golden.get("measured"):
         rate = golden.get("compliance")
@@ -475,7 +506,9 @@ def _known_gaps_section(gaps: list[dict[str, Any]]) -> list[str]:
     return out
 
 
-def _caveats(routes: dict[str, Any], golden: dict[str, Any], evals: dict[str, Any]) -> list[str]:
+def _caveats(
+    routes: dict[str, Any], curated: dict[str, Any], golden: dict[str, Any], evals: dict[str, Any]
+) -> list[str]:
     """Collect the reasons not to trust a number as far as it looks."""
     caveats: list[str] = []
     notes = routes.get("notes") or {}
@@ -484,14 +517,20 @@ def _caveats(routes: dict[str, Any], golden: dict[str, Any], evals: dict[str, An
             caveats.append(f"{metric}: {note}")
     else:
         caveats.extend(str(note) for note in notes)
-    for routes_metric, metric in (routes.get("metrics") or {}).items():
-        if routes_metric == "stage.recall" and metric.get("mean") == 1.0:
-            caveats.append(
-                "stage-2 recall читается 1.000 по построению: пул — это остановки самого "
-                "маршрута, он не может промахнуться. Числом это станет, когда API отдаст "
-                "пул кандидатов шире маршрута."
-            )
-    for layer, name in ((routes, "routes"), (golden, "golden"), (evals, "evals")):
+    for layer in (routes, curated):
+        for routes_metric, metric in (layer.get("metrics") or {}).items():
+            if routes_metric == "stage.recall" and metric.get("mean") == 1.0:
+                caveats.append(
+                    "stage-2 recall читается 1.000 по построению: пул — это остановки самого "
+                    "маршрута, он не может промахнуться. Числом это станет, когда API отдаст "
+                    "пул кандидатов шире маршрута."
+                )
+    for layer, name in (
+        (routes, "routes"),
+        (curated, "curated"),
+        (golden, "golden"),
+        (evals, "evals"),
+    ):
         age = layer.get("age_days")
         if age is not None and age > STALE_DAYS:
             caveats.append(
@@ -516,7 +555,7 @@ def _caveats_section(caveats: list[str]) -> list[str]:
 
 
 def _tail_section(
-    routes: dict[str, Any], golden: dict[str, Any], evals: dict[str, Any]
+    routes: dict[str, Any], curated: dict[str, Any], golden: dict[str, Any], evals: dict[str, Any]
 ) -> list[str]:
     """What is not measured at all, and the command that re-takes everything."""
     out: list[str] = []
@@ -529,7 +568,12 @@ def _tail_section(
     out.append("")
     out.append("КАК СНЯТЬ ЗАНОВО")
     out.append("-" * 66)
-    for layer, name in ((routes, "routes"), (golden, "golden"), (evals, "evals")):
+    for layer, name in (
+        (routes, "routes"),
+        (curated, "curated"),
+        (golden, "golden"),
+        (evals, "evals"),
+    ):
         if not layer.get("measured"):
             out.append(f"  {name}: {layer['how']}")
     out.append("  всё офлайн сразу: ./.venv/bin/python -m quality.report --run")
@@ -541,18 +585,8 @@ def _run_offline() -> None:
     """Re-run the offline layers: geometry (replay) and the flow stages."""
     snapshot = _latest_under(SNAPSHOTS, "rows.jsonl")
     if snapshot is not None:
-        out = SNAPSHOTS / datetime.now(UTC).strftime("%Y-%m-%d")
-        out.mkdir(parents=True, exist_ok=True)
         subprocess.run(
-            [
-                str(VENV),
-                "-m",
-                "quality",
-                "--replay",
-                str(snapshot.parent),
-                "--report-dir",
-                str(out),
-            ],
+            [str(VENV), "-m", "quality", "--replay", str(snapshot.parent)],
             cwd=BACKEND,
             check=False,
         )
@@ -594,9 +628,9 @@ def main(argv: list[str] | None = None) -> int:
             check=False,
         )
 
-    routes, golden, evals = read_routes(), read_golden(), read_evals()
+    routes, curated, golden, evals = read_routes(), read_curated(), read_golden(), read_evals()
     trajectory = read_trajectory()
-    print(render(routes, golden, evals, trajectory))
+    print(render(routes, curated, golden, evals, trajectory))
 
     if args.json:
         args.json.parent.mkdir(parents=True, exist_ok=True)
@@ -604,10 +638,11 @@ def main(argv: list[str] | None = None) -> int:
             json.dumps(
                 {
                     "routes": routes,
+                    "curated": curated,
                     "golden": golden,
                     "evals": evals,
                     "trajectory": trajectory,
-                    "growth_points": growth_points(routes, golden, evals, trajectory),
+                    "growth_points": growth_points(routes, curated, golden, evals, trajectory),
                     "known_gaps": known_gaps(golden, evals),
                     "not_measured": NOT_MEASURED,
                 },
@@ -618,7 +653,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         print(f"машинный отчёт: {args.json}")
 
-    if not any(layer.get("measured") for layer in (routes, golden, evals, trajectory)):
+    if not any(layer.get("measured") for layer in (routes, curated, golden, evals, trajectory)):
         print(
             "ни один слой не измерялся — отчёт не о чем; см. колонку «НЕ ИЗМЕРЯЛОСЬ»",
             file=sys.stderr,
