@@ -19,6 +19,7 @@ cd backend
 .venv/bin/python -m quality               # geometry: live run (needs the stack)
 .venv/bin/python -m quality --replay DIR  # recompute from a recorded snapshot (offline)
 .venv/bin/python -m quality --golden      # compliance: live (needs the stack)
+.venv/bin/python -m quality --curated     # the ready-made walks: live (needs the stack)
 .venv/bin/python -m quality.trajectory    # trajectory: scripted run (needs db + Valhalla)
 .venv/bin/python -m quality.evals         # the flow stages (offline ones run without a stack)
 .venv/bin/python -m quality.report        # the one-page readout over all four
@@ -39,6 +40,13 @@ non-zero when *no* layer has numbers.
   (categories, prohibitions, region, budget, RU/EN parity) and the conditions any
   acceptable answer must meet. The loader (`quality/runner.py`) refuses unknown
   keys, so a case cannot carry an expectation nothing checks. Field reference below.
+* **curated** (`cases/curated/<id>.json`, `id ==` an itinerary in
+  `db/data/itineraries.json`): the ready-made walks scored as reference walks, run
+  with `--curated`. The sidecar holds only what the data does not — `query_ru` and
+  `budget_minutes`; the stops are read from the itinerary and resolved against the
+  datasets the seed projects, so a walk and the case measuring it cannot drift
+  apart. A sidecar naming an itinerary that does not exist, or a stop no dataset
+  holds, is a loud error rather than an empty layer.
 * **trajectory** (`cases/trajectory.jsonl`): a scripted model turn-by-turn, and the
   tool calls the CODE actually made. A `FunctionModel` stands in for the provider
   (the same trick `tests/conftest.py` uses), so the run is offline of any provider
