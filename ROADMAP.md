@@ -11,12 +11,14 @@ vocabulary, the names for the unnamed stops, and the empty infrastructure sheet 
 § *Closed* at the bottom. The list is renumbered after every such pass, so numbers are
 dense and an entry's number does not survive it.
 
-Of the six entries below, 2 is **decided** (the column stays empty) and 4 has a decided
+Of the nine entries below, 2 is **decided** (the column stays empty) and 4 has a decided
 *no* (elevation is not worth four hours of download for a question nobody asks), so both
 stay listed only as the record of a measurement. Entries 1 and 3 wait on one outside thing,
 the administration's reply — 3 because its premise was measured away on 2026-10-14. Entry 5
-is measured and split: seven rows are a mechanism, fifty-two are editorial. Entry 6 is a
-decision nobody has made yet. Nothing below is work in hand.
+is measured and split: seven rows are a mechanism, fifty-two are editorial. Entries 6 to 9
+are what the 2026-10-15 measurements left behind: a settings surface nothing can open, an
+English name a shadowed row loses, a box that disagrees with the box beside it, and two
+curated walks that ask for more than the product gives. Nothing below is work in hand.
 
 ## 1. Authoritative data from the administration
 
@@ -175,6 +177,50 @@ catalogue and let the client route send the one option it actually needs.
 Found 2026-10-14 while measuring item 4; nothing depends on it, so it stays until someone
 decides which of the two it is.
 
+## 7. A shadowed row loses its English name
+
+`db/data/place_aliases_en.json` reaches a row by its own `source_url`, and a row the seed
+has shadowed — dropped from `places` when a hand-authored row claims the same place — is not
+there to be found. Every seed says so (`aliases_en_written: 292 written, 295 declared,
+unresolved: [...]`) and **four are unresolved today**: `osm:relation/1579104` («Mir Castle»),
+`osm:relation/5755161` («Lida castle», shadowed the moment the Lida row's coordinates were
+corrected) and two others. So two of the country's best-known castles answer an English
+query by name only if the Russian one happens to match.
+
+The fix is not in the JSON: after `apply_shadowed` the loser's identity is gone from
+`places` but not from `place_sources`, which still holds `external_id` and the provider.
+Resolving the alias through the survivor's `place_sources` row would attach «Mir Castle» to
+`region:mir-castle`, where the visitor looking for it belongs. Found 2026-10-15 by the
+districts/curated work; reported honestly by the seed in the meantime, so nothing is silent.
+
+## 8. A box that no longer agrees with the box next to it
+
+`core/constants.py::GRODNO_BBOX` says the north edge is 54.80; `db/seed/datasets.py::BBOX`
+says 55.01. Only one of them is read — the seed's, by the ingest — and the other is **read
+by nothing at all**: it is re-exported into `quality/runner.py` and never used there or
+anywhere else. The widening was deliberate (a hand-authored row, `region:mihalishki-church`
+at 54.814, is fatal when out of box), so the number that moved is the right one and the
+constant that stayed is a trap: whoever next reaches for "the area the product covers" gets
+a box 23 km narrower than the one the data was fetched with.
+
+Either align it with the seed's or delete it as the dead constant it is. A decision, not a
+task — the same shape as item 2.
+
+## 9. Two of the eleven curated walks ask for more than the product gives
+
+The curated layer ran twice on 2026-10-15 and gated a different run out each time: once
+`castles-lida-krevo-golshany` came back "the request could not be planned" (`api_error`) and
+once `synagogues-trail` returned an empty shape (`geometry_missing`) — both times on the
+regional **auto** walks, never on the six city ones. The same run also flagged a leg of
+**210.1 km** between two stops of `synagogues-trail` against the engine's own **180 km** cap
+for motorised transport (the cap is the drive's four-hour fallback at its own speed, and it
+is the product's, not the harness's).
+
+So the case asks for something the product refuses: Гродно → Лида → Слоним cannot be one
+leg inside the cap, and «замки Лиды, Крево и Гольшан за день» is close to the same edge.
+That is either a case that wants trimming to what the product serves, or a cap that is wrong
+for a day's drive — a decision, and the second run's numbers are the evidence for it.
+
 ## Closed
 
 Dropped from this list on 2026-10-14, and three on 2026-10-15, so nobody re-adds them:
@@ -314,17 +360,40 @@ Dropped from this list on 2026-10-14, and three on 2026-10-15, so nobody re-adds
   needed, and `find_places` ranks it as a fourth signal it reports honestly: «Парк Мир» now
   reaches «Мирский замок», which no vector signal could bring in.
 - **the benchmark's coincidence rule flagged legitimate neighbours.** The rule is unchanged
-  and the six pairs are named in `quality/cases/duplicate_exceptions.json`; a declared pair is
+  and the pairs are named in `quality/cases/duplicate_exceptions.json`; a declared pair is
   still reported, marked `excluded`, with the reason, so the silence is visible. Replayed over
   the 2026-10-14 snapshot: `duplicate_stop` 6 pairs in 4 of 8 runs → 0, every route metric
-  byte-identical.
+  byte-identical. The 2026-10-15 live run printed **eleven more**, all of them two distinct
+  objects — the four Гродница landmarks of the curated «tyzenhauz-north» (an ensemble row
+  against the church, the theatre and the park inside it, 37–109 m), the three Советская
+  museums (29–103 m, все «музей», name similarity 0.17–0.25), «Старый замок» against
+  «Памятник Витовту» (105 m) and the Августовский canal museum against the lock it explains
+  (70 m). All eleven are declared in the same file, with the two source rows and the reason
+  per pair, and the harness's pin moved 6 → 17 so a declaration cannot pass unseen.
+
+  **The list does not converge, and that is worth knowing before it is read as closed.** The
+  next run of the same two layers — the agent is stochastic, so its routes differ — printed
+  four pairs none of the eleven covered («Музей истории города Гродно» against «Музей истории
+  религии» 72 m; «Памятник Витовту» against the историко-археологический музей 102 m; «Адам
+  Мицкевич» against «Новогрудский замок (руины)» 139 m; and four inside one Шафнагели estate
+  — a barn and the mill 54 m, a gate and a belfry 21 m). They are the same kind of pair, and
+  declaring them is the same judgement. A dense old town will print new ones for as long as
+  the rule stays wide — which the file argues it must, because a radius or a category test
+  misses the real twins it exists to catch. So the count is a running record, not a finish
+  line.
 - **the frontend had no `result_mode`.** A catalogue answer now renders as a list of places —
   count, one honest line, a card per place — with no line, no budget and no refinement
   history, and a route answer clears it.
 - **a route could answer `ready` over its budget.** The self-repair attempt is in the tree
   (`1fada84`): a route the code itself called bad gets one more attempt, with the verdicts
-  handed back to the model. **Not yet measured** — `quality/cases/compliance/castles_half_day.json`
-  has not been re-run since, and one live `--golden` pass is what would settle it.
+  handed back to the model. **Measured 2026-10-15** on the live stack: `--golden` scores
+  **1.000 — 16 of 16 units, 14 cases and 2 ru/en parity groups — with `castles_half_day`
+  passing**, and one check the API cannot answer is named rather than assumed
+  (`out_of_region_vilnius:over_budget`: the response carries no total). The same run gives
+  trajectory 5/5, evals 100% over four stages (one known gap visible and not counted), and
+  the two route layers — benchmark Rec@K 0.648 [0.423, 0.821] over 8 cases, curated 0.694
+  [0.518, 0.845] over 11 — against the 2026-09-26 reference 0.711 ± 0.150. `duplicate_stop`
+  was the only defect class either layer printed, and it is declared above.
 - **the curated overlay picking an arbitrary twin.** `match_place` takes the hand-authored
   row first, then the lowest id, and refuses a name spread over kilometres; the seed resets
   every `curated` flag before it re-applies them, so a flag left by an earlier run no longer
