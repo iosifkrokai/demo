@@ -197,6 +197,7 @@ export const sidebarArea = {
         impossibleTitle:
           'Маршрут не построен: не удалось выполнить обязательное требование',
         degradedTitle: 'Часть запроса выполнить не удалось',
+        checkedAt: 'Проверено на {{when}}',
         reasonFallback: 'требование не выполнено',
         reason: {
           must_visit_on_route: 'обязательная точка не попала на маршрут',
@@ -458,6 +459,7 @@ export const sidebarArea = {
         impossibleTitle:
           'Route not built: a mandatory requirement could not be met',
         degradedTitle: 'Part of the request could not be fulfilled',
+        checkedAt: 'Checked for {{when}}',
         reasonFallback: 'requirement not met',
         reason: {
           must_visit_on_route: 'a mandatory stop is not on the route',

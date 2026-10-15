@@ -1,6 +1,8 @@
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 
+import { formatMoment } from '@/i18n/format';
+
 import type {
   AgentRouteResponse,
   PlanRequirement,
@@ -65,8 +67,16 @@ export const PlanVerdict = ({ response }: PlanVerdictProps) => {
   const { t } = useTranslation();
   const status = response?.status;
   const unmet = response?.interpretation?.unmet ?? [];
+  const at = response?.interpretation?.at;
 
   if (status !== 'infeasible' && status !== 'degraded') return null;
+
+  /** The moment the code read the hours at, when the tourist named one themselves. */
+  const checkedAt = at ? (
+    <p className="mt-1">
+      {t('sidebar.status.checkedAt', { when: formatMoment(at) })}
+    </p>
+  ) : null;
 
   const unmetList = (
     <ul className="mt-1 list-disc space-y-0.5 pl-4">
@@ -105,6 +115,7 @@ export const PlanVerdict = ({ response }: PlanVerdictProps) => {
         className="rounded-xl bg-destructive/10 px-3 py-2 text-meta text-destructive"
       >
         <p>{t('sidebar.status.impossibleTitle')}</p>
+        {checkedAt}
         {unmetList}
       </div>
     );
@@ -117,6 +128,7 @@ export const PlanVerdict = ({ response }: PlanVerdictProps) => {
       className="rounded-xl bg-warning/15 px-3 py-2 text-meta text-warning"
     >
       <p>{t('sidebar.status.degradedTitle')}</p>
+      {checkedAt}
       {unmetList}
     </div>
   );

@@ -234,6 +234,8 @@ export interface PlanRequirement {
 /** The agent's account of the plan: requirements honoured, missed, or not understood. */
 export interface PlanInterpretation {
   status: RoutePlanStatus;
+  /** The moment the verdict was read at, when the tourist named one; null for «сейчас». */
+  at?: string | null;
   requirements: PlanRequirement[];
   unmet: PlanRequirement[];
   unknowns: string[];

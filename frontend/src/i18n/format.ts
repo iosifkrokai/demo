@@ -24,3 +24,16 @@ export const formatNumber = (
   value: number,
   options?: Intl.NumberFormatOptions
 ) => value.toLocaleString(locale(), options);
+
+/** Grodno is UTC+3 all year; the server's `local_at` shifts an instant by exactly this. */
+export const GRODNO_UTC_OFFSET_MS = 3 * 60 * 60 * 1000;
+
+/** The instant the server judged against, as the wall clock on the tourist's own clock. */
+export const formatMoment = (at: string | number | Date) =>
+  new Intl.DateTimeFormat(locale(), {
+    day: 'numeric',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: 'UTC',
+  }).format(new Date(new Date(at).getTime() + GRODNO_UTC_OFFSET_MS));
