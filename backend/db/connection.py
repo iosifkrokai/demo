@@ -8,8 +8,12 @@ from psycopg import sql
 from core.config import settings
 
 WORD_SIMILARITY_THRESHOLD = 0.45
-_SESSION_SETUP = sql.SQL("SET pg_trgm.word_similarity_threshold = {}").format(
-    sql.Literal(WORD_SIMILARITY_THRESHOLD)
+EF_SEARCH = 400
+_SESSION_SETUP = (
+    sql.SQL("SET pg_trgm.word_similarity_threshold = {}").format(
+        sql.Literal(WORD_SIMILARITY_THRESHOLD)
+    ),
+    sql.SQL("SET hnsw.ef_search = {}").format(sql.Literal(EF_SEARCH)),
 )
 
 
@@ -27,7 +31,8 @@ def connect(
             dsn or settings.DSN, autocommit=autocommit, connect_timeout=int(timeout)
         )
     try:
-        conn.execute(_SESSION_SETUP)
+        for statement in _SESSION_SETUP:
+            conn.execute(statement)
         if not autocommit:
             conn.commit()
     except Exception:

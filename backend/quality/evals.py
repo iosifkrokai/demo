@@ -512,6 +512,20 @@ def _covered(stops: list[Any], rows: list[dict[str, Any]]) -> int:
     return sum(1 for stop in stops if _reaches(stop, rows))
 
 
+def _held(repos: Any, name: str) -> Any | None:
+    """The row the corpus keeps under this exact name, or None.
+
+    The case files are Wikivoyage walks: their coordinates and names are their author's,
+    and a third of the stops either match nothing we hold or sit hundreds of metres from
+    our row. Only the name can say whether the stop tests the search at all.
+    """
+    wanted = name.strip().lower()
+    for place in repos.places.keyword_search(name, limit=20):
+        if place.name.strip().lower() == wanted:
+            return place
+    return None
+
+
 def _area_checks(repos: Any) -> list[dict[str, Any]]:
     """Every territory that has a boundary: a search scoped to it must stay inside it."""
     checks: list[dict[str, Any]] = []
@@ -565,18 +579,25 @@ def _pool_checks(repos: Any) -> tuple[list[dict[str, Any]], dict[str, float]]:
         )
         for stop in stops:
             rows = _pool(stop.name, repos)
-            near = _nearest_km(stop, rows)
+            held = _held(repos, stop.name)
+            found = any(row["id"] == held.id for row in rows) if held is not None else False
             checks.append(
                 {
                     "case": f"{route.case}/{stop.name}",
                     "check": "stop_is_reachable_by_its_name",
-                    "ok": _reaches(stop, rows),
+                    "ok": found,
+                    "known_gap": held is None,
                     "detail": (
-                        f"вернулось {len(rows)}, ближайшая в {near:.2f} км"
-                        if near is not None
-                        else "ничего не вернулось"
+                        f"вернулось {len(rows)}, наше место #{held.id} в пуле"
+                        if found and held is not None
+                        else f"вернулось {len(rows)}, наше место в пул не попало"
+                        if held is not None
+                        else f"вернулось {len(rows)}; места с таким именем в данных нет"
                     ),
-                    "why": "Место, которое есть в данных, обязано находиться по своему имени.",
+                    "why": (
+                        "Место, которое есть в данных, обязано попадать в пул по своему имени. "
+                        "Стоп, которого в данных нет, — пробел в кейсах, а не в поиске."
+                    ),
                 }
             )
     total = covered["stops"] or 1

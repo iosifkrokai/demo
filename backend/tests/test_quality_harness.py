@@ -357,6 +357,43 @@ class _Stop:
         self.lon = lon
 
 
+class _Row:
+    def __init__(self, place_id: int, name: str) -> None:
+        self.id = place_id
+        self.name = name
+
+
+class _Places:
+    def __init__(self, rows: list[_Row]) -> None:
+        self.rows = rows
+
+    def keyword_search(self, query: str, limit: int = 20) -> list[_Row]:
+        return self.rows
+
+
+class _Repos:
+    def __init__(self, places: _Places) -> None:
+        self.places = places
+
+
+def test_a_stop_the_corpus_names_differently_is_a_case_gap() -> None:
+    """The cases are Wikivoyage walks: their name for a place is not ours, and a stop
+    we hold under another name says nothing about the search."""
+    repos = _Repos(_Places([_Row(31, "Фарный костёл Святого Франциска Ксаверия")]))
+
+    assert evals_mod._held(repos, "Кафедральный костёл Святого Франциска Ксаверия") is None
+    assert evals_mod._held(repos, "Фарный костёл Святого Франциска Ксаверия").id == 31
+
+
+def test_the_vector_search_is_provisioned_for_the_pool_it_serves() -> None:
+    """`ef_search` under the pool width drops true neighbours — measured: the exact row
+    of «Монастырь бригиток» is rank 1 at 400 and absent from the pool at 40."""
+    from core import constants
+    from db.connection import EF_SEARCH
+
+    assert EF_SEARCH >= constants.RETRIEVAL_POOL_SIZE
+
+
 def test_the_pool_is_measured_with_the_benchmarks_own_radius() -> None:
     """The retrieval stage must not invent a second criterion: it reads the runner's."""
     from quality.runner import STAGE1_PROXY_RADIUS_M
