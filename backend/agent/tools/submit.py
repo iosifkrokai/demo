@@ -91,7 +91,9 @@ def measure_submission(
         "result_mode": result_mode,
         "fact_status": "re-measured on submit",
     }
-    contract.unknowns = list(submission.unknowns)
+    for entry in submission.unknowns:
+        if entry not in contract.unknowns:
+            contract.unknowns.append(entry)
 
     if result_mode == "catalogue":
         rows, capped = catalogue_rows(

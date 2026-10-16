@@ -118,6 +118,9 @@ def test_the_wheelchair_control_reaches_the_measurement(
 
     assert outcome is not None
     assert handed[0].step_free is True
+    assert "wheelchair_accessible" in outcome.requirements.unknowns, (
+        "a caveat the code found is not the model's to drop"
+    )
 
 
 def test_a_run_that_never_submits_produces_no_plan(fake_model: FakeModel, db_repos) -> None:
