@@ -23,9 +23,29 @@ StrengthL = Literal["hard", "soft"]
 class AgentRequirement(BaseModel):
     """One requirement the model read out of the text."""
 
-    kind: RequirementKindL
-    strength: StrengthL = "soft"
-    code: str | None = None
+    kind: RequirementKindL = Field(
+        description=(
+            "must_visit — a named place to SEE; interest — a category of place "
+            "(«замки»); service — a café, toilet or hotel the walk passes; avoid — "
+            "a class the user ruled out («без храмов»); free, open and step_free — "
+            "a condition with no code, checked by the code against the stops."
+        )
+    )
+    strength: StrengthL = Field(
+        default="soft",
+        description=(
+            "'hard' when the user made it mandatory («обязательно») or ruled it out "
+            "(«без …», «не хочу …», «кроме …»); 'soft' for a wish. A ban is never soft."
+        ),
+    )
+    code: str | None = Field(
+        default=None,
+        description=(
+            "One canonical code from the catalogue in the instructions — never a word "
+            "of your own. A ban carries one requirement per code its class spans: "
+            "«без храмов» is костёл + церковь + храм, not храм alone."
+        ),
+    )
     name: str | None = None
     text: str | None = None
     confidence: float = Field(default=0.5, ge=0.0, le=1.0)
