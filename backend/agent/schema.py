@@ -47,11 +47,19 @@ class PlanSubmission(BaseModel):
 
     outcome: Literal["route", "catalogue", "refuse"] | None = None
     refusal_reason: str | None = None
-    ordered_ids: list[int] = Field(default_factory=list)
+    ordered_ids: list[int] = Field(
+        default_factory=list, description="The stops of the walk, in the order they are walked."
+    )
     narrative: str = ""
     profile: str = "pedestrian"
     round_trip: bool = False
-    must_keep_ids: list[int] = Field(default_factory=list)
+    must_keep_ids: list[int] = Field(
+        default_factory=list,
+        description=(
+            "Ids of places the tourist asked to go INTO. A service here becomes a stop "
+            "of the walk; every other service is something the walk passes."
+        ),
+    )
 
 
 @dataclass
@@ -60,6 +68,8 @@ class PlanningDeps:
 
     repos: Repositories | None = None
     observed_ids: set[int] = field(default_factory=set)
+    tool_calls_used: int = 0
+    instructions: str | None = None
 
     locale: str = "ru"
     origin: LatLon | None = None

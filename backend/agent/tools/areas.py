@@ -9,7 +9,6 @@ from pydantic_ai import RunContext
 from agent.schema import PlanningDeps
 from agent.tools import (
     ERR_BAD_ARGUMENT,
-    Remember,
     ToolAnswer,
     envelope,
     fetch,
@@ -44,7 +43,7 @@ def find_areas(term: str, locale: str = "ru", *, repos: Any = None) -> dict[str,
     return envelope("find_areas", results, provenance, capped=len(rows or []) > len(results))
 
 
-def register_find_areas(agent: Any, _remember: Remember) -> None:
+def register_find_areas(agent: Any) -> None:
     """Advertise ``find_areas`` to the agent."""
 
     @agent.tool(name="find_areas")

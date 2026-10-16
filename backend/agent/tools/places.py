@@ -12,7 +12,6 @@ from agent.tools import (
     ERR_BAD_ARGUMENT,
     ERR_EMPTY_QUERY,
     ERR_NOT_FOUND,
-    Remember,
     clamp,
     envelope,
     fetch,
@@ -308,7 +307,7 @@ def get_place_facts(place_id: int, *, repos: Any = None) -> dict[str, Any]:
     return envelope("get_place_facts", rows[:MAX_FACTS_PER_CALL], provenance)
 
 
-def register_find_places(agent: Any, remember: Remember) -> None:
+def register_find_places(agent: Any) -> None:
     """Advertise ``find_places`` to the agent."""
 
     @agent.tool(name="find_places")
@@ -321,23 +320,20 @@ def register_find_places(agent: Any, remember: Remember) -> None:
         where: Where | None = None,
     ) -> dict[str, Any]:
         """Find real places matching a description, a category, and/or a point."""
-        return remember(
-            ctx,
-            find_places(
-                query,
-                category_codes,
-                limit,
-                where=where,
-                repos=ctx.deps.repos,
-                region_bbox=list(ctx.deps.region_bbox) if ctx.deps.region_bbox else None,
-            ),
+        return find_places(
+            query,
+            category_codes,
+            limit,
+            where=where,
+            repos=ctx.deps.repos,
+            region_bbox=list(ctx.deps.region_bbox) if ctx.deps.region_bbox else None,
         )
 
 
-def register_get_place_facts(agent: Any, remember: Remember) -> None:
+def register_get_place_facts(agent: Any) -> None:
     """Advertise ``get_place_facts`` to the agent."""
 
     @agent.tool(name="get_place_facts")
     def _get_place_facts(ctx: RunContext[PlanningDeps], place_id: int) -> dict[str, Any]:
         """Raw stored facts (hours, price, town, source URL) about one place."""
-        return remember(ctx, get_place_facts(place_id, repos=ctx.deps.repos))
+        return get_place_facts(place_id, repos=ctx.deps.repos)

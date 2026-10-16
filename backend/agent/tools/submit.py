@@ -1,4 +1,4 @@
-"""``submit_plan`` — the end of the run, and the only way one ends."""
+"""Measuring the finished plan — what the submit_plan tool left the code to do."""
 
 from __future__ import annotations
 
@@ -68,7 +68,7 @@ def _catalogue_codes(contract: TripRequirements) -> list[str]:
     return [code for code in _named_codes(contract) if code not in forbidden]
 
 
-def submit_plan(
+def measure_submission(
     request: WalkRequest,
     submission: PlanSubmission,
     *,

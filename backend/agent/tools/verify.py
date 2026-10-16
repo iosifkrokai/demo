@@ -8,7 +8,7 @@ from typing import Any
 from pydantic_ai import RunContext
 
 from agent.schema import PlanningDeps
-from agent.tools import ERR_BAD_ARGUMENT, Remember, ToolAnswer, envelope, fetch
+from agent.tools import ERR_BAD_ARGUMENT, ToolAnswer, envelope, fetch
 from routing.models import Requirement, TripRequirements
 from routing.stops import candidate_of
 from routing.verify import overall_status, steps_evidence, verify, verify_summary
@@ -71,7 +71,7 @@ def check_requirements(  # noqa: PLR0913 — the tool's whole surface, all four 
     return envelope("check_requirements", answer["verdicts"], provenance) | answer
 
 
-def register_check_requirements(agent: Any, _remember: Remember) -> None:
+def register_check_requirements(agent: Any) -> None:
     """Advertise ``check_requirements`` to the agent."""
 
     @agent.tool(name="check_requirements")

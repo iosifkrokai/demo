@@ -172,7 +172,12 @@ def _repair_text(failed: list[Requirement], measured: dict[str, Any], over_budge
     lines += [
         "Plan again so that every hard requirement above can be proven:",
         "- a place you need goes on the route, pinned in must_keep_ids;",
-        "- a service or an interest the request names needs a stop of that category;",
+        (
+            "- a service the request names has to lie on the route — check the walk with "
+            "nearby_services instead of making the café a stop, and a wish the request "
+            "only implied ('кофе по пути') is a soft interest, not a hard service;"
+        ),
+        "- an interest the request names needs a stop of that category;",
         "- a stop that breaks an exclusion has to go.",
         "Call check_requirements with the stops you are about to submit, then submit.",
     ]
@@ -256,7 +261,7 @@ def _measured(
         log.info("agent_plan: empty route submission — no plan")
         return None
 
-    measured = submit_mod.submit_plan(
+    measured = submit_mod.measure_submission(
         WalkRequest(
             stop_ids=ordered,
             profile=contract.costing or "pedestrian",

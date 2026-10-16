@@ -4,15 +4,15 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, replace
-from typing import Any
+from typing import Annotated, Any
 
+from pydantic import Field
 from pydantic_ai import RunContext
 
 from agent.schema import PlanningDeps
 from agent.tools import (
     ERR_BAD_ARGUMENT,
     ERR_DB_UNAVAILABLE,
-    Remember,
     ToolAnswer,
     envelope,
     fetch,
@@ -392,19 +392,39 @@ def _no_route_message(info: dict[str, Any], origin: LatLon | None, fallback: str
     )
 
 
-def register_plan_walk(agent: Any, _remember: Remember) -> None:
+def register_plan_walk(agent: Any) -> None:
     """Advertise ``plan_walk`` to the agent."""
 
     @agent.tool(name="plan_walk")
     def _plan_walk(  # noqa: PLR0913 — the tool's whole surface, stops plus the levers
         ctx: RunContext[PlanningDeps],
-        stop_ids: list[int],
+        stop_ids: Annotated[
+            list[int], Field(description="The ids of the places to walk between, in any order.")
+        ],
         *,
-        budget_minutes: int | None = None,
-        profile: str = "pedestrian",
-        round_trip: bool = False,
-        must_keep_ids: list[int] | None = None,
-        step_free: bool = False,
+        budget_minutes: Annotated[
+            int | None,
+            Field(description="Minutes the walk has to fit into, if the request gave one."),
+        ] = None,
+        profile: Annotated[
+            str, Field(description="How the tourist moves: pedestrian, bicycle or auto.")
+        ] = "pedestrian",
+        round_trip: Annotated[
+            bool, Field(description="True when the walk should come back to where it started.")
+        ] = False,
+        must_keep_ids: Annotated[
+            list[int] | None,
+            Field(
+                description=(
+                    "Ids of places the tourist asked to go INTO ('зайти в кафе «Публіка»'). "
+                    "A service here becomes a stop of the walk. Leave a service out of this "
+                    "list to have the walk pass it instead."
+                )
+            ),
+        ] = None,
+        step_free: Annotated[
+            bool, Field(description="True when the route has to avoid steps and stairs.")
+        ] = False,
     ) -> ToolAnswer:
         """Order chosen stops into the shortest feasible walk and measure it."""
         return plan_walk(

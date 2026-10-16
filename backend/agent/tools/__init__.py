@@ -12,9 +12,9 @@ ERR_EMPTY_QUERY = "empty_query"
 ERR_BAD_ARGUMENT = "bad_argument"
 ERR_NOT_FOUND = "not_found"
 ERR_DB_UNAVAILABLE = "db_unavailable"
+ERR_TOOL_BUDGET = "tool_budget_exhausted"
 
 ToolAnswer = dict[str, Any]
-Remember = Callable[[Any, ToolAnswer], ToolAnswer]
 
 
 def envelope(
@@ -77,7 +77,7 @@ def positive_int(value: Any) -> bool:
 
 from agent.tools import areas, places, plan, services, verify  # noqa: E402
 
-TOOL_REGISTRARS: tuple[Callable[[Any, Remember], None], ...] = (
+TOOL_REGISTRARS: tuple[Callable[[Any], None], ...] = (
     areas.register_find_areas,
     places.register_find_places,
     plan.register_plan_walk,
@@ -87,7 +87,7 @@ TOOL_REGISTRARS: tuple[Callable[[Any, Remember], None], ...] = (
 )
 
 
-def register_all(agent: Any, remember: Remember) -> None:
+def register_all(agent: Any) -> None:
     """Advertise every tool in the registry on ``agent``."""
     for register in TOOL_REGISTRARS:
-        register(agent, remember)
+        register(agent)

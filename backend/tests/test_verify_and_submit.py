@@ -75,13 +75,13 @@ def test_an_absent_place_is_unmet_not_ignored(db_repos) -> None:
 
 def test_submit_measures_and_verifies_before_it_answers(db_repos) -> None:
     from agent.schema import PlanSubmission
-    from agent.tools.submit import submit_plan
+    from agent.tools.submit import measure_submission
     from agent.tools.verify import requirements_from
     from routing.models import WalkRequest
 
     stops = _stops(db_repos, 4)
     ids = [row.id for row in stops]
-    answer = submit_plan(
+    answer = measure_submission(
         WalkRequest(ids, budget_minutes=180),
         PlanSubmission(),
         repos=db_repos,
@@ -107,12 +107,12 @@ def test_submit_measures_and_verifies_before_it_answers(db_repos) -> None:
 
 def test_submit_refuses_to_call_an_impossible_plan_ready(db_repos) -> None:
     from agent.schema import PlanSubmission
-    from agent.tools.submit import submit_plan
+    from agent.tools.submit import measure_submission
     from agent.tools.verify import requirements_from
     from routing.models import WalkRequest
 
     stops = _stops(db_repos, 4)
-    answer = submit_plan(
+    answer = measure_submission(
         WalkRequest([row.id for row in stops], budget_minutes=180),
         PlanSubmission(),
         repos=db_repos,
@@ -138,7 +138,7 @@ def test_a_catalogue_submits_the_places_themselves(db_repos) -> None:
     """The answer to «все костёлы области» is places, not the verdicts about them:
     a response builder reads cards, and a verdict carries no id to be read."""
     from agent.schema import PlanSubmission
-    from agent.tools.submit import submit_plan
+    from agent.tools.submit import measure_submission
     from routing.models import Requirement, TripRequirements, WalkRequest
 
     rows = [row for row in db_repos.places.with_category(["костёл"]) if row.id is not None][:5]
@@ -150,7 +150,7 @@ def test_a_catalogue_submits_the_places_themselves(db_repos) -> None:
         requirements=[Requirement(kind="interest", code="костёл")],
     )
 
-    answer = submit_plan(
+    answer = measure_submission(
         WalkRequest(ids),
         PlanSubmission(ordered_ids=ids),
         repos=db_repos,
@@ -170,7 +170,7 @@ def test_a_catalogue_left_empty_by_the_agent_is_built_by_the_code(db_repos) -> N
     """The list is the request's, not the model's memory: an area and a code are
     enough to answer «все костёлы области», so nobody has to enumerate them."""
     from agent.schema import PlanSubmission
-    from agent.tools.submit import submit_plan
+    from agent.tools.submit import measure_submission
     from routing.models import Requirement, TripRequirements, WalkRequest
 
     contract = TripRequirements(
@@ -179,7 +179,7 @@ def test_a_catalogue_left_empty_by_the_agent_is_built_by_the_code(db_repos) -> N
         requirements=[Requirement(kind="interest", code="костёл")],
     )
 
-    answer = submit_plan(
+    answer = measure_submission(
         WalkRequest([]),
         PlanSubmission(),
         repos=db_repos,

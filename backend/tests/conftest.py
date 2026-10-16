@@ -67,9 +67,17 @@ class FakeModel:
 
     def __init__(self) -> None:
         self._steps: list[ModelResponse] = []
+        self.seen: list[list[Any]] = []
 
     def call(self, tool: str, /, **args: Any) -> FakeModel:
         self._steps.append(ModelResponse([ToolCallPart(tool, json.dumps(args))]))
+        return self
+
+    def turn(self, *calls: tuple[str, dict[str, Any]]) -> FakeModel:
+        """One model turn carrying several calls, the way a provider may send them."""
+        self._steps.append(
+            ModelResponse([ToolCallPart(tool, json.dumps(args)) for tool, args in calls])
+        )
         return self
 
     def finish(self, **fields: Any) -> FakeModel:
@@ -77,7 +85,8 @@ class FakeModel:
         self._steps.append(ModelResponse([ToolCallPart("submit_plan", json.dumps(fields))]))
         return self
 
-    def _next(self, _messages: list[Any], _info: AgentInfo) -> ModelResponse:
+    def _next(self, messages: list[Any], _info: AgentInfo) -> ModelResponse:
+        self.seen.append(list(messages))
         if not self._steps:
             raise AssertionError("fake_model ran out of scripted steps")
         return self._steps.pop(0)

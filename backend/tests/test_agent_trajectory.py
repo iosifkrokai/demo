@@ -5,10 +5,13 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 import pytest
+from pydantic_ai.messages import ToolReturnPart
 
 from agent import runner
 from agent.client import plan_with_agent
 from agent.models import ReaderBrief
+from agent.tools import ERR_TOOL_BUDGET
+from core import constants
 from routing.models import CategoryFacts
 
 if TYPE_CHECKING:
@@ -90,6 +93,31 @@ def test_the_ui_brief_wins_over_the_submission(fake_model: FakeModel, db_repos) 
     assert outcome is not None
     assert outcome.requirements.budget_minutes == 60
     assert outcome.requirements.source == "mixed"
+
+
+def test_the_wheelchair_control_reaches_the_measurement(
+    fake_model: FakeModel, db_repos, monkeypatch
+) -> None:
+    """The ticked control travels the whole way to the request the engine measures."""
+    from agent.tools import submit as submit_mod
+    from routing.models import WalkRequest
+
+    handed: list[WalkRequest] = []
+    real = submit_mod.measure_submission
+
+    def spy(request: WalkRequest, submission: Any, **kwargs: Any) -> Any:
+        handed.append(request)
+        return real(request, submission, **kwargs)
+
+    monkeypatch.setattr(submit_mod, "measure_submission", spy)
+    fake_model.finish(ordered_ids=_ids(db_repos), budget_minutes=120)
+
+    outcome = plan_with_agent(
+        "два часа пешком", ReaderBrief(locale="ru", mobility=("wheelchair",)), repos=db_repos
+    )
+
+    assert outcome is not None
+    assert handed[0].step_free is True
 
 
 def test_a_run_that_never_submits_produces_no_plan(fake_model: FakeModel, db_repos) -> None:
@@ -297,3 +325,81 @@ def test_a_second_try_that_helps_nothing_is_dropped(
     assert outcome is not None
     assert len(seen) == 2
     assert outcome.submission.narrative == "первый"
+
+
+def test_an_oversized_turn_is_trimmed_instead_of_ending_the_pass(
+    fake_model: FakeModel, db_repos, monkeypatch
+) -> None:
+    """Three calls in one turn against a budget of two: the surplus is refused.
+
+    A provider may put several calls in one answer, and the framework's own limit
+    projects the whole batch before anything runs — so the pass used to be thrown
+    away and the budget note asked the model to spend it all over again.
+    """
+    monkeypatch.setattr(constants, "MAX_TOOL_CALLS", 2)
+    ids = _ids(db_repos)
+    seen: list[str | None] = []
+    monkeypatch.setattr(runner, "_run_agent", _spy(seen))
+    fake_model.turn(
+        ("find_places", {"query": "замок"}),
+        ("find_places", {"query": "костёл"}),
+        ("find_places", {"query": "музей"}),
+    ).finish(ordered_ids=ids, budget_minutes=120)
+
+    outcome = plan_with_agent("два часа пешком", ReaderBrief(locale="ru"), repos=db_repos)
+
+    assert outcome is not None
+    assert seen == [None], "the first pass answered — it was not spent again"
+    refusals = [
+        part.content
+        for messages in fake_model.seen
+        for message in messages
+        for part in getattr(message, "parts", ())
+        if isinstance(part, ToolReturnPart)
+        and isinstance(part.content, dict)
+        and part.content.get("error") == ERR_TOOL_BUDGET
+    ]
+    assert len(refusals) == 1, "the third call is the one that went over the budget"
+
+
+def test_a_call_the_model_got_wrong_does_not_spend_the_budget(
+    fake_model: FakeModel, db_repos, monkeypatch
+) -> None:
+    """Two good calls and one the schema rejects, against a budget of two.
+
+    A call that never reaches a tool body is not a call the model spent, so the
+    pass still finishes with a submission instead of being cut short.
+    """
+    monkeypatch.setattr(constants, "MAX_TOOL_CALLS", 2)
+    ids = _ids(db_repos)
+    seen: list[str | None] = []
+    monkeypatch.setattr(runner, "_run_agent", _spy(seen))
+    fake_model.turn(
+        ("find_places", {}),
+        ("find_places", {"query": "замок"}),
+        ("find_places", {"query": "костёл"}),
+    ).finish(ordered_ids=ids, budget_minutes=120)
+
+    outcome = plan_with_agent("два часа пешком", ReaderBrief(locale="ru"), repos=db_repos)
+
+    assert outcome is not None
+    assert seen == [None]
+
+
+def test_the_ids_a_tool_returned_are_recorded(fake_model: FakeModel, db_repos, monkeypatch) -> None:
+    """The id guard reads what a tool actually answered — and it is a hook now."""
+    handed: list[Any] = []
+    real = runner._run_agent
+
+    def spy(query, brief, deps, *, wall_clock_s=None, repair=None):
+        handed.append(deps)
+        return real(query, brief, deps, wall_clock_s=wall_clock_s, repair=repair)
+
+    monkeypatch.setattr(runner, "_run_agent", spy)
+    ids = _ids(db_repos)
+    fake_model.call("find_places", query="замок").finish(ordered_ids=ids, budget_minutes=120)
+
+    outcome = plan_with_agent("два часа пешком", ReaderBrief(locale="ru"), repos=db_repos)
+
+    assert outcome is not None
+    assert handed[0].observed_ids, "the run saw places, so it must have recorded them"

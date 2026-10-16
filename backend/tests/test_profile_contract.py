@@ -60,6 +60,26 @@ def test_a_result_mode_nobody_chose_is_the_models_to_read() -> None:
     assert _mode(None, None) == "route"
 
 
+def _step_free(mobility: tuple[str, ...]) -> bool:
+    brief = ReaderBrief(locale="ru", mobility=mobility)
+    return bool(_merge("прогулка", brief, PlanSubmission(), set(), None).of_kind("step_free"))
+
+
+def test_the_wheelchair_control_is_a_step_free_route_not_only_a_note() -> None:
+    """A control the tourist ticked has to change the walk, not just the caveats."""
+    assert _step_free(("wheelchair",)) is True
+    assert _step_free(()) is False
+    assert _step_free(("stroller",)) is False
+
+
+def test_the_wheelchair_control_still_admits_what_is_not_proven() -> None:
+    """Step-free is measured along the line; a barrier-free entrance is not."""
+    brief = ReaderBrief(locale="ru", mobility=("wheelchair",))
+    contract = _merge("прогулка", brief, PlanSubmission(), set(), None)
+
+    assert "wheelchair_accessible" in contract.unknowns
+
+
 @pytest.mark.parametrize(
     ("profile", "costing"),
     [

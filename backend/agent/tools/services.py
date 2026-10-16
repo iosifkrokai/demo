@@ -11,7 +11,6 @@ from agent.schema import PlanningDeps
 from agent.tools import (
     ERR_BAD_ARGUMENT,
     ERR_DB_UNAVAILABLE,
-    Remember,
     ToolAnswer,
     clamp,
     envelope,
@@ -183,7 +182,7 @@ def _best_detour(
     return ranked
 
 
-def register_nearby_services(agent: Any, remember: Remember) -> None:
+def register_nearby_services(agent: Any) -> None:
     """Advertise ``nearby_services`` to the agent."""
 
     @agent.tool(name="nearby_services")
@@ -195,14 +194,11 @@ def register_nearby_services(agent: Any, remember: Remember) -> None:
         max_detour_minutes: float | None = None,
     ) -> ToolAnswer:
         """Services that can be slipped in on this route, with the real detour."""
-        return remember(
-            ctx,
-            nearby_services(
-                stop_ids,
-                category_codes,
-                repos=ctx.deps.repos,
-                profile=profile,
-                max_detour_minutes=max_detour_minutes,
-                deadline_s=ctx.deps.seconds_left(),
-            ),
+        return nearby_services(
+            stop_ids,
+            category_codes,
+            repos=ctx.deps.repos,
+            profile=profile,
+            max_detour_minutes=max_detour_minutes,
+            deadline_s=ctx.deps.seconds_left(),
         )

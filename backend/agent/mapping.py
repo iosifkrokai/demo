@@ -35,6 +35,8 @@ def ui_requirements(brief: ReaderBrief) -> list[Requirement]:
         )
     for code in brief.avoid:
         out.append(Requirement(kind="avoid", strength="hard", code=code, label=code, source="ui"))
+    if "wheelchair" in brief.mobility:
+        out.append(Requirement(kind="step_free", strength="hard", label="step_free", source="ui"))
     return out
 
 
