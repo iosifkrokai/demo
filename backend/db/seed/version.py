@@ -1,4 +1,4 @@
-"""The data version: a digest of the committed datasets the seed projects."""
+"""The data version: a digest of the committed datasets, and of the embedding recipe."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ import hashlib
 from pathlib import Path
 
 from core.paths import DATA_DIR
+from db.seed.embeddings import RECIPE
 
 VERSIONED_FILES: tuple[str, ...] = (
     "places/places_grodno_city.csv",
@@ -31,9 +32,11 @@ _ABSENT = b"<absent>"
 
 
 def content_version(data_dir: Path | None = None) -> str:
-    """A short digest of every versioned dataset's path and bytes."""
+    """A short digest of every versioned dataset's path and bytes, and of the embed recipe."""
     root = data_dir if data_dir is not None else DATA_DIR
     digest = hashlib.sha256()
+    digest.update(RECIPE.encode("utf-8"))
+    digest.update(b"\x00")
     for rel in VERSIONED_FILES:
         digest.update(rel.encode("utf-8"))
         digest.update(b"\x00")

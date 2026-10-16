@@ -22,6 +22,7 @@ from core.paths import (
 from . import (
     datasets as ds_mod,
     itineraries as itineraries_mod,
+    pipeline,
     taxonomy as taxonomy_mod,
     version as version_mod,
 )
@@ -336,6 +337,27 @@ def cmd_streets(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_reembed(args: argparse.Namespace) -> int:
+    """Rebuild every vector from the current recipe — the one job a plain seed cannot do."""
+    from db.seed.embeddings import RECIPE, embed_missing
+    from db.store.places import PostgresPlaceRepository
+
+    if args.dry_run:
+        print(f"[seed] reembed: recipe {RECIPE}, nothing written (dry run)")
+        return 0
+
+    with pipeline.connect(_dsn(args)) as conn:
+        places = PostgresPlaceRepository(connect=lambda: conn)
+        cleared = places.clear_embeddings()
+        places.commit()
+        written = embed_missing(places)
+        pipeline.record_data_version(conn, version_mod.content_version())
+        conn.commit()
+
+    print(f"[seed] reembed: recipe {RECIPE}, cleared {cleared}, embedded {written}")
+    return 0
+
+
 def cmd_admin(args: argparse.Namespace) -> int:
     from .admin import create_admin
 
@@ -434,6 +456,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
     a.add_argument("--input-json", type=Path, default=None)
     a.add_argument("--out-dir", type=Path, default=PLACES_DIR)
     a.set_defaults(func=None)
+
+    re = sub.add_parser("reembed", help="Rebuild every vector from the current recipe.")
+    re.add_argument("--dry-run", action="store_true", help="Report the recipe, write nothing.")
+    re.add_argument("--database-url", default=None)
+    re.set_defaults(func=cmd_reembed)
 
     ad = sub.add_parser("admin", help="Create or promote the first administrator.")
     ad.add_argument("--email", required=True)

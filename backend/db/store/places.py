@@ -14,7 +14,12 @@ import psycopg
 from core import constants
 from db.models.place import Place
 from db.store.base import PostgresRepository
-from db.store.columns import PLACE_COLUMNS, PLACE_SELECT, PLACE_WRITE_COLUMNS
+from db.store.columns import (
+    EMBEDDED_TEXT_COLUMNS,
+    PLACE_COLUMNS,
+    PLACE_SELECT,
+    PLACE_WRITE_COLUMNS,
+)
 from db.store.errors import DuplicateSourceError
 from db.store.mappers import place_from_row, place_payload
 from db.store.services import (
@@ -459,13 +464,21 @@ class PostgresPlaceRepository(PostgresRepository):
             log.warning("health.db err=%s", exc)
             return False
 
-    def rows_missing_embedding(self) -> list[tuple[int, str, str | None]]:
+    def rows_missing_embedding(self) -> list[tuple[int, str, str | None, str | None]]:
         """Every row with no vector, oldest first — the backfill's work list."""
         with self._cursor() as cur:
             cur.execute(
-                "SELECT id, name, blurb FROM places WHERE embedding IS NULL ORDER BY id",
+                "SELECT id, name, category, town FROM places WHERE embedding IS NULL ORDER BY id",
             )
-            return [(row["id"], row["name"], row["blurb"]) for row in cur.fetchall()]
+            return [
+                (row["id"], row["name"], row["category"], row["town"]) for row in cur.fetchall()
+            ]
+
+    def clear_embeddings(self) -> int:
+        """Forget every stored vector: the recipe changed, so all of them describe another text."""
+        with self._cursor() as cur:
+            cur.execute("UPDATE places SET embedding = NULL WHERE embedding IS NOT NULL")
+            return cur.rowcount
 
     def upsert_embedding(self, place_id: int, vector: Sequence[float]) -> None:
         """Store one vector. The `::vector` cast is what pgvector needs."""
@@ -526,6 +539,8 @@ class PostgresPlaceRepository(PostgresRepository):
         params: list[Any] = [fields[c] for c in cols]
         if "category" in cols:
             sets.append("category_source = 'curated'")
+        if set(cols) & set(EMBEDDED_TEXT_COLUMNS):
+            sets.append("embedding = NULL")
         params.append(place_id)
         with self._tx_cursor() as cur:
             if "category" in cols:

@@ -164,7 +164,10 @@ sending `radius: 100` per location (`LOCATION_SNAP_RADIUS_M` in
 
 **No semantic results (only keyword hits).** The rows have `embedding IS NULL`.
 `python -m db.seed` embeds everything locally — re-run it. (A missing
-a model key does not affect retrieval.)
+a model key does not affect retrieval.) A vector describes the text it was built
+from — the name, the blurb, the category and the town — so a change to that recipe
+leaves every stored vector describing the old one, and only `python -m db.seed
+reembed` rebuilds them: a plain seed fills `NULL`s and nothing else.
 
 ## What is not verified / not promised
 

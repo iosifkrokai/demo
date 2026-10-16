@@ -36,6 +36,19 @@ def test_an_absent_optional_file_is_part_of_the_version(tmp_path) -> None:
     assert content_version(tmp_path) != absent
 
 
+def test_the_embedding_recipe_is_part_of_the_version(tmp_path, monkeypatch) -> None:
+    """A vector is a projection of the recipe: change the text and every vector is stale."""
+    from db.seed import embeddings, version
+
+    assert version.RECIPE == embeddings.RECIPE
+
+    _write_tree(tmp_path, version.VERSIONED_FILES)
+    before = version.content_version(tmp_path)
+
+    monkeypatch.setattr(version, "RECIPE", "embed:something-else")
+    assert version.content_version(tmp_path) != before
+
+
 def test_the_seed_stamps_a_version_the_planner_reads_back() -> None:
     """The write and the read agree, and an unchanged version is a true no-op."""
     from db.connection import connect

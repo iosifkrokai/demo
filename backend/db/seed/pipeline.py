@@ -32,17 +32,19 @@ PROVIDER_BY_PREFIX = {
 }
 
 
-def stale_embedding(name_expr: LiteralString, blurb_expr: LiteralString) -> LiteralString:
+def stale_embedding(
+    name_expr: LiteralString, category_expr: LiteralString, town_expr: LiteralString
+) -> LiteralString:
     """The SQL that drops a row's vector when the text it was built from changes.
 
-    A vector is a projection of ``embeddings.embedded_text`` — the row's name and blurb and
-    nothing else — so a writer that renames a row must clear it in the same statement.
-    Otherwise the row keeps answering to its old name for ever: ``embed_missing`` only ever
-    fills ``NULL``, and it runs after every writer in the seed, so clearing is enough.
+    A vector is a projection of ``embeddings.embedded_text`` — the row's name, category
+    and town — so every writer of one of those three clears it in the same statement.
+    ``embed_missing`` only ever fills ``NULL``, so clearing is enough.
     """
     return (
         f"CASE WHEN places.name IS DISTINCT FROM {name_expr} "
-        f"OR places.blurb IS DISTINCT FROM {blurb_expr} "
+        f"OR places.category IS DISTINCT FROM {category_expr} "
+        f"OR places.town IS DISTINCT FROM {town_expr} "
         "THEN NULL ELSE places.embedding END"
     )
 
@@ -58,7 +60,7 @@ def upsert_sql() -> LiteralString:
         f"CASE WHEN {protected} AND EXCLUDED.category_source = 'auto' "
         "THEN places.category_source ELSE EXCLUDED.category_source END"
     )
-    stale = stale_embedding("EXCLUDED.name", "EXCLUDED.blurb")
+    stale = stale_embedding("EXCLUDED.name", guarded_cat, "EXCLUDED.town")
     return f"""
         INSERT INTO places (name, category, category_source, district, town, lat, lon,
                             blurb, fun_fact, fun_facts, opening_hours, ticket_price,
@@ -195,7 +197,7 @@ def apply_curated_rows(conn: psycopg.Connection, curated: list[dict[str, Any]]) 
                        fun_fact = %(fun_fact)s, fun_facts = %(fun_facts)s,
                        links = %(links)s, category_source = 'curated',
                        embedding = """
-                + stale_embedding("%(name)s", "%(blurb)s")
+                + stale_embedding("%(name)s", "%(category)s", "places.town")
                 + """
                  WHERE id = %(id)s
                 """,
@@ -519,7 +521,7 @@ def apply_place_streets(conn: psycopg.Connection, path: Path | None = None) -> d
         for entry in entries:
             cur.execute(
                 "UPDATE places SET name = %(named)s, embedding = "
-                + stale_embedding("%(named)s", "places.blurb")
+                + stale_embedding("%(named)s", "places.category", "places.town")
                 + " WHERE source_url = %(url)s AND name = %(label)s",
                 {
                     "named": f"{entry['name']} ({entry['street']})",
@@ -537,9 +539,9 @@ def apply_place_categories(conn: psycopg.Connection, path: Path | None = None) -
     The dataset upsert writes the snapshot's ``historic=ruins`` category back on every
     seed, so the re-derived category must be laid on *after* it or the next seed would
     win it back. Only an automatic row is re-labelled — a curated or dataset category is
-    a human's and the trigger would revert the write — and nothing but the category and
-    its default visit time changes, so no name is renamed and no vector re-embedded. A
-    file that is absent is not a declaration. The caller commits.
+    a human's and the trigger would revert the write. The category is part of the text a
+    vector is a projection of, so this write clears the vector like any other. A file
+    that is absent is not a declaration. The caller commits.
     """
     from .finds import read_place_category_entries
 
@@ -551,9 +553,15 @@ def apply_place_categories(conn: psycopg.Connection, path: Path | None = None) -
     with conn.cursor() as cur:
         for entry in entries:
             cur.execute(
-                "UPDATE places SET category = %s, visit_minutes = coalesce(%s, visit_minutes) "
-                "WHERE source_url = %s AND category_source = 'auto'",
-                (entry["category"], entry["visit_minutes"], entry["source_url"]),
+                "UPDATE places SET category = %(category)s, "
+                "visit_minutes = coalesce(%(visit)s, visit_minutes), embedding = "
+                + stale_embedding("places.name", "%(category)s", "places.town")
+                + " WHERE source_url = %(url)s AND category_source = 'auto'",
+                {
+                    "category": entry["category"],
+                    "visit": entry["visit_minutes"],
+                    "url": entry["source_url"],
+                },
             )
             written += cur.rowcount
     return {"written": written, "declared": len(entries)}

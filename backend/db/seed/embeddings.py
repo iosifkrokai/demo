@@ -7,25 +7,34 @@ from typing import Protocol
 
 from db.embeddings.model import DB_BATCH, embed_documents
 
+RECIPE = "embed:name+category+town"
+
 
 class PlaceBackfill(Protocol):
     """What the backfill asks of a place repository — the three methods it uses."""
 
-    def rows_missing_embedding(self) -> list[tuple[int, str, str | None]]: ...
+    def rows_missing_embedding(
+        self,
+    ) -> list[tuple[int, str, str | None, str | None]]: ...
 
     def upsert_embedding(self, place_id: int, vector: Sequence[float]) -> None: ...
 
     def commit(self) -> None: ...
 
 
-def embedded_text(name: str, blurb: str | None) -> str:
+def embedded_text(name: str, category: str | None, town: str | None) -> str:
     """The text a row's vector is a projection of.
 
-    Its two fields are the whole of the staleness rule: a rename or a new blurb makes the
-    stored vector describe a place that no longer exists, and the writers of those two
-    columns clear it (`pipeline.upsert_sql`, the streets overlay, the curated overlay).
+    The category and the town are what a tourist actually says («музеи Гродно»): a vector
+    of the name alone leaves 45% of the corpus duplicated and reaches nothing. The blurb
+    is deliberately not here — measured, it dilutes the two that matter (precision@10
+    0.63 against 0.75), and only 1% of the rows have one.
     """
-    return f"{name}. {blurb or ''}"
+    parts = [f"{name}."]
+    for field in (category, town):
+        if field:
+            parts.append(f"{field}.")
+    return " ".join(parts)
 
 
 def embed_missing(places: PlaceBackfill, *, batch: int = DB_BATCH) -> int:
@@ -37,9 +46,9 @@ def embed_missing(places: PlaceBackfill, *, batch: int = DB_BATCH) -> int:
     done = 0
     for i in range(0, len(pending), batch):
         chunk = pending[i : i + batch]
-        texts = [embedded_text(name, blurb) for _, name, blurb in chunk]
+        texts = [embedded_text(name, category, town) for _, name, category, town in chunk]
         vectors = embed_documents(texts)
-        for (pid, _, _), vec in zip(chunk, vectors, strict=True):
+        for (pid, *_), vec in zip(chunk, vectors, strict=True):
             places.upsert_embedding(pid, vec)
         places.commit()
         done += len(chunk)

@@ -85,6 +85,12 @@ PLACE_WRITE_COLUMNS: tuple[str, ...] = (
     "ticket_price",
 )
 
+EMBEDDED_TEXT_COLUMNS: tuple[str, ...] = (
+    "name",
+    "category",
+    "town",
+)
+
 USER_COLUMNS: tuple[str, ...] = (
     "id",
     "email",
