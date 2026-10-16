@@ -4,7 +4,6 @@ import {
   AccountApiError,
   adminListUsers,
   getAuthState,
-  isStorageDown,
   listVisited,
   registerAccount,
 } from './account';
@@ -92,7 +91,6 @@ describe('accounts api', () => {
 
     const error = await getAuthState().catch((e: unknown) => e);
     expect(error).toBeInstanceOf(AccountApiError);
-    expect(isStorageDown(error)).toBe(true);
   });
 
   it('keeps visited_at and the place payload', async () => {

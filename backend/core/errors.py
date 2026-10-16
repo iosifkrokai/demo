@@ -4,11 +4,7 @@ from __future__ import annotations
 
 
 class ItinerariesUnavailableError(RuntimeError):
-    """The committed itineraries file is missing or malformed.
-
-    A deployment bug rather than a request error, which is why it is not an
-    `AgentError`: the router answers 503 and the operator fixes the file.
-    """
+    """The committed itineraries file is missing or malformed."""
 
 
 class AgentError(Exception):

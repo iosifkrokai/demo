@@ -17,6 +17,7 @@ import {
   Minus,
   Plus,
   RotateCcw,
+  Wand2,
   Route as RouteIcon,
   Search,
   SlidersHorizontal,
@@ -25,9 +26,15 @@ import {
 } from 'lucide-react';
 import { useNavigate } from '@tanstack/react-router';
 import { cn } from '@/lib/utils';
+import { asMapShape } from '@/utils/agent-shape';
 import { meWaypoint, storedMeCoords } from '@/utils/me-waypoint';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
 import { Textarea } from '@/components/ui/textarea';
 import {
   Sheet,
@@ -43,7 +50,12 @@ import {
   type RouteHistoryEntry,
   type Waypoint,
 } from '@/stores/directions-store';
-import { useDirectionsQuery } from '@/hooks/use-directions-queries';
+import {
+  setAgentRoute,
+  useDirectionsQuery,
+} from '@/hooks/use-directions-queries';
+import { useRouteRecalculate } from '@/hooks/use-route-recalculate';
+import { summaryOf } from '@/utils/route-summary';
 import { GuidePanel, guideRouteKey, type GuideStop } from './guide-panel';
 import { MobileSection } from './mobile/mobile-section';
 import { MOBILE_MAX_WIDTH } from './mobile/use-is-mobile';
@@ -63,7 +75,15 @@ import { newProgressId } from '@/api/progress';
 import { AGENT_URL } from '@/api/request';
 import { currentRunSession, startRunSession } from '@/utils/run-session';
 import { WaypointList } from './waypoint-list';
+import { CatalogueList } from './parts/catalogue-list';
 import { Chip } from './parts/chip';
+import {
+  buildHintChips,
+  buildRefineHintChips,
+  groupHintChips,
+  type HintChip,
+} from './parts/hint-chips';
+import { HintsDialog } from './parts/hints-dialog';
 import { agentErrorMessage } from './parts/guide-format';
 import { useRouteProgress } from '@/hooks/use-route-progress';
 import {
@@ -99,6 +119,22 @@ const buildTimeBudgetOptions = (t: TFunction) => [
   { value: 480, label: t('sidebar.budgets.b480') },
   { value: 0, label: t('sidebar.budgets.none') },
 ];
+
+const padTwo = (value: number) => String(value).padStart(2, '0');
+
+/** A `YYYY-MM-DDTHH:MM` wall-clock stamp in the device's own timezone. */
+const localStamp = (date: Date) =>
+  `${date.getFullYear()}-${padTwo(date.getMonth() + 1)}-${padTwo(
+    date.getDate()
+  )}T${padTwo(date.getHours())}:${padTwo(date.getMinutes())}`;
+
+/** The device's local moment at `hour`, `dayOffset` days from today. */
+const localMoment = (hour: number, dayOffset = 0) => {
+  const date = new Date();
+  date.setDate(date.getDate() + dayOffset);
+  date.setHours(hour, 0, 0, 0);
+  return localStamp(date);
+};
 
 /** Transport the tourist has. */
 const buildTransportOptions = (
@@ -158,31 +194,6 @@ const buildViewSubtitles = (t: TFunction): Record<PanelView, string> => ({
   places: t('tabSubtitles.places'),
   history: t('tabSubtitles.history'),
 });
-
-/** One-tap starters. */
-interface HintChip {
-  /** Stable id: the chip's text is a whole sentence, and it may be reworded. */
-  id: string;
-  text: string;
-}
-
-/** The chips offered before anything is planned — how a tourist would start. */
-const buildHintChips = (t: TFunction): HintChip[] => [
-  { id: 'old-town', text: t('ask.chips.oldTown') },
-  { id: 'castles-churches', text: t('ask.chips.castlesChurches') },
-  { id: 'food', text: t('ask.chips.food') },
-  { id: 'evening', text: t('ask.chips.evening') },
-  { id: 'with-children', text: t('ask.chips.withChildren') },
-];
-
-/** The chips offered once a route exists. */
-const buildRefineHintChips = (t: TFunction): HintChip[] => [
-  { id: 'refine-add-cafe', text: t('ask.chipsRefine.addCafe') },
-  { id: 'refine-remove-museum', text: t('ask.chipsRefine.removeMuseum') },
-  { id: 'refine-shorter', text: t('ask.chipsRefine.shorter') },
-  { id: 'refine-only-churches', text: t('ask.chipsRefine.onlyChurches') },
-  { id: 'refine-with-children', text: t('ask.chipsRefine.withChildren') },
-];
 
 /** Options of the advanced filters. */
 interface FilterOption {
@@ -384,8 +395,12 @@ export const Sidebar = ({
   const resetRoute = useDirectionsStore((s) => s.resetRoute);
   const pushRefinement = useDirectionsStore((s) => s.pushRefinement);
   const { refetch: refetchDirections } = useDirectionsQuery();
+  const { recalculate, cancel: cancelRecalculate } = useRouteRecalculate();
+  const setManualOrder = useDirectionsStore((s) => s.setManualOrder);
+  const setCosting = useDirectionsStore((s) => s.setCosting);
+  const manualOrder = useDirectionsStore((s) => s.manualOrder);
+  const recalculating = useDirectionsStore((s) => s.recalculating);
 
-  const resetSettings = useCommonStore((s) => s.resetSettings);
   const navigate = useNavigate({ from: '/$activeTab' });
 
   const [query, setQuery] = useState('');
@@ -394,9 +409,17 @@ export const Sidebar = ({
   const setGuidingStore = useCommonStore((s) => s.setGuiding);
   const setPlacesVisible = useCommonStore((s) => s.setPlacesVisible);
   const placeDetails = useDirectionsStore((s) => s.placeDetails);
-  const [timeBudget, setTimeBudget] = useState(0);
+  const catalogue = useDirectionsStore((s) => s.catalogue);
+  const setCatalogue = useDirectionsStore((s) => s.setCatalogue);
+  const timeBudget = useDirectionsStore((s) => s.timeBudget);
+  const setTimeBudget = useDirectionsStore((s) => s.setTimeBudget);
   const [transport, setTransport] = useState<'' | Profile>('');
   const [mirroredCosting, setMirroredCosting] = useState<Profile | null>(null);
+  const dateTime = useCommonStore((s) => s.dateTime);
+  const updateDateTime = useCommonStore((s) => s.updateDateTime);
+  const [customOpen, setCustomOpen] = useState(false);
+  const [customValue, setCustomValue] = useState('');
+  const [hintsOpen, setHintsOpen] = useState(false);
 
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [partyAdults, setPartyAdults] = useState<number | null>(null);
@@ -408,7 +431,8 @@ export const Sidebar = ({
   const [interests, setInterests] = useState<string[]>([]);
   const [avoid, setAvoid] = useState<string[]>([]);
   const [resultMode, setResultMode] = useState<ResultMode>('route');
-  const [roundTrip, setRoundTrip] = useState(false);
+  const roundTrip = useDirectionsStore((s) => s.roundTrip);
+  const setRoundTrip = useDirectionsStore((s) => s.setRoundTrip);
   const [me, setMe] = useState<{ lat: number; lon: number } | null>(null);
   const [geoState, setGeoState] = useState<
     'idle' | 'locating' | 'ok' | 'denied'
@@ -440,21 +464,10 @@ export const Sidebar = ({
     kind: 'ok' | 'err' | 'warn';
     text: string;
   } | null>(null);
-  const [summary, setSummary] = useState<{
-    stops: number;
-    km: number | null;
-    /** summary.time_seconds — the time actually spent on the legs. */
-    travelMinutes: number;
-    /** budget.walk_minutes — the agent's own estimate of the walking time. */
-    walkMinutes: number;
-    visitMinutes: number;
-    budgetMinutes: number | null;
-    fits: boolean;
-  } | null>(null);
+  const summary = useDirectionsStore((s) => s.routeSummary);
+  const setSummary = useDirectionsStore((s) => s.setRouteSummary);
   const [verdict, setVerdict] = useState<AgentRouteResponse | null>(null);
 
-  const lastQueryRef = useRef<string | null>(null);
-  const replanRef = useRef<() => void>(() => {});
   const transportRef = useRef<'' | Profile>('');
 
   const [manualQuery, setManualQuery] = useState('');
@@ -463,6 +476,16 @@ export const Sidebar = ({
 
   const { t } = useTranslation();
   const panel = usePanelWidth();
+  const whenToday = localMoment(18);
+  const whenTomorrow = localMoment(10, 1);
+  const whenIsToday = dateTime.type === 1 && dateTime.value === whenToday;
+  const whenIsTomorrow = dateTime.type === 1 && dateTime.value === whenTomorrow;
+  const whenIsCustom = dateTime.type === 1 && !whenIsToday && !whenIsTomorrow;
+  /** A chosen departure: `type === 1`, the value the local wall-clock moment. */
+  const pickMoment = (value: string) => {
+    updateDateTime('type', 1);
+    updateDateTime('value', value);
+  };
   const tabs = useMemo(() => buildViews(t), [t]);
   const subtitles = useMemo(() => buildViewSubtitles(t), [t]);
   const hints = useMemo(
@@ -474,6 +497,13 @@ export const Sidebar = ({
         : buildHintChips(t),
     [t, waypoints]
   );
+  const hintGroups = useMemo(() => groupHintChips(hints, t), [hints, t]);
+  /** A starter: its sentence in the field, and the transport that sentence asks for. */
+  const pickHint = (hint: HintChip) => {
+    if (hint.transport !== null) setTransportEverywhere(hint.transport, false);
+    setQuery(hint.text);
+    taRef.current?.focus();
+  };
 
   const routeHistory = useDirectionsStore((s) => s.routeHistory);
   const addToHistory = useDirectionsStore((s) => s.addToHistory);
@@ -513,7 +543,7 @@ export const Sidebar = ({
     el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
   }, [query]);
 
-  /** Pick a transport. */
+  /** Pick a transport. Another profile is the same walk measured again, not a new one. */
   const setTransportEverywhere = useCallback(
     (value: '' | Profile, replan = true) => {
       const changed = transportRef.current !== value;
@@ -521,10 +551,13 @@ export const Sidebar = ({
       setTransport(value);
       if (value === '') return;
       setMirroredCosting(value);
-      resetSettings(value);
-      if (replan && changed && lastQueryRef.current) replanRef.current();
+      const costing = buildTransportOptions(t).find(
+        (o) => o.value === value
+      )?.costing;
+      setCosting(costing ?? value);
+      if (replan && changed) recalculate();
     },
-    [resetSettings]
+    [recalculate, setCosting, t]
   );
 
   useEffect(() => {
@@ -580,7 +613,7 @@ export const Sidebar = ({
           meWaypoint(coords.lat, coords.lon, t('sidebar.ui.myLocation')),
           ...current.filter((w) => w.id !== ME_WAYPOINT_ID),
         ]);
-        if (!silent) refetchDirections();
+        if (!silent) recalculate();
         return coords;
       } catch (err) {
         const code = (err as GeolocationPositionError | undefined)?.code;
@@ -589,7 +622,7 @@ export const Sidebar = ({
         return null;
       }
     },
-    [refetchDirections, setWaypoint, t]
+    [recalculate, setWaypoint, t]
   );
 
   const childrenAges = useMemo(
@@ -695,15 +728,18 @@ export const Sidebar = ({
             visitMinutes: p.visitMinutes ?? null,
             openingHours: p.openingHours ?? null,
             ticketPrice: p.ticketPrice ?? null,
+            isFree: p.isFree ?? null,
             town: p.town ?? null,
             district: p.district ?? null,
           } satisfies PlaceDetails,
         ])
       )
     );
+    setCatalogue(null);
     setSummary(null);
     setVerdict(null);
-    refetchDirections();
+    setManualOrder(false);
+    recalculate();
   };
 
   /** Show a ready-made route on the map. */
@@ -759,15 +795,18 @@ export const Sidebar = ({
             visitMinutes: stop.visit_minutes ?? null,
             openingHours: stop.opening_hours ?? null,
             ticketPrice: stop.ticket_price ?? null,
+            isFree: stop.is_free ?? null,
             town: stop.town ?? null,
             district: stop.district ?? null,
           } satisfies PlaceDetails,
         ])
       )
     );
+    setCatalogue(null);
     setSummary(null);
     setVerdict(null);
-    refetchDirections();
+    setManualOrder(false);
+    recalculate();
     setMode('plan');
   };
 
@@ -779,6 +818,7 @@ export const Sidebar = ({
     abortRef.current = controller;
     setBusy(true);
     setStage('requesting');
+    cancelRecalculate();
     const requestProgressId = newProgressId();
     setProgressId(requestProgressId);
     setStatus(null);
@@ -795,6 +835,7 @@ export const Sidebar = ({
         query: string;
         time_budget_minutes?: number;
         profile?: string;
+        at?: string;
         origin?: { lat: number; lon: number };
         party_adults?: number;
         party_children?: number;
@@ -821,6 +862,7 @@ export const Sidebar = ({
         session_id?: string;
       } = { query: q, progress_id: requestProgressId };
       if (timeBudget >= 15) body.time_budget_minutes = timeBudget;
+      if (dateTime.type === 1) body.at = dateTime.value;
       const chosen = buildTransportOptions(t).find(
         (o) => o.value === transportRef.current
       );
@@ -837,11 +879,10 @@ export const Sidebar = ({
       if (roundTrip) body.round_trip = true;
 
       const prior = useDirectionsStore.getState();
-      // Only the points the journal cannot know travel with a turn: the
-      // tourist's own position, and anything they pinned by hand. The agent's
-      // own stops are the server's to replay, not the client's to re-upload.
+      // Every point the user can see travels with the turn, the agent's stops
+      // included: the run id does not survive a reload, so the server cannot be
+      // left to replay a route it was never told about.
       const basePoints = prior.waypoints
-        .filter((wp) => wp.id === ME_WAYPOINT_ID || wp.placeId == null)
         .map((wp) => {
           const geo =
             wp.geocodeResults.find((g) => g.selected) ?? wp.geocodeResults[0];
@@ -849,13 +890,14 @@ export const Sidebar = ({
           const [lon, lat] = geo.sourcelnglat ?? geo.displaylnglat ?? [];
           if (lat === undefined || lon === undefined) return null;
           const isMe = wp.id === ME_WAYPOINT_ID;
+          const source = isMe ? 'mine' : wp.placeId != null ? 'agent' : 'user';
           return {
             id: wp.placeId ?? null,
             name: wp.userInput || geo.title || t('sidebar.waypoints.unnamed'),
             lat,
             lon,
             pinned: wp.pinned ?? (!isMe && wp.placeId == null),
-            source: (isMe ? 'mine' : 'user') as 'agent' | 'user' | 'mine',
+            source: source as 'agent' | 'user' | 'mine',
           };
         })
         .filter((p): p is NonNullable<typeof p> => p !== null);
@@ -905,6 +947,36 @@ export const Sidebar = ({
       }
       if (data.status === 'degraded') setVerdict(data);
       const pts = data.points ?? [];
+      if (data.result_mode === 'catalogue') {
+        resetRoute();
+        setCatalogue(pts);
+        setPlaceDetails(
+          Object.fromEntries(
+            pts.map((p) => [
+              p.id,
+              {
+                name: p.name,
+                category: p.category ?? null,
+                blurb: p.blurb ?? null,
+                funFact: p.fun_fact ?? null,
+                funFacts: p.fun_facts ?? [],
+                photo: p.photo ?? null,
+                links: p.links ?? [],
+                visitMinutes: p.visit_minutes ?? null,
+                openingHours: p.opening_hours ?? null,
+                ticketPrice: p.ticket_price ?? null,
+                isFree: p.is_free ?? null,
+                town: p.town ?? null,
+                district: p.district ?? null,
+              } satisfies PlaceDetails,
+            ])
+          )
+        );
+        setSummary(null);
+        setQuery('');
+        return;
+      }
+      setCatalogue(null);
       if (pts.length < 2) {
         throw new Error(t('sidebar.status.fewPlaces'));
       }
@@ -937,6 +1009,17 @@ export const Sidebar = ({
       }));
       setWaypoint([...start, ...placeWaypoints]);
 
+      const measured = asMapShape(data.shape);
+      setAgentRoute(
+        measured
+          ? {
+              shape: measured,
+              summary: data.summary ?? null,
+              costing: data.costing ?? null,
+            }
+          : null
+      );
+
       setPlaceDetails(
         Object.fromEntries(
           pts.map((p) => [
@@ -952,6 +1035,7 @@ export const Sidebar = ({
               visitMinutes: p.visit_minutes ?? null,
               openingHours: p.opening_hours ?? null,
               ticketPrice: p.ticket_price ?? null,
+              isFree: p.is_free ?? null,
               town: p.town ?? null,
               district: p.district ?? null,
             } satisfies PlaceDetails,
@@ -961,21 +1045,7 @@ export const Sidebar = ({
       setStage('drawing');
       const drawing = refetchDirections();
 
-      const visitMins =
-        data.budget?.visit_minutes ??
-        pts.reduce((s, p) => s + (p.visit_minutes ?? 15), 0);
-      const travelMins = Math.round((data.summary?.time_seconds ?? 0) / 60);
-      const walkMins = data.budget?.walk_minutes ?? travelMins;
-      lastQueryRef.current = q;
-      setSummary({
-        stops: pts.length,
-        km: data.summary?.length_km ?? null,
-        travelMinutes: travelMins,
-        walkMinutes: walkMins,
-        visitMinutes: visitMins,
-        budgetMinutes: data.budget?.budget_minutes ?? null,
-        fits: data.budget?.fits ?? true,
-      });
+      setSummary(summaryOf(data));
 
       addToHistory({
         query: q,
@@ -995,6 +1065,7 @@ export const Sidebar = ({
           visitMinutes: p.visit_minutes ?? null,
           openingHours: p.opening_hours ?? null,
           ticketPrice: p.ticket_price ?? null,
+          isFree: p.is_free ?? null,
           town: p.town ?? null,
           district: p.district ?? null,
         })),
@@ -1050,13 +1121,18 @@ export const Sidebar = ({
     }
   };
 
-  replanRef.current = () => {
-    const q = lastQueryRef.current;
-    if (q) void submitPrompt(q);
+  /** Hand a hand-ordered route back to the planner, at once rather than debounced. */
+  const optimiseOrder = () => {
+    setManualOrder(false);
+    recalculate(0);
   };
 
+  const hasQuery = query.trim().length > 0;
+  const refresh = !hasQuery && summary !== null && waypoints.length > 1;
+  const refreshing = refresh && recalculating;
+
   const reset = () => {
-    lastQueryRef.current = null;
+    setManualOrder(false);
     const empties: Waypoint[] = [
       { id: '0', userInput: '', geocodeResults: [] },
       { id: '1', userInput: '', geocodeResults: [] },
@@ -1069,7 +1145,7 @@ export const Sidebar = ({
     setStatus(null);
     setSummary(null);
     setVerdict(null);
-    refetchDirections();
+    setCatalogue(null);
   };
 
   const manualAdd = async () => {
@@ -1105,7 +1181,9 @@ export const Sidebar = ({
         } satisfies Waypoint,
       ];
       setWaypoint(next);
-      refetchDirections();
+      setManualOrder(false);
+      setCatalogue(null);
+      recalculate();
       setManualQuery('');
     } catch (e) {
       setManualErr(e instanceof Error ? e.message : String(e));
@@ -1259,25 +1337,40 @@ export const Sidebar = ({
               />
             </div>
           </div>
-          <div
-            role="group"
-            aria-label={t('sidebar.plan.hintsAria')}
-            className="mt-2 flex gap-1.5 max-md:flex-nowrap max-md:overflow-x-auto max-md:pb-0.5 md:flex-wrap"
-          >
-            {hints.map((hint) => (
-              <Chip
-                key={hint.id}
-                className="truncate max-w-[12rem]"
-                onClick={() => {
-                  setQuery(hint.text);
-                  taRef.current?.focus();
-                }}
-                data-testid={`hint-${hint.id}`}
-              >
-                {hint.text}
-              </Chip>
-            ))}
+          <div className="mt-2 flex items-center gap-1.5">
+            <div
+              role="group"
+              aria-label={t('sidebar.plan.hintsAria')}
+              className="flex min-w-0 flex-1 flex-nowrap gap-1.5 overflow-x-auto pb-0.5"
+            >
+              {hints.map((hint) => (
+                <Chip
+                  key={hint.id}
+                  className="max-w-[12rem] truncate"
+                  onClick={() => pickHint(hint)}
+                  data-testid={`hint-${hint.id}`}
+                >
+                  {hint.text}
+                </Chip>
+              ))}
+            </div>
+            <Chip
+              className="shrink-0"
+              onClick={() => setHintsOpen(true)}
+              data-testid="hints-all"
+            >
+              {t('ask.allHints')}
+            </Chip>
           </div>
+          <HintsDialog
+            open={hintsOpen}
+            onOpenChange={setHintsOpen}
+            groups={hintGroups}
+            onPick={(hint) => {
+              setHintsOpen(false);
+              pickHint(hint);
+            }}
+          />
         </section>
       )}
 
@@ -1379,12 +1472,84 @@ export const Sidebar = ({
                     <Chip
                       key={option.value}
                       selected={timeBudget === option.value}
-                      onClick={() => setTimeBudget(option.value)}
+                      onClick={() => {
+                        setTimeBudget(option.value);
+                        recalculate();
+                      }}
                       data-testid={`budget-${option.value}`}
                     >
                       {option.label}
                     </Chip>
                   ))}
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <span
+                  id="when-label"
+                  className="text-meta text-muted-foreground"
+                >
+                  {t('sidebar.ui.whenLabel')}
+                </span>
+                <div
+                  role="group"
+                  aria-labelledby="when-label"
+                  className="flex flex-wrap gap-1.5"
+                >
+                  <Chip
+                    selected={dateTime.type === -1}
+                    onClick={() => updateDateTime('type', -1)}
+                    data-testid="when-now"
+                  >
+                    {t('sidebar.when.now')}
+                  </Chip>
+                  <Chip
+                    selected={whenIsToday}
+                    onClick={() => pickMoment(whenToday)}
+                    data-testid="when-today"
+                  >
+                    {t('sidebar.when.today')}
+                  </Chip>
+                  <Chip
+                    selected={whenIsTomorrow}
+                    onClick={() => pickMoment(whenTomorrow)}
+                    data-testid="when-tomorrow"
+                  >
+                    {t('sidebar.when.tomorrow')}
+                  </Chip>
+                  <Popover
+                    open={customOpen}
+                    onOpenChange={(open) => {
+                      setCustomOpen(open);
+                      if (open) {
+                        setCustomValue(
+                          dateTime.type === 1 ? dateTime.value : ''
+                        );
+                      }
+                    }}
+                  >
+                    <PopoverTrigger asChild>
+                      <Chip selected={whenIsCustom} data-testid="when-custom">
+                        {t('sidebar.when.custom')}
+                      </Chip>
+                    </PopoverTrigger>
+                    <PopoverContent align="start" className="w-auto p-3">
+                      <input
+                        type="datetime-local"
+                        aria-label={t('sidebar.when.custom')}
+                        data-testid="when-custom-input"
+                        value={customValue}
+                        onChange={(event) => {
+                          setCustomValue(event.target.value);
+                          if (event.target.value) {
+                            pickMoment(event.target.value);
+                            setCustomOpen(false);
+                          }
+                        }}
+                        className="h-9 w-full min-w-0 rounded-md border border-input bg-transparent px-3 py-1 text-base outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] md:text-sm"
+                      />
+                    </PopoverContent>
+                  </Popover>
                 </div>
               </div>
 
@@ -1641,7 +1806,10 @@ export const Sidebar = ({
                       />
                       <Chip
                         selected={roundTrip}
-                        onClick={() => setRoundTrip((v) => !v)}
+                        onClick={() => {
+                          setRoundTrip(!roundTrip);
+                          recalculate();
+                        }}
                         data-testid="round-trip"
                         className="mt-0.5 self-start"
                       >
@@ -1655,89 +1823,233 @@ export const Sidebar = ({
 
             <section className="flex flex-col gap-2.5">
               <PlanVerdict response={verdict} />
-              {hasRoute && (
-                <div className="flex items-center justify-between gap-2">
-                  <h2 className="text-label font-semibold">
-                    {t('sidebar.ui.route')}
-                  </h2>
-                  <button
-                    type="button"
-                    onClick={reset}
-                    className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-meta text-muted-foreground transition-colors hover:bg-muted hover:text-foreground max-md:min-h-11 pointer-coarse:min-h-11"
-                    title={t('sidebar.plan.resetHint')}
-                  >
-                    <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
-                    {t('sidebar.plan.reset')}
-                  </button>
-                </div>
-              )}
-
-              {summary ? (
+              {catalogue ? (
+                <CatalogueList places={catalogue} />
+              ) : (
                 <>
-                  <StatTiles>
-                    <StatTile
-                      value={summary.stops}
-                      count={summary.stops}
-                      unit="points"
-                    />
-                    <StatTile
-                      value={summary.km != null ? fmtKm(summary.km, t) : '—'}
-                      label={t('sidebar.plan.length')}
-                    />
-                    <StatTile
-                      value={summary.travelMinutes}
-                      label={t('sidebar.plan.travelMinutes')}
-                    />
-                  </StatTiles>
-                  <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-meta text-muted-foreground">
-                    <span className="inline-flex items-center gap-1">
-                      <Clock className="h-3.5 w-3.5" aria-hidden="true" />
-                      {t('sidebar.plan.travelSummary', {
-                        value: fmtMin(summary.walkMinutes, t),
-                      })}
-                    </span>
-                    <span>
-                      {t('sidebar.plan.visitSummary', {
-                        value: fmtMin(summary.visitMinutes, t),
-                      })}
-                    </span>
-                    <span>
-                      {summary.budgetMinutes
-                        ? t('sidebar.plan.budgetSummary', {
-                            value: fmtMin(summary.budgetMinutes, t),
-                          })
-                        : t('sidebar.ui.noLimit')}
-                    </span>
-                    {!summary.fits && (
-                      <span className="rounded-full bg-warning/15 px-2 py-0.5 font-medium text-warning">
-                        {t('sidebar.plan.overBudget')}
-                      </span>
-                    )}
-                  </p>
+                  {hasRoute && (
+                    <div className="flex flex-col gap-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <h2 className="text-label font-semibold">
+                          {t('sidebar.ui.route')}
+                        </h2>
+                        <div className="flex items-center gap-1">
+                          {manualOrder && (
+                            <button
+                              type="button"
+                              onClick={optimiseOrder}
+                              data-testid="optimise-order"
+                              className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-meta text-muted-foreground transition-colors hover:bg-muted hover:text-foreground max-md:min-h-11 pointer-coarse:min-h-11"
+                              title={t('sidebar.plan.optimiseHint')}
+                            >
+                              <Wand2
+                                className="h-3.5 w-3.5"
+                                aria-hidden="true"
+                              />
+                              {t('sidebar.plan.optimiseOrder')}
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={reset}
+                            className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-meta text-muted-foreground transition-colors hover:bg-muted hover:text-foreground max-md:min-h-11 pointer-coarse:min-h-11"
+                            title={t('sidebar.plan.resetHint')}
+                          >
+                            <RotateCcw
+                              className="h-3.5 w-3.5"
+                              aria-hidden="true"
+                            />
+                            {t('sidebar.plan.reset')}
+                          </button>
+                        </div>
+                      </div>
+                      {recalculating && (
+                        <p
+                          role="status"
+                          data-testid="recalculating"
+                          className="text-meta text-muted-foreground"
+                        >
+                          {t('sidebar.plan.recalculating')}
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {summary ? (
+                    <>
+                      <StatTiles>
+                        <StatTile
+                          value={summary.stops}
+                          count={summary.stops}
+                          unit="points"
+                        />
+                        <StatTile
+                          value={
+                            summary.km != null ? fmtKm(summary.km, t) : '—'
+                          }
+                          label={t('sidebar.plan.length')}
+                        />
+                        <StatTile
+                          value={summary.travelMinutes}
+                          label={t('sidebar.plan.travelMinutes')}
+                        />
+                      </StatTiles>
+                      <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-meta text-muted-foreground">
+                        <span className="inline-flex items-center gap-1">
+                          <Clock className="h-3.5 w-3.5" aria-hidden="true" />
+                          {t('sidebar.plan.travelSummary', {
+                            value: fmtMin(summary.walkMinutes, t),
+                          })}
+                        </span>
+                        <span>
+                          {t('sidebar.plan.visitSummary', {
+                            value: fmtMin(summary.visitMinutes, t),
+                          })}
+                        </span>
+                        <span>
+                          {summary.budgetMinutes
+                            ? t('sidebar.plan.budgetSummary', {
+                                value: fmtMin(summary.budgetMinutes, t),
+                              })
+                            : t('sidebar.ui.noLimit')}
+                        </span>
+                        {!summary.fits && (
+                          <span className="rounded-full bg-warning/15 px-2 py-0.5 font-medium text-warning">
+                            {t('sidebar.plan.overBudget')}
+                          </span>
+                        )}
+                      </p>
+                    </>
+                  ) : (
+                    busy && <SummarySkeleton />
+                  )}
+
+                  {busy ? (
+                    <StopsSkeleton />
+                  ) : hasRoute ? (
+                    <WaypointList onChanged={() => setStatus(null)} />
+                  ) : (
+                    <div
+                      data-testid="plan-empty"
+                      className="flex flex-col items-center gap-2 rounded-2xl border border-border bg-card px-4 py-7 text-center"
+                    >
+                      <Compass
+                        className="h-7 w-7 text-muted-foreground"
+                        aria-hidden="true"
+                      />
+                      <p className="text-label text-muted-foreground">
+                        {t('sidebar.ui.emptyStops')}
+                      </p>
+                    </div>
+                  )}
+
+                  {hasRoute && (
+                    <div className="flex flex-col gap-2 rounded-2xl border border-border bg-card p-3">
+                      {(refinementLog.length > 0 ||
+                        excludedPlaceIds.length > 0) && (
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {refinementLog.map((entry) => (
+                            <span
+                              key={entry.id}
+                              className="inline-flex flex-wrap items-center gap-1"
+                            >
+                              <span
+                                title={
+                                  [
+                                    entry.added.length
+                                      ? t('sidebar.plan.refinementAdded', {
+                                          names: entry.added.join(', '),
+                                        })
+                                      : '',
+                                    entry.removed.length
+                                      ? t('sidebar.plan.refinementRemoved', {
+                                          names: entry.removed.join(', '),
+                                        })
+                                      : '',
+                                  ]
+                                    .filter(Boolean)
+                                    .join(' · ') ||
+                                  t('sidebar.status.noChanges')
+                                }
+                                className="rounded-full border border-border bg-muted px-2.5 py-0.5 text-meta text-muted-foreground"
+                              >
+                                {entry.instruction}
+                              </span>
+                              {entry.added.length > 0 && (
+                                <span className="rounded-full bg-primary/10 px-2 py-0.5 text-meta text-primary">
+                                  {t('sidebar.plan.addedCount', {
+                                    count: entry.added.length,
+                                  })}
+                                </span>
+                              )}
+                              {entry.removed.length > 0 && (
+                                <span className="rounded-full bg-muted px-2 py-0.5 text-meta text-muted-foreground">
+                                  {t('sidebar.plan.removedCount', {
+                                    count: entry.removed.length,
+                                  })}
+                                </span>
+                              )}
+                              {entry.added.length === 0 &&
+                                entry.removed.length === 0 && (
+                                  <span className="rounded-full bg-muted px-2 py-0.5 text-meta text-muted-foreground">
+                                    {t('sidebar.status.noChanges')}
+                                  </span>
+                                )}
+                            </span>
+                          ))}
+                          {excludedPlaceIds.length > 0 && (
+                            <span
+                              data-testid="excluded-chip"
+                              className="rounded-full bg-destructive/10 px-2.5 py-0.5 text-meta text-destructive"
+                            >
+                              {t('sidebar.plan.excludedManual', {
+                                count: excludedPlaceIds.length,
+                              })}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                      <div className="flex items-center gap-2">
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          onClick={() => {
+                            undoRefinement();
+                            setStatus({
+                              kind: 'ok',
+                              text: t('sidebar.status.restoredPrevious'),
+                            });
+                            refetchDirections();
+                          }}
+                          disabled={
+                            routeSnapshots.length === 0 &&
+                            (routeThread?.turns.length ?? 0) < 2
+                          }
+                          className="h-9 rounded-full px-3 text-label disabled:opacity-40 max-md:h-11 pointer-coarse:h-11"
+                        >
+                          <Undo2 className="h-3.5 w-3.5" aria-hidden="true" />
+                          {t('sidebar.plan.undoRefinement')}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          onClick={() => {
+                            resetRoute();
+                            reset();
+                          }}
+                          className="h-9 rounded-full px-3 text-label font-normal text-muted-foreground hover:text-foreground max-md:h-11 pointer-coarse:h-11"
+                        >
+                          <RotateCcw
+                            className="h-3.5 w-3.5"
+                            aria-hidden="true"
+                          />
+                          {t('sidebar.plan.newRoute')}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </>
-              ) : (
-                busy && <SummarySkeleton />
               )}
-
-              {busy ? (
-                <StopsSkeleton />
-              ) : hasRoute ? (
-                <WaypointList onChanged={() => setStatus(null)} />
-              ) : (
-                <div
-                  data-testid="plan-empty"
-                  className="flex flex-col items-center gap-2 rounded-2xl border border-border bg-card px-4 py-7 text-center"
-                >
-                  <Compass
-                    className="h-7 w-7 text-muted-foreground"
-                    aria-hidden="true"
-                  />
-                  <p className="text-label text-muted-foreground">
-                    {t('sidebar.ui.emptyStops')}
-                  </p>
-                </div>
-              )}
-
               {status && (
                 <div
                   role={status.kind === 'err' ? 'alert' : 'status'}
@@ -1757,108 +2069,6 @@ export const Sidebar = ({
                   ].join(' ')}
                 >
                   {status.text}
-                </div>
-              )}
-
-              {hasRoute && (
-                <div className="flex flex-col gap-2 rounded-2xl border border-border bg-card p-3">
-                  {(refinementLog.length > 0 ||
-                    excludedPlaceIds.length > 0) && (
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      {refinementLog.map((entry) => (
-                        <span
-                          key={entry.id}
-                          className="inline-flex flex-wrap items-center gap-1"
-                        >
-                          <span
-                            title={
-                              [
-                                entry.added.length
-                                  ? t('sidebar.plan.refinementAdded', {
-                                      names: entry.added.join(', '),
-                                    })
-                                  : '',
-                                entry.removed.length
-                                  ? t('sidebar.plan.refinementRemoved', {
-                                      names: entry.removed.join(', '),
-                                    })
-                                  : '',
-                              ]
-                                .filter(Boolean)
-                                .join(' · ') || t('sidebar.status.noChanges')
-                            }
-                            className="rounded-full border border-border bg-muted px-2.5 py-0.5 text-meta text-muted-foreground"
-                          >
-                            {entry.instruction}
-                          </span>
-                          {entry.added.length > 0 && (
-                            <span className="rounded-full bg-primary/10 px-2 py-0.5 text-meta text-primary">
-                              {t('sidebar.plan.addedCount', {
-                                count: entry.added.length,
-                              })}
-                            </span>
-                          )}
-                          {entry.removed.length > 0 && (
-                            <span className="rounded-full bg-muted px-2 py-0.5 text-meta text-muted-foreground">
-                              {t('sidebar.plan.removedCount', {
-                                count: entry.removed.length,
-                              })}
-                            </span>
-                          )}
-                          {entry.added.length === 0 &&
-                            entry.removed.length === 0 && (
-                              <span className="rounded-full bg-muted px-2 py-0.5 text-meta text-muted-foreground">
-                                {t('sidebar.status.noChanges')}
-                              </span>
-                            )}
-                        </span>
-                      ))}
-                      {excludedPlaceIds.length > 0 && (
-                        <span
-                          data-testid="excluded-chip"
-                          className="rounded-full bg-destructive/10 px-2.5 py-0.5 text-meta text-destructive"
-                        >
-                          {t('sidebar.plan.excludedManual', {
-                            count: excludedPlaceIds.length,
-                          })}
-                        </span>
-                      )}
-                    </div>
-                  )}
-                  <div className="flex items-center gap-2">
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      onClick={() => {
-                        undoRefinement();
-                        setStatus({
-                          kind: 'ok',
-                          text: t('sidebar.status.restoredPrevious'),
-                        });
-                        refetchDirections();
-                      }}
-                      disabled={
-                        routeSnapshots.length === 0 &&
-                        (routeThread?.turns.length ?? 0) < 2
-                      }
-                      className="h-9 rounded-full px-3 text-label disabled:opacity-40 max-md:h-11 pointer-coarse:h-11"
-                    >
-                      <Undo2 className="h-3.5 w-3.5" aria-hidden="true" />
-                      {t('sidebar.plan.undoRefinement')}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      onClick={() => {
-                        resetRoute();
-                        reset();
-                      }}
-                      className="h-9 rounded-full px-3 text-label font-normal text-muted-foreground hover:text-foreground max-md:h-11 pointer-coarse:h-11"
-                    >
-                      <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
-                      {t('sidebar.plan.newRoute')}
-                    </Button>
-                  </div>
                 </div>
               )}
             </section>
@@ -1970,8 +2180,8 @@ export const Sidebar = ({
           <Button
             type="button"
             data-testid="build-route"
-            onClick={() => submitPrompt()}
-            disabled={busy || !query.trim()}
+            onClick={() => (refresh ? recalculate(0) : submitPrompt())}
+            disabled={busy || refreshing || !(hasQuery || refresh)}
             className={cn(
               'h-12 w-full rounded-xl text-body font-semibold transition hover:brightness-[0.97] active:scale-[0.99] motion-reduce:active:scale-100 disabled:opacity-40',
               canGuide
@@ -1979,10 +2189,18 @@ export const Sidebar = ({
                 : 'bg-primary text-primary-foreground'
             )}
           >
-            {busy && (
+            {(busy || refreshing) && (
               <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
             )}
-            {busy ? t('sidebar.ui.plan') : t('sidebar.ui.build')}
+            {busy
+              ? t('sidebar.ui.plan')
+              : refresh
+                ? t(
+                    refreshing
+                      ? 'sidebar.ui.refreshingRoute'
+                      : 'sidebar.ui.refreshRoute'
+                  )
+                : t('sidebar.ui.build')}
           </Button>
         </footer>
       )}

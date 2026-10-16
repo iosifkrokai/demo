@@ -4,7 +4,6 @@ import { toast } from 'sonner';
 import type {
   ActiveWaypoint,
   ParsedDirectionsGeometry,
-  PossibleSettings,
   ValhallaRouteResponse,
 } from '@/components/types';
 import i18n from '@/i18n';
@@ -15,8 +14,6 @@ import {
   parseDirectionsGeometry,
   showValhallaWarnings,
 } from '@/utils/valhalla';
-import { forward_geocode, parseGeocodeResponse } from '@/utils/nominatim';
-import { filterProfileSettings } from '@/utils/filter-profile-settings';
 import { getDirectionsLanguage } from '@/utils/directions-language';
 import { useCommonStore, type Profile } from '@/stores/common-store';
 import { useDirectionsStore, type Waypoint } from '@/stores/directions-store';
@@ -129,17 +126,12 @@ const asClientRoute = (data: ParsedDirectionsGeometry): ProvenancedRoute => ({
 async function requestRoute(
   activeWaypoints: ActiveWaypoint[],
   profile: Profile,
-  rawSettings: PossibleSettings,
   dateTime: { type: number; value: string },
   language: string
 ): Promise<ParsedDirectionsGeometry> {
-  const settings = filterProfileSettings(profile || 'bicycle', rawSettings);
-
   const valhallaRequest = buildDirectionsRequest({
-    profile: profile || 'bicycle',
+    profile,
     activeWaypoints,
-    // @ts-expect-error todo: initial settings and filtered settings types mismatch
-    settings,
     dateTime,
     language,
   });
@@ -209,7 +201,7 @@ async function requestRoute(
 async function fetchDirections() {
   const waypoints = useDirectionsStore.getState().waypoints;
   const profile = router.state.location.search.profile;
-  const { dateTime, settings: rawSettings } = useCommonStore.getState();
+  const { dateTime } = useCommonStore.getState();
 
   const activeWaypoints = getActiveWaypoints(waypoints);
   if (activeWaypoints.length < 2) {
@@ -230,7 +222,7 @@ async function fetchDirections() {
   }
 
   const language = getDirectionsLanguage();
-  const currentProfile = (profile || 'bicycle') as Profile;
+  const currentProfile = profile ?? 'pedestrian';
   const chunks = chunkWaypoints(activeWaypoints);
 
   const mergeParts = (parts: ParsedDirectionsGeometry[]) => {
@@ -261,13 +253,7 @@ async function fetchDirections() {
   if (chunks.length === 1) {
     try {
       return asClientRoute(
-        await requestRoute(
-          activeWaypoints,
-          currentProfile,
-          rawSettings,
-          dateTime,
-          language
-        )
+        await requestRoute(activeWaypoints, currentProfile, dateTime, language)
       );
     } catch (error) {
       const legs: ParsedDirectionsGeometry[] = [];
@@ -277,7 +263,6 @@ async function fetchDirections() {
             await requestRoute(
               [activeWaypoints[i]!, activeWaypoints[i + 1]!],
               currentProfile,
-              rawSettings,
               dateTime,
               language
             )
@@ -291,9 +276,7 @@ async function fetchDirections() {
 
   const parts = [];
   for (const chunk of chunks) {
-    parts.push(
-      await requestRoute(chunk, currentProfile, rawSettings, dateTime, language)
-    );
+    parts.push(await requestRoute(chunk, currentProfile, dateTime, language));
   }
 
   return mergeParts(parts);
@@ -390,63 +373,4 @@ export function useSetWaypointFromCoords() {
   };
 
   return { setWaypointFromCoords };
-}
-
-async function fetchForwardGeocode(
-  userInput: string,
-  lngLat?: [number, number]
-): Promise<ActiveWaypoint[]> {
-  if (lngLat) {
-    return [
-      {
-        title: lngLat.toString(),
-        key: 0,
-        selected: false,
-        addresslnglat: lngLat,
-        sourcelnglat: lngLat,
-        displaylnglat: lngLat,
-        addressindex: 0,
-      },
-    ];
-  }
-
-  const response = await forward_geocode(userInput);
-  const addresses = parseGeocodeResponse(response.data);
-
-  if (addresses.length === 0) {
-    toast.warning(i18n.t('toast.noAddressesTitle'), {
-      description: i18n.t('toast.noAddressesBody'),
-      position: 'bottom-center',
-      duration: 5000,
-      closeButton: true,
-    });
-  }
-
-  return addresses as ActiveWaypoint[];
-}
-
-export function useForwardGeocodeDirections() {
-  const receiveGeocodeResults = useDirectionsStore(
-    (state) => state.receiveGeocodeResults
-  );
-
-  const forwardGeocode = async (
-    userInput: string,
-    index: number,
-    lngLat?: [number, number]
-  ) => {
-    try {
-      const addresses = await fetchForwardGeocode(userInput, lngLat);
-      receiveGeocodeResults({
-        addresses,
-        index,
-      });
-      return addresses;
-    } catch (error) {
-      console.error('Forward geocode error:', error);
-      throw error;
-    }
-  };
-
-  return { forwardGeocode };
 }

@@ -10,15 +10,23 @@ import json
 import math
 import re
 import unicodedata
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from core import constants as _constants
-from core.paths import PLACES_DIR
+from core.paths import (
+    EXCLUDED_NAMES_JSON,
+    PLACE_ALIASES_JSON,
+    PLACE_MERGES_JSON,
+    PLACES_DIR,
+    TOWN_NAMES_JSON,
+)
 
 from . import taxonomy
 from .geofence import inside_project_area
+from .osm_tags import is_fallback_name
 
 SOURCE_CURATED = "curated"
 SOURCE_DATASET = "dataset"
@@ -28,6 +36,22 @@ PROTECTED_CATEGORY_SOURCES = (SOURCE_CURATED, SOURCE_DATASET)
 GEOFENCE_PROBLEM = "outside Grodno region"
 
 DEFAULT_DUP_RADIUS_M = _constants.DUPLICATE_RADIUS_M
+
+# Two names within this distance are *likely the same object mapped twice*: real double
+# mappings sit metres apart. Measured on the committed files: after the twins collapse,
+# nothing shares a name+category closer than 80 m, so above this radius a same-name pair
+# is a namesake (two «Остановка»-like objects on one street), not a duplicate. Both bands
+# are reported — the report separates the two rather than merging them into one number.
+SAME_OBJECT_RADIUS_M = 30.0
+
+TWIN_RADIUS_M = 5.0
+
+# A curated row reaches its target by name and nothing else — the CSV carries no
+# coordinate and no id — so a name several automatic rows answer to is a guess unless
+# they stand together. Measured on the committed files: «Еврейское кладбище» is three
+# cemeteries 70 to 190 km apart, while the only other shared names are a hand-authored
+# row beside its OSM twin.
+CURATED_TWIN_RADIUS_M = 2000.0
 
 COLUMNS = [
     "name",
@@ -46,10 +70,105 @@ COLUMNS = [
     "source_url",
 ]
 
-BBOX = {"south": 52.75, "west": 23.35, "north": 54.80, "east": 27.00}
+BBOX = {"south": 52.75, "west": 23.35, "north": 55.01, "east": 27.00}
+
+FINDS_DATASET = "finds"
 
 SIGHT_TAXONOMY = frozenset(c.code for c in taxonomy.all_categories() if c.role == "sight")
 SERVICE_TAXONOMY = frozenset(c.code for c in taxonomy.all_categories() if c.role == "service")
+STEPS_TAXONOMY = frozenset(
+    c.code for c in taxonomy.all_categories() if "highway=steps" in c.osm_tags
+)
+
+
+MIN_BUCKET_ROWS = 2
+
+
+def load_excluded_names(path: Path | None = None) -> frozenset[str]:
+    """The names no dataset may carry, normalised for comparison.
+
+    Read from ``excluded_names.json``: text the source uses on unrelated objects, which
+    names nothing (see the file's own `reason` fields). A judgement call written down,
+    not a pattern guessed in code.
+    """
+    source = path or EXCLUDED_NAMES_JSON
+    if not source.is_file():
+        return frozenset()
+    data = json.loads(source.read_text(encoding="utf-8"))
+    return frozenset(norm_name(entry.get("name")) for entry in data.get("names") or [])
+
+
+def is_excluded_name(name: str | None, excluded: frozenset[str] | None = None) -> bool:
+    """True when ``name`` is on the exclusion list."""
+    known = excluded if excluded is not None else load_excluded_names()
+    normalised = norm_name(name)
+    return bool(normalised) and normalised in known
+
+
+def load_town_names(path: Path | None = None) -> dict[str, str]:
+    """Belarusian → Russian settlement names, as the committed mapping file has them.
+
+    Applied to a row's `town` on the way into a dataset (`overpass.fill_town_names`).
+    A value the file does not list is left alone: the alternative is guessing at a
+    village spelling, and a wrong town is worse than a Belarusian one.
+    """
+    source = path or TOWN_NAMES_JSON
+    if not source.is_file():
+        return {}
+    data = json.loads(source.read_text(encoding="utf-8"))
+    return {str(was): str(now) for was, now in (data.get("names") or {}).items()}
+
+
+def read_place_alias_entries(path: Path | None = None) -> list[dict[str, str]]:
+    """``place_aliases.json`` as rows: one name, the row it belongs to, its locale.
+
+    Read from ``place_aliases.json``: an object the source maps under a spelling of
+    its own — the Belarusian form of a Russian name, the name of the complex rather
+    than of the building, a part of it. A judgement written down per name.
+    """
+    source = path or PLACE_ALIASES_JSON
+    if not source.is_file():
+        return []
+    data = json.loads(source.read_text(encoding="utf-8"))
+    rows: list[dict[str, str]] = []
+    for entry in data.get("places") or []:
+        url = str(entry.get("source_url") or "")
+        locale = str(entry.get("locale") or "ru")
+        if not url:
+            continue
+        rows.extend(
+            {"source_url": url, "locale": locale, "alias": str(name).strip()}
+            for name in entry.get("names") or []
+            if str(name).strip()
+        )
+    return rows
+
+
+def load_place_aliases(path: Path | None = None) -> dict[str, frozenset[str]]:
+    """Those names normalised, by the `source_url` of the row they belong to.
+
+    The view the merge rules need: a protected row is bucketed under every name it
+    answers to, so it can shadow an automatic row that spells the place differently.
+    """
+    out: dict[str, set[str]] = {}
+    for row in read_place_alias_entries(path):
+        key = norm_name(row["alias"])
+        if key:
+            out.setdefault(row["source_url"], set()).add(key)
+    return {url: frozenset(names) for url, names in out.items()}
+
+
+def load_declared_merges(path: Path | None = None) -> list[dict[str, str]]:
+    """The pairs of rows that are one object, as ``place_merges.json`` declares them."""
+    source = path or PLACE_MERGES_JSON
+    if not source.is_file():
+        return []
+    data = json.loads(source.read_text(encoding="utf-8"))
+    return [
+        {"keep": str(entry["keep"]), "drop": str(entry["drop"])}
+        for entry in data.get("pairs") or []
+        if entry.get("keep") and entry.get("drop")
+    ]
 
 
 def read_pipe_csv(path: Path) -> list[dict[str, Any]]:
@@ -89,12 +208,12 @@ def _validate_common(
         problems.append(f"lat {lat} outside bbox")
     if not (BBOX["west"] <= lon <= BBOX["east"]):
         problems.append(f"lon {lon} outside bbox")
-    for field in ("fun_facts", "links"):
-        if (row.get(field) or "").strip():
+    for key in ("fun_facts", "links"):
+        if (row.get(key) or "").strip():
             try:
-                json.loads(row[field])
+                json.loads(row[key])
             except json.JSONDecodeError as e:
-                problems.append(f"bad JSON in {field} ({e})")
+                problems.append(f"bad JSON in {key} ({e})")
     if not row["source_url"].startswith(prefixes):
         problems.append(f"source_url must start with one of {prefixes}")
     visit = (row.get("visit_minutes") or "").strip()
@@ -147,6 +266,13 @@ def validate_osm_service(row: dict[str, Any]) -> list[str]:
     )
 
 
+def validate_osm_steps(row: dict[str, Any]) -> list[str]:
+    """osm: rows — stairways and the like, visit_minutes optional (NULL)."""
+    return _validate_common(
+        row, taxonomy_codes=STEPS_TAXONOMY, prefixes=("osm:",), visit_required=False
+    )
+
+
 def normalize_city_region(row: dict[str, Any]) -> dict[str, Any]:
     return _normalize_common(row, visit_required=True)
 
@@ -159,38 +285,32 @@ def normalize_osm_service(row: dict[str, Any]) -> dict[str, Any]:
     return _normalize_common(row, visit_required=False)
 
 
+def normalize_osm_steps(row: dict[str, Any]) -> dict[str, Any]:
+    return _normalize_common(row, visit_required=False)
+
+
 def _read_pipe(path: Path) -> list[dict[str, Any]]:
     return read_pipe_csv(path)
 
 
+@dataclass
 class Dataset:
     """One versioned CSV dataset with its loader and natural-key prefix."""
 
-    def __init__(
-        self,
-        name: str,
-        *,
-        filename: str,
-        prefix: str,
-        reader: Callable[[Path], list[dict[str, Any]]],
-        validator: Callable[[dict[str, Any]], list[str]],
-        normalizer: Callable[[dict[str, Any]], dict[str, Any]],
-        category_source: str,
-        fatal_invalid: bool,
-        license: str = "see file header",
-        optional: bool = False,
-    ) -> None:
-        self.name = name
-        self.filename = filename
-        self.prefix = prefix
-        self.reader = reader
-        self.validator = validator
-        self.normalizer = normalizer
-        self.category_source = category_source
-        self.fatal_invalid = fatal_invalid
-        self.license = license
-        self.optional = optional
-        self.path: Path = PLACES_DIR / filename
+    name: str
+    filename: str
+    prefix: str
+    reader: Callable[[Path], list[dict[str, Any]]]
+    validator: Callable[[dict[str, Any]], list[str]]
+    normalizer: Callable[[dict[str, Any]], dict[str, Any]]
+    category_source: str
+    fatal_invalid: bool
+    license: str = "see file header"
+    optional: bool = False
+    path: Path = field(init=False)
+
+    def __post_init__(self) -> None:
+        self.path = PLACES_DIR / self.filename
 
     def with_data_dir(self, data_dir: Path) -> Dataset:
         self.path = data_dir / self.filename
@@ -198,7 +318,7 @@ class Dataset:
 
 
 def default_datasets() -> list[Dataset]:
-    """The four CSV datasets, in apply order (hand-authored, then OSM)."""
+    """The CSV datasets, in apply order (hand-authored, then OSM)."""
     return [
         Dataset(
             "city",
@@ -240,6 +360,29 @@ def default_datasets() -> list[Dataset]:
             reader=_read_pipe,
             validator=validate_osm_service,
             normalizer=normalize_osm_service,
+            category_source=SOURCE_AUTO,
+            fatal_invalid=False,
+            optional=True,
+            license="ODbL 1.0 (OpenStreetMap contributors)",
+        ),
+        Dataset(
+            "steps",
+            filename="places_steps.csv",
+            prefix="osm:",
+            reader=_read_pipe,
+            validator=validate_osm_steps,
+            normalizer=normalize_osm_steps,
+            category_source=SOURCE_AUTO,
+            fatal_invalid=False,
+            license="ODbL 1.0 (OpenStreetMap contributors)",
+        ),
+        Dataset(
+            FINDS_DATASET,
+            filename="places_finds.csv",
+            prefix="osm:",
+            reader=_read_pipe,
+            validator=validate_osm_sight,
+            normalizer=normalize_osm_sight,
             category_source=SOURCE_AUTO,
             fatal_invalid=False,
             optional=True,
@@ -293,22 +436,44 @@ def read_curated(path: Path) -> list[dict[str, Any]]:
     ]
 
 
-def match_place(name: str, db_rows: list[dict[str, Any]]) -> dict[str, Any] | None:
-    """Find the DB row for a curated name.
-    Match on equality first, then case-insensitive containment (not by id).
+def _widest_gap_m(rows: list[dict[str, Any]]) -> float:
+    """The widest distance between any two of the rows, or 0 for a single row."""
+    widest = 0.0
+    for index, first in enumerate(rows):
+        for second in rows[index + 1 :]:
+            gap = haversine_m(first["lat"], first["lon"], second["lat"], second["lon"])
+            widest = max(widest, gap)
+    return widest
+
+
+def match_place(name: str, db_rows: list[dict[str, Any]]) -> tuple[dict[str, Any] | None, str]:
+    """The row a curated name means, and how the code knows: ``exact`` | ``contains`` |
+    ``fuzzy`` | ``ambiguous`` | ``none``.
+
+    Equality first, then containment (never by id). Several rows answering to one name
+    are resolved by evidence, not by the order the heap returned them: a hand-authored
+    row is the place the curated text was written for, and automatic rows are the same
+    object only while they stand together — three cemeteries 70 km apart under one name
+    are three places, and the overlay says ``ambiguous`` rather than picking one.
     """
     n = name.lower()
-    exact = [r for r in db_rows if r["name"].strip().lower() == n]
-    if exact:
-        return exact[0]
-    contains = [r for r in db_rows if n in r["name"].lower()]
+    ordered = sorted(db_rows, key=lambda r: (r.get("category_source") != SOURCE_DATASET, r["id"]))
+    named = [r for r in ordered if r["name"].strip().lower() == n]
+    if named:
+        hand = [r for r in named if r.get("category_source") == SOURCE_DATASET]
+        if hand:
+            return hand[0], "exact"
+        if len(named) == 1 or _widest_gap_m(named) <= CURATED_TWIN_RADIUS_M:
+            return named[0], "exact"
+        return None, "ambiguous"
+    contains = [r for r in ordered if n in r["name"].lower()]
     if len(contains) == 1:
-        return contains[0]
+        return contains[0], "contains"
     stripped = n.replace("бывший", "").replace("в гродно", "").strip()
-    fuzzy = [r for r in db_rows if stripped in r["name"].lower()]
+    fuzzy = [r for r in ordered if stripped in r["name"].lower()]
     if fuzzy:
-        return fuzzy[0]
-    return None
+        return fuzzy[0], "fuzzy"
+    return None, "none"
 
 
 def load_dataset(ds: Dataset) -> list[dict[str, Any]]:
@@ -426,19 +591,29 @@ def haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
 def find_suspected_duplicates(
     records: list[dict[str, Any]], radius_m: float = DEFAULT_DUP_RADIUS_M
 ) -> list[dict[str, Any]]:
-    """Record pairs with the same normalised name within ``radius_m``.
+    """Record pairs sharing a normalised name **and category** within ``radius_m``.
+
+    Both halves matter. The name alone is not evidence: two «Остановка» rows are two
+    different stops, and two «Часовня» rows in different categories are different
+    kinds of object — grouping on the name alone reported 1597 "duplicates" of which
+    the overwhelming majority were generated service labels. Generated labels are
+    skipped outright (``is_fallback_name``); the count of what was skipped is in the
+    report, so the omission stays visible.
+
     Candidates for merging, not proof — reported for review, not dropped.
     """
-    buckets: dict[str, list[dict[str, Any]]] = {}
+    buckets: dict[tuple[str, str], list[dict[str, Any]]] = {}
     for r in records:
+        if is_fallback_name(r.get("name")):
+            continue
         key = norm_name(r.get("name"))
         if not key or r.get("lat") is None or r.get("lon") is None:
             continue
-        buckets.setdefault(key, []).append(r)
+        buckets.setdefault((key, str(r.get("category") or "")), []).append(r)
 
     pairs: list[dict[str, Any]] = []
-    for key, rows in buckets.items():
-        if len(rows) < 2:
+    for (key, category), rows in buckets.items():
+        if len(rows) < MIN_BUCKET_ROWS:
             continue
         for i in range(len(rows)):
             for j in range(i + 1, len(rows)):
@@ -448,12 +623,219 @@ def find_suspected_duplicates(
                     pairs.append(
                         {
                             "name": key,
+                            "category": category,
                             "distance_m": round(d, 1),
                             "a": {"dataset": a["_dataset"], "source_url": a["source_url"]},
                             "b": {"dataset": b["_dataset"], "source_url": b["source_url"]},
                         }
                     )
     return pairs
+
+
+def count_generated_labels(records: list[dict[str, Any]]) -> int:
+    """Rows whose name is a generated service label rather than a name."""
+    return sum(1 for r in records if is_fallback_name(r.get("name")))
+
+
+def _nearest_within(
+    candidates: Sequence[dict[str, Any]], lat: float, lon: float, radius_m: float
+) -> dict[str, Any] | None:
+    """The closest candidate within ``radius_m``, or None."""
+    best: dict[str, Any] | None = None
+    best_m = radius_m
+    for candidate in candidates:
+        distance = haversine_m(lat, lon, candidate["lat"], candidate["lon"])
+        if distance < best_m:
+            best, best_m = candidate, distance
+    return best
+
+
+def _answered_names(record: dict[str, Any], aliases: dict[str, frozenset[str]]) -> frozenset[str]:
+    """The normalised names a row answers to: its own, and the ones it is declared under."""
+    names = {norm_name(record.get("name"))}
+    names.discard("")
+    return frozenset(names | set(aliases.get(str(record.get("source_url")), ())))
+
+
+def resolve_shadowed(
+    records: list[dict[str, Any]],
+    radius_m: float = DEFAULT_DUP_RADIUS_M,
+    aliases: dict[str, frozenset[str]] | None = None,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Split records into the ones to project and the automatic ones a hand-authored row shadows.
+    Same name within ``radius_m`` — the hand-authored row's own, or one the alias file
+    gives it; that row keeps the place.
+    """
+    known = aliases or {}
+    buckets: dict[str, list[dict[str, Any]]] = {}
+    for r in records:
+        if r.get("_category_source") not in PROTECTED_CATEGORY_SOURCES:
+            continue
+        if r.get("lat") is None or r.get("lon") is None:
+            continue
+        for key in _answered_names(r, known):
+            buckets.setdefault(key, []).append(r)
+
+    shadowed: list[dict[str, Any]] = []
+    dropped: set[int] = set()
+    for index, r in enumerate(records):
+        if r.get("_category_source") in PROTECTED_CATEGORY_SOURCES:
+            continue
+        key = norm_name(r.get("name"))
+        if not key or r.get("lat") is None or r.get("lon") is None:
+            continue
+        winner = _nearest_within(buckets.get(key) or (), r["lat"], r["lon"], radius_m)
+        if winner is None:
+            continue
+        dropped.add(index)
+        shadowed.append(
+            {
+                "name": r.get("name"),
+                "dataset": r["_dataset"],
+                "source_url": r["source_url"],
+                "shadowed_by": winner["source_url"],
+                "distance_m": round(
+                    haversine_m(r["lat"], r["lon"], winner["lat"], winner["lon"]), 1
+                ),
+                "rule": "hand-authored",
+            }
+        )
+    return [r for index, r in enumerate(records) if index not in dropped], shadowed
+
+
+TWIN_FIELDS = (
+    "blurb",
+    "fun_fact",
+    "fun_facts",
+    "opening_hours",
+    "ticket_price",
+    "visit_minutes",
+    "links",
+)
+
+
+def _richness(r: dict[str, Any]) -> int:
+    return sum(1 for f in TWIN_FIELDS if r.get(f))
+
+
+def _twin_groups(records: list[dict[str, Any]], radius_m: float) -> list[list[int]]:
+    """Index groups of records that sit within ``radius_m`` of their group's head."""
+    remaining = list(range(len(records)))
+    groups: list[list[int]] = []
+    while remaining:
+        head, group, rest = remaining[0], [remaining[0]], []
+        for index in remaining[1:]:
+            a, b = records[head], records[index]
+            if haversine_m(a["lat"], a["lon"], b["lat"], b["lon"]) < radius_m:
+                group.append(index)
+            else:
+                rest.append(index)
+        remaining = rest
+        if len(group) > 1:
+            groups.append(group)
+    return groups
+
+
+def resolve_twins(
+    records: list[dict[str, Any]], radius_m: float = TWIN_RADIUS_M
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Collapse automatic records mapping one object twice: same name and category, metres apart.
+    Distance is what tells a twin from a namesake — same-name fortifications a hundred
+    metres apart are distinct objects, and are left alone.
+    """
+    buckets: dict[tuple[str, str], list[int]] = {}
+    for index, r in enumerate(records):
+        if r.get("_category_source") != SOURCE_AUTO:
+            continue
+        key = (norm_name(r.get("name")), str(r.get("category") or ""))
+        if key[0] and r.get("lat") is not None and r.get("lon") is not None:
+            buckets.setdefault(key, []).append(index)
+
+    dropped: set[int] = set()
+    shadowed: list[dict[str, Any]] = []
+    for indexes in buckets.values():
+        if len(indexes) < MIN_BUCKET_ROWS:
+            continue
+        rows = [records[index] for index in indexes]
+        for group in _twin_groups(rows, radius_m):
+            winner = min(group, key=lambda i: (-_richness(rows[i]), i))
+            survivor = rows[winner]
+            for position in group:
+                if position == winner:
+                    continue
+                loser = rows[position]
+                dropped.add(indexes[position])
+                shadowed.append(
+                    {
+                        "name": loser.get("name"),
+                        "dataset": loser["_dataset"],
+                        "source_url": loser["source_url"],
+                        "shadowed_by": survivor["source_url"],
+                        "distance_m": round(
+                            haversine_m(
+                                loser["lat"], loser["lon"], survivor["lat"], survivor["lon"]
+                            ),
+                            1,
+                        ),
+                        "rule": "same object",
+                    }
+                )
+    return [r for index, r in enumerate(records) if index not in dropped], shadowed
+
+
+def resolve_declared_merges(
+    records: list[dict[str, Any]], declared: list[dict[str, str]]
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[str]]:
+    """Drop the rows a declared pair names as the losing side of one object.
+
+    Returns the records to project, the drops to report, and the declarations the data
+    no longer holds. A merge that quietly stopped applying would leave the pair it was
+    written for in place, so a stale declaration is said out loud instead.
+    """
+    index_of = {str(r.get("source_url")): index for index, r in enumerate(records)}
+    dropped: set[int] = set()
+    shadowed: list[dict[str, Any]] = []
+    stale: list[str] = []
+    for pair in declared:
+        keep_at = index_of.get(pair["keep"])
+        drop_at = index_of.get(pair["drop"])
+        if keep_at is None or drop_at is None:
+            stale.append(f"{pair['keep']} ← {pair['drop']}")
+            continue
+        keeper, loser = records[keep_at], records[drop_at]
+        if loser.get("_category_source") in PROTECTED_CATEGORY_SOURCES:
+            stale.append(f"{pair['keep']} ← {pair['drop']} (the row is hand-authored)")
+            continue
+        dropped.add(drop_at)
+        shadowed.append(
+            {
+                "name": loser.get("name"),
+                "dataset": loser["_dataset"],
+                "source_url": loser["source_url"],
+                "shadowed_by": keeper["source_url"],
+                "distance_m": round(
+                    haversine_m(loser["lat"], loser["lon"], keeper["lat"], keeper["lon"]), 1
+                ),
+                "rule": "declared",
+            }
+        )
+    kept = [r for index, r in enumerate(records) if index not in dropped]
+    return kept, shadowed, stale
+
+
+def collapse(
+    records: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[str]]:
+    """The records the seed projects: the hand-authored rows, twins and declared pairs applied.
+
+    The one place the three rules are put in order, so a stage that names rows by identity
+    (``streets``) sees the same set the projection will — a row that has been collapsed
+    cannot keep a name or a street the seed is about to drop.
+    """
+    kept, hand = resolve_shadowed(records, aliases=load_place_aliases())
+    kept, twins = resolve_twins(kept)
+    kept, declared, stale = resolve_declared_merges(kept, load_declared_merges())
+    return kept, [*hand, *twins, *declared], stale
 
 
 def _share(part: int, total: int) -> dict[str, Any]:
@@ -473,17 +855,22 @@ def _count_by(rows: list[dict[str, Any]], key: str) -> dict[str, int]:
     return out
 
 
-def build_coverage_report(
-    collected: dict[str, Any],
-    *,
-    mode: str,
-    curated: list[dict[str, Any]] | None = None,
-    curated_stats: dict[str, Any] | None = None,
-    duplicate_radius_m: float = DEFAULT_DUP_RADIUS_M,
-    db_stats: dict[str, Any] | None = None,
-    data_version: str | None = None,
-    generated_at: str | None = None,
-) -> dict[str, Any]:
+@dataclass(frozen=True)
+class CoverageContext:
+    """What a coverage report is assembled in, beyond the rows themselves."""
+
+    mode: str
+    curated: list[dict[str, Any]] | None = None
+    curated_stats: dict[str, Any] | None = None
+    duplicate_radius_m: float = DEFAULT_DUP_RADIUS_M
+    db_stats: dict[str, Any] | None = None
+    data_version: str | None = None
+    generated_at: str | None = None
+    merged: list[dict[str, Any]] = field(default_factory=list)
+    stale_merges: list[str] = field(default_factory=list)
+
+
+def build_coverage_report(collected: dict[str, Any], context: CoverageContext) -> dict[str, Any]:
     """Assemble the machine-readable coverage report from in-memory records."""
     records: list[dict[str, Any]] = collected["records"]
     rejects: list[dict[str, Any]] = collected["rejects"]
@@ -513,12 +900,16 @@ def build_coverage_report(
 
     geofence_rejects = [r for r in rejects if r["kind"] == "geofence"]
     invalid_rejects = [r for r in rejects if r["kind"] == "invalid"]
-    duplicates = find_suspected_duplicates(records, duplicate_radius_m)
+    same_name = find_suspected_duplicates(records, context.duplicate_radius_m)
+    duplicates = [p for p in same_name if p["distance_m"] < SAME_OBJECT_RADIUS_M]
+    namesakes = [p for p in same_name if p["distance_m"] >= SAME_OBJECT_RADIUS_M]
+    generated_labels = count_generated_labels(records)
 
     report: dict[str, Any] = {
-        "generated_at": generated_at or _dt.datetime.now(_dt.UTC).isoformat(timespec="seconds"),
-        "mode": mode,
-        "duplicate_radius_m": duplicate_radius_m,
+        "generated_at": context.generated_at
+        or _dt.datetime.now(_dt.UTC).isoformat(timespec="seconds"),
+        "mode": context.mode,
+        "duplicate_radius_m": context.duplicate_radius_m,
         "datasets": collected["datasets"],
         "totals": {
             "records": total,
@@ -541,12 +932,13 @@ def build_coverage_report(
             "en_script_names": _share(en_names, total),
             "mixed_script_names": _share(mixed, total),
             "unknown_script_names": _share(unknown, total),
-            "explicit_ru_aliases": _share(len(curated or []), total),
+            "explicit_ru_aliases": _share(len(context.curated or []), total),
             "explicit_en_aliases": _share(0, total),
             "note": (
                 "name-script proxy; explicit RU aliases come from the curated CSV, "
-                "EN aliases from place_aliases once a translation source exists "
-                "(see db.place_aliases after an apply)"
+                "which holds only the rows that reach a place — the applied set, and the "
+                "only one that can produce an alias; EN aliases from place_aliases once a "
+                "translation source exists (see db.place_aliases after an apply)"
             ),
         },
         "geofence_rejects": {
@@ -561,12 +953,39 @@ def build_coverage_report(
         },
         "suspected_duplicates": {
             "count": len(duplicates),
+            "radius_m": SAME_OBJECT_RADIUS_M,
             "pairs": duplicates[:50],
+            "skipped_generated_labels": generated_labels,
+            "namesakes": {
+                "count": len(namesakes),
+                "radius_m": context.duplicate_radius_m,
+                "pairs": namesakes[:50],
+                "note": (
+                    "same name and category, but too far apart to be one object mapped "
+                    "twice — reported apart from duplicates so neither number misleads"
+                ),
+            },
+            "note": (
+                "same name and category within radius_m; rows whose name is a generated "
+                "service label («Остановка», «Туалет») are skipped and counted in "
+                "skipped_generated_labels rather than reported as duplicates"
+            ),
         },
-        "curated": curated_stats or {"rows": len(curated or []), "applied": False},
+        "merged": {
+            "count": len(context.merged),
+            "pairs": context.merged[:50],
+            "stale_declarations": context.stale_merges[:20],
+            "note": (
+                "rule=hand-authored: a protected row shadowed an automatic namesake inside "
+                "the duplicate radius · rule=same object: twins collapsed by name and "
+                "category · rule=declared: a pair named in place_merges.json. A declaration "
+                "with no row behind it is listed in stale_declarations, not ignored"
+            ),
+        },
+        "curated": context.curated_stats or {"rows": len(context.curated or []), "applied": False},
     }
-    if db_stats is not None:
-        report["db"] = db_stats
-    if data_version is not None:
-        report["data_version"] = data_version
+    if context.db_stats is not None:
+        report["db"] = context.db_stats
+    if context.data_version is not None:
+        report["data_version"] = context.data_version
     return report

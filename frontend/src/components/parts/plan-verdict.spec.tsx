@@ -156,4 +156,91 @@ describe('PlanVerdict', () => {
     );
     expect(container).not.toBeEmptyDOMElement();
   });
+  it('выбранный момент назван: вердикт говорит, на какой час он посчитан', () => {
+    render(
+      <PlanVerdict
+        response={response({
+          status: 'degraded',
+          interpretation: interpretation({
+            status: 'degraded',
+            at: '2026-10-20T08:00:00Z',
+            unmet: [
+              requirement({
+                kind: 'open',
+                code: null,
+                name: '',
+                reason: 'hours_unknown',
+              }),
+            ],
+          }),
+        })}
+      />
+    );
+
+    expect(screen.getByTestId('plan-verdict')).toHaveTextContent(
+      'Проверено на 20 окт., 11:00'
+    );
+  });
+
+  it('без выбранного момента часы не выдумываются — «сейчас» это не час', () => {
+    render(
+      <PlanVerdict
+        response={response({
+          status: 'degraded',
+          interpretation: interpretation({
+            status: 'degraded',
+            at: null,
+            unmet: [requirement({ reason: 'hours_unknown' })],
+          }),
+        })}
+      />
+    );
+
+    expect(screen.getByTestId('plan-verdict')).not.toHaveTextContent(
+      'Проверено на'
+    );
+  });
+
+  it('отказ по зоне покрытия не перечисляет требований и не называет час', () => {
+    render(
+      <PlanVerdict
+        response={response({
+          status: 'infeasible',
+          interpretation: interpretation({
+            at: '2026-10-20T08:00:00Z',
+            unmet: [requirement({ name: 'Вильнюсский собор' })],
+          }),
+        })}
+      />
+    );
+
+    const verdict = screen.getByTestId('plan-verdict');
+    expect(verdict).toHaveTextContent('Сюда маршрут не построить');
+    expect(verdict).not.toHaveTextContent('Проверено на');
+  });
+
+  it('вид требования без кода и имени назван по-русски, а не как код', () => {
+    render(
+      <PlanVerdict
+        response={response({
+          status: 'degraded',
+          interpretation: interpretation({
+            status: 'degraded',
+            unmet: [
+              requirement({
+                kind: 'free',
+                code: null,
+                name: '',
+                reason: 'paid_stop_on_route',
+              }),
+            ],
+          }),
+        })}
+      />
+    );
+
+    const verdict = screen.getByTestId('plan-verdict');
+    expect(verdict).toHaveTextContent('бесплатный вход');
+    expect(verdict).toHaveTextContent('на маршруте есть платный вход');
+  });
 });

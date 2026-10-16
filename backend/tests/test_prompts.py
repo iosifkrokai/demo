@@ -1,15 +1,9 @@
-"""The instruction text, held to its promise.
-
-The rules are the only lever on how the model searches: a rule that is not in the
-prompt cannot change the trajectory the live logs show, and a number the prompt
-names must be the number the tool enforces. These hold the one-search rule and its
-agreement with `find_places` — the two things a prompt change has to get right.
-"""
+"""The instruction text, held to its promise."""
 
 from __future__ import annotations
 
 from agent.prompts import compose_instructions
-from agent.tools.places import MAX_PLACES_PER_FIND
+from core.constants import MAX_PLACES_PER_FIND
 
 
 def _instructions() -> str:
@@ -42,9 +36,17 @@ def test_the_one_search_rule_names_the_cap_the_tool_enforces() -> None:
     assert f"up to {MAX_PLACES_PER_FIND} real stops" in text
 
 
+def test_the_prompt_names_the_tool_that_judges_a_requirement() -> None:
+    """The verdict is the code's: the model is told which tool speaks it, and when."""
+    text = _instructions().lower()
+    assert "never decide whether a requirement is satisfied" in text
+    assert "check_requirements" in text
+    assert "before you submit" in text
+
+
 def test_the_worked_old_town_shape_is_a_three_call_path() -> None:
     """The worked shape spells the short path out, so 'choose the stops yourself'
     does not read as a licence to search each sight in turn."""
     text = _instructions()
-    assert 'find_places(area="grodno-old-town")' in text
+    assert 'find_places(where={"area": "grodno-old-town"})' in text
     assert "three calls" in text

@@ -195,9 +195,7 @@ vi.mock('@/stores/common-store', () => ({
       get directionsPanelOpen() {
         return mockCommonState.directionsPanelOpen;
       },
-      settingsPanelOpen: false,
       toggleDirections: mockToggleDirections,
-      updateSettings: vi.fn(),
       focus: null,
       get guiding() {
         return mockCommonState.guiding;

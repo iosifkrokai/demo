@@ -1,6 +1,8 @@
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 
+import { formatMoment } from '@/i18n/format';
+
 import type {
   AgentRouteResponse,
   PlanRequirement,
@@ -26,9 +28,22 @@ const KNOWN_REASONS: readonly PlanRequirementReason[] = [
   'interest_absent',
   'avoid_honoured',
   'avoid_violated',
+  'free_entry_proven',
+  'paid_stop_on_route',
+  'admission_unknown',
+  'open_at_visit',
+  'closed_at_visit',
+  'hours_unknown',
+  'visit_time_unknown',
+  'step_free_proven',
+  'steps_on_route',
+  'steps_unknown',
   'route_missing',
   'geometry_missing',
 ];
+
+/** The kinds that carry no code: a fact about the walk, not a category. */
+const KIND_LABELS: readonly string[] = ['free', 'open', 'step_free'];
 
 /** The reason as a short label; the code itself is never shown to the tourist. */
 const reasonLabel = (
@@ -40,22 +55,34 @@ const reasonLabel = (
     : t('sidebar.status.reasonFallback');
 
 /** What the requirement is called on screen: the name, else the code, else the kind. */
-const requirementName = (item: PlanRequirement): string =>
-  item.name || item.code || item.kind;
+const requirementName = (item: PlanRequirement, t: TFunction): string =>
+  item.name ||
+  item.code ||
+  (KIND_LABELS.includes(item.kind)
+    ? t(`sidebar.status.kind.${item.kind}`)
+    : item.kind);
 
 /** The agent's verdict: why the route could not be built or which request went unmet. */
 export const PlanVerdict = ({ response }: PlanVerdictProps) => {
   const { t } = useTranslation();
   const status = response?.status;
   const unmet = response?.interpretation?.unmet ?? [];
+  const at = response?.interpretation?.at;
 
   if (status !== 'infeasible' && status !== 'degraded') return null;
+
+  /** The moment the code read the hours at, when the tourist named one themselves. */
+  const checkedAt = at ? (
+    <p className="mt-1">
+      {t('sidebar.status.checkedAt', { when: formatMoment(at) })}
+    </p>
+  ) : null;
 
   const unmetList = (
     <ul className="mt-1 list-disc space-y-0.5 pl-4">
       {unmet.map((item, i) => (
         <li key={i}>
-          {requirementName(item)} — {reasonLabel(item.reason, t)}
+          {requirementName(item, t)} — {reasonLabel(item.reason, t)}
         </li>
       ))}
     </ul>
@@ -66,7 +93,10 @@ export const PlanVerdict = ({ response }: PlanVerdictProps) => {
       (item) => item.reason === 'must_visit_outside_coverage'
     );
     if (outside.length > 0) {
-      const names = outside.map(requirementName).filter(Boolean).join(', ');
+      const names = outside
+        .map((item) => requirementName(item, t))
+        .filter(Boolean)
+        .join(', ');
       return (
         <div
           data-testid="plan-verdict"
@@ -85,6 +115,7 @@ export const PlanVerdict = ({ response }: PlanVerdictProps) => {
         className="rounded-xl bg-destructive/10 px-3 py-2 text-meta text-destructive"
       >
         <p>{t('sidebar.status.impossibleTitle')}</p>
+        {checkedAt}
         {unmetList}
       </div>
     );
@@ -97,6 +128,7 @@ export const PlanVerdict = ({ response }: PlanVerdictProps) => {
       className="rounded-xl bg-warning/15 px-3 py-2 text-meta text-warning"
     >
       <p>{t('sidebar.status.degradedTitle')}</p>
+      {checkedAt}
       {unmetList}
     </div>
   );

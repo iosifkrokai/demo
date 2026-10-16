@@ -1,14 +1,10 @@
-"""HTTP surface for accounts and visits.
-
-The wire speaks codes, not prose; a missing identity differs from a wrong one.
-The admin panel lives in ``api.routers.admin``.
-"""
+"""HTTP surface for accounts and visits."""
 
 from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Request, Response
 
@@ -74,12 +70,9 @@ def register(
     body: RegisterIn,
     request: Request,
     response: Response,
-    repo: UserRepository = Depends(deps.get_user_repository),
+    repo: Annotated[UserRepository, Depends(deps.get_user_repository)],
 ) -> Any:
-    """Create an account (always ``role=user``) and sign it in.
-
-    The first administrator is made by ``python -m db.seed admin``, not by registering.
-    """
+    """Create an account (always ``role=user``) and sign it in."""
     email = normalize_email(body.email)
     if email is None:
         return deps.error(422, REASON_INVALID_EMAIL)
@@ -107,7 +100,7 @@ def login(
     body: LoginIn,
     request: Request,
     response: Response,
-    repo: UserRepository = Depends(deps.get_user_repository),
+    repo: Annotated[UserRepository, Depends(deps.get_user_repository)],
 ) -> Any:
     email = normalize_email(body.email)
     user = repo.get_user_by_email(email) if email is not None else None
@@ -121,7 +114,7 @@ def login(
 @deps.storage_guarded
 def logout(
     request: Request,
-    repo: UserRepository = Depends(deps.get_user_repository),
+    repo: Annotated[UserRepository, Depends(deps.get_user_repository)],
 ) -> Any:
     out = Response(status_code=204)
     token = deps.session_token(request)
@@ -135,12 +128,9 @@ def logout(
 @deps.storage_guarded
 def me(
     request: Request,
-    repo: UserRepository = Depends(deps.get_user_repository),
+    repo: Annotated[UserRepository, Depends(deps.get_user_repository)],
 ) -> Any:
-    """Honest about the anonymous case: ``{authenticated: false}``, not a 401.
-
-    A 401 here would be console noise for every visitor who is not logged in.
-    """
+    """Honest about the anonymous case: ``{authenticated: false}``, not a 401."""
     user = deps.session_user(request, repo)
     if user is None:
         return AuthMeOut(authenticated=False, user=None)
@@ -151,13 +141,14 @@ def me(
 @deps.storage_guarded
 def list_visited(
     request: Request,
-    repo: UserRepository = Depends(deps.get_user_repository),
-    places: PostgresPlaceRepository = Depends(deps.get_place_repository),
+    repo: Annotated[UserRepository, Depends(deps.get_user_repository)],
+    places: Annotated[PostgresPlaceRepository, Depends(deps.get_place_repository)],
 ) -> Any:
     user, err = deps.require_user(request, repo)
     if err is not None:
         return err
-    assert user is not None and user.id is not None
+    assert user is not None
+    assert user.id is not None
     marks = repo.list_visited(user.id)
     by_id = {place.id: place for place in places.get_by_ids([m.place_id for m in marks])}
     items: list[VisitedItem] = []
@@ -174,13 +165,14 @@ def list_visited(
 def mark_visited(
     place_id: int,
     request: Request,
-    repo: UserRepository = Depends(deps.get_user_repository),
-    places: PostgresPlaceRepository = Depends(deps.get_place_repository),
+    repo: Annotated[UserRepository, Depends(deps.get_user_repository)],
+    places: Annotated[PostgresPlaceRepository, Depends(deps.get_place_repository)],
 ) -> Any:
     user, err = deps.require_user(request, repo)
     if err is not None:
         return err
-    assert user is not None and user.id is not None
+    assert user is not None
+    assert user.id is not None
     mark = repo.mark_visited(user.id, place_id)
     place = places.get_by_id(place_id) if mark is not None else None
     if mark is None or place is None or mark.visited_at is None:
@@ -193,12 +185,13 @@ def mark_visited(
 def mark_visited_bulk(
     body: VisitedBulkIn,
     request: Request,
-    repo: UserRepository = Depends(deps.get_user_repository),
+    repo: Annotated[UserRepository, Depends(deps.get_user_repository)],
 ) -> Any:
     user, err = deps.require_user(request, repo)
     if err is not None:
         return err
-    assert user is not None and user.id is not None
+    assert user is not None
+    assert user.id is not None
     marked = repo.mark_visited_many(user.id, body.place_ids)
     return VisitedBulkOut(marked=marked, count=len(marked))
 
@@ -208,11 +201,12 @@ def mark_visited_bulk(
 def unmark_visited(
     place_id: int,
     request: Request,
-    repo: UserRepository = Depends(deps.get_user_repository),
+    repo: Annotated[UserRepository, Depends(deps.get_user_repository)],
 ) -> Any:
     user, err = deps.require_user(request, repo)
     if err is not None:
         return err
-    assert user is not None and user.id is not None
+    assert user is not None
+    assert user.id is not None
     repo.unmark_visited(user.id, place_id)
     return Response(status_code=204)

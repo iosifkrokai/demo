@@ -12,6 +12,8 @@ backend/     the service — api (HTTP) · agent (the planner) · routing (the
              db/  — the persistence side: models (rows) · store (repositories)
                     · seed (the projection) · alembic · connection.py
                     · embeddings (the local model) · data (the datasets)
+                    · external_form.py (the filled-in form we send out, off the
+                      contract in db/data/external/)
 frontend/    React + Vite + MapLibre, talked to over nginx
 docker-compose.yml   the whole stack, including the db image (inline)
 ```
@@ -80,10 +82,15 @@ pass you should ignore.
 - **Reading a query needs the model.** Without `OPENROUTER_API_KEY` the planning
   endpoints answer `503 llm_not_configured` rather than guessing; retrieval is
   unaffected (embeddings are local, 384-d, ONNX).
-- **The product speaks Russian.** `ruff` deliberately ignores the ambiguous-unicode
-  rules (RUF001–RUF003): Cyrillic in strings is the point, not a defect.
+- **The product speaks Russian.** The ambiguous-unicode rules (RUF001–RUF002) stay
+  on, but `allowed-confusables` in `backend/pyproject.toml` lists the Russian and
+  Belarusian letters and the typography the product uses — so Cyrillic in strings
+  is not a defect, while any *other* homoglyph still is.
 - **Frontend:** do not fork `frontend/src/components/ui/*`; every size, radius and
   colour comes from the tokens in `frontend/src/index.css`. See `frontend/DESIGN.md`.
+- **No comments.** New code carries no `#` and no `//` commentary. When something
+  genuinely has to be said, one short docstring line says it — what the thing is
+  for, not how it works. The code is the explanation.
 
 ## Where the rest is written down
 

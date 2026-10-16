@@ -29,7 +29,7 @@ from db.connection import connect
 BACKEND = Path(__file__).resolve().parent.parent
 HINTS = PHOTOS_DIR / "osm_photo_hints.json"
 OUT = PHOTOS_DIR / "place_photos.json"
-CACHE = Path(os.environ.get("PHOTO_CACHE", "/home/codespace/.hermes/cache/scratch/photo_cache"))
+CACHE = Path(os.environ.get("PHOTO_CACHE", PHOTOS_DIR / "cache"))
 DSN = os.environ.get("DATABASE_URL", "postgresql://grodno:grodno@localhost:5432/grodno")
 
 PBF = os.environ.get("OSM_PBF")
@@ -48,13 +48,16 @@ WIKIMEDIA_HOSTS = ("upload.wikimedia.org", "commons.wikimedia.org")
 WANTED = ("wikidata", "wikipedia", "webpage", "wikimedia_commons", "image")
 
 
+_MIN_DOUBLED_LEN = 8
+
+
 def _osmium() -> Any:
     """Import pyosmium on demand, with a clear error when it is not installed.
     Not a declared dependency, so a hints-file-only checkout can still import this.
     """
     try:
         return importlib.import_module("osmium")
-    except ImportError as exc:  # pragma: no cover - depends on the environment
+    except ImportError as exc:
         raise RuntimeError(
             "стадия подсказок требует pyosmium (osmium): он не объявлен в pyproject — "
             "установите его отдельно (pip install osmium) или запустите стадию resolve "
@@ -172,7 +175,7 @@ def http_json(url: str, post: bytes | None = None, cache_id: str | None = None) 
         except Exception as exc:
             last = exc
             time.sleep(BACKOFF[min(attempt, len(BACKOFF) - 1)])
-    raise last if last else RuntimeError(url)
+    raise last or RuntimeError(url)
 
 
 def is_image(url: str) -> str:
@@ -323,7 +326,7 @@ def clean_author(raw: str) -> str:
     text = re.sub(r"\s*<https?://[^>]*>?", " ", text)
     text = re.sub(r"\s+", " ", text).strip()
     half = len(text) // 2
-    if len(text) >= 8 and len(text) % 2 == 0 and text[:half] == text[half:]:
+    if len(text) >= _MIN_DOUBLED_LEN and len(text) % 2 == 0 and text[:half] == text[half:]:
         text = text[:half].strip()
     text = re.sub(r"(https?://\S+)$", "", text).strip()
     return text
@@ -485,6 +488,36 @@ def resolve_photos(
         places = load_places()
     stats: Counter[str] = Counter()
 
+    candidates, named = _candidates(places, hints, stats, limit=limit)
+    claims, pageimages = _reference_images(candidates)
+    wanted, provenance = _hint_titles(candidates, claims, pageimages, stats)
+    with_article, meta = _article_meta(named, stats)
+    matched = _named_matches(with_article, meta, claims, stats, total=len(named))
+    _matched_titles(matched, pageimages, wanted, provenance, stats)
+    photos = _credited(wanted, provenance, stats)
+
+    print("\nитог:")
+    for key, value in stats.most_common():
+        print(f"  {key}: {value}")
+    print(f"  с фото: {len(photos)}")
+
+    if out is not None:
+        out.write_text(
+            json.dumps(photos, ensure_ascii=False, indent=1, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        print(f"-> {_shown(out)}  ({len(photos)} точек)")
+    return photos
+
+
+def _candidates(
+    places: list[dict[str, Any]],
+    hints: dict[str, dict[str, Any]],
+    stats: Counter[str],
+    *,
+    limit: int | None,
+) -> tuple[list[tuple[dict[str, Any], dict[str, Any]]], list[dict[str, Any]]]:
+    """The places whose OSM hint we hold, and the hand-authored ones to match by name."""
     candidates: list[tuple[dict[str, Any], dict[str, Any]]] = []
     for place in places:
         m = _OSM_REF.match(place["source_url"] or "")
@@ -508,7 +541,13 @@ def resolve_photos(
     if limit:
         candidates = candidates[:limit]
     print(f"кандидатов: {len(candidates)}")
+    return candidates, named
 
+
+def _reference_images(
+    candidates: list[tuple[dict[str, Any], dict[str, Any]]],
+) -> tuple[dict[str, dict[str, Any]], dict[tuple[str, str], str]]:
+    """What Wikidata and Wikipedia say these objects look like, before any matching."""
     qids = [h["wikidata"] for _, h in candidates if h.get("wikidata")]
     claims = wikidata_claims(sorted(set(qids))) if qids else {}
     with_image = sum(1 for c in claims.values() if c.get("image"))
@@ -524,7 +563,16 @@ def resolve_photos(
     ]
     pageimages = wikipedia_pageimage(sorted(set(wiki_pairs))) if wiki_pairs else {}
     print(f"Википедия дала лид-картинку: {len(pageimages)} из {len(set(wiki_pairs))}")
+    return claims, pageimages
 
+
+def _hint_titles(
+    candidates: list[tuple[dict[str, Any], dict[str, Any]]],
+    claims: dict[str, dict[str, Any]],
+    pageimages: dict[tuple[str, str], str],
+    stats: Counter[str],
+) -> tuple[dict[str, tuple[str, str]], dict[str, dict[str, Any]]]:
+    """A Commons file for every hint that names one, by the shortest route available."""
     wanted: dict[str, tuple[str, str]] = {}
     provenance: dict[str, dict[str, Any]] = {}
 
@@ -546,7 +594,13 @@ def resolve_photos(
             stats["только ссылка-поделиться, атрибуции нет"] += 1
         else:
             stats["подсказка не дала файла"] += 1
+    return wanted, provenance
 
+
+def _article_meta(
+    named: list[dict[str, Any]], stats: Counter[str]
+) -> tuple[list[dict[str, Any]], dict[str, dict[str, Any]]]:
+    """The Wikipedia article behind each hand-authored point, and what it yields."""
     for place in named:
         article = article_from_links(place.get("links"))
         if not article:
@@ -563,7 +617,18 @@ def resolve_photos(
     print(
         f"авторских точек со ссылкой: {len(with_article)}, ответ по статье получен для {len(meta)}"
     )
+    return with_article, meta
 
+
+def _named_matches(
+    with_article: list[dict[str, Any]],
+    meta: dict[str, dict[str, Any]],
+    claims: dict[str, Any],
+    stats: Counter[str],
+    *,
+    total: int,
+) -> dict[str, dict[str, Any]]:
+    """Which hand-authored points the coordinates confirm, and to which article."""
     article_qids = [info["qid"] for info in meta.values() if info.get("qid")]
     if article_qids:
         claims.update(wikidata_claims(sorted(set(article_qids))))
@@ -584,8 +649,18 @@ def resolve_photos(
             stats["авторская точка: координаты не совпали"] += 1
             continue
         matched[place["source_url"]] = {**match, "place": place, "image": claim.get("image")}
-    print(f"подтверждено координатами: {len(matched)} из {len(named)}")
+    print(f"подтверждено координатами: {len(matched)} из {total}")
+    return matched
 
+
+def _matched_titles(
+    matched: dict[str, dict[str, Any]],
+    pageimages: dict[tuple[str, str], str],
+    wanted: dict[str, tuple[str, str]],
+    provenance: dict[str, dict[str, Any]],
+    stats: Counter[str],
+) -> None:
+    """Carry the confirmed matches into `wanted`, with the article they came from."""
     article_pairs = []
     for m in matched.values():
         parsed = parse_wikipedia(m["article"])
@@ -611,6 +686,13 @@ def resolve_photos(
         else:
             stats["авторская точка: у статьи нет картинки"] += 1
 
+
+def _credited(
+    wanted: dict[str, tuple[str, str]],
+    provenance: dict[str, dict[str, Any]],
+    stats: Counter[str],
+) -> dict[str, dict[str, Any]]:
+    """Ask Commons about every file, and keep only the ones with a credit and a license."""
     info = commons_imageinfo(sorted({t for t, _ in wanted.values()})) if wanted else {}
     print(f"Commons ответил по файлам: {len(info)} из {len({t for t, _ in wanted.values()})}")
 
@@ -643,18 +725,6 @@ def resolve_photos(
             "verified": verdict,
             **provenance.get(source_url, {}),
         }
-
-    print("\nитог:")
-    for key, value in stats.most_common():
-        print(f"  {key}: {value}")
-    print(f"  с фото: {len(photos)}")
-
-    if out is not None:
-        out.write_text(
-            json.dumps(photos, ensure_ascii=False, indent=1, sort_keys=True) + "\n",
-            encoding="utf-8",
-        )
-        print(f"-> {_shown(out)}  ({len(photos)} точек)")
     return photos
 
 

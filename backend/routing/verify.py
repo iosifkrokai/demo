@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 import re
+from datetime import datetime
 from typing import Any, Literal, NamedTuple
 
+from core import constants
+from core.hours import local_at, opens_at
+from core.prices import free_entry
 from routing.models import (
     REASON_MUST_VISIT_OUTSIDE as REASON_MUST_VISIT_OUTSIDE_CODE,
     CategoryFacts,
@@ -15,6 +19,7 @@ from routing.models import (
 __all__ = [
     "INFEASIBLE_REASONS",
     "REASON_CODES",
+    "REPAIRABLE_REASONS",
     "geometry_ok",
     "overall_status",
     "verify",
@@ -45,6 +50,19 @@ REASON_INTEREST_IN_CATALOGUE = "interest_in_catalogue"
 REASON_AVOID_OK = "avoid_honoured"
 REASON_AVOID_VIOLATED = "avoid_violated"
 
+REASON_FREE_OK = "free_entry_proven"
+REASON_FREE_PAID = "paid_stop_on_route"
+REASON_FREE_UNKNOWN = "admission_unknown"
+
+REASON_OPEN_OK = "open_at_visit"
+REASON_OPEN_CLOSED = "closed_at_visit"
+REASON_OPEN_UNKNOWN = "hours_unknown"
+REASON_OPEN_NOT_DATED = "visit_time_unknown"
+
+REASON_STEP_FREE_PROVEN = "step_free_proven"
+REASON_STEPS_ON_ROUTE = "steps_on_route"
+REASON_STEPS_UNKNOWN = "steps_unknown"
+
 REASON_CODE_UNSPECIFIED = "category_code_unspecified"
 REASON_CODE_UNKNOWN = "category_code_unknown"
 
@@ -59,6 +77,28 @@ class ServiceAlongEvidence(NamedTuple):
 
     measured: bool
     by_code: dict[str, list[dict[str, Any]]]
+
+
+class StepsAlong(NamedTuple):
+    """What the catalogue's stairways say about the drawn line.
+
+    ``measured=False`` is the data the code could not consult — a missing line or an
+    unreachable catalogue — and it is ``uncertain``, never ``unmet``.
+    """
+
+    measured: bool
+    steps: list[dict[str, Any]]
+
+
+def steps_evidence(repos: Any, shape: Any) -> StepsAlong:
+    """The stairways the route runs over, or the honest word that they were not read."""
+    if repos is None or not shape:
+        return StepsAlong(measured=False, steps=[])
+    try:
+        answer = repos.places.steps_along(shape)
+    except Exception:
+        return StepsAlong(measured=False, steps=[])
+    return StepsAlong(measured=True, steps=list(answer.get("items") or []))
 
 
 REASON_CODES: frozenset[str] = frozenset(
@@ -80,6 +120,16 @@ REASON_CODES: frozenset[str] = frozenset(
         REASON_INTEREST_IN_CATALOGUE,
         REASON_AVOID_OK,
         REASON_AVOID_VIOLATED,
+        REASON_FREE_OK,
+        REASON_FREE_PAID,
+        REASON_FREE_UNKNOWN,
+        REASON_OPEN_OK,
+        REASON_OPEN_CLOSED,
+        REASON_OPEN_UNKNOWN,
+        REASON_OPEN_NOT_DATED,
+        REASON_STEP_FREE_PROVEN,
+        REASON_STEPS_ON_ROUTE,
+        REASON_STEPS_UNKNOWN,
         REASON_CODE_UNSPECIFIED,
         REASON_CODE_UNKNOWN,
         REASON_ROUTE_MISSING,
@@ -93,6 +143,24 @@ INFEASIBLE_REASONS: frozenset[str] = frozenset(
         REASON_MUST_VISIT_ABSENT,
         REASON_MUST_VISIT_OUTSIDE,
         REASON_HARD_SERVICE_ABSENT,
+    }
+)
+
+REPAIRABLE_REASONS: frozenset[str] = frozenset(
+    {
+        REASON_MUST_VISIT_ABSENT,
+        REASON_MUST_VISIT_UNSPECIFIED,
+        REASON_HARD_SERVICE_ABSENT,
+        REASON_INTEREST_ABSENT,
+        REASON_AVOID_VIOLATED,
+        REASON_CODE_UNSPECIFIED,
+        REASON_CODE_UNKNOWN,
+        REASON_FREE_PAID,
+        REASON_FREE_UNKNOWN,
+        REASON_OPEN_CLOSED,
+        REASON_OPEN_UNKNOWN,
+        REASON_STEPS_ON_ROUTE,
+        REASON_STEPS_UNKNOWN,
     }
 )
 
@@ -139,10 +207,7 @@ def _unroutable_ids(trace: dict[str, Any]) -> set[int]:
 
 
 def geometry_ok(geometry: Any) -> bool:
-    """True when ``geometry`` is a usable line: ≥2 coordinates.
-
-    None, ``{}``, ``{"coordinates": []}`` and a bare Point all return False.
-    """
+    """True when ``geometry`` is a usable line: ≥2 coordinates."""
     if geometry is None or not isinstance(geometry, dict):
         return False
 
@@ -156,7 +221,7 @@ def geometry_ok(geometry: Any) -> bool:
         return False
 
     coords = geometry.get("coordinates")
-    return _coord_count(coords) >= 2
+    return _coord_count(coords) >= constants.MIN_LEG_POINTS
 
 
 def _coord_count(coords: Any) -> int:
@@ -183,22 +248,14 @@ def _norm_cat(value: str | None) -> str:
 
 
 def _canonical_code(code: str | None, codes: frozenset[str]) -> str | None:
-    """The code itself when it is canonical, else None.
-
-    Requirements arrive with their codes already resolved — the reader validated
-    them against the taxonomy before they were ever written down — so this is a
-    membership check, not a second resolution.
-    """
+    """The code itself when it is canonical, else None."""
     if not code:
         return None
     return code if code in codes else None
 
 
 def _field(obj: Any, name: str, default: Any = None) -> Any:
-    """Read a stop's field whether the plan arrived as objects or as mappings.
-
-    Reading both spellings removes a class of silent wrong verdicts.
-    """
+    """Read a stop's field whether the plan arrived as objects or as mappings."""
     if isinstance(obj, dict):
         return obj.get(name, default)
     return getattr(obj, name, default)
@@ -223,10 +280,7 @@ def _set(requirement: Requirement, status: Status, place_ids: list[int], reason:
 
 
 def _match_named(r: Requirement, stops: list[Any]) -> Any | None:
-    """The stop proving a named/numbered must-visit, or None.
-
-    Identity first (a real place id), then the normalised name.
-    """
+    """The stop proving a named/numbered must-visit, or None."""
     if r.place_id is not None:
         for stop in stops:
             if _field(stop, "id") == r.place_id:
@@ -278,10 +332,7 @@ def _verify_must_visit(
 def _evidence_for(
     r: Requirement, services_along: ServiceAlongEvidence | None, codes: frozenset[str]
 ) -> tuple[bool | None, list[dict[str, Any]] | None]:
-    """``(measured_ok, items)`` for this requirement.
-
-    ``measured_ok`` is ``None`` when the caller measured nothing at all.
-    """
+    """``(measured_ok, items)`` for this requirement."""
     if services_along is None:
         return None, None
     if not services_along.measured:
@@ -300,6 +351,7 @@ def _verify_service(
     route_present: bool,
     geom_ok: bool,
     codes: frozenset[str],
+    *,
     evidence: tuple[bool | None, list[dict[str, Any]] | None] = (None, None),
 ) -> None:
     measured_ok, measured = evidence
@@ -390,16 +442,114 @@ def _verify_avoid(
     _set(r, "satisfied", [], REASON_AVOID_OK)
 
 
-def verify(
+def _ids_of(rows: list[Any]) -> list[int]:
+    return [i for i in (_field(row, "id") for row in rows) if isinstance(i, int)]
+
+
+def _by_admission(rows: list[Any]) -> tuple[list[Any], list[Any], list[Any]]:
+    """The rows as (free, paid, price-unknown). A price the data does not state is
+    not a free one, and it is not a paid one either.
+    """
+    groups: tuple[list[Any], list[Any], list[Any]] = ([], [], [])
+    for row in rows:
+        groups[{True: 0, False: 1, None: 2}[free_entry(_field(row, "ticket_price"))]].append(row)
+    return groups
+
+
+def _verify_free(r: Requirement, stops: list[Any], route_present: bool, geom_ok: bool) -> None:
+    """Whether the walk costs nothing to enter. Every stop has to be proven free: one
+    paid stop is the answer `unmet`, and a price nobody wrote down is `uncertain`.
+    """
+    if not route_present:
+        _set(r, "uncertain", [], REASON_ROUTE_MISSING)
+        return
+    free, paid, unknown = _by_admission(stops)
+    if paid:
+        _set(r, "unmet", _ids_of(paid), REASON_FREE_PAID)
+        return
+    if unknown:
+        _set(r, "uncertain", _ids_of(unknown), REASON_FREE_UNKNOWN)
+        return
+    if not geom_ok:
+        _set(r, "uncertain", _ids_of(free), REASON_GEOMETRY_MISSING)
+        return
+    _set(r, "satisfied", _ids_of(free), REASON_FREE_OK)
+
+
+def _verify_open(
+    r: Requirement,
+    stops: list[Any],
+    route_present: bool,
+    geom_ok: bool,
+    at: datetime | None,
+) -> None:
+    """Whether the walk is inside opening hours at ``at``. The moment is an input, not
+    a clock read: a verdict about "now" that changes between two identical requests is
+    not a verdict. Without a moment the request cannot be proven either way.
+    """
+    if at is None:
+        _set(r, "uncertain", [], REASON_OPEN_NOT_DATED)
+        return
+    if not route_present:
+        _set(r, "uncertain", [], REASON_ROUTE_MISSING)
+        return
+    when = local_at(at)
+    opened: list[Any] = []
+    closed: list[Any] = []
+    unknown: list[Any] = []
+    for stop in stops:
+        verdict = opens_at(_field(stop, "opening_hours"), when)
+        if verdict is None:
+            unknown.append(stop)
+        elif verdict:
+            opened.append(stop)
+        else:
+            closed.append(stop)
+    if closed:
+        _set(r, "unmet", _ids_of(closed), REASON_OPEN_CLOSED)
+        return
+    if unknown:
+        _set(r, "uncertain", _ids_of(unknown), REASON_OPEN_UNKNOWN)
+        return
+    if not geom_ok:
+        _set(r, "uncertain", _ids_of(opened), REASON_GEOMETRY_MISSING)
+        return
+    _set(r, "satisfied", _ids_of(opened), REASON_OPEN_OK)
+
+
+def _verify_step_free(r: Requirement, steps: StepsAlong | None, route_present: bool) -> None:
+    """Whether the measured line runs over a stairway. The verdict is about the walk's
+    own geometry — ``steps_along`` re-read it — never about the costing option that
+    built it, so a route that still crosses a staircase is ``unmet`` how ever it was asked
+    for. Without the stairway data the answer is ``uncertain``, not a claim.
+    """
+    if not route_present:
+        _set(r, "uncertain", [], REASON_ROUTE_MISSING)
+        return
+    if steps is None or not steps.measured:
+        _set(r, "uncertain", [], REASON_STEPS_UNKNOWN)
+        return
+    if steps.steps:
+        _set(r, "unmet", _ids_of(steps.steps), REASON_STEPS_ON_ROUTE)
+        return
+    _set(r, "satisfied", [], REASON_STEP_FREE_PROVEN)
+
+
+def verify(  # noqa: PLR0913 — the verdict's whole input: route, line, and what was measured
     requirements: TripRequirements,
     plan: Any,
     geometry: Any,
     services_along: ServiceAlongEvidence | None = None,
     *,
     facts: CategoryFacts,
+    at: datetime | None = None,
+    steps_along: StepsAlong | None = None,
 ) -> list[Requirement]:
     """Statuses are written onto the requirement objects *in place* and the same
     list is returned; every requirement leaves resolved.
+
+    ``at`` is the moment the walk is checked against, passed in rather than read off
+    the clock: the same route verified twice against the same ``at`` answers the same.
     """
     codes = facts.codes
     stops = _route_stops(plan)
@@ -413,87 +563,164 @@ def verify(
             _verify_must_visit(r, stops, route_present, unroutable, geom_ok)
         elif r.kind == "service":
             _verify_service(
-                r, stops, route_present, geom_ok, codes, _evidence_for(r, services_along, codes)
+                r,
+                stops,
+                route_present,
+                geom_ok,
+                codes,
+                evidence=_evidence_for(r, services_along, codes),
             )
         elif r.kind == "interest":
             _verify_interest(r, stops, route_present, geom_ok, codes)
         elif r.kind == "avoid":
             _verify_avoid(r, stops, route_present, codes)
-        else:  # pragma: no cover — RequirementKind is closed
+        elif r.kind == "free":
+            _verify_free(r, stops, route_present, geom_ok)
+        elif r.kind == "open":
+            _verify_open(r, stops, route_present, geom_ok, at)
+        elif r.kind == "step_free":
+            _verify_step_free(r, steps_along, route_present)
+        else:
             _set(r, "uncertain", [], REASON_CODE_UNSPECIFIED)
 
     return requirements.requirements
 
 
 def verify_catalogue(
-    requirements: TripRequirements, places: list[Any], *, facts: CategoryFacts
+    requirements: TripRequirements,
+    places: list[Any],
+    *,
+    facts: CategoryFacts,
+    at: datetime | None = None,
 ) -> list[Requirement]:
     """Check a CATALOGUE (a list of places to choose from) against the request.
 
-    Satisfaction reasons are the `*_in_catalogue` codes — no verdict claims "on the route".
+    A catalogue is a choice, so a fact it must carry is proven by *some* place holding
+    it — one free place in the list answers «бесплатно», where a walk would have to be
+    free stop by stop.
     """
     codes = facts.codes
     empty = not places
     for r in requirements.requirements:
         code = _canonical_code(r.code, codes) if r.code else None
-
         if r.kind == "must_visit":
-            if r.place_id is None and not r.name:
-                _set(r, "uncertain", [], REASON_MUST_VISIT_UNSPECIFIED)
-                continue
-            match = _match_named(r, places)
-            if match is not None:
-                pid = _field(match, "id")
-                ids = [pid] if isinstance(pid, int) else []
-                _set(r, "satisfied", ids, REASON_MUST_VISIT_IN_CATALOGUE)
-            elif empty:
-                _set(r, "uncertain", [], REASON_ROUTE_MISSING)
-            else:
-                _set(r, "unmet", [], REASON_MUST_VISIT_ABSENT)
-            continue
-
-        if not r.code:
+            _catalogue_must_visit(r, places, empty=empty)
+        elif r.kind == "free":
+            _catalogue_free(r, places, empty=empty)
+        elif r.kind == "open":
+            _catalogue_open(r, places, empty=empty, at=at)
+        elif r.kind == "step_free":
+            _catalogue_step_free(r)
+        elif not r.code:
             _set(r, "uncertain", [], REASON_CODE_UNSPECIFIED)
-            continue
-        if code is None:
+        elif code is None:
             _set(r, "uncertain", [], REASON_CODE_UNKNOWN)
-            continue
-
-        if r.kind in ("service", "interest"):
-            matched = [p for p in places if _stop_matches_code(p, code, codes)]
-            if matched:
-                ids = [i for i in (_field(p, "id") for p in matched) if isinstance(i, int)]
-                reason = (
-                    REASON_SERVICE_IN_CATALOGUE
-                    if r.kind == "service"
-                    else REASON_INTEREST_IN_CATALOGUE
-                )
-                _set(r, "satisfied", ids, reason)
-            elif empty:
-                _set(r, "uncertain", [], REASON_ROUTE_MISSING)
-            elif r.kind == "service":
-                _set(
-                    r,
-                    "unmet",
-                    [],
-                    REASON_HARD_SERVICE_ABSENT
-                    if r.strength == "hard"
-                    else REASON_SOFT_SERVICE_ABSENT,
-                )
-            else:
-                _set(r, "unmet", [], REASON_INTEREST_ABSENT)
-            continue
-
-        offenders = [p for p in places if _stop_matches_code(p, code, codes)]
-        if offenders:
-            ids = [i for i in (_field(p, "id") for p in offenders) if isinstance(i, int)]
-            _set(r, "unmet", ids, REASON_AVOID_VIOLATED)
-        elif empty:
-            _set(r, "uncertain", [], REASON_ROUTE_MISSING)
+        elif r.kind in ("service", "interest"):
+            _catalogue_wanted(r, places, code, codes, empty=empty)
         else:
-            _set(r, "satisfied", [], REASON_AVOID_OK)
+            _catalogue_avoid(r, places, code, codes, empty=empty)
 
     return requirements.requirements
+
+
+def _catalogue_must_visit(r: Requirement, places: list[Any], *, empty: bool) -> None:
+    """A named or id'd place the tourist asked to see, looked for in the list."""
+    if r.place_id is None and not r.name:
+        _set(r, "uncertain", [], REASON_MUST_VISIT_UNSPECIFIED)
+        return
+    match = _match_named(r, places)
+    if match is not None:
+        pid = _field(match, "id")
+        _set(r, "satisfied", [pid] if isinstance(pid, int) else [], REASON_MUST_VISIT_IN_CATALOGUE)
+    elif empty:
+        _set(r, "uncertain", [], REASON_ROUTE_MISSING)
+    else:
+        _set(r, "unmet", [], REASON_MUST_VISIT_ABSENT)
+
+
+def _catalogue_wanted(
+    r: Requirement, places: list[Any], code: str, codes: frozenset[str], *, empty: bool
+) -> None:
+    """A service or interest the catalogue is expected to contain somewhere."""
+    matched = [p for p in places if _stop_matches_code(p, code, codes)]
+    if matched:
+        ids = [i for i in (_field(p, "id") for p in matched) if isinstance(i, int)]
+        reason = (
+            REASON_SERVICE_IN_CATALOGUE if r.kind == "service" else REASON_INTEREST_IN_CATALOGUE
+        )
+        _set(r, "satisfied", ids, reason)
+    elif empty:
+        _set(r, "uncertain", [], REASON_ROUTE_MISSING)
+    elif r.kind == "service":
+        reason = REASON_HARD_SERVICE_ABSENT if r.strength == "hard" else REASON_SOFT_SERVICE_ABSENT
+        _set(r, "unmet", [], reason)
+    else:
+        _set(r, "unmet", [], REASON_INTEREST_ABSENT)
+
+
+def _catalogue_free(r: Requirement, places: list[Any], *, empty: bool) -> None:
+    """The list has to hold a free place to choose; it does not have to hold only those."""
+    free, paid, unknown = _by_admission(places)
+    if free:
+        _set(r, "satisfied", _ids_of(free), REASON_FREE_OK)
+        return
+    if empty:
+        _set(r, "uncertain", [], REASON_ROUTE_MISSING)
+        return
+    if unknown:
+        _set(r, "uncertain", _ids_of(unknown), REASON_FREE_UNKNOWN)
+        return
+    _set(r, "unmet", _ids_of(paid), REASON_FREE_PAID)
+
+
+def _catalogue_open(r: Requirement, places: list[Any], *, empty: bool, at: datetime | None) -> None:
+    """The list has to hold somewhere open at that hour to choose."""
+    if at is None:
+        _set(r, "uncertain", [], REASON_OPEN_NOT_DATED)
+        return
+    when = local_at(at)
+    opened: list[Any] = []
+    closed: list[Any] = []
+    unknown: list[Any] = []
+    for place in places:
+        verdict = opens_at(_field(place, "opening_hours"), when)
+        if verdict is None:
+            unknown.append(place)
+        elif verdict:
+            opened.append(place)
+        else:
+            closed.append(place)
+    if opened:
+        _set(r, "satisfied", _ids_of(opened), REASON_OPEN_OK)
+        return
+    if empty:
+        _set(r, "uncertain", [], REASON_ROUTE_MISSING)
+        return
+    if unknown:
+        _set(r, "uncertain", _ids_of(unknown), REASON_OPEN_UNKNOWN)
+        return
+    _set(r, "unmet", _ids_of(closed), REASON_OPEN_CLOSED)
+
+
+def _catalogue_step_free(r: Requirement) -> None:
+    """A catalogue is a set of places to choose from; a walk's stairways are not a
+    property of that list, so nothing here can prove the choice step-free.
+    """
+    _set(r, "uncertain", [], REASON_STEPS_UNKNOWN)
+
+
+def _catalogue_avoid(
+    r: Requirement, places: list[Any], code: str, codes: frozenset[str], *, empty: bool
+) -> None:
+    """Something the tourist asked to keep away from — satisfied only when absent."""
+    offenders = [p for p in places if _stop_matches_code(p, code, codes)]
+    if offenders:
+        ids = [i for i in (_field(p, "id") for p in offenders) if isinstance(i, int)]
+        _set(r, "unmet", ids, REASON_AVOID_VIOLATED)
+    elif empty:
+        _set(r, "uncertain", [], REASON_ROUTE_MISSING)
+    else:
+        _set(r, "satisfied", [], REASON_AVOID_OK)
 
 
 def _key(r: Requirement) -> str:

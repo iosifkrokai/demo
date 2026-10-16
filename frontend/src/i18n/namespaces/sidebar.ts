@@ -8,6 +8,7 @@ type SidebarShape = {
     string
   >;
   transport: Record<'pedestrian' | 'bicycle' | 'car' | 'any', string>;
+  when: Record<'now' | 'today' | 'tomorrow' | 'custom', string>;
   resultModes: Record<'route' | 'catalogue', string>;
   interests: Record<
     | 'castles'
@@ -64,6 +65,7 @@ type SidebarShape = {
     | 'selecting_candidates'
     | 'measuring_legs'
     | 'ordering_stops'
+    | 'repairing_route'
     | 'drawing_line'
     | 'checking_requirements'
     | 'done',
@@ -100,6 +102,7 @@ type SidebarShape = {
   ui: Record<
     | 'timeLabel'
     | 'transportLabel'
+    | 'whenLabel'
     | 'emptyStops'
     | 'emptyPoint'
     | 'guide'
@@ -114,6 +117,8 @@ type SidebarShape = {
     | 'point'
     | 'plan'
     | 'build'
+    | 'refreshRoute'
+    | 'refreshingRoute'
     | 'start'
     | 'myLocation',
     string
@@ -138,6 +143,12 @@ export const sidebarArea = {
         bicycle: 'велосипед',
         car: 'машина',
         any: 'как удобно',
+      },
+      when: {
+        now: 'сейчас',
+        today: 'сегодня 18:00',
+        tomorrow: 'завтра 10:00',
+        custom: 'своё время',
       },
       resultModes: {
         route: 'маршрут',
@@ -186,6 +197,7 @@ export const sidebarArea = {
         impossibleTitle:
           'Маршрут не построен: не удалось выполнить обязательное требование',
         degradedTitle: 'Часть запроса выполнить не удалось',
+        checkedAt: 'Проверено на {{when}}',
         reasonFallback: 'требование не выполнено',
         reason: {
           must_visit_on_route: 'обязательная точка не попала на маршрут',
@@ -200,8 +212,23 @@ export const sidebarArea = {
           interest_absent: 'интерес не найден в данных',
           avoid_honoured: 'ограничение соблюдено',
           avoid_violated: 'ограничение нарушено',
+          free_entry_proven: 'вход бесплатный у всех остановок',
+          paid_stop_on_route: 'на маршруте есть платный вход',
+          admission_unknown: 'цена входа не указана в данных',
+          open_at_visit: 'в это время всё открыто',
+          closed_at_visit: 'в это время остановка закрыта',
+          hours_unknown: 'часы работы не указаны в данных',
+          visit_time_unknown: 'время прогулки не названо',
+          step_free_proven: 'на пути нет лестниц',
+          steps_on_route: 'на маршруте есть лестницы',
+          steps_unknown: 'лестницы не удалось проверить',
           route_missing: 'маршрут не построен',
           geometry_missing: 'нет геометрии маршрута',
+        },
+        kind: {
+          free: 'бесплатный вход',
+          open: 'открыто в это время',
+          step_free: 'без лестниц',
         },
       },
       geo: {
@@ -253,6 +280,7 @@ export const sidebarArea = {
         selecting_candidates: 'отбираю, что взять',
         measuring_legs: 'считаю дорогу между точками',
         ordering_stops: 'собираю порядок остановок',
+        repairing_route: 'пересобираю маршрут, чтобы всё сошлось',
         drawing_line: 'рисую линию по дорогам',
         checking_requirements: 'проверяю, что всё выполнено',
         done: 'готово',
@@ -260,6 +288,7 @@ export const sidebarArea = {
 
       ui: {
         timeLabel: 'сколько есть времени',
+        whenLabel: 'когда',
         transportLabel: 'на чём',
         emptyStops:
           'Здесь появятся остановки маршрута — или соберите его из точек вручную',
@@ -276,6 +305,8 @@ export const sidebarArea = {
         point: 'точка',
         plan: 'Строю маршрут…',
         build: 'Подобрать маршрут',
+        refreshRoute: 'Обновить маршрут',
+        refreshingRoute: 'Обновляю маршрут…',
         start: 'старт маршрута',
         myLocation: 'Моё местоположение',
       },
@@ -298,6 +329,9 @@ export const sidebarArea = {
         resultTypeAria: 'тип результата',
         reset: 'сброс',
         resetHint: 'очистить маршрут',
+        recalculating: 'пересчитываю маршрут…',
+        optimiseOrder: 'оптимизировать порядок',
+        optimiseHint: 'порядок точек задан вручную — вернуть его планировщику',
         length: 'длина',
         travelMinutes: 'мин в пути',
         travelSummary: 'в пути ~{{value}}',
@@ -343,6 +377,14 @@ export const sidebarArea = {
         pinnedHint: 'уточнение не будет убирать эту точку',
         remove: 'удалить',
       },
+      catalogue: {
+        title: 'Каталог мест',
+        intro:
+          'Это выбор мест, а не готовая прогулка — нажмите на место, чтобы показать его на карте.',
+        count_one: '{{count}} место',
+        count_few: '{{count}} места',
+        count_many: '{{count}} мест',
+      },
     },
   },
   en: {
@@ -362,6 +404,12 @@ export const sidebarArea = {
         bicycle: 'by bike',
         car: 'by car',
         any: 'any way',
+      },
+      when: {
+        now: 'now',
+        today: 'today 18:00',
+        tomorrow: 'tomorrow 10:00',
+        custom: 'custom time',
       },
       resultModes: {
         route: 'route',
@@ -411,6 +459,7 @@ export const sidebarArea = {
         impossibleTitle:
           'Route not built: a mandatory requirement could not be met',
         degradedTitle: 'Part of the request could not be fulfilled',
+        checkedAt: 'Checked for {{when}}',
         reasonFallback: 'requirement not met',
         reason: {
           must_visit_on_route: 'a mandatory stop is not on the route',
@@ -426,8 +475,23 @@ export const sidebarArea = {
           interest_absent: 'the interest is not in the data',
           avoid_honoured: 'the restriction was honoured',
           avoid_violated: 'the restriction was violated',
+          free_entry_proven: 'every stop is free to enter',
+          paid_stop_on_route: 'a stop on the route charges admission',
+          admission_unknown: 'the data states no admission price',
+          open_at_visit: 'everything is open at that hour',
+          closed_at_visit: 'a stop is closed at that hour',
+          hours_unknown: 'the data states no opening hours',
+          visit_time_unknown: 'the walk has no stated time',
+          step_free_proven: 'no stairs on the route',
+          steps_on_route: 'the route crosses stairs',
+          steps_unknown: 'the stairs could not be checked',
           route_missing: 'no route was built',
           geometry_missing: 'no route geometry',
+        },
+        kind: {
+          free: 'free admission',
+          open: 'open at the time',
+          step_free: 'step-free',
         },
       },
       geo: {
@@ -477,6 +541,7 @@ export const sidebarArea = {
         selecting_candidates: 'choosing what to include',
         measuring_legs: 'measuring the way between stops',
         ordering_stops: 'putting the stops in order',
+        repairing_route: 'rebuilding the route so it all holds',
         drawing_line: 'drawing the line along the roads',
         checking_requirements: 'checking that everything is honoured',
         done: 'done',
@@ -484,6 +549,7 @@ export const sidebarArea = {
 
       ui: {
         timeLabel: 'how much time you have',
+        whenLabel: 'when',
         transportLabel: 'how you travel',
         emptyStops: 'Route stops will appear here — or build one by hand',
         emptyPoint: 'an empty stop (pick it on the map)',
@@ -499,6 +565,8 @@ export const sidebarArea = {
         point: 'stop',
         plan: 'Building the route…',
         build: 'Plan my route',
+        refreshRoute: 'Refresh the route',
+        refreshingRoute: 'Refreshing the route…',
         start: 'route start',
         myLocation: 'My location',
       },
@@ -521,6 +589,10 @@ export const sidebarArea = {
         resultTypeAria: 'result type',
         reset: 'reset',
         resetHint: 'clear the route',
+        recalculating: 're-measuring the route…',
+        optimiseOrder: 'optimise the order',
+        optimiseHint:
+          'the stops are in the order you put them in — hand them back to the planner',
         length: 'length',
         travelMinutes: 'min travelling',
         travelSummary: 'travelling ~{{value}}',
@@ -564,6 +636,13 @@ export const sidebarArea = {
         pinnedHint: 'a refinement will not remove this stop',
         remove: 'delete',
       },
+      catalogue: {
+        title: 'Place catalogue',
+        intro:
+          'These are places to choose from, not a ready walk — tap a place to show it on the map.',
+        count_one: '{{count}} place',
+        count_other: '{{count}} places',
+      },
     },
   },
 } satisfies LocaleArea<{
@@ -572,5 +651,6 @@ export const sidebarArea = {
     plan: Record<string, string>;
     summary: Record<string, string>;
     waypoints: Record<string, string>;
+    catalogue: Record<string, string>;
   };
 }>;

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { MarkerIcon, markerColorForStop } from './marker-icon';
+import { MarkerIcon } from './marker-icon';
 
 describe('MarkerIcon', () => {
   it('should render without crashing', () => {
@@ -83,24 +83,6 @@ describe('MarkerIcon', () => {
       expect(fillOf('red')).toBe(fillOf('finish'));
       expect(fillOf('blue')).toBe(fillOf('me'));
       expect(fillOf('purple')).toBe(fillOf('iso'));
-    });
-  });
-
-  describe('markerColorForStop', () => {
-    it('gives start / intermediate / finish for a route', () => {
-      expect(markerColorForStop(0, 4)).toBe('start');
-      expect(markerColorForStop(1, 4)).toBe('via');
-      expect(markerColorForStop(2, 4)).toBe('via');
-      expect(markerColorForStop(3, 4)).toBe('finish');
-    });
-
-    it('does not call a lone stop a finish', () => {
-      expect(markerColorForStop(0, 1)).toBe('start');
-    });
-
-    it('does not call the first of two stops a finish', () => {
-      expect(markerColorForStop(0, 2)).toBe('start');
-      expect(markerColorForStop(1, 2)).toBe('finish');
     });
   });
 

@@ -1,9 +1,4 @@
-"""Turning a run's outcome into the wire.
-
-The agent proposes; the tools measure and verify; this module writes down what
-happened, once, for every branch. Nothing here decides anything — every number
-and every status was computed before it arrived.
-"""
+"""Turning a run's outcome into the wire."""
 
 from __future__ import annotations
 
@@ -13,34 +8,66 @@ from typing import Any
 
 from agent.client import AgentOutcome
 from agent.models import BriefStop, ReaderBrief, RefinementBrief, TripRequirements
+from agent.tools.plan import MeasureSetup, measure_candidates
 from api.models.routes import (
     BudgetInfo,
     GenerateReq,
     Interpretation,
+    OverallStatus,
     ParsedQuery,
     Place,
     PlannedAlternative,
     RequirementSignal,
+    RerouteReq,
+    RerouteStop,
     RouteChange,
     RouteChanges,
     RouteResponse,
     RouteSummary,
+    StepFreeInfo,
 )
 from core import constants
-from core.errors import NoRoutePossibleError, UpstreamUnavailableError
+from core.errors import NoRoutePossibleError
 from routing.cost import visit_time_minutes
-from routing.models import Candidate, CategoryFacts
-from routing.render import render
+from routing.models import Candidate, CategoryFacts, WalkRequest
 from routing.stops import candidate_of
+from routing.valhalla.constants import costing_for
 
 log = logging.getLogger(__name__)
 
+PLACED_STOP_NAME = "Точка на карте"
 
-def to_places(candidates: list[Candidate], facts: CategoryFacts) -> list[Place]:
-    """Candidates → the response points (one mapping, used by every branch)."""
+
+def budget_info(
+    measured: dict[str, Any], *, budget_minutes: int | None, stops_dropped: int = 0
+) -> BudgetInfo:
+    """The walk, the visits and their sum: one currency, so a panel that shows a
+    sum shows a sum that comes out.
+    """
+    walk_minutes = int(measured.get("walk_minutes") or 0)
+    visit_minutes = int(measured.get("visit_minutes") or 0)
+    return BudgetInfo(
+        budget_minutes=budget_minutes,
+        walk_minutes=walk_minutes,
+        visit_minutes=visit_minutes,
+        total_minutes=walk_minutes + visit_minutes,
+        fits=bool(measured.get("fits_budget")),
+        stops_dropped=stops_dropped,
+    )
+
+
+def to_places(
+    candidates: list[Candidate], facts: CategoryFacts, keys: dict[int, str] | None = None
+) -> list[Place]:
+    """Candidates → the response points (one mapping, used by every branch).
+
+    `keys` names them the way the client that sent the route named them.
+    """
+    named = keys or {}
     return [
         Place(
             id=p.id,
+            key=named.get(p.id),
             name=p.name,
             category=p.category,
             lat=p.lat,
@@ -51,6 +78,7 @@ def to_places(candidates: list[Candidate], facts: CategoryFacts) -> list[Place]:
             links=p.links,
             opening_hours=p.opening_hours,
             ticket_price=p.ticket_price,
+            is_free=p.is_free,
             town=p.town,
             district=p.district,
             photo=p.photo,
@@ -61,20 +89,7 @@ def to_places(candidates: list[Candidate], facts: CategoryFacts) -> list[Place]:
 
 
 def route_changes(previous: Sequence[BriefStop], points: list[Place]) -> RouteChanges | None:
-    """What a refinement did to the route it started from.
-
-    ``previous`` is the route's stops as the refinement began — the journal's last
-    turn where the server has one, the client's re-sent snapshot only as a
-    fallback (see ``agent.thread.previous_stops``). ``None`` when there is no
-    previous route: a fresh generation changed nothing, and an empty diff would be
-    a claim the code cannot make.
-
-    A stop is matched by place id; a snapshot stop that carries no id — a point the
-    tourist pinned by hand — can only be matched by name. Everything on the
-    previous route that the final points do not carry is reported ``removed``,
-    whether the code dropped it or the model left it out: the final points are the
-    truth, and nothing absent from them may be reported ``kept``.
-    """
+    """What a refinement did to the route it started from."""
     if not previous:
         return None
     new_ids = {place.id for place in points}
@@ -115,11 +130,16 @@ def _ordered_candidates(repos: Any, outcome: AgentOutcome) -> list[Candidate]:
     return [candidate_of(row, 0.0) for row in rows]
 
 
-def interpretation(contract: TripRequirements | None, status: str | None) -> Interpretation | None:
-    """What the system understood, in one compact block for the client.
+OVERALL_STATUSES: dict[str, OverallStatus] = {
+    "ready": "ready",
+    "infeasible": "infeasible",
+    "degraded": "degraded",
+    "pending": "pending",
+}
 
-    Codes and numbers only — the client localises ``code``/``reason`` itself.
-    """
+
+def interpretation(contract: TripRequirements | None, status: str | None) -> Interpretation | None:
+    """What the system understood, in one compact block for the client."""
     if contract is None:
         return None
 
@@ -139,7 +159,8 @@ def interpretation(contract: TripRequirements | None, status: str | None) -> Int
     return Interpretation(
         source=contract.source,
         locale=contract.locale,
-        status=status or "pending",  # type: ignore[arg-type]
+        status=OVERALL_STATUSES.get(status or "", "pending"),
+        at=contract.at if contract.at_chosen else None,
         adults=contract.party.adults,
         children=contract.party.children,
         children_ages=list(contract.party.children_ages),
@@ -158,10 +179,7 @@ def interpretation(contract: TripRequirements | None, status: str | None) -> Int
 def alternatives_for(
     *, costing: str, walk_s: float, length_km: float | None
 ) -> list[PlannedAlternative]:
-    """What to offer when the plan outgrows the profile the tourist chose.
-
-    The far stops are NOT dropped; only costings we can genuinely route are offered.
-    """
+    """What to offer when the plan outgrows the profile the tourist chose."""
     if costing not in ("pedestrian", "bicycle"):
         return []
     far = (length_km or 0.0) >= constants.WALK_TOO_FAR_KM
@@ -209,31 +227,41 @@ def alternatives_sentence(offers: list[PlannedAlternative], walk_s: float) -> st
     )
 
 
-def render_tour(
-    route: list[Candidate],
-    *,
-    costing: str,
-    origin: Any,
-    round_trip: bool = False,
-) -> tuple[dict[str, Any], dict[str, Any]]:
-    """Draw the tour, never failing the request over geometry.
+def _span(minutes: int) -> str:
+    """Minutes as the panel spells a duration."""
+    hours, mins = divmod(int(minutes), 60)
+    if not hours:
+        return f"{mins} мин"
+    return f"{hours} ч {mins} мин" if mins else f"{hours} ч"
 
-    If nothing draws, answer with the stops and no line instead of a 500.
+
+def step_free_info(measured: dict[str, Any]) -> StepFreeInfo | None:
+    """The measured price of a step-free detour, when one was asked for and taken."""
+    raw = measured.get("step_free")
+    if not isinstance(raw, dict):
+        return None
+    return StepFreeInfo(
+        walk_minutes=int(raw.get("walk_minutes") or 0),
+        without_steps_minutes=int(raw.get("without_steps_minutes") or 0),
+        detour_minutes=int(raw.get("detour_minutes") or 0),
+        length_km=raw.get("length_km"),
+        without_steps_length_km=raw.get("without_steps_length_km"),
+    )
+
+
+def step_free_sentence(info: StepFreeInfo) -> str:
+    """The detour's price in the request's language: a step-free claim is only honest
+    with what the detour cost shown beside it.
     """
-    try:
-        shape, summary, status = render(
-            route, costing=costing, origin=origin, round_trip=round_trip
-        )
-        if status != "usable":
-            log.info("render returned status: %s", status)
-        return shape, summary
-    except UpstreamUnavailableError as exc:
-        log.warning("render failed (%s) — answering without geometry", exc)
-        return {}, {}
+    here = _span(info.walk_minutes)
+    plain = _span(info.without_steps_minutes)
+    if info.length_km is not None and info.without_steps_length_km is not None:
+        here = f"{here} / {info.length_km:.1f} км"
+        plain = f"{plain} / {info.without_steps_length_km:.1f} км"
+    return f"Без лестниц путь длиннее: около {here} в обход, против {plain} по обычному маршруту."
 
 
 def route_response(
-    req: GenerateReq,
     outcome: AgentOutcome,
     *,
     repos: Any,
@@ -241,28 +269,37 @@ def route_response(
     deadline: dict[str, Any] | None = None,
     previous: Sequence[BriefStop] | None = None,
 ) -> RouteResponse:
-    """The one place a run's outcome becomes the response body.
-
-    ``previous`` is the route this turn refines, when there is one; the response
-    says what the refinement did to it rather than leaving the tourist to guess.
-    A refusal or a fresh generation carries no such statement.
-    """
+    """The one place a run's outcome becomes the response body."""
     contract = outcome.requirements
     measured = outcome.measured
 
     if outcome.refused:
-        return _refusal_response(req, outcome, deadline=deadline)
+        return _refusal_response(outcome, deadline=deadline)
+    if contract.result_mode == "catalogue":
+        return _catalogue_response(
+            outcome, repos=repos, facts=facts, previous=previous, deadline=deadline
+        )
 
     route = _ordered_candidates(repos, outcome)
 
-    walk_s = float(measured.get("walk_minutes") or 0) * 60
+    budget = budget_info(
+        measured,
+        budget_minutes=contract.budget_minutes,
+        stops_dropped=int((measured.get("provenance") or {}).get("stops_dropped") or 0),
+    )
+    walk_s = float(budget.walk_minutes) * 60
     length_km = measured.get("length_km")
-    costing = outcome.submission.profile or req.profile or "pedestrian"
+    costing = costing_for(outcome.requirements.costing)
     narrative = outcome.submission.narrative or None
 
     offers = alternatives_for(costing=costing, walk_s=walk_s, length_km=length_km)
     if offers and narrative:
         narrative = f"{narrative}\n\n{alternatives_sentence(offers, walk_s)}"
+
+    step_free = step_free_info(measured)
+    if step_free is not None and step_free.detour_minutes > 0:
+        sentence = step_free_sentence(step_free)
+        narrative = f"{narrative}\n\n{sentence}" if narrative else sentence
 
     points = to_places(route, facts)
 
@@ -276,14 +313,7 @@ def route_response(
         shape=measured.get("shape") or {},
         summary=RouteSummary(length_km=length_km, time_seconds=walk_s),
         result_mode=contract.result_mode,
-        budget=BudgetInfo(
-            budget_minutes=contract.budget_minutes,
-            walk_minutes=int(walk_s / 60) + 1,
-            visit_minutes=int(measured.get("visit_minutes") or 0),
-            total_minutes=int(measured.get("total_minutes") or 0),
-            fits=bool(measured.get("fits_budget")),
-            stops_dropped=int(measured.get("provenance", {}).get("stops_dropped") or 0),
-        ),
+        budget=budget,
         explanation=narrative,
         alternatives=offers or None,
         status=outcome.status,
@@ -291,6 +321,7 @@ def route_response(
         interpretation=interpretation(contract, outcome.status),
         costing=costing,
         changes=route_changes(previous or (), points),
+        step_free=step_free,
         debug={
             "requirements_source": contract.source,
             "problems": outcome.problems,
@@ -307,14 +338,9 @@ DEFAULT_REFUSAL = (
 
 
 def _refusal_response(
-    req: GenerateReq, outcome: AgentOutcome, *, deadline: dict[str, Any] | None = None
+    outcome: AgentOutcome, *, deadline: dict[str, Any] | None = None
 ) -> RouteResponse:
-    """The agent said the request cannot be served: infeasible, with its reason.
-
-    A refusal is an answer, not a failed run — it reaches the client as an empty
-    plan carrying `status="infeasible"` and the reason the agent gave, never as a
-    pending plan with zero points.
-    """
+    """The agent said the request cannot be served: infeasible, with its reason."""
     contract = outcome.requirements
     reason = (outcome.submission.refusal_reason or "").strip() or DEFAULT_REFUSAL
     outside = ", ".join(contract.outside_coverage)
@@ -333,7 +359,7 @@ def _refusal_response(
         status="infeasible",
         requirements=contract.public_requirements(),
         interpretation=interpretation(contract, "infeasible"),
-        costing=outcome.submission.profile or req.profile or "pedestrian",
+        costing=costing_for(outcome.requirements.costing),
         changes=None,
         debug={
             "reason": "refused",
@@ -344,11 +370,53 @@ def _refusal_response(
     )
 
 
-def no_route_response(req: GenerateReq, detail: str) -> RouteResponse:
-    """Turn "there is no walk here" into an answer instead of a failed request.
+CATALOGUE_PLACES = "Каталог: {n} мест — выберите точки, и я построю по ним маршрут."
 
-    Returns an empty plan with `status="infeasible"` and a machine-readable reason.
-    """
+
+def _catalogue_response(
+    outcome: AgentOutcome,
+    *,
+    repos: Any,
+    facts: CategoryFacts,
+    previous: Sequence[BriefStop] | None = None,
+    deadline: dict[str, Any] | None = None,
+) -> RouteResponse:
+    """A list to choose from: the places, no line, and no numbers nobody measured."""
+    contract = outcome.requirements
+    measured = outcome.measured
+    points = to_places(_ordered_candidates(repos, outcome), facts)
+    narrative = (outcome.submission.narrative or "").strip()
+    return RouteResponse(
+        parsed=ParsedQuery(
+            categories=contract.interest_codes(),
+            time_budget_minutes=contract.budget_minutes,
+            source="agent",
+        ),
+        points=points,
+        shape={},
+        summary=RouteSummary(length_km=None, time_seconds=None),
+        result_mode="catalogue",
+        budget=None,
+        explanation=narrative or CATALOGUE_PLACES.format(n=len(points)),
+        status=outcome.status,
+        requirements=contract.public_requirements(),
+        interpretation=interpretation(contract, outcome.status),
+        costing=costing_for(contract.costing),
+        changes=route_changes(previous or (), points),
+        debug={
+            "result_mode": "catalogue",
+            "n_places": len(points),
+            "capped": bool(measured.get("capped")),
+            "requirements_source": contract.source,
+            "problems": outcome.problems,
+            "verdicts": measured.get("verdicts"),
+            "deadline": deadline,
+        },
+    )
+
+
+def no_route_response(req: GenerateReq, detail: str) -> RouteResponse:
+    """Turn "there is no walk here" into an answer instead of a failed request."""
     return RouteResponse(
         parsed=ParsedQuery(time_budget_minutes=req.time_budget_minutes, source="agent"),
         points=[],
@@ -361,18 +429,14 @@ def no_route_response(req: GenerateReq, detail: str) -> RouteResponse:
         ),
         status="infeasible",
         requirements=[],
-        costing=req.profile or "pedestrian",
+        costing=costing_for(req.profile),
         changes=None,
         debug={"reason": "no_walkable_route", "detail": detail},
     )
 
 
 def explain_points(candidates: list[Candidate], facts: CategoryFacts) -> str:
-    """A short Russian description of a list of points, written from the data.
-
-    The planning agent writes its own narrative now; this is what the standalone
-    explain endpoint answers with, so a client that only holds ids still gets text.
-    """
+    """A short Russian description of a list of points, written from the data."""
     if not candidates:
         return "Точки не выбраны."
     places = to_places(candidates, facts)
@@ -382,21 +446,8 @@ def explain_points(candidates: list[Candidate], facts: CategoryFacts) -> str:
 
 
 def reader_brief(req: GenerateReq) -> ReaderBrief:
-    """Narrow the wire to what the agent is told.
-
-    The run never sees the wire shape — no client id, no raw payload — only the
-    controls that reach its prompt. This is the whole coupling between the HTTP
-    layer and the agent's input.
-    """
+    """Narrow the wire to what the agent is told."""
     origin = (req.origin.lat, req.origin.lon) if req.origin is not None else None
-    region_bbox: tuple[float, float, float, float] | None = None
-    if req.region_bbox and len(req.region_bbox) == 4:
-        region_bbox = (
-            float(req.region_bbox[0]),
-            float(req.region_bbox[1]),
-            float(req.region_bbox[2]),
-            float(req.region_bbox[3]),
-        )
     context = None
     if req.context is not None:
         context = RefinementBrief(
@@ -411,8 +462,8 @@ def reader_brief(req: GenerateReq) -> ReaderBrief:
     return ReaderBrief(
         locale=req.locale,
         profile=req.profile,
+        at=req.at,
         origin=origin,
-        region_bbox=region_bbox,
         time_budget_minutes=req.time_budget_minutes,
         party_adults=req.party_adults,
         party_children=req.party_children,
@@ -427,34 +478,95 @@ def reader_brief(req: GenerateReq) -> ReaderBrief:
     )
 
 
-def reroute_response(req: Any, *, repos: Any) -> RouteResponse:
-    """Route a list of points the client already chose, and draw it.
-
-    No model is involved: the points are given, so this is the measurement and
-    nothing else.
+def _placed_stop(stop: RerouteStop, index: int) -> Candidate:
+    """A stop the client placed itself: no row, so a point and nothing more, under
+    a negative id — the catalogue numbers from one upwards. The wire refuses a stop
+    with nowhere to be, so the coordinates are here.
     """
-    from api.models.routes import RerouteReq
-    from routing.models import CategoryFacts
+    assert stop.lat is not None
+    assert stop.lon is not None
+    return Candidate(
+        id=-(index + 1),
+        name=stop.name or PLACED_STOP_NAME,
+        category=None,
+        lat=stop.lat,
+        lon=stop.lon,
+    )
 
-    assert isinstance(req, RerouteReq)
-    facts = CategoryFacts.from_rows(repos.taxonomy.all())
-    rows = repos.places.get_by_ids(req.point_ids)
+
+def _as_measured(candidates: list[Candidate], measured: dict[str, Any]) -> list[Candidate]:
+    """The candidates in the order the measurement settled on."""
+    by_id = {c.id: c for c in candidates}
+    return [by_id[card["id"]] for card in measured.get("results") or [] if card["id"] in by_id]
+
+
+def reroute_response(req: RerouteReq, *, repos: Any) -> RouteResponse:
+    """Measure and draw the route the client is holding, without asking the model.
+
+    Editing a stop is a measurement, not a request to be interpreted.
+    """
+    stops = req.as_stops()
+    wanted = [stop.place_id for stop in stops if stop.place_id is not None]
+    rows = repos.places.get_by_ids(wanted) if wanted else []
     found = {row.id: row for row in rows}
-    missing = [pid for pid in req.point_ids if pid not in found]
+    missing = [pid for pid in wanted if pid not in found]
     if missing:
         raise NoRoutePossibleError(f"unknown point_ids: {sorted(missing)}")
 
-    candidates = [candidate_of(found[pid], 0.0) for pid in req.point_ids]
-    costing = req.profile or "pedestrian"
-    shape, summary = render_tour(candidates, costing=costing, origin=None)
-    walk_s = float((summary or {}).get("time", 0.0) or 0.0)
+    keys: dict[int, str] = {}
+    candidates: list[Candidate] = []
+    for index, stop in enumerate(stops):
+        card = (
+            candidate_of(found[stop.place_id], 0.0)
+            if stop.place_id is not None
+            else _placed_stop(stop, index)
+        )
+        keys[card.id] = stop.key
+        candidates.append(card)
+
+    facts = CategoryFacts.from_rows(repos.taxonomy.all())
+    costing = costing_for(req.profile)
+    provenance: dict[str, Any] = {
+        "source": "places+valhalla",
+        "profile": costing,
+        "round_trip": req.round_trip,
+        "budget_minutes": req.time_budget_minutes,
+        "result_cap": constants.VALHALLA_MAX_LOCATIONS,
+    }
+    measured = measure_candidates(
+        candidates,
+        WalkRequest(
+            stop_ids=wanted,
+            profile=req.profile or "pedestrian",
+            budget_minutes=req.time_budget_minutes,
+            origin=req.origin,
+            round_trip=req.round_trip,
+            must_keep_ids=[c.id for c in candidates if facts.is_service(c.category)] or None,
+        ),
+        MeasureSetup(
+            repos=repos, provenance=provenance, facts=facts, preserve_order=req.preserve_order
+        ),
+    )
+    if measured.get("error") is not None:
+        raise NoRoutePossibleError(str(measured.get("message") or measured["error"]))
+
+    route = _as_measured(candidates, measured)
+    walk_s = float(measured.get("walk_minutes") or 0) * 60
     return RouteResponse(
-        parsed=ParsedQuery(source="explicit"),
-        points=to_places(candidates, facts),
-        shape=shape,
-        summary=RouteSummary(length_km=(summary or {}).get("length"), time_seconds=walk_s),
+        parsed=ParsedQuery(
+            time_budget_minutes=req.time_budget_minutes,
+            source="explicit",
+        ),
+        points=to_places(route, facts, keys),
+        shape=measured.get("shape") or {},
+        summary=RouteSummary(length_km=measured.get("length_km"), time_seconds=walk_s),
         costing=costing,
-        budget=None,
-        explanation=explain_points(candidates, facts),
+        budget=budget_info(
+            measured,
+            budget_minutes=req.time_budget_minutes,
+            stops_dropped=int((measured.get("provenance") or {}).get("stops_dropped") or 0),
+        ),
+        explanation=explain_points(route, facts),
+        status="ready",
         changes=None,
     )

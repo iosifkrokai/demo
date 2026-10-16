@@ -6,7 +6,6 @@ import {
   markSpoken,
   cancelSpeech,
   speak,
-  isSpeechAvailable,
   type SpokenThresholds,
   type VoiceManeuver,
   VOICE_THRESHOLDS_M,
@@ -429,20 +428,6 @@ describe('cancelSpeech', () => {
     // @ts-expect-error — deliberately absent in this test
     window.speechSynthesis = undefined;
     expect(() => cancelSpeech()).not.toThrow();
-    window.speechSynthesis = prev;
-  });
-});
-
-describe('isSpeechAvailable', () => {
-  it('returns true when speechSynthesis is present', () => {
-    expect(isSpeechAvailable()).toBe(true);
-  });
-
-  it('returns false when speechSynthesis is undefined', () => {
-    const prev = window.speechSynthesis;
-    // @ts-expect-error — deliberately absent in this test
-    window.speechSynthesis = undefined;
-    expect(isSpeechAvailable()).toBe(false);
     window.speechSynthesis = prev;
   });
 });

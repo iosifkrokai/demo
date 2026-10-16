@@ -480,3 +480,54 @@ describe('журнал: маршрут приходит с сервера', () =
     expect(useDirectionsStore.getState().threadRevision).toBe(-1);
   });
 });
+
+describe('directions-store — the order the server measured', () => {
+  const summary = {
+    stops: 2,
+    km: 1.5,
+    travelMinutes: 15,
+    walkMinutes: 15,
+    visitMinutes: 70,
+    budgetMinutes: null,
+    fits: true,
+  };
+
+  beforeEach(() => {
+    withRoute([
+      stop(ME_WAYPOINT_ID, -1, 'моё местоположение'),
+      stop('1', 10, 'Кафе Немо'),
+      stop('2', 20, 'Туалет'),
+      stop('dropped', 0, 'точка на карте'),
+    ]);
+  });
+
+  it('follows the order the server settled on', () => {
+    useDirectionsStore.getState().applyReroute({ keys: ['2', '1'], summary });
+
+    expect(useDirectionsStore.getState().waypoints.map((wp) => wp.id)).toEqual([
+      ME_WAYPOINT_ID,
+      '2',
+      '1',
+      'dropped',
+    ]);
+  });
+
+  it('keeps the tourist’s own position as the route’s start', () => {
+    useDirectionsStore.getState().applyReroute({ keys: ['2', '1'], summary });
+
+    expect(useDirectionsStore.getState().waypoints[0]?.id).toBe(ME_WAYPOINT_ID);
+  });
+
+  it('keeps a stop the server has no name for at the end, not at the front', () => {
+    useDirectionsStore.getState().applyReroute({ keys: ['2', '1'], summary });
+
+    expect(useDirectionsStore.getState().waypoints.at(-1)?.id).toBe('dropped');
+  });
+
+  it('writes the numbers that came with the order', () => {
+    useDirectionsStore.getState().applyReroute({ keys: ['2', '1'], summary });
+
+    expect(useDirectionsStore.getState().routeSummary).toEqual(summary);
+    expect(useDirectionsStore.getState().recalculating).toBe(false);
+  });
+});

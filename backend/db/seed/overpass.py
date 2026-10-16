@@ -1,24 +1,28 @@
 """Overpass transport, district resolution and the pipe-delimited CSV writer.
-Holds the endpoints, retry/failover, query templates and the reverse geocoder.
+Holds the endpoints, retry/failover, query templates and the raion fallback.
 """
 
 from __future__ import annotations
 
-import contextlib
 import csv
-import json
 import math
 import sys
 import time
-from collections.abc import Sequence
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
 import httpx
 
-DEFAULT_BBOX: tuple[float, float, float, float] = (23.35, 52.75, 27.00, 54.80)
+from .datasets import BBOX
+from .districts import district_at
 
-CACHE_DIR = Path(__file__).resolve().parent.parent / ".cache" / "nominatim"
+DEFAULT_BBOX: tuple[float, float, float, float] = (
+    BBOX["west"],
+    BBOX["south"],
+    BBOX["east"],
+    BBOX["north"],
+)
 
 OVERPASS_ENDPOINTS = [
     "https://overpass-api.de/api/interpreter",
@@ -85,6 +89,9 @@ RAION_CENTRES: dict[str, tuple[float, float]] = {
 }
 
 
+_ATTEMPTS = 4
+
+
 def haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     """Metres between two lat/lon points."""
     earth_radius_m = 6371000
@@ -95,91 +102,82 @@ def haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     return earth_radius_m * 2 * math.asin(math.sqrt(a))
 
 
-def nominatim_tile(lat: float, lon: float) -> tuple[int, int]:
-    """z8 tile coordinates for Nominatim tile cache."""
-    x = int((lon + 180) / 360 * 256)
-    y = int(
-        (1 - math.log(math.tan(math.radians(lat)) + 1 / math.cos(math.radians(lat))) / math.pi)
-        / 2
-        * 256
-    )
-    return x, y
+def fill_town_names(
+    rows: list[dict[str, Any]],
+    resolve: Callable[[str], str | None],
+) -> dict[str, int]:
+    """Replace a Belarusian ``town`` with the Russian one, when the mapping knows it.
 
+    ``addr:city`` in OSM is Belarusian («Гродна», «Слонім») while the product speaks
+    Russian, so the card would show the wrong language. The mapping is a committed file
+    (`db/data/town_names.json`), not a geocoder: reverse geocoding answers the same
+    question but needs a network pass per value, and a village translated by guesswork is
+    a wrong fact on a card.
 
-def nominatim_cache_path(lat: float, lon: float) -> Path:
-    x, y = nominatim_tile(lat, lon)
-    return CACHE_DIR / f"tile_z8_{x}_{y}.json"
-
-
-def nominatim_reverse(
-    lat: float, lon: float, cache: dict[tuple[float, float], str | None]
-) -> str | None:
-    """Reverse geocode via disk cache + Nominatim API (1 rps)."""
-    key = (round(lat, 4), round(lon, 4))
-    if key in cache:
-        return cache[key]
-
-    CACHE_DIR.mkdir(parents=True, exist_ok=True)
-    tile_path = nominatim_cache_path(lat, lon)
-    tile_cache: dict[str, str | None] = {}
-    if tile_path.exists():
-        with contextlib.suppress(Exception):
-            tile_cache = json.loads(tile_path.read_text(encoding="utf-8"))
-
-    if str(key) in tile_cache:
-        cache[key] = tile_cache[str(key)]
-        return cache[key]
-
-    url = "https://nominatim.openstreetmap.org/reverse"
-    params = {"lat": lat, "lon": lon, "format": "json", "accept-language": "ru"}
-    headers = {"User-Agent": "GrodnoRegionPipeline/1.0 (codex-ai)"}
-    try:
-        resp = httpx.get(url, params=params, headers=headers, timeout=10)
-        resp.raise_for_status()
-        data = resp.json()
-    except Exception as exc:
-        sys.stderr.write(f"[nominatim] {exc}\n")
-        return None
-
-    district = None
-    addr = data.get("address", {})
-    district = addr.get("county") or addr.get("district") or addr.get("region")
-    if district:
-        district = district.replace(" район", "").replace(" District", "").strip()
-
-    cache[key] = district
-    tile_cache[str(key)] = district
-    with contextlib.suppress(Exception):
-        tile_path.write_text(json.dumps(tile_cache, ensure_ascii=False), encoding="utf-8")
-
-    time.sleep(1.1)
-    return district
-
-
-def resolve_district(
-    lat: float,
-    lon: float,
-    tags: dict[str, str],
-    cache: dict[tuple[float, float], str | None] | None = None,
-    use_nominatim: bool = True,
-) -> str:
-    """District: OSM addr:district → Nominatim reverse → nearest raion centre.
-    ``use_nominatim=False`` skips Nominatim; the value is cosmetic for routing.
+    ``resolve`` is injected so this is testable offline. A value the mapping does not
+    know is left exactly as it was — and counted, so the gap stays visible.
     """
-    if cache is None:
-        cache = {}
+    translated = kept = 0
+    for row in rows:
+        town = str(row.get("town") or "").strip()
+        if not town:
+            continue
+        russian = resolve(town)
+        if russian and russian != town:
+            row["town"] = russian
+            translated += 1
+        else:
+            kept += 1
+    return {"translated": translated, "kept": kept}
 
+
+def resolve_district(lat: float, lon: float, tags: dict[str, str]) -> str:
+    """District: OSM ``addr:district`` when tagged, then the committed boundary, then the
+    nearest raion centre — the last one only for a point outside every boundary we hold.
+    """
     d = tags.get("addr:district", "")
     if d:
         return d.replace(" район", "").strip()
 
-    if use_nominatim:
-        district = nominatim_reverse(lat, lon, cache)
-        if district:
-            return district
+    inside = district_at(lat, lon)
+    if inside:
+        return inside
 
     nearest = min(RAION_CENTRES, key=lambda r: haversine_m(lat, lon, *RAION_CENTRES[r]))
     return f"{nearest} район"
+
+
+def fill_districts(
+    rows: list[dict[str, Any]], previous: Mapping[str, str] | None = None
+) -> dict[str, int]:
+    """Give every row a district, offline.
+
+    The Overpass rows carry no ``addr:district`` on these objects, so the committed
+    boundary answers first: it is the only source that knows where a border runs, and a
+    snapshot carried from an older fetch may hold the nearest-centre answer that boundary
+    has since corrected. Outside every boundary the previous snapshot is the best evidence
+    left — an exact match on ``source_url`` keeps the district it already had — and a
+    genuinely new point falls back to the raion whose centre is nearest.
+
+    A re-fetch that skipped this would write ``district: ""`` over every sight, which is
+    why it runs before the file is written. Returns the counts for the fetch report.
+    """
+    known = previous or {}
+    carried = derived = 0
+    for row in rows:
+        if str(row.get("district") or "").strip():
+            continue
+        lat, lon = float(row["lat"]), float(row["lon"])
+        district = district_at(lat, lon)
+        if district:
+            derived += 1
+        elif district := known.get(str(row.get("source_url"))):
+            carried += 1
+        else:
+            district = resolve_district(lat, lon, {})
+            derived += 1
+        row["district"] = district
+    return {"carried": carried, "derived": derived}
 
 
 def build_overpass_query(template: str, bbox: tuple[float, float, float, float]) -> str:
@@ -212,7 +210,7 @@ def fetch_overpass(
 
     failed_endpoints: list[str] = []
     dead: set[str] = set()
-    for attempt in range(4):
+    for attempt in range(_ATTEMPTS):
         for endpoint in OVERPASS_ENDPOINTS:
             if endpoint in dead:
                 continue
@@ -240,12 +238,12 @@ def fetch_overpass(
                     ),
                 ):
                     dead.add(endpoint)
-                if attempt == 3 and endpoint not in dead:
+                if attempt == _ATTEMPTS - 1 and endpoint not in dead:
                     failed_endpoints.append(f"{endpoint} ({exc})")
 
         if all(ep in dead for ep in OVERPASS_ENDPOINTS):
             break
-        if attempt < 3:
+        if attempt < _ATTEMPTS - 1:
             wait = (2**attempt) * 5
             sys.stderr.write(f"[overpass] retry in {wait}s …\n")
             time.sleep(wait)
@@ -253,7 +251,8 @@ def fetch_overpass(
     for ep in failed_endpoints:
         sys.stderr.write(f"[overpass] FAILED: {ep}\n")
     sys.stderr.write(
-        f"[overpass] all {len(OVERPASS_ENDPOINTS)} endpoints failed after 4 attempts — exiting\n"
+        f"[overpass] all {len(OVERPASS_ENDPOINTS)} endpoints failed "
+        f"after {_ATTEMPTS} attempts — exiting\n"
     )
     return None
 

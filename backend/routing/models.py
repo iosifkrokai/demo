@@ -1,19 +1,10 @@
-"""The measurement currency — what the deterministic layer speaks.
-
-This lives below both the planner and the agent so the agent's tools can call the
-routing math without either of them importing the other. It is the *measurement*
-half of the old ``planner.models``; the HTTP wire and the pipeline glue stayed
-behind.
-
-``Candidate`` still carries display fields (blurb, links, photo). That is
-transitional: once the response is assembled from ids at the edge, they collapse
-into a thin ``Stop`` and leave this module.
-"""
+"""The measurement currency — what the deterministic layer speaks."""
 
 from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
@@ -28,12 +19,7 @@ class LatLon(BaseModel):
 
 @dataclass(frozen=True)
 class CategoryFacts:
-    """What the measurement needs to know about categories — and nothing else.
-
-    The taxonomy lives in the database, but the arithmetic here is a leaf: it is
-    handed this value rather than a repository, so the cost matrix can be computed
-    from coordinates and numbers alone, with no connection in reach.
-    """
+    """What the measurement needs to know about categories — and nothing else."""
 
     codes: frozenset[str] = field(default_factory=frozenset)
     visit_minutes: Mapping[str, int] = field(default_factory=dict)
@@ -41,11 +27,7 @@ class CategoryFacts:
 
     @classmethod
     def from_rows(cls, categories: Any) -> CategoryFacts:
-        """Build from taxonomy rows (anything with code/ru/visit_minutes/role).
-
-        `places.category` stores the Russian name, not the code, so both surfaces
-        are keyed — a lookup succeeds whichever one the data carries.
-        """
+        """Build from taxonomy rows (anything with code/ru/visit_minutes/role)."""
         codes: set[str] = set()
         minutes: dict[str, int] = {}
         roles: dict[str, str] = {}
@@ -69,10 +51,7 @@ class CategoryFacts:
 
 
 class Photo(BaseModel):
-    """A picture of a point, always with the credit the licence demands.
-
-    url, author, license and source travel together; incomplete records are never emitted.
-    """
+    """A picture of a point, always with the credit the licence demands."""
 
     url: str
     author: str
@@ -84,6 +63,7 @@ class ResolvedConstraints(BaseModel):
     must_visit_ids: list[int] = []
     time_budget_minutes: int | None = 120
     round_trip: bool = False
+    origin: LatLon | None = None
 
 
 class Candidate(BaseModel):
@@ -101,6 +81,7 @@ class Candidate(BaseModel):
     photo: Photo | None = None
     opening_hours: str | None = None
     ticket_price: str | None = None
+    is_free: bool | None = None
     town: str | None = None
     district: str | None = None
     visit_minutes_db: int | None = None
@@ -108,12 +89,80 @@ class Candidate(BaseModel):
     rrf_score: float = 0.0
 
 
+class OriginAnchor(BaseModel):
+    """The tourist's own position as a leg endpoint, measured beside the matrix
+    rather than as a row of it: the origin is not a stop and has no index."""
+
+    from_origin: list[float] = []
+    to_origin: list[float] = []
+
+
 class CostMatrix(BaseModel):
-    """Walk cost matrix + per-place visit times."""
+    """Walk cost matrix + per-place visit times, and the origin's own legs."""
 
     walk_seconds: list[list[float]] = []
     visit_minutes: list[int] = []
     indices: list[int] = []
+    anchor: OriginAnchor | None = None
+
+
+@dataclass(frozen=True)
+class WalkRequest:
+    """What the tourist asked to walk, before there is a matrix to measure it on."""
+
+    stop_ids: list[int]
+    profile: str = "pedestrian"
+    budget_minutes: int | None = None
+    origin: LatLon | None = None
+    round_trip: bool = False
+    must_keep_ids: list[int] | None = None
+    locale: str = "ru"
+    step_free: bool = False
+
+    def constraints(self, *, keep: list[int] | None = None) -> ResolvedConstraints:
+        """This request, as the rules the routing layer reads."""
+        return ResolvedConstraints(
+            must_visit_ids=list(self.must_keep_ids or [] if keep is None else keep),
+            time_budget_minutes=self.budget_minutes,
+            round_trip=self.round_trip,
+            origin=self.origin,
+        )
+
+
+@dataclass(frozen=True)
+class WalkProblem:
+    """One measurement's whole input: the stops, the matrix, and the rules."""
+
+    candidates: list[Candidate]
+    cost: CostMatrix
+    constraints: ResolvedConstraints
+    costing: str = "pedestrian"
+
+    @property
+    def matrix(self) -> list[list[float]]:
+        return self.cost.walk_seconds
+
+    @property
+    def visits(self) -> list[int]:
+        return self.cost.visit_minutes
+
+    @property
+    def anchor(self) -> OriginAnchor | None:
+        return self.cost.anchor
+
+    @property
+    def round_trip(self) -> bool:
+        return self.constraints.round_trip
+
+    @property
+    def budget_s(self) -> int | None:
+        minutes = self.constraints.time_budget_minutes
+        return minutes * 60 if minutes else None
+
+    @property
+    def must_idx(self) -> list[int]:
+        wanted = set(self.constraints.must_visit_ids)
+        return [i for i, c in enumerate(self.candidates) if c.id in wanted]
 
 
 class ValidatedPlan(BaseModel):
@@ -128,9 +177,10 @@ class ValidatedPlan(BaseModel):
 
 ResultMode = Literal["route", "catalogue"]
 
-# --- what the reader understood ----------------------------------------------
 
-RequirementKind = Literal["must_visit", "service", "interest", "avoid"]
+RequirementKind = Literal["must_visit", "service", "interest", "avoid", "free", "open", "step_free"]
+
+CODE_LESS_KINDS: frozenset[str] = frozenset({"free", "open", "step_free"})
 
 REASON_MUST_VISIT_OUTSIDE = "must_visit_outside_coverage"
 
@@ -177,13 +227,13 @@ class PartyComposition(BaseModel):
 
 
 class TripRequirements(BaseModel):
-    """Everything the route must respect, in one place.
-
-    Built once per request, rebuilt from the delta on a refinement turn.
-    """
+    """Everything the route must respect, in one place."""
 
     locale: Literal["ru", "en"] = "ru"
     raw_query: str = ""
+
+    at: datetime | None = None
+    at_chosen: bool = False
 
     party: PartyComposition = Field(default_factory=PartyComposition)
 
@@ -248,10 +298,7 @@ class TripRequirements(BaseModel):
         return not self.failed_hard() and not self.unresolved_hard()
 
     def public_requirements(self) -> list[dict[str, Any]]:
-        """Localizable view of the requirement list for the HTTP response.
-
-        Frontend renders from kind/code/status so both locales share one contract.
-        """
+        """Localizable view of the requirement list for the HTTP response."""
         return [
             {
                 "kind": r.kind,

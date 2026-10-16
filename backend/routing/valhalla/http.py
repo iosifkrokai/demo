@@ -21,10 +21,7 @@ def request_with_retry(
     timeout: float,
     retries: int | None = None,
 ) -> Any:
-    """GET with bounded retries on transient failures.
-
-    Exhausted retries raise UpstreamUnavailableError so main.py can return 503.
-    """
+    """GET with bounded retries on transient failures."""
     if retries is None:
         retries = constants.VALHALLA_MAX_RETRIES
     last_exc: Exception | None = None

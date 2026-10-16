@@ -42,16 +42,6 @@ const markerIconVariants = cva('relative cursor-pointer w-[35px] h-[45px]', {
   },
 });
 
-/** The role colour for the stop at `index` of `total` numbered stops. */
-export const markerColorForStop = (
-  index: number,
-  total: number
-): MarkerColor => {
-  if (index === 0) return 'start';
-  if (index === total - 1 && total > 1) return 'finish';
-  return 'via';
-};
-
 interface MarkerIconProps extends VariantProps<typeof markerIconVariants> {
   number?: string;
   className?: string;

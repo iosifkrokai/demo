@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { useSyncExternalStore } from 'react';
 import {
   fireEvent,
   render,
@@ -12,6 +13,7 @@ import userEvent from '@testing-library/user-event';
 const mockStoreState = vi.hoisted(() => ({
   waypoints: [] as Record<string, unknown>[],
   placeDetails: {} as Record<string, unknown>,
+  catalogue: null as unknown[] | null,
   results: { data: null, show: {} } as {
     data: unknown;
     show: Record<string, boolean>;
@@ -21,7 +23,21 @@ const mockStoreState = vi.hoisted(() => ({
   routeSnapshots: [] as unknown[],
   excludedPlaceIds: [] as number[],
   thread: null as unknown,
+  manualOrder: false,
+  roundTrip: false,
+  timeBudget: 0,
+  costing: null as string | null,
+  routeSummary: null as unknown,
+  recalculating: false,
   setWaypoint: vi.fn(),
+  setManualOrder: vi.fn(),
+  setRoundTrip: vi.fn(),
+  setTimeBudget: vi.fn(),
+  setCosting: vi.fn(),
+  setRouteSummary: vi.fn(),
+  setRecalculating: vi.fn(),
+  applyReroute: vi.fn(),
+  setCatalogue: vi.fn(),
   setPlaceDetails: vi.fn(),
   addEmptyWaypointToEnd: vi.fn(),
   addToHistory: vi.fn(),
@@ -35,15 +51,24 @@ const mockStoreState = vi.hoisted(() => ({
   refreshThread: vi.fn(),
 }));
 const mockSetWaypoint = mockStoreState.setWaypoint;
+
+/** The mock is a real store to React: a setter re-renders its readers. */
+const mockStoreListeners = vi.hoisted(() => new Set<() => void>());
+const mockStoreVersion = vi.hoisted(() => ({ current: 0 }));
+const notifyMockStore = () => {
+  mockStoreVersion.current += 1;
+  mockStoreListeners.forEach((listener) => listener());
+};
 const mockRefetch = vi.hoisted(() => vi.fn());
+const mockSetAgentRoute = vi.hoisted(() => vi.fn());
 const mockGetState = vi.hoisted(() =>
   vi.fn((): Record<string, unknown> => mockStoreState)
 );
 const mockNavigate = vi.hoisted(() => vi.fn());
-const mockResetSettings = vi.hoisted(() => vi.fn());
 
 vi.mock('@/hooks/use-directions-queries', () => ({
   useDirectionsQuery: () => ({ refetch: mockRefetch }),
+  setAgentRoute: mockSetAgentRoute,
 }));
 
 const mockItineraries = vi.hoisted(() => ({
@@ -75,33 +100,62 @@ vi.mock('@/hooks/use-places', () => ({
   }),
 }));
 
+const mockCommonState = vi.hoisted(() => ({
+  directionsPanelOpen: true,
+  focus: null as unknown,
+  guideFix: null as unknown,
+  guiding: false,
+  guideVoiceMuted: false,
+  guideTurnDistanceM: null as number | null,
+  placesVisible: false,
+  dateTime: { type: -1, value: '' } as { type: number; value: string },
+  setDirectionsPanelOpen: vi.fn(),
+  toggleDirections: vi.fn(),
+  focusOn: vi.fn(),
+  setGuideFix: vi.fn(),
+  setGuiding: vi.fn(),
+  setGuideVoiceMuted: vi.fn(),
+  setGuideTurnDistanceM: vi.fn(),
+  setPlacesVisible: vi.fn(),
+  updateDateTime: vi.fn(),
+}));
+const mockCommonListeners = vi.hoisted(() => new Set<() => void>());
+const mockCommonVersion = vi.hoisted(() => ({ current: 0 }));
+const notifyMockCommon = () => {
+  mockCommonVersion.current += 1;
+  mockCommonListeners.forEach((listener) => listener());
+};
+
 vi.mock('@/stores/common-store', () => ({
-  useCommonStore: (selector: (s: Record<string, unknown>) => unknown) =>
-    selector({
-      directionsPanelOpen: true,
-      setDirectionsPanelOpen: vi.fn(),
-      toggleDirections: vi.fn(),
-      resetSettings: mockResetSettings,
-      focus: null,
-      guideFix: null,
-      guiding: false,
-      guideVoiceMuted: false,
-      guideTurnDistanceM: null,
-      focusOn: vi.fn(),
-      setGuideFix: vi.fn(),
-      setGuiding: vi.fn(),
-      setGuideVoiceMuted: vi.fn(),
-      setGuideTurnDistanceM: vi.fn(),
-      placesVisible: false,
-      setPlacesVisible: vi.fn(),
-    }),
+  useCommonStore: (selector: (s: Record<string, unknown>) => unknown) => {
+    useSyncExternalStore(
+      (onChange: () => void) => {
+        mockCommonListeners.add(onChange);
+        return () => {
+          mockCommonListeners.delete(onChange);
+        };
+      },
+      () => mockCommonVersion.current
+    );
+    return selector(mockCommonState);
+  },
 }));
 
 vi.mock('@/stores/directions-store', () => ({
   ME_WAYPOINT_ID: 'me',
   useDirectionsStore: Object.assign(
-    (selector: (s: Record<string, unknown>) => unknown) =>
-      selector(mockStoreState),
+    (selector: (s: Record<string, unknown>) => unknown) => {
+      useSyncExternalStore(
+        (onChange: () => void) => {
+          mockStoreListeners.add(onChange);
+          return () => {
+            mockStoreListeners.delete(onChange);
+          };
+        },
+        () => mockStoreVersion.current
+      );
+      return selector(mockStoreState);
+    },
     { getState: mockGetState }
   ),
 }));
@@ -159,8 +213,101 @@ const AGENT_ANSWER = {
   },
 };
 
+/** The agent's answer for a catalogue request: places to choose, no walk. */
+const CATALOGUE_ANSWER = {
+  result_mode: 'catalogue',
+  points: [
+    {
+      id: 201,
+      name: 'Костёл Святого Франциска Ксаверия',
+      category: 'костёл',
+      town: 'Гродно',
+      lat: 53.6789,
+      lon: 23.8312,
+      blurb: 'Самый старый костёл города',
+    },
+    {
+      id: 202,
+      name: 'Церковь Бориса и Глеба',
+      category: 'церковь',
+      town: 'Гродно',
+      lat: 53.6785,
+      lon: 23.8275,
+    },
+    {
+      id: 203,
+      name: 'Костёл Девы Марии',
+      category: 'костёл',
+      town: 'Островец',
+      lat: 54.6121,
+      lon: 25.9554,
+    },
+  ],
+  costing: null,
+  summary: {},
+  budget: null,
+  shape: {},
+  status: 'ready',
+};
+
 const askField = () =>
   screen.getByRole('textbox', { name: 'что хотите посмотреть' });
+
+/** Every starter the ask box offers, and the request each one fills in. */
+const baseHintChips = [
+  ['old-town-castles', 'два замка и Советская улица в Гродно, часа на четыре'],
+  [
+    'museums-rainy-day',
+    'куда пойти в Гродно в дождь, музеи под крышей, часа на три',
+  ],
+  ['family-with-kids', 'Гродно с детьми: замки, парк и зоопарк, на полдня'],
+  [
+    'four-faiths',
+    'костёл, синагога, монастырь и церкви старого Гродно, часа на три',
+  ],
+  ['free-old-town-walk', 'что посмотреть в Гродно бесплатно, часа на три'],
+  [
+    'tyzenhauz-north',
+    'Городница и век Тызенгауза, прогулка по северному Гродно, часа на три',
+  ],
+  [
+    'bicycle-canal',
+    'Августовский канал на велосипеде: Сопоцкин и шлюзы, часа на четыре',
+  ],
+  ['augustow-canal-bike', 'Августовский канал на велосипеде, часа на четыре'],
+  ['palaces-day', 'дворцы и усадьбы запада области на машине, на весь день'],
+  [
+    'castles-lida-krevo-golshany',
+    'замки Лиды, Крево и Гольшан за день на машине',
+  ],
+  ['mir-novogrudok', 'Мир и Новогрудок за день: два замка и Мицкевич'],
+  ['west-palaces-and-churches', 'дворцы и храмы запада области на машине'],
+  ['synagogues-day', 'синагоги Гродно, Лиды и Слонима на машине'],
+  ['castles-half-day', 'замки Гродненской области на полдня'],
+  ['museums-budget', 'музеи Гродно на два часа'],
+  [
+    'family-walk',
+    'старый Гродно, двое детей, два часа, туалет обязателен, кафе если по пути',
+  ],
+  [
+    'avoid-temples',
+    'семейная прогулка по Гродно без храмов и костёлов: парк и зоопарк',
+  ],
+  [
+    'named-farnyi',
+    'прогулка по старому Гродно с обязательной остановкой у Фарного костёла',
+  ],
+  [
+    'free-old-town',
+    'Гродно бесплатно: только то, куда вход свободный, часа на три',
+  ],
+  ['all-churches-catalogue', 'все костёлы и церкви Гродненской области'],
+  ['vague-no-anchor', 'что-нибудь интересное'],
+  [
+    'out-of-region-vilnius',
+    'Вильнюс: Кафедральный собор Святого Станислава — маршрут пешком',
+  ],
+] as const;
 
 /** The sticky footer's main action. */
 const buildButton = () =>
@@ -194,6 +341,18 @@ const stubAgentFetch = (
   });
 };
 
+const pad2 = (value: number) => String(value).padStart(2, '0');
+
+/** The same wall-clock stamp the panel computes for a local preset. */
+const localMoment = (hour: number, dayOffset = 0) => {
+  const date = new Date();
+  date.setDate(date.getDate() + dayOffset);
+  date.setHours(hour, 0, 0, 0);
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(
+    date.getDate()
+  )}T${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
+};
+
 describe('Sidebar', () => {
   beforeEach(() => {
     vi.unstubAllGlobals();
@@ -208,13 +367,57 @@ describe('Sidebar', () => {
     });
     mockStoreState.waypoints = [];
     mockStoreState.placeDetails = {};
+    mockStoreState.catalogue = null;
     mockStoreState.results = { data: null, show: {} };
     mockStoreState.refinementLog = [];
     mockStoreState.routeSnapshots = [];
     mockStoreState.excludedPlaceIds = [];
+    mockStoreState.timeBudget = 0;
+    mockStoreState.roundTrip = false;
+    mockStoreState.manualOrder = false;
+    mockStoreState.costing = null;
+    mockStoreState.routeSummary = null;
+    mockStoreState.recalculating = false;
     mockStoreState.setWaypoint.mockImplementation(
       (next: Record<string, unknown>[]) => {
         mockStoreState.waypoints = next;
+        notifyMockStore();
+      }
+    );
+    mockStoreState.setRouteSummary.mockImplementation((summary: unknown) => {
+      mockStoreState.routeSummary = summary;
+      notifyMockStore();
+    });
+    mockStoreState.setCosting.mockImplementation((costing: string | null) => {
+      mockStoreState.costing = costing;
+      notifyMockStore();
+    });
+    mockStoreState.setManualOrder.mockImplementation((value: boolean) => {
+      mockStoreState.manualOrder = value;
+      notifyMockStore();
+    });
+    mockStoreState.setTimeBudget.mockImplementation((minutes: number) => {
+      mockStoreState.timeBudget = minutes;
+      notifyMockStore();
+    });
+    mockStoreState.setRoundTrip.mockImplementation((value: boolean) => {
+      mockStoreState.roundTrip = value;
+      notifyMockStore();
+    });
+    mockStoreState.setCatalogue.mockImplementation(
+      (places: unknown[] | null) => {
+        mockStoreState.catalogue = places;
+        notifyMockStore();
+      }
+    );
+    mockCommonState.dateTime = { type: -1, value: '' };
+    mockCommonState.updateDateTime.mockImplementation(
+      (key: 'type' | 'value', value: string | number) => {
+        mockCommonState.dateTime =
+          key === 'type'
+            ? { ...mockCommonState.dateTime, type: Number(value) }
+            : { ...mockCommonState.dateTime, value: String(value) };
+        notifyMockCommon();
       }
     );
     mockGetState.mockReturnValue(mockStoreState);
@@ -268,6 +471,65 @@ describe('Sidebar', () => {
     expect(body.time_budget_minutes).toBeUndefined();
   });
 
+  it('draws the line the agent measured, instead of asking the engine twice', async () => {
+    mockSetAgentRoute.mockClear();
+    const measured = {
+      ...AGENT_ANSWER,
+      shape: {
+        type: 'LineString',
+        coordinates: [
+          [23.8222, 53.6772],
+          [23.8246, 53.678],
+        ],
+      },
+    };
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- the test reads calls[i][1]
+    const fetchMock = vi.fn(async (_url: string, _init: RequestInit) => ({
+      ok: true,
+      json: async () => measured,
+    }));
+    stubAgentFetch(fetchMock);
+
+    const user = userEvent.setup({ delay: null });
+    render(<Sidebar />);
+
+    await user.type(askField(), 'замки Гродно');
+    await user.click(buildButton());
+
+    await waitFor(() =>
+      expect(mockSetAgentRoute).toHaveBeenCalledWith({
+        shape: {
+          type: 'LineString',
+          coordinates: [
+            [53.6772, 23.8222],
+            [53.678, 23.8246],
+          ],
+        },
+        summary: { length_km: 1.5, time_seconds: 900 },
+        costing: 'auto',
+      })
+    );
+  });
+
+  it('leaves the line to the map panel when the agent measured none', async () => {
+    mockSetAgentRoute.mockClear();
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- the test reads calls[i][1]
+    const fetchMock = vi.fn(async (_url: string, _init: RequestInit) => ({
+      ok: true,
+      json: async () => AGENT_ANSWER,
+    }));
+    stubAgentFetch(fetchMock);
+
+    const user = userEvent.setup({ delay: null });
+    render(<Sidebar />);
+
+    await user.type(askField(), 'замки Гродно');
+    await user.click(buildButton());
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(mockSetAgentRoute).toHaveBeenCalledWith(null);
+  });
+
   it('sends no transport at all when the tourist did not pick one', async () => {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars -- the test reads calls[i][1]
     const fetchMock = vi.fn(async (_url: string, _init: RequestInit) => ({
@@ -301,7 +563,6 @@ describe('Sidebar', () => {
     await user.type(askField(), 'костёлы области');
     await user.click(buildButton());
 
-    await waitFor(() => expect(mockResetSettings).toHaveBeenCalledWith('car'));
     await waitFor(() => expect(mockNavigate).toHaveBeenCalled());
     const search = mockNavigate.mock.calls.at(-1)![0].search({});
     expect(search.profile).toBe('car');
@@ -330,7 +591,7 @@ describe('Sidebar', () => {
     expect(body.query).toBe('замки Гродно');
   });
 
-  it('re-plans the route when the transport changes', async () => {
+  it('measures the route again when the transport changes, without the model', async () => {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars -- the test reads calls[i][1]
     const fetchMock = vi.fn(async (_url: string, _init: RequestInit) => ({
       ok: true,
@@ -348,9 +609,37 @@ describe('Sidebar', () => {
     await user.click(screen.getByTestId('transport-car'));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
-    const body = JSON.parse(String(fetchMock.mock.calls[1]![1].body));
+    const [url, init] = fetchMock.mock.calls[1]!;
+    expect(String(url)).toContain('/routes/reroute');
+    const body = JSON.parse(String((init as RequestInit).body));
     expect(body.profile).toBe('auto');
-    expect(body.query).toBe('замки Гродно');
+    expect(body.query).toBeUndefined();
+  });
+
+  it('turns the footer button into «обновить маршрут» once there is a route', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- the test reads calls[i][1]
+    const fetchMock = vi.fn(async (_url: string, _init: RequestInit) => ({
+      ok: true,
+      json: async () => ({ ...AGENT_ANSWER, costing: 'pedestrian' }),
+    }));
+    stubAgentFetch(fetchMock);
+
+    const user = userEvent.setup({ delay: null });
+    render(<Sidebar />);
+
+    await user.type(askField(), 'замки Гродно');
+    await user.click(buildButton());
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+
+    const action = screen.getByTestId('build-route');
+    expect(action).toBeEnabled();
+    expect(action).toHaveTextContent('Обновить маршрут');
+
+    await user.click(action);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const [url] = fetchMock.mock.calls[1]!;
+    expect(String(url)).toContain('/routes/reroute');
   });
 
   it('starts the planned route at my position and numbers the stops from 1', async () => {
@@ -394,6 +683,7 @@ describe('Sidebar', () => {
 
     const snapshot = vi.fn();
     mockGetState.mockReturnValue({
+      ...mockStoreState,
       waypoints: [
         {
           id: 'me',
@@ -434,12 +724,13 @@ describe('Sidebar', () => {
     expect(body.context.instruction).toBe('добавь кофейню и туалет');
     expect(body.context.revision).toBe(2);
     expect(body.context.excluded_ids).toEqual([17]);
-    // The agent's stop belongs to the server's journal; only the tourist's own
-    // points travel with the turn.
+    // The whole route travels with the turn, the agent's stop included: the
+    // server must not have to replay a run id that a reload has already lost.
     expect(
       body.context.base_points.map((p: { source: string }) => p.source)
-    ).toEqual(['mine']);
+    ).toEqual(['mine', 'agent']);
     expect(body.context.base_points[0].pinned).toBe(false);
+    expect(body.context.base_points[1].id).toBe(11);
   });
 
   it('has no guide tab: the guide opens from one explicit action on a route', async () => {
@@ -536,13 +827,7 @@ describe('Sidebar', () => {
     expect(
       screen.getByPlaceholderText('Что хотите посмотреть?')
     ).toBeInTheDocument();
-    for (const [id, said] of [
-      ['old-town', 'Старый город за два часа пешком'],
-      ['castles-churches', 'Замки и костёлы Гродно'],
-      ['food', 'Где поесть в центре, недорого'],
-      ['evening', 'Вечерняя прогулка по Советской'],
-      ['with-children', 'С детьми: парки и замки'],
-    ] as const) {
+    for (const [id, said] of baseHintChips) {
       expect(screen.getByTestId(`hint-${id}`)).toHaveTextContent(said);
     }
     expect(buildButton()).toBeDisabled();
@@ -554,11 +839,59 @@ describe('Sidebar', () => {
     const action = buildButton();
     expect(action.closest('footer')).not.toBeNull();
     expect(action.closest('.slim-scroll')).toBeNull();
-    const hints = screen.getByTestId('hint-old-town').parentElement;
+    const hints = screen.getByTestId('hint-old-town-castles').parentElement;
     expect(hints?.getAttribute('role')).toBe('group');
-    expect(hints?.querySelectorAll('button').length).toBe(5);
-    expect(hints?.className).toContain('max-md:flex-nowrap');
-    expect(hints?.className).toContain('max-md:overflow-x-auto');
+    expect(hints?.querySelectorAll('button').length).toBe(baseHintChips.length);
+    expect(hints?.className).toContain('flex-nowrap');
+    expect(hints?.className).toContain('overflow-x-auto');
+    expect(hints?.className).not.toContain('flex-wrap');
+  });
+
+  it('lists every starter in a dialogue instead of scrolling the row past them', async () => {
+    const user = userEvent.setup({ delay: null });
+    render(<Sidebar />);
+
+    expect(screen.queryByTestId('hints-dialog')).not.toBeInTheDocument();
+
+    await user.click(screen.getByTestId('hints-all'));
+
+    const dialog = await screen.findByTestId('hints-dialog');
+    for (const [id, said] of baseHintChips) {
+      expect(within(dialog).getByTestId(`dialog-hint-${id}`)).toHaveTextContent(
+        said
+      );
+    }
+    expect(within(dialog).getByText('пешком')).toBeInTheDocument();
+    expect(within(dialog).getByText('велосипед')).toBeInTheDocument();
+    expect(within(dialog).getByText('машина')).toBeInTheDocument();
+  });
+
+  it('fills the field from the dialogue and closes it', async () => {
+    const user = userEvent.setup({ delay: null });
+    render(<Sidebar />);
+
+    await user.click(screen.getByTestId('hints-all'));
+    await user.click(await screen.findByTestId('dialog-hint-bicycle-canal'));
+
+    expect(askField()).toHaveValue(
+      'Августовский канал на велосипеде: Сопоцкин и шлюзы, часа на четыре'
+    );
+    await waitFor(() =>
+      expect(screen.queryByTestId('hints-dialog')).not.toBeInTheDocument()
+    );
+  });
+
+  it('leaves the field alone until a hint is picked', async () => {
+    const user = userEvent.setup({ delay: null });
+    render(<Sidebar />);
+
+    await user.click(screen.getByTestId('hints-all'));
+    await user.keyboard('{Escape}');
+
+    await waitFor(() =>
+      expect(screen.queryByTestId('hints-dialog')).not.toBeInTheDocument()
+    );
+    expect(askField()).toHaveValue('');
   });
 
   it('once a route exists the chips edit it instead of starting a new one', () => {
@@ -592,6 +925,7 @@ describe('Sidebar', () => {
     render(<Sidebar />);
 
     for (const [id, said] of [
+      ['refine-add-cafe-toilet', 'добавь кофейню и туалет'],
       ['refine-add-cafe', 'добавь кафе по пути'],
       ['refine-remove-museum', 'убери музей из маршрута'],
       ['refine-shorter', 'сделай короче — часа на два'],
@@ -600,7 +934,9 @@ describe('Sidebar', () => {
     ] as const) {
       expect(screen.getByTestId(`hint-${id}`)).toHaveTextContent(said);
     }
-    expect(screen.queryByTestId('hint-old-town')).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId('hint-old-town-castles')
+    ).not.toBeInTheDocument();
     expect(
       screen.getByPlaceholderText('Что уточнить? «добавь кофейню»')
     ).toBeInTheDocument();
@@ -614,13 +950,41 @@ describe('Sidebar', () => {
     const user = userEvent.setup({ delay: null });
     render(<Sidebar />);
 
-    await user.click(screen.getByTestId('hint-old-town'));
-    expect(askField()).toHaveValue('Старый город за два часа пешком');
+    await user.click(screen.getByTestId('hint-old-town-castles'));
+    expect(askField()).toHaveValue(
+      'два замка и Советская улица в Гродно, часа на четыре'
+    );
     expect(fetchMock).not.toHaveBeenCalled();
 
     await user.type(askField(), '{Enter}');
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
-    expect(body(0).query).toBe('Старый город за два часа пешком');
+    expect(body(0).query).toBe(
+      'два замка и Советская улица в Гродно, часа на четыре'
+    );
+  });
+
+  it('takes the transport from the chip, so a bicycle hint is a bicycle route', async () => {
+    const { fetchMock, body } = agentFetch();
+
+    const user = userEvent.setup({ delay: null });
+    render(<Sidebar />);
+
+    await user.click(screen.getByTestId('hint-bicycle-canal'));
+    await user.type(askField(), '{Enter}');
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(body(0).profile).toBe('bicycle');
+  });
+
+  it('states the walking transport on a walking hint instead of leaving it open', async () => {
+    const { fetchMock, body } = agentFetch();
+
+    const user = userEvent.setup({ delay: null });
+    render(<Sidebar />);
+
+    await user.click(screen.getByTestId('hint-old-town-castles'));
+    await user.type(askField(), '{Enter}');
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(body(0).profile).toBe('pedestrian');
   });
 
   it('sends the time budget the tourist picked', async () => {
@@ -656,6 +1020,76 @@ describe('Sidebar', () => {
     await user.click(buildButton());
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
     expect('time_budget_minutes' in body(0)).toBe(false);
+  });
+
+  it('sends the departure moment the tourist picked', async () => {
+    const { fetchMock, body } = agentFetch();
+
+    const user = userEvent.setup({ delay: null });
+    render(<Sidebar />);
+
+    await user.click(screen.getByTestId('when-today'));
+    expect(screen.getByTestId('when-today')).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+
+    await user.type(askField(), 'замки Гродно');
+    await user.click(buildButton());
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(body(0).at).toBe(localMoment(18));
+  });
+
+  it('leaves the departure out of the body for «сейчас»', async () => {
+    const { fetchMock, body } = agentFetch();
+
+    const user = userEvent.setup({ delay: null });
+    render(<Sidebar />);
+
+    await user.type(askField(), 'замки Гродно');
+    await user.click(buildButton());
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect('at' in body(0)).toBe(false);
+  });
+
+  it('drops the moment once the tourist returns to «сейчас»', async () => {
+    const { fetchMock, body } = agentFetch();
+
+    const user = userEvent.setup({ delay: null });
+    render(<Sidebar />);
+
+    await user.click(screen.getByTestId('when-tomorrow'));
+    await user.click(screen.getByTestId('when-now'));
+    expect(screen.getByTestId('when-now')).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+
+    await user.type(askField(), 'замки Гродно');
+    await user.click(buildButton());
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect('at' in body(0)).toBe(false);
+  });
+
+  it('records a custom departure moment from the popover input', async () => {
+    const { fetchMock, body } = agentFetch();
+
+    const user = userEvent.setup({ delay: null });
+    render(<Sidebar />);
+
+    await user.click(screen.getByTestId('when-custom'));
+    const input = await screen.findByTestId('when-custom-input');
+    fireEvent.change(input, { target: { value: '2026-05-01T18:30' } });
+
+    expect(mockCommonState.dateTime).toEqual({
+      type: 1,
+      value: '2026-05-01T18:30',
+    });
+
+    await user.type(askField(), 'замки Гродно');
+    await user.click(buildButton());
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(body(0).at).toBe('2026-05-01T18:30');
   });
 
   it('shows the route summary numbers the answer came with', async () => {
@@ -1177,6 +1611,7 @@ describe('Sidebar', () => {
     expect(JSON.parse(sentBodies[0]!).hard_services).toEqual(['туалет']);
 
     mockGetState.mockReturnValue({
+      ...mockStoreState,
       waypoints: [
         {
           id: 'me',
@@ -1238,6 +1673,69 @@ describe('Sidebar', () => {
       'В базе не нашлось туалетов — маршрут построен без них.'
     );
   });
+
+  it('рисует каталожный ответ списком мест, а не панелью маршрута', async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => CATALOGUE_ANSWER,
+    }));
+    stubAgentFetch(fetchMock);
+
+    const user = userEvent.setup({ delay: null });
+    render(<Sidebar />);
+
+    const refetchesBefore = mockRefetch.mock.calls.length;
+    const resetsBefore = mockStoreState.resetRoute.mock.calls.length;
+
+    await user.type(askField(), 'костёлы и церкви области');
+    await user.click(buildButton());
+
+    expect(await screen.findByTestId('catalogue-list')).toBeInTheDocument();
+    const places = mockStoreState.setCatalogue.mock.calls.at(-1)?.[0] as Array<{
+      name: string;
+    }>;
+    expect(places.map((p) => p.name)).toEqual([
+      'Костёл Святого Франциска Ксаверия',
+      'Церковь Бориса и Глеба',
+      'Костёл Девы Марии',
+    ]);
+    expect(screen.getByTestId('catalogue-place-201')).toHaveTextContent(
+      'Костёл Святого Франциска Ксаверия'
+    );
+    expect(screen.getByText('3 места')).toBeInTheDocument();
+
+    expect(screen.queryByTestId('waypoint-list')).toBeNull();
+    expect(screen.queryByTestId('plan-empty')).toBeNull();
+    expect(screen.queryByTestId('route-progress')).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Маршрут' })).toBeNull();
+    expect(screen.queryByText('точки')).toBeNull();
+    expect(screen.queryByText('длина')).toBeNull();
+    expect(screen.queryByText('мин в пути')).toBeNull();
+    expect(mockRefetch.mock.calls.length).toBe(refetchesBefore);
+    expect(mockStoreState.resetRoute.mock.calls.length).toBe(resetsBefore + 1);
+  });
+
+  it('сбрасывает каталог, когда приходит обычный маршрут', async () => {
+    const { fetchMock } = agentFetch();
+    mockStoreState.catalogue = [
+      { id: 201, name: 'Костёл', category: 'костёл', lat: 53.6, lon: 23.8 },
+    ];
+
+    const user = userEvent.setup({ delay: null });
+    render(<Sidebar />);
+
+    await user.type(askField(), 'замки Гродно');
+    await user.click(buildButton());
+
+    await waitFor(() =>
+      expect(mockStoreState.setCatalogue).toHaveBeenCalledWith(null)
+    );
+    await waitFor(() =>
+      expect(screen.queryByTestId('catalogue-list')).toBeNull()
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId('waypoint-list')).toBeInTheDocument();
+  });
 });
 
 /** Focusable elements in DOM order — that is exactly the tab order. */
@@ -1255,9 +1753,53 @@ describe('Sidebar — felt quality', () => {
     });
     mockStoreState.routeHistory = [];
     mockStoreState.waypoints = [];
+    mockStoreState.catalogue = null;
+    mockStoreState.timeBudget = 0;
+    mockStoreState.roundTrip = false;
+    mockStoreState.manualOrder = false;
+    mockStoreState.costing = null;
+    mockStoreState.routeSummary = null;
+    mockStoreState.recalculating = false;
     mockStoreState.setWaypoint.mockImplementation(
       (next: Record<string, unknown>[]) => {
         mockStoreState.waypoints = next;
+        notifyMockStore();
+      }
+    );
+    mockStoreState.setRouteSummary.mockImplementation((summary: unknown) => {
+      mockStoreState.routeSummary = summary;
+      notifyMockStore();
+    });
+    mockStoreState.setCosting.mockImplementation((costing: string | null) => {
+      mockStoreState.costing = costing;
+      notifyMockStore();
+    });
+    mockStoreState.setManualOrder.mockImplementation((value: boolean) => {
+      mockStoreState.manualOrder = value;
+      notifyMockStore();
+    });
+    mockStoreState.setTimeBudget.mockImplementation((minutes: number) => {
+      mockStoreState.timeBudget = minutes;
+      notifyMockStore();
+    });
+    mockStoreState.setRoundTrip.mockImplementation((value: boolean) => {
+      mockStoreState.roundTrip = value;
+      notifyMockStore();
+    });
+    mockStoreState.setCatalogue.mockImplementation(
+      (places: unknown[] | null) => {
+        mockStoreState.catalogue = places;
+        notifyMockStore();
+      }
+    );
+    mockCommonState.dateTime = { type: -1, value: '' };
+    mockCommonState.updateDateTime.mockImplementation(
+      (key: 'type' | 'value', value: string | number) => {
+        mockCommonState.dateTime =
+          key === 'type'
+            ? { ...mockCommonState.dateTime, type: Number(value) }
+            : { ...mockCommonState.dateTime, value: String(value) };
+        notifyMockCommon();
       }
     );
     mockGetState.mockReturnValue(mockStoreState);
@@ -1294,13 +1836,7 @@ describe('Sidebar — felt quality', () => {
       expect(tabs.className).toMatch(/pointer-coarse:h-11/);
       expect(tabs.className).toMatch(/pointer-coarse:max-md:h-10/);
     }
-    for (const id of [
-      'old-town',
-      'castles-churches',
-      'food',
-      'evening',
-      'with-children',
-    ]) {
+    for (const [id] of baseHintChips) {
       const chip = screen.getByTestId(`hint-${id}`);
       expect(chip.className).toMatch(/max-md:h-10/);
       expect(chip.className).toMatch(/pointer-coarse:max-md:h-10/);
@@ -1309,7 +1845,7 @@ describe('Sidebar — felt quality', () => {
     expect(screen.getByTestId('mode-plan').className).toMatch(
       /pointer-coarse:h-11/
     );
-    expect(screen.getByTestId('hint-old-town').className).toMatch(
+    expect(screen.getByTestId('hint-old-town-castles').className).toMatch(
       /pointer-coarse:h-11/
     );
   });

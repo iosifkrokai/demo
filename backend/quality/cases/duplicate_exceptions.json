@@ -1,0 +1,279 @@
+{
+  "description": "Pairs of returned stops that the harness's duplicate rule flags but a human has decided are two different objects standing close. The rule (`coincident` under 150 m, any name; `same_name` under the name radius; `same_name_near` on token overlap) is deliberately wide because distance alone cannot tell one object mapped twice from two objects that stand together — it must stay wide to catch the twins. It is the pairs that are named here, not the rule that is relaxed: a pair in this file is still reported, marked `excluded`, with the rule it would have fired, but it is not counted as a duplicate and does not raise `duplicate_stop`. A pair the file does not hold is judged exactly as before.",
+  "why_a_list_and_not_a_rule": "Shrinking `coincident` to a smaller radius, or requiring the two categories to overlap, was rejected: in the same 2026-10-14 run the rule caught two real duplicates at 34 m and 89 m, and the pair that prompted it — a museum and the castle row that had borrowed its name — differed by category and name, so a category test would have missed it too. The Grodno museum that is one object twice sits 49 m from the street it names; a real twin sits at 34 m; no radius separates the two. Whether two rows are one object is a judgement about the object, so it is stated per pair, with the names, the distance and the two source rows, and can be reviewed.",
+  "scope": "One entry per pair the harness has actually printed from a run. The key is the unordered pair of stop names as the wire spells them; the source rows are recorded as evidence. A pair whose stop name is later edited drops out of the file loudly — the rule fires again — rather than silently covering a renamed object. Only a pair of two different objects belongs here; a genuine twin belongs in db/data/place_merges.json instead.",
+  "pairs": [
+    {
+      "names": [
+        "Фарный костёл Святого Франциска Ксаверия",
+        "Музей истории города Гродно"
+      ],
+      "dist_m": 102.4,
+      "source_urls": [
+        "city:farny",
+        "city:city-history-museum"
+      ],
+      "categories": [
+        "костёл",
+        "музей"
+      ],
+      "reason": "The Jesuit church of St Francis Xavier and the city-history museum in the former town-duma building are two buildings on two hand-authored rows, a church against a museum. Both are stops of one walk (quality case «grodno_no_budget_full_day»). The museological museum that was one object mapped twice is a different, third row (`Гродненский государственный историко-археологический музей`, id 789) and is not this pair."
+    },
+    {
+      "names": [
+        "Фарный костёл Святого Франциска Ксаверия",
+        "Историческая застройка ул. Замковая"
+      ],
+      "dist_m": 148.0,
+      "source_urls": [
+        "city:farny",
+        "osm:node/2788680524"
+      ],
+      "categories": [
+        "костёл",
+        "архитектура"
+      ],
+      "reason": "A named church against the OSM ensemble of Zamkovaya street's historic houses — a specific building against the fabric of the street it stands on, written under a different category and a different source. Both stops of «grodno_no_budget_full_day»."
+    },
+    {
+      "names": [
+        "Музей истории города Гродно",
+        "Историческая застройка ул. Замковая"
+      ],
+      "dist_m": 48.6,
+      "source_urls": [
+        "city:city-history-museum",
+        "osm:node/2788680524"
+      ],
+      "categories": [
+        "музей",
+        "архитектура"
+      ],
+      "reason": "The museum occupies one house on Zamkovaya; the OSM row is the ensemble of the street's houses, not that house — two stops a visitor can want separately, a museum to enter and a street to walk. Different categories, different rows, 49 m apart."
+    },
+    {
+      "names": [
+        "Церковь Рождества Богородицы",
+        "Историческая застройка ул. Замковая"
+      ],
+      "dist_m": 101.2,
+      "source_urls": [
+        "osm:way/69906569",
+        "osm:node/2788680524"
+      ],
+      "categories": [
+        "церковь",
+        "архитектура"
+      ],
+      "reason": "A specific temple against the street's architectural ensemble, two OSM elements under different categories. Both stops of «grodno_old_town»."
+    },
+    {
+      "names": [
+        "Монастырь доминиканцев",
+        "Историческая застройка улицы Советская"
+      ],
+      "dist_m": 107.3,
+      "source_urls": [
+        "osm:node/2788681618",
+        "osm:node/2788680554"
+      ],
+      "categories": [
+        "архитектура",
+        "архитектура"
+      ],
+      "reason": "Two OSM elements that share the category «архитектура» but not the object: a named monastery against the ensemble of Sovetskaya street's houses. Distance cannot separate them; the names can. Both stops of «grodno_sovetskaya_refine»."
+    },
+    {
+      "names": [
+        "Часовня-усыпальница Святополк-Мирских",
+        "Мирский замок"
+      ],
+      "dist_m": 119.2,
+      "source_urls": [
+        "osm:way/128322210",
+        "region:mir-castle"
+      ],
+      "categories": [
+        "костёл",
+        "замок"
+      ],
+      "reason": "The Mir princes' burial chapel is a separate structure beside the castle — one a костёл, one a замок, two OSM/hand rows. The real Mir duplicate (the OSM «Замковый комплекс Мир» node that carries the ensemble's name) is folded onto the castle by db/data/place_aliases.json, not here. Both stops of «mir»."
+    },
+    {
+      "names": [
+        "Музей интересностей",
+        "Музей истории религии"
+      ],
+      "dist_m": 29.0,
+      "source_urls": [
+        "osm:node/6521934486",
+        "osm:node/1863658377"
+      ],
+      "categories": [
+        "музей",
+        "музей"
+      ],
+      "reason": "Two museums that OSM maps as two nodes with two names, 29 m apart on the same stretch of Советская — «Музей интересностей» (node/6521934486) and «Музей истории религии» (node/1863658377), both категории «музей», name similarity 0.25, so the rule fired on distance alone. Both stops of the curated «museums-rainy-day» and of the benchmark walk that shares those stops."
+    },
+    {
+      "names": [
+        "Старый замок",
+        "Памятник Витовту"
+      ],
+      "dist_m": 104.6,
+      "source_urls": [
+        "osm:relation/18245978",
+        "osm:node/5171000080"
+      ],
+      "categories": [
+        "замок",
+        "памятник"
+      ],
+      "reason": "The castle itself (a relation, категория «замок») and the monument to Vytautas that stands beside it (a node, категория «памятник»), 105 m apart with zero name similarity. Both stops of «grodno_no_budget_full_day» and of the curated «old-town-castles»."
+    },
+    {
+      "names": [
+        "Музей истории Августовского канала",
+        "Августовский канал: шлюз Нёмново"
+      ],
+      "dist_m": 70.3,
+      "source_urls": [
+        "osm:way/186106248",
+        "region:augustow-canal-nemnovo"
+      ],
+      "categories": [
+        "музей",
+        "инфраструктура"
+      ],
+      "reason": "The museum building (a way, «музей») against the lock it explains (a hand-authored row, «инфраструктура»), 70 m apart — a museum and a piece of the canal's own infrastructure, not one object mapped twice. Both stops of the curated «augustow-canal-bike»."
+    },
+    {
+      "names": [
+        "Дом-музей Элизы Ожешко",
+        "Музей интересностей"
+      ],
+      "dist_m": 86.7,
+      "source_urls": [
+        "city:orzeshko-museum",
+        "osm:node/6521934486"
+      ],
+      "categories": [
+        "музей",
+        "музей"
+      ],
+      "reason": "A hand-authored house-museum and an OSM museum node two doors apart on the same street (87 m), both категории «музей», similarity 0.2. Two museums a visitor can enter separately; both stops of the curated «museums-rainy-day»."
+    },
+    {
+      "names": [
+        "Дом-музей Элизы Ожешко",
+        "Музей истории религии"
+      ],
+      "dist_m": 102.6,
+      "source_urls": [
+        "city:orzeshko-museum",
+        "osm:node/1863658377"
+      ],
+      "categories": [
+        "музей",
+        "музей"
+      ],
+      "reason": "The same hand-authored house-museum against a second OSM museum node 103 m away, similarity 0.167 — again distance alone. Both stops of the curated «museums-rainy-day»."
+    },
+    {
+      "names": [
+        "Ансамбль Городницы (резиденция Тызенгауза)",
+        "Домовая церковь Святителя Николая Чудотворца"
+      ],
+      "dist_m": 37.0,
+      "source_urls": [
+        "city:horodnitsa",
+        "osm:way/29124937"
+      ],
+      "categories": [
+        "архитектура",
+        "церковь"
+      ],
+      "reason": "The Городница ensemble as one hand-authored row (the residence complex as a whole) and the house church that stands inside it (an OSM way, «церковь»), 37 m apart — an ensemble and one of the objects it contains, the same relationship «Историческая застройка ул. Замковая» has to the church on it. Both stops of the curated «tyzenhauz-north»."
+    },
+    {
+      "names": [
+        "Ансамбль Городницы (резиденция Тызенгауза)",
+        "Гродненский областной драматический театр"
+      ],
+      "dist_m": 68.9,
+      "source_urls": [
+        "city:horodnitsa",
+        "city:drama-theatre"
+      ],
+      "categories": [
+        "архитектура",
+        "архитектура"
+      ],
+      "reason": "The ensemble row against the drama theatre that occupies one of its buildings (69 m), two hand-authored rows of different categories. Both stops of the curated «tyzenhauz-north»."
+    },
+    {
+      "names": [
+        "Ансамбль Городницы (резиденция Тызенгауза)",
+        "Швейцарская долина"
+      ],
+      "dist_m": 108.8,
+      "source_urls": [
+        "city:horodnitsa",
+        "osm:way/535758104"
+      ],
+      "categories": [
+        "архитектура",
+        "архитектура"
+      ],
+      "reason": "The ensemble row against the Swiss valley park laid out around it (109 m), a complex and its grounds. Both stops of the curated «tyzenhauz-north»."
+    },
+    {
+      "names": [
+        "Домовая церковь Святителя Николая Чудотворца",
+        "Гродненский областной драматический театр"
+      ],
+      "dist_m": 83.6,
+      "source_urls": [
+        "osm:way/29124937",
+        "city:drama-theatre"
+      ],
+      "categories": [
+        "церковь",
+        "архитектура"
+      ],
+      "reason": "The drama theatre and the house church beside it (84 m), a theatre row and an OSM church way, different categories and zero similarity. Both stops of the curated «tyzenhauz-north»."
+    },
+    {
+      "names": [
+        "Домовая церковь Святителя Николая Чудотворца",
+        "Швейцарская долина"
+      ],
+      "dist_m": 140.0,
+      "source_urls": [
+        "osm:way/29124937",
+        "osm:way/535758104"
+      ],
+      "categories": [
+        "церковь",
+        "архитектура"
+      ],
+      "reason": "The house church and the park laid out around the ensemble (140 m) — a building and the grounds it stands in, a pair the 150 m rule catches at its edge. Both stops of the curated «tyzenhauz-north»."
+    },
+    {
+      "names": [
+        "Гродненский областной драматический театр",
+        "Швейцарская долина"
+      ],
+      "dist_m": 74.6,
+      "source_urls": [
+        "city:drama-theatre",
+        "osm:way/535758104"
+      ],
+      "categories": [
+        "архитектура",
+        "архитектура"
+      ],
+      "reason": "The drama theatre and the Swiss valley park beside it (75 m), two hand-authored rows of different categories. Both stops of the curated «tyzenhauz-north»."
+    }
+  ]
+}

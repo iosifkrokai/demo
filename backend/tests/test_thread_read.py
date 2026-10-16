@@ -1,10 +1,4 @@
-"""Reading a thread back: the endpoint, its account-scoping, and the wire shape.
-
-The journal is read through an in-memory repository and a fake account store, so
-nothing here needs a database or a model. What the tests hold is the rule the
-task rests on: the session is the only identity, so a run recorded under one
-session is never returned under another.
-"""
+"""Reading a thread back: the endpoint, its account-scoping, and the wire shape."""
 
 from __future__ import annotations
 
@@ -32,6 +26,7 @@ class FakeThreadRepository:
 
     def __init__(self) -> None:
         self._turns: dict[str, list[Turn]] = {}
+        self._appended: list[Turn] = []
 
     def append(
         self,
@@ -50,11 +45,18 @@ class FakeThreadRepository:
             measurement=measurement,
         )
         rows.append(turn)
+        self._appended.append(turn)
         return turn
 
     def latest(self, thread_id: str) -> Turn | None:
         rows = self._turns.get(thread_id) or []
         return rows[-1] if rows else None
+
+    def latest_with_prefix(self, prefix: str) -> Turn | None:
+        for turn in reversed(self._appended):
+            if turn.thread_id.startswith(prefix):
+                return turn
+        return None
 
     def journal(self, thread_id: str) -> Thread | None:
         rows = self._turns.get(thread_id)
@@ -97,9 +99,6 @@ def _key(token: str, session: str = SESSION) -> str:
     return thread.thread_key(session, identity=hash_token(token))
 
 
-# --- the key -----------------------------------------------------------------
-
-
 def test_the_key_carries_the_session_that_names_the_run() -> None:
     assert thread.thread_key("run-1", identity="abc") == "abc:run-1"
 
@@ -107,9 +106,6 @@ def test_the_key_carries_the_session_that_names_the_run() -> None:
 def test_an_anonymous_key_is_the_bare_run() -> None:
     assert thread.thread_key("run-1") == "run-1"
     assert thread.thread_key("run-1", identity=None) == "run-1"
-
-
-# --- the endpoint ------------------------------------------------------------
 
 
 def test_an_empty_thread_reads_back_empty() -> None:

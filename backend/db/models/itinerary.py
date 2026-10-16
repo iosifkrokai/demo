@@ -1,9 +1,4 @@
-"""The `itineraries` rows: a curated walk and the stops it names.
-
-A stop is a `source_url` — the same natural key `places` is matched on — so the
-itinerary keeps pointing at the dataset's identity, not at a database id that a
-re-seed could renumber.
-"""
+"""The `itineraries` rows: a curated walk and the stops it names."""
 
 from __future__ import annotations
 

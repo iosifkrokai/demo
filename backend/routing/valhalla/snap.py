@@ -1,4 +1,4 @@
-"""Snap locations onto the routing network, memoised per rounded coordinate."""
+"""Snap locations onto the routing network, memoised per coordinate and costing."""
 
 from __future__ import annotations
 
@@ -15,14 +15,21 @@ from .constants import LOCATE_RADIUS_M, LOCATE_SNAP_RADIUS_M, costing_for
 
 logger = logging.getLogger(__name__)
 
-SNAP_CACHE: dict[tuple[int, int], tuple[float, float]] = {}
+SNAP_CACHE: dict[tuple[int, int, str], tuple[float, float]] = {}
+
+LOCATE_BATCH_MAX = 50
 
 
-def _locate_snap(
-    location: dict[str, Any], costing: str, timeout: float, radius: int
-) -> tuple[float, float] | None:
+def _cache_key(lat: float, lon: float, costing: str) -> tuple[int, int, str]:
+    return (round(lat * 100_000), round(lon * 100_000), costing)
+
+
+def _locate_batch(
+    points: list[tuple[float, float]], costing: str, timeout: float, radius: int
+) -> list[tuple[float, float] | None]:
+    """One /locate call for the whole batch; None where the engine found no edge."""
     payload = {
-        "locations": [{**location, "radius": radius}],
+        "locations": [{"lat": lat, "lon": lon, "radius": radius} for lat, lon in points],
         "costing": costing,
     }
     try:
@@ -33,15 +40,21 @@ def _locate_snap(
             timeout=timeout,
         )
     except UpstreamUnavailableError:
-        return None
-    entry = body[0] if isinstance(body, list) and body else None
-    edges = (entry or {}).get("edges") or []
-    if not edges:
-        return None
-    edge = edges[0]
-    if "correlated_lat" not in edge or "correlated_lon" not in edge:
-        return None
-    return float(edge["correlated_lat"]), float(edge["correlated_lon"])
+        return [None] * len(points)
+    if isinstance(body, dict):
+        body = [body]
+    if not isinstance(body, list):
+        return [None] * len(points)
+    found: list[tuple[float, float] | None] = []
+    for entry in body:
+        edges = (entry or {}).get("edges") or []
+        edge = edges[0] if edges else {}
+        if "correlated_lat" in edge and "correlated_lon" in edge:
+            found.append((float(edge["correlated_lat"]), float(edge["correlated_lon"])))
+        else:
+            found.append(None)
+    found.extend([None] * (len(points) - len(found)))
+    return found
 
 
 def snap_locations(
@@ -50,35 +63,40 @@ def snap_locations(
     timeout: float | None = None,
     radius: int = LOCATE_SNAP_RADIUS_M,
 ) -> list[dict[str, Any]]:
-    """Snap every location onto the routing network; keeps lat/lon dict shape.
-
-    Results are memoised per rounded coordinate.
-    """
+    """Snap every location onto the routing network; keeps lat/lon dict shape."""
     costing = costing_for(costing)
-    out: list[dict[str, Any]] = []
-    for loc in locations:
-        lat, lon = float(loc["lat"]), float(loc["lon"])
-        key = (round(lat * 100_000), round(lon * 100_000))
-        if key not in SNAP_CACHE:
-            snapped = _locate_snap(
-                {"lat": lat, "lon": lon},
-                costing,
-                timeout or constants.VALHALLA_TIMEOUT_S,
-                radius,
-            )
-            SNAP_CACHE[key] = snapped or (lat, lon)
-        snap_lat, snap_lon = SNAP_CACHE[key]
-        out.append({**loc, "lat": snap_lat, "lon": snap_lon})
-    return out
+    coords = [(float(loc["lat"]), float(loc["lon"])) for loc in locations]
+    keys = [_cache_key(lat, lon, costing) for lat, lon in coords]
+
+    pending: dict[tuple[int, int, str], tuple[float, float]] = {}
+    for key, point in zip(keys, coords, strict=True):
+        if key not in SNAP_CACHE and key not in pending:
+            pending[key] = point
+
+    wanted = list(pending)
+    for start in range(0, len(wanted), LOCATE_BATCH_MAX):
+        chunk = wanted[start : start + LOCATE_BATCH_MAX]
+        found = _locate_batch(
+            [pending[key] for key in chunk],
+            costing,
+            timeout or constants.VALHALLA_TIMEOUT_S,
+            radius,
+        )
+        for key, snapped in zip(chunk, found, strict=True):
+            SNAP_CACHE[key] = snapped or pending[key]
+
+    return [
+        {**loc, "lat": SNAP_CACHE[key][0], "lon": SNAP_CACHE[key][1]}
+        for loc, key in zip(locations, keys, strict=True)
+    ]
 
 
-def _snappable(location: dict[str, Any], costing: str, timeout: float | None) -> bool:
-    """Ask /locate whether this point can be snapped onto the network.
-
-    Timeouts and 5xx count as snappable — a hiccup must not drop a stop.
-    """
+def _snappable_batch(
+    locations: list[dict[str, Any]], costing: str, timeout: float | None
+) -> list[bool]:
+    """Ask /locate once which of these points have an edge on the network."""
     payload = {
-        "locations": [{**location, "radius": LOCATE_RADIUS_M}],
+        "locations": [{**loc, "radius": LOCATE_RADIUS_M} for loc in locations],
         "costing": costing,
     }
     try:
@@ -89,21 +107,27 @@ def _snappable(location: dict[str, Any], costing: str, timeout: float | None) ->
             timeout=timeout or constants.VALHALLA_TIMEOUT_S,
         )
     except UpstreamUnavailableError:
-        return True
-    if not body:
-        return False
-    entry = body[0] if isinstance(body, list) else body
-    return bool(entry.get("edges"))
+        return [True] * len(locations)
+    if isinstance(body, dict):
+        body = [body]
+    if not isinstance(body, list) or not body:
+        return [False] * len(locations)
+    verdicts = [bool((entry or {}).get("edges")) for entry in body]
+    verdicts.extend([False] * (len(locations) - len(verdicts)))
+    return verdicts
 
 
 def drop_unsnappable(
     locations: list[dict[str, Any]], costing: str, timeout: float | None
 ) -> list[dict[str, Any]]:
-    """Keep only the locations /locate can place on the routing network.
-
-    One off-graph POI makes Valhalla answer 500 for the whole request.
-    """
-    keep = [loc for loc in locations if _snappable(loc, costing, timeout)]
+    """Keep only the locations /locate can place on the routing network."""
+    keep = [
+        loc
+        for loc, snappable in zip(
+            locations, _snappable_batch(locations, costing, timeout), strict=True
+        )
+        if snappable
+    ]
     if len(keep) != len(locations):
         logger.warning(
             "snap: dropped %d of %d location(s) with no edge on the network",

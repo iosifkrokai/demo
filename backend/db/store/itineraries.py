@@ -1,9 +1,5 @@
 """The curated walks: the `itineraries` tables, and the read of `places` that
 fills each stop in.
-
-A stop is stored as the `source_url` the dataset is keyed on, so an itinerary
-keeps pointing at the dataset's identity rather than at a row id a re-seed could
-renumber.
 """
 
 from __future__ import annotations
@@ -53,10 +49,7 @@ def _split_by_role(
     payloads: list[dict[str, Any]],
     taxonomy: PostgresCategoryRepository,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """Partition resolved places into (stops, services) using the taxonomy.
-
-    An unknown code counts as a stop, never as a service.
-    """
+    """Partition resolved places into (stops, services) using the taxonomy."""
     stops: list[dict[str, Any]] = []
     services: list[dict[str, Any]] = []
     for payload in payloads:
@@ -73,10 +66,7 @@ def resolve_itineraries(
     taxonomy: PostgresCategoryRepository,
     items: list[Itinerary],
 ) -> tuple[list[dict[str, Any]], list[str]]:
-    """Attach dataset facts to every stop, in the authored order.
-
-    Returns the payloads and keys that did not resolve; services are not stops.
-    """
+    """Attach dataset facts to every stop, in the authored order."""
     wanted = [key for item in items for key in item.stops]
     found, missing = places.get_by_source_urls(wanted)
     if missing:

@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-"""
-bench_routes.py — Golden-set evaluation for the Grodno route planner.
-
-Modes: LIVE, REPLAY, COMPARE, GOLDEN — one metric implementation.
-"""
+"""Golden-set evaluation for the Grodno route planner."""
 
 from __future__ import annotations
 
@@ -21,26 +17,22 @@ import urllib.error
 import urllib.request
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
+from functools import lru_cache
 from http import HTTPStatus
 from itertools import pairwise
 from pathlib import Path
-from typing import Any
+from typing import Any, get_args
 
 BACKEND = Path(__file__).parent.parent.resolve()
 QUALITY = BACKEND / "quality"
 BENCH_ROUTES = QUALITY / "cases" / "routes"
 BENCH_GOLDEN = QUALITY / "cases" / "compliance"
+BENCH_CURATED = QUALITY / "cases" / "curated"
+BENCH_CURATED_OUT = QUALITY / "reports" / "curated"
+DUPLICATE_EXCEPTIONS = QUALITY / "cases" / "duplicate_exceptions.json"
 BENCH_OUT = QUALITY / "reports"
 BENCH_SNAPSHOTS = BENCH_OUT / "snapshots"
 
-# The statuses a golden case may EXPECT. They are exactly the wire's
-# `OverallStatus` (`api/models/routes.py`): the API emits `ready | infeasible |
-# degraded | pending`, and nothing else. `rejected`/`needs_clarification` are
-# gone with the old pipeline, and `catalogue` was never a status — a research
-# result is `result_mode`, checked separately by `expected_result_mode`.
-#
-# `derive_status` may still OBSERVE `error` when the backend fails; that is not a
-# legal expectation, so a case can never name it and a broken run fails loudly.
 STATUSES = frozenset({"ready", "degraded", "pending", "infeasible"})
 
 CHECK_API_ERROR = "api_error"
@@ -49,6 +41,9 @@ CHECK_TOO_FEW_PLACES = "too_few_places"
 CHECK_MISSING_MANDATORY_CATEGORY = "missing_mandatory_category"
 CHECK_FORBIDDEN_CATEGORY_PRESENT = "forbidden_category_present"
 CHECK_MISSING_NAMED_PLACE = "missing_named_place"
+CHECK_REQUIREMENT_UNMET = "requirement_unmet"
+CHECK_REQUIREMENT_STATUS = "requirement_status"
+CHECK_MOMENT_APPLIED = "moment_not_applied"
 CHECK_OUT_OF_REGION_POINT = "out_of_region_point"
 CHECK_OVER_BUDGET = "over_budget"
 CHECK_RESULT_MODE = "result_mode_mismatch"
@@ -61,6 +56,9 @@ CHECK_PRIORITY: tuple[str, ...] = (
     CHECK_MISSING_MANDATORY_CATEGORY,
     CHECK_FORBIDDEN_CATEGORY_PRESENT,
     CHECK_MISSING_NAMED_PLACE,
+    CHECK_REQUIREMENT_UNMET,
+    CHECK_REQUIREMENT_STATUS,
+    CHECK_MOMENT_APPLIED,
     CHECK_OUT_OF_REGION_POINT,
     CHECK_OVER_BUDGET,
     CHECK_RESULT_MODE,
@@ -74,13 +72,21 @@ if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 
 from core import constants as agent_constants  # noqa: E402
+from core.hours import parse_moment  # noqa: E402
+from core.paths import ITINERARIES_JSON  # noqa: E402
+from db.seed import datasets as ds_mod, itineraries as itin_mod  # noqa: E402
 from db.seed.geofence import inside_project_area  # noqa: E402
 from db.seed.taxonomy import all_categories  # noqa: E402
-from routing.models import Requirement, TripRequirements  # noqa: E402
+from routing.models import (  # noqa: E402
+    Requirement,
+    RequirementKind,
+    RequirementStatus,
+    TripRequirements,
+)
+from routing.optimize import max_leg_seconds  # noqa: E402
+from routing.valhalla.constants import VALHALLA_COSTINGS, costing_for  # noqa: E402
 from routing.verify import overall_status  # noqa: E402
 
-# `quality` is a development tool and is not shipped, so it reads the taxonomy
-# from the dataset the seed projects rather than from the database.
 CANONICAL_CATEGORIES = {
     canonical.code.strip().lower().replace("ё", "е"): canonical.code
     for canonical in all_categories()
@@ -89,10 +95,15 @@ CANONICAL_CODES_NORM = frozenset(CANONICAL_CATEGORIES)
 
 
 UNREACHABLE_S = float(agent_constants.UNREACHABLE_S)
-MAX_WALK_LEG_KM = float(agent_constants.MAX_WALK_LEG_KM)
 DUPLICATE_RADIUS_M = float(agent_constants.DUPLICATE_RADIUS_M)
+LEG_SPEED_KMH = {
+    "pedestrian": float(agent_constants.PEDESTRIAN_SPEED_KMH),
+    "bicycle": float(agent_constants.BICYCLE_SPEED_KMH),
+    "auto": float(agent_constants.AUTO_SPEED_KMH),
+}
 DUPLICATE_NAME_RADIUS_M = float(agent_constants.DUPLICATE_NAME_RADIUS_M)
-GRODNO_BBOX = dict(agent_constants.GRODNO_BBOX)
+REQUIREMENT_KINDS = frozenset(get_args(RequirementKind))
+REQUIREMENT_STATUSES = frozenset(get_args(RequirementStatus))
 
 STAGE1_PROXY_RADIUS_M = 250.0
 
@@ -123,6 +134,12 @@ GOLDEN_ROW_SCHEMA = "bench_routes/golden_row/1"
 REFERENCE_NOISE_FLOOR = "recall 0.711 ± 0.150 over 9 runs (measured 2026-09-26)"
 
 
+_PAIR = 2
+_QUERY_MIN_CHARS = 3
+_QUERY_MAX_CHARS = 500
+_PARTY_CHILDREN_MAX = 20
+
+
 @dataclass
 class GoldenStop:
     name: str
@@ -144,6 +161,9 @@ class GoldenRoute:
     budget_minutes: int
     stops: list[GoldenStop]
     est_walk_minutes: int | None = None
+    profile: str | None = None
+    origin: tuple[float, float] | None = None
+    fingerprint: str | None = None
     path: Path = field(default=None)
     case: str = ""
 
@@ -163,10 +183,7 @@ class OurStop:
 
 @dataclass
 class ReferenceWalk:
-    """The benchmark's reference walk, derived from the reference stop geometry.
-
-    `order` indexes `GoldenRoute.stops`; `distance_km` is its haversine length.
-    """
+    """The benchmark's reference walk, derived from the reference stop geometry."""
 
     order: list[int]
     distance_km: float
@@ -175,10 +192,7 @@ class ReferenceWalk:
 
 @dataclass
 class StageSplit:
-    """Retrieval (stage 1) vs assembly (stage 2) for one run.
-
-    `pool_exposed` is False for the current API: the pool proxy is the returned stops.
-    """
+    """Retrieval (stage 1) vs assembly (stage 2) for one run."""
 
     pool_exposed: bool
     pool_source: str
@@ -203,11 +217,13 @@ class LegSanity:
     avg_speed_kmh: float | None = None
     max_leg_km: float | None = None
     max_leg_km_straight: float | None = None
+    cap_km: float | None = None
     over_cap: bool = False
     unreachable_sentinel: bool = False
     n_unreachable_legs: int = 0
     duplicate_pairs: list[dict[str, Any]] = field(default_factory=list)
     n_duplicate_stops: int = 0
+    n_legitimate_adjacent: int = 0
     geometry_missing: bool = False
 
 
@@ -239,10 +255,7 @@ class GoldenCase:
 
 @dataclass
 class ComplianceVerdict:
-    """PASS/FAIL for one golden case (or parity group) against a plan response.
-
-    `reason` is the first failed CHECK_* code or "ok"; unverified checks are marked.
-    """
+    """PASS/FAIL for one golden case (or parity group) against a plan response."""
 
     case_id: str
     passed: bool
@@ -357,6 +370,23 @@ class EvaluationResult:
         }
 
 
+@dataclass(frozen=True)
+class ReportInput:
+    """One run's identity and numbers — what every report writer is handed."""
+
+    mode: str
+    generated_at: str
+    snapshot: dict[str, Any]
+    cases_dir: str = ""
+    base_url: str = ""
+    overall: dict[str, Any] = field(default_factory=dict)
+    noise: dict[str, Any] = field(default_factory=dict)
+    failures: dict[str, Any] = field(default_factory=dict)
+    drift_rows: list[dict[str, Any]] = field(default_factory=list)
+    samples: int = BOOTSTRAP_SAMPLES
+    seed: int = BOOTSTRAP_SEED
+
+
 @dataclass
 class RunRecord:
     """One (case, repeat) run — the unit the snapshot stores and the report reads."""
@@ -390,10 +420,7 @@ def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
 
 
 def norm_name(name: str) -> str:
-    """Lowercase, drop parentheticals and punctuation — the agent's own rule.
-
-    Mirrors planner/pipeline.py::norm_name, so both consider the same names identical.
-    """
+    """Lowercase, drop parentheticals and punctuation — the agent's own rule."""
     n = re.sub(r"\([^)]*\)", " ", (name or "").lower())
     n = re.sub(r"[^0-9a-zа-яё]+", " ", n)
     return " ".join(n.split())
@@ -415,10 +442,7 @@ def match_golden_to_ours(
     golden_stops: list[GoldenStop],
     our_stops: list[OurStop],
 ) -> list[tuple[int | None, int | None]]:
-    """Greedy best-cost match between golden stops and our stops.
-
-    Per golden stop, (golden_idx, our_idx | None); None = no match within MATCH_RADIUS_KM.
-    """
+    """Greedy best-cost match between golden stops and our stops."""
     n = len(golden_stops)
     m = len(our_stops)
     if n == 0 or m == 0:
@@ -471,10 +495,7 @@ def _nearest_neighbour_order(d: list[list[float]]) -> list[int]:
 
 
 def shortest_walk_order(points: list[tuple[float, float]]) -> list[int]:
-    """Indices of `points` in the order of a shortest open walk through all of them.
-
-    Exact DP up to REF_WALK_EXACT_MAX_STOPS, nearest neighbour above; ties are stable.
-    """
+    """Indices of `points` in the order of a shortest open walk through all of them."""
     n = len(points)
     if n <= 1:
         return list(range(n))
@@ -517,11 +538,8 @@ def walk_distance_km(points: list[tuple[float, float]], order: list[int]) -> flo
 
 
 def max_leg_km(points: list[tuple[float, float]]) -> float | None:
-    """Longest straight-line hop of an open walk, or None for < 2 points.
-
-    This is the offline lower bound of the network figure LegSanity.max_leg_km.
-    """
-    if len(points) < 2:
+    """Longest straight-line hop of an open walk, or None for < 2 points."""
+    if len(points) < _PAIR:
         return None
     return max(haversine_km(*a, *b) for a, b in pairwise(points))
 
@@ -538,10 +556,7 @@ def build_reference_walk(stops: list[GoldenStop]) -> ReferenceWalk:
 
 
 def kendall_tau(order_a: list[int], order_b: list[int]) -> float | None:
-    """Kendall's tau-b between two orderings, over the elements they share.
-
-    Returns None below MIN_TAU_STOPS shared elements, where tau-b carries no information.
-    """
+    """Kendall's tau-b between two orderings, over the elements they share."""
     pos_a = {e: i for i, e in enumerate(order_a)}
     shared = [e for e in order_b if e in pos_a]
     n = len(shared)
@@ -564,21 +579,10 @@ def kendall_tau(order_a: list[int], order_b: list[int]) -> float | None:
 
 
 def detour_km(our_distance_km: float | None, ref_distance_km: float | None) -> float | None:
-    """How much longer our walk is than the reference walk, in km.
-
-    Negative is legitimate; None when either side is unknown.
-    """
+    """How much longer our walk is than the reference walk, in km."""
     if our_distance_km is None or ref_distance_km is None:
         return None
     return our_distance_km - ref_distance_km
-
-
-# The wire (`api/models/routes.py::RouteResponse`) exposes exactly one candidate
-# list — `points`, the stops that made the route. The old `debug.trace.candidates`
-# pool is gone with the pipeline that built it, so the stage-1 split can only ever
-# be the route-points PROXY below: for each graded reference stop, the question is
-# whether any RETURNED stop sits within STAGE1_PROXY_RADIUS_M of it. There is no
-# pre-rerank pool to probe, and pretending otherwise would be a fabricated number.
 
 
 def _any_within(
@@ -586,10 +590,7 @@ def _any_within(
     points: list[tuple[float, float]],
     radius_m: float,
 ) -> list[bool]:
-    """Per target: is ANY returned stop within `radius_m`?
-
-    Not a one-to-one assignment — the question is "was this place reachable at all".
-    """
+    """Per target: is ANY returned stop within `radius_m`?"""
     radius_km = radius_m / 1000.0
     out: list[bool] = []
     for gs in targets:
@@ -601,12 +602,7 @@ def stage_split(
     golden: GoldenRoute,
     our_stops: list[OurStop],
 ) -> StageSplit:
-    """Split one run's outcome into a retrieval proxy and an assembly number.
-
-    The wire exposes no pre-rerank pool, so stage 1 is always the route-points
-    proxy: the pool IS the route, and `pool_exposed` is False (see the note above
-    `_any_within`).
-    """
+    """Split one run's outcome into a retrieval proxy and an assembly number."""
     points = [(s.lat, s.lon) for s in our_stops]
     source = "route_points"
     exposed = False
@@ -646,11 +642,39 @@ def result_matches_stop(golden: GoldenRoute, our_stops: list[OurStop], golden_id
     return any(haversine_km(gs.lat, gs.lon, o.lat, o.lon) <= MATCH_RADIUS_KM for o in our_stops)
 
 
-def find_duplicate_stop_pairs(our_stops: list[OurStop]) -> list[dict[str, Any]]:
-    """Pairs of returned stops that are the same physical POI, in visit order.
+@lru_cache(maxsize=4)
+def _load_duplicate_exceptions(path_str: str) -> dict[frozenset[str], dict[str, Any]]:
+    """Read the hand-authored legitimate-neighbour list, keyed by normalised name pair."""
+    path = Path(path_str)
+    data = json.loads(path.read_text(encoding="utf-8"))
+    out: dict[frozenset[str], dict[str, Any]] = {}
+    for entry in data.get("pairs", []):
+        names = entry.get("names") or []
+        try:
+            norm_a, norm_b = (norm_name(n) for n in names)
+        except ValueError as exc:
+            raise ValueError(
+                f"{path}: an exception needs exactly two names, got {names!r}"
+            ) from exc
+        if not norm_a or not norm_b or norm_a == norm_b:
+            raise ValueError(
+                f"{path}: exception names must normalise to two distinct names: {names!r}"
+            )
+        key = frozenset({norm_a, norm_b})
+        if key in out:
+            raise ValueError(f"{path}: duplicate exception for {names!r}")
+        out[key] = entry
+    return out
 
-    Three rules, first match wins: coincident, same_name, same_name_near.
-    """
+
+def duplicate_exceptions(path: Path | None = None) -> dict[frozenset[str], dict[str, Any]]:
+    """The declared legitimate neighbours the duplicate rule consults."""
+    return _load_duplicate_exceptions(str(path or DUPLICATE_EXCEPTIONS))
+
+
+def find_duplicate_stop_pairs(our_stops: list[OurStop]) -> list[dict[str, Any]]:
+    """Pairs of returned stops the rule flags, marked when declared legitimate."""
+    exceptions = duplicate_exceptions()
     pairs: list[dict[str, Any]] = []
     for i in range(len(our_stops)):
         for j in range(i + 1, len(our_stops)):
@@ -659,6 +683,7 @@ def find_duplicate_stop_pairs(our_stops: list[OurStop]) -> list[dict[str, Any]]:
             rule = _duplicate_rule(a.name, b.name, dist_m)
             if rule is None:
                 continue
+            entry = exceptions.get(frozenset((norm_name(a.name), norm_name(b.name))))
             pairs.append(
                 {
                     "our_stop_indices": [i, j],
@@ -667,6 +692,8 @@ def find_duplicate_stop_pairs(our_stops: list[OurStop]) -> list[dict[str, Any]]:
                     "dist_m": round(dist_m, 1),
                     "name_similarity": round(name_similarity(a.name, b.name), 3),
                     "rule": rule,
+                    "excluded": entry is not None,
+                    "exception_reason": entry.get("reason") if entry else None,
                 }
             )
     return pairs
@@ -686,22 +713,29 @@ def _duplicate_rule(name_a: str, name_b: str, dist_m: float) -> str | None:
     return None
 
 
+def leg_cap_km(profile: str | None, budget_minutes: int | None = None) -> float:
+    """The longest single leg the engine's own rule allows, in km, at this budget.
+
+    `routing.optimize.max_leg_seconds` states that rule in seconds and in terms of the
+    budget — a quarter of it capped at 5 km on foot or 20 km by bicycle, and the whole
+    budget for anything motorised (a four-hour fallback when the request names none) —
+    so the bound is read from there rather than restated, and converted at the speed
+    the engine prices that transport with.
+    """
+    costing = costing_for(str(profile or "").strip().lower())
+    budget_s = int(budget_minutes) * 60 if budget_minutes else None
+    speed = LEG_SPEED_KMH.get(costing, float(agent_constants.AUTO_SPEED_KMH))
+    return max_leg_seconds(budget_s, costing) / 3600.0 * speed
+
+
 def leg_sanity(
     our_stops: list[OurStop],
     summary: dict[str, Any],
     raw: dict[str, Any],
+    profile: str | None = None,
+    budget_minutes: int | None = None,
 ) -> LegSanity:
-    """Is the returned route physically walkable, judging from the wire alone?
-
-    The old per-leg trace (`debug.trace.max_leg_seconds`, and the UNREACHABLE_S
-    sentinel it carried) went with the pipeline that produced it: the new wire
-    (`api/models/routes.py::RouteResponse`) has no matrix and no per-leg figure.
-    What remains is honest and offline — the straight-line hops between the
-    returned stops, the route's own drawn shape, and the duplicate-POI scan. A leg
-    over `MAX_WALK_LEG_KM` is still caught; the exact unreachable-hop count is NOT
-    measurable from the response any more, so `n_unreachable_legs` stays 0 rather
-    than being guessed at.
-    """
+    """Is the returned route physically plausible, judging from the wire alone?"""
     leg = LegSanity(n_stops=len(our_stops))
     points = [(s.lat, s.lon) for s in our_stops]
     leg.max_leg_km_straight = max_leg_km(points)
@@ -711,11 +745,13 @@ def leg_sanity(
     if _is_num(length_km) and _is_num(time_s) and length_km > 0 and time_s > 0:
         leg.avg_speed_kmh = float(length_km) / (float(time_s) / 3600.0)
 
-    if leg.max_leg_km_straight is not None and leg.max_leg_km_straight > MAX_WALK_LEG_KM:
+    leg.cap_km = leg_cap_km(profile, budget_minutes)
+    if leg.max_leg_km_straight is not None and leg.max_leg_km_straight > leg.cap_km:
         leg.over_cap = True
 
     leg.duplicate_pairs = find_duplicate_stop_pairs(our_stops)
-    leg.n_duplicate_stops = len(leg.duplicate_pairs)
+    leg.n_duplicate_stops = sum(1 for p in leg.duplicate_pairs if not p["excluded"])
+    leg.n_legitimate_adjacent = sum(1 for p in leg.duplicate_pairs if p["excluded"])
     leg.geometry_missing = "shape" in (raw or {}) and not raw.get("shape")
     return leg
 
@@ -725,6 +761,7 @@ def build_request(
     budget_minutes: int | None,
     origin_lat: float | None = None,
     origin_lon: float | None = None,
+    profile: str | None = None,
 ) -> dict[str, Any]:
     """The exact body sent to POST /routes/generate (also what a row records)."""
     payload: dict[str, Any] = {
@@ -733,6 +770,8 @@ def build_request(
     }
     if origin_lat is not None and origin_lon is not None:
         payload["origin"] = {"lat": origin_lat, "lon": origin_lon}
+    if profile:
+        payload["profile"] = profile
     return payload
 
 
@@ -755,40 +794,24 @@ def call_generate(
     budget_minutes: int | None,
     origin_lat: float | None = None,
     origin_lon: float | None = None,
+    profile: str | None = None,
 ) -> dict[str, Any]:
     """POST /routes/generate → parsed dict (raw JSON)."""
     _status, raw = post_generate(
-        base_url, build_request(query, budget_minutes, origin_lat, origin_lon)
+        base_url, build_request(query, budget_minutes, origin_lat, origin_lon, profile)
     )
     return raw
 
 
 def route_origin(golden: GoldenRoute) -> tuple[float | None, float | None]:
-    """Origin estimate: the centroid of the reference stops."""
+    """Origin estimate: the case's own start, or the centroid of the reference stops."""
+    if golden.origin is not None:
+        return golden.origin
     if not golden.stops:
         return None, None
     lat = sum(s.lat for s in golden.stops) / len(golden.stops)
     lon = sum(s.lon for s in golden.stops) / len(golden.stops)
     return lat, lon
-
-
-def evaluate(golden: GoldenRoute, base_url: str) -> EvaluationResult:
-    """One live run. Same scorer the replay path uses, via call_generate()."""
-    lat, lon = route_origin(golden)
-    t0 = time.monotonic()
-    try:
-        raw = call_generate(base_url, golden.query_ru, golden.budget_minutes, lat, lon)
-    except urllib.error.HTTPError as exc:
-        return score_response(
-            golden,
-            None,
-            http_status=exc.code,
-            api_error=_http_error_detail(exc),
-            latency_s=time.monotonic() - t0,
-        )
-    except urllib.error.URLError as exc:
-        return score_response(golden, None, api_error=str(exc), latency_s=time.monotonic() - t0)
-    return score_response(golden, raw, latency_s=time.monotonic() - t0)
 
 
 def _http_error_detail(exc: urllib.error.HTTPError) -> str:
@@ -807,10 +830,7 @@ def score_response(
     api_error: str | None = None,
     latency_s: float = 0.0,
 ) -> EvaluationResult:
-    """Every metric for one run, from a response and nothing else.
-
-    Shared by live, snapshot and replay; pure — no clock, no RNG, no I/O.
-    """
+    """Every metric for one run, from a response and nothing else."""
     result = EvaluationResult(
         golden=golden, api_error=api_error, latency_s=latency_s, http_status=http_status
     )
@@ -830,17 +850,12 @@ def score_response(
 
     summary = (raw or {}).get("summary") or {}
     budget_info = (raw or {}).get("budget") or {}
-    # The wire names the request's reader in `interpretation.source`
-    # (`llm | mixed | explicit`); `debug.requirements_source` carries the same
-    # provenance. The old `debug.intent_source` went with the old pipeline.
     interpretation = (raw or {}).get("interpretation") or {}
     result.intent_source = interpretation.get("source") or ((raw or {}).get("debug") or {}).get(
         "requirements_source"
     )
     result.stops_dropped = int(budget_info.get("stops_dropped") or 0)
 
-    # The wire exposes no candidate pool: `points` are the stops that made the
-    # route, and that is all the harness can see (see the note above `_any_within`).
     result.candidate_ids = [s.place_id for s in result.our_stops if s.place_id is not None]
     result.candidate_ids_source = "route_points"
 
@@ -848,8 +863,10 @@ def score_response(
     _score_reference(result)
     _score_budget(result, summary, budget_info)
     result.stage = stage_split(golden, result.our_stops)
-    result.leg = leg_sanity(result.our_stops, summary, raw or {})
-    result.failures.extend(_leg_failures(result.leg))
+    result.leg = leg_sanity(
+        result.our_stops, summary, raw or {}, golden.profile, golden.budget_minutes
+    )
+    result.failures.extend(_leg_failures(result.leg, golden.profile))
     return result
 
 
@@ -881,10 +898,7 @@ def _score_coverage(result: EvaluationResult) -> None:
 
 
 def _score_reference(result: EvaluationResult) -> None:
-    """Reference walk, tau over the shared stops, walk lengths and detour.
-
-    Rebuilt per run — a pure function of the committed coordinates.
-    """
+    """Reference walk, tau over the shared stops, walk lengths and detour."""
     golden = result.golden
     ref = build_reference_walk(golden.stops)
     result.ref_walk_km = ref.distance_km
@@ -913,7 +927,7 @@ def _score_budget(
     result.budget_fit = bool(budget_info.get("fits", False))
 
 
-def _leg_failures(leg: LegSanity) -> list[Failure]:
+def _leg_failures(leg: LegSanity, profile: str | None = None) -> list[Failure]:
     out: list[Failure] = []
     if leg.unreachable_sentinel:
         out.append(
@@ -928,21 +942,23 @@ def _leg_failures(leg: LegSanity) -> list[Failure]:
         )
     if leg.geometry_missing:
         out.append(Failure(kind="geometry_missing", detail="response carried an empty shape"))
-    if leg.n_duplicate_stops:
+    duplicate_pairs = [p for p in leg.duplicate_pairs if not p["excluded"]]
+    if duplicate_pairs:
         names = "; ".join(
             f"{p['names'][0]} ~ {p['names'][1]} ({p['dist_m']:.0f} m, {p['rule']})"
-            for p in leg.duplicate_pairs
+            for p in duplicate_pairs
         )
         out.append(
             Failure(
-                kind="duplicate_stop", detail=f"{leg.n_duplicate_stops} duplicate pair(s): {names}"
+                kind="duplicate_stop", detail=f"{len(duplicate_pairs)} duplicate pair(s): {names}"
             )
         )
     if leg.over_cap:
         out.append(
             Failure(
                 kind="leg_over_cap",
-                detail=f"a leg exceeds MAX_WALK_LEG_KM={MAX_WALK_LEG_KM}",
+                detail=f"a leg of {leg.max_leg_km_straight:.1f} km exceeds the engine's cap of "
+                f"{leg.cap_km:.1f} km for {costing_for(profile)}",
             )
         )
     return out
@@ -957,10 +973,7 @@ def percentile(sorted_values: list[float], q: float) -> float:
 
 
 def resample_indices(n: int, samples: int, seed: int) -> list[tuple[int, ...]]:
-    """`samples` bootstrap resamples of `n` case indices, from a seeded RNG.
-
-    Cached per (n, samples, seed) so every metric in one report shares the SAME indices.
-    """
+    """`samples` bootstrap resamples of `n` case indices, from a seeded RNG."""
     key = (n, samples, seed)
     cached = _RESAMPLE_CACHE.get(key)
     if cached is None:
@@ -1000,10 +1013,7 @@ def paired_bootstrap(
     indices: list[tuple[int, ...]],
     alpha: float = BOOTSTRAP_ALPHA,
 ) -> dict[str, Any]:
-    """Paired bootstrap on the difference A − B over the shared cases.
-
-    A single paired case gets a difference but no interval and no p-value.
-    """
+    """Paired bootstrap on the difference A − B over the shared cases."""
     n = len(a_values)
     if n != len(b_values) or n == 0:
         return {"diff": None, "lo": None, "hi": None, "p": None, "n": n}
@@ -1061,7 +1071,8 @@ def golden_sha256(golden: GoldenRoute) -> str | None:
         return None
     cached = _GOLDEN_SHA_CACHE.get(golden.case)
     if cached is None:
-        cached = _sha256_text(golden.path.read_text(encoding="utf-8"))
+        text = golden.path.read_text(encoding="utf-8") + (golden.fingerprint or "")
+        cached = _sha256_text(text)
         _GOLDEN_SHA_CACHE[golden.case] = cached
     return cached
 
@@ -1135,10 +1146,7 @@ def append_row(row: dict[str, Any], path: Path) -> None:
 
 
 def load_snapshot(snapshot_dir: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:
-    """Read a snapshot dir → (meta, rows).
-
-    Only `rows*.jsonl` is snapshot data; unknown record kinds are dropped.
-    """
+    """Read a snapshot dir → (meta, rows)."""
     files = sorted(snapshot_dir.glob("rows*.jsonl"))
     if not files:
         raise FileNotFoundError(
@@ -1200,7 +1208,7 @@ def _mean(values: list[float]) -> float | None:
 
 def _std(values: list[float]) -> float | None:
     """Sample std (ddof=1); None for a single value."""
-    if len(values) < 2:
+    if len(values) < _PAIR:
         return None
     m = sum(values) / len(values)
     var = sum((v - m) ** 2 for v in values) / (len(values) - 1)
@@ -1208,10 +1216,7 @@ def _std(values: list[float]) -> float | None:
 
 
 def _attr(runs: list[EvaluationResult], path: str) -> list[float]:
-    """Defined values of `path` across runs.
-
-    Gated hard failures and undefined (None) values are skipped, not averaged in.
-    """
+    """Defined values of `path` across runs."""
     out: list[float] = []
     for r in runs:
         if r.hard_failure:
@@ -1270,15 +1275,8 @@ COMPARE_METRICS: tuple[tuple[str, str], ...] = (
 )
 
 
-def _results(groups: list[list[RunRecord]]) -> list[EvaluationResult]:
-    return [rec.result for g in groups for rec in g]
-
-
 def per_case_scores(groups: list[list[RunRecord]]) -> dict[str, dict[str, float | None]]:
-    """One score per case per metric: the mean over that case's defined runs.
-
-    The case is the resampling unit for every CI and paired bootstrap.
-    """
+    """One score per case per metric: the mean over that case's defined runs."""
     out: dict[str, dict[str, float | None]] = {}
     for g in groups:
         if not g:
@@ -1309,16 +1307,13 @@ def overall_stats(
 
 
 def noise_floor(groups: list[list[RunRecord]]) -> dict[str, dict[str, Any]]:
-    """Mean within-case spread across repeats — the LLM-sampling noise floor.
-
-    Reported next to every delta; a smaller change is indistinguishable from a re-run.
-    """
+    """Mean within-case spread across repeats — the LLM-sampling noise floor."""
     out: dict[str, dict[str, Any]] = {}
     for path, label, _d in CI_METRICS:
         spreads, stds, n_cases = [], [], 0
         for g in groups:
             vals = _attr([r.result for r in g], path)
-            if len(vals) < 2:
+            if len(vals) < _PAIR:
                 continue
             n_cases += 1
             spreads.append(_spread(vals) or 0.0)
@@ -1338,6 +1333,7 @@ def failure_summary(groups: list[list[RunRecord]]) -> dict[str, Any]:
     gated: list[dict[str, Any]] = []
     defects: list[dict[str, Any]] = []
     details: list[dict[str, Any]] = []
+    legitimate: list[dict[str, Any]] = []
     total_runs = 0
     for g in groups:
         for rec in g:
@@ -1347,12 +1343,25 @@ def failure_summary(groups: list[list[RunRecord]]) -> dict[str, Any]:
                 row = {"case": rec.case, "repeat": rec.repeat, **f.as_dict()}
                 (gated if f.gated else defects).append(row)
                 details.append(row)
+            for p in rec.result.leg.duplicate_pairs:
+                if p["excluded"]:
+                    legitimate.append(
+                        {
+                            "case": rec.case,
+                            "repeat": rec.repeat,
+                            "names": p["names"],
+                            "dist_m": p["dist_m"],
+                            "rule": p["rule"],
+                            "reason": p["exception_reason"],
+                        }
+                    )
     return {
         "total_runs": total_runs,
         "n_failed_runs": len(gated),
         "gated_runs": len(gated),
         "by_kind": by_kind,
         "leg_sanity_defects": len(defects),
+        "legitimate_adjacent": legitimate,
         "gated": gated,
         "details": details,
     }
@@ -1371,16 +1380,13 @@ def _pad(s: str, w: int) -> str:
 def _ci_cell(stats: dict[str, Any], decimals: int = 3) -> str:
     if stats.get("mean") is None:
         return "n/a"
-    if stats.get("n", 0) < 2:
+    if stats.get("n", 0) < _PAIR:
         return f"{stats['mean']:.{decimals}f} (n=1, no CI)"
     return f"{stats['mean']:.{decimals}f} [{stats['lo']:.{decimals}f}, {stats['hi']:.{decimals}f}]"
 
 
 def _stage2_is_trivial(overall: dict[str, dict[str, Any]]) -> bool:
-    """True when stage-2 recall is 1.0 for want of a pool, not for want of skill.
-
-    Under the route-points fallback the pool is the route, so the conditional is vacuous.
-    """
+    """True when stage-2 recall is 1.0 for want of a pool, not for want of skill."""
     stats = overall.get("stage.route_recall_given_pool", {})
     return stats.get("mean") is not None and stats["mean"] >= 1.0
 
@@ -1535,6 +1541,17 @@ def print_failures(summary: dict[str, Any], overall: dict[str, Any] | None = Non
     )
     for row in defects:
         print(f"    ! {row['case']}#{row['repeat']}: {row['detail']}")
+    legitimate = summary.get("legitimate_adjacent") or []
+    if legitimate:
+        print(
+            f"  legitimate neighbours the rule would flag — declared two objects, "
+            f"not counted: {len(legitimate)}"
+        )
+        for row in legitimate:
+            print(
+                f"    ~ {row['case']}#{row['repeat']}: {row['names'][0]} ~ "
+                f"{row['names'][1]} ({row['dist_m']:.0f} m, {row['rule']})"
+            )
     if overall:
         rec = overall.get("recall_at_k", {})
         print(f"  headline (for reference only): Rec@K {_ci_cell(rec)}")
@@ -1559,17 +1576,9 @@ def _agg(runs: list[EvaluationResult], path: str) -> dict[str, Any]:
 def write_json_report(
     groups: list[list[RunRecord]],
     out_dir: Path,
+    report: ReportInput,
     *,
-    mode: str,
-    generated_at: str,
-    snapshot: dict[str, Any],
     per_case: dict[str, Any],
-    overall: dict[str, Any],
-    noise: dict[str, Any],
-    failures: dict[str, Any],
-    drift_rows: list[dict[str, Any]],
-    samples: int = BOOTSTRAP_SAMPLES,
-    seed: int = BOOTSTRAP_SEED,
 ) -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
     path = out_dir / "report.json"
@@ -1645,15 +1654,16 @@ def write_json_report(
 
     report = {
         "schema": REPORT_SCHEMA,
-        "mode": mode,
-        "generated_at": generated_at,
+        "mode": report.mode,
+        "cases_dir": report.cases_dir,
+        "generated_at": report.generated_at,
         "n_routes": len(groups),
         "repeat": len(groups[0]) if groups else 0,
         "n_runs": sum(len(g) for g in groups),
-        "snapshot": snapshot,
+        "snapshot": report.snapshot,
         "bootstrap": {
-            "samples": samples,
-            "seed": seed,
+            "samples": report.samples,
+            "seed": report.seed,
             "alpha": BOOTSTRAP_ALPHA,
             "resample": "cases",
         },
@@ -1683,9 +1693,14 @@ def write_json_report(
             "max_leg_km_straight": (
                 "the longest straight-line hop between the returned stops. The wire "
                 "carries no per-leg figure any more (the old debug.trace.max_leg_seconds "
-                "went with the pipeline), so this is the offline leg-cap check: a value "
-                f"over MAX_WALK_LEG_KM={MAX_WALK_LEG_KM} is a leg-sanity defect. It is a "
-                "lower bound on the walked leg, not the walked leg itself."
+                "went with the pipeline), so this is the offline leg-cap check, and the "
+                "bound is the engine's own rule read from routing.optimize.max_leg_seconds "
+                "at the case's own profile and budget — a quarter of the budget up to "
+                f"{float(agent_constants.MAX_WALK_LEG_KM):g} km on foot or "
+                f"{float(agent_constants.BICYCLE_LEG_KM):g} km by bicycle, and the budget "
+                f"itself for anything motorised (a four-hour fallback, {leg_cap_km('auto'):g} km, "
+                "when the request names none). The straight line is a lower bound on the "
+                "real leg, not the leg itself."
             ),
             "n_unreachable_legs": (
                 "NOT MEASURABLE from the wire: the new response carries no cost matrix "
@@ -1694,7 +1709,10 @@ def write_json_report(
             "duplicates": (
                 f"same POI twice inside one route: <{DUPLICATE_RADIUS_M:.0f} m "
                 f"(any name), identical normalised name <{DUPLICATE_NAME_RADIUS_M:.0f} m, "
-                f"or name token overlap >= {DUPLICATE_SIM} <{DUPLICATE_SIM_RADIUS_M:.0f} m"
+                f"or name token overlap >= {DUPLICATE_SIM} <{DUPLICATE_SIM_RADIUS_M:.0f} m. "
+                "A pair listed in quality/cases/duplicate_exceptions.json is still "
+                "reported but marked `excluded` and is not counted — the rule fired, the "
+                "pair is declared two objects (see leg_sanity.duplicate_pairs)."
             ),
             "hard_failures": (
                 f"gated kinds {sorted(GATED_FAILURE_KINDS)} are dropped from every "
@@ -1703,13 +1721,13 @@ def write_json_report(
             ),
         },
         "per_case_scores": per_case,
-        "overall": _r(overall, 4),
+        "overall": _r(report.overall, 4),
         "noise_floor": {
-            "computed": _r(noise, 4),
+            "computed": _r(report.noise, 4),
             "reference_measurement": REFERENCE_NOISE_FLOOR,
         },
-        "hard_failures": failures,
-        "metrics_drift_vs_snapshot": drift_rows,
+        "hard_failures": report.failures,
+        "metrics_drift_vs_snapshot": report.drift_rows,
         "results": results,
     }
     path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -1766,52 +1784,47 @@ def write_metrics_jsonl(
     return path
 
 
-def write_md_report(
-    groups: list[list[RunRecord]],
-    out_dir: Path,
-    *,
-    mode: str,
-    generated_at: str,
-    snapshot: dict[str, Any],
-    overall: dict[str, Any],
-    noise: dict[str, Any],
-    failures: dict[str, Any],
-    drift_rows: list[dict[str, Any]],
-    samples: int = BOOTSTRAP_SAMPLES,
-    seed: int = BOOTSTRAP_SEED,
-) -> Path:
+def write_md_report(groups: list[list[RunRecord]], out_dir: Path, report: ReportInput) -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
     path = out_dir / "report.md"
     repeat = len(groups[0]) if groups else 0
     lines: list[str] = [
         "# Benchmark Report: Grodno Route Planner",
         "",
-        f"**Mode:** `{mode}` · **Generated:** {generated_at}",
+        f"**Mode:** `{report.mode}` · **Generated:** {report.generated_at}",
         "",
-        f"**Runs per case:** {repeat} · **cases:** {len(groups)} · "
-        f"**runs:** {sum(len(g) for g in groups)}",
+        (
+            f"**Runs per case:** {repeat} · **cases:** {len(groups)} · "
+            f"**runs:** {sum(len(g) for g in groups)}"
+        ),
         "",
     ]
-    if snapshot:
+    if report.snapshot:
         lines += [
-            f"**Snapshot:** `{snapshot.get('dir', '—')}` · "
-            f"{snapshot.get('n_rows', 0)} row(s) · "
-            f"git `{snapshot.get('git_sha', '—')}`",
+            (
+                f"**Snapshot:** `{report.snapshot.get('dir', '—')}` · "
+                f"{report.snapshot.get('n_rows', 0)} row(s) · "
+                f"git `{report.snapshot.get('git_sha', '—')}`"
+            ),
             "",
         ]
-    if drift_rows:
+    if report.drift_rows:
         lines += [
-            f"> ⚠ {len(drift_rows)} row(s) recomputed to metrics that differ from "
-            "the values recorded in the snapshot — the metric code changed since "
-            "the run.",
+            (
+                f"> ⚠ {len(report.drift_rows)} row(s) recomputed to metrics that differ from "
+                "the values recorded in the snapshot — the metric code changed since "
+                "the run."
+            ),
             "",
         ]
 
     lines += [
         "## Per-case scores (`mean±spread` over repeats)",
         "",
-        "| case | S1 pool | S2 \\| S1 | Rec@K | prec | τ | detour km | Δwalk | fit "
-        "| dup | unr | HF |",
+        (
+            "| case | S1 pool | S2 \\| S1 | Rec@K | prec | τ | detour km | Δwalk | fit "
+            "| dup | unr | HF |"
+        ),
         "|---|---|---|---|---|---|---|---|---|---|---|---|",
     ]
     for runs in groups:
@@ -1831,14 +1844,14 @@ def write_md_report(
 
     lines += [
         "",
-        f"## Overall — bootstrap over cases (B={samples}, seed={seed})",
+        f"## Overall — bootstrap over cases (B={report.samples}, seed={report.seed})",
         "",
         "| metric | mean [95 % CI] | n cases | noise floor (within-case spread) |",
         "|---|---|---|---|",
     ]
     for path_, _label, dec in CI_METRICS:
-        stats = overall.get(path_, {})
-        nf = noise.get(path_, {}).get("mean_within_case_spread")
+        stats = report.overall.get(path_, {})
+        nf = report.noise.get(path_, {}).get("mean_within_case_spread")
         lines.append(
             f"| {stats.get('label', path_)} | {_ci_cell(stats, dec)} | "
             f"{stats.get('n', 0)} | "
@@ -1850,22 +1863,24 @@ def write_md_report(
         "",
         "## Hard failures — outside every score above",
         "",
-        f"**{failures['n_failed_runs']} of {failures['total_runs']} run(s) gated "
-        f"out of the quality means.** Counts by kind:",
+        (
+            f"**{report.failures['n_failed_runs']} of {report.failures['total_runs']} run(s) gated "
+            f"out of the quality means.** Counts by kind:"
+        ),
         "",
     ]
-    if not failures["by_kind"]:
+    if not report.failures["by_kind"]:
         lines.append("- none")
-    for kind, count in sorted(failures["by_kind"].items()):
+    for kind, count in sorted(report.failures["by_kind"].items()):
         tag = "gated" if kind in GATED_FAILURE_KINDS else "counted, kept in means"
         lines.append(f"- `{kind}`: {count} ({tag})")
-    if failures["gated"]:
+    if report.failures["gated"]:
         lines += ["", "| case | repeat | kind | detail |", "|---|---|---|---|"]
-        for row in failures["gated"]:
+        for row in report.failures["gated"]:
             lines.append(f"| {row['case']} | {row['repeat']} | {row['kind']} | {row['detail']} |")
     lines += [
         "",
-        f"Leg-sanity defects kept in the means: {failures['leg_sanity_defects']}.",
+        f"Leg-sanity defects kept in the means: {report.failures['leg_sanity_defects']}.",
         "",
         "## How the stage split is measured",
         "",
@@ -1931,6 +1946,7 @@ def load_golden_routes(routes_dir: Path) -> list[GoldenRoute]:
                 budget_minutes=data.get("budget_minutes", 120),
                 stops=stops,
                 est_walk_minutes=data.get("est_walk_minutes"),
+                profile=data.get("profile"),
                 path=p,
                 case=p.stem,
             )
@@ -1938,12 +1954,113 @@ def load_golden_routes(routes_dir: Path) -> list[GoldenRoute]:
     return routes
 
 
+CURATED_REQUIRED_KEYS = frozenset({"id", "query_ru", "budget_minutes"})
+CURATED_OPTIONAL_KEYS = frozenset({"est_walk_minutes", "note"})
+
+
+def _check_curated_case(data: Any, path: Path) -> list[str]:
+    """A sidecar carries the query and the budget, and nothing the data already holds."""
+    where = str(path)
+    if not isinstance(data, dict):
+        return [f"{where}: a curated case must be a JSON object"]
+    errs: list[str] = []
+    for key in sorted(set(data) - CURATED_REQUIRED_KEYS - CURATED_OPTIONAL_KEYS):
+        errs.append(f"{where}: unknown key {key!r}")
+    for key in sorted(CURATED_REQUIRED_KEYS - set(data)):
+        errs.append(f"{where}: missing key {key!r}")
+    case_id = data.get("id")
+    if "id" in data and (not isinstance(case_id, str) or case_id != path.stem):
+        errs.append(f"{where}: id must be {path.stem!r}, not {case_id!r}")
+    query = data.get("query_ru")
+    if "query_ru" in data and (not isinstance(query, str) or not query.strip()):
+        errs.append(f"{where}: query_ru must be a non-empty string")
+    budget = data.get("budget_minutes")
+    if "budget_minutes" in data and (
+        not _is_plain_int(budget, low=1) or budget > int(agent_constants.MAX_BUDGET_MIN)
+    ):
+        errs.append(
+            f"{where}: budget_minutes must be an int in 1..{int(agent_constants.MAX_BUDGET_MIN)}"
+        )
+    walk = data.get("est_walk_minutes")
+    if walk is not None and not _is_plain_int(walk, low=0):
+        errs.append(f"{where}: est_walk_minutes must be null or an int >= 0")
+    note = data.get("note")
+    if note is not None and (not isinstance(note, str) or not note.strip()):
+        errs.append(f"{where}: note must be a non-empty string when present")
+    return errs
+
+
+def load_curated_routes(
+    curated_dir: Path = BENCH_CURATED, itineraries_path: Path | None = None
+) -> list[GoldenRoute]:
+    """The ready-made routes as reference walks.
+
+    The stops are read from `db/data/itineraries.json` and resolved against the
+    datasets the seed projects — never copied into the case — so a walk and the
+    case that measures it cannot drift apart. A sidecar supplies only what the
+    data does not hold: the query words and the budget. Unknown keys are refused,
+    the way a compliance case refuses them, so a sidecar cannot carry a field
+    nothing reads.
+    """
+    sidecars = sorted(curated_dir.glob("*.json"))
+    if not sidecars:
+        return []
+    source = itineraries_path or ITINERARIES_JSON
+    walks = {walk["id"]: walk for walk in itin_mod.load_itineraries(source)}
+    collected = ds_mod.collect_records(ds_mod.default_datasets())
+    kept, _shadowed, _stale = ds_mod.collapse(collected["records"])
+    places = {record["source_url"]: record for record in kept}
+
+    routes: list[GoldenRoute] = []
+    for path in sidecars:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if errs := _check_curated_case(data, path):
+            raise ValueError("; ".join(errs))
+        walk = walks.get(str(data.get("id")))
+        if walk is None:
+            raise ValueError(f"{path}: no itinerary {data.get('id')!r} in {source.name}")
+        unresolved = [key for key in walk["stops"] if key not in places]
+        if unresolved:
+            raise ValueError(f"{path}: a stop names a source_url no dataset holds: {unresolved}")
+        stops = [
+            GoldenStop(
+                name=places[key]["name"],
+                lat=places[key]["lat"],
+                lon=places[key]["lon"],
+                visit_minutes=places[key].get("visit_minutes"),
+            )
+            for key in walk["stops"]
+        ]
+        routes.append(
+            GoldenRoute(
+                name=walk["title"],
+                source=f"{source.name}#{walk['id']}",
+                query_ru=str(data["query_ru"]),
+                budget_minutes=int(data["budget_minutes"]),
+                stops=stops,
+                est_walk_minutes=data.get("est_walk_minutes"),
+                profile=walk.get("transport"),
+                origin=(stops[0].lat, stops[0].lon) if stops else None,
+                fingerprint="\n".join(
+                    f"{key}|{p.lat:.6f}|{p.lon:.6f}|{p.name}"
+                    for key, p in zip(walk["stops"], stops, strict=True)
+                ),
+                path=path,
+                case=walk["id"],
+            )
+        )
+    return routes
+
+
 def load_golden_map() -> dict[str, GoldenRoute]:
-    return {r.case: r for r in load_golden_routes(BENCH_ROUTES)}
+    """Every reference walk this tree knows: the benchmark's, and the ready-made ones."""
+    routes = [*load_golden_routes(BENCH_ROUTES), *load_curated_routes(BENCH_CURATED)]
+    return {r.case: r for r in routes}
 
 
 GOLDEN_REQUIRED_TOP = frozenset({"id", "locale", "query", "filters", "expectations"})
 GOLDEN_OPTIONAL_TOP = frozenset({"parity_group"})
+GOLDEN_OPTIONAL_FILTER_KEYS = frozenset({"profile", "at"})
 GOLDEN_FILTER_KEYS = frozenset(
     {
         "party_children",
@@ -1955,6 +2072,7 @@ GOLDEN_FILTER_KEYS = frozenset(
         "result_mode",
     }
 )
+GOLDEN_ALL_FILTER_KEYS = GOLDEN_FILTER_KEYS | GOLDEN_OPTIONAL_FILTER_KEYS
 GOLDEN_REQUIRED_EXPECTATIONS = frozenset(
     {
         "must_contain_categories",
@@ -1967,6 +2085,8 @@ GOLDEN_REQUIRED_EXPECTATIONS = frozenset(
 GOLDEN_OPTIONAL_EXPECTATIONS = frozenset(
     {
         "must_contain_names",
+        "must_satisfy_requirement_kinds",
+        "requirement_status",
         "expected_result_mode",
         "allow_empty",
         "min_places",
@@ -2011,12 +2131,19 @@ def _validate_code_list(name: str, values, errs: list[str]) -> None:
 def validate_golden_case(data, path: Path | None = None) -> list[str]:
     """Every way one golden case violates the schema, as strings. [] == valid."""
     where = path.name if path is not None else "<memory>"
-    errs: list[str] = []
     if not isinstance(data, dict):
         return [f"{where}: top level must be an object"]
+    return (
+        _golden_header(data, where, path)
+        + _golden_filters(data, where)
+        + _golden_expectations(data, where)
+    )
 
-    unknown_top = set(data) - GOLDEN_REQUIRED_TOP - GOLDEN_OPTIONAL_TOP
-    for key in sorted(unknown_top):
+
+def _golden_header(data: dict[str, Any], where: str, path: Path | None) -> list[str]:
+    """The keys, the id, the locale, the query and the parity group."""
+    errs: list[str] = []
+    for key in sorted(set(data) - GOLDEN_REQUIRED_TOP - GOLDEN_OPTIONAL_TOP):
         errs.append(f"{where}: unknown top-level key {key!r}")
     for key in sorted(GOLDEN_REQUIRED_TOP - set(data)):
         errs.append(f"{where}: missing required key {key!r}")
@@ -2031,141 +2158,295 @@ def validate_golden_case(data, path: Path | None = None) -> list[str]:
     if locale not in LOCALES:
         errs.append(f"{where}: locale must be one of {list(LOCALES)}, got {locale!r}")
 
-    query = data.get("query")
-    if not isinstance(query, str) or not (3 <= len(query.strip()) <= 500):
-        errs.append(f"{where}: query must be a string of 3..500 characters")
-    elif locale in LOCALES:
-        has_cyrillic = bool(_CYRILLIC_RE.search(query))
-        if locale == "en" and has_cyrillic:
-            errs.append(f"{where}: locale is 'en' but the query contains Cyrillic")
-        if locale == "ru" and not has_cyrillic:
-            errs.append(f"{where}: locale is 'ru' but the query contains no Cyrillic")
+    errs += _query_errors(data.get("query"), locale, where)
 
     group = data.get("parity_group")
     if group is not None and (not isinstance(group, str) or not group.strip()):
         errs.append(f"{where}: parity_group must be a non-empty string when present")
+    return errs
 
+
+def _query_errors(query: Any, locale: Any, where: str) -> list[str]:
+    """The query's length, and whether its script matches the locale it claims."""
+    if not isinstance(query, str) or not (
+        _QUERY_MIN_CHARS <= len(query.strip()) <= _QUERY_MAX_CHARS
+    ):
+        return [
+            f"{where}: query must be a string of {_QUERY_MIN_CHARS}..{_QUERY_MAX_CHARS} characters"
+        ]
+    if locale not in LOCALES:
+        return []
+    has_cyrillic = bool(_CYRILLIC_RE.search(query))
+    errs: list[str] = []
+    if locale == "en" and has_cyrillic:
+        errs.append(f"{where}: locale is 'en' but the query contains Cyrillic")
+    if locale == "ru" and not has_cyrillic:
+        errs.append(f"{where}: locale is 'ru' but the query contains no Cyrillic")
+    return errs
+
+
+def _is_plain_int(value: Any, *, low: int | None = None, high: int | None = None) -> bool:
+    """A real int inside the bounds — `True` is a bool, and no bound means none here."""
+    if not isinstance(value, int) or isinstance(value, bool):
+        return False
+    if low is not None and value < low:
+        return False
+    return not (high is not None and value > high)
+
+
+def _golden_filters(data: dict[str, Any], where: str) -> list[str]:
+    """The filters block: its keys, the party, and the bounds on budget and origin."""
     filters = data.get("filters")
     if not isinstance(filters, dict):
-        errs.append(f"{where}: filters must be an object")
-    else:
-        for key in sorted(set(filters) - GOLDEN_FILTER_KEYS):
-            errs.append(f"{where}: unknown filters key {key!r}")
-        for key in sorted(GOLDEN_FILTER_KEYS - set(filters)):
-            errs.append(f"{where}: missing filters key {key!r}")
-        children = filters.get("party_children")
-        if children is not None and not (
-            isinstance(children, int) and not isinstance(children, bool) and 0 <= children <= 20
-        ):
-            errs.append(f"{where}: party_children must be null or an int in 0..20")
-        for key in ("hard_services", "interests", "avoid"):
-            if key in filters:
-                _validate_code_list(f"{where}: filters.{key}", filters[key], errs)
-        hard = {_norm_code(c) for c in filters.get("hard_services") or []}
-        avoid = {_norm_code(c) for c in filters.get("avoid") or []}
-        interests = {_norm_code(c) for c in filters.get("interests") or []}
-        both = hard & avoid
-        if both:
-            errs.append(
-                f"{where}: filters.hard_services and filters.avoid overlap "
-                f"({sorted(both)}) — a code cannot be mandatory and forbidden"
-            )
-        if interests & avoid:
-            errs.append(
-                f"{where}: filters.interests and filters.avoid overlap "
-                f"({sorted(interests & avoid)})"
-            )
-        budget = filters.get("time_budget_minutes")
-        if budget is not None and not (
-            isinstance(budget, int) and not isinstance(budget, bool) and budget >= 0
-        ):
-            errs.append(f"{where}: filters.time_budget_minutes must be null or an int >= 0")
-        elif budget is not None and budget > int(agent_constants.MAX_BUDGET_MIN):
-            errs.append(
+        return [f"{where}: filters must be an object"]
+    return (
+        _filter_keys(filters, where)
+        + _filter_profile(filters, where)
+        + _filter_moment(filters, where)
+        + _filter_overlap(filters, where)
+        + _filter_budget(filters, where)
+        + _filter_result_mode(filters, where)
+        + _filter_origin(filters, where)
+    )
+
+
+def _filter_moment(filters: dict[str, Any], where: str) -> list[str]:
+    """The moment the walk is planned for, as a Grodno wall clock or an instant."""
+    moment = filters.get("at")
+    if moment is None:
+        return []
+    if not isinstance(moment, str):
+        return [f"{where}: filters.at must be null or an ISO moment, got {moment!r}"]
+    try:
+        parse_moment(moment)
+    except ValueError:
+        return [f"{where}: filters.at {moment!r} is not an ISO moment"]
+    return []
+
+
+def _filter_profile(filters: dict[str, Any], where: str) -> list[str]:
+    """The transport the tourist picked. Absent means the API's own default."""
+    profile = filters.get("profile")
+    if profile is None or profile in VALHALLA_COSTINGS:
+        return []
+    return [
+        (
+            f"{where}: filters.profile must be null or one of "
+            f"{sorted(VALHALLA_COSTINGS)}, got {profile!r}"
+        )
+    ]
+
+
+def _filter_keys(filters: dict[str, Any], where: str) -> list[str]:
+    """The keys the schema names, the party size, and the codes to look for."""
+    errs: list[str] = []
+    for key in sorted(set(filters) - GOLDEN_ALL_FILTER_KEYS):
+        errs.append(f"{where}: unknown filters key {key!r}")
+    for key in sorted(GOLDEN_FILTER_KEYS - set(filters)):
+        errs.append(f"{where}: missing filters key {key!r}")
+    children = filters.get("party_children")
+    if children is not None and not _is_plain_int(children, low=0, high=_PARTY_CHILDREN_MAX):
+        errs.append(f"{where}: party_children must be null or an int in 0..{_PARTY_CHILDREN_MAX}")
+    for key in ("hard_services", "interests", "avoid"):
+        if key in filters:
+            _validate_code_list(f"{where}: filters.{key}", filters[key], errs)
+    return errs
+
+
+def _filter_overlap(filters: dict[str, Any], where: str) -> list[str]:
+    """A code cannot be both mandatory and forbidden, nor both wanted and forbidden."""
+    hard = {_norm_code(c) for c in filters.get("hard_services") or []}
+    avoid = {_norm_code(c) for c in filters.get("avoid") or []}
+    interests = {_norm_code(c) for c in filters.get("interests") or []}
+    errs: list[str] = []
+    if hard & avoid:
+        errs.append(
+            f"{where}: filters.hard_services and filters.avoid overlap "
+            f"({sorted(hard & avoid)}) — a code cannot be mandatory and forbidden"
+        )
+    if interests & avoid:
+        errs.append(
+            f"{where}: filters.interests and filters.avoid overlap ({sorted(interests & avoid)})"
+        )
+    return errs
+
+
+def _filter_budget(filters: dict[str, Any], where: str) -> list[str]:
+    """The time budget, and that it stays inside what the API will accept."""
+    budget = filters.get("time_budget_minutes")
+    if budget is None:
+        return []
+    if not _is_plain_int(budget, low=0):
+        return [f"{where}: filters.time_budget_minutes must be null or an int >= 0"]
+    if budget > int(agent_constants.MAX_BUDGET_MIN):
+        return [
+            (
                 f"{where}: filters.time_budget_minutes {budget} exceeds the API "
                 f"maximum {agent_constants.MAX_BUDGET_MIN}"
             )
-        origin = filters.get("origin")
-        if origin is not None:
-            if not isinstance(origin, dict) or set(origin) != {"lat", "lon"}:
-                errs.append(f"{where}: filters.origin must be null or {{lat, lon}}")
-            else:
-                for axis, (lo, hi) in ORIGIN_BOUNDS.items():
-                    value = origin.get(axis)
-                    if not _is_num(value) or not (lo <= value <= hi):
-                        errs.append(
-                            f"{where}: filters.origin.{axis} must be a number in "
-                            f"{lo}..{hi}, got {value!r}"
-                        )
-        if filters.get("result_mode") not in RESULT_MODES:
-            errs.append(
-                f"{where}: filters.result_mode must be one of {list(RESULT_MODES)}, "
-                f"got {filters.get('result_mode')!r}"
-            )
+        ]
+    return []
 
+
+def _filter_result_mode(filters: dict[str, Any], where: str) -> list[str]:
+    """The result mode the case asks for."""
+    mode = filters.get("result_mode")
+    if mode in RESULT_MODES:
+        return []
+    return [f"{where}: filters.result_mode must be one of {list(RESULT_MODES)}, got {mode!r}"]
+
+
+def _filter_origin(filters: dict[str, Any], where: str) -> list[str]:
+    """The optional starting point, inside the box the API accepts."""
+    origin = filters.get("origin")
+    if origin is None:
+        return []
+    if not isinstance(origin, dict) or set(origin) != {"lat", "lon"}:
+        return [f"{where}: filters.origin must be null or {{lat, lon}}"]
+    errs: list[str] = []
+    for axis, (lo, hi) in ORIGIN_BOUNDS.items():
+        value = origin.get(axis)
+        if not _is_num(value) or not (lo <= value <= hi):
+            errs.append(
+                f"{where}: filters.origin.{axis} must be a number in {lo}..{hi}, got {value!r}"
+            )
+    return errs
+
+
+def _golden_expectations(data: dict[str, Any], where: str) -> list[str]:
+    """The expectations block: its keys, the lists, the bounds, and the flags."""
     exp = data.get("expectations")
     if not isinstance(exp, dict):
-        errs.append(f"{where}: expectations must be an object")
-    else:
-        for key in sorted(set(exp) - GOLDEN_EXPECTATION_KEYS):
-            errs.append(f"{where}: unknown expectations key {key!r}")
-        for key in sorted(GOLDEN_REQUIRED_EXPECTATIONS - set(exp)):
-            errs.append(f"{where}: missing expectations key {key!r}")
-        for key in ("must_contain_categories", "must_not_contain_categories"):
-            if key in exp:
-                _validate_code_list(f"{where}: expectations.{key}", exp[key], errs)
-        names = exp.get("must_contain_names")
-        if names is not None and (
-            not isinstance(names, list)
-            or not names
-            or any(not isinstance(n, str) or not n.strip() for n in names)
-        ):
-            errs.append(
-                f"{where}: expectations.must_contain_names must be a non-empty "
-                "list of non-empty strings when present"
-            )
-        statuses = exp.get("expected_status")
-        if not isinstance(statuses, list) or not statuses:
-            errs.append(f"{where}: expectations.expected_status must be a non-empty list")
+        return [f"{where}: expectations must be an object"]
+    return (
+        _expectation_keys(exp, where)
+        + _expectation_codes(exp, where)
+        + _expectation_status(exp, where)
+        + _expectation_result_mode(exp, where)
+        + _expectation_bounds(exp, where, data.get("filters"))
+        + _expectation_flags(exp, where)
+    )
+
+
+def _expectation_keys(exp: dict[str, Any], where: str) -> list[str]:
+    """The keys the schema names, and none missing."""
+    errs: list[str] = []
+    for key in sorted(set(exp) - GOLDEN_EXPECTATION_KEYS):
+        errs.append(f"{where}: unknown expectations key {key!r}")
+    for key in sorted(GOLDEN_REQUIRED_EXPECTATIONS - set(exp)):
+        errs.append(f"{where}: missing expectations key {key!r}")
+    return errs
+
+
+def _expectation_codes(exp: dict[str, Any], where: str) -> list[str]:
+    """The categories and the names the case says must (or must not) appear."""
+    errs: list[str] = []
+    for key in ("must_contain_categories", "must_not_contain_categories"):
+        if key in exp:
+            _validate_code_list(f"{where}: expectations.{key}", exp[key], errs)
+    names = exp.get("must_contain_names")
+    if names is not None and not _name_list_ok(names):
+        errs.append(
+            f"{where}: expectations.must_contain_names must be a non-empty "
+            "list of non-empty strings when present"
+        )
+    wanted = exp.get("requirement_status")
+    if wanted is not None:
+        if not isinstance(wanted, dict) or not wanted:
+            errs.append(f"{where}: expectations.requirement_status must be a non-empty object")
         else:
-            for status in statuses:
-                if status not in STATUSES:
-                    errs.append(
-                        f"{where}: expectations.expected_status {status!r} is not one "
-                        f"of {sorted(STATUSES)}"
-                    )
-        mode = exp.get("expected_result_mode")
-        if mode is not None and mode not in RESULT_MODES:
-            errs.append(f"{where}: expectations.expected_result_mode must be {RESULT_MODES}")
-        cap = exp.get("max_total_minutes")
-        if cap is not None and not (isinstance(cap, int) and not isinstance(cap, bool) and cap > 0):
-            errs.append(f"{where}: expectations.max_total_minutes must be null or int > 0")
-        elif (
-            cap is not None
-            and isinstance(filters, dict)
-            and isinstance(filters.get("time_budget_minutes"), int)
-            and cap > filters["time_budget_minutes"]
-        ):
+            errs += [
+                f"{where}: expectations.requirement_status {kind!r} is not one of "
+                f"{sorted(REQUIREMENT_KINDS)}"
+                for kind in wanted
+                if kind not in REQUIREMENT_KINDS
+            ]
+            errs += [
+                f"{where}: expectations.requirement_status[{kind!r}] must be one of "
+                f"{sorted(REQUIREMENT_STATUSES)}, not {status!r}"
+                for kind, status in wanted.items()
+                if status not in REQUIREMENT_STATUSES
+            ]
+    kinds = exp.get("must_satisfy_requirement_kinds")
+    if kinds is not None:
+        if not _name_list_ok(kinds):
             errs.append(
-                f"{where}: expectations.max_total_minutes {cap} exceeds the stated "
-                f"budget {filters['time_budget_minutes']} — the cap would never bind"
+                f"{where}: expectations.must_satisfy_requirement_kinds must be a "
+                "non-empty list of non-empty strings when present"
             )
-        if not isinstance(exp.get("in_region"), bool):
-            errs.append(f"{where}: expectations.in_region must be a boolean")
-        if "allow_empty" in exp and not isinstance(exp["allow_empty"], bool):
-            errs.append(f"{where}: expectations.allow_empty must be a boolean")
-        min_places = exp.get("min_places")
-        if min_places is not None and not (
-            isinstance(min_places, int) and not isinstance(min_places, bool) and min_places >= 0
-        ):
-            errs.append(f"{where}: expectations.min_places must be null or an int >= 0")
-        elif min_places is not None and not exp.get("allow_empty") and min_places == 0:
-            errs.append(
-                f"{where}: expectations.min_places 0 with allow_empty false — an "
-                "empty plan would pass; say allow_empty: true instead"
-            )
-        if exp.get("status_note") is not None and not isinstance(exp["status_note"], str):
-            errs.append(f"{where}: expectations.status_note must be a string")
+        else:
+            errs += [
+                f"{where}: expectations.must_satisfy_requirement_kinds {kind!r} is not "
+                f"one of {sorted(REQUIREMENT_KINDS)}"
+                for kind in kinds
+                if kind not in REQUIREMENT_KINDS
+            ]
+    return errs
+
+
+def _name_list_ok(names: Any) -> bool:
+    """A non-empty list of non-empty strings."""
+    if not isinstance(names, list) or not names:
+        return False
+    return all(isinstance(n, str) and n.strip() for n in names)
+
+
+def _expectation_status(exp: dict[str, Any], where: str) -> list[str]:
+    """The plan statuses the case will accept."""
+    statuses = exp.get("expected_status")
+    if not isinstance(statuses, list) or not statuses:
+        return [f"{where}: expectations.expected_status must be a non-empty list"]
+    return [
+        f"{where}: expectations.expected_status {status!r} is not one of {sorted(STATUSES)}"
+        for status in statuses
+        if status not in STATUSES
+    ]
+
+
+def _expectation_result_mode(exp: dict[str, Any], where: str) -> list[str]:
+    """The result mode the case expects, when it says."""
+    mode = exp.get("expected_result_mode")
+    if mode is None or mode in RESULT_MODES:
+        return []
+    return [f"{where}: expectations.expected_result_mode must be {RESULT_MODES}"]
+
+
+def _expectation_bounds(exp: dict[str, Any], where: str, filters: Any) -> list[str]:
+    """The two numeric bounds: the total-minutes cap and the minimum stop count."""
+    errs: list[str] = []
+    cap = exp.get("max_total_minutes")
+    if cap is not None and not _is_plain_int(cap, low=1):
+        errs.append(f"{where}: expectations.max_total_minutes must be null or int > 0")
+    elif (
+        cap is not None
+        and isinstance(filters, dict)
+        and isinstance(filters.get("time_budget_minutes"), int)
+        and cap > filters["time_budget_minutes"]
+    ):
+        errs.append(
+            f"{where}: expectations.max_total_minutes {cap} exceeds the stated "
+            f"budget {filters['time_budget_minutes']} — the cap would never bind"
+        )
+    min_places = exp.get("min_places")
+    if min_places is not None and not _is_plain_int(min_places, low=0):
+        errs.append(f"{where}: expectations.min_places must be null or an int >= 0")
+    elif min_places is not None and not exp.get("allow_empty") and min_places == 0:
+        errs.append(
+            f"{where}: expectations.min_places 0 with allow_empty false — an "
+            "empty plan would pass; say allow_empty: true instead"
+        )
+    return errs
+
+
+def _expectation_flags(exp: dict[str, Any], where: str) -> list[str]:
+    """The three booleans, and the free-text note."""
+    errs: list[str] = []
+    if not isinstance(exp.get("in_region"), bool):
+        errs.append(f"{where}: expectations.in_region must be a boolean")
+    if "allow_empty" in exp and not isinstance(exp["allow_empty"], bool):
+        errs.append(f"{where}: expectations.allow_empty must be a boolean")
+    if exp.get("status_note") is not None and not isinstance(exp["status_note"], str):
+        errs.append(f"{where}: expectations.status_note must be a string")
     return errs
 
 
@@ -2218,10 +2499,7 @@ def golden_by_id(cases: list[GoldenCase]) -> dict[str, GoldenCase]:
 
 
 def _parity_signature(case: GoldenCase) -> tuple:
-    """What must be identical across a parity group: filters and conditions.
-
-    `status_note` is per-locale documentation; everything else must match.
-    """
+    """What must be identical across a parity group: filters and conditions."""
     exp = {k: v for k, v in case.expectations.items() if k != "status_note"}
     return (
         json.dumps(case.filters, sort_keys=True, ensure_ascii=False),
@@ -2268,16 +2546,7 @@ def parity_groups(cases: list[GoldenCase]) -> dict[str, list[GoldenCase]]:
 
 
 def _status_from_requirements(requirements: list[Any]) -> str:
-    """The plan's status, decided by the LIVE verifier — `routing.verify.overall_status`.
-
-    The response carries the public view of the contract (`kind`, `strength`,
-    `status`, `detail`), so it is rebuilt into a `TripRequirements` and handed to
-    the same function that runs in production. This used to be a hand-copied mirror
-    of the deleted `planner/verify.py::overall_status`, and it had drifted: it
-    called ANY unmet hard requirement `infeasible`, while the live code returns
-    `infeasible` only for the reasons in `INFEASIBLE_REASONS` (an unmet hard
-    requirement outside that set is merely `degraded`).
-    """
+    """The plan's status, decided by the LIVE verifier — `routing.verify.overall_status`."""
     rebuilt: list[Requirement] = []
     for r in requirements:
         if not isinstance(r, dict) or not isinstance(r.get("kind"), str):
@@ -2295,7 +2564,6 @@ def _status_from_requirements(requirements: list[Any]) -> str:
                 )
             )
         except Exception:
-            # A malformed verdict cannot be graded; skip it rather than crash the run.
             continue
     return overall_status(TripRequirements(requirements=rebuilt))
 
@@ -2306,16 +2574,8 @@ def derive_status(
     http_status: int | None = None,
     api_error: str | None = None,
 ) -> tuple[str, str]:
-    """(status, source) for one response, using the best evidence available.
-
-    `source` records which rung was used; a derived status is never passed off as the API's.
-    """
+    """(status, source) for one response, using the best evidence available."""
     if api_error or (http_status is not None and http_status >= HTTPStatus.BAD_REQUEST):
-        # A failed request is not a plan, and the wire has no `rejected` status: a
-        # genuine refusal comes back as HTTP 200 with `status="infeasible"`
-        # (`api/responses.py::no_route_response`). The harness names a broken
-        # request itself, and `error` is not a legal `expected_status` — so a case
-        # can never "expect" a backend failure.
         return "error", "api_error" if api_error else "http_status"
     raw = raw or {}
     explicit = raw.get("status")
@@ -2341,10 +2601,7 @@ def _canon_codes(codes) -> list[str]:
 
 
 def stop_category_codes(stop: dict[str, Any]) -> set[str]:
-    """The canonical codes one returned stop counts as.
-
-    The point's own `category` is authoritative; the name only votes when it is missing.
-    """
+    """The canonical codes one returned stop counts as."""
     category = _norm_code(stop.get("category"))
     if category:
         return {category}
@@ -2366,10 +2623,7 @@ def _unverified(detail: str, **extra) -> dict[str, Any]:
 def response_total_minutes(
     raw: dict[str, Any] | None, points: list[dict[str, Any]]
 ) -> float | None:
-    """Total route minutes: `budget.total_minutes`, or walk + visits as a fallback.
-
-    The fallback keeps an over-budget route from hiding behind a missing field.
-    """
+    """Total route minutes: `budget.total_minutes`, or walk + visits as a fallback."""
     raw = raw or {}
     budget = raw.get("budget") or {}
     total = budget.get("total_minutes")
@@ -2390,143 +2644,32 @@ def evaluate_compliance(
     http_status: int | None = None,
     api_error: str | None = None,
 ) -> ComplianceVerdict:
-    """Every expectation of one golden case against one response.
-
-    Pure; `reason` is the first failed check in CHECK_PRIORITY, or "ok".
-    """
+    """Every expectation of one golden case against one response."""
     exp = case.expectations
     raw = raw or {}
     points = [p for p in (raw.get("points") or []) if isinstance(p, dict)]
     status, source = derive_status(raw, http_status=http_status, api_error=api_error)
     checks: dict[str, dict[str, Any]] = {}
 
-    expected_status = [str(s).strip().lower() for s in exp["expected_status"]]
-    checks[CHECK_WRONG_STATUS] = (
-        _ok(f"{status} ({source}) is in {expected_status}")
-        if status in expected_status
-        else _fail(f"status {status} ({source}) is not one of {expected_status}")
-    )
-    if status == "error":
-        checks[CHECK_API_ERROR] = _fail(
-            api_error or f"the backend failed with HTTP {http_status} — no plan"
-        )
-    elif api_error or (http_status is not None and http_status >= HTTPStatus.BAD_REQUEST):
-        checks[CHECK_API_ERROR] = _ok(
-            f"the backend refused the request (HTTP {http_status}) — an honest "
-            f"refusal, judged by the status check"
-        )
-    else:
-        checks[CHECK_API_ERROR] = _ok("the backend answered with a plan")
+    checks[CHECK_WRONG_STATUS] = _status_check(status, source, exp)
+    checks[CHECK_API_ERROR] = _api_error_check(status, http_status, api_error)
+    checks[CHECK_TOO_FEW_PLACES] = _too_few_places_check(points, exp)
 
-    allow_empty = bool(exp.get("allow_empty"))
-    min_places = exp.get("min_places")
-    if min_places is None:
-        min_places = 0 if allow_empty else 1
-    if len(points) < min_places:
-        detail = f"{len(points)} stop(s) returned, at least {min_places} required"
-        if not points and allow_empty:
-            detail = "empty plan, which this case allows"
-        checks[CHECK_TOO_FEW_PLACES] = _ok(detail) if len(points) >= min_places else _fail(detail)
-    else:
-        checks[CHECK_TOO_FEW_PLACES] = _ok(f"{len(points)} stop(s) returned (>= {min_places})")
-
-    seen: set[str] = set()
-    for stop in points:
-        seen |= stop_category_codes(stop)
-    stop_codes = set(seen)
-    for req in raw.get("requirements") or []:
-        if not isinstance(req, dict) or req.get("status") != "satisfied":
-            continue
-        code = req.get("code")
-        if isinstance(code, str) and code.strip():
-            seen.add(_norm_code(code))
-    wanted = [_norm_code(c) for c in exp["must_contain_categories"]]
-    missing = [c for c in wanted if c not in seen]
-    category_evidence = {
-        "missing": _canon_codes(missing),
-        "seen": sorted(_canon_codes(seen)),
-    }
-    checks[CHECK_MISSING_MANDATORY_CATEGORY] = (
-        _ok(f"every mandatory category is present {_canon_codes(wanted)}", **category_evidence)
-        if not missing
-        else _fail(
-            f"missing mandatory category(ies) {category_evidence['missing']}"
-            f"; the plan has {category_evidence['seen'] or 'no categories'}",
-            **category_evidence,
-        )
-    )
-    forbidden = [_norm_code(c) for c in exp["must_not_contain_categories"]]
-    present = [c for c in forbidden if c in stop_codes]
-    checks[CHECK_FORBIDDEN_CATEGORY_PRESENT] = (
-        _ok(f"no forbidden category present {_canon_codes(forbidden)}")
-        if not present
-        else _fail(
-            f"forbidden category(ies) present {[CANONICAL_CATEGORIES.get(c, c) for c in present]}"
-        )
-    )
-
-    names = exp.get("must_contain_names") or []
-    if names:
-        missing_names = [
-            n
-            for n in names
-            if not any(_norm_code(n) in norm_name(p.get("name", "")) for p in points)
-        ]
-        checks[CHECK_MISSING_NAMED_PLACE] = (
-            _ok(f"every named place is on the plan {names}")
-            if not missing_names
-            else _fail(
-                f"missing named place(s) {missing_names}; plan names "
-                f"{[p.get('name') for p in points][:6]}"
-            )
-        )
-
+    seen, stop_codes = _seen_codes(points, raw)
+    checks[CHECK_MISSING_MANDATORY_CATEGORY] = _mandatory_check(exp, seen)
+    checks[CHECK_FORBIDDEN_CATEGORY_PRESENT] = _forbidden_check(exp, stop_codes)
+    if exp.get("must_contain_names"):
+        checks[CHECK_MISSING_NAMED_PLACE] = _named_check(exp, points)
+    if exp.get("must_satisfy_requirement_kinds"):
+        checks[CHECK_REQUIREMENT_UNMET] = _requirement_check(raw, exp)
+    if exp.get("requirement_status"):
+        checks[CHECK_REQUIREMENT_STATUS] = _requirement_status_check(raw, exp)
+    if case.filters.get("at"):
+        checks[CHECK_MOMENT_APPLIED] = _moment_check(raw, case.filters.get("at"))
     if exp.get("in_region"):
-        offenders: list[str] = []
-        for stop in points:
-            lat, lon = stop.get("lat"), stop.get("lon")
-            if not (_is_num(lat) and _is_num(lon)):
-                offenders.append(f"{stop.get('name')!r} has no coordinates")
-            elif not inside_project_area(float(lat), float(lon)):
-                offenders.append(
-                    f"{stop.get('name')!r} at {lat:.4f},{lon:.4f} is outside Grodno ADM1"
-                )
-        checks[CHECK_OUT_OF_REGION_POINT] = (
-            _ok(f"all {len(points)} point(s) inside Grodno ADM1")
-            if not offenders
-            else _fail("; ".join(offenders[:4]))
-        )
-
-    cap = exp.get("max_total_minutes")
-    if cap is None:
-        checks[CHECK_OVER_BUDGET] = _ok("no time cap in this case")
-    else:
-        total = response_total_minutes(raw, points)
-        if total is None:
-            checks[CHECK_OVER_BUDGET] = _unverified(
-                f"cap {cap} min stated but the response reports no total"
-            )
-        elif total > cap + 1e-9:
-            checks[CHECK_OVER_BUDGET] = _fail(f"total {total:.1f} min exceeds the {cap} min cap")
-        else:
-            checks[CHECK_OVER_BUDGET] = _ok(f"total {total:.1f} min <= {cap} min cap")
-
-    expected_mode = exp.get("expected_result_mode")
-    if expected_mode is None:
-        checks[CHECK_RESULT_MODE] = _ok("no result mode expected")
-    else:
-        actual = _norm_code(raw.get("result_mode") or raw.get("mode"))
-        if actual:
-            checks[CHECK_RESULT_MODE] = (
-                _ok(f"result_mode {actual}")
-                if actual == _norm_code(expected_mode)
-                else _fail(f"result_mode {actual} != expected {expected_mode}")
-            )
-        else:
-            checks[CHECK_RESULT_MODE] = _unverified(
-                f"expected result_mode {expected_mode}, but the response carries no "
-                "result_mode marker (the API does not expose one yet)"
-            )
+        checks[CHECK_OUT_OF_REGION_POINT] = _region_check(points)
+    checks[CHECK_OVER_BUDGET] = _budget_check(raw, points, exp)
+    checks[CHECK_RESULT_MODE] = _result_mode_check(raw, exp)
 
     failed = [code for code in CHECK_PRIORITY if checks.get(code, {}).get("ok") is False]
     reason = failed[0] if failed else "ok"
@@ -2542,15 +2685,194 @@ def evaluate_compliance(
     )
 
 
+def _status_check(status: str, source: str, exp: dict[str, Any]) -> dict[str, Any]:
+    """The status the case will accept, and the one it got."""
+    expected_status = [str(s).strip().lower() for s in exp["expected_status"]]
+    if status in expected_status:
+        return _ok(f"{status} ({source}) is in {expected_status}")
+    return _fail(f"status {status} ({source}) is not one of {expected_status}")
+
+
+def _api_error_check(status: str, http_status: int | None, api_error: str | None) -> dict[str, Any]:
+    """An error status is the failure; a 4xx the case expected is an honest refusal."""
+    if status == "error":
+        return _fail(api_error or f"the backend failed with HTTP {http_status} — no plan")
+    if api_error or (http_status is not None and http_status >= HTTPStatus.BAD_REQUEST):
+        return _ok(
+            f"the backend refused the request (HTTP {http_status}) — an honest "
+            f"refusal, judged by the status check"
+        )
+    return _ok("the backend answered with a plan")
+
+
+def _too_few_places_check(points: list[dict[str, Any]], exp: dict[str, Any]) -> dict[str, Any]:
+    """How many stops came back, against the minimum this case allows."""
+    allow_empty = bool(exp.get("allow_empty"))
+    min_places = exp.get("min_places")
+    if min_places is None:
+        min_places = 0 if allow_empty else 1
+    if len(points) >= min_places:
+        return _ok(f"{len(points)} stop(s) returned (>= {min_places})")
+    detail = f"{len(points)} stop(s) returned, at least {min_places} required"
+    if not points and allow_empty:
+        detail = "empty plan, which this case allows"
+    return _fail(detail)
+
+
+def _seen_codes(points: list[dict[str, Any]], raw: dict[str, Any]) -> tuple[set[str], set[str]]:
+    """Every category the plan shows, and those of its stops alone."""
+    seen: set[str] = set()
+    for stop in points:
+        seen |= stop_category_codes(stop)
+    stop_codes = set(seen)
+    for req in raw.get("requirements") or []:
+        if not isinstance(req, dict) or req.get("status") != "satisfied":
+            continue
+        code = req.get("code")
+        if isinstance(code, str) and code.strip():
+            seen.add(_norm_code(code))
+    return seen, stop_codes
+
+
+def _mandatory_check(exp: dict[str, Any], seen: set[str]) -> dict[str, Any]:
+    """The categories the case insists on, against the ones the plan shows."""
+    wanted = [_norm_code(c) for c in exp["must_contain_categories"]]
+    missing = [c for c in wanted if c not in seen]
+    evidence = {"missing": _canon_codes(missing), "seen": sorted(_canon_codes(seen))}
+    if not missing:
+        return _ok(f"every mandatory category is present {_canon_codes(wanted)}", **evidence)
+    return _fail(
+        f"missing mandatory category(ies) {evidence['missing']}"
+        f"; the plan has {evidence['seen'] or 'no categories'}",
+        **evidence,
+    )
+
+
+def _forbidden_check(exp: dict[str, Any], stop_codes: set[str]) -> dict[str, Any]:
+    """The categories the case rules out, against the stops themselves."""
+    forbidden = [_norm_code(c) for c in exp["must_not_contain_categories"]]
+    present = [c for c in forbidden if c in stop_codes]
+    if not present:
+        return _ok(f"no forbidden category present {_canon_codes(forbidden)}")
+    return _fail(
+        f"forbidden category(ies) present {[CANONICAL_CATEGORIES.get(c, c) for c in present]}"
+    )
+
+
+def _named_check(exp: dict[str, Any], points: list[dict[str, Any]]) -> dict[str, Any]:
+    """The places the case names, against the names the plan carries."""
+    names = exp.get("must_contain_names") or []
+    missing_names = [
+        n for n in names if not any(_norm_code(n) in norm_name(p.get("name", "")) for p in points)
+    ]
+    if not missing_names:
+        return _ok(f"every named place is on the plan {names}")
+    return _fail(
+        f"missing named place(s) {missing_names}; plan names {[p.get('name') for p in points][:6]}"
+    )
+
+
+def _requirement_check(raw: dict[str, Any], exp: dict[str, Any]) -> dict[str, Any]:
+    """Whether the kinds the case names were read out of the query and satisfied.
+
+    The answer comes from the wire's own reading (`interpretation.requirements`), so
+    the check sees what the parser understood, not what the case hoped for.
+    """
+    wanted = [str(k) for k in exp.get("must_satisfy_requirement_kinds") or []]
+    interpretation = raw.get("interpretation")
+    if not isinstance(interpretation, dict):
+        return _unverified(f"the response carries no interpretation to read {wanted} from")
+    signals = [s for s in (interpretation.get("requirements") or []) if isinstance(s, dict)]
+    declared = {str(s.get("kind")): str(s.get("status")) for s in signals}
+    missing = [k for k in wanted if k not in declared]
+    if missing:
+        return _fail(f"the reading declared no {missing} requirement; it read {sorted(declared)}")
+    unmet = [k for k in wanted if declared[k] == "unmet"]
+    if unmet:
+        return _fail(f"the plan left {unmet} unmet; it read {declared}")
+    return _ok(f"read and met {wanted}: {declared}")
+
+
+def _requirement_status_check(raw: dict[str, Any], exp: dict[str, Any]) -> dict[str, Any]:
+    """The exact statuses a case demands. `must_satisfy_requirement_kinds` passes on
+    `uncertain`, so a condition that has to be PROVEN needs this one."""
+    wanted = {str(k): str(v) for k, v in (exp.get("requirement_status") or {}).items()}
+    interpretation = raw.get("interpretation")
+    if not isinstance(interpretation, dict):
+        return _unverified(f"the response carries no interpretation to read {sorted(wanted)} in")
+    declared = {
+        str(s.get("kind")): str(s.get("status"))
+        for s in (interpretation.get("requirements") or [])
+        if isinstance(s, dict)
+    }
+    wrong = {k: declared.get(k, "absent") for k, v in wanted.items() if declared.get(k) != v}
+    if wrong:
+        return _fail(f"expected {wanted}, read {wrong}")
+    return _ok(f"read {sorted(wanted)} as asked")
+
+
+def _moment_check(raw: dict[str, Any], chosen: Any) -> dict[str, Any]:
+    """Whether the answer was checked against the moment the case asked for."""
+    interpretation = raw.get("interpretation")
+    echoed = interpretation.get("at") if isinstance(interpretation, dict) else None
+    if not echoed:
+        return _fail("the response does not say which moment it was checked against")
+    if parse_moment(str(echoed)) != parse_moment(str(chosen)):
+        return _fail(f"checked against {echoed}, the case asked for {chosen}")
+    return _ok(f"checked against {echoed}")
+
+
+def _region_check(points: list[dict[str, Any]]) -> dict[str, Any]:
+    """Whether every stop sits inside the region the product serves."""
+    offenders: list[str] = []
+    for stop in points:
+        lat, lon = stop.get("lat"), stop.get("lon")
+        if not (_is_num(lat) and _is_num(lon)):
+            offenders.append(f"{stop.get('name')!r} has no coordinates")
+        elif not inside_project_area(float(lat), float(lon)):
+            offenders.append(f"{stop.get('name')!r} at {lat:.4f},{lon:.4f} is outside Grodno ADM1")
+    if not offenders:
+        return _ok(f"all {len(points)} point(s) inside Grodno ADM1")
+    return _fail("; ".join(offenders[:4]))
+
+
+def _budget_check(
+    raw: dict[str, Any], points: list[dict[str, Any]], exp: dict[str, Any]
+) -> dict[str, Any]:
+    """The total the response reports, against the cap the case states."""
+    cap = exp.get("max_total_minutes")
+    if cap is None:
+        return _ok("no time cap in this case")
+    total = response_total_minutes(raw, points)
+    if total is None:
+        return _unverified(f"cap {cap} min stated but the response reports no total")
+    if total > cap + 1e-9:
+        return _fail(f"total {total:.1f} min exceeds the {cap} min cap")
+    return _ok(f"total {total:.1f} min <= {cap} min cap")
+
+
+def _result_mode_check(raw: dict[str, Any], exp: dict[str, Any]) -> dict[str, Any]:
+    """The result mode the response carries, against the one the case expects."""
+    expected_mode = exp.get("expected_result_mode")
+    if expected_mode is None:
+        return _ok("no result mode expected")
+    actual = _norm_code(raw.get("result_mode") or raw.get("mode"))
+    if not actual:
+        return _unverified(
+            f"expected result_mode {expected_mode}, but the response carries no "
+            "result_mode marker (the API does not expose one yet)"
+        )
+    if actual == _norm_code(expected_mode):
+        return _ok(f"result_mode {actual}")
+    return _fail(f"result_mode {actual} != expected {expected_mode}")
+
+
 def parity_verdict(
     group: str,
     members: list[GoldenCase],
     verdicts: dict[str, ComplianceVerdict],
 ) -> ComplianceVerdict:
-    """Did the same request in RU and EN get the same KIND of answer?
-
-    Status, failed checks and mandatory categories are compared, not the stop lists.
-    """
+    """Did the same request in RU and EN get the same KIND of answer?"""
     case_id = f"parity:{group}"
     missing = [c.id for c in members if c.id not in verdicts]
     if missing:
@@ -2604,10 +2926,7 @@ def compliance_summary(
     verdicts: dict[str, ComplianceVerdict],
     parity: list[ComplianceVerdict] | None = None,
 ) -> dict[str, Any]:
-    """Per-case PASS/FAIL plus the aggregate rate over cases AND parity groups.
-
-    The rate is over units: one per golden case, one more per parity group.
-    """
+    """Per-case PASS/FAIL plus the aggregate rate over cases AND parity groups."""
     parity = parity or []
     case_verdicts = [verdicts[c.id] for c in cases if c.id in verdicts]
     unrun = [c.id for c in cases if c.id not in verdicts]
@@ -2641,10 +2960,7 @@ def compliance_summary(
 
 
 def build_golden_request(case: GoldenCase) -> dict[str, Any]:
-    """The exact body one golden case sends: the query plus its explicit filters.
-
-    The filters go on the wire as GenerateReq fields, not prose.
-    """
+    """The exact body one golden case sends: the query plus its explicit filters."""
     filters = case.filters
     payload: dict[str, Any] = {
         "query": case.query,
@@ -2659,6 +2975,12 @@ def build_golden_request(case: GoldenCase) -> dict[str, Any]:
     origin = filters.get("origin")
     if origin:
         payload["origin"] = {"lat": origin["lat"], "lon": origin["lon"]}
+    profile = filters.get("profile")
+    if profile:
+        payload["profile"] = profile
+    moment = filters.get("at")
+    if moment:
+        payload["at"] = moment
     return payload
 
 
@@ -2679,10 +3001,7 @@ class GoldenRun:
 
 
 def summarise_repeats(case: GoldenCase, runs: list[GoldenRun]) -> ComplianceVerdict:
-    """One verdict per case over its repeats: PASS only when every repeat passed.
-
-    A condition that survives one run out of N is a flake, so the case fails.
-    """
+    """One verdict per case over its repeats: PASS only when every repeat passed."""
     verdicts = [r.verdict for r in runs if r.verdict is not None]
     if not verdicts:
         return ComplianceVerdict(
@@ -2723,10 +3042,7 @@ def summarise_repeats(case: GoldenCase, runs: list[GoldenRun]) -> ComplianceVerd
 
 
 def run_golden(cases: list[GoldenCase], base_url: str, repeat: int) -> list[GoldenRun]:
-    """Call the agent once per (case, repeat) and score each response.
-
-    Writes nothing: `write_golden_snapshot` owns the snapshot and runs once, after.
-    """
+    """Call the agent once per (case, repeat) and score each response."""
     git_sha = _git_sha()
     runs: list[GoldenRun] = []
     for case in cases:
@@ -2816,10 +3132,7 @@ def write_golden_snapshot(
     append: bool = True,
     meta: dict[str, Any] | None = None,
 ) -> Path:
-    """Write the golden snapshot (one meta record + one row per run).
-
-    Meta first, then the rows that ``rescore_golden_rows`` replays offline.
-    """
+    """Write the golden snapshot (one meta record + one row per run)."""
     snapshot_dir.mkdir(parents=True, exist_ok=True)
     path = snapshot_dir / GOLDEN_SNAPSHOT_FILE
     cases = [run.case for run in runs]
@@ -2969,11 +3282,8 @@ def print_compliance_table(
 
 def write_compliance_reports(
     out_dir: Path,
+    report: ReportInput,
     *,
-    mode: str,
-    generated_at: str,
-    base_url: str,
-    snapshot: dict[str, Any],
     cases: list[GoldenCase],
     runs: list[GoldenRun],
     summary: dict[str, Any],
@@ -2986,10 +3296,10 @@ def write_compliance_reports(
 
     payload = {
         "schema": REPORT_SCHEMA,
-        "mode": mode,
-        "generated_at": generated_at,
-        "base_url": base_url,
-        "snapshot": snapshot,
+        "mode": report.mode,
+        "generated_at": report.generated_at,
+        "base_url": report.base_url,
+        "snapshot": report.snapshot,
         "summary": summary,
         "cases": [
             {
@@ -3062,16 +3372,23 @@ def write_compliance_reports(
     md = [
         "# Golden-set compliance report",
         "",
-        f"**Mode:** `{mode}` · **Generated:** {generated_at} · **API:** `{base_url}`",
+        (
+            f"**Mode:** `{report.mode}` · **Generated:** {report.generated_at} · "
+            f"**API:** `{report.base_url}`"
+        ),
         "",
-        "This measures whether the CONDITIONS of a request survived, not how close "
-        "the route came to a reference walk. A case passes only if every "
-        "machine-checkable expectation of its file holds; a parity group passes "
-        "only if RU and EN got the same kind of answer.",
+        (
+            "This measures whether the CONDITIONS of a request survived, not how close "
+            "the route came to a reference walk. A case passes only if every "
+            "machine-checkable expectation of its file holds; a parity group passes "
+            "only if RU and EN got the same kind of answer."
+        ),
         "",
-        f"**Compliance rate: "
-        f"{compliance_text}** "
-        f"({summary['n_units_passed']}/{summary['n_units']} units)",
+        (
+            f"**Compliance rate: "
+            f"{compliance_text}** "
+            f"({summary['n_units_passed']}/{summary['n_units']} units)"
+        ),
         "",
         "| case | locale | verdict | status | reason | detail |",
         "|---|---|---|---|---|---|",
@@ -3094,8 +3411,10 @@ def write_compliance_reports(
             "",
             "## Checks the current API cannot answer",
             "",
-            "These are recorded as unverified rather than passed or failed, "
-            "because the response carries no field to decide them:",
+            (
+                "These are recorded as unverified rather than passed or failed, "
+                "because the response carries no field to decide them:"
+            ),
             "",
         ]
         md += [f"- `{c}`" for c in summary["unverified_checks"]]
@@ -3114,10 +3433,7 @@ def fetch_health(base_url: str, timeout: float = HEALTH_TIMEOUT_S) -> dict[str, 
 
 
 def preflight_or_exit(base_url: str) -> dict[str, Any]:
-    """Refuse to benchmark a backend that is not there.
-
-    Must not write a report without a live stack; exits 2 with the reason on stderr.
-    """
+    """Refuse to benchmark a backend that is not there."""
     try:
         health = fetch_health(base_url)
     except urllib.error.HTTPError as exc:
@@ -3215,8 +3531,7 @@ def emit_golden(args, out: tuple) -> None:
     verdicts, parity = golden_verdicts(runs, cases)
     summary = compliance_summary(cases, verdicts, parity)
     print_compliance_table(cases, verdicts, parity, summary)
-    write_compliance_reports(
-        out_dir,
+    report = ReportInput(
         mode=mode,
         generated_at=(
             datetime.now(UTC).isoformat()
@@ -3225,10 +3540,8 @@ def emit_golden(args, out: tuple) -> None:
         ),
         base_url=args.base_url,
         snapshot=snapshot,
-        cases=cases,
-        runs=runs,
-        summary=summary,
     )
+    write_compliance_reports(out_dir, report, cases=cases, runs=runs, summary=summary)
     print(f"  compliance report → {out_dir / 'compliance.json'}")
     print(f"  compliance report → {out_dir / 'compliance.md'}")
     print(f"  compliance JSONL  → {out_dir / 'compliance.metrics.jsonl'}")
@@ -3290,7 +3603,7 @@ def run_live(
 
 def _run_once(route: GoldenRoute, base_url: str, repeat: int, git_sha: str) -> RunRecord:
     lat, lon = route_origin(route)
-    request = build_request(route.query_ru, route.budget_minutes, lat, lon)
+    request = build_request(route.query_ru, route.budget_minutes, lat, lon, route.profile)
     t0 = time.monotonic()
     status: int | None = None
     raw: dict[str, Any] | None = None
@@ -3338,10 +3651,7 @@ def _print_run(rec: RunRecord, i: int, repeat: int, route: GoldenRoute) -> None:
 def run_replay(
     snapshot_dir: Path,
 ) -> tuple[list[list[RunRecord]], dict[str, Any], list[dict[str, Any]]]:
-    """Recompute every metric offline from a snapshot. No clock, no RNG, no I/O.
-
-    Reference .json files are sha256-checked against the snapshot's recorded hashes.
-    """
+    """Recompute every metric offline from a snapshot. No clock, no RNG, no I/O."""
     meta, rows = load_snapshot(snapshot_dir)
     goldens = load_golden_map()
     drift: list[dict[str, Any]] = []
@@ -3418,10 +3728,7 @@ def _snapshot_info(meta: dict[str, Any], snapshot_dir: Path, n_rows: int) -> dic
 
 
 def compare_snapshots(dir_a: Path, dir_b: Path, samples: int, seed: int) -> dict[str, Any]:
-    """Paired bootstrap A − B over the cases the two snapshots share.
-
-    Both sides are rescored against the same current reference files, so the diff is fair.
-    """
+    """Paired bootstrap A − B over the cases the two snapshots share."""
     groups_a, meta_a, _ = run_replay(dir_a)
     groups_b, meta_b, _ = run_replay(dir_b)
     per_a = per_case_scores(groups_a)
@@ -3493,7 +3800,7 @@ def _noise_of(groups: list[list[RunRecord]], path: str) -> float | None:
     spreads = []
     for g in groups:
         vals = _attr([r.result for r in g], path)
-        if len(vals) < 2:
+        if len(vals) < _PAIR:
             continue
         spreads.append(_spread(vals) or 0.0)
     return _mean(spreads)
@@ -3528,7 +3835,7 @@ def print_compare(cmp: dict[str, Any]) -> None:
     )
     for row in cmp["metrics"]:
         n = row.get("n_paired", 0)
-        if row["diff"] is None or n < 2:
+        if row["diff"] is None or n < _PAIR:
             note = "n=1, no CI" if n == 1 else "n/a"
             mean_a = "n/a" if row["mean_a"] is None else f"{row['mean_a']:.3f}"
             mean_b = "n/a" if row["mean_b"] is None else f"{row['mean_b']:.3f}"
@@ -3649,6 +3956,21 @@ def build_parser() -> argparse.ArgumentParser:
         f"(default: {BOOTSTRAP_SEED})",
     )
     parser.add_argument(
+        "--curated",
+        action="store_true",
+        help=(
+            "Score the READY-MADE routes (quality/cases/curated/*.json) instead of the "
+            "benchmark walks: each case asks the planner the same request the itinerary "
+            "answers, and the itinerary's own stops are the reference. Needs a live stack."
+        ),
+    )
+    parser.add_argument(
+        "--curated-dir",
+        default=None,
+        metavar="DIR",
+        help="Directory of curated cases (default: backend/quality/cases/curated)",
+    )
+    parser.add_argument(
         "--golden",
         action="store_true",
         help=(
@@ -3707,18 +4029,56 @@ class RunOutput:
 
 
 def _select_routes(args) -> list[GoldenRoute]:
-    routes = load_golden_routes(BENCH_ROUTES)
+    if args.curated:
+        source = Path(args.curated_dir) if args.curated_dir else BENCH_CURATED
+        routes = load_curated_routes(source)
+        if not routes:
+            print(f"No curated cases found in {source}", file=sys.stderr)
+            sys.exit(1)
+    else:
+        routes = load_golden_routes(BENCH_ROUTES)
+        if not routes:
+            print(f"No benchmark files found in {BENCH_ROUTES}", file=sys.stderr)
+            sys.exit(1)
     if args.case:
         wanted = set(args.case)
         routes = [r for r in routes if r.case in wanted]
         missing = wanted - {r.case for r in routes}
         if missing:
-            print(f"No benchmark file for case(s): {sorted(missing)}", file=sys.stderr)
+            print(f"No case file for case(s): {sorted(missing)}", file=sys.stderr)
             sys.exit(1)
-    if not routes:
-        print(f"No benchmark files found in {BENCH_ROUTES}", file=sys.stderr)
-        sys.exit(1)
     return routes
+
+
+def _cases_dir(cases: list[str]) -> Path | None:
+    """The one directory a run's cases come from, when they all come from one."""
+    goldens = load_golden_map()
+    dirs = {goldens[c].path.parent for c in cases if c in goldens and goldens[c].path}
+    dirs = {d for d in dirs if d is not None}
+    return dirs.pop() if len(dirs) == 1 else None
+
+
+def _relative_cases_dir(groups: list[list[RunRecord]]) -> str:
+    """The set the run scored, as a path from backend/ — the report names its own source."""
+    found = _cases_dir([g[0].case for g in groups if g])
+    if found is None:
+        return ""
+    try:
+        return str(found.relative_to(BACKEND))
+    except ValueError:
+        return str(found)
+
+
+def _report_dir(args, fallback: Path, cases: list[str]) -> Path:
+    """Where a run's reports land: an explicit dir, or the measured set's own.
+
+    A replay cannot be told its set by a flag, so the cases decide: rows that name the
+    ready-made walks are filed with them, and a report never overwrites the other
+    layer's numbers under the other layer's name.
+    """
+    if args.report_dir:
+        return Path(args.report_dir)
+    return BENCH_CURATED_OUT if _cases_dir(cases) == BENCH_CURATED else fallback
 
 
 def _live_output(args, routes: list[GoldenRoute]) -> RunOutput:
@@ -3729,11 +4089,12 @@ def _live_output(args, routes: list[GoldenRoute]) -> RunOutput:
         snapshot_dir = Path(args.snapshot)
     else:
         snapshot_dir = default_snapshot_dir()
+    out_dir = _report_dir(args, BENCH_OUT, [r.case for r in routes])
     print("Benchmark runner — live")
     print(f"API base URL: {args.base_url}")
     print(f"Runs per case: {args.repeat}")
     print(f"Snapshot: {snapshot_dir}" if snapshot_dir else "Snapshot: off")
-    print(f"Reports will be written to: {args.report_dir or BENCH_OUT}")
+    print(f"Reports will be written to: {out_dir}")
     preflight_or_exit(args.base_url)
     groups, meta = run_live(routes, args.base_url, args.repeat, snapshot_dir, args.append)
     n_rows = sum(len(g) for g in groups)
@@ -3741,7 +4102,7 @@ def _live_output(args, routes: list[GoldenRoute]) -> RunOutput:
         mode="live",
         groups=groups,
         meta=meta,
-        out_dir=Path(args.report_dir) if args.report_dir else BENCH_OUT,
+        out_dir=out_dir,
         snapshot=_snapshot_info(meta, snapshot_dir, n_rows) if snapshot_dir else {},
         generated_at=str(meta.get("started_at")),
     )
@@ -3768,7 +4129,7 @@ def _replay_output(args) -> RunOutput:
         mode="replay",
         groups=groups,
         meta=meta,
-        out_dir=Path(args.report_dir) if args.report_dir else snapshot_dir,
+        out_dir=_report_dir(args, snapshot_dir, [g[0].case for g in groups if g]),
         snapshot=_snapshot_info(meta, snapshot_dir, n_rows),
         generated_at=str(meta.get("started_at") or "unknown"),
         drift=drift,
@@ -3785,19 +4146,20 @@ def _emit(args, out: RunOutput) -> None:
     print_ci_table(overall, per_case, noise, args.bootstrap, args.seed)
     print_failures(failures, overall)
 
-    common = {
-        "mode": out.mode,
-        "generated_at": out.generated_at,
-        "snapshot": out.snapshot,
-        "overall": overall,
-        "noise": noise,
-        "failures": failures,
-        "drift_rows": out.drift,
-        "samples": args.bootstrap,
-        "seed": args.seed,
-    }
-    write_json_report(out.groups, out.out_dir, per_case=per_case, **common)
-    write_md_report(out.groups, out.out_dir, **common)
+    report = ReportInput(
+        mode=out.mode,
+        generated_at=out.generated_at,
+        snapshot=out.snapshot,
+        cases_dir=_relative_cases_dir(out.groups),
+        overall=overall,
+        noise=noise,
+        failures=failures,
+        drift_rows=out.drift,
+        samples=args.bootstrap,
+        seed=args.seed,
+    )
+    write_json_report(out.groups, out.out_dir, report, per_case=per_case)
+    write_md_report(out.groups, out.out_dir, report)
     write_metrics_jsonl(out.groups, out.out_dir, overall, failures)
 
     if args.strict and failures["n_failed_runs"]:

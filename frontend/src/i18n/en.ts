@@ -28,33 +28,54 @@ export const en: Dictionary = {
     placeholderRefine: 'What to refine? “add a coffee shop”',
     placeholder: 'What would you like to see?',
     label: 'What would you like to see',
+    allHints: 'all hints',
+    hintsTitle: 'Hints',
+    hintsIntro: 'Ready-made requests — tap one to put it in the field',
+    hintsClose: 'close the hints',
     chips: {
-      oldTown: 'Old town in two hours on foot',
-      castlesChurches: 'Castles and churches of Grodno',
-      food: 'Where to eat in the centre, on a budget',
-      evening: 'An evening walk along Sovetskaya',
-      withChildren: 'With children: parks and castles',
+      oldTownCastles: 'two castles and Sovetskaya street in Grodno, four hours',
+      museumsRainyDay:
+        'where to go in Grodno when it rains, museums under a roof, three hours',
+      familyWithKids: 'Grodno with children: castles, park and zoo, half a day',
+      fourFaiths:
+        'a catholic church, a synagogue, a monastery and the churches of old Grodno',
+      freeOldTownWalk: 'what to see in Grodno for free, three hours',
+      tyzenhauzNorth:
+        'Horodnica and the age of Tyzenhauz, a walk in northern Grodno',
+      bicycleCanal:
+        'the Augustow canal by bicycle: Sopotskin and the locks, four hours',
+      augustowCanalBike: 'the Augustow canal by bicycle, four hours',
+      palacesDay:
+        'palaces and manors of the west of the region by car, a whole day',
+      castlesLidaKrevoGolshany:
+        'Lida, Krevo and Golshany castles in one day by car',
+      mirNovogrudok:
+        'Mir and Novogrudok in one day: two castles and Mickiewicz',
+      westPalacesAndChurches:
+        'palaces and churches of the west of the region by car',
+      synagoguesDay: 'the synagogues of Grodno, Lida and Slonim by car',
+      castlesHalfDay: 'the castles of the Grodno region in half a day',
+      museumsBudget: 'Grodno museums for two hours',
+      familyWalk:
+        'old Grodno, two children, two hours, toilet required, cafe if along the way',
+      avoidTemples:
+        'a family walk in Grodno without churches or cathedrals: park and zoo',
+      namedFarnyi: 'a walk in old Grodno with a stop at the Farny church',
+      freeOldTown:
+        'Grodno for free: only places with free admission, three hours',
+      allChurchesCatalogue:
+        'every catholic and orthodox church of the Grodno region',
+      vagueNoAnchor: 'something interesting',
+      outOfRegionVilnius: 'Vilnius: the cathedral — a walk on foot',
     },
     chipsRefine: {
+      addCafeToilet: 'add a coffee shop and a toilet',
       addCafe: 'add a café on the way',
       removeMuseum: 'take the museum out',
       shorter: 'make it shorter — two hours',
       onlyChurches: 'keep only churches and castles',
       withChildren: 'add something for the children',
     },
-  },
-  transport: {
-    pedestrian: 'on foot',
-    bicycle: 'by bike',
-    auto: 'by car',
-    any: 'any way',
-  },
-  budget: {
-    '30': '30 min',
-    '60': '1 hr',
-    '120': '2 hrs',
-    '240': 'half a day',
-    any: 'no limit',
   },
   actions: {
     closePanel: 'close the panel',

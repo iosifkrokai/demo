@@ -1,12 +1,4 @@
-"""What makes an account: the rules, and the codes they answer with.
-
-This lives below both consumers on purpose. The HTTP layer validates a
-registration, and `db/seed/admin` validates the first administrator — the same
-rules, so they cannot sit in either layer without one importing the other.
-
-The rest of the account vocabulary (the shapes, the session cookie, the roles)
-stays with the API, which is the only place that speaks it.
-"""
+"""What makes an account: the rules, and the codes they answer with."""
 
 from __future__ import annotations
 

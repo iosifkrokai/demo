@@ -20,7 +20,6 @@ import {
   extractDistanceToNextManeuver,
   extractRemainingSteps,
   extractSpokenInstruction,
-  extractVisualInstruction,
   isCompletelyOffRoute,
 } from './ferrostar-nav';
 
@@ -413,7 +412,6 @@ describe('Ferrostar state extractors', () => {
 
   it('reads the announcement and the banner', () => {
     expect(extractSpokenInstruction(navigating())).toEqual(SPOKEN);
-    expect(extractVisualInstruction(navigating())).toEqual(VISUAL);
     expect(extractRemainingSteps(navigating())).toHaveLength(2);
   });
 
@@ -430,7 +428,6 @@ describe('Ferrostar state extractors', () => {
       expect(extractDistanceToNextManeuver(state)).toBeNull();
       expect(extractDistanceRemaining(state)).toBeNull();
       expect(extractSpokenInstruction(state)).toBeNull();
-      expect(extractVisualInstruction(state)).toBeNull();
       expect(extractRemainingSteps(state)).toEqual([]);
       expect(isCompletelyOffRoute(state)).toBeNull();
     }
@@ -443,7 +440,6 @@ describe('Ferrostar state extractors', () => {
       remainingSteps: [],
     });
     expect(extractSpokenInstruction(quiet)).toBeNull();
-    expect(extractVisualInstruction(quiet)).toBeNull();
     expect(extractRemainingSteps(quiet)).toEqual([]);
   });
 
@@ -453,7 +449,6 @@ describe('Ferrostar state extractors', () => {
       expect(extractDistanceToNextManeuver(state)).toBeNull();
       expect(extractDistanceRemaining(state)).toBeNull();
       expect(extractSpokenInstruction(state)).toBeNull();
-      expect(extractVisualInstruction(state)).toBeNull();
       expect(extractRemainingSteps(state)).toEqual([]);
       expect(isCompletelyOffRoute(state)).toBeNull();
     }

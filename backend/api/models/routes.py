@@ -1,19 +1,18 @@
-"""The wire: what /routes/* accepts and returns.
-
-These shapes belong to the HTTP layer. The pipeline's own currency — a candidate
-stop, a cost matrix, a validated plan — lives in `routing`, and the request body
-is narrowed to a `ReaderBrief` before the agent ever sees it.
-"""
+"""The wire: what /routes/* accepts and returns."""
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from core import constants
+from core.hours import parse_moment
 from routing.models import LatLon, Photo
+
+MOMENT_FLOOR = datetime(2020, 1, 1, tzinfo=UTC)
+MOMENT_CEILING = timedelta(days=730)
 
 TransportLiteral = Literal[
     "pedestrian",
@@ -25,7 +24,6 @@ TransportLiteral = Literal[
     "motor_scooter",
     "motorcycle",
 ]
-# The service lookup also accepts "any" — a service is not a journey.
 TransportOrAnyLiteral = Literal[
     "pedestrian",
     "bicycle",
@@ -37,6 +35,8 @@ TransportOrAnyLiteral = Literal[
     "motorcycle",
     "any",
 ]
+
+MAX_STOPS = constants.VALHALLA_MAX_LOCATIONS
 
 OverallStatus = Literal["ready", "infeasible", "degraded", "pending"]
 
@@ -53,10 +53,7 @@ class ContextPoint(BaseModel):
 
 
 class RouteContext(BaseModel):
-    """The route as it stands plus what the user asks to change about it.
-
-    `instruction` is the delta only; `base_points` are forced to survive it.
-    """
+    """The route as it stands plus what the user asks to change about it."""
 
     instruction: str | None = Field(default=None, max_length=500)
     base_points: list[ContextPoint] = Field(default_factory=list)
@@ -85,14 +82,15 @@ class GenerateReq(BaseModel):
     progress_id: str | None = Field(default=None, max_length=64)
     session_id: str | None = Field(default=None, max_length=128)
     time_budget_minutes: int | None = Field(default=None, ge=0, le=constants.MAX_BUDGET_MIN)
+    at: datetime | None = Field(
+        default=None,
+        description=(
+            "When the walk is planned for: an ISO instant, or a wall clock the visitor "
+            "typed, read as Grodno time (UTC+3). Absent means the moment of the request."
+        ),
+    )
     origin: LatLon | None = None
     profile: TransportLiteral | None = None
-    region_bbox: list[float] | None = Field(
-        default=None,
-        description="[south, west, north, east]. Used as a PostGIS envelope filter.",
-        min_length=4,
-        max_length=4,
-    )
     context: RouteContext | None = None
 
     locale: Literal["ru", "en"] = "ru"
@@ -103,8 +101,19 @@ class GenerateReq(BaseModel):
     hard_services: list[str] = Field(default_factory=list)
     interests: list[str] = Field(default_factory=list)
     avoid: list[str] = Field(default_factory=list)
-    result_mode: Literal["route", "catalogue"] = "route"
+    result_mode: Literal["route", "catalogue"] | None = None
     round_trip: bool = False
+
+    @field_validator("at")
+    @classmethod
+    def _a_placed_moment(cls, v: datetime | None) -> datetime | None:
+        """A wall clock the visitor typed is Grodno time; an instant is already placed."""
+        if v is None:
+            return None
+        moment = parse_moment(v)
+        if not MOMENT_FLOOR <= moment <= datetime.now(UTC) + MOMENT_CEILING:
+            raise ValueError("the moment is outside the years this planner covers")
+        return moment
 
     @field_validator("query")
     @classmethod
@@ -118,6 +127,7 @@ class GenerateReq(BaseModel):
 class Place(BaseModel):
     id: int
     name: str
+    key: str | None = None
     category: str | None
     lat: float
     lon: float
@@ -129,6 +139,7 @@ class Place(BaseModel):
     visit_minutes: int | None = None
     opening_hours: str | None = None
     ticket_price: str | None = None
+    is_free: bool | None = None
     town: str | None = None
     district: str | None = None
 
@@ -154,13 +165,20 @@ class RouteSummary(BaseModel):
     time_seconds: float | None = None
 
 
+class StepFreeInfo(BaseModel):
+    """What a step-free walk cost, measured against the same stops taken directly."""
+
+    walk_minutes: int
+    without_steps_minutes: int
+    detour_minutes: int
+    length_km: float | None = None
+    without_steps_length_km: float | None = None
+
+
 class RequirementSignal(BaseModel):
-    """One requirement as the client renders it — codes only, never prose.
+    """One requirement as the client renders it — codes only, never prose."""
 
-    `origin` is the honest provenance; nothing here is a sentence in any language.
-    """
-
-    kind: Literal["must_visit", "service", "interest", "avoid"]
+    kind: Literal["must_visit", "service", "interest", "avoid", "free", "open", "step_free"]
     strength: Literal["hard", "soft"] = "soft"
     code: str | None = None
     name: str | None = None
@@ -171,15 +189,16 @@ class RequirementSignal(BaseModel):
 
 
 class Interpretation(BaseModel):
-    """What the system understood — one place, before the plan is judged.
-
-    Every field is a code or a number; the wording is the client's.
-    """
+    """What the system understood — one place, before the plan is judged."""
 
     source: Literal["llm", "mixed", "explicit"] = "llm"
     locale: Literal["ru", "en"] = "ru"
     status: OverallStatus = "pending"
 
+    at: datetime | None = Field(
+        default=None,
+        description="The moment the walk was checked against, when the visitor chose one.",
+    )
     adults: int | None = None
     children: int | None = None
     children_ages: list[int] = Field(default_factory=list)
@@ -196,10 +215,7 @@ class Interpretation(BaseModel):
 
 
 class PlannedAlternative(BaseModel):
-    """A way to actually make the plan, offered when the chosen one does not fit.
-
-    An offer with a reason code, not a silent switch of the request.
-    """
+    """A way to actually make the plan, offered when the chosen one does not fit."""
 
     costing: str
     reason: str
@@ -220,16 +236,12 @@ class RouteResponse(BaseModel):
     costing: str | None = None
     changes: RouteChanges | None = None
     alternatives: list[PlannedAlternative] | None = None
+    step_free: StepFreeInfo | None = None
     debug: dict[str, Any] | None = None
 
 
 class ThreadTurn(BaseModel):
-    """One recorded turn: what was asked, what the agent proposed, what was measured.
-
-    `submission` and `measurement` are the run's own JSON, carried whole so a turn
-    can be replayed without re-planning it — the rows themselves never leave the
-    store.
-    """
+    """One recorded turn: what was asked, what the agent proposed, what was measured."""
 
     revision: int
     query: str
@@ -246,9 +258,49 @@ class ThreadResponse(BaseModel):
     turns: list[ThreadTurn] = Field(default_factory=list)
 
 
+class RerouteStop(BaseModel):
+    """One stop the client is showing: a place it found, a point it placed, or both.
+
+    `key` is the client's own name for it, echoed back in the order it was measured.
+    """
+
+    key: str = Field(min_length=1, max_length=64)
+    place_id: int | None = None
+    lat: float | None = None
+    lon: float | None = None
+    name: str | None = Field(default=None, max_length=200)
+
+    @model_validator(mode="after")
+    def _can_be_measured(self) -> RerouteStop:
+        if self.place_id is None and (self.lat is None or self.lon is None):
+            raise ValueError("a stop needs a place_id, or both a lat and a lon")
+        return self
+
+
 class RerouteReq(BaseModel):
-    point_ids: list[int] = Field(min_length=2, max_length=10)
+    """POST /routes/reroute body: the route the client holds, to be measured."""
+
+    stops: list[RerouteStop] = Field(default_factory=list, max_length=MAX_STOPS)
+    point_ids: list[int] = Field(default_factory=list, max_length=MAX_STOPS)
     profile: TransportLiteral | None = None
+    origin: LatLon | None = None
+    round_trip: bool = False
+    time_budget_minutes: int | None = Field(default=None, ge=0, le=constants.MAX_BUDGET_MIN)
+    preserve_order: bool = False
+
+    @model_validator(mode="after")
+    def _one_list_of_stops(self) -> RerouteReq:
+        if self.stops and self.point_ids:
+            raise ValueError("give stops or point_ids, not both")
+        if len(self.stops or self.point_ids) < constants.MIN_LEG_POINTS:
+            raise ValueError("at least two stops are needed to measure a walk")
+        return self
+
+    def as_stops(self) -> list[RerouteStop]:
+        """The stops in the client's order, whichever body it sent."""
+        if self.stops:
+            return self.stops
+        return [RerouteStop(key=str(pid), place_id=pid) for pid in self.point_ids]
 
 
 class ExplainReq(BaseModel):
@@ -256,10 +308,7 @@ class ExplainReq(BaseModel):
 
 
 class ServicesAlongReq(BaseModel):
-    """POST /routes/services body: the line the tourist is walking.
-
-    `shape` is the GeoJSON LineString the client already has.
-    """
+    """POST /routes/services body: the line the tourist is walking."""
 
     shape: dict[str, Any] = Field(description="GeoJSON LineString, WGS84")
     profile: TransportOrAnyLiteral | None = None
@@ -267,6 +316,15 @@ class ServicesAlongReq(BaseModel):
     max_off_line_m: float | None = Field(default=None, ge=10, le=1500)
     limit: int | None = Field(default=None, ge=1, le=20)
     session_id: str | None = Field(default=None, max_length=128)
+
+
+class RouteProgressOut(BaseModel):
+    """GET /routes/progress/{id} body: where the run got to."""
+
+    stage: str
+    done: bool
+    failed: bool
+    elapsed_ms: int
 
 
 class HealthResponse(BaseModel):

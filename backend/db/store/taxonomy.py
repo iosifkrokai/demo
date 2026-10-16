@@ -1,10 +1,4 @@
-"""The category repository: the `categories` table, read whole.
-
-Eighteen rows, read once per process: every resolver folds over all of them
-anyway, so there is no per-code query to make. The folding — exact name, alias,
-ё-normalised, then an inflected stem — is the same logic that used to read
-`data/taxonomy.csv`, moved here so the service stops reading datasets at runtime.
-"""
+"""The category repository: the `categories` table, read whole."""
 
 from __future__ import annotations
 
@@ -40,19 +34,20 @@ _RU_ENDINGS = (
 _EN_ENDINGS = ("es", "s")
 
 
+_MIN_STEM = 3
+_MIN_LOOSE_FORM = 4
+
+
 def _norm(text: str) -> str:
     """Lower-case and fold ё→е so «костёл»/«костел» are one surface form."""
     return text.strip().lower().replace("ё", "е")
 
 
 def _fold_candidates(norm: str) -> list[str]:
-    """Candidate lemmas for an inflected surface form (may be empty).
-
-    Stripped stems are also tried with a restored soft consonant («музеями» → «музей»).
-    """
+    """Candidate lemmas for an inflected surface form (may be empty)."""
     out: list[str] = []
     for ending in _RU_ENDINGS + _EN_ENDINGS:
-        if norm.endswith(ending) and len(norm) - len(ending) >= 3:
+        if norm.endswith(ending) and len(norm) - len(ending) >= _MIN_STEM:
             stem = norm[: -len(ending)]
             out.extend((stem, stem + "й", stem + "ь"))
     return out
@@ -65,8 +60,6 @@ class PostgresCategoryRepository(PostgresRepository):
         super().__init__(connect)
         self._cache: tuple[Category, ...] | None = None
         self._index: dict[str, str] | None = None
-
-    # --- reads -------------------------------------------------------------
 
     def all(self) -> tuple[Category, ...]:
         """Every category, in code order. Read once, then held."""
@@ -85,7 +78,13 @@ class PostgresCategoryRepository(PostgresRepository):
         return tuple(cat.code for cat in self.all())
 
     def service_codes(self) -> tuple[str, ...]:
-        return tuple(cat.code for cat in self.all() if cat.role == "service")
+        """The service categories highlighted by default, as the taxonomy marks them.
+
+        A role of `service` is not enough: stairways are a service the catalogue holds
+        and the map does not show unasked, so the highlight flag — not the role — is
+        what the default reads.
+        """
+        return tuple(cat.code for cat in self.all() if cat.role == "service" and cat.highlight)
 
     def get(self, code: str) -> Category | None:
         """The category behind a code or a resolvable term, else None."""
@@ -95,7 +94,7 @@ class PostgresCategoryRepository(PostgresRepository):
         for cat in self.all():
             if cat.code == resolved:
                 return cat
-        return None  # pragma: no cover — resolve_code only returns known codes
+        return None
 
     def role(self, code: str) -> Role:
         """Role of a code: 'sight' or 'service'. Raises KeyError if unknown."""
@@ -112,29 +111,21 @@ class PostgresCategoryRepository(PostgresRepository):
         return cat.visit_minutes
 
     def db_values(self, codes: Iterable[str]) -> list[str]:
-        """Map query codes/terms to ``places.category`` values.
-
-        Deduplicates, preserves input order; unknown input is dropped, never passed through.
-        """
+        """Map query codes/terms to ``places.category`` values."""
         out: list[str] = []
         for raw in codes or ():
             resolved = raw if raw in self._code_set() else self.resolve_code(raw or "")
             if resolved is None:
                 continue
             cat = self.get(resolved)
-            if cat is None:  # pragma: no cover
+            if cat is None:
                 continue
             if cat.ru not in out:
                 out.append(cat.ru)
         return out
 
-    # --- resolution --------------------------------------------------------
-
     def resolve_code(self, term: str | None) -> str | None:
-        """Resolve free text to a canonical code, or None when unknown.
-
-        Tries exact code/name/alias, ё-normalised match, then plural/substring fold.
-        """
+        """Resolve free text to a canonical code, or None when unknown."""
         if term is None:
             return None
         raw = term.strip()
@@ -156,7 +147,11 @@ class PostgresCategoryRepository(PostgresRepository):
 
         longest: str | None = None
         for form in index:
-            if len(form) >= 4 and form in norm and (longest is None or len(form) > len(longest)):
+            if (
+                len(form) >= _MIN_LOOSE_FORM
+                and form in norm
+                and (longest is None or len(form) > len(longest))
+            ):
                 longest = form
         return index[longest] if longest is not None else None
 
@@ -164,10 +159,7 @@ class PostgresCategoryRepository(PostgresRepository):
         return frozenset(self.all_codes())
 
     def _surface_index(self) -> dict[str, str]:
-        """normalised surface form → code, for every alias/name/locale.
-
-        A form that maps to two different codes is ambiguous and raises.
-        """
+        """normalised surface form → code, for every alias/name/locale."""
         if self._index is None:
             index: dict[str, str] = {}
             for cat in self.all():

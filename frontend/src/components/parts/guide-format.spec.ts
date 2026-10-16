@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach } from 'vitest';
 
 import i18n from '@/i18n';
-import { fmtMin, fmtDist, fmtStops, agentErrorMessage } from './guide-format';
+import { fmtMin, fmtDist, agentErrorMessage } from './guide-format';
 
 afterEach(async () => {
   await i18n.changeLanguage('ru');
@@ -44,22 +44,6 @@ describe('fmtDist', () => {
 
     expect(fmtDist(240)).toBe('240 m');
     expect(fmtDist(1300)).toBe('1.3 km');
-  });
-});
-
-describe('fmtStops', () => {
-  it('inflects остановка', () => {
-    expect(fmtStops(1)).toBe('1 остановка');
-    expect(fmtStops(3)).toBe('3 остановки');
-    expect(fmtStops(5)).toBe('5 остановок');
-  });
-
-  it('follows the English one/other rule in English', async () => {
-    await i18n.changeLanguage('en');
-
-    expect(fmtStops(1)).toBe('1 stop');
-    expect(fmtStops(2)).toBe('2 stops');
-    expect(fmtStops(5)).toBe('5 stops');
   });
 });
 

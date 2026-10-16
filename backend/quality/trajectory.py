@@ -1,23 +1,5 @@
 #!/usr/bin/env python
-"""Trajectory evals: which tools the agent called, and with what arguments.
-
-This layer measures the **agent loop**, not the model. A scripted
-``FunctionModel`` stands in for the provider — the same trick ``tests/conftest.py``
-uses — so a run is offline of any provider and exact, and what the harness records
-is not the script but what the CODE actually did: every tool function the loop
-invoked, in order, with the arguments it was handed and the answer it gave back.
-Every expectation is checked by code; there is no model and no judge.
-
-The tool functions are wrapped for the duration of a case (see ``_recording``), so
-a call is recorded the moment it runs — including when the run later ends without a
-submission. The terminal ``submit_plan`` is not a tool function (it is the run's
-structured output), so it is recorded from the outcome instead.
-
-Prerequisites are the same as the live route layers: the database (the tools read
-places) and Valhalla (``plan_walk`` routes). When either is unreachable the whole
-layer is skipped and writes no artifact, so ``quality.report`` shows it as
-«НЕ ИЗМЕРЯЛОСЬ» rather than as a green run.
-"""
+"""Trajectory evals: which tools the agent called, and with what arguments."""
 
 from __future__ import annotations
 
@@ -27,11 +9,13 @@ import inspect
 import json
 import os
 import sys
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field, is_dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from unittest import mock
+
+from pydantic import BaseModel
 
 BACKEND = Path(__file__).resolve().parent.parent
 if str(BACKEND) not in sys.path:
@@ -50,19 +34,20 @@ from agent.tools import (  # noqa: E402
     services as services_mod,
     verify as verify_mod,
 )
+from db.store.areas import PostgresAreaRepository  # noqa: E402
+from db.store.places import PostgresPlaceRepository  # noqa: E402
+from db.store.registry import Repositories  # noqa: E402
+from routing.models import CategoryFacts  # noqa: E402
 
 QUALITY = BACKEND / "quality"
 CASES = QUALITY / "cases" / "trajectory.jsonl"
 REPORTS = QUALITY / "reports"
 DEFAULT_OUT = REPORTS / "trajectory.json"
 
-# The provider seam is the only thing the script replaces; this key is a stand-in,
-# never a real one, and it is set only for the duration of a case.
 FAKE_KEY = "trajectory-offline"
 
-# The advertised tool name → the module-level function the registered tool body
-# calls. The bodies resolve these names as module globals at call time, so wrapping
-# the global records every invocation without touching the agent package.
+DISCOVER_SCAN = 200
+
 TOOL_TARGETS: dict[str, tuple[Any, str]] = {
     "find_areas": (areas_mod, "find_areas"),
     "find_places": (places_mod, "find_places"),
@@ -71,8 +56,6 @@ TOOL_TARGETS: dict[str, tuple[Any, str]] = {
     "check_requirements": (verify_mod, "check_requirements"),
     "nearby_services": (services_mod, "nearby_services"),
 }
-# Arguments injected by the tool body from the deps, not the model — plumbing, not
-# a trajectory fact, so they are left out of what a case asserts on.
 PLUMBING_ARGS = frozenset({"repos", "facts", "deadline_s"})
 
 BRIEF_KEYS = frozenset(
@@ -92,7 +75,7 @@ BRIEF_KEYS = frozenset(
 TUPLE_BRIEF_KEYS = ("hard_services", "interests", "avoid")
 
 
-# --- the unit that is recorded ------------------------------------------------
+_LATLON = 2
 
 
 @dataclass
@@ -123,9 +106,6 @@ class Trajectory:
         return sum(1 for s in self.steps if s.name != "submit_plan")
 
 
-# --- pure scoring -------------------------------------------------------------
-
-
 def _matches(actual: Any, wanted: Any) -> bool:
     """Is every key/value in ``wanted`` present in ``actual``? (a subset check)."""
     if isinstance(wanted, dict):
@@ -136,11 +116,7 @@ def _matches(actual: Any, wanted: Any) -> bool:
 
 
 def score_case(case: dict[str, Any], trajectory: Trajectory) -> dict[str, Any]:
-    """Every expectation of one case against one recorded trajectory, by code.
-
-    Checks are keyed and each carries ``ok`` plus a human ``detail``; the case
-    passes only when every check holds.
-    """
+    """Every expectation of one case against one recorded trajectory, by code."""
     expect = case["expect"]
     checks: dict[str, dict[str, Any]] = {}
 
@@ -200,9 +176,6 @@ def score_case(case: dict[str, Any], trajectory: Trajectory) -> dict[str, Any]:
     return {"checks": checks, "passed": not failed, "failed": failed}
 
 
-# --- the scripted run ---------------------------------------------------------
-
-
 def _resolve(value: Any, ids: list[int]) -> Any:
     """Replace the ``@stops`` / ``@stop`` placeholders with discovered ids."""
     if value == "@stops":
@@ -245,12 +218,26 @@ def _script_steps(case: dict[str, Any], ids: list[int]) -> list[ModelResponse]:
 
 
 def _record_args(fn: Any, args: tuple[Any, ...], kwargs: dict[str, Any]) -> dict[str, Any]:
-    """The named arguments of a tool call, plumbing (repos/facts) left out."""
+    """The named arguments of a tool call, plumbing (repos/facts) left out.
+
+    A request object taken as a single argument is recorded as its own fields: those
+    are what the agent passed, and an envelope of ours is not an argument of anyone's.
+    """
     try:
         bound = inspect.signature(fn).bind(*args, **kwargs)
     except TypeError:
         return {"_positional": list(args)} if args else {}
-    return {k: v for k, v in bound.arguments.items() if k not in PLUMBING_ARGS}
+    out: dict[str, Any] = {}
+    for name, value in bound.arguments.items():
+        if name in PLUMBING_ARGS:
+            continue
+        if is_dataclass(value) and not isinstance(value, type):
+            out.update(asdict(value))
+        elif isinstance(value, BaseModel):
+            out[name] = value.model_dump()
+        else:
+            out[name] = value
+    return out
 
 
 def _make_wrapper(record: list[ToolStep], name: str, original: Any) -> Any:
@@ -274,11 +261,7 @@ def _make_wrapper(record: list[ToolStep], name: str, original: Any) -> Any:
 
 
 def _recording(record: list[ToolStep]) -> list[tuple[Any, str, Any]]:
-    """Wrap each registered tool's function so the call is recorded as it runs.
-
-    Returns the ``(module, attr, original)`` triples to put back; the wrapper is
-    undone even when a run raises, so a case never leaks into the next one.
-    """
+    """Wrap each registered tool's function so the call is recorded as it runs."""
     patches: list[tuple[Any, str, Any]] = []
     for name, (module, attr) in TOOL_TARGETS.items():
         original = getattr(module, attr)
@@ -298,23 +281,22 @@ def run_case(case: dict[str, Any], repos: Any) -> Trajectory:
     discover = case.get("discover")
     if discover:
         near = discover["near"]
+        facts = CategoryFacts.from_rows(repos.taxonomy.all())
         ids = [
             row.id
             for row in repos.places.nearby(
                 float(near[0]),
                 float(near[1]),
                 radius_km=float(discover["radius_km"]),
-                limit=int(discover["limit"]),
+                limit=DISCOVER_SCAN,
             )
-            if row.id is not None
-        ]
+            if row.id is not None and not facts.is_service(row.category)
+        ][: int(discover["limit"])]
 
     steps = _script_steps(case, ids)
 
     def _next(_messages: list[Any], _info: AgentInfo) -> ModelResponse:
         if not steps:
-            # The model stopped without submitting — the run ends with no plan, the
-            # same way a real run that trails off does (see tests/conftest.FakeModel).
             raise AssertionError(f"{case['id']}: the script ran out of turns")
         return steps.pop(0)
 
@@ -324,7 +306,7 @@ def run_case(case: dict[str, Any], repos: Any) -> Trajectory:
         with (
             mock.patch.dict(os.environ, {"OPENROUTER_API_KEY": FAKE_KEY}),
             mock.patch.object(
-                llm, "make_model", lambda: FunctionModel(_next, model_name="fake-agent")
+                llm, "make_model", return_value=FunctionModel(_next, model_name="fake-agent")
             ),
         ):
             outcome = plan_with_agent(case["query"], _brief(case), repos=repos)
@@ -346,8 +328,6 @@ def run_case(case: dict[str, Any], repos: Any) -> Trajectory:
     return trajectory
 
 
-# --- case loading -------------------------------------------------------------
-
 CASES_SCHEMA = "quality/trajectory/1"
 REQUIRED_CASE_KEYS = frozenset({"id", "why", "query", "script", "expect"})
 OPTIONAL_CASE_KEYS = frozenset({"locale", "brief", "discover", "finish"})
@@ -360,46 +340,72 @@ class CaseError(ValueError):
 def validate_case(data: Any, path: Path | None = None) -> list[str]:
     """Every way one case violates the schema, as strings. [] == valid."""
     where = path.name if path is not None else "<memory>"
-    errors: list[str] = []
     if not isinstance(data, dict):
         return [f"{where}: the case must be an object"]
+    return (
+        _case_keys(data, where)
+        + _script_errors(data, where)
+        + _expect_errors(data, where)
+        + _discover_errors(data, where)
+    )
 
+
+def _case_keys(data: dict[str, Any], where: str) -> list[str]:
+    """The keys the schema names — no others, none missing, and the strings filled."""
+    errors: list[str] = []
     for key in sorted(set(data) - REQUIRED_CASE_KEYS - OPTIONAL_CASE_KEYS):
         errors.append(f"{where}: unknown key {key!r}")
     for key in sorted(REQUIRED_CASE_KEYS - set(data)):
         errors.append(f"{where}: missing required key {key!r}")
-
     for key in ("id", "why", "query"):
         if not isinstance(data.get(key), str) or not data.get(key, "").strip():
             errors.append(f"{where}: {key} must be a non-empty string")
+    return errors
 
+
+def _script_errors(data: dict[str, Any], where: str) -> list[str]:
+    """The script: a non-empty list of {tool, args} calls."""
     script = data.get("script")
     if not isinstance(script, list) or not script:
-        errors.append(f"{where}: script must be a non-empty list of tool calls")
-    else:
-        for index, call in enumerate(script):
-            if not isinstance(call, dict) or not isinstance(call.get("tool"), str):
-                errors.append(f"{where}: script[{index}] must be {{tool, args}}")
+        return [f"{where}: script must be a non-empty list of tool calls"]
+    return [
+        f"{where}: script[{index}] must be {{tool, args}}"
+        for index, call in enumerate(script)
+        if not isinstance(call, dict) or not isinstance(call.get("tool"), str)
+    ]
 
+
+def _expect_errors(data: dict[str, Any], where: str) -> list[str]:
+    """The expectation: an object naming the tools the case should call."""
     expect = data.get("expect")
     if not isinstance(expect, dict):
-        errors.append(f"{where}: expect must be an object")
-    elif not isinstance(expect.get("tools"), list) or not expect.get("tools"):
-        errors.append(f"{where}: expect.tools must be a non-empty list of tool names")
+        return [f"{where}: expect must be an object"]
+    if not isinstance(expect.get("tools"), list) or not expect.get("tools"):
+        return [f"{where}: expect.tools must be a non-empty list of tool names"]
+    return []
 
+
+def _discover_errors(data: dict[str, Any], where: str) -> list[str]:
+    """The discover block, and whether a @stops placeholder has one to resolve against."""
     discover = data.get("discover")
-    if discover is not None and (
-        not isinstance(discover, dict)
-        or not isinstance(discover.get("near"), list)
-        or len(discover["near"]) != 2
-        or "radius_km" not in discover
-        or "limit" not in discover
-    ):
-        errors.append(f"{where}: discover must be {{near:[lat,lon], radius_km, limit}}")
+    if discover is None:
+        if "@stops" in json.dumps(data) or "@stop" in json.dumps(data):
+            return [f"{where}: a @stops/@stop placeholder needs a discover block"]
+        return []
+    if _discover_shape_ok(discover):
+        return []
+    return [f"{where}: discover must be {{near:[lat,lon], radius_km, limit}}"]
 
-    if ("@stops" in json.dumps(data) or "@stop" in json.dumps(data)) and discover is None:
-        errors.append(f"{where}: a @stops/@stop placeholder needs a discover block")
-    return errors
+
+def _discover_shape_ok(discover: Any) -> bool:
+    """A discover block carries a lat/lon pair, a radius and a limit."""
+    return (
+        isinstance(discover, dict)
+        and isinstance(discover.get("near"), list)
+        and len(discover["near"]) == _LATLON
+        and "radius_km" in discover
+        and "limit" in discover
+    )
 
 
 def load_cases(path: Path | None = None) -> list[dict[str, Any]]:
@@ -431,14 +437,7 @@ def load_cases(path: Path | None = None) -> list[dict[str, Any]]:
     return cases
 
 
-# --- reporting ----------------------------------------------------------------
-
-
-def _repositories() -> Any:
-    from db.store.areas import PostgresAreaRepository
-    from db.store.places import PostgresPlaceRepository
-    from db.store.registry import Repositories
-
+def _repositories() -> Repositories:
     return Repositories(places=PostgresPlaceRepository(), areas=PostgresAreaRepository())
 
 
@@ -509,7 +508,7 @@ def _offline_reason(repos: Any) -> str | None:
     try:
         if not repos.places.ping():
             return "база данных не отвечает"
-    except Exception as exc:  # any storage failure means "not reachable"
+    except Exception as exc:
         return f"база данных недоступна: {type(exc).__name__}: {exc}"
     return None
 

@@ -1,17 +1,4 @@
-"""The architecture the target layering promises: one test per rule.
-
-1. ``routing/`` is a leaf. It may reach ``core``, ``db`` and ``reference`` (and
-   third-party packages), but never ``agent`` or ``api``. The deterministic
-   routing math sits below every logic layer that wants it.
-2. ``agent/`` is a leaf. It may reach ``core``, ``db`` and ``reference``, but
-   never ``api``. The reader declares its own input.
-3. The logic layers never speak SQL and never import a driver. Every database
-   read goes through a repository in ``db/store``.
-4. ``db/models/**`` describes rows: it imports the standard library only.
-
-The checks parse with ``ast`` so a docstring that mentions ``SELECT`` or an
-``import psycopg`` inside a comment is not mistaken for a violation.
-"""
+"""The architecture the target layering promises: one test per rule."""
 
 from __future__ import annotations
 
@@ -22,22 +9,17 @@ from pathlib import Path
 
 BACKEND = Path(__file__).resolve().parents[1]
 
-# --- the rules --------------------------------------------------------------
 
-# A layer that may import data (core/db/reference) but nothing above it.
 LEAF_RULES: dict[str, frozenset[str]] = {
     "routing": frozenset({"agent", "api"}),
     "agent": frozenset({"api"}),
 }
 
-# The layers that must go through `db/store` for everything database-shaped.
 LOGIC_LAYERS = ("agent", "api", "routing", "quality")
 
 MODEL_LAYER = BACKEND / "db" / "models"
 _MODEL_LAYER_ALLOWED = frozenset(sys.stdlib_module_names) | {"__future__"}
 
-# A statement, not a word: "SELECT " has to be followed by a column or a number,
-# and "SET " by a dotted GUC name — otherwise prose would trip the scan.
 _SQL = re.compile(
     r"\b(?:"
     r"SELECT\s+(?:[\w*\"]|\d)"
@@ -52,9 +34,6 @@ _SQL = re.compile(
 )
 
 _DRIVER = re.compile(r"^\s*(?:import|from)\s+psycopg\b", re.MULTILINE)
-
-
-# --- helpers ----------------------------------------------------------------
 
 
 def _python_files(directory: Path) -> list[Path]:
@@ -117,9 +96,6 @@ def _sql_lines(path: Path) -> list[int]:
         if _SQL.search(text):
             lines.append(node.lineno)
     return lines
-
-
-# --- the tests --------------------------------------------------------------
 
 
 def test_the_leaf_layers_stay_below_every_logic_layer() -> None:

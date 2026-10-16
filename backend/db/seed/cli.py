@@ -11,15 +11,28 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from core.paths import GEO_DIR, PHOTOS_DIR, PLACES_DIR
+from core.paths import (
+    GEO_DIR,
+    PHOTOS_DIR,
+    PLACE_ALIASES_EN_JSON,
+    PLACE_STREETS_JSON,
+    PLACES_DIR,
+)
 
 from . import (
     datasets as ds_mod,
     itineraries as itineraries_mod,
+    pipeline,
     taxonomy as taxonomy_mod,
     version as version_mod,
 )
-from .datasets import Dataset, build_coverage_report, collect_records, read_curated
+from .datasets import (
+    CoverageContext,
+    Dataset,
+    build_coverage_report,
+    collect_records,
+    read_curated,
+)
 
 DEFAULT_DSN = "postgresql://grodno:grodno@localhost:5432/grodno"
 
@@ -28,11 +41,53 @@ def _dsn(args: argparse.Namespace) -> str:
     return args.database_url or os.environ.get("DATABASE_URL", DEFAULT_DSN)
 
 
+def _prune_stale(conn: Any, collected: dict[str, Any], *, skip: bool) -> int | str:
+    """Delete the automatic rows no dataset carries any more, or say why nothing was."""
+    if skip:
+        return "skipped (--no-prune)"
+    absent = [d["name"] for d in collected["datasets"] if d.get("missing")]
+    if absent:
+        return f"skipped (datasets absent: {', '.join(absent)})"
+    from . import pipeline
+
+    return pipeline.prune_stale(conn, [r["source_url"] for r in collected["records"]], apply=True)
+
+
 def _count_by(rows: list[dict[str, Any]], key: str) -> dict[str, int]:
     out: dict[str, int] = {}
     for r in rows:
         out[str(r.get(key))] = out.get(str(r.get(key)), 0) + 1
     return out
+
+
+def _write_registries(conn: Any, *, areas: bool) -> dict[str, Any]:
+    """Write what is not a row of a dataset: the places' declared aliases and the taxonomies."""
+    from . import pipeline
+
+    written: dict[str, Any] = {"areas_written": 0}
+    if areas:
+        landed = pipeline.load_areas(conn, GEO_DIR)
+        written["areas_written"] = landed["written"]
+        written["areas_undeclared_removed"] = landed["removed"]
+    written["aliases_written"] = pipeline.apply_place_aliases(conn)
+    written["aliases_en_written"] = pipeline.apply_place_aliases(conn, PLACE_ALIASES_EN_JSON)
+    written["categories_written"] = pipeline.load_categories(conn, taxonomy_mod.all_categories())
+    written["itineraries_written"] = pipeline.load_itineraries(
+        conn, itineraries_mod.load_itineraries()
+    )
+    written["photos_written"] = pipeline.apply_photos(conn, PHOTOS_DIR)
+    written["streets_written"] = pipeline.apply_place_streets(conn)
+    written["categories_overlaid"] = pipeline.apply_place_categories(conn)
+    return written
+
+
+def _collect(datasets: list[Dataset]) -> tuple[dict[str, Any], list[dict[str, Any]], list[str]]:
+    """The valid records to project, the ones another record shadows, and the
+    declarations the data no longer holds."""
+    collected = collect_records(datasets)
+    kept, shadowed, stale = ds_mod.collapse(collected["records"])
+    collected["records"] = kept
+    return collected, shadowed, stale
 
 
 def cmd_apply(args: argparse.Namespace) -> int:
@@ -47,34 +102,30 @@ def cmd_apply(args: argparse.Namespace) -> int:
         "by_category": _count_by(curated, "category") if curated else {},
     }
 
-    collected = collect_records(datasets)
-    # The version is the content of the committed datasets, computed here (offline)
-    # and stamped into the database below, so the planner keys its measurement
-    # cache on it and a re-seed invalidates what the old rows produced.
+    collected, shadowed, stale_merges = _collect(datasets)
     data_version = version_mod.content_version()
 
+    merged_rows = 0
     db_stats: dict[str, Any] | None = None
     if not args.dry_run:
         try:
             with pipeline.connect(_dsn(args)) as conn:
                 pipeline.allow_curated_category_change(conn)
+                uncurated = pipeline.reset_curated(conn, collected["records"])
                 totals = {"inserted": 0, "updated": 0}
                 for ds in datasets:
                     rows = [r for r in collected["records"] if r["_dataset"] == ds.name]
                     out = pipeline.apply_dataset(conn, ds, rows)
                     totals["inserted"] += out["inserted"]
                     totals["updated"] += out["updated"]
+                merged_rows = pipeline.apply_shadowed(
+                    conn, shadowed, {d.name: d.license for d in datasets}
+                )
                 if curated:
                     curated_stats.update(pipeline.apply_curated_rows(conn, curated))
                     curated_stats["applied"] = True
-                areas_written = 0
-                if not args.no_areas:
-                    areas_written = pipeline.load_areas(conn, GEO_DIR)
-                categories_written = pipeline.load_categories(conn, taxonomy_mod.all_categories())
-                itineraries_written = pipeline.load_itineraries(
-                    conn, itineraries_mod.load_itineraries()
-                )
-                photos_written = pipeline.apply_photos(conn, PHOTOS_DIR)
+                registries = _write_registries(conn, areas=not args.no_areas)
+                pruned = _prune_stale(conn, collected, skip=args.no_prune)
                 pipeline.record_data_version(conn, data_version)
                 conn.commit()
 
@@ -83,18 +134,17 @@ def cmd_apply(args: argparse.Namespace) -> int:
                     from db.seed.embeddings import embed_missing
                     from db.store.places import PostgresPlaceRepository
 
-                    # Reuse the seed's own connection: one transaction, one commit.
                     embedded = embed_missing(PostgresPlaceRepository(connect=lambda: conn))
                 db_stats = pipeline.gather_db_stats(conn)
                 db_stats.update(
                     {
                         "upserted": totals,
-                        "areas_written": areas_written,
-                        "categories_written": categories_written,
-                        "itineraries_written": itineraries_written,
-                        "photos_written": photos_written,
+                        **registries,
+                        "curated_reset": uncurated,
                         "embedded": embedded,
                         "embeddings_skipped": args.no_embed,
+                        "merged_removed": merged_rows,
+                        "stale_pruned": pruned,
                     }
                 )
         except Exception as exc:
@@ -103,11 +153,15 @@ def cmd_apply(args: argparse.Namespace) -> int:
 
     report = build_coverage_report(
         collected,
-        mode="dry-run" if args.dry_run else "apply",
-        curated=curated,
-        curated_stats=curated_stats,
-        db_stats=db_stats,
-        data_version=data_version,
+        CoverageContext(
+            mode="dry-run" if args.dry_run else "apply",
+            curated=curated,
+            curated_stats=curated_stats,
+            db_stats=db_stats,
+            data_version=data_version,
+            merged=shadowed,
+            stale_merges=stale_merges,
+        ),
     )
     _print_summary(report)
     if args.report:
@@ -128,11 +182,15 @@ def cmd_apply(args: argparse.Namespace) -> int:
 
 def _print_summary(report: dict[str, Any]) -> None:
     t = report["totals"]
+    dup = report["suspected_duplicates"]
     print(
         f"[seed] mode={report['mode']} records={t['records']} "
         f"geofence_rejects={t['geofence_rejects']} invalid={t['invalid']} "
-        f"duplicates={report['suspected_duplicates']['count']}"
+        f"duplicates={dup['count']} namesakes={dup['namesakes']['count']} "
+        f"merged={report['merged']['count']}"
     )
+    for declaration in report["merged"].get("stale_declarations") or []:
+        print(f"    declared merge not in the data: {declaration}")
     for ds in report["datasets"]:
         note = " (absent — run `seed fetch`)" if ds.get("missing") else ""
         print(
@@ -141,10 +199,42 @@ def _print_summary(report: dict[str, Any]) -> None:
             f"category_source={ds['category_source']}){note}"
         )
     print("  coverage: " + ", ".join(f"{k}={v['share']}" for k, v in report["coverage"].items()))
+    curated = report["curated"]
+    if curated.get("applied"):
+        print(
+            f"  curated: {curated['matched']} applied of {curated['rows']}, "
+            f"{curated['unmatched_count']} unmatched, {curated.get('ambiguous_count', 0)} ambiguous"
+        )
+        for name in curated.get("ambiguous") or []:
+            print(f"    a curated name with no single row behind it: {name}")
     if "data_version" in report:
         print(f"  data_version: {report['data_version']}")
     if "db" in report:
         print(f"  db: {report['db']}")
+
+
+def _drop_excluded_names(rows: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], int]:
+    """Rows whose name is on the exclusion list (data, not a pattern — see the file)."""
+    excluded = ds_mod.load_excluded_names()
+    if not excluded:
+        return rows, 0
+    kept = [r for r in rows if not ds_mod.is_excluded_name(r.get("name"), excluded)]
+    return kept, len(rows) - len(kept)
+
+
+def _previous_districts(path: Path) -> dict[str, str]:
+    """``source_url → district`` from the snapshot the fetch is about to replace.
+
+    Read before writing, so a re-fetch keeps the districts already resolved instead of
+    blanking the column (`overpass.fill_districts`).
+    """
+    if not path.is_file():
+        return {}
+    return {
+        row["source_url"]: str(row.get("district") or "").strip()
+        for row in ds_mod.read_pipe_csv(path)
+        if str(row.get("district") or "").strip()
+    }
 
 
 def cmd_fetch(args: argparse.Namespace) -> int:
@@ -169,6 +259,7 @@ def cmd_fetch(args: argparse.Namespace) -> int:
             ("poi", overpass.SERVICE_QUERY, osm_tags.service_element_to_row, "places_poi.csv")
         )
 
+    town_names = ds_mod.load_town_names()
     for name, template, to_row, filename in sources:
         query = overpass.build_overpass_query(template, bbox)
         elements = overpass.fetch_overpass(
@@ -179,8 +270,19 @@ def cmd_fetch(args: argparse.Namespace) -> int:
             return 1
         rows = [row for el in elements if (row := to_row(el))]
         out_path = out_dir / filename
+        rows, excluded = _drop_excluded_names(rows)
+        districts = overpass.fill_districts(rows, _previous_districts(out_path))
+        towns = overpass.fill_town_names(rows, town_names.get)
+        note = f", {excluded} dropped (excluded names)" if excluded else ""
+        tail = " (dry-run, not written)" if args.dry_run else ""
+        print(
+            f"[seed] fetch {name}: {len(rows)} rows{note} — district: "
+            f"{districts['carried']} kept from the previous snapshot, "
+            f"{districts['derived']} resolved without it; town: "
+            f"{towns['translated']} translated, {towns['kept']} left as the source spelled "
+            f"them{tail}"
+        )
         if args.dry_run:
-            print(f"[seed] fetch {name}: {len(rows)} rows (dry-run, not written)")
             continue
         overpass.write_pipe_csv(rows, out_path, COLUMNS)
         print(f"[seed] fetch {name}: wrote {len(rows)} rows to {out_path}")
@@ -203,16 +305,56 @@ def cmd_photos(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_prune(args: argparse.Namespace) -> int:
-    from . import pipeline
+def cmd_aliases_en(args: argparse.Namespace) -> int:
+    from . import aliases_en
+
+    stats = aliases_en.run_stage(
+        pbf_path=args.pbf,
+        out=args.out,
+        data_dir=args.data_dir,
+        apply=args.apply,
+        dsn=_dsn(args) if args.apply else None,
+    )
+    print(f"[seed] aliases-en: {stats['written']} aliases for {stats['matched']} named objects")
+    if args.apply:
+        print(f"[seed] aliases-en: {stats['db']}")
+    return 0
+
+
+def cmd_streets(args: argparse.Namespace) -> int:
+    from . import streets
+
+    stats = streets.run_stage(
+        pbf_path=args.pbf,
+        out=args.out,
+        data_dir=args.data_dir,
+        apply=args.apply,
+        dsn=_dsn(args) if args.apply else None,
+    )
+    print(f"[seed] streets: {stats['ok']} rows written for {stats['targets']} unnamed services")
+    if args.apply:
+        print(f"[seed] streets: {stats['db']}")
+    return 0
+
+
+def cmd_reembed(args: argparse.Namespace) -> int:
+    """Rebuild every vector from the current recipe — the one job a plain seed cannot do."""
+    from db.seed.embeddings import RECIPE, embed_missing
+    from db.store.places import PostgresPlaceRepository
+
+    if args.dry_run:
+        print(f"[seed] reembed: recipe {RECIPE}, nothing written (dry run)")
+        return 0
 
     with pipeline.connect(_dsn(args)) as conn:
-        found = pipeline.prune_foreign(conn, apply=args.apply)
+        places = PostgresPlaceRepository(connect=lambda: conn)
+        cleared = places.clear_embeddings()
+        places.commit()
+        written = embed_missing(places)
+        pipeline.record_data_version(conn, version_mod.content_version())
         conn.commit()
-        if not args.apply:
-            print(f"[seed] prune: {found} foreign rows (dry-run — pass --apply to delete)")
-        else:
-            print(f"[seed] prune: deleted {found} foreign rows")
+
+    print(f"[seed] reembed: recipe {RECIPE}, cleared {cleared}, embedded {written}")
     return 0
 
 
@@ -245,6 +387,11 @@ def _add_apply_flags(p: argparse.ArgumentParser) -> None:
         help="Skip embeddings (local model; still works without it).",
     )
     p.add_argument("--no-areas", action="store_true", help="Do not (re)load areas.")
+    p.add_argument(
+        "--no-prune",
+        action="store_true",
+        help="Keep rows the datasets no longer carry (they are dropped by default).",
+    )
     p.add_argument("--database-url", default=None, help="Override DATABASE_URL.")
 
 
@@ -286,6 +433,22 @@ def build_arg_parser() -> argparse.ArgumentParser:
     ph.add_argument("--database-url", default=None)
     ph.set_defaults(func=cmd_photos)
 
+    en = sub.add_parser("aliases-en", help="Read OSM name:en into the English alias sidecar.")
+    en.add_argument("--pbf", type=Path, default=None, help="OSM PBF extract (default: $OSM_PBF).")
+    en.add_argument("--out", type=Path, default=PLACE_ALIASES_EN_JSON)
+    en.add_argument("--data-dir", type=Path, default=PLACES_DIR)
+    en.add_argument("--apply", action="store_true", help="Write the aliases into the DB.")
+    en.add_argument("--database-url", default=None)
+    en.set_defaults(func=cmd_aliases_en)
+
+    st = sub.add_parser("streets", help="Measure unnamed stops/toilets against the local extract.")
+    st.add_argument("--pbf", type=Path, default=None, help="OSM PBF extract (default: $OSM_PBF).")
+    st.add_argument("--out", type=Path, default=PLACE_STREETS_JSON)
+    st.add_argument("--data-dir", type=Path, default=PLACES_DIR)
+    st.add_argument("--apply", action="store_true", help="Overlay the hints on the DB.")
+    st.add_argument("--database-url", default=None)
+    st.set_defaults(func=cmd_streets)
+
     a = sub.add_parser("all", help="fetch, then apply.")
     _add_apply_flags(a)
     a.add_argument("--source", choices=["osm", "poi", "all"], default="all")
@@ -294,10 +457,10 @@ def build_arg_parser() -> argparse.ArgumentParser:
     a.add_argument("--out-dir", type=Path, default=PLACES_DIR)
     a.set_defaults(func=None)
 
-    pr = sub.add_parser("prune", help="Drop places outside the project area.")
-    pr.add_argument("--apply", action="store_true", help="Actually delete.")
-    pr.add_argument("--database-url", default=None)
-    pr.set_defaults(func=cmd_prune)
+    re = sub.add_parser("reembed", help="Rebuild every vector from the current recipe.")
+    re.add_argument("--dry-run", action="store_true", help="Report the recipe, write nothing.")
+    re.add_argument("--database-url", default=None)
+    re.set_defaults(func=cmd_reembed)
 
     ad = sub.add_parser("admin", help="Create or promote the first administrator.")
     ad.add_argument("--email", required=True)

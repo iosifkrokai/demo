@@ -145,11 +145,6 @@ const getSpeech = (): SpeechSynthesisInstance | undefined => {
   return window.speechSynthesis;
 };
 
-/** Whether the browser supports speech synthesis. */
-export const isSpeechAvailable = (): boolean => {
-  return getSpeech() != null;
-};
-
 /** Speak `text` in the given language. */
 export const speak = (text: string, lang: string = 'ru-RU'): void => {
   const ss = getSpeech();

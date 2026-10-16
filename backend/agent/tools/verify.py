@@ -1,21 +1,17 @@
-"""``check_requirements`` — the deterministic verdict on the current route.
-
-The agent may call it as often as it likes while it plans; it is the feedback
-loop's signal, not a gate. `submit_plan` runs the same verifier on whatever is
-finally submitted, so a run cannot end without a code-computed status.
-"""
+"""``check_requirements`` — the deterministic verdict on the current route."""
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 from pydantic_ai import RunContext
 
 from agent.schema import PlanningDeps
-from agent.tools import ERR_BAD_ARGUMENT, Remember, ToolAnswer, envelope, fetch
+from agent.tools import ERR_BAD_ARGUMENT, ToolAnswer, envelope, fetch
 from routing.models import Requirement, TripRequirements
 from routing.stops import candidate_of
-from routing.verify import overall_status, verify, verify_summary
+from routing.verify import overall_status, steps_evidence, verify, verify_summary
 
 MAX_SPECS_PER_CALL = 20
 
@@ -36,7 +32,7 @@ def verdicts_of(contract: TripRequirements) -> dict[str, Any]:
     }
 
 
-def check_requirements(
+def check_requirements(  # noqa: PLR0913 — the tool's whole surface, all four of them
     requirement_specs: list[dict[str, Any]],
     stop_ids: list[int],
     *,
@@ -44,6 +40,7 @@ def check_requirements(
     facts: Any,
     geometry: dict[str, Any] | None = None,
     unknowns: list[str] | None = None,
+    at: datetime | None = None,
 ) -> dict[str, Any]:
     """Report which requirements the given stops provably satisfy, and why not."""
     provenance: dict[str, Any] = {
@@ -67,13 +64,14 @@ def check_requirements(
     contract = requirements_from(requirement_specs)
     contract.unknowns = list(unknowns or [])
     stops = [candidate_of(row, 0.0) for row in (rows or [])]
-    verify(contract, {"route": stops, "trace": {}}, geometry, facts=facts)
+    steps = steps_evidence(repos, geometry) if contract.of_kind("step_free") else None
+    verify(contract, {"route": stops, "trace": {}}, geometry, facts=facts, at=at, steps_along=steps)
 
     answer = verdicts_of(contract)
     return envelope("check_requirements", answer["verdicts"], provenance) | answer
 
 
-def register_check_requirements(agent: Any, _remember: Remember) -> None:
+def register_check_requirements(agent: Any) -> None:
     """Advertise ``check_requirements`` to the agent."""
 
     @agent.tool(name="check_requirements")
@@ -84,15 +82,7 @@ def register_check_requirements(agent: Any, _remember: Remember) -> None:
         geometry: dict[str, Any] | None = None,
         unknowns: list[str] | None = None,
     ) -> ToolAnswer:
-        """Re-read the route by code and report what it provably satisfies.
-
-        Returns one verdict per requirement — `satisfied`, `unmet`, `uncertain`
-        or `pending` — with the reason code behind it. Use it to decide what to
-        change; do not restate its verdicts in your own words.
-
-        Pass the `shape` that `plan_walk` returned: without a drawn line a visit
-        cannot be *proved*, and every stop requirement comes back `uncertain`.
-        """
+        """Re-read the route by code and report what it provably satisfies."""
         return check_requirements(
             requirement_specs,
             stop_ids,
@@ -100,4 +90,5 @@ def register_check_requirements(agent: Any, _remember: Remember) -> None:
             facts=ctx.deps.facts,
             geometry=geometry,
             unknowns=unknowns,
+            at=ctx.deps.now,
         )

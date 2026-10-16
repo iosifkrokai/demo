@@ -9,6 +9,7 @@ export type RouteStageCode =
   | 'selecting_candidates'
   | 'measuring_legs'
   | 'ordering_stops'
+  | 'repairing_route'
   | 'drawing_line'
   | 'checking_requirements'
   | 'done';
@@ -31,6 +32,7 @@ const STAGE_CODES: ReadonlySet<string> = new Set<RouteStageCode>([
   'selecting_candidates',
   'measuring_legs',
   'ordering_stops',
+  'repairing_route',
   'drawing_line',
   'checking_requirements',
   'done',

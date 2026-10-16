@@ -1,10 +1,4 @@
-"""FastAPI agent: turns free-text Russian queries into pedestrian walking routes.
-
-The HTTP layer is thin; the decisions live in the agent's tools (`agent/tools`).
-The app object lives here because ``uvicorn api.main:app`` and the image's
-``python -m api.main`` both name it; the routes themselves live under
-``api.routers``.
-"""
+"""FastAPI agent: turns free-text Russian queries into pedestrian walking routes."""
 
 from __future__ import annotations
 
@@ -41,10 +35,6 @@ log = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    # Observability is wired once here. PydanticAI instruments itself through
-    # Logfire, so every model call and every tool call of the agent loop is
-    # visible without a hand-written span. Containers and CI carry no token, and
-    # send_to_logfire="if-token-present" makes that absence a no-op, not an error.
     logfire.configure(send_to_logfire="if-token-present", token=logfire_token())
     logfire.instrument_pydantic_ai()
     repos = Repositories(

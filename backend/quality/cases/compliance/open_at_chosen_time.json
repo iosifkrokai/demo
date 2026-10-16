@@ -1,0 +1,27 @@
+{
+  "id": "open_at_chosen_time",
+  "locale": "ru",
+  "query": "все музеи Гродно, открытые в это время",
+  "filters": {
+    "party_children": null,
+    "hard_services": [],
+    "interests": ["музей"],
+    "avoid": [],
+    "time_budget_minutes": null,
+    "origin": {"lat": 53.6778, "lon": 23.8295},
+    "result_mode": "catalogue",
+    "at": "2026-10-20T11:00"
+  },
+  "expectations": {
+    "must_contain_categories": ["музей"],
+    "must_not_contain_categories": [],
+    "expected_status": ["ready", "degraded", "pending"],
+    "max_total_minutes": null,
+    "in_region": true,
+    "must_satisfy_requirement_kinds": ["open"],
+    "requirement_status": {"open": "satisfied"},
+    "expected_result_mode": "catalogue",
+    "min_places": 3,
+    "status_note": "Первый и единственный кейс, который назначает момент: `at` = вторник 20.10.2026, 11:00 по Гродно (наивная строка трактуется как местное время, UTC+3). До него `at` нигде на шине не было, и планировать на утро, сидя вечером, было нечем. `requirement_status` нужен потому, что `must_satisfy_requirement_kinds` пропускает `uncertain`: без него кейс прошёл бы и тогда, когда часы работы никто не читал. Дата фиксированная — расписание недельное, поэтому вердикт воспроизводим. Чего этот кейс НЕ доказывает: чувствительности вердикта к моменту. Он каталог, а `_catalogue_open` довольствуется одним открытым местом из полусотни, поэтому прогон на 23:00 тоже даёт `satisfied` — проверено. Чувствителен маршрут: черновой прогон «кафе Гродно, чтобы было открыто, часа на два» дал `satisfied` на 11:00 и `uncertain` на 23:00, то есть падение по `requirement_status`. В набор он не пошёл: на этом запросе агент упирается в `MAX_TOOL_CALLS` и отдаёт 503 примерно в каждом третьем прогоне, а флак в бенчмарке — хуже отсутствующего кейса. Офлайн-скан данных: из 101 музея читаемых расписаний 29, и 26 из них открыты в 11:00."
+  }
+}

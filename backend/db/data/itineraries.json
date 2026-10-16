@@ -7,76 +7,152 @@
     "hours and the curated visit time are read from the database at request time,",
     "so a card can never show a fact the dataset does not hold.",
     "`transport` is a Valhalla costing word, exactly as the planner sends it.",
-    "A tip is allowed only when it restates what the data already says."
+    "A tip is allowed only when it restates what the data already says.",
+    "Every stop is held to the datasets by tests/test_itineraries_contract.py, and",
+    "every route is measurable as a reference walk: quality/cases/curated/ carries",
+    "the request words for it, the stops stay here."
   ],
   "itineraries": [
     {
       "id": "old-town-castles",
       "title": "Два замка и Советская",
-      "blurb": "Сердце старого города: оба замка, Фарный костёл и пешеходная Советская с аптекой-музеем.",
+      "blurb": "Сердце старого города: Старый и Новый замки, Фарный костёл и пешеходная Советская с аптекой-музеем.",
       "transport": "pedestrian",
       "stops": [
         "city:old-castle",
         "city:new-castle",
         "city:farny",
-        "city:pharmacy-museum"
+        "city:pharmacy-museum",
+        "city:sovetskaya"
       ]
     },
     {
-      "id": "churches-of-the-north",
-      "title": "Коложа и монастыри",
-      "blurb": "Северо-восточная линия: бригитки, кафедральный собор, бернардинцы и древнейшая церковь Беларуси.",
+      "id": "four-faiths",
+      "title": "Четыре конфессии старого города",
+      "blurb": "Один квадрат — четыре веры: барочный Фарный костёл, хоральная синагога, бернардинский монастырь, Покровский собор, лютеранская кирха и древняя Коложа.",
       "transport": "pedestrian",
       "stops": [
-        "city:brigittine",
-        "city:pokrov-cathedral",
+        "city:farny",
+        "city:choral-synagogue",
         "city:bernardine",
+        "city:pokrov-cathedral",
+        "city:lutheran",
         "city:kolozha"
       ]
     },
     {
       "id": "museums-rainy-day",
-      "title": "Дождь: три музея",
-      "blurb": "Что смотреть в Гродно под крышей — история города, старинная аптека и дом Элизы Ожешко.",
+      "title": "Дождь: музеи под крышей",
+      "blurb": "Что смотреть в Гродно в непогоду: музеи истории города и аптеки, дом Элизы Ожешко и экспозиция Нового замка — переходы короткие, всё под крышей.",
       "transport": "pedestrian",
       "stops": [
         "city:city-history-museum",
         "city:pharmacy-museum",
-        "city:orzeshko-museum"
+        "city:orzeshko-museum",
+        "city:new-castle"
       ]
     },
     {
       "id": "family-with-kids",
-      "title": "С детьми: замки и парк",
-      "blurb": "Короткие переходы, оба замка и Каложский парк; между замками и парком — туалет по пути.",
+      "title": "С детьми: замки, парк и зоопарк",
+      "blurb": "Оба замка, Коложский парк над Неманом и старейший в Беларуси зоопарк; по дороге — туалет и кафе.",
       "transport": "pedestrian",
       "stops": [
         "city:old-castle",
         "city:new-castle",
+        "osm_poi:node/320409617",
+        "city:kolozha-park",
         "osm_poi:node/5659105662",
-        "city:kolozha"
+        "city:zoo"
+      ]
+    },
+    {
+      "id": "free-old-town",
+      "title": "Бесплатный Гродно: Коложа и монастыри",
+      "blurb": "Вход свободный на каждой остановке: Коложская церковь XII века, Коложский парк, монастыри бригиток и бернардинцев и Фарный костёл.",
+      "transport": "pedestrian",
+      "stops": [
+        "city:kolozha",
+        "city:kolozha-park",
+        "city:brigittine",
+        "city:bernardine",
+        "city:farny"
+      ]
+    },
+    {
+      "id": "tyzenhauz-north",
+      "title": "Городница и век Тызенгауза",
+      "blurb": "Север старого города: «образцовый город» Антония Тызенгауза с театром, лютеранская кирха и старейший парк Беларуси.",
+      "transport": "pedestrian",
+      "stops": [
+        "city:horodnitsa",
+        "city:drama-theatre",
+        "city:lutheran",
+        "city:gilibert-park"
+      ]
+    },
+    {
+      "id": "augustow-canal-bike",
+      "title": "Августовский канал на велосипеде",
+      "blurb": "Полдня в седле: сакральный Сопоцкин, дворец Воловичей в Свяцке и два шлюза канала 1824–1839 годов — Домбровка и Нёмново.",
+      "transport": "bicycle",
+      "stops": [
+        "region:sopotskin-church",
+        "osm:way/40350893",
+        "osm_poi:node/11235393067",
+        "region:augustow-canal-dombrowka",
+        "region:augustow-canal-nemnovo"
       ]
     },
     {
       "id": "castles-lida-krevo-golshany",
       "title": "Замки северо-востока: Лида — Крево — Гольшаны",
-      "blurb": "Кольцо по области на машине: живой Лидский замок, руины Крево и Гольшан.",
+      "blurb": "Кольцо по области на машине: живой Лидский замок и его Фарный костёл, руины Крево и Гольшаны с костёлом Иоанна Крестителя.",
       "transport": "auto",
       "stops": [
         "region:lida-castle",
+        "region:lida-farny-church",
         "region:krevo-castle",
-        "region:golshany-castle"
+        "region:golshany-castle",
+        "region:golshany-church"
       ]
     },
     {
-      "id": "mir-novogrudok-dyatlovo",
-      "title": "Мир, Новогрудок и Дятлово",
-      "blurb": "Полный день на машине: Мирский замок, руины Новогрудка и дворец Радзивиллов в Дятлово.",
+      "id": "mir-novogrudok-mickiewicz",
+      "title": "Мир и Новогрудок: два замка и Мицкевич",
+      "blurb": "День на машине: Мирский замок с костёлом Святого Николая, руины Новогрудка, Фарный костёл и места Мицкевича — музей и курган.",
       "transport": "auto",
       "stops": [
         "region:mir-castle",
+        "region:mir-st-nicholas",
         "region:novogrudok-castle",
-        "region:dyatlovo-palace"
+        "region:novogrudok-farny",
+        "region:novogrudok-mickiewicz-museum",
+        "region:novogrudok-mickiewicz-mound"
+      ]
+    },
+    {
+      "id": "synagogues-trail",
+      "title": "Синагоги трёх городов",
+      "blurb": "Еврейское наследие области на машине: хоральная синагога Гродно, синагога Лиды и большая синагога Слонима 1648 года.",
+      "transport": "auto",
+      "stops": [
+        "city:choral-synagogue",
+        "region:lida-synagogue",
+        "region:slonim-synagogue"
+      ]
+    },
+    {
+      "id": "west-palaces-and-churches",
+      "title": "Дворцы и храмы запада",
+      "blurb": "День на машине по западным районам: дворец Радзивиллов и костёл в Дятлово, оборонительная церковь в Сынковичах, Щучин с монастырём пиаров и Василишки.",
+      "transport": "auto",
+      "stops": [
+        "region:dyatlovo-palace",
+        "region:dyatlovo-church",
+        "region:synkovychi-church",
+        "region:shchuchin-church",
+        "region:vasilishki-church"
       ]
     }
   ]

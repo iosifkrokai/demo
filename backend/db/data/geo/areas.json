@@ -4,7 +4,9 @@
   "notes": [
     "District names are taken verbatim from the district column of places_region.csv; English district names are literal translations of the official Russian names.",
     "grodno-oblast geometry is the geoBoundaries ADM1 polygon (grodno_border.json, Creative Commons Attribution 3.0), loaded at runtime from that file.",
-    "Boundary exceptions (points treated as inside the project area although they fall outside a border polygon) are the documented keep-list in belarus_border_keep.json; they are loaded into the grodno-oblast definition at runtime."
+    "District geometry is the OSM admin_level=6 ring of that district in districts_border.json (its record named by slug), loaded at runtime from that file: shapes, not bounding boxes, so a district that surrounds the city of Grodno keeps the city a hole.",
+    "Boundary exceptions (points treated as inside the project area although they fall outside a border polygon) are the documented keep-list in belarus_border_keep.json; they are loaded into the grodno-oblast definition at runtime.",
+    "grodno-old-town has no boundary in OSM, so its polygon is authored here: the convex hull of the curated Grodno objects the quarter holds, buffered 100 m (source in old_town_border.json says so, and the file is versioned data like the rest)."
   ],
   "areas": [
     {
@@ -50,8 +52,15 @@
           "City of Grodno"
         ]
       },
-      "geometry": null,
-      "geometry_note": "No boundary polygon for this area exists in backend/db/data/. The area is defined for alias anchoring only; geometric containment is unavailable (agent.areas.area_contains returns None), never a silent default.",
+      "geometry": {
+        "source": "districts_border.json",
+        "record": "grodno-city",
+        "ring_count": 2,
+        "hole_count": 0,
+        "point_count": 308,
+        "license": "ODbL 1.0",
+        "attribution": "© OpenStreetMap contributors, ODbL — https://www.openstreetmap.org/copyright"
+      },
       "evidence": "district column value 'Гродно (город)' in places_grodno_city.csv"
     },
     {
@@ -71,8 +80,13 @@
           "Old Town Grodno"
         ]
       },
-      "geometry": null,
-      "geometry_note": "No boundary polygon for this area exists in backend/db/data/. The area is defined for alias anchoring only; geometric containment is unavailable (agent.areas.area_contains returns None), never a silent default. 'старый Гродно' must anchor to a verified area (spec 002 §4.3)."
+      "geometry": {
+        "source": "old_town_border.json",
+        "ring_count": 1,
+        "point_count": 15,
+        "license": "hand-authored (planetabelarus.by derived)",
+        "attribution": "the same curated rows as db/data/places/places_grodno_city.csv"
+      }
     },
     {
       "slug": "berestovitsa-district",
@@ -88,8 +102,15 @@
           "Berestovitsa District"
         ]
       },
-      "geometry": null,
-      "geometry_note": "No boundary polygon for this area exists in backend/db/data/. The area is defined for alias anchoring only; geometric containment is unavailable (agent.areas.area_contains returns None), never a silent default.",
+      "geometry": {
+        "source": "districts_border.json",
+        "record": "berestovitsa-district",
+        "ring_count": 1,
+        "hole_count": 0,
+        "point_count": 759,
+        "license": "ODbL 1.0",
+        "attribution": "© OpenStreetMap contributors, ODbL — https://www.openstreetmap.org/copyright"
+      },
       "evidence": "district column of places_region.csv"
     },
     {
@@ -108,8 +129,15 @@
           "Volkovysk District"
         ]
       },
-      "geometry": null,
-      "geometry_note": "No boundary polygon for this area exists in backend/db/data/. The area is defined for alias anchoring only; geometric containment is unavailable (agent.areas.area_contains returns None), never a silent default.",
+      "geometry": {
+        "source": "districts_border.json",
+        "record": "volkovysk-district",
+        "ring_count": 1,
+        "hole_count": 0,
+        "point_count": 551,
+        "license": "ODbL 1.0",
+        "attribution": "© OpenStreetMap contributors, ODbL — https://www.openstreetmap.org/copyright"
+      },
       "evidence": "district column of places_region.csv"
     },
     {
@@ -126,8 +154,15 @@
           "Voronovo District"
         ]
       },
-      "geometry": null,
-      "geometry_note": "No boundary polygon for this area exists in backend/db/data/. The area is defined for alias anchoring only; geometric containment is unavailable (agent.areas.area_contains returns None), never a silent default.",
+      "geometry": {
+        "source": "districts_border.json",
+        "record": "voronovo-district",
+        "ring_count": 1,
+        "hole_count": 0,
+        "point_count": 871,
+        "license": "ODbL 1.0",
+        "attribution": "© OpenStreetMap contributors, ODbL — https://www.openstreetmap.org/copyright"
+      },
       "evidence": "district column of places_region.csv"
     },
     {
@@ -144,8 +179,15 @@
           "Grodno District"
         ]
       },
-      "geometry": null,
-      "geometry_note": "No boundary polygon for this area exists in backend/db/data/. The area is defined for alias anchoring only; geometric containment is unavailable (agent.areas.area_contains returns None), never a silent default.",
+      "geometry": {
+        "source": "districts_border.json",
+        "record": "grodno-district",
+        "ring_count": 1,
+        "hole_count": 2,
+        "point_count": 1735,
+        "license": "ODbL 1.0",
+        "attribution": "© OpenStreetMap contributors, ODbL — https://www.openstreetmap.org/copyright"
+      },
       "evidence": "district column of places_region.csv"
     },
     {
@@ -162,8 +204,15 @@
           "Dyatlovo District"
         ]
       },
-      "geometry": null,
-      "geometry_note": "No boundary polygon for this area exists in backend/db/data/. The area is defined for alias anchoring only; geometric containment is unavailable (agent.areas.area_contains returns None), never a silent default.",
+      "geometry": {
+        "source": "districts_border.json",
+        "record": "dyatlovo-district",
+        "ring_count": 1,
+        "hole_count": 0,
+        "point_count": 822,
+        "license": "ODbL 1.0",
+        "attribution": "© OpenStreetMap contributors, ODbL — https://www.openstreetmap.org/copyright"
+      },
       "evidence": "district column of places_region.csv"
     },
     {
@@ -180,8 +229,15 @@
           "Zelva District"
         ]
       },
-      "geometry": null,
-      "geometry_note": "No boundary polygon for this area exists in backend/db/data/. The area is defined for alias anchoring only; geometric containment is unavailable (agent.areas.area_contains returns None), never a silent default.",
+      "geometry": {
+        "source": "districts_border.json",
+        "record": "zelva-district",
+        "ring_count": 1,
+        "hole_count": 0,
+        "point_count": 702,
+        "license": "ODbL 1.0",
+        "attribution": "© OpenStreetMap contributors, ODbL — https://www.openstreetmap.org/copyright"
+      },
       "evidence": "district column of places_region.csv"
     },
     {
@@ -198,8 +254,15 @@
           "Ivye District"
         ]
       },
-      "geometry": null,
-      "geometry_note": "No boundary polygon for this area exists in backend/db/data/. The area is defined for alias anchoring only; geometric containment is unavailable (agent.areas.area_contains returns None), never a silent default.",
+      "geometry": {
+        "source": "districts_border.json",
+        "record": "ivye-district",
+        "ring_count": 1,
+        "hole_count": 0,
+        "point_count": 862,
+        "license": "ODbL 1.0",
+        "attribution": "© OpenStreetMap contributors, ODbL — https://www.openstreetmap.org/copyright"
+      },
       "evidence": "district column of places_region.csv"
     },
     {
@@ -216,8 +279,15 @@
           "Korelichi District"
         ]
       },
-      "geometry": null,
-      "geometry_note": "No boundary polygon for this area exists in backend/db/data/. The area is defined for alias anchoring only; geometric containment is unavailable (agent.areas.area_contains returns None), never a silent default.",
+      "geometry": {
+        "source": "districts_border.json",
+        "record": "korelichi-district",
+        "ring_count": 1,
+        "hole_count": 0,
+        "point_count": 548,
+        "license": "ODbL 1.0",
+        "attribution": "© OpenStreetMap contributors, ODbL — https://www.openstreetmap.org/copyright"
+      },
       "evidence": "district column of places_region.csv"
     },
     {
@@ -234,8 +304,15 @@
           "Lida District"
         ]
       },
-      "geometry": null,
-      "geometry_note": "No boundary polygon for this area exists in backend/db/data/. The area is defined for alias anchoring only; geometric containment is unavailable (agent.areas.area_contains returns None), never a silent default.",
+      "geometry": {
+        "source": "districts_border.json",
+        "record": "lida-district",
+        "ring_count": 1,
+        "hole_count": 0,
+        "point_count": 969,
+        "license": "ODbL 1.0",
+        "attribution": "© OpenStreetMap contributors, ODbL — https://www.openstreetmap.org/copyright"
+      },
       "evidence": "district column of places_region.csv"
     },
     {
@@ -252,8 +329,15 @@
           "Mosty District"
         ]
       },
-      "geometry": null,
-      "geometry_note": "No boundary polygon for this area exists in backend/db/data/. The area is defined for alias anchoring only; geometric containment is unavailable (agent.areas.area_contains returns None), never a silent default.",
+      "geometry": {
+        "source": "districts_border.json",
+        "record": "mosty-district",
+        "ring_count": 1,
+        "hole_count": 0,
+        "point_count": 894,
+        "license": "ODbL 1.0",
+        "attribution": "© OpenStreetMap contributors, ODbL — https://www.openstreetmap.org/copyright"
+      },
       "evidence": "district column of places_region.csv"
     },
     {
@@ -270,8 +354,15 @@
           "Novogrudok District"
         ]
       },
-      "geometry": null,
-      "geometry_note": "No boundary polygon for this area exists in backend/db/data/. The area is defined for alias anchoring only; geometric containment is unavailable (agent.areas.area_contains returns None), never a silent default.",
+      "geometry": {
+        "source": "districts_border.json",
+        "record": "novogrudok-district",
+        "ring_count": 1,
+        "hole_count": 0,
+        "point_count": 811,
+        "license": "ODbL 1.0",
+        "attribution": "© OpenStreetMap contributors, ODbL — https://www.openstreetmap.org/copyright"
+      },
       "evidence": "district column of places_region.csv"
     },
     {
@@ -288,8 +379,15 @@
           "Ostrovets District"
         ]
       },
-      "geometry": null,
-      "geometry_note": "No boundary polygon for this area exists in backend/db/data/. The area is defined for alias anchoring only; geometric containment is unavailable (agent.areas.area_contains returns None), never a silent default.",
+      "geometry": {
+        "source": "districts_border.json",
+        "record": "ostrovets-district",
+        "ring_count": 1,
+        "hole_count": 0,
+        "point_count": 924,
+        "license": "ODbL 1.0",
+        "attribution": "© OpenStreetMap contributors, ODbL — https://www.openstreetmap.org/copyright"
+      },
       "evidence": "district column of places_region.csv"
     },
     {
@@ -306,8 +404,15 @@
           "Oshmyany District"
         ]
       },
-      "geometry": null,
-      "geometry_note": "No boundary polygon for this area exists in backend/db/data/. The area is defined for alias anchoring only; geometric containment is unavailable (agent.areas.area_contains returns None), never a silent default.",
+      "geometry": {
+        "source": "districts_border.json",
+        "record": "oshmyany-district",
+        "ring_count": 1,
+        "hole_count": 0,
+        "point_count": 583,
+        "license": "ODbL 1.0",
+        "attribution": "© OpenStreetMap contributors, ODbL — https://www.openstreetmap.org/copyright"
+      },
       "evidence": "district column of places_region.csv"
     },
     {
@@ -324,8 +429,15 @@
           "Svislach District"
         ]
       },
-      "geometry": null,
-      "geometry_note": "No boundary polygon for this area exists in backend/db/data/. The area is defined for alias anchoring only; geometric containment is unavailable (agent.areas.area_contains returns None), never a silent default.",
+      "geometry": {
+        "source": "districts_border.json",
+        "record": "svislach-district",
+        "ring_count": 1,
+        "hole_count": 0,
+        "point_count": 498,
+        "license": "ODbL 1.0",
+        "attribution": "© OpenStreetMap contributors, ODbL — https://www.openstreetmap.org/copyright"
+      },
       "evidence": "district column of places_region.csv"
     },
     {
@@ -342,8 +454,15 @@
           "Slonim District"
         ]
       },
-      "geometry": null,
-      "geometry_note": "No boundary polygon for this area exists in backend/db/data/. The area is defined for alias anchoring only; geometric containment is unavailable (agent.areas.area_contains returns None), never a silent default.",
+      "geometry": {
+        "source": "districts_border.json",
+        "record": "slonim-district",
+        "ring_count": 1,
+        "hole_count": 0,
+        "point_count": 898,
+        "license": "ODbL 1.0",
+        "attribution": "© OpenStreetMap contributors, ODbL — https://www.openstreetmap.org/copyright"
+      },
       "evidence": "district column of places_region.csv"
     },
     {
@@ -360,8 +479,15 @@
           "Smorgon District"
         ]
       },
-      "geometry": null,
-      "geometry_note": "No boundary polygon for this area exists in backend/db/data/. The area is defined for alias anchoring only; geometric containment is unavailable (agent.areas.area_contains returns None), never a silent default.",
+      "geometry": {
+        "source": "districts_border.json",
+        "record": "smorgon-district",
+        "ring_count": 1,
+        "hole_count": 0,
+        "point_count": 872,
+        "license": "ODbL 1.0",
+        "attribution": "© OpenStreetMap contributors, ODbL — https://www.openstreetmap.org/copyright"
+      },
       "evidence": "district column of places_region.csv"
     },
     {
@@ -378,8 +504,15 @@
           "Shchuchyn District"
         ]
       },
-      "geometry": null,
-      "geometry_note": "No boundary polygon for this area exists in backend/db/data/. The area is defined for alias anchoring only; geometric containment is unavailable (agent.areas.area_contains returns None), never a silent default.",
+      "geometry": {
+        "source": "districts_border.json",
+        "record": "shchuchyn-district",
+        "ring_count": 1,
+        "hole_count": 0,
+        "point_count": 1586,
+        "license": "ODbL 1.0",
+        "attribution": "© OpenStreetMap contributors, ODbL — https://www.openstreetmap.org/copyright"
+      },
       "evidence": "district column of places_region.csv"
     }
   ]

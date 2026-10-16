@@ -1,0 +1,12 @@
+{
+  "description": "Pairs of automatic rows that are one object, declared by hand. The automatic rules collapse twins by name and category inside five metres, and let a hand-authored row shadow its namesake; a pair they cannot see — two OSM elements whose names and categories differ — is resolved here. `seed apply` drops the `drop` row and keeps its source on the `keep` one, exactly as it does for a shadowed twin, and the drop appears in the seed report.",
+  "why_a_list_and_not_a_rule": "Relaxing the twin rule to the name alone, or to a node against a way, was rejected: 84 committed pairs share a name and differ by element type while being a street and the transit stop on it. Whether two rows are one object is a judgement about the object, so it is stated per pair and can be reviewed.",
+  "scope": "One pair per object the harness has seen twice in a route. A pair stays here until one of its rows leaves the data; the seed reports a declaration whose ids it no longer holds rather than ignoring it.",
+  "pairs": [
+    {
+      "keep": "osm:node/4301841763",
+      "drop": "osm:way/1102852544",
+      "reason": "The way carries the museum's name under category «замок» while standing 34 m from `osm:relation/18245978` «Старый замок» — the castle is already mapped, so the way is that object written twice. The product saw the pair the other way round: the way and the museum node, one name across two categories, 174 m apart, both stops of one walk (quality case «grodno_no_budget_full_day»). The node is the museum the name belongs to; the castle keeps its own row."
+    }
+  ]
+}

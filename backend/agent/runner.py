@@ -1,9 +1,4 @@
-"""Running the planning agent: limits, timeouts, wall-clock, failure recording.
-
-One run reads the request, chooses the stops with the tools, measures them, and
-finishes by *submitting* — a schema-validated terminal call rather than a
-paragraph to be parsed. Everything the run produces is in that one shape.
-"""
+"""Running the planning agent: limits, timeouts, wall-clock, failure recording."""
 
 from __future__ import annotations
 
@@ -14,7 +9,7 @@ from typing import Any
 
 import pydantic_ai
 from pydantic_ai import RunContext, ToolOutput, UsageLimits
-from pydantic_ai.capabilities import ProcessHistory
+from pydantic_ai.capabilities import Hooks, ProcessHistory
 from pydantic_ai.messages import ModelRequest, UserPromptPart
 from pydantic_ai.settings import ModelSettings
 
@@ -23,25 +18,25 @@ from agent.models import ReaderBrief
 from agent.prompts import compose_instructions
 from agent.prompts.notes import _request_note, _ui_note
 from agent.schema import PlanningDeps, PlanSubmission
-from agent.tools import register_all
+from agent.tools import ERR_TOOL_BUDGET, envelope, register_all
+from core import constants
 
 log = logging.getLogger(__name__)
 
-# Planning calls are heavier than reading calls, so the budget is tighter than
-# the read-only agent's was: a run that needs more than this is lost anyway.
-MAX_TOOL_CALLS = 12
-MAX_REQUESTS = 10
+MAX_REQUESTS = constants.MAX_TOOL_CALLS + 2
 MAX_OUTPUT_TOKENS = 8192
 WALL_CLOCK_TIMEOUT_S = 150.0
 MODEL_TIMEOUT_S = 90.0
 
-# When this little time is left, the run is nudged in-band to submit instead of
-# waiting for the tools to start refusing — the give-up signal becomes time, not
-# only the tool counter.
 TIME_NUDGE_LEFT_S = 25.0
 SUBMIT_NUDGE = (
     "Time is nearly up. Submit this turn with what you already have — call "
     "submit_plan with the stops you have found. Do not start a new search."
+)
+
+BUDGET_SPENT = (
+    "The tool budget for this run is spent. Call submit_plan now with the stops "
+    "you already have, and do not call another tool."
 )
 
 _NO_MODEL = {"agent_unavailable", "model_unavailable"}
@@ -64,11 +59,7 @@ def effective_wall_clock(wall_clock_s: float | None) -> float:
 
 
 def _submission_nudge(messages: list[Any], seconds_left: float) -> list[Any]:
-    """Append a "submit now" reminder once time is short.
-
-    Attached as a part of the message the model is about to answer (never a second
-    consecutive request, which the loop would reject) and never stacked twice.
-    """
+    """Append a "submit now" reminder once time is short."""
     if seconds_left > TIME_NUDGE_LEFT_S:
         return messages
     if messages and isinstance(messages[-1], ModelRequest):
@@ -88,11 +79,21 @@ def _time_capability() -> ProcessHistory[PlanningDeps]:
     return ProcessHistory(processor)
 
 
-def _build_prompt(query: str, brief: Any) -> str:
+def _build_prompt(query: str, brief: Any, *, repair: str | None = None) -> str:
     """The text handed to the model, built in one place."""
-    return (
+    prompt = (
         f"locale={brief.locale}\n{_request_note(brief)}\nrequest={query!r}\n"
         "Plan the walk for this request, then submit it with submit_plan."
+    )
+    return prompt if repair is None else f"{prompt}\n{repair}"
+
+
+def _usage_line(usage: Any) -> str:
+    """What one pass cost, in one line — tokens, requests and tool calls."""
+    return (
+        f"agent_plan: usage in={usage.input_tokens} out={usage.output_tokens} "
+        f"total={usage.total_tokens} cache_read={usage.cache_read_tokens} "
+        f"requests={usage.requests} tools={usage.tool_calls}"
     )
 
 
@@ -112,26 +113,59 @@ def _territories(deps: PlanningDeps) -> Sequence[Any]:
     return deps.repos.areas.list_all() if deps.repos is not None else ()
 
 
+async def _guard(ctx: Any, *, call: Any, args: Any, handler: Any, **_rest: Any) -> Any:
+    """Refuse the calls past the budget instead of throwing the whole pass away."""
+    ctx.deps.tool_calls_used += 1
+    log.info("agent_plan: call %d/%d %s", ctx.deps.tool_calls_used, constants.MAX_TOOL_CALLS, args)
+    if ctx.deps.tool_calls_used > constants.MAX_TOOL_CALLS:
+        log.info("agent_plan: tool budget spent on %s", call.tool_name)
+        return envelope(
+            call.tool_name,
+            [],
+            {"tool_calls_used": ctx.deps.tool_calls_used, "limit": constants.MAX_TOOL_CALLS},
+            error=ERR_TOOL_BUDGET,
+            message=BUDGET_SPENT,
+        )
+    return await handler(args)
+
+
+def _remember(ctx: Any, *, result: Any, **_rest: Any) -> Any:
+    """Record the ids a tool actually returned (the id guard)."""
+    if isinstance(result, dict):
+        for row in result.get("results") or ():
+            pid = row.get("id") if isinstance(row, dict) else None
+            if isinstance(pid, int):
+                ctx.deps.observed_ids.add(pid)
+    return result
+
+
+def _instructions(deps: PlanningDeps, brief: ReaderBrief) -> str:
+    """The instructions for this run, composed from the database once."""
+    if deps.instructions is None:
+        deps.instructions = compose_instructions(
+            _catalogue(deps), _territories(deps), _ui_note(brief)
+        )
+    return deps.instructions
+
+
 def _build_agent(model: Any, brief: ReaderBrief, deps: PlanningDeps) -> Any:
-    """Create the PydanticAI agent, its tool surface, and its terminal output."""
+    """Create the PydanticAI agent, its tool surface, and its terminal output.
+
+    `end_strategy` is left at its default `'early'` on purpose: a `submit_plan`
+    sent beside a stray search is the answer, and the stray call is dropped.
+    """
     agent = pydantic_ai.Agent(
         model,
         output_type=ToolOutput(PlanSubmission, name="submit_plan", description=SUBMIT_DESCRIPTION),
         deps_type=PlanningDeps,
-        instructions=compose_instructions(_catalogue(deps), _territories(deps), _ui_note(brief)),
-        capabilities=[_time_capability()],
+        instructions=_instructions(deps, brief),
+        capabilities=[_time_capability(), Hooks(tool_execute=_guard, after_tool_execute=_remember)],
     )
-
-    def _remember(ctx: Any, out: dict[str, Any]) -> dict[str, Any]:
-        """Record the ids a tool actually returned (the id guard)."""
-        for row in out.get("results") or ():
-            pid = row.get("id") if isinstance(row, dict) else None
-            if isinstance(pid, int):
-                ctx.deps.observed_ids.add(pid)
-        return out
-
-    register_all(agent, _remember)
+    register_all(agent)
     return agent
+
+
+TOOL_BUDGET_FAILURE = "UsageLimitExceeded"
 
 
 def _run_with_timeout(fn: Any, timeout_s: float) -> tuple[Any, str | None]:
@@ -152,7 +186,12 @@ def _run_with_timeout(fn: Any, timeout_s: float) -> tuple[Any, str | None]:
 
 
 def _run_agent(
-    query: str, brief: ReaderBrief, deps: PlanningDeps, wall_clock_s: float | None = None
+    query: str,
+    brief: ReaderBrief,
+    deps: PlanningDeps,
+    wall_clock_s: float | None = None,
+    *,
+    repair: str | None = None,
 ) -> tuple[PlanSubmission | None, str | None]:
     """Run one bounded planning pass. Returns (submission, failure_reason)."""
     try:
@@ -161,35 +200,42 @@ def _run_agent(
         log.info("agent_plan: model unavailable: %s", exc)
         return None, "model_unavailable"
 
-    usage_limits = UsageLimits(
-        request_limit=MAX_REQUESTS,
-        tool_calls_limit=MAX_TOOL_CALLS,
+    usage_limits = UsageLimits(request_limit=MAX_REQUESTS)
+    model_settings = ModelSettings(
+        max_tokens=MAX_OUTPUT_TOKENS,
+        timeout=MODEL_TIMEOUT_S,
+        extra_body=model_mod.answer_cap(MAX_OUTPUT_TOKENS),
     )
-    model_settings = ModelSettings(max_tokens=MAX_OUTPUT_TOKENS, timeout=MODEL_TIMEOUT_S)
     prompt = _build_prompt(query, brief)
+    asked = prompt if repair is None else f"{prompt}\n{repair}"
 
     def call() -> Any:
+        deps.tool_calls_used = 0
         agent = _build_agent(model, brief, deps)
         return agent.run_sync(
-            prompt, deps=deps, usage_limits=usage_limits, model_settings=model_settings
+            asked,
+            deps=deps,
+            usage_limits=usage_limits,
+            model_settings=model_settings,
         )
 
     bound = effective_wall_clock(wall_clock_s)
     result, failure = _run_with_timeout(call, bound)
+    if failure is not None or result is None:
+        log.info("agent_plan: gave up after %d tool call(s)", deps.tool_calls_used)
     if failure is not None:
         _record_model_failure(failure, prompt)
         return None, failure
     if result is None:
         _record_model_failure("unexpected_output", prompt)
         return None, "unexpected_output"
+    log.info("%s", _usage_line(result.usage))
     if not isinstance(getattr(result, "output", None), PlanSubmission):
-        # A run that never submitted has no plan, whatever else it produced.
         _record_model_failure("no_submission", prompt)
         return None, "no_submission"
     return result.output, None
 
 
-# agent.client reuses the failure path and the prompt builder.
 __all__ = [
     "_build_prompt",
     "_record_model_failure",

@@ -1,12 +1,4 @@
-"""What a refinement tells the tourist it changed.
-
-Two things are exercised here, both offline. The diff itself — previous route
-against the final points — is a pure function over stops and places. The source
-it diffs against is the journal's last turn where the server has one, and the
-client's re-sent snapshot only as a fallback; `previous_stops` is checked both
-ways, and the router is checked to wire the journal in. No model and no migrated
-database are needed.
-"""
+"""What a refinement tells the tourist it changed."""
 
 from __future__ import annotations
 
@@ -20,7 +12,7 @@ from agent import thread
 from agent.client import AgentOutcome
 from agent.models import BriefStop, RefinementBrief
 from agent.schema import PlanSubmission
-from api.models.routes import GenerateReq, ParsedQuery, Place, RouteResponse, RouteSummary
+from api.models.routes import ParsedQuery, Place, RouteResponse, RouteSummary
 from api.responses import route_changes, route_response
 from api.routers import routes as routes_api
 from db.models.place import Place as PlaceRow
@@ -36,6 +28,7 @@ class FakeThreadRepository:
 
     def __init__(self, *, unreadable: bool = False) -> None:
         self._turns: dict[str, list[Turn]] = {}
+        self._appended: list[Turn] = []
         self._unreadable = unreadable
 
     def append(
@@ -55,6 +48,7 @@ class FakeThreadRepository:
             measurement=measurement,
         )
         rows.append(turn)
+        self._appended.append(turn)
         return turn
 
     def latest(self, thread_id: str) -> Turn | None:
@@ -63,6 +57,14 @@ class FakeThreadRepository:
         rows = self._turns.get(thread_id) or []
         return rows[-1] if rows else None
 
+    def latest_with_prefix(self, prefix: str) -> Turn | None:
+        if self._unreadable:
+            raise StorageUnavailableError("the journal is not readable")
+        for turn in reversed(self._appended):
+            if turn.thread_id.startswith(prefix):
+                return turn
+        return None
+
 
 def _points(*pairs: tuple[int, str]) -> list[Place]:
     return [Place(id=pid, name=name, category=None, lat=0.0, lon=0.0) for pid, name in pairs]
@@ -70,9 +72,6 @@ def _points(*pairs: tuple[int, str]) -> list[Place]:
 
 def _brief_stops(*pairs: tuple[int, str]) -> tuple[BriefStop, ...]:
     return tuple(BriefStop(place_id=pid, name=name) for pid, name in pairs)
-
-
-# --- the diff itself ---------------------------------------------------------
 
 
 def test_a_refinement_that_removes_a_stop_reports_it_removed() -> None:
@@ -133,11 +132,7 @@ def test_a_pinned_stop_without_an_id_is_matched_by_name() -> None:
     assert changes is not None
     assert changes.removed == []
     assert changes.kept == 1
-    # The named stop is the one the point matches, so it is not a fresh addition.
     assert changes.added == []
-
-
-# --- the route_response producer --------------------------------------------
 
 
 def _row(pid: int) -> PlaceRow:
@@ -173,7 +168,6 @@ def _built_response(previous: tuple[BriefStop, ...] | None, final: list[int]) ->
         },
     )
     return route_response(
-        GenerateReq(query="добавь кофе"),
         outcome,
         repos=_Repos([1, 2, 3, 4, 5]),
         facts=CategoryFacts.from_rows([]),
@@ -193,7 +187,19 @@ def test_route_response_leaves_a_fresh_generation_without_changes() -> None:
     assert _built_response(None, [1, 2]).changes is None
 
 
-# --- which source the previous route comes from ------------------------------
+def test_the_reported_costing_is_the_one_the_line_was_drawn_with() -> None:
+    """The field is a Valhalla costing, not the client's word for the transport:
+    the contract carries the profile the tourist chose, and the client matches its
+    transport control on the engine's name."""
+    outcome = AgentOutcome(
+        submission=PlanSubmission(ordered_ids=[1]),
+        requirements=TripRequirements(costing="car"),
+        measured={"status": "ready", "results": [{"id": 1, "name": NAMES[1]}]},
+    )
+
+    response = route_response(outcome, repos=_Repos([1]), facts=CategoryFacts.from_rows([]))
+
+    assert response.costing == "auto"
 
 
 def test_the_journal_outranks_the_snapshot_for_the_previous_route() -> None:
@@ -239,9 +245,6 @@ def test_a_fresh_request_has_no_previous_route() -> None:
     assert thread.previous_stops(FakeThreadRepository(), thread_id="run-1", context=None) == ()
 
 
-# --- the router wires the journal in -----------------------------------------
-
-
 def _canned_outcome() -> AgentOutcome:
     return AgentOutcome(
         submission=PlanSubmission(ordered_ids=[3, 4]),
@@ -263,7 +266,7 @@ def test_generate_diffs_against_the_journals_last_turn(monkeypatch) -> None:
 
     seen: dict[str, Any] = {}
 
-    def fake_response(req: Any, outcome: Any, **kwargs: Any) -> RouteResponse:
+    def fake_response(outcome: Any, **kwargs: Any) -> RouteResponse:
         seen["previous"] = kwargs.get("previous")
         return RouteResponse(parsed=ParsedQuery(), points=[], shape={}, summary=RouteSummary())
 

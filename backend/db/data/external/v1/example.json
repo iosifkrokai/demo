@@ -1,0 +1,124 @@
+{
+  "version": 1,
+  "sent_on": "2026-10-20",
+  "sender": "Управление культуры Гродненского облисполкома",
+  "places": [
+    {
+      "external_id": "ГО-0001",
+      "official_name": "Борисоглебская (Коложская) церковь",
+      "official_name_en": "Kalozha Church",
+      "address": "ул. Коложа, 6",
+      "district": "Гродно (город)",
+      "lat": 53.6808,
+      "lon": 23.8305,
+      "category": "церковь",
+      "description": "Храм XII века гродненской архитектурной школы с голосниками в кладке.",
+      "built_year": 1184,
+      "architect": "неизвестен",
+      "opening_hours": [
+        {
+          "weekday": "Все дни",
+          "opens": "10:00",
+          "closes": "18:00",
+          "as_documented": "ежедневно 10:00–18:00"
+        }
+      ],
+      "prices": [
+        {
+          "free": true,
+          "note": "Вход свободный, пожертвования по желанию."
+        }
+      ],
+      "accessibility": {
+        "step_free_entrance": false,
+        "entrance_steps": 3,
+        "ramp": false,
+        "note": "Вход со стороны улицы Коложа."
+      },
+      "heritage": {
+        "status": "памятник истории и культуры",
+        "level": "республиканского значения"
+      },
+      "events": [
+        {
+          "external_id": "ГО-0001-СОБ-01",
+          "title": "Экскурсия по храму XII века",
+          "starts_on": "2026-11-01",
+          "ends_on": "2026-11-01",
+          "note": "По предварительной записи, группы до 15 человек."
+        }
+      ]
+    },
+    {
+      "external_id": "КО-0007",
+      "official_name": "Любчанский замок",
+      "address": "г. п. Любча, ул. Замковая, 1",
+      "district": "Новогрудский район",
+      "lat": 53.7521858,
+      "lon": 26.0692601,
+      "category": "замок",
+      "description": "Замок ВКЛ XVI века на Немане, который восстанавливают волонтёры.",
+      "built_year": 1581,
+      "architect": "неизвестен",
+      "opening_hours": [
+        {
+          "weekday": "Все дни",
+          "opens": "10:00",
+          "closes": "19:00",
+          "as_documented": "территория — ежедневно 10:00–19:00, экскурсии по расписанию"
+        }
+      ],
+      "prices": [
+        {
+          "visitor_category": "взрослый",
+          "amount": 4,
+          "currency": "BYN"
+        },
+        {
+          "visitor_category": "детский",
+          "free": true
+        },
+        {
+          "visitor_category": "групповой",
+          "note": "Экскурсионное обслуживание — по договору, сумму называет экскурсовод."
+        }
+      ],
+      "accessibility": {
+        "step_free_entrance": false,
+        "entrance_steps": 6,
+        "ramp": false,
+        "child_friendly": true,
+        "note": "Двор замка — грунтовое покрытие, передвигаться с коляской затруднительно."
+      },
+      "heritage": {
+        "status": "историко-культурная ценность",
+        "level": "республиканского значения"
+      }
+    }
+  ],
+  "infrastructure": [
+    {
+      "external_id": "ИНФ-0142",
+      "kind": "лестница",
+      "lat": 53.6816,
+      "lon": 23.8311,
+      "steps": 48,
+      "ramp": false,
+      "gradient": "более 8%",
+      "surface": "бетон",
+      "width_m": 2.4,
+      "lit": true
+    }
+  ],
+  "events": [
+    {
+      "venue": "Площадь Советская",
+      "lat": 53.6782,
+      "lon": 23.8286,
+      "title": "Фестиваль ремёсел",
+      "starts_on": "2026-11-14",
+      "ends_on": "2026-11-15",
+      "note": "Площадка не является объектом показа."
+    }
+  ]
+}

@@ -1,11 +1,6 @@
 """The same question, asked twice, computed once.
 
-An in-process TTL/LRU cache for the deterministic expensive thing this process
-does: embedding text. `CACHE_BUST=1` turns it off.
-
-A *plan* is not cached, and never will be: the run is the model's, and the same
-query twice is two different walks. What is worth caching is the layer under it,
-where the same input really does mean the same answer.
+A *plan* is not cached: the same query twice is two different walks.
 """
 
 from __future__ import annotations
@@ -103,17 +98,6 @@ class TtlLru:
 
 EMBED_CACHE = TtlLru(maxsize=512, ttl_s=DEFAULT_TTL_S)
 
-# Deterministic routing measurements (a cost matrix and the walk it yields) for a
-# given set of stops. Valhalla is deterministic, so the same stops with the same
-# profile and budget really do mean the same walk, and this is what makes a
-# refinement cheap: a stop the model keeps is not re-measured. The key carries the
-# *data version* the seed stamped (`db.seed.version` into `data_versions`, read
-# through `db/store/datasets.py`): the stops, profile and budget describe the
-# request, but a re-seed can move a place underneath it, and the version is what
-# makes the old number miss instead of replay. The TTL is now a backstop — it
-# bounds how long an entry may live when the version cannot be read — not a
-# substitute for the version. Two entries can also differ by the deadline the run
-# was measured under (a tight budget skips the final re-order).
 MEASURE_CACHE = TtlLru(maxsize=256, ttl_s=DEFAULT_TTL_S)
 
 

@@ -8,15 +8,13 @@ from agent.models import PartyComposition, ReaderBrief, Requirement, TripRequire
 from agent.schema import PlanSubmission
 from core import constants
 from db.store.registry import Repositories
+from routing.models import CODE_LESS_KINDS
 
 log = logging.getLogger(__name__)
 
 
 def _verbatim(fragment: str | None, query: str) -> str | None:
-    """Keep a provenance fragment only if it is really from the query.
-
-    A fragment that does not occur in the request is dropped; the requirement survives.
-    """
+    """Keep a provenance fragment only if it is really from the query."""
     if not isinstance(fragment, str):
         return None
     frag = " ".join(fragment.split())
@@ -37,6 +35,8 @@ def ui_requirements(brief: ReaderBrief) -> list[Requirement]:
         )
     for code in brief.avoid:
         out.append(Requirement(kind="avoid", strength="hard", code=code, label=code, source="ui"))
+    if "wheelchair" in brief.mobility:
+        out.append(Requirement(kind="step_free", strength="hard", label="step_free", source="ui"))
     return out
 
 
@@ -65,7 +65,22 @@ def _reading_requirements(
     unsupported: list[str] = []
     for item in reading.requirements:
         code = None
-        if item.kind != "must_visit":
+        if item.kind == "must_visit":
+            if not (item.name or "").strip():
+                unsupported.append(item.kind)
+                continue
+            if not (isinstance(item.place_id, int) and item.place_id in observed):
+                territory = (
+                    repos.areas.resolve((item.name or "").strip()) if repos is not None else None
+                )
+                if territory:
+                    log.info(
+                        "interpretation: must_visit %r — территория (%s), не остановка",
+                        item.name,
+                        territory,
+                    )
+                    continue
+        elif item.kind not in CODE_LESS_KINDS:
             code = (
                 repos.taxonomy.resolve_code(item.code or item.name or "")
                 if repos is not None
@@ -74,20 +89,6 @@ def _reading_requirements(
             if code is None:
                 ask = (item.code or item.name or item.text or item.kind).strip()
                 unsupported.append(ask)
-                continue
-        elif not (item.name or "").strip():
-            unsupported.append(item.kind)
-            continue
-        elif not (isinstance(item.place_id, int) and item.place_id in observed):
-            territory = (
-                repos.areas.resolve((item.name or "").strip()) if repos is not None else None
-            )
-            if territory:
-                log.info(
-                    "interpretation: must_visit %r — территория (%s), не остановка",
-                    item.name,
-                    territory,
-                )
                 continue
 
         place_id = None
@@ -102,7 +103,7 @@ def _reading_requirements(
                 kind=item.kind,
                 strength=item.strength,
                 code=code,
-                label=code or item.name,
+                label=code or item.name or item.kind,
                 name=item.name if item.kind == "must_visit" else None,
                 place_id=place_id,
                 text=_verbatim(item.text, query),
@@ -174,16 +175,15 @@ def _merge(
         if slug.strip() and slug.strip() not in areas:
             areas.append(slug.strip())
 
-    # The submission's outcome decides route vs catalogue; a submission that says
-    # neither (or refuses) leaves the brief's own result_mode standing.
-    mode = reading.outcome if reading.outcome in ("route", "catalogue") else brief.result_mode
+    read_mode = reading.outcome if reading.outcome in ("route", "catalogue") else "route"
+    mode = brief.result_mode or read_mode
 
     return TripRequirements(
         locale=brief.locale,
         raw_query=query,
         party=party,
         budget_minutes=budget,
-        costing=brief.profile,
+        costing=brief.profile or reading.profile or None,
         origin_lat=brief.origin[0] if brief.origin is not None else None,
         origin_lon=brief.origin[1] if brief.origin is not None else None,
         areas=areas,
@@ -206,5 +206,4 @@ def _outside_names(raw: list[str]) -> list[str]:
     return out
 
 
-# Used by agent.client outside this module.
 __all__ = ["_merge", "_reading_requirements", "ui_requirements", "ui_used"]

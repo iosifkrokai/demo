@@ -9,7 +9,6 @@ from pydantic_ai import RunContext
 from agent.schema import PlanningDeps
 from agent.tools import (
     ERR_BAD_ARGUMENT,
-    Remember,
     ToolAnswer,
     envelope,
     fetch,
@@ -22,10 +21,7 @@ _AREA_FIELDS = ("code", "name_ru", "name_en", "kind")
 
 
 def find_areas(term: str, locale: str = "ru", *, repos: Any = None) -> dict[str, Any]:
-    """Resolve a territory name ("старый город", "Новогрудок") to area slugs.
-
-    A name that matches nothing returns an empty result set — never a guessed radius.
-    """
+    """Resolve a territory name ("старый город", "Новогрудок") to area slugs."""
     provenance: dict[str, Any] = {
         "source": "areas",
         "locale": locale if locale in ("ru", "en") else "ru",
@@ -47,12 +43,8 @@ def find_areas(term: str, locale: str = "ru", *, repos: Any = None) -> dict[str,
     return envelope("find_areas", results, provenance, capped=len(rows or []) > len(results))
 
 
-def register_find_areas(agent: Any, _remember: Remember) -> None:
-    """Advertise ``find_areas`` to the agent.
-
-    The Python name differs from the advertised one on purpose: a nested
-    ``find_areas`` would shadow the module function this body has to call.
-    """
+def register_find_areas(agent: Any) -> None:
+    """Advertise ``find_areas`` to the agent."""
 
     @agent.tool(name="find_areas")
     def _find_areas(ctx: RunContext[PlanningDeps], term: str, locale: str = "ru") -> ToolAnswer:

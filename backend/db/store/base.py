@@ -1,13 +1,4 @@
-"""What every Postgres repository shares: one lazy connection, two cursors.
-
-A repository is handed a connection *factory*, not a connection. Reconnection,
-thread-safety and the mapping from `psycopg.Error` to `StorageUnavailableError`
-live here, so no caller has to think about them.
-
-`_tx_cursor` is not decoration: the connection is autocommit, so a `SET LOCAL`
-or a trigger that reads transaction state needs a real transaction around it.
-That is exactly what keeps the curated-category guard honest.
-"""
+"""What every Postgres repository shares: one lazy connection, two cursors."""
 
 from __future__ import annotations
 
@@ -27,11 +18,7 @@ ConnectionFactory = Callable[[], psycopg.Connection]
 
 
 def autocommit_connect() -> psycopg.Connection:
-    """The default factory: one autocommit connection through the configured DSN.
-
-    The connect timeout inside `db.connection` is short, so a database that is
-    down fails fast into a ``503`` rather than hanging the request.
-    """
+    """The default factory: one autocommit connection through the configured DSN."""
     return connect(autocommit=True)
 
 
@@ -53,7 +40,7 @@ class PostgresRepository:
     def _drop(self) -> None:
         conn, self._conn = self._conn, None
         if conn is not None:
-            with contextlib.suppress(Exception):  # pragma: no cover — a broken socket
+            with contextlib.suppress(Exception):
                 conn.close()
 
     @contextmanager
@@ -79,11 +66,7 @@ class PostgresRepository:
             raise StorageUnavailableError(str(exc)) from exc
 
     def commit(self) -> None:
-        """Flush the current transaction, if the connection has one.
-
-        A no-op on the autocommit connections the app hands out; the seed runs
-        non-autocommit and needs it after each batch.
-        """
+        """Flush the current transaction, if the connection has one."""
         conn = self._conn
         if conn is not None and not conn.closed and not conn.autocommit:
             try:

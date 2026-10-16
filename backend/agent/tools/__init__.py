@@ -1,8 +1,4 @@
-"""Bounded tool surface for the interpretation agent.
-
-The registry lives here: one line per tool the agent advertises. Adding a tool
-means a new module under ``tools/`` plus one entry in :data:`TOOL_REGISTRARS`.
-"""
+"""Bounded tool surface for the interpretation agent."""
 
 from __future__ import annotations
 
@@ -16,12 +12,9 @@ ERR_EMPTY_QUERY = "empty_query"
 ERR_BAD_ARGUMENT = "bad_argument"
 ERR_NOT_FOUND = "not_found"
 ERR_DB_UNAVAILABLE = "db_unavailable"
-ERR_AREA_REGISTRY = "area_registry_unavailable"
-ERR_NOT_IMPLEMENTED = "not_implemented"
+ERR_TOOL_BUDGET = "tool_budget_exhausted"
 
 ToolAnswer = dict[str, Any]
-# Every tool answers through `remember`, which records the ids it handed out.
-Remember = Callable[[Any, ToolAnswer], ToolAnswer]
 
 
 def envelope(
@@ -47,10 +40,7 @@ def envelope(
 def clamp(
     value: Any, low: int | float, high: int | float, default: int | float
 ) -> tuple[int | float, bool]:
-    """Clamp a number the model sent into [low, high]; report whether we did.
-
-    A missing/unparseable value becomes `default`, not an error.
-    """
+    """Clamp a number the model sent into [low, high]; report whether we did."""
     if not isinstance(value, (int, float)) or isinstance(value, bool):
         return default, False
     if value < low:
@@ -68,11 +58,7 @@ def project(row: Any, fields: tuple[str, ...]) -> dict[str, Any]:
 
 
 def fetch(repos: Any, fn: Callable[[Any], Any]) -> tuple[Any, str | None, str | None]:
-    """Run `fn(repos)`, or say why the database could not be reached.
-
-    Never raises: a tool that cannot read reports it, so the model learns the
-    answer is missing instead of the whole run dying on it.
-    """
+    """Run `fn(repos)`, or say why the database could not be reached."""
     if repos is None:
         return None, ERR_DB_UNAVAILABLE, "database not available"
     try:
@@ -89,12 +75,9 @@ def positive_int(value: Any) -> bool:
     return isinstance(value, int) and not isinstance(value, bool) and value > 0
 
 
-# The registry needs the submodules; they import the helpers above, so this
-# import has to sit below them.
 from agent.tools import areas, places, plan, services, verify  # noqa: E402
 
-# The registry: what the agent advertises, one line per tool.
-TOOL_REGISTRARS: tuple[Callable[[Any, Remember], None], ...] = (
+TOOL_REGISTRARS: tuple[Callable[[Any], None], ...] = (
     areas.register_find_areas,
     places.register_find_places,
     plan.register_plan_walk,
@@ -104,7 +87,7 @@ TOOL_REGISTRARS: tuple[Callable[[Any, Remember], None], ...] = (
 )
 
 
-def register_all(agent: Any, remember: Remember) -> None:
+def register_all(agent: Any) -> None:
     """Advertise every tool in the registry on ``agent``."""
     for register in TOOL_REGISTRARS:
-        register(agent, remember)
+        register(agent)

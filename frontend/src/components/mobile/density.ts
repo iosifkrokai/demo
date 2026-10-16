@@ -1,11 +1,4 @@
 /** Mobile density tokens, kept in one file instead of `max-md:h-*` across callers. */
-import { MOBILE_MAX_WIDTH } from './use-is-mobile';
-
-/** Every token here applies below this width (Tailwind `md` minus one). */
-export const DENSITY_MAX_WIDTH = MOBILE_MAX_WIDTH;
-
-/** Smallest side a finger target may have on a phone. */
-export const MIN_TAP_PX = 40;
 
 export const DENSITY = {
   /** Panel padding: 16 -> 12. */

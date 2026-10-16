@@ -1,7 +1,4 @@
-"""The time matrix: chunked /sources_to_targets with resilient fallbacks.
-
-The matrix guides ordering; the reported length/time must come from /route.
-"""
+"""The time matrix: chunked /sources_to_targets with resilient fallbacks."""
 
 from __future__ import annotations
 
@@ -19,18 +16,26 @@ from core.errors import UpstreamUnavailableError
 from . import http
 from .constants import (
     DISTANCE_LIMIT_MARKERS,
-    LOCATION_SNAP_RADIUS_M,
     MATRIX_FALLBACK_BUDGET_S,
     MATRIX_FALLBACK_MAX_ROUTE_CALLS,
     MATRIX_MAX_SOURCES,
     MATRIX_MAX_TARGETS,
     MATRIX_PATH_LIMIT_M,
+    MATRIX_SNAP_RADII_M,
     ROUTE_FAILURE_MARKERS,
-    ROUTE_SNAP_RADII_M,
     costing_for,
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _with_radius(locations: list[dict[str, Any]], radius: int | None) -> list[dict[str, Any]]:
+    """Attach a snap radius only when one was asked for: an explicit radius lets
+    the engine fold two nearby places onto one edge.
+    """
+    if radius is None:
+        return list(locations)
+    return [{**loc, "radius": radius} for loc in locations]
 
 
 def _is_distance_limit_error(exc: Exception) -> bool:
@@ -48,10 +53,7 @@ def _pair_metres(a: dict[str, Any], b: dict[str, Any]) -> float:
 
 
 def _same_point(a: dict[str, Any], b: dict[str, Any]) -> bool:
-    """True when two locations are the same point, even across chunk copies.
-
-    Compares global indices when present, otherwise object identity.
-    """
+    """True when two locations are the same point, even across chunk copies."""
     si, ti = a.get("_src_idx"), b.get("_tgt_idx")
     if si is not None and ti is not None:
         return si == ti
@@ -70,16 +72,19 @@ def _matrix_via_route(
     costing: str,
     timeout: float,
     radius: int | None = None,
+    costing_options: dict[str, Any] | None = None,
 ) -> float:
     """Fallback: single pair via GET /route."""
-    snap = radius or LOCATION_SNAP_RADIUS_M
-    payload = {
+    pairs = _with_radius([source, target], radius)
+    payload: dict[str, Any] = {
         "costing": costing,
-        "locations": [{**source, "radius": snap}, {**target, "radius": snap}],
+        "locations": pairs,
         "units": "kilometers",
         "alternates": 0,
         "directions_options": {"units": "kilometers"},
     }
+    if costing_options:
+        payload["costing_options"] = costing_options
     body = http.request_with_retry(
         "GET",
         f"{settings.VALHALLA_URL.rstrip('/')}/route",
@@ -98,15 +103,17 @@ def _matrix_chunk(
     costing: str,
     timeout: float,
     radius: int | None = None,
+    costing_options: dict[str, Any] | None = None,
 ) -> list[list[float]]:
     """Single chunk: issue one /sources_to_targets request and return its matrix."""
-    snap = radius or LOCATION_SNAP_RADIUS_M
-    payload = {
+    payload: dict[str, Any] = {
         "costing": costing,
-        "sources": [{**loc, "radius": snap} for loc in sources],
-        "targets": [{**loc, "radius": snap} for loc in targets],
+        "sources": _with_radius(sources, radius),
+        "targets": _with_radius(targets, radius),
         "units": "kilometers",
     }
+    if costing_options:
+        payload["costing_options"] = costing_options
     body = http.request_with_retry(
         "GET",
         f"{settings.VALHALLA_URL.rstrip('/')}/sources_to_targets",
@@ -132,25 +139,32 @@ def _matrix_chunk_resilient(
     costing: str,
     timeout: float,
     deadline: float | None = None,
+    costing_options: dict[str, Any] | None = None,
 ) -> list[list[float]]:
     """A chunk request, retried with a wider snap radius, then per-pair /route."""
     last_exc: Exception | None = None
-    for radius in ROUTE_SNAP_RADII_M:
+    for radius in MATRIX_SNAP_RADII_M:
         try:
-            return _matrix_chunk(sources, targets, costing, timeout, radius=radius)
+            return _matrix_chunk(
+                sources, targets, costing, timeout, radius=radius, costing_options=costing_options
+            )
         except UpstreamUnavailableError as exc:
             if _is_distance_limit_error(exc):
                 logger.warning(
                     "matrix chunk hit the 200 km path limit — resolving by distance "
                     "instead of per-pair /route"
                 )
-                return _distance_aware_fill(sources, targets, costing, timeout)
+                return _distance_aware_fill(
+                    sources, targets, costing, timeout, costing_options=costing_options
+                )
             last_exc = exc
     logger.warning(
         "matrix chunk failed at every snap radius (%s) — falling back to per-pair /route",
         last_exc,
     )
-    return _fill_via_route(sources, targets, costing, timeout, deadline=deadline)
+    return _fill_via_route(
+        sources, targets, costing, timeout, deadline=deadline, costing_options=costing_options
+    )
 
 
 def _distance_aware_fill(
@@ -158,11 +172,9 @@ def _distance_aware_fill(
     targets: list[dict[str, Any]],
     costing: str,
     timeout: float,
+    costing_options: dict[str, Any] | None = None,
 ) -> list[list[float]]:
-    """Resolve a chunk Valhalla refused for the 200 km path limit, per source.
-
-    Far pairs are marked unreachable; near pairs still get real times.
-    """
+    """Resolve a chunk Valhalla refused for the 200 km path limit, per source."""
     n_s, n_t = len(sources), len(targets)
     unreachable = float(constants.UNREACHABLE_S)
     unknown = float(constants.UNKNOWN_S)
@@ -174,18 +186,18 @@ def _distance_aware_fill(
             cols = near[start : start + MATRIX_MAX_TARGETS]
             row_values: list[float] | None = None
             try:
-                sub = _matrix_chunk([source], [targets[j] for j in cols], costing, timeout)
+                sub = _matrix_chunk(
+                    [source],
+                    [targets[j] for j in cols],
+                    costing,
+                    timeout,
+                    costing_options=costing_options,
+                )
                 row_values = [float(v) for v in sub[0]]
             except UpstreamUnavailableError as exc:
                 if _is_distance_limit_error(exc) and len(cols) > 1:
                     row_values = _isolate_row(
-                        source,
-                        targets,
-                        cols,
-                        costing,
-                        timeout,
-                        unreachable=unreachable,
-                        unknown=unknown,
+                        source, targets, cols, costing, timeout, costing_options=costing_options
                     )
                 else:
                     logger.warning(
@@ -203,18 +215,17 @@ def _isolate_row(
     cols: list[int],
     costing: str,
     timeout: float,
-    *,
-    unreachable: float,
-    unknown: float,
+    costing_options: dict[str, Any] | None = None,
 ) -> list[float]:
-    """Probe one source's target block a single cell at a time.
-
-    The far cell is marked unreachable; transport failures stay unknown.
-    """
+    """Probe one source's target block a single cell at a time."""
+    unreachable = float(constants.UNREACHABLE_S)
+    unknown = float(constants.UNKNOWN_S)
     row: list[float] = []
     for j in cols:
         try:
-            sub = _matrix_chunk([source], [targets[j]], costing, timeout)
+            sub = _matrix_chunk(
+                [source], [targets[j]], costing, timeout, costing_options=costing_options
+            )
             row.append(float(sub[0][0]))
         except UpstreamUnavailableError as exc:
             row.append(unreachable if _is_distance_limit_error(exc) else unknown)
@@ -222,24 +233,24 @@ def _isolate_row(
 
 
 def _chunks_safe(n_sources: int, n_targets: int) -> bool:
-    """True when this shape fits in a single /sources_to_targets request.
-
-    Valhalla answers 500 for larger shapes, so bigger ones are split.
-    """
+    """True when this shape fits in a single /sources_to_targets request."""
     return n_sources <= MATRIX_MAX_SOURCES and n_targets <= MATRIX_MAX_TARGETS
 
 
 def _matrix_via_route_resilient(
-    source: dict[str, Any], target: dict[str, Any], costing: str, timeout: float
+    source: dict[str, Any],
+    target: dict[str, Any],
+    costing: str,
+    timeout: float,
+    costing_options: dict[str, Any] | None = None,
 ) -> float:
-    """One pair via /route, widening the snap radius only for a snap failure.
-
-    Returns a time, UNREACHABLE_S, or UNKNOWN_S ("we could not ask").
-    """
+    """One pair via /route, widening the snap radius only for a snap failure."""
     last_exc: Exception | None = None
-    for radius in ROUTE_SNAP_RADII_M:
+    for radius in MATRIX_SNAP_RADII_M:
         try:
-            return _matrix_via_route(source, target, costing, timeout, radius=radius)
+            return _matrix_via_route(
+                source, target, costing, timeout, radius=radius, costing_options=costing_options
+            )
         except UpstreamUnavailableError as exc:
             if _is_distance_limit_error(exc):
                 return float(constants.UNREACHABLE_S)
@@ -271,11 +282,9 @@ def _fill_via_route(
     costing: str,
     timeout: float,
     deadline: float | None = None,
+    costing_options: dict[str, Any] | None = None,
 ) -> list[list[float]]:
-    """Fill every cell with per-pair /route calls. Used only when all else fails.
-
-    Bounded by a call cap and a deadline; leftover cells stay UNKNOWN_S.
-    """
+    """Fill every cell with per-pair /route calls. Used only when all else fails."""
     n_src = len(sources)
     n_tgt = len(targets)
     started = _time.monotonic()
@@ -293,7 +302,11 @@ def _fill_via_route(
                 row.append(float(constants.UNKNOWN_S))
             else:
                 calls += 1
-                row.append(_matrix_via_route_resilient(sources[i], targets[j], costing, timeout))
+                row.append(
+                    _matrix_via_route_resilient(
+                        sources[i], targets[j], costing, timeout, costing_options=costing_options
+                    )
+                )
         result.append(row)
     if capped:
         logger.warning(
@@ -323,18 +336,18 @@ def time_matrix(
     costing: str = "pedestrian",
     timeout: float | None = None,
     deadline: float | None = None,
+    costing_options: dict[str, Any] | None = None,
 ) -> list[list[float]]:
-    """GET /sources_to_targets → time matrix in seconds, chunked to avoid 500s.
-
-    A cell is a real time, UNREACHABLE_S ("no path") or UNKNOWN_S.
-    """
+    """GET /sources_to_targets → time matrix in seconds, chunked to avoid 500s."""
     costing = costing_for(costing)
     n_src = len(sources)
     n_tgt = len(targets)
     timeout = timeout or constants.VALHALLA_TIMEOUT_S
 
     if _chunks_safe(n_src, n_tgt):
-        fast_result = _matrix_chunk_resilient(sources, targets, costing, timeout, deadline=deadline)
+        fast_result = _matrix_chunk_resilient(
+            sources, targets, costing, timeout, deadline=deadline, costing_options=costing_options
+        )
         _zero_diagonal(fast_result, sources, targets)
         return fast_result
 
@@ -350,7 +363,12 @@ def time_matrix(
             tgt_chunk = idx_targets[tgt_start:tgt_end]
 
             chunk_matrix = _matrix_chunk_resilient(
-                src_chunk, tgt_chunk, costing, timeout, deadline=deadline
+                src_chunk,
+                tgt_chunk,
+                costing,
+                timeout,
+                deadline=deadline,
+                costing_options=costing_options,
             )
 
             for li, row in enumerate(chunk_matrix):
@@ -363,9 +381,6 @@ def time_matrix(
 
 
 def is_route_failure(exc: Exception) -> bool:
-    """True when the tour itself is the problem, not the Valhalla connection.
-
-    Transport failures match neither marker and must keep bubbling up as 503.
-    """
+    """True when the tour itself is the problem, not the Valhalla connection."""
     text = str(exc).lower()
     return any(marker in text for marker in ROUTE_FAILURE_MARKERS)

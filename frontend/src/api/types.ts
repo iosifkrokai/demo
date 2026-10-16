@@ -23,6 +23,8 @@ export interface ItineraryStop {
   /** Real source links (Wikipedia and friends) where the dataset has them. */
   links: { title: string; url: string }[];
   ticket_price: string | null;
+  /** `true` when admission is free; `false`/absent when paid or unknown. */
+  is_free?: boolean | null;
   /** The point's picture, or null when there is none (the usual case). */
   photo: Photo | null;
 }
@@ -193,9 +195,3 @@ export type AccountApiErrorCode =
   | 'network_unavailable'
   | 'bad_response'
   | 'server_error';
-
-/** Codes that mean «the store is unreachable right now» — never a real answer. */
-export const STORAGE_DOWN_CODES: readonly AccountApiErrorCode[] = [
-  'storage_unavailable',
-  'network_unavailable',
-];

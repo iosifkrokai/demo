@@ -1,24 +1,23 @@
-"""``submit_plan`` — the end of the run, and the only way one ends.
-
-The model does not get to declare its own work good. Whatever is submitted is
-re-measured and re-verified here, by the same code the agent may have called
-while planning, and the answer carries a status that came from that code. The
-tool is a schema rather than free text, so a submission cannot arrive half-shaped.
-"""
+"""Measuring the finished plan — what the submit_plan tool left the code to do."""
 
 from __future__ import annotations
 
 from typing import Any
 
-from agent.tools import ERR_BAD_ARGUMENT, envelope
+from agent.schema import PlanSubmission
+from agent.tools import envelope
+from agent.tools.places import card_of, catalogue_rows
 from agent.tools.plan import plan_walk
-from agent.tools.verify import requirements_from, verdicts_of
-from routing.models import LatLon, TripRequirements
+from agent.tools.verify import verdicts_of
+from routing.models import TripRequirements, WalkRequest
 from routing.stops import candidate_of
-from routing.verify import ServiceAlongEvidence, verify, verify_catalogue
+from routing.verify import (
+    ServiceAlongEvidence,
+    steps_evidence,
+    verify,
+    verify_catalogue,
+)
 
-RESULT_MODES = ("route", "catalogue")
-# Enough to prove a service is on the way, not a catalogue of every bench.
 MAX_SERVICES_MEASURED = 24
 
 
@@ -37,14 +36,8 @@ def _problems(verdicts: list[dict[str, Any]]) -> list[dict[str, str]]:
 
 
 def _evidence(repos: Any, contract: TripRequirements, shape: Any) -> ServiceAlongEvidence | None:
-    """Measure the services beside the line, for the codes the request named.
-
-    Without this a service requirement can only ever come back `uncertain`, and
-    "кофе по пути" would never be provable.
-    """
-    codes = sorted(
-        {r.code for r in contract.requirements if r.kind in ("service", "interest") and r.code}
-    )
+    """Measure the services beside the line, for the codes the request named."""
+    codes = _named_codes(contract)
     if not codes or not shape or repos is None:
         return None
     try:
@@ -62,69 +55,67 @@ def _evidence(repos: Any, contract: TripRequirements, shape: Any) -> ServiceAlon
     return ServiceAlongEvidence(measured=True, by_code=by_code)
 
 
-def submit_plan(
-    ordered_ids: list[int],
+def _named_codes(contract: TripRequirements) -> list[str]:
+    """Every category code the request named, services included."""
+    return sorted(
+        {r.code for r in contract.requirements if r.kind in ("service", "interest") and r.code}
+    )
+
+
+def _catalogue_codes(contract: TripRequirements) -> list[str]:
+    """What a catalogue is of: every code the request named, minus what it forbade."""
+    forbidden = set(contract.avoid_codes())
+    return [code for code in _named_codes(contract) if code not in forbidden]
+
+
+def measure_submission(
+    request: WalkRequest,
+    submission: PlanSubmission,
     *,
     repos: Any,
     facts: Any,
-    budget_minutes: int | None = None,
-    profile: str = "pedestrian",
-    origin: LatLon | None = None,
-    round_trip: bool = False,
-    must_keep_ids: list[int] | None = None,
-    locale: str = "ru",
-    requirement_specs: list[dict[str, Any]] | None = None,
-    contract: TripRequirements | None = None,
-    unknowns: list[str] | None = None,
-    narrative: str | None = None,
-    result_mode: str = "route",
+    contract: TripRequirements,
     deadline_s: float | None = None,
 ) -> dict[str, Any]:
-    """Measure and verify the finished plan; the status is code's, not the model's."""
+    """Measure and verify the finished plan; the status is code's, not the model's.
+
+    The verdicts are read off the route that was measured, not off the ids that were
+    asked for: the planner drops stops — a budget too small for the walk, a point
+    nothing reaches, a service that is not a stop — and a requirement proved by a stop
+    the walk does not contain would be a satisfied nobody can see.
+    """
+    result_mode = contract.result_mode
+    narrative = submission.narrative
     provenance: dict[str, Any] = {
         "source": "places+valhalla",
         "result_mode": result_mode,
         "fact_status": "re-measured on submit",
     }
-    if result_mode not in RESULT_MODES:
-        return envelope(
-            "submit_plan",
-            [],
-            provenance,
-            error=ERR_BAD_ARGUMENT,
-            message=f"result_mode must be one of {RESULT_MODES}",
-        )
-
-    # The contract the response will render is the one verified here: a second
-    # copy would drift, and the client would show verdicts nobody computed.
-    if contract is None:
-        contract = requirements_from(requirement_specs)
-    contract.unknowns = list(unknowns or [])
+    for entry in submission.unknowns:
+        if entry not in contract.unknowns:
+            contract.unknowns.append(entry)
 
     if result_mode == "catalogue":
-        rows = repos.places.get_by_ids(ordered_ids or [])
+        rows, capped = catalogue_rows(
+            list(request.stop_ids),
+            categories=_catalogue_codes(contract),
+            area=contract.areas[0] if contract.areas else None,
+            repos=repos,
+        )
         places = [candidate_of(row, 0.0) for row in rows]
-        verify_catalogue(contract, places, facts=facts)
+        verify_catalogue(contract, places, facts=facts, at=contract.at)
         answer = verdicts_of(contract)
-        return envelope("submit_plan", answer["verdicts"], provenance) | {
+        provenance["capped"] = capped
+        return envelope(
+            "submit_plan", [card_of(row) for row in rows], provenance, capped=capped
+        ) | {
             "ok": answer["status"] == "ready",
             "problems": _problems(answer["verdicts"]),
             "narrative": narrative,
             **answer,
         }
 
-    measured = plan_walk(
-        ordered_ids,
-        repos=repos,
-        budget_minutes=budget_minutes,
-        profile=profile,
-        origin=origin,
-        round_trip=round_trip,
-        must_keep_ids=must_keep_ids,
-        locale=locale,
-        facts=facts,
-        deadline_s=deadline_s,
-    )
+    measured = plan_walk(request, repos=repos, facts=facts, deadline_s=deadline_s)
     if measured.get("error") is not None:
         provenance["reason_code"] = measured.get("error")
         return envelope(
@@ -135,7 +126,7 @@ def submit_plan(
             message=measured.get("message"),
         )
 
-    stops = [candidate_of(row, 0.0) for row in repos.places.get_by_ids(ordered_ids)]
+    stops = list(measured.get("results") or ())
     shape = measured.get("shape")
     verify(
         contract,
@@ -143,6 +134,8 @@ def submit_plan(
         shape,
         _evidence(repos, contract, shape),
         facts=facts,
+        at=contract.at,
+        steps_along=steps_evidence(repos, shape),
     )
     answer = verdicts_of(contract)
 
@@ -161,5 +154,6 @@ def submit_plan(
         "total_minutes": measured["total_minutes"],
         "fits_budget": measured["fits_budget"],
         "shape": measured.get("shape"),
+        "step_free": measured.get("step_free"),
         **answer,
     }

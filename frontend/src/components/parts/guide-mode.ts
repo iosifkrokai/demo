@@ -50,9 +50,6 @@ const resolve = (mode: ModeDescriptor): GuideTravelMode => ({
     : undefined,
 });
 
-/** Walking: the default travel mode when a route states no transport. */
-export const defaultTravelMode = (): GuideTravelMode => resolve(FOOT);
-
 /** Valhalla costing name → the guide's travel mode. */
 export const guideModeFor = (costing?: string | null): GuideTravelMode => {
   switch ((costing ?? '').toLowerCase()) {

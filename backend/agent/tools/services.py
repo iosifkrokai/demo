@@ -1,13 +1,4 @@
-"""``nearby_services`` — what can be inserted on the way, with a measured detour.
-
-"Кофе по пути" is a wish about the walk, not about a place, so the answer has to
-be a *detour*: how many extra minutes the routing engine needs to slip the stop
-in between two the route already has. A straight-line guess would be a different
-number, and a wrong one.
-
-One matrix answers the whole question — every stop and every candidate together —
-so the cost is one call to the engine however many services are considered.
-"""
+"""``nearby_services`` — what can be inserted on the way, with a measured detour."""
 
 from __future__ import annotations
 
@@ -20,12 +11,12 @@ from agent.schema import PlanningDeps
 from agent.tools import (
     ERR_BAD_ARGUMENT,
     ERR_DB_UNAVAILABLE,
-    Remember,
     ToolAnswer,
     clamp,
     envelope,
     fetch,
 )
+from core import constants
 from core.errors import UpstreamUnavailableError
 from routing.models import Candidate
 from routing.stops import candidate_of
@@ -54,7 +45,6 @@ def nearby_services(
     repos: Any,
     profile: str = "pedestrian",
     max_detour_minutes: float | None = None,
-    limit: int = MAX_RESULTS,
     deadline_s: float | None = None,
 ) -> dict[str, Any]:
     """Services insertable on this route, each with the walking detour it costs."""
@@ -65,7 +55,7 @@ def nearby_services(
         "fact_status": "detour measured",
     }
     wanted = [i for i in (stop_ids or []) if i > 0][:MAX_STOPS]
-    if len(wanted) < 2:
+    if len(wanted) < constants.MIN_LEG_POINTS:
         return envelope(
             "nearby_services",
             [],
@@ -77,50 +67,69 @@ def nearby_services(
     budget, budget_clamped = clamp(
         max_detour_minutes, 1, MAX_DETOUR_MINUTES, DEFAULT_DETOUR_MINUTES
     )
-    want, want_clamped = clamp(limit, 1, MAX_RESULTS, MAX_RESULTS)
-
     rows, error, message = fetch(repos, lambda store: store.places.get_by_ids(wanted))
-    if error is not None:
-        return envelope("nearby_services", [], provenance, error=error, message=message)
-
     stops = [candidate_of(row, 0.0) for row in (rows or [])]
-    if len(stops) < 2:
-        return envelope(
-            "nearby_services",
-            [],
-            provenance,
-            error=ERR_DB_UNAVAILABLE,
-            message="fewer than two of the given stops exist",
+    if error is None and len(stops) < constants.MIN_LEG_POINTS:
+        error, message = ERR_DB_UNAVAILABLE, "fewer than two of the given stops exist"
+    found: dict[int, Candidate] = {}
+    if error is None:
+        found, error, message = fetch(
+            repos, lambda store: _collect_services(store, stops, category_codes)
         )
-
-    def collect(store: Any) -> dict[int, Candidate]:
-        """Services near any stop, by category. Never a stop the route already has."""
-        requested = [c for c in (category_codes or []) if c.strip()]
-        wanted_codes = store.taxonomy.db_values(requested) if requested else None
-        allowed = set(wanted_codes) if wanted_codes else None
-        on_route = {stop.id for stop in stops}
-        found: dict[int, Candidate] = {}
-        for stop in stops:
-            near = store.places.nearby(
-                stop.lat, stop.lon, radius_km=DEFAULT_RADIUS_KM, limit=NEARBY_PER_STOP
-            )
-            for place in near:
-                if place.id in on_route or place.id in found:
-                    continue
-                if allowed is not None and (place.category or "") not in allowed:
-                    continue
-                found[place.id] = candidate_of(place, 0.0)
-        return found
-
-    candidates, error, message = fetch(repos, collect)
     if error is not None:
         return envelope("nearby_services", [], provenance, error=error, message=message)
-    services = list((candidates or {}).values())[:MAX_CANDIDATES]
+
+    services = list(found.values())[:MAX_CANDIDATES]
     provenance["candidates"] = len(services)
     provenance["categories"] = category_codes or "every service the taxonomy knows"
     if not services:
         return envelope("nearby_services", [], provenance)
 
+    budget_s = float(budget) * 60.0
+    ranked, why = _ranked_by_detour(stops, services, profile, budget_s, deadline_s)
+    if why is not None:
+        provenance["reason_code"] = "valhalla_unavailable"
+        return envelope("nearby_services", [], provenance, error="upstream", message=why)
+
+    results = ranked[:MAX_RESULTS]
+    return envelope(
+        "nearby_services",
+        results,
+        provenance,
+        capped=bool(budget_clamped or len(ranked) > len(results)),
+    )
+
+
+def _collect_services(
+    store: Any, stops: list[Candidate], category_codes: list[str] | None
+) -> dict[int, Candidate]:
+    """Services near any stop, by category. Never a stop the route already has."""
+    requested = [c for c in (category_codes or []) if c.strip()]
+    wanted_codes = store.taxonomy.db_values(requested) if requested else None
+    allowed = set(wanted_codes) if wanted_codes else None
+    on_route = {stop.id for stop in stops}
+    found: dict[int, Candidate] = {}
+    for stop in stops:
+        near = store.places.nearby(
+            stop.lat, stop.lon, radius_km=DEFAULT_RADIUS_KM, limit=NEARBY_PER_STOP
+        )
+        for place in near:
+            if place.id in on_route or place.id in found:
+                continue
+            if allowed is not None and (place.category or "") not in allowed:
+                continue
+            found[place.id] = candidate_of(place, 0.0)
+    return found
+
+
+def _ranked_by_detour(
+    stops: list[Candidate],
+    services: list[Candidate],
+    profile: str,
+    budget_s: float,
+    deadline_s: float | None,
+) -> tuple[list[dict[str, Any]], str | None]:
+    """Which services fit, cheapest detour first, or why Valhalla would not measure it."""
     points = [*stops, *services]
     coords = [{"lat": point.lat, "lon": point.lon} for point in points]
     try:
@@ -129,10 +138,19 @@ def nearby_services(
             raise UpstreamUnavailableError("some stops could not be snapped to a road")
         matrix = time_matrix(snapped, snapped, costing=profile, deadline=deadline_s)
     except UpstreamUnavailableError as exc:
-        provenance["reason_code"] = "valhalla_unavailable"
-        return envelope("nearby_services", [], provenance, error="upstream", message=str(exc))
+        return [], str(exc)
+    ranked = _best_detour(stops, services, matrix, budget_s)
+    ranked.sort(key=lambda item: item["detour_minutes"])
+    return ranked, None
 
-    budget_s = float(budget) * 60.0
+
+def _best_detour(
+    stops: list[Candidate],
+    services: list[Candidate],
+    matrix: list[list[float]],
+    budget_s: float,
+) -> list[dict[str, Any]]:
+    """The least walking each service would add, when it is worth adding at all."""
     offset = len(stops)
     ranked: list[dict[str, Any]] = []
     for position, service in enumerate(services):
@@ -161,18 +179,10 @@ def nearby_services(
                 "insert_after": stops[after].id if after is not None else stops[0].id,
             }
         )
-
-    ranked.sort(key=lambda item: item["detour_minutes"])
-    results = ranked[: int(want)]
-    return envelope(
-        "nearby_services",
-        results,
-        provenance,
-        capped=bool(budget_clamped or want_clamped or len(ranked) > len(results)),
-    )
+    return ranked
 
 
-def register_nearby_services(agent: Any, remember: Remember) -> None:
+def register_nearby_services(agent: Any) -> None:
     """Advertise ``nearby_services`` to the agent."""
 
     @agent.tool(name="nearby_services")
@@ -183,20 +193,12 @@ def register_nearby_services(agent: Any, remember: Remember) -> None:
         profile: str = "pedestrian",
         max_detour_minutes: float | None = None,
     ) -> ToolAnswer:
-        """Services that can be slipped in on this route, with the real detour.
-
-        Each result carries `detour_minutes` — the extra walking the engine needs
-        to insert it, not a straight-line guess — and `insert_after`, the stop it
-        belongs behind. Categories default to every service the taxonomy knows.
-        """
-        return remember(
-            ctx,
-            nearby_services(
-                stop_ids,
-                category_codes,
-                repos=ctx.deps.repos,
-                profile=profile,
-                max_detour_minutes=max_detour_minutes,
-                deadline_s=ctx.deps.seconds_left(),
-            ),
+        """Services that can be slipped in on this route, with the real detour."""
+        return nearby_services(
+            stop_ids,
+            category_codes,
+            repos=ctx.deps.repos,
+            profile=profile,
+            max_detour_minutes=max_detour_minutes,
+            deadline_s=ctx.deps.seconds_left(),
         )

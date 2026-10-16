@@ -6,14 +6,23 @@ import itertools
 import math
 from collections.abc import Collection
 from dataclasses import dataclass
+from typing import Any
 
 from core import constants
 from core.errors import NoRoutePossibleError, UpstreamUnavailableError
-from routing.models import Candidate, CategoryFacts, CostMatrix, ResolvedConstraints
+from routing.models import (
+    Candidate,
+    CategoryFacts,
+    CostMatrix,
+    LatLon,
+    OriginAnchor,
+    ResolvedConstraints,
+)
+from routing.valhalla.constants import costing_for
 from routing.valhalla.matrix import time_matrix
 from routing.valhalla.snap import snap_locations
 
-from .geometry import distance_m
+from .geometry import distance_m, distance_pt_m
 
 REASON_UNROUTABLE_LEG = "unroutable_leg"
 REASON_MUST_VISIT_UNROUTABLE = "must_visit_unroutable"
@@ -50,13 +59,40 @@ def visit_time_minutes(category: str | None, facts: CategoryFacts) -> int:
 
 
 def visit_minutes_of(candidate: Candidate, facts: CategoryFacts) -> int:
-    """The stop's own visit estimate, falling back to its category default.
-
-    An estimate from the taxonomy, not a hard constraint.
-    """
+    """The stop's own visit estimate, falling back to its category default."""
     if candidate.visit_minutes_db is not None:
         return int(candidate.visit_minutes_db)
     return visit_time_minutes(candidate.category, facts)
+
+
+def _measure_anchor(
+    origin: LatLon | None,
+    coords: list[dict[str, float]],
+    costing: str,
+    deadline: float | None,
+    costing_options: dict[str, Any] | None = None,
+) -> OriginAnchor | None:
+    """Measure the tourist's own two legs, through the same matrix call as the rest."""
+    if origin is None or not coords:
+        return None
+    point = snap_locations([{"lat": origin.lat, "lon": origin.lon}], costing=costing)
+    try:
+        from_origin = time_matrix(
+            point, coords, costing=costing, deadline=deadline, costing_options=costing_options
+        )
+        to_origin = time_matrix(
+            coords, point, costing=costing, deadline=deadline, costing_options=costing_options
+        )
+    except UpstreamUnavailableError:
+        return None
+    if len(from_origin) != 1 or len(from_origin[0]) != len(coords):
+        return None
+    if len(to_origin) != len(coords) or any(len(row) != 1 for row in to_origin):
+        return None
+    return OriginAnchor(
+        from_origin=list(from_origin[0]),
+        to_origin=[row[0] for row in to_origin],
+    )
 
 
 def compute_cost_matrix(
@@ -65,6 +101,7 @@ def compute_cost_matrix(
     costing: str,
     facts: CategoryFacts,
     deadline: float | None = None,
+    costing_options: dict[str, Any] | None = None,
 ) -> CostMatrix:
     """Valhalla sources_to_targets + visit times, with sanity pre-filter."""
     if not candidates:
@@ -72,10 +109,10 @@ def compute_cost_matrix(
 
     coords = [{"lat": c.lat, "lon": c.lon} for c in candidates]
     coords = snap_locations(coords, costing=costing)
-    try:
-        matrix = time_matrix(coords, coords, costing=costing, deadline=deadline)
-    except UpstreamUnavailableError:
-        raise
+    anchor = _measure_anchor(constraints.origin, coords, costing, deadline, costing_options)
+    matrix = time_matrix(
+        coords, coords, costing=costing, deadline=deadline, costing_options=costing_options
+    )
 
     if not matrix or len(matrix) != len(candidates):
         raise UpstreamUnavailableError(
@@ -102,12 +139,13 @@ def compute_cost_matrix(
         visits = [visits[i] for i in keep_idx]
         coords = [{"lat": c.lat, "lon": c.lon} for c in candidates]
         coords = snap_locations(coords, costing=costing)
-        matrix = time_matrix(coords, coords, costing=costing)
+        matrix = time_matrix(coords, coords, costing=costing, costing_options=costing_options)
 
     return CostMatrix(
         walk_seconds=matrix,
         visit_minutes=visits,
         indices=kept_original_idx,
+        anchor=anchor,
     )
 
 
@@ -118,11 +156,19 @@ def _usable_link(value: float) -> bool:
     return math.isnan(value) or (math.isfinite(value) and value < constants.UNREACHABLE_S)
 
 
-def _sub_matrix(cost: CostMatrix, idx: list[int]) -> CostMatrix:
+def sub_matrix(cost: CostMatrix, idx: list[int]) -> CostMatrix:
+    """The same measurement narrowed to a subset of its stops, origin legs included."""
+    anchor = cost.anchor
+    if anchor is not None:
+        anchor = OriginAnchor(
+            from_origin=[anchor.from_origin[i] for i in idx],
+            to_origin=[anchor.to_origin[i] for i in idx],
+        )
     return CostMatrix(
         walk_seconds=[[cost.walk_seconds[i][j] for j in idx] for i in idx],
         visit_minutes=[cost.visit_minutes[i] for i in idx],
         indices=[cost.indices[i] for i in idx],
+        anchor=anchor,
     )
 
 
@@ -138,7 +184,7 @@ def _best_pair(candidates: list[Candidate], cost: CostMatrix) -> tuple[list[Cand
                 best = (key, i, j)
     assert best is not None
     _, i, j = best
-    return [candidates[i], candidates[j]], _sub_matrix(cost, [i, j])
+    return [candidates[i], candidates[j]], sub_matrix(cost, [i, j])
 
 
 def drop_unreachable(
@@ -148,7 +194,7 @@ def drop_unreachable(
     one; when fewer than two survive, the best pair is returned.
     """
     n = len(candidates)
-    if n < 3:
+    if n < constants.MIN_TOUR_STOPS:
         return candidates, cost
 
     alive = set(range(n))
@@ -164,11 +210,11 @@ def drop_unreachable(
 
     if len(alive) == n:
         return candidates, cost
-    if len(alive) < 2:
+    if len(alive) < constants.MIN_LEG_POINTS:
         return _best_pair(candidates, cost)
 
     idx = sorted(alive)
-    return [candidates[i] for i in idx], _sub_matrix(cost, idx)
+    return [candidates[i] for i in idx], sub_matrix(cost, idx)
 
 
 def prune_unroutable_stops(
@@ -180,7 +226,7 @@ def prune_unroutable_stops(
     """Must-visit stops are never dropped: they stay and are reported with
     ``must_visit_unroutable``. Returns ``(kept_route, report)``.
     """
-    if len(route) < 3:
+    if len(route) < constants.MIN_TOUR_STOPS:
         return route, []
     index = {c.id: i for i, c in enumerate(candidates)}
     must = set(must_visit_ids or ())
@@ -197,7 +243,7 @@ def prune_unroutable_stops(
         return not math.isfinite(cell) or cell >= constants.UNREACHABLE_S
 
     changed = True
-    while changed and len(keep) >= 3:
+    while changed and len(keep) >= constants.MIN_TOUR_STOPS:
         changed = False
         for i in range(len(keep) - 1):
             if not leg_bad(keep[i], keep[i + 1]):
@@ -218,7 +264,7 @@ def walk_cost(order: list[int], matrix: list[list[float]]) -> float:
     """An infinite cell saturates at UNREACHABLE_S; a NaN cell (UNKNOWN_S) is
     skipped, not saturated.
     """
-    if len(order) < 2:
+    if len(order) < constants.MIN_LEG_POINTS:
         return 0.0
     total = 0.0
     for a, b in itertools.pairwise(order):
@@ -242,19 +288,72 @@ def total_seconds(order: list[int], matrix: list[list[float]], visit_minutes: li
     return int(walk_cost(order, matrix)) + visit_cost(order, visit_minutes)
 
 
-def _synthetic_cost(candidates: list[Candidate], costing: str, facts: CategoryFacts) -> CostMatrix:
+ORIGIN_INDEX = -1
+
+
+def leg_seconds(matrix: list[list[float]], anchor: OriginAnchor | None, a: int, b: int) -> float:
+    """One leg's time in seconds; the origin has its own columns, not a row."""
+    if a == ORIGIN_INDEX:
+        return anchor.from_origin[b] if anchor is not None else constants.UNKNOWN_S
+    if b == ORIGIN_INDEX:
+        return anchor.to_origin[a] if anchor is not None else constants.UNKNOWN_S
+    return matrix[a][b]
+
+
+def route_legs(
+    order: list[int], round_trip: bool, anchor: OriginAnchor | None = None
+) -> list[tuple[int, int]]:
+    """Every leg of a route, the tourist's own legs included when they are known."""
+    if not order:
+        return []
+    legs = list(itertools.pairwise(order))
+    if anchor is not None:
+        legs.insert(0, (ORIGIN_INDEX, order[0]))
+        if round_trip:
+            legs.append((order[-1], ORIGIN_INDEX))
+    elif round_trip and len(order) >= constants.MIN_LEG_POINTS:
+        legs.append((order[-1], order[0]))
+    return legs
+
+
+def _fallback_speed_ms(costing: str) -> float:
+    """The straight-line pace to assume when the engine cannot answer."""
+    kmh = {
+        "pedestrian": constants.PEDESTRIAN_SPEED_KMH,
+        "bicycle": constants.BICYCLE_SPEED_KMH,
+    }.get(costing_for(costing), constants.AUTO_SPEED_KMH)
+    return kmh / 3.6
+
+
+def _synthetic_cost(
+    candidates: list[Candidate],
+    costing: str,
+    facts: CategoryFacts,
+    origin: LatLon | None = None,
+) -> CostMatrix:
     """A straight-line cost matrix for when Valhalla cannot answer."""
-    speed_ms = 1.3 if costing == "pedestrian" else 8.0
+    speed_ms = _fallback_speed_ms(costing)
     n = len(candidates)
     matrix = [[0.0] * n for _ in range(n)]
     for i in range(n):
         for j in range(n):
             if i != j:
                 matrix[i][j] = distance_m(candidates[i], candidates[j]) / speed_ms
+    anchor = None
+    if origin is not None:
+        anchor = OriginAnchor(
+            from_origin=[
+                distance_pt_m(origin.lat, origin.lon, c.lat, c.lon) / speed_ms for c in candidates
+            ],
+            to_origin=[
+                distance_pt_m(c.lat, c.lon, origin.lat, origin.lon) / speed_ms for c in candidates
+            ],
+        )
     return CostMatrix(
         walk_seconds=matrix,
         visit_minutes=[visit_minutes_of(c, facts) for c in candidates],
         indices=list(range(n)),
+        anchor=anchor,
     )
 
 
@@ -263,25 +362,29 @@ def refinement_cost(
     constraints: ResolvedConstraints,
     costing: str,
     facts: CategoryFacts,
+    costing_options: dict[str, Any] | None = None,
 ) -> tuple[list[Candidate], CostMatrix]:
     """Never raises and never drops a stop the user kept: falls back to straight-line
     legs if the pre-filter would remove one.
     """
     base_ids = {c.id for c in route}
     try:
-        cost = compute_cost_matrix(route, constraints, costing, facts)
+        cost = compute_cost_matrix(
+            route, constraints, costing, facts, costing_options=costing_options
+        )
     except (UpstreamUnavailableError, NoRoutePossibleError):
-        return route, _synthetic_cost(route, costing, facts)
+        return route, _synthetic_cost(route, costing, facts, constraints.origin)
 
     if cost.indices != list(range(len(route))):
         aligned = [route[i] for i in cost.indices]
         if not base_ids <= {c.id for c in aligned}:
-            return route, _synthetic_cost(route, costing, facts)
+            return route, _synthetic_cost(route, costing, facts, constraints.origin)
         route = aligned
         cost = CostMatrix(
             walk_seconds=cost.walk_seconds,
             visit_minutes=cost.visit_minutes,
             indices=list(range(len(route))),
+            anchor=cost.anchor,
         )
     return route, cost
 
@@ -291,13 +394,16 @@ def build_cost(
     constraints: ResolvedConstraints,
     costing: str,
     facts: CategoryFacts,
+    costing_options: dict[str, Any] | None = None,
 ) -> tuple[list[Candidate], CostMatrix]:
     """Cost matrix, aligned to the candidates, minus what Valhalla cannot reach."""
-    cost = compute_cost_matrix(candidates, constraints, costing, facts)
+    cost = compute_cost_matrix(
+        candidates, constraints, costing, facts, costing_options=costing_options
+    )
     if cost.indices != list(range(len(candidates))):
         candidates = [candidates[i] for i in cost.indices]
     candidates, cost = drop_unreachable(candidates, cost)
-    if len(candidates) < 2:
+    if len(candidates) < constants.MIN_LEG_POINTS:
         raise NoRoutePossibleError(
             "Valhalla не нашла дороги между нашими точками — уточните город или район"
         )

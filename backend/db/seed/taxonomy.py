@@ -1,9 +1,4 @@
-"""Reading `data/taxonomy.csv` — the seed's view of the taxonomy.
-
-The file is the source; the `categories` table is the projection. The seed reads
-the file to validate a dataset row *while it writes it*, so it needs the parser
-even though the service reads the table.
-"""
+"""Reading `data/taxonomy.csv` — the seed's view of the taxonomy."""
 
 from __future__ import annotations
 
@@ -25,6 +20,7 @@ _COLUMNS = (
     "visit_minutes",
     "aliases_ru",
     "aliases_en",
+    "highlight",
 )
 
 
@@ -34,15 +30,24 @@ def _split(value: str) -> tuple[str, ...]:
     return tuple(p for p in parts if p)
 
 
+def _flag(value: str) -> bool:
+    """A CSV column the taxonomy spells 'true'/'false'."""
+    if value == "true":
+        return True
+    if value == "false":
+        return False
+    raise ValueError(f"taxonomy flag must be true|false, got {value!r}")
+
+
 def read_categories(path: Path | None = None) -> tuple[Category, ...]:
     """Parse the taxonomy file, failing loudly on a malformed or ambiguous row."""
     source = path or TAXONOMY_CSV
-    if not source.exists():  # pragma: no cover — packaging error
+    if not source.exists():
         raise FileNotFoundError(f"taxonomy data file missing: {source}")
 
     with source.open(encoding="utf-8", newline="") as fh:
         rows = [row for row in csv.reader(fh) if row and not row[0].lstrip().startswith("#")]
-    if not rows:  # pragma: no cover
+    if not rows:
         raise ValueError(f"taxonomy data file has no rows: {source}")
 
     header = tuple(cell.strip() for cell in rows[0])
@@ -55,7 +60,7 @@ def read_categories(path: Path | None = None) -> tuple[Category, ...]:
             raise ValueError(
                 f"taxonomy row has {len(row)} columns, expected {len(_COLUMNS)}: {row}"
             )
-        code, ru, en, role, osm_tags, visit_minutes, aliases_ru, aliases_en = row
+        code, ru, en, role, osm_tags, visit_minutes, aliases_ru, aliases_en, highlight = row
         if role not in ("sight", "service"):
             raise ValueError(f"taxonomy role must be sight|service, got {role!r} for {code!r}")
         categories.append(
@@ -68,6 +73,7 @@ def read_categories(path: Path | None = None) -> tuple[Category, ...]:
                 visit_minutes=int(visit_minutes),
                 aliases_ru=_split(aliases_ru),
                 aliases_en=_split(aliases_en),
+                highlight=_flag(highlight),
             )
         )
 

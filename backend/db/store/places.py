@@ -1,9 +1,4 @@
-"""The place repository: every query that reads or writes a `places` row.
-
-Methods on an object that owns the connection, returning `Place` rather than a
-raw dict. Callers in `planner/`, `agent/` and `api/` hold one of these, never a
-connection.
-"""
+"""The place repository: every query that reads or writes a `places` row."""
 
 from __future__ import annotations
 
@@ -18,14 +13,23 @@ import psycopg
 
 from db.models.place import Place
 from db.store.base import PostgresRepository
-from db.store.columns import PLACE_SELECT, PLACE_WRITE_COLUMNS
+from db.store.columns import (
+    EMBEDDED_TEXT_COLUMNS,
+    PLACE_COLUMNS,
+    PLACE_SELECT,
+    PLACE_WRITE_COLUMNS,
+)
 from db.store.errors import DuplicateSourceError
 from db.store.mappers import place_from_row, place_payload
 from db.store.services import (
     DEFAULT_PROFILE,
     MAX_SERVICES,
+    MAX_STEPS_ON_ROUTE,
+    STEP_CATEGORY,
+    STEP_ON_LINE_M,
     empty_answer,
     item_of,
+    named_codes,
     route_line,
     service_codes,
     threshold_for,
@@ -35,8 +39,6 @@ log = logging.getLogger(__name__)
 
 MAX_PLACES = 5000
 
-# The one query the service lookup runs. It lives beside the repository rather
-# than in a class of its own now that the repository is where queries live.
 _BESIDE_LINE = """
     WITH line AS (
         SELECT ST_GeomFromGeoJSON(%s) AS geom
@@ -57,17 +59,29 @@ _BESIDE_LINE = """
 
 _WORD = re.compile(r"[а-яёa-z]{3,}\d*")
 
+_ALIAS_SELECT = ", ".join(f"p.{column}" for column in PLACE_COLUMNS)
+
+
+def _in_area(alias: str, area: str | None) -> tuple[str, list[str]]:
+    """SQL and its parameter that keep a search inside one area's own polygon.
+
+    The polygon, not its bounding box: `grodno-district` surrounds the city of Grodno and
+    holds it as a hole, so a box would hand back the city's points to a district search.
+    """
+    if not area:
+        return "", []
+    clause = (
+        f" AND EXISTS (SELECT 1 FROM areas a WHERE a.code = %s "
+        f"AND ST_Intersects({alias}.geom, a.geom))"
+    )
+    return clause, [area]
+
 
 class PostgresPlaceRepository(PostgresRepository):
     """Reads, searches and the writes the seed and the admin both go through."""
 
-    # --- browse -------------------------------------------------------------
-
     def catalog(self) -> dict[str, Any]:
-        """Every place with coordinates, in a stable browse order.
-
-        Ordered by category then town then name, so a re-seed does not reorder it.
-        """
+        """Every place with coordinates, in a stable browse order."""
         with self._cursor() as cur:
             cur.execute(
                 f"SELECT {PLACE_SELECT} FROM places "
@@ -84,8 +98,6 @@ class PostgresPlaceRepository(PostgresRepository):
             "total": len(items),
             "capped": len(items) >= MAX_PLACES,
         }
-
-    # --- by identity --------------------------------------------------------
 
     def get_by_id(self, place_id: int) -> Place | None:
         """One place by id, or None."""
@@ -116,15 +128,9 @@ class PostgresPlaceRepository(PostgresRepository):
             found = {row["source_url"]: place_from_row(row) for row in cur.fetchall()}
         return found, [key for key in keys if key not in found]
 
-    # --- search -------------------------------------------------------------
-
     def keyword_search(self, query: str, limit: int = 20) -> list[Place]:
-        """Exact + prefix keyword search on name, town and district.
-
-        The fallback when embeddings are unavailable; ILIKE + pg_trgm carries the
-        inflection.
-        """
-        words = [w for w in _WORD.findall(query.lower()) if len(w) >= 3]
+        """Exact + prefix keyword search on name, town and district."""
+        words = _WORD.findall(query.lower())
         if not words:
             return []
 
@@ -135,8 +141,10 @@ class PostgresPlaceRepository(PostgresRepository):
         per_word_sql = " OR ".join(per_word)
         conditions = " OR ".join([per_word_sql] * len(words))
         word_sim = [
-            "GREATEST(similarity(name, %s), word_similarity(%s, name), "
-            "similarity(town, %s), word_similarity(%s, town))"
+            (
+                "GREATEST(similarity(name, %s), word_similarity(%s, name), "
+                "similarity(town, %s), word_similarity(%s, town))"
+            )
         ] * len(words)
         order_expr = "(" + ") + (".join(word_sim) + ")"
 
@@ -160,7 +168,7 @@ class PostgresPlaceRepository(PostgresRepository):
 
     def name_match(self, query: str, limit: int = 5) -> list[tuple[Place, float]]:
         """Name-only trigram search, best first, with the similarity it scored."""
-        words = [w for w in re.findall(r"[а-яёa-z]{2,}", query.lower()) if len(w) >= 2]
+        words = re.findall(r"[а-яёa-z]{2,}", query.lower())
         if not words:
             return []
 
@@ -186,19 +194,60 @@ class PostgresPlaceRepository(PostgresRepository):
             cur.execute(sql, params)
             return [(place_from_row(row), float(row["_name_sim"])) for row in cur.fetchall()]
 
-    def nearby(
-        self, lat: float, lon: float, radius_km: float = 12.0, limit: int = 50
-    ) -> list[Place]:
-        """Places within `radius_km` of a point, nearest first.
+    def by_alias(
+        self,
+        query: str,
+        limit: int = 5,
+        area: str | None = None,
+    ) -> list[tuple[Place, float]]:
+        """Trigram search over the other names a place answers to, best first."""
+        words = re.findall(r"[а-яёa-z]{2,}", query.lower())
+        if not words:
+            return []
 
-        Guarantees the pool holds something around a known point or named town.
+        sim_expr = " + ".join(
+            ["GREATEST(similarity(a.alias, %s), word_similarity(%s, a.alias))"] * len(words)
+        )
+        conditions = " OR ".join(["a.alias ILIKE %s OR a.alias %%> %s"] * len(words))
+        area_clause, area_params = _in_area("p", area)
+
+        sim_params = [word for word in words for _ in range(2)]
+        cond_params = [value for word in words for value in (f"%{word}%", word)]
+        params: list[Any] = [*sim_params, *cond_params, *area_params, limit]
+
+        sql = f"""
+            SELECT {_ALIAS_SELECT}, s.alias_sim
+              FROM places p
+              JOIN (
+                  SELECT a.place_id, MAX(({sim_expr})) AS alias_sim
+                    FROM place_aliases a
+                   WHERE {conditions}
+                   GROUP BY a.place_id
+              ) s ON s.place_id = p.id{area_clause}
+             ORDER BY s.alias_sim DESC
+             LIMIT %s
         """
+        with self._cursor() as cur:
+            cur.execute(sql, params)
+            return [(place_from_row(row), float(row["alias_sim"])) for row in cur.fetchall()]
+
+    def nearby(
+        self,
+        lat: float,
+        lon: float,
+        radius_km: float = 12.0,
+        limit: int = 50,
+        area: str | None = None,
+    ) -> list[Place]:
+        """Places within `radius_km` of a point, nearest first."""
         dlat = radius_km / 111.0
         dlon = radius_km / (111.0 * max(0.2, math.cos(math.radians(lat))))
+        area_clause, area_params = _in_area("places", area)
         with self._cursor() as cur:
             cur.execute(
                 f"SELECT {PLACE_SELECT} FROM places "
                 "WHERE lat BETWEEN %s AND %s AND lon BETWEEN %s AND %s "
+                f"{area_clause} "
                 "ORDER BY (lat - %s) * (lat - %s) + (lon - %s) * (lon - %s) "
                 "LIMIT %s",
                 (
@@ -206,6 +255,7 @@ class PostgresPlaceRepository(PostgresRepository):
                     lat + dlat,
                     lon - dlon,
                     lon + dlon,
+                    *area_params,
                     lat,
                     lat,
                     lon,
@@ -219,43 +269,47 @@ class PostgresPlaceRepository(PostgresRepository):
         self,
         qvec: Sequence[float],
         limit: int = 50,
-        region_bbox: Sequence[float] | None = None,
+        area: str | None = None,
     ) -> list[tuple[Place, float]]:
-        """Top-K by vector cosine distance, each with the distance it scored.
-
-        Category filtering is left to the caller as a soft score boost, not a WHERE.
-        """
-        bbox_clause = ""
-        bbox_params: list[Any] = []
-        if region_bbox and len(region_bbox) == 4:
-            south, west, north, east = region_bbox
-            bbox_clause = "   AND geom && ST_MakeEnvelope(%s, %s, %s, %s, 4326)"
-            bbox_params = [west, south, east, north]
-
+        """Top-K by vector cosine distance, each with the distance it scored."""
+        area_clause, area_params = _in_area("places", area)
         sql = f"""
             SELECT {PLACE_SELECT},
                    embedding <=> %s::vector AS cosine_dist
               FROM places
              WHERE embedding IS NOT NULL
-            {bbox_clause}
+            {area_clause}
              ORDER BY embedding <=> %s::vector
              LIMIT %s
         """
-        params: list[Any] = [qvec, *bbox_params, qvec, limit]
+        params: list[Any] = [qvec, *area_params, qvec, limit]
         with self._cursor() as cur:
             cur.execute(sql, params)
             return [(place_from_row(row), float(row["cosine_dist"])) for row in cur.fetchall()]
 
-    def by_category(self, codes: Sequence[str], limit: int) -> list[Place]:
+    def by_category(self, codes: Sequence[str], limit: int, area: str | None = None) -> list[Place]:
         """Places in any of these DB category values, in the pool's own order."""
         if not codes:
             return []
+        area_clause, area_params = _in_area("places", area)
         with self._cursor() as cur:
             cur.execute(
-                f"SELECT {PLACE_SELECT} FROM places WHERE category = ANY(%s) LIMIT %s",
-                (list(codes), limit),
+                f"SELECT {PLACE_SELECT} FROM places WHERE category = ANY(%s){area_clause} LIMIT %s",
+                (list(codes), *area_params, limit),
             )
             return [place_from_row(row) for row in cur.fetchall()]
+
+    def outside_area(self, ids: Sequence[int], code: str) -> list[int]:
+        """The ids that do not stand inside the area's polygon — the harness's own check."""
+        if not ids:
+            return []
+        with self._cursor() as cur:
+            cur.execute(
+                "SELECT p.id FROM places p JOIN areas a ON a.code = %s "
+                " WHERE p.id = ANY(%s) AND (a.geom IS NULL OR NOT ST_Intersects(p.geom, a.geom))",
+                (code, list(ids)),
+            )
+            return [int(row["id"]) for row in cur.fetchall()]
 
     def category_of(self, ids: Sequence[int]) -> dict[int, str]:
         """`{place_id: category}` for these ids — the avoid-filter reads it."""
@@ -266,10 +320,7 @@ class PostgresPlaceRepository(PostgresRepository):
             return {row["id"]: row["category"] for row in cur.fetchall()}
 
     def with_category(self, codes: Iterable[str], *, lat_lon_only: bool = False) -> list[Place]:
-        """Places in these categories — the quality layer's reference set.
-
-        `lat_lon_only` keeps the rows the haversine cross-check needs.
-        """
+        """Places in these categories — the quality layer's reference set."""
         wanted = list(codes)
         if not wanted:
             return []
@@ -303,7 +354,52 @@ class PostgresPlaceRepository(PostgresRepository):
                     out[place_id] = list(arr)
             return out
 
-    # --- services beside a line ---------------------------------------------
+    def places_along(
+        self,
+        shape: dict[str, Any],
+        *,
+        categories: Sequence[str] | None = None,
+        profile: str = DEFAULT_PROFILE,
+        max_off_line_m: float | None = None,
+        limit: int = MAX_SERVICES,
+    ) -> dict[str, Any]:
+        """Places of any named categories beside a route line, ordered along it.
+
+        The codes reach the line query as they are, whatever their role: a museum and a
+        café are measured the same way. Nothing here is a detour, only «beside the line».
+        """
+        return self._beside_line(
+            shape,
+            named_codes(categories),
+            profile,
+            max_off_line_m,
+            limit,
+            reason="no_category_codes",
+        )
+
+    def steps_along(
+        self,
+        shape: dict[str, Any],
+        *,
+        profile: str = DEFAULT_PROFILE,
+        max_off_line_m: float | None = None,
+        limit: int = MAX_STEPS_ON_ROUTE,
+    ) -> dict[str, Any]:
+        """Stairways the drawn line runs over — the walk's own geometry, re-read.
+
+        The gate is the measured distance from the line to a stairway's own point, and
+        it is the same line query the services use; a normal walk keeps its stairways
+        off the line, so a hit means the route climbs one.
+        """
+        gate = STEP_ON_LINE_M if max_off_line_m is None else max_off_line_m
+        return self._beside_line(
+            shape,
+            [STEP_CATEGORY],
+            profile,
+            gate,
+            limit,
+            reason="no_stairways",
+        )
 
     def services_along(
         self,
@@ -315,25 +411,42 @@ class PostgresPlaceRepository(PostgresRepository):
         max_off_line_m: float | None = None,
         limit: int = MAX_SERVICES,
     ) -> dict[str, Any]:
-        """Services lying beside a route line, ordered along it.
-
-        Never mixes a service into the route's stops; the caller shows it.
-        """
-        line = route_line(shape)
+        """Services beside a route line — the default the API and the planner ask for."""
         codes = service_codes(categories, service_category_codes)
+        return self._beside_line(
+            shape,
+            codes,
+            profile,
+            max_off_line_m,
+            limit,
+            reason="no_service_categories",
+        )
+
+    def _beside_line(
+        self,
+        shape: dict[str, Any],
+        codes: Sequence[str],
+        profile: str,
+        max_off_line_m: float | None,
+        limit: int,
+        *,
+        reason: str,
+    ) -> dict[str, Any]:
+        """One line query for both the service default and any named category."""
+        line = route_line(shape)
         if not codes:
-            return empty_answer(codes, profile, max_off_line_m, reason="no_service_categories")
+            return empty_answer(codes, profile, max_off_line_m, reason=reason)
 
         threshold = threshold_for(profile, max_off_line_m)
         cap = max(1, int(limit))
         with self._cursor() as cur:
-            cur.execute(_BESIDE_LINE, (json.dumps(line), codes, threshold, cap))
+            cur.execute(_BESIDE_LINE, (json.dumps(line), list(codes), threshold, cap))
             rows = [dict(row) for row in cur.fetchall()]
 
         line_m = float(rows[0]["line_m"]) if rows else 0.0
         items = [item_of(row, line_m) for row in rows]
         log.info(
-            "services_along: %d of at most %d beside a %.0f m line (%.0f m off-line gate)",
+            "places_along: %d of at most %d beside a %.0f m line (%.0f m off-line gate)",
             len(items),
             cap,
             line_m,
@@ -345,14 +458,12 @@ class PostgresPlaceRepository(PostgresRepository):
             "not_measured": "detour_walking_time",
             "detour_confirmed": False,
             "profile": profile,
-            "categories": codes,
+            "categories": list(codes),
             "max_off_line_m": threshold,
             "line_m": round(line_m),
             "result_cap": cap,
             "capped": len(items) >= cap,
         }
-
-    # --- health and the embedding backfill ----------------------------------
 
     def ping(self) -> bool:
         """True when the database answers. Never raises."""
@@ -364,13 +475,21 @@ class PostgresPlaceRepository(PostgresRepository):
             log.warning("health.db err=%s", exc)
             return False
 
-    def rows_missing_embedding(self) -> list[tuple[int, str, str | None]]:
+    def rows_missing_embedding(self) -> list[tuple[int, str, str | None, str | None]]:
         """Every row with no vector, oldest first — the backfill's work list."""
         with self._cursor() as cur:
             cur.execute(
-                "SELECT id, name, blurb FROM places WHERE embedding IS NULL ORDER BY id",
+                "SELECT id, name, category, town FROM places WHERE embedding IS NULL ORDER BY id",
             )
-            return [(row["id"], row["name"], row["blurb"]) for row in cur.fetchall()]
+            return [
+                (row["id"], row["name"], row["category"], row["town"]) for row in cur.fetchall()
+            ]
+
+    def clear_embeddings(self) -> int:
+        """Forget every stored vector: the recipe changed, so all of them describe another text."""
+        with self._cursor() as cur:
+            cur.execute("UPDATE places SET embedding = NULL WHERE embedding IS NOT NULL")
+            return cur.rowcount
 
     def upsert_embedding(self, place_id: int, vector: Sequence[float]) -> None:
         """Store one vector. The `::vector` cast is what pgvector needs."""
@@ -380,16 +499,10 @@ class PostgresPlaceRepository(PostgresRepository):
                 (str(list(vector)), place_id),
             )
 
-    # --- the admin's reads and writes ---------------------------------------
-
     def list_places_paged(
         self, *, q: str = "", category: str = "", limit: int = 50, offset: int = 0
     ) -> tuple[list[Place], int]:
-        """Admin browse: filtered by free text and category, name order.
-
-        Returns the page and the total that matched, so the panel can paginate
-        without a second query of its own.
-        """
+        """Admin browse: filtered by free text and category, name order."""
         pattern = f"%{q}%"
         where = (
             "(%s = '' OR name ILIKE %s OR town ILIKE %s OR district ILIKE %s) "
@@ -408,11 +521,7 @@ class PostgresPlaceRepository(PostgresRepository):
         return places, total
 
     def create_place(self, fields: dict[str, Any]) -> Place:
-        """Insert a hand-curated point. Raises :class:`DuplicateSourceError` on a clash.
-
-        A category supplied by an admin is a curated one by definition, so the
-        row is stamped `curated` and the trigger protects it from the seed.
-        """
+        """Insert a hand-curated point. Raises :class:`DuplicateSourceError` on a clash."""
         cols = [c for c in PLACE_WRITE_COLUMNS if c in fields]
         extra_cols = ["category_source"] if "category" in cols else []
         values_sql = ", ".join(["%s"] * (len(cols) + len(extra_cols)))
@@ -433,11 +542,7 @@ class PostgresPlaceRepository(PostgresRepository):
         return place_from_row(row)
 
     def update_place(self, place_id: int, fields: dict[str, Any]) -> Place | None:
-        """Patch a point; ``None`` when the id is unknown.
-
-        A category change is an admin decision, so it runs with the
-        curated-category guard explicitly lowered — and re-stamps `curated`.
-        """
+        """Patch a point; ``None`` when the id is unknown."""
         cols = [c for c in PLACE_WRITE_COLUMNS if c in fields]
         if not cols:
             return self.get_by_id(place_id)
@@ -445,6 +550,8 @@ class PostgresPlaceRepository(PostgresRepository):
         params: list[Any] = [fields[c] for c in cols]
         if "category" in cols:
             sets.append("category_source = 'curated'")
+        if set(cols) & set(EMBEDDED_TEXT_COLUMNS):
+            sets.append("embedding = NULL")
         params.append(place_id)
         with self._tx_cursor() as cur:
             if "category" in cols:

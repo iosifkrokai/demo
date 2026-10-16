@@ -19,88 +19,6 @@ export type AmenityStrength = 'hard' | 'soft';
 
 export type ActiveWaypoints = ActiveWaypoint[];
 
-export type Settings = Record<
-  'costing' | 'directions',
-  {
-    [key in keyof PossibleSettings]: PossibleSettings[key];
-  }
->;
-
-export type BicycleType = 'Hybrid' | 'Road' | 'City' | 'Cross' | 'Mountain';
-export type PedestrianType = 'Foot' | 'Wheelchair' | 'Blind';
-
-export interface PossibleSettings {
-  maneuver_penalty: number;
-  country_crossing_penalty: number;
-  country_crossing_cost: number;
-  length: number;
-  width: number;
-  height: number;
-  weight: number;
-  axle_load: number;
-  hazmat: boolean;
-  use_highways: number;
-  use_tolls: number;
-  use_ferry: number;
-  ferry_cost: number;
-  use_living_streets: number;
-  use_tracks: number;
-  private_access_penalty: number;
-  destination_only_penalty: number;
-  elevator_penalty: number;
-  ignore_closures: boolean;
-  ignore_restrictions: boolean;
-  ignore_access: boolean;
-  closure_factor: number;
-  service_penalty: number;
-  service_factor: number;
-  exclude_unpaved: boolean;
-  shortest: boolean;
-  exclude_cash_only_tolls: boolean;
-  bicycle_type: BicycleType;
-  type: PedestrianType;
-  cycling_speed: number;
-  use_roads: number;
-  use_hills: number;
-  avoid_bad_surfaces: number;
-  top_speed: number;
-  use_primary: number;
-  walking_speed: number;
-  walkway_factor: number;
-  sidewalk_factor: number;
-  alley_factor: number;
-  driveway_factor: number;
-  step_penalty: number;
-  max_hiking_difficulty: number;
-  exclude_polygons: GeoJSON.GeoJSON[];
-  use_geocoding: boolean;
-  use_lit: number;
-  axle_count: number;
-  fixed_speed: number;
-  toll_booth_penalty: number;
-  toll_booth_cost: number;
-  gate_penalty: number;
-  gate_cost: number;
-  include_hov2: boolean;
-  include_hov3: boolean;
-  include_hot: boolean;
-  transit_start_end_max_distance: number;
-  transit_transfer_max_distance: number;
-  disable_hierarchy_pruning: boolean;
-  use_trails: number;
-  denoise: number;
-  generalize: number;
-  alternates: number;
-  speed_types: string[];
-  [key: string]:
-    | string
-    | string[]
-    | number
-    | boolean
-    | GeoJSON.GeoJSON[]
-    | undefined;
-}
-
 export interface ParsedDirectionsGeometry {
   trip: Trip;
   id: string;
@@ -185,27 +103,6 @@ export interface Summary {
   cost: number;
 }
 
-export interface IsochronesRequestParams {
-  profile: string;
-  center: Center;
-  settings: Settings;
-  denoise: number;
-  generalize: number;
-  maxRange: number;
-  interval: number;
-}
-
-export interface Center {
-  title: string;
-  description: string;
-  selected: boolean;
-  addresslnglat: number[];
-  sourcelnglat: number[];
-  displaylnglat: number[];
-  key: number;
-  addressindex: number;
-}
-
 export interface NominationResponse {
   place_id: number;
   licence: string;
@@ -247,8 +144,16 @@ export interface ValhallaRouteResponse {
 }
 
 /** One stop of an agent-planned route, as POST /routes/generate returns it. */
+/** A line as GeoJSON spells it: coordinates are `[lon, lat]`. */
+export interface GeoLineString {
+  type?: string;
+  coordinates?: number[][];
+}
+
 export interface AgentPoint {
   id: number;
+  /** The client's own name for the stop, echoed back; absent for a catalogued stop. */
+  key?: string | null;
   name: string;
   category?: string | null;
   lat: number;
@@ -261,6 +166,8 @@ export interface AgentPoint {
   visit_minutes?: number | null;
   opening_hours?: string | null;
   ticket_price?: string | null;
+  /** `true` when admission is free; `false`/absent when paid or unknown. */
+  is_free?: boolean | null;
   town?: string | null;
   district?: string | null;
 }
@@ -276,6 +183,15 @@ export interface AgentBudget {
 /** What the planner managed with the request — or that it is still working. */
 export type RoutePlanStatus = 'ready' | 'degraded' | 'infeasible' | 'pending';
 
+/** What a step-free walk cost, measured against the same stops taken directly. */
+export interface StepFreeInfo {
+  walk_minutes: number;
+  without_steps_minutes: number;
+  detour_minutes: number;
+  length_km?: number | null;
+  without_steps_length_km?: number | null;
+}
+
 /** Why a requirement went unmet. */
 export type PlanRequirementReason =
   | 'must_visit_on_route'
@@ -290,6 +206,16 @@ export type PlanRequirementReason =
   | 'interest_absent'
   | 'avoid_honoured'
   | 'avoid_violated'
+  | 'free_entry_proven'
+  | 'paid_stop_on_route'
+  | 'admission_unknown'
+  | 'open_at_visit'
+  | 'closed_at_visit'
+  | 'hours_unknown'
+  | 'visit_time_unknown'
+  | 'step_free_proven'
+  | 'steps_on_route'
+  | 'steps_unknown'
   | 'route_missing'
   | 'geometry_missing';
 
@@ -308,6 +234,8 @@ export interface PlanRequirement {
 /** The agent's account of the plan: requirements honoured, missed, or not understood. */
 export interface PlanInterpretation {
   status: RoutePlanStatus;
+  /** The moment the verdict was read at, when the tourist named one; null for «сейчас». */
+  at?: string | null;
   requirements: PlanRequirement[];
   unmet: PlanRequirement[];
   unknowns: string[];
@@ -315,11 +243,17 @@ export interface PlanInterpretation {
 
 /** POST /routes/generate — either a ready plan or the honest reason there is none. */
 export interface AgentRouteResponse {
+  /** `route` a walkable itinerary, `catalogue` a list of places to choose from. */
+  result_mode?: ResultMode;
   points?: AgentPoint[];
   budget?: AgentBudget;
   costing?: string | null;
+  /** The drawn line, when the answer carries one. */
+  shape?: GeoLineString | null;
   summary?: { length_km?: number | null; time_seconds?: number | null };
   status?: RoutePlanStatus;
+  /** The measured price of a step-free detour, present only when one was taken. */
+  step_free?: StepFreeInfo | null;
   interpretation?: PlanInterpretation;
 }
 

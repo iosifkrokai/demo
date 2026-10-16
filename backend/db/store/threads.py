@@ -1,13 +1,4 @@
-"""The planning journal: the `threads` parent, the `turns` rows, and their reads.
-
-A thread is a client run session; a turn is one query and the code's answer to
-it. The store owns the revision sequence — the next number is computed in SQL
-against the rows already there — so the journal has one gap-free sequence per
-thread and a turn can be replayed by number.
-
-The shape mirrors `db/store/itineraries.py`: a parent read that attaches its
-rows, written and read through one connection the repository owns.
-"""
+"""The planning journal: the `threads` parent, the `turns` rows, and their reads."""
 
 from __future__ import annotations
 
@@ -48,6 +39,8 @@ class ThreadRepository(Protocol):
 
     def latest(self, thread_id: str) -> Turn | None: ...
 
+    def latest_with_prefix(self, prefix: str) -> Turn | None: ...
+
     def journal(self, thread_id: str) -> Thread | None: ...
 
     def delete(self, thread_id: str) -> bool: ...
@@ -66,8 +59,6 @@ class PostgresThreadRepository(PostgresRepository):
     ) -> Turn:
         """Record one turn, minting its revision against the rows already there."""
         with self._cursor() as cur:
-            # The parent must exist before the FK allows the row; a thread is
-            # created by its first turn and never listed on its own.
             cur.execute(
                 "INSERT INTO threads (id) VALUES (%s) ON CONFLICT (id) DO NOTHING",
                 (thread_id,),
@@ -95,6 +86,17 @@ class PostgresThreadRepository(PostgresRepository):
                 f"SELECT {TURN_SELECT} FROM turns WHERE thread_id = %s "
                 "ORDER BY revision DESC LIMIT 1",
                 (thread_id,),
+            )
+            row = cur.fetchone()
+        return model_from_row(Turn, row) if row is not None else None
+
+    def latest_with_prefix(self, prefix: str) -> Turn | None:
+        """The newest turn on any thread whose id begins with ``prefix``."""
+        with self._cursor() as cur:
+            cur.execute(
+                f"SELECT {TURN_SELECT} FROM turns WHERE starts_with(thread_id, %s) "
+                "ORDER BY created_at DESC LIMIT 1",
+                (prefix,),
             )
             row = cur.fetchone()
         return model_from_row(Turn, row) if row is not None else None

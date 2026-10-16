@@ -1,10 +1,4 @@
-"""The server-side thread: the journal, the reconciliation, and the router that wires them.
-
-The reconciliation is exercised through an in-memory repository, and the router
-through a FastAPI app whose agent run is replaced — so no test here needs a model
-provider or a migrated database. The one test that touches Postgres skips itself
-when the `turns` schema is not applied, because a skip is not a pass.
-"""
+"""The server-side thread: the journal, the reconciliation, and the router that wires them."""
 
 from __future__ import annotations
 
@@ -33,6 +27,7 @@ class FakeThreadRepository:
 
     def __init__(self, *, unreadable: bool = False, unwritable: bool = False) -> None:
         self._turns: dict[str, list[Turn]] = {}
+        self._appended: list[Turn] = []
         self._unreadable = unreadable
         self._unwritable = unwritable
 
@@ -55,6 +50,7 @@ class FakeThreadRepository:
             measurement=measurement,
         )
         rows.append(turn)
+        self._appended.append(turn)
         return turn
 
     def latest(self, thread_id: str) -> Turn | None:
@@ -62,6 +58,14 @@ class FakeThreadRepository:
             raise StorageUnavailableError("the journal is not readable")
         rows = self._turns.get(thread_id) or []
         return rows[-1] if rows else None
+
+    def latest_with_prefix(self, prefix: str) -> Turn | None:
+        if self._unreadable:
+            raise StorageUnavailableError("the journal is not readable")
+        for turn in reversed(self._appended):
+            if turn.thread_id.startswith(prefix):
+                return turn
+        return None
 
     def journal(self, thread_id: str) -> Thread | None:
         if self._unreadable:
@@ -89,9 +93,6 @@ def _recorded(*stops: tuple[int, str]) -> Turn:
     )
 
 
-# --- reading a recorded turn -------------------------------------------------
-
-
 def test_journal_stops_read_the_measured_order() -> None:
     turn = _recorded((2, "Б"), (1, "А"))
 
@@ -112,9 +113,6 @@ def test_journal_stops_skip_cards_without_an_id() -> None:
 
 def test_journal_stops_of_no_turn_are_empty() -> None:
     assert thread.journal_stops(None) == ()
-
-
-# --- reconciling a refinement ------------------------------------------------
 
 
 def test_the_journal_is_the_spine_a_refinement_is_merged_onto() -> None:
@@ -178,9 +176,6 @@ def test_without_a_record_the_snapshot_stands_as_sent() -> None:
     assert thread.reconcile(None, _recorded((1, "А"))) is None
 
 
-# --- reconciling a whole brief against the repository ------------------------
-
-
 def test_reconcile_brief_reads_the_journals_latest_turn() -> None:
     repo = FakeThreadRepository()
     repo.append(
@@ -220,7 +215,70 @@ def test_reconcile_brief_falls_back_when_the_journal_is_unreadable() -> None:
     assert thread.reconcile_brief(repo, thread_id="run-1", brief=brief) is brief
 
 
-# --- recording a turn --------------------------------------------------------
+def _refinement() -> ReaderBrief:
+    return ReaderBrief(context=RefinementBrief(instruction="ещё", revision=1))
+
+
+def test_an_unknown_run_recovers_the_accounts_newest_route() -> None:
+    """A run id lives in the browser: a reload mints one this server never saw."""
+    repo = FakeThreadRepository()
+    repo.append("acct:run-1", query="первый", submission={}, measurement={"results": []})
+    repo.append(
+        "acct:run-2",
+        query="второй",
+        submission={},
+        measurement={"results": [{"id": 3, "name": "В"}]},
+    )
+
+    out = thread.reconcile_brief(repo, thread_id="acct:run-9", brief=_refinement(), identity="acct")
+
+    assert out.context is not None
+    assert [stop.place_id for stop in out.context.base_points] == [3]
+
+
+def test_the_named_run_wins_over_the_accounts_newest() -> None:
+    repo = FakeThreadRepository()
+    repo.append(
+        "acct:run-1", query="п", submission={}, measurement={"results": [{"id": 3, "name": "В"}]}
+    )
+    repo.append(
+        "acct:run-2", query="в", submission={}, measurement={"results": [{"id": 5, "name": "Д"}]}
+    )
+
+    out = thread.reconcile_brief(repo, thread_id="acct:run-1", brief=_refinement(), identity="acct")
+
+    assert out.context is not None
+    assert [stop.place_id for stop in out.context.base_points] == [3]
+
+
+def test_another_accounts_route_is_never_recovered() -> None:
+    repo = FakeThreadRepository()
+    repo.append(
+        "other:run-1",
+        query="чужой",
+        submission={},
+        measurement={"results": [{"id": 3, "name": "В"}]},
+    )
+
+    out = thread.reconcile_brief(repo, thread_id="acct:run-9", brief=_refinement(), identity="acct")
+
+    assert out.context is not None
+    assert out.context.base_points == ()
+
+
+def test_previous_stops_fall_back_to_the_accounts_newest_run() -> None:
+    repo = FakeThreadRepository()
+    repo.append(
+        "acct:run-1",
+        query="первый",
+        submission={},
+        measurement={"results": [{"id": 3, "name": "В"}, {"id": 4, "name": "Г"}]},
+    )
+    context = RefinementBrief(instruction="ещё", revision=1)
+
+    stops = thread.previous_stops(repo, thread_id="acct:run-9", context=context, identity="acct")
+
+    assert [stop.place_id for stop in stops] == [3, 4]
 
 
 def test_record_appends_a_turn() -> None:
@@ -249,9 +307,6 @@ def test_record_swallows_a_journal_write_failure() -> None:
         submission={},
         measurement={},
     )
-
-
-# --- the router wires the journal in -----------------------------------------
 
 
 class _Taxonomy:
@@ -317,8 +372,35 @@ def test_generate_lets_the_journal_lead_the_refinement(monkeypatch) -> None:
     assert response.status_code == 200, response.text
     brief = captured[0]
     assert brief.context is not None
-    # The journal's route is the spine; the snapshot's own point is merged in.
     assert [stop.place_id for stop in brief.context.base_points] == [3, 4, 9]
+
+
+def test_generate_recovers_an_unknown_runs_route_from_the_account(monkeypatch) -> None:
+    """The browser minted a run id this server never saw; the route is still the account's."""
+    repo = FakeThreadRepository()
+    repo.append(
+        "acct:run-1",
+        query="первый",
+        submission={},
+        measurement={"results": [{"id": 3, "name": "В"}, {"id": 4, "name": "Г"}]},
+    )
+    captured: list[ReaderBrief] = []
+    client = _app(monkeypatch, repo, captured)
+    monkeypatch.setattr(routes_api, "_identity", lambda request: "acct")
+
+    response = client.post(
+        "/routes/generate",
+        json={
+            "query": "добавь кофе",
+            "session_id": "run-2",
+            "context": {"instruction": "добавь кофе", "revision": 1, "base_points": []},
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    brief = captured[0]
+    assert brief.context is not None
+    assert [stop.place_id for stop in brief.context.base_points] == [3, 4]
 
 
 def test_generate_records_the_turn_under_the_session(monkeypatch) -> None:
@@ -359,9 +441,6 @@ def test_generate_reports_when_planning_produced_nothing(monkeypatch) -> None:
 
     assert response.status_code == 503
     assert repo.written() == set()
-
-
-# --- the real repository, when the schema is there ---------------------------
 
 
 def test_the_postgres_journal_round_trips(db_repos) -> None:

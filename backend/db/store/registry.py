@@ -1,8 +1,4 @@
-"""What a logic layer is handed instead of a connection.
-
-The connection stays inside the repository that owns it, so nothing above
-`db/store` can run a query it did not ask for.
-"""
+"""What a logic layer is handed instead of a connection."""
 
 from __future__ import annotations
 
@@ -20,14 +16,7 @@ from db.store.users import PostgresUserRepository
 
 @dataclass(frozen=True)
 class Repositories:
-    """One instance per request-scoped component, wired once at startup.
-
-    Frozen so a request cannot swap a repository mid-flight; the repositories
-    themselves are mutable, because each owns a connection it reconnects lazily.
-    The account and stats repositories default to real ones so a planner-only
-    construction — `Repositories(places=…, areas=…)` — stays a one-liner; a test
-    that needs a fake passes it explicitly.
-    """
+    """One instance per request-scoped component, wired once at startup."""
 
     places: PostgresPlaceRepository
     areas: PostgresAreaRepository

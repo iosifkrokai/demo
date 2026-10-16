@@ -1,0 +1,17 @@
+{
+  "description": "Other names a hand-authored place answers to. OSM maps one object several times under names that are not the same string — the Belarusian form of a Russian name («Мірскі замак» / «Мирский замок»), a description of the complex rather than the castle («Замковый комплекс Мир»), or a part of it («Парк Мир»). The seed reads this file (db/seed/datasets.py) and lets a protected row shadow an automatic one whose own name is one of its aliases, inside the duplicate radius.",
+  "why_a_list_and_not_a_rule": "Folding Belarusian into Russian by rule, or collapsing every row within a radius, was rejected: the data holds 204 legitimately mixed-script names and 84 same-name node/way pairs that are a transit stop against the street of its own name. Distance alone cannot tell one object mapped twice from two objects that stand together. A name per entry is a judgement a reader can check, and it is the only place this claim is written down.",
+  "scope": "Only names of OSM objects that are the same place as a hand-authored row, and only for rows whose twin the quality harness has actually seen. A name that is a different sight stays out, however close it lies.",
+  "places": [
+    {
+      "source_url": "region:mir-castle",
+      "locale": "ru",
+      "names": [
+        "Замковый комплекс Мир",
+        "Мирский замковый комплекс",
+        "Парк Мир"
+      ],
+      "reason": "The Mir castle complex is one walk: the castle, its park, and the museum that carries the ensemble's name. OSM maps the ensemble as a museum node, the park as a monument node, and the hand-authored row as the castle — three stops 89 m apart in one route (quality case «mir»). The accommodation node «Мірскі замак» (tourism=hotel) deliberately stays out of this list: it is a service beside the castle, not the castle, and it is kept out of stops by the role rule instead."
+    }
+  ]
+}

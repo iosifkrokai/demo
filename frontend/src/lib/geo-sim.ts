@@ -63,8 +63,6 @@ export const readSimOptions = (
 
 export const isSimulating = (): boolean => state.active;
 
-export const simSpeed = (): number => state.speed;
-
 /** Where the simulated tourist stands before a route: central Grodno. */
 const START_POINT: SimFix = { lat: 53.6778, lon: 23.8295, heading: null };
 

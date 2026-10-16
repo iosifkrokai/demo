@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach } from 'vitest';
 
 import i18n from '@/i18n';
-import { defaultTravelMode, guideModeFor } from './guide-mode';
+import { guideModeFor } from './guide-mode';
 
 afterEach(async () => {
   await i18n.changeLanguage('ru');
@@ -19,10 +19,10 @@ describe('guideModeFor', () => {
 
   it('walks when nothing is stated — that is what a route without a transport means', () => {
     for (const value of [undefined, null, '', 'unknown-costing']) {
-      expect(guideModeFor(value).id).toBe(defaultTravelMode().id);
+      expect(guideModeFor(value).id).toBe('foot');
     }
     expect(guideModeFor(undefined).id).toBe('foot');
-    expect(guideModeFor(undefined).label).toBe(defaultTravelMode().label);
+    expect(guideModeFor(undefined).label).toBe('пешком');
   });
 
   it('rides when the plan says bicycle', () => {
@@ -62,6 +62,5 @@ describe('guideModeFor', () => {
     expect(guideModeFor('pedestrian').verb).toBe('walk');
     expect(guideModeFor('bicycle').label).toBe('by bike');
     expect(guideModeFor('auto').arrivalHint).toBe('park by the stop');
-    expect(defaultTravelMode().id).toBe('foot');
   });
 });

@@ -28,6 +28,7 @@ import {
 import { PlacesLayer, PLACES_POINTS_LAYER_ID } from './parts/places-layer';
 import { PlaceCardPopup } from './parts/place-card-popup';
 import { PlaceMarkerLabel } from './parts/place-marker-label';
+import { PlaceIcon } from '@/components/parts/place-icon';
 import { MobilePlaceCard } from '@/components/mobile/mobile-place-card';
 import { useIsMobile } from '@/components/mobile/use-is-mobile';
 import { maxBounds } from './constants';
@@ -43,10 +44,8 @@ import {
 import { useServicesAlong } from '@/hooks/use-services-along';
 import { usePlaces } from '@/hooks/use-places';
 import type { Place } from '@/api/types';
-import {
-  useDirectionsQuery,
-  useSetWaypointFromCoords,
-} from '@/hooks/use-directions-queries';
+import { useSetWaypointFromCoords } from '@/hooks/use-directions-queries';
+import { useRouteRecalculate } from '@/hooks/use-route-recalculate';
 
 const { center, zoom: zoom_initial } = getInitialMapPosition();
 
@@ -72,6 +71,7 @@ const placeToDetails = (place: Place): PlaceDetails => ({
   visitMinutes: place.visit_minutes,
   openingHours: place.opening_hours,
   ticketPrice: place.ticket_price,
+  isFree: place.is_free ?? null,
   town: place.town,
   district: place.district,
   photo: place.photo,
@@ -95,6 +95,7 @@ export const MapComponent = () => {
     lat: number;
   } | null>(null);
   const waypoints = useDirectionsStore((state) => state.waypoints);
+  const catalogue = useDirectionsStore((state) => state.catalogue);
   const placeDetails = useDirectionsStore((state) => state.placeDetails);
   const placesVisible = useCommonStore((state) => state.placesVisible);
   const { places } = usePlaces({ enabled: placesVisible });
@@ -125,8 +126,8 @@ export const MapComponent = () => {
   const provenance = routeProvenance(routeResult);
   const missingVerifiedLine = isMissingVerifiedLine(routeResult);
 
-  const { refetch: refetchDirections } = useDirectionsQuery();
   const { setWaypointFromCoords } = useSetWaypointFromCoords();
+  const { recalculate } = useRouteRecalculate();
   const [routeHoverPopup, setRouteHoverPopup] = useState<{
     lng: number;
     lat: number;
@@ -217,10 +218,10 @@ export const MapComponent = () => {
         object.latLng.lat,
         object.index
       ).then(() => {
-        refetchDirections();
+        recalculate();
       });
     },
-    [setWaypointFromCoords, refetchDirections]
+    [setWaypointFromCoords, recalculate]
   );
 
   /** The panel's handle does both: it closes what is open, opens what is not. */
@@ -811,6 +812,26 @@ export const MapComponent = () => {
             </Marker>
           );
         })}
+
+        {catalogue?.map((place) => (
+          <Marker
+            anchor="bottom"
+            key={`catalogue-${place.id}`}
+            longitude={place.lon}
+            latitude={place.lat}
+            onClick={() => {
+              markerClickRef.current = true;
+              setActivePlace({ id: place.id, lng: place.lon, lat: place.lat });
+            }}
+          >
+            <span
+              data-testid={`catalogue-marker-${place.id}`}
+              className="flex h-6 w-6 items-center justify-center rounded-full border border-border bg-card shadow-card"
+            >
+              <PlaceIcon category={place.category} />
+            </span>
+          </Marker>
+        ))}
 
         {activePlace && activeDetails && !isMobile && (
           <PlaceCardPopup

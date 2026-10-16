@@ -1,8 +1,4 @@
-"""Where the committed data lives, resolved from the backend root.
-
-The datasets belong to the persistence side — `db/seed` is what reads them — so
-they sit inside `db/`, beside the code that projects them into Postgres.
-"""
+"""Where the committed data lives, resolved from the backend root."""
 
 from __future__ import annotations
 
@@ -17,3 +13,10 @@ PHOTOS_DIR = DATA_DIR / "photos"
 
 TAXONOMY_CSV = DATA_DIR / "taxonomy.csv"
 ITINERARIES_JSON = DATA_DIR / "itineraries.json"
+EXCLUDED_NAMES_JSON = DATA_DIR / "excluded_names.json"
+TOWN_NAMES_JSON = DATA_DIR / "town_names.json"
+PLACE_ALIASES_JSON = DATA_DIR / "place_aliases.json"
+PLACE_ALIASES_EN_JSON = DATA_DIR / "place_aliases_en.json"
+PLACE_MERGES_JSON = DATA_DIR / "place_merges.json"
+PLACE_STREETS_JSON = DATA_DIR / "place_streets.json"
+PLACE_CATEGORIES_JSON = DATA_DIR / "place_categories.json"
