@@ -471,6 +471,65 @@ describe('Sidebar', () => {
     expect(body.time_budget_minutes).toBeUndefined();
   });
 
+  it('draws the line the agent measured, instead of asking the engine twice', async () => {
+    mockSetAgentRoute.mockClear();
+    const measured = {
+      ...AGENT_ANSWER,
+      shape: {
+        type: 'LineString',
+        coordinates: [
+          [23.8222, 53.6772],
+          [23.8246, 53.678],
+        ],
+      },
+    };
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- the test reads calls[i][1]
+    const fetchMock = vi.fn(async (_url: string, _init: RequestInit) => ({
+      ok: true,
+      json: async () => measured,
+    }));
+    stubAgentFetch(fetchMock);
+
+    const user = userEvent.setup({ delay: null });
+    render(<Sidebar />);
+
+    await user.type(askField(), 'замки Гродно');
+    await user.click(buildButton());
+
+    await waitFor(() =>
+      expect(mockSetAgentRoute).toHaveBeenCalledWith({
+        shape: {
+          type: 'LineString',
+          coordinates: [
+            [53.6772, 23.8222],
+            [53.678, 23.8246],
+          ],
+        },
+        summary: { length_km: 1.5, time_seconds: 900 },
+        costing: 'auto',
+      })
+    );
+  });
+
+  it('leaves the line to the map panel when the agent measured none', async () => {
+    mockSetAgentRoute.mockClear();
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- the test reads calls[i][1]
+    const fetchMock = vi.fn(async (_url: string, _init: RequestInit) => ({
+      ok: true,
+      json: async () => AGENT_ANSWER,
+    }));
+    stubAgentFetch(fetchMock);
+
+    const user = userEvent.setup({ delay: null });
+    render(<Sidebar />);
+
+    await user.type(askField(), 'замки Гродно');
+    await user.click(buildButton());
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(mockSetAgentRoute).toHaveBeenCalledWith(null);
+  });
+
   it('sends no transport at all when the tourist did not pick one', async () => {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars -- the test reads calls[i][1]
     const fetchMock = vi.fn(async (_url: string, _init: RequestInit) => ({

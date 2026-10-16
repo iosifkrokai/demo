@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, replace
 from typing import Any
 
@@ -19,15 +20,26 @@ from agent.tools import (
 from core import cache, constants
 from core.errors import NoRoutePossibleError, UpstreamUnavailableError
 from db.store.errors import StorageUnavailableError
-from routing.cost import build_cost, refinement_cost
-from routing.models import Candidate, CategoryFacts, LatLon, WalkProblem, WalkRequest
+from routing.cost import build_cost, refinement_cost, sub_matrix
+from routing.models import (
+    Candidate,
+    CategoryFacts,
+    CostMatrix,
+    LatLon,
+    ResolvedConstraints,
+    WalkProblem,
+    WalkRequest,
+)
 from routing.optimize import optimize, order_after_prune, prune_unroutable, valhalla_order
 from routing.render import render
 from routing.stops import candidate_of
 from routing.valhalla.constants import costing_for, costing_options_for
+from routing.valhalla.types import RouteStatus
 from routing.validate import validate
 
 MAX_STOPS_PER_CALL = constants.VALHALLA_MAX_LOCATIONS
+
+log = logging.getLogger(__name__)
 
 
 def _measure_key(request: WalkRequest, *, data_version: str, regime: str = "order") -> str:
@@ -176,7 +188,14 @@ def measure_candidates(
             )
         planned = len(route)
         route, prune_report = prune_unroutable(route, candidates, cost, constraints.must_visit_ids)
-        info = order_after_prune(info, route, candidates)
+        if prune_report:
+            route, info = _reorder_after_prune(route, candidates, cost, constraints, info)
+            route, again = prune_unroutable(route, candidates, cost, constraints.must_visit_ids)
+            if again:
+                info = order_after_prune(info, route, candidates)
+            prune_report = [*prune_report, *again]
+        else:
+            info = order_after_prune(info, route, candidates)
         plan = validate(route, cost, constraints, info, prune_report=prune_report)
     except NoRoutePossibleError as exc:
         provenance["reason_code"] = "no_route_possible"
@@ -301,6 +320,29 @@ def _step_free_price(step_free: dict[str, Any], baseline: dict[str, Any]) -> dic
     }
 
 
+def _reorder_after_prune(
+    route: list[Candidate],
+    candidates: list[Candidate],
+    cost: CostMatrix,
+    constraints: ResolvedConstraints,
+    info: dict[str, Any],
+) -> tuple[list[Candidate], dict[str, Any]]:
+    """Order the survivors again: the walk the dropped stop was part of is not this one."""
+    position = {id(card): i for i, card in enumerate(candidates)}
+    idx = [position[id(card)] for card in route]
+    if len(idx) < constants.MIN_TOUR_STOPS:
+        return route, order_after_prune(info, route, candidates)
+    ordered, fresh = optimize(
+        WalkProblem(candidates=route, cost=sub_matrix(cost, idx), constraints=constraints)
+    )
+    return ordered, {
+        **info,
+        **fresh,
+        "order": [idx[i] for i in fresh["order"]],
+        "reordered_after_prune": True,
+    }
+
+
 def _drawn(
     route: list[Any],
     request: WalkRequest,
@@ -310,7 +352,7 @@ def _drawn(
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Ask Valhalla to draw the walk; a service that cannot is not a failed plan."""
     try:
-        shape, summary, _status = render(
+        shape, summary, status = render(
             route,
             costing=costing,
             origin=request.origin,
@@ -321,6 +363,9 @@ def _drawn(
     except UpstreamUnavailableError:
         provenance["geometry"] = "valhalla unavailable"
         return {}, {}
+    if status == RouteStatus.PARTIAL.value:
+        provenance["geometry"] = "a leg is missing"
+        log.warning("plan_walk: the drawn line is missing a leg")
     return shape, summary
 
 

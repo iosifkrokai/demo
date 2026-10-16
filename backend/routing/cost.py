@@ -156,7 +156,8 @@ def _usable_link(value: float) -> bool:
     return math.isnan(value) or (math.isfinite(value) and value < constants.UNREACHABLE_S)
 
 
-def _sub_matrix(cost: CostMatrix, idx: list[int]) -> CostMatrix:
+def sub_matrix(cost: CostMatrix, idx: list[int]) -> CostMatrix:
+    """The same measurement narrowed to a subset of its stops, origin legs included."""
     anchor = cost.anchor
     if anchor is not None:
         anchor = OriginAnchor(
@@ -183,7 +184,7 @@ def _best_pair(candidates: list[Candidate], cost: CostMatrix) -> tuple[list[Cand
                 best = (key, i, j)
     assert best is not None
     _, i, j = best
-    return [candidates[i], candidates[j]], _sub_matrix(cost, [i, j])
+    return [candidates[i], candidates[j]], sub_matrix(cost, [i, j])
 
 
 def drop_unreachable(
@@ -213,7 +214,7 @@ def drop_unreachable(
         return _best_pair(candidates, cost)
 
     idx = sorted(alive)
-    return [candidates[i] for i in idx], _sub_matrix(cost, idx)
+    return [candidates[i] for i in idx], sub_matrix(cost, idx)
 
 
 def prune_unroutable_stops(

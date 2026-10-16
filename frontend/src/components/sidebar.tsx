@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import { useNavigate } from '@tanstack/react-router';
 import { cn } from '@/lib/utils';
+import { asMapShape } from '@/utils/agent-shape';
 import { meWaypoint, storedMeCoords } from '@/utils/me-waypoint';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -49,7 +50,10 @@ import {
   type RouteHistoryEntry,
   type Waypoint,
 } from '@/stores/directions-store';
-import { useDirectionsQuery } from '@/hooks/use-directions-queries';
+import {
+  setAgentRoute,
+  useDirectionsQuery,
+} from '@/hooks/use-directions-queries';
 import { useRouteRecalculate } from '@/hooks/use-route-recalculate';
 import { summaryOf } from '@/utils/route-summary';
 import { GuidePanel, guideRouteKey, type GuideStop } from './guide-panel';
@@ -1114,6 +1118,17 @@ export const Sidebar = ({
         ],
       }));
       setWaypoint([...start, ...placeWaypoints]);
+
+      const measured = asMapShape(data.shape);
+      setAgentRoute(
+        measured
+          ? {
+              shape: measured,
+              summary: data.summary ?? null,
+              costing: data.costing ?? null,
+            }
+          : null
+      );
 
       setPlaceDetails(
         Object.fromEntries(

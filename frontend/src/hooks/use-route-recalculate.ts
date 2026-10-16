@@ -9,10 +9,10 @@ import {
   type RerouteRequest,
   type RerouteStop,
 } from '@/api/reroute';
-import type { AgentRouteResponse } from '@/components/types';
 import i18n from '@/i18n';
 import type { Waypoint } from '@/stores/directions-store';
 import { ME_WAYPOINT_ID, useDirectionsStore } from '@/stores/directions-store';
+import { asMapShape } from '@/utils/agent-shape';
 import { storedMeCoords } from '@/utils/me-waypoint';
 import { summaryOf } from '@/utils/route-summary';
 
@@ -40,16 +40,6 @@ const asStop = (waypoint: Waypoint): RerouteStop | null => {
     lat,
     lon,
     name: waypoint.userInput || geo?.title,
-  };
-};
-
-/** The one place GeoJSON's `[lon, lat]` meets the map's `[lat, lon]`. */
-const asMapShape = (answer: AgentRouteResponse) => {
-  const coordinates = answer.shape?.coordinates;
-  if (!coordinates || coordinates.length < 2) return null;
-  return {
-    type: answer.shape?.type ?? 'LineString',
-    coordinates: coordinates.map(([lon, lat]) => [lat ?? 0, lon ?? 0]),
   };
 };
 
@@ -86,7 +76,7 @@ export const useRouteRecalculate = () => {
         summary: summaryOf(answer),
       });
       setAgentRoute({
-        shape: asMapShape(answer),
+        shape: asMapShape(answer.shape),
         summary: {
           length_km: answer.summary?.length_km ?? null,
           time_seconds: answer.summary?.time_seconds ?? null,
