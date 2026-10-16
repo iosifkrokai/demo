@@ -9,7 +9,7 @@ from typing import Any
 from agent.tools.places import Where, find_places
 from agent.tools.plan import plan_walk
 from db.seed import cli, datasets as ds_mod, itineraries as itin_mod
-from quality import report as report_mod
+from quality import evals as evals_mod, report as report_mod
 from quality.evals import _forbidden, _load, _service_checks, report as evals_report
 from quality.report import read_curated, read_routes
 from quality.runner import (
@@ -347,3 +347,61 @@ def test_a_skipped_stage_is_named_with_its_reason_and_weighs_nothing() -> None:
     assert "services — нет базы" in text
     assert "веса учтённых участков: verdicts 0.25, plan 0.25" in text
     assert "НЕ ИЗМЕРЯЛОСЬ (2, вес 0.50 — в итог не входит)" in text
+
+
+class _Stop:
+    """A reference stop, as the retrieval stage reads it off a case."""
+
+    def __init__(self, lat: float, lon: float) -> None:
+        self.lat = lat
+        self.lon = lon
+
+
+def test_the_pool_is_measured_with_the_benchmarks_own_radius() -> None:
+    """The retrieval stage must not invent a second criterion: it reads the runner's."""
+    from quality.runner import STAGE1_PROXY_RADIUS_M
+
+    stop = _Stop(53.6778, 23.8295)
+    just_inside = [{"lat": 53.6778 + 0.002, "lon": 23.8295}]
+    just_outside = [{"lat": 53.6778 + 0.003, "lon": 23.8295}]
+
+    assert STAGE1_PROXY_RADIUS_M == 250.0
+    assert evals_mod._reaches(stop, just_inside) is True
+    assert evals_mod._reaches(stop, just_outside) is False
+    assert evals_mod._nearest_km(stop, []) is None
+
+
+def test_the_pool_recall_counts_stops_not_rows() -> None:
+    stops = [_Stop(53.6778, 23.8295), _Stop(53.6791, 23.8216)]
+    near_the_first = [{"lat": 53.6778, "lon": 23.8295}, {"lat": 53.6778, "lon": 23.8295}]
+
+    assert evals_mod._covered(stops, near_the_first) == 1
+    assert evals_mod._covered(stops, []) == 0
+
+
+def test_the_retrieval_stage_does_not_enter_the_weighted_total() -> None:
+    """It reports a number, so it must not re-weight the four stages it sits beside."""
+    text = evals_report(
+        [
+            {"stage": "verdicts", "checks": [_passing_check()]},
+            {"stage": "retrieval", "checks": [_passing_check()]},
+            {"stage": "plan", "checks": [_passing_check()]},
+        ]
+    )
+
+    assert "веса учтённых участков: verdicts 0.25, plan 0.25" in text
+    assert "retrieval" in text
+
+
+def test_the_pool_recall_is_printed_under_its_own_row() -> None:
+    text = evals_report(
+        [
+            {
+                "stage": "retrieval",
+                "checks": [_passing_check()],
+                "pool_recall": {"whole": 0.417, "per_object": 0.806, "stops": 36},
+            }
+        ]
+    )
+
+    assert "резерв пула (250 м, 36 остановок): одним запросом 42%, по объектам 81%" in text

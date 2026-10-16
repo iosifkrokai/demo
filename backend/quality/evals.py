@@ -16,14 +16,18 @@ from typing import Any
 
 from agent import client
 from agent.models import Requirement, TripRequirements
+from agent.tools.places import Where, find_places
 from api.models.routes import GenerateReq
 from api.responses import reader_brief
+from core import constants
+from db.embeddings import model as embeddings_model
 from db.seed.taxonomy import all_categories as _seed_categories
 from db.store import services as services_mod
 from db.store.areas import PostgresAreaRepository
 from db.store.errors import StorageUnavailableError
 from db.store.places import PostgresPlaceRepository
 from db.store.registry import Repositories
+from quality.runner import BENCH_ROUTES, STAGE1_PROXY_RADIUS_M, haversine_km, load_golden_routes
 from routing.models import CategoryFacts
 from routing.verify import ServiceAlongEvidence, verify
 
@@ -452,6 +456,138 @@ def run_plan() -> dict[str, Any]:
     return {"stage": "plan", "checks": checks, "base_url": BASE_URL}
 
 
+AREA_QUERY = "достопримечательности"
+
+
+def run_retrieval() -> dict[str, Any]:
+    """Does the pool reach the stops the data holds, and stay inside the area it was asked for?"""
+
+    if not embeddings_model.is_available():
+        return {
+            "stage": "retrieval",
+            "checks": [],
+            "skipped": "нет локальной модели эмбеддингов — векторный поиск нечем измерить",
+        }
+
+    checks: list[dict[str, Any]] = []
+    repos = _repositories()
+    try:
+        checks.extend(_area_checks(repos))
+        pool_checks, recall = _pool_checks(repos)
+        checks.extend(pool_checks)
+    except StorageUnavailableError as exc:
+        return {
+            "stage": "retrieval",
+            "checks": checks,
+            "skipped": f"нет доступа к базе: {type(exc).__name__}: {exc}",
+        }
+    finally:
+        repos.close()
+
+    return {"stage": "retrieval", "checks": checks, "skipped": None, "pool_recall": recall}
+
+
+def _pool(query: str, repos: Any, area: str | None = None) -> list[dict[str, Any]]:
+    """The rows one search hands the agent — the pool it chooses the stops from."""
+    where = Where(area=area) if area else None
+    found = find_places(query, limit=constants.MAX_PLACES_PER_FIND, repos=repos, where=where)
+    return list(found.get("results") or [])
+
+
+def _nearest_km(stop: Any, rows: list[dict[str, Any]]) -> float | None:
+    """How far the nearest returned row stands from the stop; None when nothing came back."""
+    if not rows:
+        return None
+    return min(haversine_km(stop.lat, stop.lon, row["lat"], row["lon"]) for row in rows)
+
+
+def _reaches(stop: Any, rows: list[dict[str, Any]]) -> bool:
+    """Whether anything returned stands within the benchmark's own 250 m of the stop."""
+    near = _nearest_km(stop, rows)
+    return near is not None and near * 1000.0 <= STAGE1_PROXY_RADIUS_M
+
+
+def _covered(stops: list[Any], rows: list[dict[str, Any]]) -> int:
+    """How many of these stops the returned pool reaches."""
+    return sum(1 for stop in stops if _reaches(stop, rows))
+
+
+def _area_checks(repos: Any) -> list[dict[str, Any]]:
+    """Every territory that has a boundary: a search scoped to it must stay inside it."""
+    checks: list[dict[str, Any]] = []
+    for area in repos.areas.list_all():
+        if repos.areas.bbox(area.code) is None:
+            continue
+        ids = [row["id"] for row in _pool(AREA_QUERY, repos, area.code)]
+        outside = repos.places.outside_area(ids, area.code)
+        checks.append(
+            {
+                "case": area.code,
+                "check": "scoped_search_stays_inside_the_area",
+                "ok": bool(ids) and not outside,
+                "detail": f"{area.name_ru}: вернулось {len(ids)} точек, вне границы {len(outside)}",
+                "why": (
+                    "Площадка в запросе обязана ограничивать поиск: без границы агент думает, "
+                    "что ищет по этому кварталу, а получает точки по всей области."
+                ),
+            }
+        )
+    return checks
+
+
+def _pool_checks(repos: Any) -> tuple[list[dict[str, Any]], dict[str, float]]:
+    """The reference walks: does the pool reach their stops, and asked which way?"""
+    checks: list[dict[str, Any]] = []
+    covered = {"whole": 0, "per_object": 0, "stops": 0}
+    for route in load_golden_routes(BENCH_ROUTES):
+        stops = list(route.stops)
+        one = _pool(route.query_ru, repos)
+        per_object = [row for stop in stops for row in _pool(stop.name, repos)]
+        names = [row["name"] for row in one + per_object]
+        covered["whole"] += _covered(stops, one)
+        covered["per_object"] += _covered(stops, per_object)
+        covered["stops"] += len(stops)
+        checks.append(
+            {
+                "case": route.case,
+                "check": "per_object_query_is_not_worse",
+                "ok": _covered(stops, per_object) >= _covered(stops, one),
+                "detail": (
+                    f"одним запросом {_covered(stops, one)}/{len(stops)}, "
+                    f"по объектам {_covered(stops, per_object)}/{len(stops)}; "
+                    f"повторов имён в пуле {len(names) - len(set(names))} из {len(names)}"
+                ),
+                "why": (
+                    "Длинная фраза усредняется в вектор, который не находит ничего: названные "
+                    "объекты надо искать по одному и их же словами."
+                ),
+            }
+        )
+        for stop in stops:
+            rows = _pool(stop.name, repos)
+            near = _nearest_km(stop, rows)
+            checks.append(
+                {
+                    "case": f"{route.case}/{stop.name}",
+                    "check": "stop_is_reachable_by_its_name",
+                    "ok": _reaches(stop, rows),
+                    "detail": (
+                        f"вернулось {len(rows)}, ближайшая в {near:.2f} км"
+                        if near is not None
+                        else "ничего не вернулось"
+                    ),
+                    "why": "Место, которое есть в данных, обязано находиться по своему имени.",
+                }
+            )
+    total = covered["stops"] or 1
+    recall = {
+        "whole": covered["whole"] / total,
+        "per_object": covered["per_object"] / total,
+        "stops": covered["stops"],
+    }
+    return checks, recall
+
+
 def _repositories() -> Repositories:
     """The repositories a live stage reads through, skipping when there is none."""
     return Repositories(places=PostgresPlaceRepository(), areas=PostgresAreaRepository())
@@ -594,6 +730,7 @@ def _code_exists(code: str) -> bool:
 STAGES: dict[str, Callable[[], dict[str, Any]]] = {
     "verdicts": run_verdicts,
     "services": run_services,
+    "retrieval": run_retrieval,
     "interpretation": run_interpretation,
     "plan": run_plan,
 }
@@ -619,6 +756,12 @@ def _stage_rows(res: dict[str, Any]) -> tuple[list[str], tuple[int, int]]:
     if res.get("near_gate_points"):
         rows.append(
             f"{'':<22} точек у самого порога (не считаем расхождением): {res['near_gate_points']}"
+        )
+    recall = res.get("pool_recall")
+    if recall:
+        rows.append(
+            f"{'':<22} резерв пула (250 м, {recall['stops']} остановок): "
+            f"одним запросом {recall['whole']:.0%}, по объектам {recall['per_object']:.0%}"
         )
     return rows, (passed, total)
 

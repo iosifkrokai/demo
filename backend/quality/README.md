@@ -9,6 +9,7 @@ Four layers, four different questions:
 | **compliance** | does the plan meet the conditions the request states? | `cases/compliance/*.json` | `reports/compliance.json` |
 | **trajectory** | which tools did the agent call, and with what arguments? | `cases/trajectory.jsonl` | `reports/trajectory.json` |
 | **evals** (flow stages) | which stage is to blame when the answer is bad? | `cases/*.jsonl` | `reports/evals_last.json` |
+| **evals / `retrieval`** | does the pool the agent chooses from reach the stops we know are in the data — and stay inside the area the request names? | the `routes` walks, graded at their own 250 m | the same report |
 
 The two geometry layers ask the same question of two different sets of reference
 walks, and each report names its own set (`cases_dir`), so neither can be filed
@@ -28,6 +29,7 @@ cd backend
 .venv/bin/python -m quality --curated     # the ready-made walks: live (needs the stack)
 .venv/bin/python -m quality.trajectory    # trajectory: scripted run (needs db + Valhalla)
 .venv/bin/python -m quality.evals         # the flow stages (offline ones run without a stack)
+.venv/bin/python -m quality.evals --stage retrieval  # the pool, offline: needs the db + embedder
 .venv/bin/python -m quality.report        # the one-page readout over all four
 ```
 

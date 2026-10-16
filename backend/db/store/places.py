@@ -283,6 +283,18 @@ class PostgresPlaceRepository(PostgresRepository):
             )
             return [place_from_row(row) for row in cur.fetchall()]
 
+    def outside_area(self, ids: Sequence[int], code: str) -> list[int]:
+        """The ids that do not stand inside the area's polygon — the harness's own check."""
+        if not ids:
+            return []
+        with self._cursor() as cur:
+            cur.execute(
+                "SELECT p.id FROM places p JOIN areas a ON a.code = %s "
+                " WHERE p.id = ANY(%s) AND (a.geom IS NULL OR NOT ST_Intersects(p.geom, a.geom))",
+                (code, list(ids)),
+            )
+            return [int(row["id"]) for row in cur.fetchall()]
+
     def category_of(self, ids: Sequence[int]) -> dict[int, str]:
         """`{place_id: category}` for these ids — the avoid-filter reads it."""
         if not ids:
