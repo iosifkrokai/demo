@@ -10,7 +10,7 @@ from agent.tools.places import Where, find_places
 from agent.tools.plan import plan_walk
 from db.seed import cli, datasets as ds_mod, itineraries as itin_mod
 from quality import report as report_mod
-from quality.evals import _load, _service_checks, report as evals_report
+from quality.evals import _forbidden, _load, _service_checks, report as evals_report
 from quality.report import read_curated, read_routes
 from quality.runner import (
     BENCH_CURATED,
@@ -321,6 +321,18 @@ def test_a_stage_that_did_not_run_is_named_and_left_out_of_the_total() -> None:
     assert "НЕ ИЗМЕРЯЛОСЬ (2, вес 0.50 — в итог не входит)" in text
     assert "веса учтённых участков: verdicts 0.25, plan 0.25" in text
     assert "добавь `--stage interpretation`" in text
+
+
+def test_a_reading_a_case_rules_out_is_caught_by_kind_strength_and_code() -> None:
+    """A case can say what the words must not be taken to mean."""
+    any_service = [{"kind": "service", "code": None, "strength": "hard"}]
+    the_cafe = [{"kind": "service", "code": "кафе", "strength": "hard"}]
+
+    assert _forbidden([("service", "кафе", "hard")], any_service) == ["service/кафе/hard"]
+    assert _forbidden([("service", "кафе", "soft")], any_service) == []
+    assert _forbidden([("interest", "кафе", "hard")], any_service) == []
+    assert _forbidden([("service", "музей", "hard")], the_cafe) == []
+    assert _forbidden([("service", "кафе", "hard")], the_cafe) == ["service/кафе/hard"]
 
 
 def test_a_skipped_stage_is_named_with_its_reason_and_weighs_nothing() -> None:

@@ -532,6 +532,19 @@ def run_interpretation() -> dict[str, Any]:
             }
         )
 
+        forbid = raw.get("forbid") or []
+        if forbid:
+            broke = _forbidden(reading, forbid)
+            checks.append(
+                {
+                    "case": case.id,
+                    "check": "no_forbidden_reading",
+                    "ok": not broke,
+                    "detail": f"прочитано запрещённое: {broke}",
+                    "why": case.why,
+                }
+            )
+
         unplaceable = [
             (r.name or r.code or "-")
             for r in got.requirements
@@ -559,6 +572,18 @@ def run_interpretation() -> dict[str, Any]:
         "skipped": None,
         "sources": sources,
     }
+
+
+def _forbidden(reading: list[tuple[str, str, str]], forbid: list[dict[str, Any]]) -> list[str]:
+    """The reading the case rules out — what the product must not take the words to mean."""
+    out = []
+    for kind, code, strength in reading:
+        for spec in forbid:
+            same_code = spec.get("code") is None or code == spec["code"]
+            if kind == spec["kind"] and strength == spec["strength"] and same_code:
+                out.append(f"{kind}/{code}/{strength}")
+                break
+    return out
 
 
 def _code_exists(code: str) -> bool:
