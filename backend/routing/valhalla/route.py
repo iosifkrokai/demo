@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 from collections.abc import Iterable
+from dataclasses import dataclass
 from typing import Any
 
 from core import constants
@@ -12,7 +13,13 @@ from core.config import settings
 from core.errors import UpstreamUnavailableError
 
 from . import http, snap
-from .constants import LOCATION_SNAP_RADIUS_M, PRECISION, ROUTE_SNAP_RADII_M, costing_for
+from .constants import (
+    ALTERNATES_MAX,
+    LOCATION_SNAP_RADIUS_M,
+    PRECISION,
+    ROUTE_SNAP_RADII_M,
+    costing_for,
+)
 from .matrix import is_route_failure
 from .types import RouteResult, RouteStatus
 
@@ -83,30 +90,38 @@ def _trip_to_shape(body: dict[str, Any], language: str | None = None) -> RouteRe
     )
 
 
+@dataclass(frozen=True)
+class RouteOptions:
+    """One route request's engine settings, through the snap radii it retries."""
+
+    costing: str
+    language: str
+    timeout: float | None
+    costing_options: dict[str, Any] | None = None
+    alternates: int = 0
+
+
 def _route_request(
     locations: list[dict[str, Any]],
-    costing: str,
-    language: str,
-    timeout: float | None,
+    options: RouteOptions,
     radius: int,
-    costing_options: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     locs = [{**loc, "radius": radius} for loc in locations]
     payload = {
-        "costing": costing,
+        "costing": options.costing,
         "locations": locs,
         "units": "kilometers",
-        "language": language,
-        "alternates": 0,
+        "language": options.language,
+        "alternates": options.alternates,
         "directions_options": {"units": "kilometers"},
     }
-    if costing_options:
-        payload["costing_options"] = costing_options
+    if options.costing_options:
+        payload["costing_options"] = options.costing_options
     return http.request_with_retry(
         "GET",
         f"{settings.VALHALLA_URL.rstrip('/')}/route",
         params={"json": json.dumps(payload, separators=(",", ":"))},
-        timeout=timeout or constants.VALHALLA_TIMEOUT_S,
+        timeout=options.timeout or constants.VALHALLA_TIMEOUT_S,
     )
 
 
@@ -158,6 +173,7 @@ def route_through(
 ) -> RouteResult:
     """Call GET /route. Locations are [{lat, lon, type}], first/last 'break'."""
     costing = costing_for(costing)
+    options = RouteOptions(costing, language, timeout, costing_options)
     locs = [dict(loc) for loc in locations]
     if len(locs) < constants.MIN_LEG_POINTS:
         return RouteResult(
@@ -183,7 +199,7 @@ def route_through(
     last_exc: Exception | None = None
     for radius in ROUTE_SNAP_RADII_M:
         try:
-            body = _route_request(locs, costing, language, timeout, radius, costing_options)
+            body = _route_request(locs, options, radius)
         except UpstreamUnavailableError as exc:
             if not is_route_failure(exc):
                 return RouteResult(
@@ -197,21 +213,100 @@ def route_through(
             continue
         return _trip_to_shape(body, language)
 
-    for i in range(len(locs)):
+    best: tuple[float, int, RouteResult] | None = None
+    for i in [*range(1, len(locs) - 1), 0, len(locs) - 1]:
         subset = locs[:i] + locs[i + 1 :]
         if len(subset) < constants.MIN_LEG_POINTS:
-            break
+            continue
         try:
-            body = _route_request(
-                subset, costing, language, timeout, ROUTE_SNAP_RADII_M[-1], costing_options
-            )
+            body = _route_request(subset, options, ROUTE_SNAP_RADII_M[-1])
         except UpstreamUnavailableError as exc:
             last_exc = exc
             continue
-        logger.warning("route: dropped 1 stop that kept failing, built with %d", len(subset))
-        return _trip_to_shape(body, language)
+        result = _trip_to_shape(body, language)
+        seconds = _summary_seconds(result.summary)
+        if best is None or seconds < best[0]:
+            best = (seconds, i, result)
+
+    if best is not None:
+        logger.warning(
+            "route: dropped stop %d of %d that kept failing, built with %d",
+            best[1] + 1,
+            len(locs),
+            len(locs) - 1,
+        )
+        return best[2]
 
     logger.warning("route: no routable pair among %d stops (%s)", len(locs), last_exc)
+    return RouteResult(
+        status=RouteStatus.NO_ROUTE_EXISTS,
+        shape={},
+        summary=None,
+        maneuvers=None,
+        language=language,
+    )
+
+
+def _summary_seconds(summary: dict[str, Any] | None) -> float:
+    """The engine's own time for a trip, when it gave one."""
+    if not summary:
+        return float("inf")
+    seconds = summary.get("time")
+    return float(seconds) if isinstance(seconds, int | float) else float("inf")
+
+
+def _fastest(body: dict[str, Any], language: str | None) -> RouteResult:
+    """The quickest of the routes in one answer: the primary and its alternates."""
+    result = _trip_to_shape(body, language)
+    quickest = _summary_seconds(result.summary)
+    for alternate in body.get("alternates") or []:
+        candidate = _trip_to_shape({"trip": alternate.get("trip") or {}}, language)
+        if candidate.status != RouteStatus.USABLE:
+            continue
+        seconds = _summary_seconds(candidate.summary)
+        if seconds < quickest:
+            result, quickest = candidate, seconds
+    return result
+
+
+def best_route(
+    locations: Iterable[dict[str, Any]],
+    costing: str = "pedestrian",
+    language: str = "ru",
+    timeout: float | None = None,
+    costing_options: dict[str, Any] | None = None,
+) -> RouteResult:
+    """The quickest route the engine offers for this pair, its alternates included."""
+    costing = costing_for(costing)
+    options = RouteOptions(costing, language, timeout, costing_options, ALTERNATES_MAX)
+    locs = snap.snap_locations([dict(loc) for loc in locations], costing, timeout)
+    if len(locs) < constants.MIN_LEG_POINTS:
+        return RouteResult(
+            status=RouteStatus.NO_ROUTE_EXISTS,
+            shape={},
+            summary=None,
+            maneuvers=None,
+            language=language,
+        )
+
+    last_exc: Exception | None = None
+    for radius in ROUTE_SNAP_RADII_M:
+        try:
+            body = _route_request(locs, options, radius)
+        except UpstreamUnavailableError as exc:
+            if not is_route_failure(exc):
+                return RouteResult(
+                    status=RouteStatus.SERVICE_UNAVAILABLE,
+                    shape={},
+                    summary=None,
+                    maneuvers=None,
+                    language=language,
+                )
+            last_exc = exc
+            continue
+        return _fastest(body, language)
+
+    logger.warning("route: no route for the pair (%s)", last_exc)
     return RouteResult(
         status=RouteStatus.NO_ROUTE_EXISTS,
         shape={},

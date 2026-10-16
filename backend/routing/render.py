@@ -9,7 +9,7 @@ from typing import Any
 from core import constants
 from core.errors import UpstreamUnavailableError
 from routing.models import Candidate, LatLon
-from routing.valhalla.route import route_through
+from routing.valhalla.route import best_route, route_through
 from routing.valhalla.types import RouteStatus
 
 log = logging.getLogger(__name__)
@@ -104,8 +104,8 @@ def _leg_by_leg(
 ) -> tuple[dict[str, Any], dict[str, Any], str]:
     """Draw every leg on its own; a tour with no drawable leg is its own status."""
     shape, summary, leg_status = _render_legs(pts, costing, locale, costing_options)
-    if leg_status == "usable" and shape.get("coordinates"):
-        return shape, summary, "usable"
+    if shape.get("coordinates"):
+        return shape, summary, leg_status
     log.warning("route: no leg of the tour could be drawn — empty shape")
     return {}, {}, "empty_geometry"
 
@@ -141,7 +141,7 @@ def _render_legs(
             {"lat": b_lat, "lon": b_lon, "type": "break"},
         ]
         try:
-            result = route_through(
+            result = best_route(
                 pair, costing=costing, language=locale, costing_options=costing_options
             )
         except UpstreamUnavailableError:
@@ -161,12 +161,18 @@ def _render_legs(
     if not drawn:
         return {}, {}, "no_route_exists"
 
-    log.info("route: drew %d of %d legs separately", drawn, len(pts) - 1)
+    if drawn < len(pts) - 1:
+        log.warning("route: drew %d of %d legs separately — the line has gaps", drawn, len(pts) - 1)
+        status = RouteStatus.PARTIAL.value
+    else:
+        log.info("route: drew %d of %d legs separately", drawn, len(pts) - 1)
+        status = RouteStatus.USABLE.value
+
     return (
         {"type": "LineString", "coordinates": coords},
         {
             "length": length_km,
             "time": seconds,
         },
-        "usable",
+        status,
     )

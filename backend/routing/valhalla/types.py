@@ -9,6 +9,7 @@ from typing import Any
 
 class RouteStatus(Enum):
     USABLE = "usable"
+    PARTIAL = "partial"
     NO_ROUTE_EXISTS = "no_route_exists"
     SERVICE_UNAVAILABLE = "service_unavailable"
     EMPTY_GEOMETRY = "empty_geometry"
