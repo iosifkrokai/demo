@@ -842,8 +842,56 @@ describe('Sidebar', () => {
     const hints = screen.getByTestId('hint-old-town-castles').parentElement;
     expect(hints?.getAttribute('role')).toBe('group');
     expect(hints?.querySelectorAll('button').length).toBe(baseHintChips.length);
-    expect(hints?.className).toContain('max-md:flex-nowrap');
-    expect(hints?.className).toContain('max-md:overflow-x-auto');
+    expect(hints?.className).toContain('flex-nowrap');
+    expect(hints?.className).toContain('overflow-x-auto');
+    expect(hints?.className).not.toContain('flex-wrap');
+  });
+
+  it('lists every starter in a dialogue instead of scrolling the row past them', async () => {
+    const user = userEvent.setup({ delay: null });
+    render(<Sidebar />);
+
+    expect(screen.queryByTestId('hints-dialog')).not.toBeInTheDocument();
+
+    await user.click(screen.getByTestId('hints-all'));
+
+    const dialog = await screen.findByTestId('hints-dialog');
+    for (const [id, said] of baseHintChips) {
+      expect(within(dialog).getByTestId(`dialog-hint-${id}`)).toHaveTextContent(
+        said
+      );
+    }
+    expect(within(dialog).getByText('пешком')).toBeInTheDocument();
+    expect(within(dialog).getByText('велосипед')).toBeInTheDocument();
+    expect(within(dialog).getByText('машина')).toBeInTheDocument();
+  });
+
+  it('fills the field from the dialogue and closes it', async () => {
+    const user = userEvent.setup({ delay: null });
+    render(<Sidebar />);
+
+    await user.click(screen.getByTestId('hints-all'));
+    await user.click(await screen.findByTestId('dialog-hint-bicycle-canal'));
+
+    expect(askField()).toHaveValue(
+      'Августовский канал на велосипеде: Сопоцкин и шлюзы, часа на четыре'
+    );
+    await waitFor(() =>
+      expect(screen.queryByTestId('hints-dialog')).not.toBeInTheDocument()
+    );
+  });
+
+  it('leaves the field alone until a hint is picked', async () => {
+    const user = userEvent.setup({ delay: null });
+    render(<Sidebar />);
+
+    await user.click(screen.getByTestId('hints-all'));
+    await user.keyboard('{Escape}');
+
+    await waitFor(() =>
+      expect(screen.queryByTestId('hints-dialog')).not.toBeInTheDocument()
+    );
+    expect(askField()).toHaveValue('');
   });
 
   it('once a route exists the chips edit it instead of starting a new one', () => {

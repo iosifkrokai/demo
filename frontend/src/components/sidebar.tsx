@@ -77,6 +77,13 @@ import { currentRunSession, startRunSession } from '@/utils/run-session';
 import { WaypointList } from './waypoint-list';
 import { CatalogueList } from './parts/catalogue-list';
 import { Chip } from './parts/chip';
+import {
+  buildHintChips,
+  buildRefineHintChips,
+  groupHintChips,
+  type HintChip,
+} from './parts/hint-chips';
+import { HintsDialog } from './parts/hints-dialog';
 import { agentErrorMessage } from './parts/guide-format';
 import { useRouteProgress } from '@/hooks/use-route-progress';
 import {
@@ -187,131 +194,6 @@ const buildViewSubtitles = (t: TFunction): Record<PanelView, string> => ({
   places: t('tabSubtitles.places'),
   history: t('tabSubtitles.history'),
 });
-
-/** One-tap starters. */
-interface HintChip {
-  /** Stable id: the chip's text is a whole sentence, and it may be reworded. */
-  id: string;
-  text: string;
-  /** The transport this request needs, `''` for «any»; `null` leaves the chosen one. */
-  transport: '' | Profile | null;
-}
-
-/** The chips offered before anything is planned — the requests the benchmark measures. */
-const buildHintChips = (t: TFunction): HintChip[] => [
-  {
-    id: 'old-town-castles',
-    text: t('ask.chips.oldTownCastles'),
-    transport: 'pedestrian',
-  },
-  {
-    id: 'museums-rainy-day',
-    text: t('ask.chips.museumsRainyDay'),
-    transport: 'pedestrian',
-  },
-  {
-    id: 'family-with-kids',
-    text: t('ask.chips.familyWithKids'),
-    transport: 'pedestrian',
-  },
-  {
-    id: 'four-faiths',
-    text: t('ask.chips.fourFaiths'),
-    transport: 'pedestrian',
-  },
-  {
-    id: 'free-old-town-walk',
-    text: t('ask.chips.freeOldTownWalk'),
-    transport: 'pedestrian',
-  },
-  {
-    id: 'tyzenhauz-north',
-    text: t('ask.chips.tyzenhauzNorth'),
-    transport: 'pedestrian',
-  },
-  {
-    id: 'bicycle-canal',
-    text: t('ask.chips.bicycleCanal'),
-    transport: 'bicycle',
-  },
-  {
-    id: 'augustow-canal-bike',
-    text: t('ask.chips.augustowCanalBike'),
-    transport: 'bicycle',
-  },
-  { id: 'palaces-day', text: t('ask.chips.palacesDay'), transport: 'car' },
-  {
-    id: 'castles-lida-krevo-golshany',
-    text: t('ask.chips.castlesLidaKrevoGolshany'),
-    transport: 'car',
-  },
-  {
-    id: 'mir-novogrudok',
-    text: t('ask.chips.mirNovogrudok'),
-    transport: 'car',
-  },
-  {
-    id: 'west-palaces-and-churches',
-    text: t('ask.chips.westPalacesAndChurches'),
-    transport: 'car',
-  },
-  {
-    id: 'synagogues-day',
-    text: t('ask.chips.synagoguesDay'),
-    transport: 'car',
-  },
-  {
-    id: 'castles-half-day',
-    text: t('ask.chips.castlesHalfDay'),
-    transport: '',
-  },
-  { id: 'museums-budget', text: t('ask.chips.museumsBudget'), transport: '' },
-  { id: 'family-walk', text: t('ask.chips.familyWalk'), transport: '' },
-  { id: 'avoid-temples', text: t('ask.chips.avoidTemples'), transport: '' },
-  { id: 'named-farnyi', text: t('ask.chips.namedFarnyi'), transport: '' },
-  { id: 'free-old-town', text: t('ask.chips.freeOldTown'), transport: '' },
-  {
-    id: 'all-churches-catalogue',
-    text: t('ask.chips.allChurchesCatalogue'),
-    transport: '',
-  },
-  { id: 'vague-no-anchor', text: t('ask.chips.vagueNoAnchor'), transport: '' },
-  {
-    id: 'out-of-region-vilnius',
-    text: t('ask.chips.outOfRegionVilnius'),
-    transport: '',
-  },
-];
-
-/** The chips offered once a route exists. */
-const buildRefineHintChips = (t: TFunction): HintChip[] => [
-  {
-    id: 'refine-add-cafe-toilet',
-    text: t('ask.chipsRefine.addCafeToilet'),
-    transport: null,
-  },
-  {
-    id: 'refine-add-cafe',
-    text: t('ask.chipsRefine.addCafe'),
-    transport: null,
-  },
-  {
-    id: 'refine-remove-museum',
-    text: t('ask.chipsRefine.removeMuseum'),
-    transport: null,
-  },
-  { id: 'refine-shorter', text: t('ask.chipsRefine.shorter'), transport: null },
-  {
-    id: 'refine-only-churches',
-    text: t('ask.chipsRefine.onlyChurches'),
-    transport: null,
-  },
-  {
-    id: 'refine-with-children',
-    text: t('ask.chipsRefine.withChildren'),
-    transport: null,
-  },
-];
 
 /** Options of the advanced filters. */
 interface FilterOption {
@@ -537,6 +419,7 @@ export const Sidebar = ({
   const updateDateTime = useCommonStore((s) => s.updateDateTime);
   const [customOpen, setCustomOpen] = useState(false);
   const [customValue, setCustomValue] = useState('');
+  const [hintsOpen, setHintsOpen] = useState(false);
 
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [partyAdults, setPartyAdults] = useState<number | null>(null);
@@ -614,6 +497,13 @@ export const Sidebar = ({
         : buildHintChips(t),
     [t, waypoints]
   );
+  const hintGroups = useMemo(() => groupHintChips(hints, t), [hints, t]);
+  /** A starter: its sentence in the field, and the transport that sentence asks for. */
+  const pickHint = (hint: HintChip) => {
+    if (hint.transport !== null) setTransportEverywhere(hint.transport, false);
+    setQuery(hint.text);
+    taRef.current?.focus();
+  };
 
   const routeHistory = useDirectionsStore((s) => s.routeHistory);
   const addToHistory = useDirectionsStore((s) => s.addToHistory);
@@ -1447,28 +1337,40 @@ export const Sidebar = ({
               />
             </div>
           </div>
-          <div
-            role="group"
-            aria-label={t('sidebar.plan.hintsAria')}
-            className="mt-2 flex gap-1.5 max-md:flex-nowrap max-md:overflow-x-auto max-md:pb-0.5 md:flex-wrap"
-          >
-            {hints.map((hint) => (
-              <Chip
-                key={hint.id}
-                className="truncate max-md:max-w-[12rem]"
-                onClick={() => {
-                  if (hint.transport !== null) {
-                    setTransportEverywhere(hint.transport, false);
-                  }
-                  setQuery(hint.text);
-                  taRef.current?.focus();
-                }}
-                data-testid={`hint-${hint.id}`}
-              >
-                {hint.text}
-              </Chip>
-            ))}
+          <div className="mt-2 flex items-center gap-1.5">
+            <div
+              role="group"
+              aria-label={t('sidebar.plan.hintsAria')}
+              className="flex min-w-0 flex-1 flex-nowrap gap-1.5 overflow-x-auto pb-0.5"
+            >
+              {hints.map((hint) => (
+                <Chip
+                  key={hint.id}
+                  className="max-w-[12rem] truncate"
+                  onClick={() => pickHint(hint)}
+                  data-testid={`hint-${hint.id}`}
+                >
+                  {hint.text}
+                </Chip>
+              ))}
+            </div>
+            <Chip
+              className="shrink-0"
+              onClick={() => setHintsOpen(true)}
+              data-testid="hints-all"
+            >
+              {t('ask.allHints')}
+            </Chip>
           </div>
+          <HintsDialog
+            open={hintsOpen}
+            onOpenChange={setHintsOpen}
+            groups={hintGroups}
+            onPick={(hint) => {
+              setHintsOpen(false);
+              pickHint(hint);
+            }}
+          />
         </section>
       )}
 

@@ -26,6 +26,10 @@ export const ru = {
     placeholderRefine: 'Что уточнить? «добавь кофейню»',
     placeholder: 'Что хотите посмотреть?',
     label: 'что хотите посмотреть',
+    allHints: 'все подсказки',
+    hintsTitle: 'Подсказки',
+    hintsIntro: 'Готовые запросы — нажмите, чтобы подставить в поле',
+    hintsClose: 'закрыть подсказки',
     chips: {
       oldTownCastles: 'два замка и Советская улица в Гродно, часа на четыре',
       museumsRainyDay:

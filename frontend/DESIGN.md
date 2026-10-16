@@ -93,10 +93,17 @@ for cards, panels, popups, and `rounded-t-3xl` for the mobile sheet.
   hint chips. The chips are whole requests, not keywords — the twenty-two the
   benchmark measures (see `backend/quality/README.md`), each filling the field with a
   sentence like «два замка и Советская улица в Гродно, часа на четыре» and setting the
-  transport that sentence asks for. They wrap on desktop (`md:flex-wrap`) and scroll in
-  one row on mobile, where each is capped at `max-md:max-w-[12rem]` and truncated.
-  Never a bare blank panel. The ask field's placeholder is the question itself
-  (`Что хотите посмотреть?`) — no trailing ellipsis.
+  transport that sentence asks for. Twenty-two whole sentences do not fit as a block, so
+  the row is **one line that scrolls at every width**, each chip capped at `max-w-[12rem]`
+  and truncated; the full list is one tap away behind «все подсказки», which opens the
+  dialogue below with the chips grouped by transport («пешком», «велосипед», «машина», «как
+  удобно») and each one free to wrap over its own row. Never a bare blank panel. The ask
+  field's placeholder is the question itself (`Что хотите посмотреть?`) — no trailing
+  ellipsis.
+- **Dialogue** (`ui/dialog.tsx`, for a list or a confirmation — not for the sheet's job):
+  centred card, `max-w-md rounded-2xl border border-border bg-card p-4 shadow-float`, on a
+  `bg-black/50` overlay; fade + `zoom-in-95` at 150ms; closes on ✕ and on Esc. The ✕
+  carries a translated `aria-label` — there is no hardcoded English in a primitive.
 - **Loading**: skeleton rows (`animate-pulse rounded-xl bg-muted h-12`) — not a spinner in the middle.
 - **Layout**: panel 360–400px on desktop (`bg-background`, `border-r border-border`,
   16px padding, `gap-3`, sticky footer). Below 768px it becomes a bottom sheet —

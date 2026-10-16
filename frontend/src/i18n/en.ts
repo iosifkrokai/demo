@@ -28,6 +28,10 @@ export const en: Dictionary = {
     placeholderRefine: 'What to refine? “add a coffee shop”',
     placeholder: 'What would you like to see?',
     label: 'What would you like to see',
+    allHints: 'all hints',
+    hintsTitle: 'Hints',
+    hintsIntro: 'Ready-made requests — tap one to put it in the field',
+    hintsClose: 'close the hints',
     chips: {
       oldTownCastles: 'two castles and Sovetskaya street in Grodno, four hours',
       museumsRainyDay:
