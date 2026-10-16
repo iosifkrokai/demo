@@ -200,7 +200,11 @@ def _run_agent(
         return None, "model_unavailable"
 
     usage_limits = UsageLimits(request_limit=MAX_REQUESTS)
-    model_settings = ModelSettings(max_tokens=MAX_OUTPUT_TOKENS, timeout=MODEL_TIMEOUT_S)
+    model_settings = ModelSettings(
+        max_tokens=MAX_OUTPUT_TOKENS,
+        timeout=MODEL_TIMEOUT_S,
+        extra_body=model_mod.answer_cap(MAX_OUTPUT_TOKENS),
+    )
     prompt = _build_prompt(query, brief)
     asked = prompt if repair is None else f"{prompt}\n{repair}"
 

@@ -9,7 +9,18 @@ from pydantic_ai.providers.openai import OpenAIProvider
 
 from core.config import Provider, chosen_provider, model_name
 
-__all__ = ["chosen_provider", "make_model", "model_name"]
+__all__ = ["answer_cap", "chosen_provider", "make_model", "model_name"]
+
+
+def answer_cap(max_tokens: int) -> dict[str, Any]:
+    """The answer cap under the name the gateway honours.
+
+    Measured 2026-10-16 against the configured endpoint: `max_completion_tokens` is
+    ignored (a cap of 5 came back with 199 completion tokens and `finish_reason=stop`),
+    `max_tokens` is obeyed (`finish_reason=length`, 5 tokens). PydanticAI sends the
+    former, so the cap has to travel beside it.
+    """
+    return {"max_tokens": max_tokens}
 
 
 def _provider(chosen: Provider) -> OpenAIProvider:

@@ -365,6 +365,13 @@ def test_an_oversized_turn_is_trimmed_instead_of_ending_the_pass(
     assert len(refusals) == 1, "the third call is the one that went over the budget"
 
 
+def test_the_answer_cap_travels_under_the_name_the_gateway_reads() -> None:
+    """`ModelSettings(max_tokens=…)` leaves as `max_completion_tokens`, which is ignored."""
+    from agent.llm import answer_cap
+
+    assert answer_cap(8192) == {"max_tokens": 8192}
+
+
 def test_the_request_limit_outlasts_the_tool_budget() -> None:
     """The tool budget is the one that refuses politely, so it has to run out first.
 
