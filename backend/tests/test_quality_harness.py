@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import json
 import os
+from typing import Any
 
 from agent.tools.places import Where, find_places
 from agent.tools.plan import plan_walk
 from db.seed import cli, datasets as ds_mod, itineraries as itin_mod
 from quality import report as report_mod
-from quality.evals import _load, _service_checks
+from quality.evals import _load, _service_checks, report as evals_report
 from quality.report import read_curated, read_routes
 from quality.runner import (
     BENCH_CURATED,
@@ -295,3 +296,42 @@ def test_the_curated_row_reads_the_set_its_report_names(monkeypatch, tmp_path) -
     assert read_routes()["source"].endswith("reports/report.json")
     assert read_curated()["layer"] == "quality/cases/curated"
     assert read_curated()["measured"] is True
+
+
+def _passing_check() -> dict[str, Any]:
+    return {
+        "case": "a",
+        "check": "verdict",
+        "ok": True,
+        "known_gap": False,
+        "detail": "",
+        "why": "",
+    }
+
+
+def test_a_stage_that_did_not_run_is_named_and_left_out_of_the_total() -> None:
+    """The live-model stage is opt-in: a green total has to say what it left out."""
+    text = evals_report(
+        [
+            {"stage": "verdicts", "checks": [_passing_check()]},
+            {"stage": "plan", "checks": [_passing_check()]},
+        ]
+    )
+
+    assert "НЕ ИЗМЕРЯЛОСЬ (2, вес 0.50 — в итог не входит)" in text
+    assert "веса учтённых участков: verdicts 0.25, plan 0.25" in text
+    assert "добавь `--stage interpretation`" in text
+
+
+def test_a_skipped_stage_is_named_with_its_reason_and_weighs_nothing() -> None:
+    text = evals_report(
+        [
+            {"stage": "verdicts", "checks": [_passing_check()]},
+            {"stage": "services", "checks": [], "skipped": "нет базы"},
+            {"stage": "plan", "checks": [_passing_check()]},
+        ]
+    )
+
+    assert "services — нет базы" in text
+    assert "веса учтённых участков: verdicts 0.25, plan 0.25" in text
+    assert "НЕ ИЗМЕРЯЛОСЬ (2, вес 0.50 — в итог не входит)" in text

@@ -580,6 +580,54 @@ def _rate(checks: list[dict[str, Any]]) -> tuple[int, int]:
     return sum(1 for c in counted if c["ok"]), len(counted)
 
 
+def _stage_rows(res: dict[str, Any]) -> tuple[list[str], tuple[int, int]]:
+    """One stage's rows in the table, with the counted (passed, total) they came from."""
+    passed, total = _rate(res["checks"])
+    stage = res["stage"]
+    if res.get("skipped"):
+        return [f"{stage:<22} {'—':>6} {'—':>8}   пропущен: {res['skipped']}"], (passed, total)
+    if not total:
+        return [f"{stage:<22} {total:>6} {passed:>8}   {'—':>5}"], (passed, total)
+    rows = [f"{stage:<22} {total:>6} {passed:>8}   {passed / total:>5.0%}"]
+    if res.get("sources"):
+        rows.append(f"{'':<22} источник разбора: {res['sources']}")
+    if res.get("near_gate_points"):
+        rows.append(
+            f"{'':<22} точек у самого порога (не считаем расхождением): {res['near_gate_points']}"
+        )
+    return rows, (passed, total)
+
+
+def _counted_weights(counted: list[str]) -> str:
+    """The legend of the weights the total was actually computed over."""
+    return "   веса учтённых участков: " + ", ".join(
+        f"{stage} {WEIGHTS[stage]:.2f}" for stage in counted
+    )
+
+
+def _unmeasured_lines(missing: list[tuple[str, str | None]]) -> list[str]:
+    """What the readout says about the weighted stages this run left out."""
+    weight = sum(WEIGHTS[stage] for stage, _ in missing)
+    lines = ["", f"НЕ ИЗМЕРЯЛОСЬ ({len(missing)}, вес {weight:.2f} — в итог не входит):"]
+    for stage, reason in missing:
+        tail = reason or f"в этот прогон не входил, добавь `--stage {stage}`"
+        lines.append(f"  {stage} — {tail}")
+    return lines
+
+
+def _unmeasured(results: list[dict[str, Any]]) -> list[tuple[str, str | None]]:
+    """The weighted stages this run left unmeasured, with the reason where it gave one."""
+    ran = {res["stage"]: res for res in results}
+    out: list[tuple[str, str | None]] = []
+    for stage in WEIGHTS:
+        res = ran.get(stage)
+        if res is None:
+            out.append((stage, None))
+        elif res.get("skipped"):
+            out.append((stage, str(res["skipped"])))
+    return out
+
+
 def report(results: list[dict[str, Any]]) -> str:
     lines: list[str] = []
     lines.append("")
@@ -588,29 +636,25 @@ def report(results: list[dict[str, Any]]) -> str:
     weighted_sum = 0.0
     weight_total = 0.0
     for res in results:
-        stage = res["stage"]
-        passed, total = _rate(res["checks"])
+        rows, counted = _stage_rows(res)
+        lines.extend(rows)
         if res.get("skipped"):
-            lines.append(f"{stage:<22} {'—':>6} {'—':>8}   пропущен: {res['skipped']}")
             continue
+        passed, total = counted
         share = passed / total if total else 0.0
-        weight = WEIGHTS.get(stage, 0.0)
+        weight = WEIGHTS.get(res["stage"], 0.0)
         weighted_sum += share * weight
         weight_total += weight
-        lines.append(f"{stage:<22} {total:>6} {passed:>8}   {share:>5.0%}")
-        if res.get("sources"):
-            lines.append(f"{'':<22} источник разбора: {res['sources']}")
-        if res.get("near_gate_points"):
-            lines.append(
-                f"{'':<22} точек у самого порога (не считаем расхождением): "
-                f"{res['near_gate_points']}"
-            )
+    missing = _unmeasured(results)
     if weight_total:
+        counted = [stage for stage in WEIGHTS if stage not in {s for s, _ in missing}]
         lines.append("─" * 52)
         lines.append(
             f"{'ИТОГО (по весам)':<22} {'':>6} {'':>8}   {weighted_sum / weight_total:>5.0%}"
         )
-        lines.append("   веса: " + ", ".join(f"{k} {v:.2f}" for k, v in WEIGHTS.items()))
+        lines.append(_counted_weights(counted))
+    if missing:
+        lines.extend(_unmeasured_lines(missing))
 
     gaps = [c for res in results for c in res["checks"] if c.get("known_gap")]
     if gaps:
