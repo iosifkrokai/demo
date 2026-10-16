@@ -365,6 +365,18 @@ def test_an_oversized_turn_is_trimmed_instead_of_ending_the_pass(
     assert len(refusals) == 1, "the third call is the one that went over the budget"
 
 
+def test_the_request_limit_outlasts_the_tool_budget() -> None:
+    """The tool budget is the one that refuses politely, so it has to run out first.
+
+    A pass that dies on the request limit is thrown away whole and asked for again,
+    which is what the denial hook exists to stop — the model must not be able to
+    reach the limit while it still has calls it is allowed to make.
+    """
+    from agent.runner import MAX_REQUESTS
+
+    assert MAX_REQUESTS > constants.MAX_TOOL_CALLS + 1
+
+
 def test_a_call_the_model_got_wrong_does_not_spend_the_budget(
     fake_model: FakeModel, db_repos, monkeypatch
 ) -> None:

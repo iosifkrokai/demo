@@ -23,7 +23,7 @@ from core import constants
 
 log = logging.getLogger(__name__)
 
-MAX_REQUESTS = 10
+MAX_REQUESTS = constants.MAX_TOOL_CALLS + 2
 MAX_OUTPUT_TOKENS = 8192
 WALL_CLOCK_TIMEOUT_S = 150.0
 MODEL_TIMEOUT_S = 90.0
