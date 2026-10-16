@@ -205,17 +205,13 @@ def test_a_deleted_stop_is_subtracted_from_both_lists() -> None:
     assert keep == [3]
 
 
-def test_the_run_carries_a_live_deadline_and_region(
-    fake_model: FakeModel, db_repos, monkeypatch
-) -> None:
+def test_the_run_carries_a_live_deadline(fake_model: FakeModel, db_repos, monkeypatch) -> None:
     """`seconds_left()` stops being infinite: the deadline reaches the tools."""
     left: list[float] = []
-    bbox: list[tuple[float, float, float, float] | None] = []
     real = runner._run_agent
 
     def spy(query, brief, deps, *, wall_clock_s=None, repair=None):
         left.append(deps.seconds_left())
-        bbox.append(deps.region_bbox)
         return real(query, brief, deps, wall_clock_s=wall_clock_s, repair=repair)
 
     monkeypatch.setattr(runner, "_run_agent", spy)
@@ -224,14 +220,13 @@ def test_the_run_carries_a_live_deadline_and_region(
 
     outcome = plan_with_agent(
         "два часа пешком",
-        ReaderBrief(locale="ru", region_bbox=(53.6, 23.7, 53.75, 23.9)),
+        ReaderBrief(locale="ru"),
         repos=db_repos,
         wall_clock_s=10,
     )
 
     assert outcome is not None
     assert 0 < left[0] <= 10
-    assert bbox[0] == (53.6, 23.7, 53.75, 23.9)
 
 
 def test_the_wall_clock_is_capped_by_the_ceiling() -> None:

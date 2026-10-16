@@ -22,6 +22,7 @@ from core.paths import (
 from core.prices import free_entry
 from db.store.datasets import DATA_VERSION_ROW
 
+from . import districts
 from .datasets import SOURCE_AUTO, SOURCE_CURATED, Dataset, match_place, read_place_alias_entries
 
 PROVIDER_BY_PREFIX = {
@@ -344,13 +345,19 @@ def load_areas(conn: psycopg.Connection, geo_dir: Path | None = None) -> dict[st
 def _area_geometry(
     directory: Path, area: dict[str, Any]
 ) -> tuple[str | None, str | None, str | None]:
-    """(wkt, source, license) from the border file this area's `geometry` names."""
-    name = (area.get("geometry") or {}).get("source")
+    """(wkt, source, license) from the border file this area's `geometry` names.
+
+    A file can hold one boundary (its own `rings`) or many (`districts`, one per slug):
+    an area that names a `record` takes that record's polygon out of the shared file.
+    """
+    declared = area.get("geometry") or {}
+    name = declared.get("source")
     path = directory / name if name else None
     if path is None or not path.is_file():
         return None, None, None
     meta = json.loads(path.read_text(encoding="utf-8"))
-    wkt = _border_wkt(meta)
+    record = declared.get("record")
+    wkt = districts.wkt(str(record)) if record else _border_wkt(meta)
     if wkt is None:
         return None, None, None
     return wkt, meta.get("source"), meta.get("license")

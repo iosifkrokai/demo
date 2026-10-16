@@ -135,18 +135,26 @@ def _facts(repos):
 
 
 def test_a_catalogue_submits_the_places_themselves(db_repos) -> None:
-    """The answer to «все костёлы области» is places, not the verdicts about them:
-    a response builder reads cards, and a verdict carries no id to be read."""
+    """The answer to «все костёлы Вороновского района» is places, not the verdicts about
+    them: a response builder reads cards, and a verdict carries no id to be read.
+
+    The district is named because the catalogue reads a bounded pool per code: a whole
+    oblast holds more костёлы than the pool does, and then the list is a slice of them.
+    """
     from agent.schema import PlanSubmission
     from agent.tools.submit import measure_submission
     from routing.models import Requirement, TripRequirements, WalkRequest
 
-    rows = [row for row in db_repos.places.with_category(["костёл"]) if row.id is not None][:5]
+    rows = [
+        row
+        for row in db_repos.places.with_category(["костёл"])
+        if row.id is not None and row.district == "Вороновский район"
+    ]
     assert len(rows) >= 2, "the catalogue needs костёлы to hold"
     ids = [row.id for row in rows]
     contract = TripRequirements(
         result_mode="catalogue",
-        areas=["grodno-oblast"],
+        areas=["voronovo-district"],
         requirements=[Requirement(kind="interest", code="костёл")],
     )
 

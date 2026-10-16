@@ -20,6 +20,8 @@ VERSIONED_FILES: tuple[str, ...] = (
     "itineraries.json",
     "geo/areas.json",
     "geo/grodno_border.json",
+    "geo/districts_border.json",
+    "geo/old_town_border.json",
     "photos/place_photos.json",
     "place_aliases.json",
     "place_aliases_en.json",

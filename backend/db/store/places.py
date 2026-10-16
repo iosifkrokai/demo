@@ -11,7 +11,6 @@ from typing import Any
 
 import psycopg
 
-from core import constants
 from db.models.place import Place
 from db.store.base import PostgresRepository
 from db.store.columns import (
@@ -61,6 +60,21 @@ _BESIDE_LINE = """
 _WORD = re.compile(r"[а-яёa-z]{3,}\d*")
 
 _ALIAS_SELECT = ", ".join(f"p.{column}" for column in PLACE_COLUMNS)
+
+
+def _in_area(alias: str, area: str | None) -> tuple[str, list[str]]:
+    """SQL and its parameter that keep a search inside one area's own polygon.
+
+    The polygon, not its bounding box: `grodno-district` surrounds the city of Grodno and
+    holds it as a hole, so a box would hand back the city's points to a district search.
+    """
+    if not area:
+        return "", []
+    clause = (
+        f" AND EXISTS (SELECT 1 FROM areas a WHERE a.code = %s "
+        f"AND ST_Intersects({alias}.geom, a.geom))"
+    )
+    return clause, [area]
 
 
 class PostgresPlaceRepository(PostgresRepository):
@@ -184,7 +198,7 @@ class PostgresPlaceRepository(PostgresRepository):
         self,
         query: str,
         limit: int = 5,
-        region_bbox: Sequence[float] | None = None,
+        area: str | None = None,
     ) -> list[tuple[Place, float]]:
         """Trigram search over the other names a place answers to, best first."""
         words = re.findall(r"[а-яёa-z]{2,}", query.lower())
@@ -195,17 +209,11 @@ class PostgresPlaceRepository(PostgresRepository):
             ["GREATEST(similarity(a.alias, %s), word_similarity(%s, a.alias))"] * len(words)
         )
         conditions = " OR ".join(["a.alias ILIKE %s OR a.alias %%> %s"] * len(words))
-
-        bbox_clause = ""
-        bbox_params: list[Any] = []
-        if region_bbox and len(region_bbox) == constants.BBOX_COORDS:
-            south, west, north, east = region_bbox
-            bbox_clause = " WHERE p.geom && ST_MakeEnvelope(%s, %s, %s, %s, 4326)"
-            bbox_params = [west, south, east, north]
+        area_clause, area_params = _in_area("p", area)
 
         sim_params = [word for word in words for _ in range(2)]
         cond_params = [value for word in words for value in (f"%{word}%", word)]
-        params: list[Any] = [*sim_params, *cond_params, *bbox_params, limit]
+        params: list[Any] = [*sim_params, *cond_params, *area_params, limit]
 
         sql = f"""
             SELECT {_ALIAS_SELECT}, s.alias_sim
@@ -215,7 +223,7 @@ class PostgresPlaceRepository(PostgresRepository):
                     FROM place_aliases a
                    WHERE {conditions}
                    GROUP BY a.place_id
-              ) s ON s.place_id = p.id{bbox_clause}
+              ) s ON s.place_id = p.id{area_clause}
              ORDER BY s.alias_sim DESC
              LIMIT %s
         """
@@ -224,15 +232,22 @@ class PostgresPlaceRepository(PostgresRepository):
             return [(place_from_row(row), float(row["alias_sim"])) for row in cur.fetchall()]
 
     def nearby(
-        self, lat: float, lon: float, radius_km: float = 12.0, limit: int = 50
+        self,
+        lat: float,
+        lon: float,
+        radius_km: float = 12.0,
+        limit: int = 50,
+        area: str | None = None,
     ) -> list[Place]:
         """Places within `radius_km` of a point, nearest first."""
         dlat = radius_km / 111.0
         dlon = radius_km / (111.0 * max(0.2, math.cos(math.radians(lat))))
+        area_clause, area_params = _in_area("places", area)
         with self._cursor() as cur:
             cur.execute(
                 f"SELECT {PLACE_SELECT} FROM places "
                 "WHERE lat BETWEEN %s AND %s AND lon BETWEEN %s AND %s "
+                f"{area_clause} "
                 "ORDER BY (lat - %s) * (lat - %s) + (lon - %s) * (lon - %s) "
                 "LIMIT %s",
                 (
@@ -240,6 +255,7 @@ class PostgresPlaceRepository(PostgresRepository):
                     lat + dlat,
                     lon - dlon,
                     lon + dlon,
+                    *area_params,
                     lat,
                     lat,
                     lon,
@@ -253,38 +269,33 @@ class PostgresPlaceRepository(PostgresRepository):
         self,
         qvec: Sequence[float],
         limit: int = 50,
-        region_bbox: Sequence[float] | None = None,
+        area: str | None = None,
     ) -> list[tuple[Place, float]]:
         """Top-K by vector cosine distance, each with the distance it scored."""
-        bbox_clause = ""
-        bbox_params: list[Any] = []
-        if region_bbox and len(region_bbox) == constants.BBOX_COORDS:
-            south, west, north, east = region_bbox
-            bbox_clause = "   AND geom && ST_MakeEnvelope(%s, %s, %s, %s, 4326)"
-            bbox_params = [west, south, east, north]
-
+        area_clause, area_params = _in_area("places", area)
         sql = f"""
             SELECT {PLACE_SELECT},
                    embedding <=> %s::vector AS cosine_dist
               FROM places
              WHERE embedding IS NOT NULL
-            {bbox_clause}
+            {area_clause}
              ORDER BY embedding <=> %s::vector
              LIMIT %s
         """
-        params: list[Any] = [qvec, *bbox_params, qvec, limit]
+        params: list[Any] = [qvec, *area_params, qvec, limit]
         with self._cursor() as cur:
             cur.execute(sql, params)
             return [(place_from_row(row), float(row["cosine_dist"])) for row in cur.fetchall()]
 
-    def by_category(self, codes: Sequence[str], limit: int) -> list[Place]:
+    def by_category(self, codes: Sequence[str], limit: int, area: str | None = None) -> list[Place]:
         """Places in any of these DB category values, in the pool's own order."""
         if not codes:
             return []
+        area_clause, area_params = _in_area("places", area)
         with self._cursor() as cur:
             cur.execute(
-                f"SELECT {PLACE_SELECT} FROM places WHERE category = ANY(%s) LIMIT %s",
-                (list(codes), limit),
+                f"SELECT {PLACE_SELECT} FROM places WHERE category = ANY(%s){area_clause} LIMIT %s",
+                (list(codes), *area_params, limit),
             )
             return [place_from_row(row) for row in cur.fetchall()]
 

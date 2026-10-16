@@ -448,14 +448,6 @@ def explain_points(candidates: list[Candidate], facts: CategoryFacts) -> str:
 def reader_brief(req: GenerateReq) -> ReaderBrief:
     """Narrow the wire to what the agent is told."""
     origin = (req.origin.lat, req.origin.lon) if req.origin is not None else None
-    region_bbox: tuple[float, float, float, float] | None = None
-    if req.region_bbox and len(req.region_bbox) == constants.BBOX_COORDS:
-        region_bbox = (
-            float(req.region_bbox[0]),
-            float(req.region_bbox[1]),
-            float(req.region_bbox[2]),
-            float(req.region_bbox[3]),
-        )
     context = None
     if req.context is not None:
         context = RefinementBrief(
@@ -472,7 +464,6 @@ def reader_brief(req: GenerateReq) -> ReaderBrief:
         profile=req.profile,
         at=req.at,
         origin=origin,
-        region_bbox=region_bbox,
         time_budget_minutes=req.time_budget_minutes,
         party_adults=req.party_adults,
         party_children=req.party_children,

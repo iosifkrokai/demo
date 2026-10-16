@@ -61,7 +61,6 @@ class ReaderBrief:
     profile: str | None = None
     at: datetime | None = None
     origin: tuple[float, float] | None = None
-    region_bbox: tuple[float, float, float, float] | None = None
     time_budget_minutes: int | None = None
     party_adults: int | None = None
     party_children: int | None = None

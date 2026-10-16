@@ -530,7 +530,7 @@ def _area_checks(repos: Any) -> list[dict[str, Any]]:
     """Every territory that has a boundary: a search scoped to it must stay inside it."""
     checks: list[dict[str, Any]] = []
     for area in repos.areas.list_all():
-        if repos.areas.bbox(area.code) is None:
+        if not repos.areas.has_boundary(area.code):
             continue
         ids = [row["id"] for row in _pool(AREA_QUERY, repos, area.code)]
         outside = repos.places.outside_area(ids, area.code)
@@ -580,23 +580,27 @@ def _pool_checks(repos: Any) -> tuple[list[dict[str, Any]], dict[str, float]]:
         for stop in stops:
             rows = _pool(stop.name, repos)
             held = _held(repos, stop.name)
-            found = any(row["id"] == held.id for row in rows) if held is not None else False
+            mine = any(row["id"] == held.id for row in rows) if held is not None else False
+            near = _nearest_km(held, rows) if held is not None else None
+            if held is None:
+                detail = f"вернулось {len(rows)}; места с таким именем в данных нет"
+            elif mine:
+                detail = f"вернулось {len(rows)}, наша строка #{held.id} в пуле"
+            elif near is not None:
+                detail = f"вернулось {len(rows)}, ближайшая к нашей строке в {near * 1000:.0f} м"
+            else:
+                detail = f"вернулось {len(rows)}, ни одной точки рядом с нашей строкой"
             checks.append(
                 {
                     "case": f"{route.case}/{stop.name}",
                     "check": "stop_is_reachable_by_its_name",
-                    "ok": found,
+                    "ok": held is not None and _reaches(held, rows),
                     "known_gap": held is None,
-                    "detail": (
-                        f"вернулось {len(rows)}, наше место #{held.id} в пуле"
-                        if found and held is not None
-                        else f"вернулось {len(rows)}, наше место в пул не попало"
-                        if held is not None
-                        else f"вернулось {len(rows)}; места с таким именем в данных нет"
-                    ),
+                    "detail": detail,
                     "why": (
-                        "Место, которое есть в данных, обязано попадать в пул по своему имени. "
-                        "Стоп, которого в данных нет, — пробел в кейсах, а не в поиске."
+                        "Место, которое есть в данных, обязано попадать в пул по своему имени — "
+                        "само или строка-двойник того же объекта в 250 м от него. Стоп, "
+                        "которого в данных нет, — пробел в кейсах, а не в поиске."
                     ),
                 }
             )

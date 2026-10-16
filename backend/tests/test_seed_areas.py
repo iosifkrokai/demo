@@ -11,7 +11,7 @@ import pytest
 
 from core.paths import GEO_DIR
 
-GEOMETRY_LESS = ("grodno-city", "grodno-old-town", "lida-district", "oshmyany-district")
+GEOMETRY_LESS = ()
 
 
 @pytest.fixture
@@ -69,31 +69,69 @@ def test_the_region_keeps_the_file_ring(conn: Any) -> None:
     assert _bbox(conn, "grodno-oblast") == pytest.approx(_file_bounds())
 
 
-def test_an_area_without_a_polygon_gets_none(conn: Any) -> None:
+def _record_bounds(slug: str) -> tuple[float, float, float, float]:
+    """The rectangle this district's own record spans in the border file."""
+    districts = json.loads((GEO_DIR / "districts_border.json").read_text(encoding="utf-8"))
+    record = next(d for d in districts["districts"] if d["slug"] == slug)
+    lons = [p[0] for ring in record["rings"] for p in ring]
+    lats = [p[1] for ring in record["rings"] for p in ring]
+    return (min(lats), min(lons), max(lats), max(lons))
+
+
+def test_a_district_keeps_its_own_ring_from_the_shared_file(conn: Any) -> None:
+    """One file holds eighteen districts: each area takes the record it names, and no
+    other — the shape it gets is its own, not the file's whole extent."""
     from db.seed.pipeline import load_areas
 
+    load_areas(conn, GEO_DIR)
+
+    for slug in ("lida-district", "oshmyany-district", "grodno-city"):
+        assert _bbox(conn, slug) == pytest.approx(_record_bounds(slug)), slug
+
+
+def test_an_area_the_file_gives_no_polygon_stays_bare(conn: Any, tmp_path: Any) -> None:
+    """A file that declares no boundary for an area writes none: the row stays a
+    registry row, and a ring an earlier vintage left on it is cleared."""
+    from db.seed.pipeline import load_areas
+
+    (tmp_path / "areas.json").write_text(
+        json.dumps(
+            {
+                "areas": [
+                    {"slug": "grodno-old-town", "kind": "city-quarter", "name_ru": "Старый город"}
+                ]
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
     _force_ring(conn, "grodno-old-town")
     assert _bbox(conn, "grodno-old-town") is not None
 
-    load_areas(conn, GEO_DIR)
+    load_areas(conn, tmp_path)
 
     assert _bbox(conn, "grodno-old-town") is None
 
 
-def test_only_the_polygon_less_areas_stay_bare(conn: Any) -> None:
+def test_no_area_the_file_declares_is_left_without_a_polygon(conn: Any) -> None:
+    """Every area carries one: a boundary the seed fails to build is a search that
+    silently stops narrowing."""
     from db.seed.pipeline import load_areas
-
-    _force_ring(conn, "grodno-old-town")
-    for code in GEOMETRY_LESS:
-        _force_ring(conn, code)
 
     load_areas(conn, GEO_DIR)
 
-    for code in GEOMETRY_LESS:
-        assert _bbox(conn, code) is None, code
+    declared = json.loads((GEO_DIR / "areas.json").read_text(encoding="utf-8"))["areas"]
+    missing = [
+        area["slug"]
+        for area in declared
+        if area.get("geometry") and _bbox(conn, area["slug"]) is None
+    ]
+
+    assert missing == [], missing
+    assert GEOMETRY_LESS == ()
 
 
-def test_a_polygon_less_area_is_still_a_registry_row(conn: Any) -> None:
+def test_an_area_is_a_registry_row_before_it_is_a_polygon(conn: Any) -> None:
     from db.seed.pipeline import load_areas
 
     load_areas(conn, GEO_DIR)

@@ -91,12 +91,6 @@ class GenerateReq(BaseModel):
     )
     origin: LatLon | None = None
     profile: TransportLiteral | None = None
-    region_bbox: list[float] | None = Field(
-        default=None,
-        description="[south, west, north, east]. Used as a PostGIS envelope filter.",
-        min_length=4,
-        max_length=4,
-    )
     context: RouteContext | None = None
 
     locale: Literal["ru", "en"] = "ru"

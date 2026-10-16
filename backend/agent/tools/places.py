@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Annotated, Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from pydantic_ai import RunContext
 
 from agent.schema import PlanningDeps
@@ -66,46 +66,44 @@ class Where(BaseModel):
     radius_m: float | None = None
 
 
-def _in_box(place: Any, box: tuple[float, float, float, float] | None) -> bool:
-    return box is None or _inside(place.lat, place.lon, box)
-
-
-def _text_hits(store: Any, query: str, box: Any, pool: int) -> list[tuple[int, float]] | None:
+def _text_hits(store: Any, query: str, area: Any, pool: int) -> list[tuple[int, float]] | None:
     """Vector hits — only when the query says something and a model can embed it."""
     if not query.strip() or not embeddings_model.is_available():
         return None
     qvec = embed_query(query)
     if not qvec:
         return None
-    found = store.places.by_embedding(qvec, limit=pool, region_bbox=box)
-    return [(place.id, score) for place, score in found if _in_box(place, box)]
+    found = store.places.by_embedding(qvec, limit=pool, area=area)
+    return [(place.id, score) for place, score in found]
 
 
-def _alias_hits(store: Any, query: str, box: Any, pool: int) -> list[tuple[int, float]] | None:
+def _alias_hits(store: Any, query: str, area: Any, pool: int) -> list[tuple[int, float]] | None:
     """The other names a place answers to, matched as trigrams — no model needed."""
     if not query.strip():
         return None
-    found = store.places.by_alias(query, limit=pool, region_bbox=box)
-    return [(place.id, score) for place, score in found if _in_box(place, box)]
+    found = store.places.by_alias(query, limit=pool, area=area)
+    return [(place.id, score) for place, score in found]
 
 
 def _category_hits(
-    store: Any, codes: list[str], box: Any, pool: int
+    store: Any, codes: list[str], area: Any, pool: int
 ) -> list[tuple[int, float]] | None:
     """Everything the catalogue files under the codes the request named."""
     if not codes:
         return None
-    return [(p.id, 0.0) for p in store.places.by_category(codes, pool) if _in_box(p, box)]
+    return [(p.id, 0.0) for p in store.places.by_category(codes, pool, area=area)]
 
 
 def _near_hits(
-    store: Any, near: tuple[float, float, float] | None, box: Any, pool: int
+    store: Any, near: tuple[float, float, float] | None, area: Any, pool: int
 ) -> list[tuple[int, float]] | None:
     """Everything inside the radius of the point the request named."""
     if near is None:
         return None
-    around = store.places.nearby(near[0], near[1], radius_km=near[2] / 1000.0, limit=pool)
-    return [(p.id, 0.0) for p in around if _in_box(p, box)]
+    around = store.places.nearby(
+        near[0], near[1], radius_km=near[2] / 1000.0, limit=pool, area=area
+    )
+    return [(p.id, 0.0) for p in around]
 
 
 def card_of(place: Any) -> dict[str, Any]:
@@ -146,11 +144,10 @@ def _catalogue_by_code(
 ) -> tuple[list[Any], bool]:
     """Each code ranked on its own, so no one code can crowd another out of the list."""
     codes = store.taxonomy.db_values(categories)
-    box = store.areas.bbox(area) if area else None
     rankings = [
         hits
         for code in codes
-        if (hits := _category_hits(store, [code], box, constants.RETRIEVAL_POOL_SIZE))
+        if (hits := _category_hits(store, [code], area, constants.RETRIEVAL_POOL_SIZE))
     ]
     if not rankings:
         return [], False
@@ -163,12 +160,6 @@ def _catalogue_by_code(
     return rows, truncated or len(rows) >= limit
 
 
-def _inside(lat: float, lon: float, box: tuple[float, float, float, float]) -> bool:
-    """Is a point inside a (south, west, north, east) box?"""
-    south, west, north, east = box
-    return south <= lat <= north and west <= lon <= east
-
-
 def find_places(
     query: str,
     category_codes: list[str] | None = None,
@@ -176,7 +167,6 @@ def find_places(
     *,
     where: Where | None = None,
     repos: Any = None,
-    region_bbox: list[float] | None = None,
 ) -> dict[str, Any]:
     """Rank real places against a description, a category, and/or a point."""
     where = where or Where()
@@ -190,15 +180,6 @@ def find_places(
     if isinstance(where.near_lat, (int, float)) and isinstance(where.near_lon, (int, float)):
         radius, radius_clamped = clamp(where.radius_m, MIN_RADIUS_M, MAX_RADIUS_M, DEFAULT_RADIUS_M)
         near = (float(where.near_lat), float(where.near_lon), float(radius))
-
-    requested_box: tuple[float, float, float, float] | None = None
-    if region_bbox and len(region_bbox) == constants.BBOX_COORDS:
-        requested_box = (
-            float(region_bbox[0]),
-            float(region_bbox[1]),
-            float(region_bbox[2]),
-            float(region_bbox[3]),
-        )
 
     provenance: dict[str, Any] = {
         "source": "places",
@@ -224,21 +205,17 @@ def find_places(
         provenance["categories"] = db_cats
         provenance["dropped_codes"] = [c for c in requested if c not in db_cats]
 
-        box = requested_box
-        if where.area:
-            resolved = store.areas.bbox(where.area)
-            if resolved is not None:
-                box = resolved
-            else:
-                provenance["area_filter"] = "no_boundary"
-        provenance["region_bbox"] = list(box) if box is not None else None
+        area = where.area
+        if area and not store.areas.has_boundary(area):
+            area = None
+            provenance["area_filter"] = "no_boundary"
 
         pool = constants.RETRIEVAL_POOL_SIZE
         hits = (
-            _text_hits(store, query, box, pool),
-            _alias_hits(store, query, box, pool),
-            _category_hits(store, db_cats, box, pool),
-            _near_hits(store, near, box, pool),
+            _text_hits(store, query, area, pool),
+            _alias_hits(store, query, area, pool),
+            _category_hits(store, db_cats, area, pool),
+            _near_hits(store, near, area, pool),
         )
         provenance["signals"] = [name for name, hit in zip(SIGNALS, hits, strict=False) if hit]
 
@@ -313,7 +290,16 @@ def register_find_places(agent: Any) -> None:
     @agent.tool(name="find_places")
     def _find_places(
         ctx: RunContext[PlanningDeps],
-        query: str,
+        query: Annotated[
+            str,
+            Field(
+                description=(
+                    "What to look for, in the user's own words. One object per call: pass "
+                    "«Старый замок», not «Старый замок, Новый замок и Фарный костёл» — a "
+                    "long phrase averages into a vector that reaches none of the names."
+                )
+            ),
+        ],
         *,
         category_codes: list[str] | None = None,
         limit: int = DEFAULT_FIND_LIMIT,
@@ -326,7 +312,6 @@ def register_find_places(agent: Any) -> None:
             limit,
             where=where,
             repos=ctx.deps.repos,
-            region_bbox=list(ctx.deps.region_bbox) if ctx.deps.region_bbox else None,
         )
 
 

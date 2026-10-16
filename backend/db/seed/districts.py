@@ -63,6 +63,29 @@ def _inside(district: District, lon: float, lat: float) -> bool:
     return not any(_inside_ring(ring, lon, lat) for ring in district.get("holes", []))
 
 
+def _ring_wkt(ring: Ring) -> str:
+    points = [*ring, ring[0]] if ring[0] != ring[-1] else ring
+    return "(" + ", ".join(f"{lon} {lat}" for lon, lat in points) + ")"
+
+
+def wkt(slug: str) -> str | None:
+    """The district's boundary as WKT, or ``None`` for a slug the file does not hold.
+
+    A record is a shape, not a box: the city of Grodno is a hole in the district around
+    it, and every hole is cut out of the shell that holds it.
+    """
+    district = next((d for d in districts() if d["slug"] == slug), None)
+    if district is None:
+        return None
+    holes = district.get("holes") or []
+    polygons = []
+    for shell in district["rings"]:
+        parts = [_ring_wkt(shell)]
+        parts += [_ring_wkt(hole) for hole in holes if _inside_ring(shell, *hole[0])]
+        polygons.append("(" + ", ".join(parts) + ")")
+    return "MULTIPOLYGON(" + ", ".join(polygons) + ")"
+
+
 def district_at(lat: float, lon: float) -> str | None:
     """The district name this point stands in, or ``None`` beyond :data:`SNAP_M` of them all."""
     hits = [

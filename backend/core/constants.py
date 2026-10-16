@@ -4,7 +4,6 @@ from __future__ import annotations
 
 MIN_LEG_POINTS = 2
 MIN_TOUR_STOPS = 3
-BBOX_COORDS = 4
 
 MAX_TOOL_CALLS = 12
 MAX_PLACES_PER_FIND = 8

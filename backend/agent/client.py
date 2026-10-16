@@ -220,7 +220,6 @@ def _deps(
         repos=repos,
         locale=brief.locale,
         origin=_origin(brief),
-        region_bbox=brief.region_bbox,
         now=brief.at or datetime.now(UTC),
         at_chosen=brief.at is not None,
         deadline_at=time.monotonic() + runner.effective_wall_clock(wall_clock_s),

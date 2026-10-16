@@ -96,50 +96,53 @@ def test_unknown_category_codes_are_dropped_not_passed_through(db_repos) -> None
     assert answer["provenance"]["categories"]
 
 
-def test_a_region_box_scopes_the_search(db_repos) -> None:
-    """A territory box keeps every returned card inside it."""
-    from agent.tools.places import find_places
-
-    box = [53.66, 23.81, 53.70, 23.85]
-    answer = find_places("костёл", repos=db_repos, limit=5, region_bbox=box)
-
-    assert answer.get("error") is None, answer.get("message")
-    assert answer["provenance"]["region_bbox"] == box
-    for card in answer["results"]:
-        assert box[0] <= card["lat"] <= box[2]
-        assert box[1] <= card["lon"] <= box[3]
-
-
-def test_a_box_with_nothing_in_it_returns_nothing(db_repos) -> None:
-    from agent.tools.places import find_places
-
-    answer = find_places("костёл", repos=db_repos, limit=5, region_bbox=[0.0, 0.0, 1.0, 1.0])
-
-    assert answer.get("error") is None, answer.get("message")
-    assert answer["results"] == []
-
-
-def test_an_area_scoped_search_boxes_itself_to_the_territory(db_repos) -> None:
-    """The area decides the box every signal is asked for.
-
-    It does NOT narrow much today: `areas.json` gives a polygon to the oblast alone,
-    so an area without a boundary is projected with none and the box stays the
-    territory's — the ranking is the only thing keeping the answer local.
-    """
-
+def test_a_named_area_keeps_the_answer_inside_its_polygon(db_repos) -> None:
+    """The area is a shape, not a box: every card the search hands back stands in it."""
     from agent.tools.places import Where, find_places
 
-    found = find_places(
-        "",
-        ["памятник", "замок", "храм", "музей", "архитектура"],
-        repos=db_repos,
-        limit=8,
-        where=Where(area="grodno-old-town"),
-    )
+    area = "lida-district"
+    if not db_repos.areas.has_boundary(area):
+        import pytest
+
+        pytest.skip(f"{area} has no boundary in this database")
+
+    found = find_places("костёл", repos=db_repos, limit=5, where=Where(area=area))
 
     assert found.get("error") is None, found.get("message")
-    assert found["provenance"]["area"] == "grodno-old-town"
-    assert len(found["results"]) >= 3, "one search did not yield a set to choose from"
+    assert found["provenance"]["area"] == area
+    assert found["results"], "a district search returned nothing to choose from"
+    ids = [card["id"] for card in found["results"]]
+    assert db_repos.places.outside_area(ids, area) == []
+
+
+def test_the_city_is_a_hole_in_the_district_around_it(db_repos) -> None:
+    """`grodno-district` surrounds the city and must not hand a district search the
+    city's own points — the one case a bounding box gets wrong."""
+    from agent.tools.places import Where, find_places
+
+    if not db_repos.areas.has_boundary("grodno-district"):
+        import pytest
+
+        pytest.skip("grodno-district has no boundary in this database")
+
+    found = find_places("", ["музей"], repos=db_repos, limit=8, where=Where(area="grodno-district"))
+
+    assert found.get("error") is None, found.get("message")
+    towns = {card["town"] for card in found["results"]}
+    assert "Гродно" not in towns, towns
+
+
+def test_an_area_without_a_boundary_is_searched_unscoped_and_says_so(db_repos) -> None:
+    """A territory the data gives no polygon to cannot fence the search: the tool says
+    `no_boundary` rather than pretending the request was narrowed to a place it cannot
+    find in its own registry."""
+    from agent.tools.places import Where, find_places
+
+    found = find_places("костёл", repos=db_repos, limit=5, where=Where(area="выдуманный-район"))
+
+    assert found.get("error") is None, found.get("message")
+    assert found["provenance"]["area_filter"] == "no_boundary"
+    assert found["results"], "an unbound area search must still return the territory's points"
 
 
 def test_a_search_scoped_by_radius_ranks_around_the_point(db_repos) -> None:
@@ -161,13 +164,19 @@ def test_a_search_scoped_by_radius_ranks_around_the_point(db_repos) -> None:
     assert found["results"], "a search around a dense old town returns nothing"
 
 
-def test_the_project_area_has_a_boundary(db_repos) -> None:
-    """The one area the dataset carries a polygon for resolves to a real box."""
-    box = db_repos.areas.bbox("grodno-oblast")
-    if box is None:
-        import pytest
+def test_every_area_the_file_gives_a_polygon_to_carries_one(db_repos) -> None:
+    """A boundary the seed failed to build is a search that silently stops narrowing."""
+    import json
 
-        pytest.skip("the project area has no boundary in this database")
-    south, west, north, east = box
-    assert south < north
-    assert west < east
+    import pytest
+
+    from core.paths import GEO_DIR
+
+    declared = json.loads((GEO_DIR / "areas.json").read_text(encoding="utf-8"))["areas"]
+    bounded = [area["slug"] for area in declared if area.get("geometry")]
+    if not bounded or not db_repos.places.ping():
+        pytest.skip("database not reachable")
+
+    missing = [slug for slug in bounded if not db_repos.areas.has_boundary(slug)]
+
+    assert missing == [], f"полигон не доехал до базы: {missing}"

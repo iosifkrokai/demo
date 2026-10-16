@@ -95,7 +95,6 @@ class PlanningDeps:
     origin: LatLon | None = None
     facts: CategoryFacts = field(default_factory=CategoryFacts)
     deadline_at: float | None = None
-    region_bbox: tuple[float, float, float, float] | None = None
     now: datetime = field(default_factory=lambda: datetime.now(UTC))
     at_chosen: bool = False
 
