@@ -28,6 +28,7 @@ from routing.validate import validate
 
 def test_route_status_values_are_the_codes_the_wire_speaks() -> None:
     assert RouteStatus.USABLE.value == "usable"
+    assert RouteStatus.PARTIAL.value == "partial"
     assert RouteStatus.NO_ROUTE_EXISTS.value == "no_route_exists"
     assert RouteStatus.SERVICE_UNAVAILABLE.value == "service_unavailable"
     assert RouteStatus.EMPTY_GEOMETRY.value == "empty_geometry"
@@ -309,6 +310,61 @@ def test_a_polish_is_a_permutation_of_what_it_was_given() -> None:
 
     assert {c.id for c in route} == {c.id for c in stops}
     assert set(must) <= {c.id for c in route}
+
+
+def _span(order: list[int], walk: list[list[float]]) -> float:
+    """The walking time of an index order, the stops' own minutes left out."""
+    return sum(walk[order[k]][order[k + 1]] for k in range(len(order) - 1))
+
+
+def _best_span(walk: list[list[float]]) -> float:
+    return min(_span(list(order), walk) for order in permutations(range(len(walk))))
+
+
+def test_the_order_that_wins_is_the_cheaper_of_the_two_heuristics() -> None:
+    """Seven asymmetric stops where insertion lands half again as long a walk as the
+    multi-start nearest-neighbour does, and enumeration agrees with the walk.
+    """
+    walk = [
+        [0.0, 400.0, 900.0, 1380.0, 1400.0, 1740.0, 360.0],
+        [660.0, 0.0, 1620.0, 1680.0, 1520.0, 1160.0, 1560.0],
+        [1500.0, 1960.0, 0.0, 1340.0, 1600.0, 1220.0, 700.0],
+        [100.0, 1660.0, 300.0, 0.0, 380.0, 820.0, 340.0],
+        [1240.0, 120.0, 1840.0, 1340.0, 0.0, 1820.0, 900.0],
+        [620.0, 1100.0, 740.0, 980.0, 1000.0, 0.0, 1060.0],
+        [1400.0, 1720.0, 280.0, 1940.0, 960.0, 320.0, 0.0],
+    ]
+    stops = _street_stops(7)
+    problem = WalkProblem(stops, _cost(walk), ResolvedConstraints(time_budget_minutes=None))
+
+    route, info = optimize(problem)
+
+    assert _span([c.id - 1 for c in route], walk) == pytest.approx(_best_span(walk))
+    assert info["algorithm"] == "nn_2opt_multi"
+    assert info["race"]["regret_2"] > info["race"]["nn_2opt_multi"]
+
+
+def test_a_walk_only_the_insertion_pass_gets_right_is_still_the_answer() -> None:
+    """The other way round: here the multi-start walk is the one a minute off, so
+    keeping the cheaper of the two is what keeps the answer.
+    """
+    walk = [
+        [0.0, 1060.0, 120.0, 360.0, 1080.0, 280.0, 220.0],
+        [980.0, 0.0, 1740.0, 1000.0, 160.0, 160.0, 1400.0],
+        [1300.0, 920.0, 0.0, 1840.0, 860.0, 1240.0, 920.0],
+        [400.0, 1360.0, 1280.0, 0.0, 1560.0, 1680.0, 520.0],
+        [480.0, 1600.0, 1420.0, 620.0, 0.0, 1200.0, 1680.0],
+        [960.0, 1260.0, 1620.0, 680.0, 1820.0, 0.0, 1900.0],
+        [260.0, 1500.0, 1120.0, 180.0, 600.0, 1740.0, 0.0],
+    ]
+    stops = _street_stops(7)
+    problem = WalkProblem(stops, _cost(walk), ResolvedConstraints(time_budget_minutes=None))
+
+    route, info = optimize(problem)
+
+    assert _span([c.id - 1 for c in route], walk) == pytest.approx(_best_span(walk))
+    assert info["algorithm"] == "regret_2"
+    assert info["race"]["regret_2"] < info["race"]["nn_2opt_multi"]
 
 
 def test_a_polish_leaves_a_walk_the_budget_had_to_trim_alone() -> None:

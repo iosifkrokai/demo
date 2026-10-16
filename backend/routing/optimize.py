@@ -28,7 +28,6 @@ from .cost import (
 log = logging.getLogger(__name__)
 
 BRUTE_FORCE_MAX = 6
-REGRET_INSERTION_MAX = 12
 OR_OPT_MAX_SEGMENT = 3
 
 
@@ -65,10 +64,8 @@ def optimize(problem: WalkProblem) -> tuple[list[Candidate], dict[str, Any]]:
 
     if n <= BRUTE_FORCE_MAX:
         order, info = _brute_open(problem, info)
-    elif n <= REGRET_INSERTION_MAX:
-        order, info = _regret_insertion(problem, problem.must_idx, info=info)
     else:
-        order, info = _nn_2opt_multi(problem, info)
+        order, info = _both_orders(problem, info)
 
     constrained, dropped = _budget_constrain(
         problem, order, must_ids=set(constraints.must_visit_ids)
@@ -95,6 +92,22 @@ def optimize(problem: WalkProblem) -> tuple[list[Candidate], dict[str, Any]]:
     }
     info = _report_missing_must(info, order, candidates, constraints)
     return [candidates[i] for i in order], info
+
+
+def _both_orders(problem: WalkProblem, info: dict[str, Any]) -> tuple[list[int], dict[str, Any]]:
+    """Insertion and nearest-neighbour, both polished, the cheaper one kept.
+
+    Neither wins everywhere: from a dozen stops the insertion pass takes over, at
+    nine or ten the multi-start walk is often ahead. A tie goes to insertion.
+    """
+    inserted = polish(_regret_insertion(problem, problem.must_idx, info={})[0], problem)
+    walked = polish(_nn_2opt_multi(problem, {})[0], problem)
+    inserted_total = _order_total(inserted, problem)
+    walked_total = _order_total(walked, problem)
+    race = {"regret_2": inserted_total, "nn_2opt_multi": walked_total}
+    if walked_total < inserted_total:
+        return walked, {**info, "algorithm": "nn_2opt_multi", "race": race}
+    return inserted, {**info, "algorithm": "regret_2", "race": race}
 
 
 def _report_missing_must(
@@ -556,7 +569,9 @@ def valhalla_order(
     if len(v_order) != len(route) or sorted(v_order) != list(range(len(route))):
         return route, info
     planned = list(info.get("order") or range(len(route)))
-    order = polish([planned[i] for i in v_order], problem)
+    engine = polish([planned[i] for i in v_order], problem)
+    from_engine = _order_total(engine, problem) < _order_total(planned, problem)
+    order = engine if from_engine else planned
     at = {candidate_idx: k for k, candidate_idx in enumerate(planned)}
     return (
         [route[at[i]] for i in order],
@@ -565,7 +580,10 @@ def valhalla_order(
             "order": order,
             "walk_seconds": walk_cost(order, problem.matrix),
             "total_seconds": int(_order_total(order, problem)),
-            "algorithm": f"{info.get('algorithm')}+valhalla",
+            "algorithm": (
+                f"{info.get('algorithm')}+valhalla" if from_engine else info.get("algorithm")
+            ),
+            "valhalla_order": "taken" if from_engine else "kept_local",
         },
     )
 
