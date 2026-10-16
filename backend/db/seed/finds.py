@@ -169,10 +169,11 @@ def split_objects(
     """Re-derive every object's category, split into new rows and re-labelled rows.
 
     An object the committed datasets already hold is a *correction* — the row keeps its
-    name, district and prose, and only its category changes, so nothing renames and
-    nothing re-embeds. An object they do not hold is a *row*, but only for the two new
-    categories: the stage is not a re-fetch, and inventing rows for every monastery the
-    snapshot missed is what this deliberately does not do.
+    name, district and prose, and only its category changes; the category is part of the
+    text a vector was built from, so that row's vector is dropped and rebuilt. An object
+    they do not hold is a *row*, but only for the two new categories: the stage is not a
+    re-fetch, and inventing rows for every monastery the snapshot missed is what this
+    deliberately does not do.
     """
     rows: list[Row] = []
     corrections: list[dict[str, Any]] = []
