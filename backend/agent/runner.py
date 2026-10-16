@@ -116,6 +116,7 @@ def _territories(deps: PlanningDeps) -> Sequence[Any]:
 async def _guard(ctx: Any, *, call: Any, args: Any, handler: Any, **_rest: Any) -> Any:
     """Refuse the calls past the budget instead of throwing the whole pass away."""
     ctx.deps.tool_calls_used += 1
+    log.info("agent_plan: call %d/%d %s", ctx.deps.tool_calls_used, constants.MAX_TOOL_CALLS, args)
     if ctx.deps.tool_calls_used > constants.MAX_TOOL_CALLS:
         log.info("agent_plan: tool budget spent on %s", call.tool_name)
         return envelope(
