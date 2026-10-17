@@ -26,18 +26,18 @@ describe('useRouteProgress', () => {
   it('показывает стадию, которую назвал конвейер', async () => {
     vi.stubGlobal(
       'fetch',
-      vi.fn(async () => answer('searching_places'))
+      vi.fn(async () => answer('interpreting_request'))
     );
 
     const { result } = renderHook(() =>
       useRouteProgress('id-1', { enabled: true })
     );
 
-    await waitFor(() => expect(result.current).toBe('searching_places'));
+    await waitFor(() => expect(result.current).toBe('interpreting_request'));
   });
 
   it('ведёт стадии по мере продвижения конвейера', async () => {
-    const stages = ['interpreting_request', 'measuring_legs', 'done'] as const;
+    const stages = ['interpreting_request', 'drawing_line', 'done'] as const;
     let call = 0;
     vi.stubGlobal(
       'fetch',
@@ -51,7 +51,7 @@ describe('useRouteProgress', () => {
     );
 
     await waitFor(() => expect(result.current).toBe('interpreting_request'));
-    await waitFor(() => expect(result.current).toBe('measuring_legs'), {
+    await waitFor(() => expect(result.current).toBe('drawing_line'), {
       timeout: 5000,
     });
     await waitFor(() => expect(result.current).toBe('done'), { timeout: 5000 });

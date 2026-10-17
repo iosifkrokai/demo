@@ -32,7 +32,7 @@ afterEach(() => {
 });
 
 describe('services along route', () => {
-  it('carries the current run id so «что по пути» joins the same session', async () => {
+  it('sends the line and the profile, and nothing the server does not read', async () => {
     const fetchMock = mockFetch(async () =>
       jsonResponse({
         items: [],
@@ -52,8 +52,9 @@ describe('services along route', () => {
     await fetchServicesAlong(LINE);
 
     const init = fetchMock.mock.calls[0]?.[1];
-    const body = JSON.parse(init?.body as string) as { session_id?: unknown };
-    expect(typeof body.session_id).toBe('string');
-    expect(body.session_id).toBeTruthy();
+    expect(JSON.parse(init?.body as string)).toEqual({
+      shape: LINE,
+      profile: 'pedestrian',
+    });
   });
 });

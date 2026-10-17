@@ -1184,7 +1184,7 @@ describe('Sidebar', () => {
       if (String(url).includes('/routes/progress/')) {
         return new Response(
           JSON.stringify({
-            stage: 'ordering_stops',
+            stage: 'drawing_line',
             done: false,
             failed: false,
             elapsed_ms: 4200,
@@ -1204,7 +1204,7 @@ describe('Sidebar', () => {
 
     const announcement = await screen.findByTestId('route-progress');
     await waitFor(() =>
-      expect(announcement).toHaveTextContent('собираю порядок остановок')
+      expect(announcement).toHaveTextContent('рисую линию по дорогам')
     );
     expect(announcement).not.toHaveTextContent('отправил запрос');
     expect(

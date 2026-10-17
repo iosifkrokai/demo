@@ -61,13 +61,8 @@ type SidebarShape = {
     | 'elapsed_many'
     | 'elapsed_other'
     | 'interpreting_request'
-    | 'searching_places'
-    | 'selecting_candidates'
-    | 'measuring_legs'
-    | 'ordering_stops'
     | 'repairing_route'
     | 'drawing_line'
-    | 'checking_requirements'
     | 'done',
     string
   >;
@@ -276,13 +271,8 @@ export const sidebarArea = {
         waitingLine: 'план пришёл — рисую маршрут по дорогам',
         longWait: 'агент всё ещё строит — иногда это занимает до минуты',
         interpreting_request: 'определяю, что вы просите',
-        searching_places: 'ищу точки рядом',
-        selecting_candidates: 'отбираю, что взять',
-        measuring_legs: 'считаю дорогу между точками',
-        ordering_stops: 'собираю порядок остановок',
         repairing_route: 'пересобираю маршрут, чтобы всё сошлось',
         drawing_line: 'рисую линию по дорогам',
-        checking_requirements: 'проверяю, что всё выполнено',
         done: 'готово',
       },
 
@@ -537,13 +527,8 @@ export const sidebarArea = {
         waitingLine: 'the plan is here — drawing the route along the roads',
         longWait: 'the agent is still working — this sometimes takes a minute',
         interpreting_request: 'working out what you asked for',
-        searching_places: 'looking for places nearby',
-        selecting_candidates: 'choosing what to include',
-        measuring_legs: 'measuring the way between stops',
-        ordering_stops: 'putting the stops in order',
         repairing_route: 'rebuilding the route so it all holds',
         drawing_line: 'drawing the line along the roads',
-        checking_requirements: 'checking that everything is honoured',
         done: 'done',
       },
 

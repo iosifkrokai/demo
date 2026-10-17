@@ -5,13 +5,8 @@ import { request } from './request';
 /** The stages the pipeline reports, in the order it reaches them. */
 export type RouteStageCode =
   | 'interpreting_request'
-  | 'searching_places'
-  | 'selecting_candidates'
-  | 'measuring_legs'
-  | 'ordering_stops'
   | 'repairing_route'
   | 'drawing_line'
-  | 'checking_requirements'
   | 'done';
 
 export interface RouteProgress {
@@ -28,13 +23,8 @@ export const newProgressId = (): string =>
 
 const STAGE_CODES: ReadonlySet<string> = new Set<RouteStageCode>([
   'interpreting_request',
-  'searching_places',
-  'selecting_candidates',
-  'measuring_legs',
-  'ordering_stops',
   'repairing_route',
   'drawing_line',
-  'checking_requirements',
   'done',
 ]);
 

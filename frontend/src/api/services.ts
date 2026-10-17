@@ -1,7 +1,6 @@
 /** Secondary points beside a route (`POST /routes/services`). */
 
 import type { RouteLine, ServicesAlongAnswer } from './types';
-import { currentRunSession } from '@/utils/run-session';
 import { ApiError, request } from './request';
 
 export class ServicesError extends Error {
@@ -52,7 +51,6 @@ export async function fetchServicesAlong(
         shape,
         profile,
         ...(categories ? { categories } : {}),
-        session_id: currentRunSession(),
       }),
       signal,
     });
