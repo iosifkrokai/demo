@@ -1,4 +1,4 @@
-"""Step 5 — Compute the cost matrix."""
+"""The cost matrix: every ordered pair of stops, in seconds."""
 
 from __future__ import annotations
 

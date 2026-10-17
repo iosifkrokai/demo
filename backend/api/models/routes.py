@@ -190,7 +190,7 @@ class RequirementSignal(BaseModel):
 class Interpretation(BaseModel):
     """What the system understood — one place, before the plan is judged."""
 
-    source: Literal["llm", "mixed", "explicit"] = "llm"
+    source: Literal["llm", "mixed"] = "llm"
     locale: Literal["ru", "en"] = "ru"
     status: OverallStatus = "pending"
 
@@ -279,7 +279,6 @@ class RerouteReq(BaseModel):
     """POST /routes/reroute body: the route the client holds, to be measured."""
 
     stops: list[RerouteStop] = Field(default_factory=list, max_length=MAX_STOPS)
-    point_ids: list[int] = Field(default_factory=list, max_length=MAX_STOPS)
     profile: TransportLiteral | None = None
     origin: LatLon | None = None
     round_trip: bool = False
@@ -288,17 +287,9 @@ class RerouteReq(BaseModel):
 
     @model_validator(mode="after")
     def _one_list_of_stops(self) -> RerouteReq:
-        if self.stops and self.point_ids:
-            raise ValueError("give stops or point_ids, not both")
-        if len(self.stops or self.point_ids) < constants.MIN_LEG_POINTS:
+        if len(self.stops) < constants.MIN_LEG_POINTS:
             raise ValueError("at least two stops are needed to measure a walk")
         return self
-
-    def as_stops(self) -> list[RerouteStop]:
-        """The stops in the client's order, whichever body it sent."""
-        if self.stops:
-            return self.stops
-        return [RerouteStop(key=str(pid), place_id=pid) for pid in self.point_ids]
 
 
 class ExplainReq(BaseModel):
@@ -325,7 +316,7 @@ class RouteProgressOut(BaseModel):
 
 
 class HealthResponse(BaseModel):
-    status: Literal["ok", "starting", "degraded"]
+    status: Literal["ok", "degraded"]
     embedder: bool
     llm: bool
     db: bool

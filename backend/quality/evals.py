@@ -27,7 +27,9 @@ from db.store.areas import PostgresAreaRepository
 from db.store.errors import StorageUnavailableError
 from db.store.places import PostgresPlaceRepository
 from db.store.registry import Repositories
-from quality.runner import BENCH_ROUTES, STAGE1_PROXY_RADIUS_M, haversine_km, load_golden_routes
+from quality.bench.analysis import haversine_km
+from quality.bench.cases import load_golden_routes
+from quality.bench.config import BENCH_ROUTES, STAGE1_PROXY_RADIUS_M
 from routing.models import CategoryFacts
 from routing.verify import ServiceAlongEvidence, verify
 

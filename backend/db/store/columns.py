@@ -38,7 +38,6 @@ AREA_COLUMNS: tuple[str, ...] = (
     "kind",
     "source",
     "license",
-    "note",
     "is_project_area",
     "created_at",
 )

@@ -244,7 +244,7 @@ class TripRequirements(BaseModel):
 
     unknowns: list[str] = Field(default_factory=list)
 
-    source: Literal["llm", "explicit", "mixed"] = "llm"
+    source: Literal["llm", "mixed"] = "llm"
 
     def hard(self) -> list[Requirement]:
         return [r for r in self.requirements if r.strength == "hard"]

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 from collections.abc import Iterator
 from typing import Any
@@ -117,6 +118,44 @@ def test_the_split_accounts_for_the_whole_file() -> None:
     assert len(kept) == 17
     assert len(retired) == 59
     assert len(kept) + len(retired) == 76
+
+
+def test_every_fact_and_link_survives_the_variadic_tail() -> None:
+    """The tail carries 1-3 facts and 0-2 links, each with its own separator; a fixed
+    seven-column reader turns the extra ones into prose in the wrong field."""
+    rows = {row["id"]: row for row in read_curated(CURATED_CSV)}
+
+    facts = rows[61]["fun_facts"].split("|")
+    assert len(facts) == 2
+    assert facts[0].startswith("Первая аптека на территории Беларуси")
+    assert facts[1].startswith("В коллекции более 3 000 предметов")
+    assert [link["title"] for link in json.loads(rows[61]["links"])] == ["Аптека-музей"]
+
+    pair = json.loads(rows[71]["links"])
+    assert len(pair) == 1
+    assert pair[0]["title"] == "Wikipedia"
+    assert pair[0]["url"].startswith("https://ru.wikipedia.org/")
+    assert len(rows[71]["fun_facts"].split("|")) == 2
+
+    assert len(rows[97]["fun_facts"].split("|")) == 2
+    assert len(json.loads(rows[97]["links"])) == 2
+
+
+def test_every_curated_row_reads_as_a_whole_record() -> None:
+    for path in (CURATED_CSV, RETIRED_CSV):
+        for row in read_curated(path):
+            assert set(row) == {
+                "id",
+                "name",
+                "category",
+                "blurb",
+                "fun_fact",
+                "fun_facts",
+                "links",
+            }
+            assert row["name"]
+            if row["links"]:
+                assert all(link.get("url") for link in json.loads(row["links"]))
 
 
 @pytest.fixture

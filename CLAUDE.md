@@ -18,8 +18,7 @@ backend/     the service — api (HTTP) · agent (the planner) · routing (the
                     we send out, off the contract in db/data/external/)
              quality/bench/ — the evaluation harness (config · models ·
                     analysis · report · cases · compliance · golden · run ·
-                    cli); quality/runner.py is its CLI facade, and
-                    quality/report.py the one-page readout
+                    cli); quality/report.py is the one-page readout
 frontend/    React + Vite + MapLibre, talked to over nginx
 docker-compose.yml   the whole stack, including the db image (inline)
 ```

@@ -4,13 +4,11 @@ Stages: collect hints from a PBF, resolve them via Wikimedia, then apply to the 
 
 from __future__ import annotations
 
-import argparse
 import hashlib
 import importlib
 import json
 import os
 import re
-import sys
 import time
 import urllib.error
 import urllib.parse
@@ -814,32 +812,3 @@ def _shown(path: Path) -> Path | str:
         return path.relative_to(BACKEND)
     except ValueError:
         return path
-
-
-def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--hints", action="store_true", help="стадия 1: собрать подсказки из PBF")
-    ap.add_argument("--pbf", type=Path, default=None, help="PBF-экстракт (по умолчанию $OSM_PBF)")
-    ap.add_argument("--limit", type=int, default=None, help="только первые N точек")
-    ap.add_argument("--apply", action="store_true", help="записать в базу")
-    args = ap.parse_args(argv)
-
-    try:
-        count = run_stage(
-            stage="hints" if args.hints else "resolve",
-            data_dir=PHOTOS_DIR,
-            pbf_path=args.pbf,
-            limit=args.limit,
-            apply=args.apply,
-        )
-    except (RuntimeError, FileNotFoundError, ValueError) as exc:
-        print(str(exc), file=sys.stderr)
-        return 2
-
-    if args.apply:
-        print(f"в базе с фото: {count}")
-    return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())

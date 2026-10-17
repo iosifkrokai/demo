@@ -1,4 +1,4 @@
-"""Step 7b — Independent requirement verifier."""
+"""The deterministic requirement verifier: whether the final route meets the request."""
 
 from __future__ import annotations
 
@@ -135,15 +135,10 @@ Status = Literal["pending", "satisfied", "unmet", "uncertain"]
 
 
 def _route_stops(plan: Any) -> list[Any]:
-    """The ordered stops of the plan, from whatever shape the caller passed."""
-    if plan is None:
-        return []
+    """The ordered stops of the plan, from a measured dict or a bare list."""
     if isinstance(plan, dict):
         route = plan.get("route")
         return list(route) if route else []
-    route = getattr(plan, "route", None)
-    if route is not None:
-        return list(route)
     if isinstance(plan, (list, tuple)):
         return list(plan)
     return []
@@ -153,23 +148,21 @@ def _plan_trace(plan: Any) -> dict[str, Any]:
     if isinstance(plan, dict):
         trace = plan.get("trace")
         return trace if isinstance(trace, dict) else {}
-    trace = getattr(plan, "trace", None)
-    return trace if isinstance(trace, dict) else {}
+    return {}
 
 
 def _unroutable_ids(trace: dict[str, Any]) -> set[int]:
     """Stop ids the pruner reported as unroutable in this order."""
     out: set[int] = set()
-    for key in ("unroutable_stops", "pruned_stops"):
-        for item in trace.get(key) or []:
-            if isinstance(item, int):
-                pid: Any = item
-            elif isinstance(item, dict):
-                pid = item.get("id")
-            else:
-                pid = item.id
-            if isinstance(pid, int):
-                out.add(pid)
+    for item in trace.get("unroutable_stops") or []:
+        if isinstance(item, int):
+            pid = item
+        elif isinstance(item, dict):
+            pid = item.get("id")
+        else:
+            pid = None
+        if isinstance(pid, int):
+            out.add(pid)
     return out
 
 

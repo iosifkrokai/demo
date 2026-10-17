@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from quality.runner import load_curated_routes, load_golden_cases
+from quality.bench.cases import load_curated_routes, load_golden_cases
 
 FRONTEND = Path(__file__).resolve().parents[2] / "frontend" / "src" / "i18n"
 CHIPS = 22

@@ -1,4 +1,4 @@
-"""Step 6 — Route optimization."""
+"""Route optimization: order stops into the shortest walk that fits the budget."""
 
 from __future__ import annotations
 

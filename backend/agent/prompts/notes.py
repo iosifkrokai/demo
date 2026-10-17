@@ -9,7 +9,7 @@ from agent.models import ReaderBrief
 from core.hours import local_at
 
 
-def _known_areas_note(areas: Sequence[Any]) -> str:
+def known_areas_note(areas: Sequence[Any]) -> str:
     """The territories the system already knows, as data for the model."""
 
     lines = []
@@ -21,7 +21,7 @@ def _known_areas_note(areas: Sequence[Any]) -> str:
     return "; ".join(lines)
 
 
-def _ui_note(brief: ReaderBrief) -> str:
+def ui_note(brief: ReaderBrief) -> str:
     """Tell the model which controls the user already set — it must not fight them."""
     fixed: list[str] = []
     if brief.party_adults is not None:
@@ -51,7 +51,7 @@ def _ui_note(brief: ReaderBrief) -> str:
     )
 
 
-def _request_note(brief: ReaderBrief) -> str:
+def request_note(brief: ReaderBrief) -> str:
     """Facts the model needs and cannot find in the request text."""
     lines = [f"transport={brief.profile or 'unset'}"]
     lines.append(
@@ -77,6 +77,3 @@ def _request_note(brief: ReaderBrief) -> str:
             )
             lines.append(f"current_route=[{shown}]")
     return "\n".join(lines)
-
-
-__all__ = ["_known_areas_note", "_request_note", "_ui_note"]

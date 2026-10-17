@@ -1,18 +1,20 @@
 ---
 name: run-quality
-description: Measure route quality — the routing cases, the requirement-compliance cases, the tool-trajectory cases and the replayable evals. Use before a release, after changing the planner or the retrieval, or when asked whether the routes got better.
+description: Measure route quality — routes, curated walks, requirement compliance, tool trajectory, evals and retrieval. Use before a release, after changing the planner or the retrieval, or when asked whether the routes got better.
 ---
 
 # Measure the routes
 
-Four layers under `backend/quality/`, with different prerequisites:
+Six layers under `backend/quality/`, with different prerequisites:
 
 | Layer | What it answers | Needs |
 |---|---|---|
 | routes | is the drawn route walkable and sensible (length, stops, budget, geometry) | a live stack |
+| curated | do the ready-made walks still hold up | a live stack |
 | compliance | does the plan satisfy the stated requirements (hard/soft service, avoid, area, family) | a live stack |
 | trajectory | which tools the agent called, with what arguments, and what it did with the answers — checked by code, never by a judge | offline: a scripted model, but a live db + Valhalla |
 | evals | is the reading of the query stable and correct | replayable offline |
+| retrieval | does the search return the right places for the query | a live stack |
 
 ```bash
 make quality                              # one-page report over what the runs wrote
@@ -20,7 +22,7 @@ cd backend && .venv/bin/python -m quality --help
 cd backend && .venv/bin/python -m quality.trajectory   # the trajectory layer, on its own
 ```
 
-`quality/runner.py` is the entry point; the golden cases are JSON under
+`quality/bench/cli.py` is the entry point; the golden cases are JSON under
 `backend/quality/cases/{routes,compliance}/`, and the trajectory cases are one per
 line in `backend/quality/cases/trajectory.jsonl`. A run writes into a report
 directory; `--replay-golden DIR` re-runs a recorded set offline, which is what

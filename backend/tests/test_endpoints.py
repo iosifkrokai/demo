@@ -90,7 +90,7 @@ def test_health_reports_its_dependencies(api: httpx.Client) -> None:
     response = api.get("/health")
     assert response.status_code == 200, response.text
     _carries(response.json(), HealthResponse)
-    assert response.json()["status"] in {"ok", "starting", "degraded"}
+    assert response.json()["status"] in {"ok", "degraded"}
 
 
 def test_generate_returns_a_route(live_stack, api: httpx.Client) -> None:
@@ -119,7 +119,9 @@ def test_progress_for_an_untracked_run_is_a_404(api: httpx.Client) -> None:
 def test_reroute_returns_a_route(api: httpx.Client) -> None:
     """A client editing its own route must not need an interpreter for it, so this
     asks for no model (no ``live_stack.require("llm")``) and skips nothing."""
-    response = api.post("/routes/reroute", json={"point_ids": _place_ids(api, 2)})
+    ids = _place_ids(api, 2)
+    stops = [{"key": str(index), "place_id": place_id} for index, place_id in enumerate(ids)]
+    response = api.post("/routes/reroute", json={"stops": stops})
     assert response.status_code == 200, response.text
     _carries(response.json(), RouteResponse)
     budget = response.json()["budget"]

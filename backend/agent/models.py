@@ -7,29 +7,19 @@ from datetime import datetime
 from typing import Literal
 
 from routing.models import (
-    REASON_MUST_VISIT_OUTSIDE,
     PartyComposition,
     Requirement,
-    RequirementKind,
-    RequirementSource,
-    RequirementStatus,
     ResultMode,
-    Strength,
     TripRequirements,
 )
 
 __all__ = [
-    "REASON_MUST_VISIT_OUTSIDE",
     "BriefStop",
     "PartyComposition",
     "ReaderBrief",
     "RefinementBrief",
     "Requirement",
-    "RequirementKind",
-    "RequirementSource",
-    "RequirementStatus",
     "ResultMode",
-    "Strength",
     "TripRequirements",
 ]
 

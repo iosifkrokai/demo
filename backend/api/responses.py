@@ -495,13 +495,13 @@ def reroute_response(req: RerouteReq, *, repos: Any) -> RouteResponse:
     """Measure and draw the route the client is holding, without asking the model.
     Editing a stop is a measurement, not a request to be interpreted.
     """
-    stops = req.as_stops()
+    stops = req.stops
     wanted = [stop.place_id for stop in stops if stop.place_id is not None]
     rows = repos.places.get_by_ids(wanted) if wanted else []
     found = {row.id: row for row in rows}
     missing = [pid for pid in wanted if pid not in found]
     if missing:
-        raise NoRoutePossibleError(f"unknown point_ids: {sorted(missing)}")
+        raise NoRoutePossibleError(f"unknown stop ids: {sorted(missing)}")
 
     keys: dict[int, str] = {}
     candidates: list[Candidate] = []

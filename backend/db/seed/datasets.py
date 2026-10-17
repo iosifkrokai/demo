@@ -363,49 +363,68 @@ def default_datasets() -> list[Dataset]:
     ]
 
 
-EXPECTED_CURATED_HEADER = [
-    "id",
-    "normalized_name",
-    "category",
-    "blurb",
-    "fun_fact",
-    "fun_facts",
-    "links",
-]
+CURATED_PREFIX = 5
+
+
+def _json_link(token: str) -> dict[str, str] | None:
+    try:
+        value = json.loads(token)
+    except json.JSONDecodeError:
+        return None
+    if isinstance(value, dict) and isinstance(value.get("url"), str):
+        return {"title": str(value.get("title") or value["url"]), "url": value["url"]}
+    return None
+
+
+def _curated_links(tail: list[str]) -> tuple[list[str], list[dict[str, str]]]:
+    """Split the variadic tail into extra facts and the links that end it."""
+    links: list[dict[str, str]] = []
+    index = len(tail)
+    while index:
+        token = tail[index - 1].strip()
+        link = _json_link(token)
+        if link is not None:
+            links.insert(0, link)
+            index -= 1
+            continue
+        if token.startswith(("http://", "https://")):
+            title = tail[index - 2].strip() if index > 1 else ""
+            if title and len(title.split()) == 1:
+                links.insert(0, {"title": title, "url": token})
+                index -= 2
+            else:
+                links.insert(0, {"title": token, "url": token})
+                index -= 1
+            continue
+        break
+    facts = [token.strip() for token in tail[:index] if token.strip()]
+    return facts, links
 
 
 def read_curated(path: Path) -> list[dict[str, Any]]:
-    """Parse the pipe-delimited curated file.
-    The header is commented out in the repo, hence the explicit fieldnames.
-    """
+    """Parse the curated file: five fixed columns, then facts and links sharing the tail."""
     if not path.exists():
         return []
-    lines = [
-        ln
-        for ln in path.read_text(encoding="utf-8").splitlines()
-        if ln.strip() and not ln.startswith("#")
-    ]
-    has_header = bool(lines) and not lines[0].split("|", 1)[0].strip().isdigit()
-    if has_header and lines[0].split("|")[:4] != EXPECTED_CURATED_HEADER[:4]:
-        raise SystemExit(
-            f"unexpected header {lines[0].split('|')}, expected {EXPECTED_CURATED_HEADER}"
+    rows: list[dict[str, Any]] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.strip() or line.startswith("#"):
+            continue
+        fields = line.split("|")
+        if len(fields) < CURATED_PREFIX or not fields[0].strip().isdigit():
+            raise SystemExit(f"unexpected curated row: {line[:80]}")
+        facts, links = _curated_links(fields[CURATED_PREFIX:])
+        rows.append(
+            {
+                "id": int(fields[0]),
+                "name": fields[1].strip(),
+                "category": fields[2].strip() or None,
+                "blurb": fields[3].strip() or None,
+                "fun_fact": fields[4].strip() or None,
+                "fun_facts": "|".join(facts) or None,
+                "links": json.dumps(links, ensure_ascii=False) if links else None,
+            }
         )
-
-    reader = csv.DictReader(
-        lines, fieldnames=None if has_header else EXPECTED_CURATED_HEADER, delimiter="|"
-    )
-    return [
-        {
-            "id": int(row["id"]),
-            "name": row["normalized_name"].strip(),
-            "category": row["category"].strip() or None,
-            "blurb": row["blurb"].strip() or None,
-            "fun_fact": (row.get("fun_fact") or "").strip() or None,
-            "fun_facts": (row.get("fun_facts") or "").strip() or None,
-            "links": (row.get("links") or "").strip() or None,
-        }
-        for row in reader
-    ]
+    return rows
 
 
 def _widest_gap_m(rows: list[dict[str, Any]]) -> float:

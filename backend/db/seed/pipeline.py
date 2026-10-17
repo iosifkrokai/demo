@@ -293,14 +293,14 @@ def load_areas(conn: psycopg.Connection, geo_dir: Path | None = None) -> dict[st
             cur.execute(
                 """
                 INSERT INTO areas (code, name_ru, name_en, aliases, kind, source,
-                                   license, note, is_project_area, geom)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s,
+                                   license, is_project_area, geom)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s,
                         CASE WHEN %s::text IS NULL THEN NULL ELSE ST_GeogFromText(%s) END)
                 ON CONFLICT (code) DO UPDATE
                     SET name_ru = EXCLUDED.name_ru, name_en = EXCLUDED.name_en,
                         aliases = EXCLUDED.aliases, kind = EXCLUDED.kind,
                         source = EXCLUDED.source, license = EXCLUDED.license,
-                        note = EXCLUDED.note, is_project_area = EXCLUDED.is_project_area,
+                        is_project_area = EXCLUDED.is_project_area,
                         geom = EXCLUDED.geom
                 """,
                 (
@@ -311,7 +311,6 @@ def load_areas(conn: psycopg.Connection, geo_dir: Path | None = None) -> dict[st
                     area.get("kind") or "district",
                     source,
                     license_,
-                    area.get("geometry_note"),
                     bool(area.get("is_project_area")),
                     geometry,
                     geometry,

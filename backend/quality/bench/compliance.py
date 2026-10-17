@@ -344,11 +344,10 @@ def _result_mode_check(raw: dict[str, Any], exp: dict[str, Any]) -> dict[str, An
     expected_mode = exp.get("expected_result_mode")
     if expected_mode is None:
         return _ok("no result mode expected")
-    actual = _norm_code(raw.get("result_mode") or raw.get("mode"))
+    actual = _norm_code(raw.get("result_mode"))
     if not actual:
         return _unverified(
-            f"expected result_mode {expected_mode}, but the response carries no "
-            "result_mode marker (the API does not expose one yet)"
+            f"expected result_mode {expected_mode}, but the response carries no result_mode"
         )
     if actual == _norm_code(expected_mode):
         return _ok(f"result_mode {actual}")

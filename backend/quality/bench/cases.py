@@ -49,7 +49,7 @@ def load_golden_routes(routes_dir: Path) -> list[GoldenRoute]:
                 name=data["name"],
                 source=data.get("source", ""),
                 query_ru=data["query_ru"],
-                budget_minutes=data.get("budget_minutes", 120),
+                budget_minutes=data["budget_minutes"],
                 stops=stops,
                 est_walk_minutes=data.get("est_walk_minutes"),
                 profile=data.get("profile"),

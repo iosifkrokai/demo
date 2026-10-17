@@ -9,11 +9,12 @@ from pydantic import ValidationError
 
 from agent.client import _deps
 from agent.models import ReaderBrief
-from agent.prompts.notes import _request_note
+from agent.prompts.notes import request_note
 from api.models.routes import GenerateReq
 from api.responses import interpretation, reader_brief
 from core.hours import parse_moment
-from quality.runner import _filter_moment, _moment_check, _requirement_status_check
+from quality.bench.cases import _filter_moment
+from quality.bench.compliance import _moment_check, _requirement_status_check
 from routing.models import Requirement, TripRequirements
 
 CHOSEN = datetime(2026, 10, 20, 8, 0, tzinfo=UTC)
@@ -59,10 +60,10 @@ def test_without_a_chosen_moment_the_run_reads_its_own_clock() -> None:
 
 
 def test_the_prompt_names_the_moment_the_walk_is_planned_for() -> None:
-    chosen = _request_note(ReaderBrief(at=CHOSEN))
+    chosen = request_note(ReaderBrief(at=CHOSEN))
 
     assert "when=2026-10-20 11:00" in chosen
-    assert "when=now" in _request_note(ReaderBrief())
+    assert "when=now" in request_note(ReaderBrief())
 
 
 def test_the_answer_echoes_the_moment_only_when_it_was_chosen() -> None:

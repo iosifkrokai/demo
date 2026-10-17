@@ -1,4 +1,4 @@
-"""Step 8 — Render the canonical route via Valhalla /route."""
+"""Render the canonical route via Valhalla /route."""
 
 from __future__ import annotations
 

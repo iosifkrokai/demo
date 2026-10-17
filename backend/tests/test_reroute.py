@@ -136,16 +136,6 @@ def test_the_tourists_own_position_is_the_walk_the_budget_counts(db_repos) -> No
     assert with_origin.budget.total_minutes > without.budget.total_minutes
 
 
-def test_point_ids_still_name_the_stops(db_repos) -> None:
-    """The older body is what the endpoint shipped with; it keeps working."""
-    ids = [stop.place_id for stop in _stops(db_repos)]
-
-    stops = RerouteReq(point_ids=ids).as_stops()
-
-    assert [stop.place_id for stop in stops] == ids
-    assert [stop.key for stop in stops] == [str(pid) for pid in ids]
-
-
 def test_a_stop_with_nowhere_to_be_is_refused() -> None:
     with pytest.raises(ValidationError):
         RerouteStop(key="nowhere")
@@ -153,13 +143,7 @@ def test_a_stop_with_nowhere_to_be_is_refused() -> None:
 
 def test_a_walk_needs_two_stops() -> None:
     with pytest.raises(ValidationError):
-        RerouteReq(point_ids=[7])
-
-
-def test_a_body_carrying_two_lists_is_refused() -> None:
-    """One list, two spellings: silently measuring only one of them would lose stops."""
-    with pytest.raises(ValidationError):
-        RerouteReq(stops=[RerouteStop(key="a", place_id=1)], point_ids=[1, 2])
+        RerouteReq(stops=[RerouteStop(key="a", place_id=7)])
 
 
 def test_the_matrix_agrees_with_the_line_that_gets_drawn(db_repos) -> None:

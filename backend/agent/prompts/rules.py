@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any
 
-from agent.prompts.notes import _known_areas_note
+from agent.prompts.notes import known_areas_note
 from core import constants
 
 
@@ -25,7 +25,7 @@ def base_rules(categories: Sequence[Any], areas: Sequence[Any]) -> str:
         "Canonical category codes (use ONLY these, never invent one): "
         f"{catalogue}.\n"
         "Known territories (canonical slugs — `find_areas` returns these): "
-        f"{_known_areas_note(areas)}.\n"
+        f"{known_areas_note(areas)}.\n"
         "Rules:\n"
         "- A requirement is a thing the user asked for, with the verbatim "
         "fragment of their text that says so (copy it exactly).\n"

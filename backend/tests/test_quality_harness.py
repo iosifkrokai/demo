@@ -10,22 +10,20 @@ from agent.tools.places import Where, find_places
 from agent.tools.plan import plan_walk
 from db.seed import cli, datasets as ds_mod, itineraries as itin_mod
 from quality import evals as evals_mod, report as report_mod
-from quality.evals import _forbidden, _load, _service_checks, report as evals_report
-from quality.report import read_curated, read_routes
-from quality.runner import (
-    BENCH_CURATED,
-    BENCH_CURATED_OUT,
-    OurStop,
-    _check_curated_case,
+from quality.bench.analysis import (
     _leg_failures,
-    _report_dir,
     duplicate_exceptions,
     find_duplicate_stop_pairs,
     leg_cap_km,
     leg_sanity,
-    load_curated_routes,
     norm_name,
 )
+from quality.bench.cases import _check_curated_case, load_curated_routes
+from quality.bench.cli import _report_dir
+from quality.bench.config import BENCH_CURATED, BENCH_CURATED_OUT
+from quality.bench.models import OurStop
+from quality.evals import _forbidden, _load, _service_checks, report as evals_report
+from quality.report import read_curated, read_routes
 from quality.trajectory import _record_args
 from routing.models import WalkRequest
 
@@ -393,7 +391,7 @@ def test_the_vector_search_is_provisioned_for_the_pool_it_serves() -> None:
 
 def test_the_pool_is_measured_with_the_benchmarks_own_radius() -> None:
     """The retrieval stage must not invent a second criterion: it reads the runner's."""
-    from quality.runner import STAGE1_PROXY_RADIUS_M
+    from quality.bench.config import STAGE1_PROXY_RADIUS_M
 
     stop = _Stop(53.6778, 23.8295)
     just_inside = [{"lat": 53.6778 + 0.002, "lon": 23.8295}]

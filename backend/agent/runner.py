@@ -17,7 +17,7 @@ from pydantic_ai.settings import ModelSettings
 from agent import llm as model_mod
 from agent.models import ReaderBrief
 from agent.prompts import compose_instructions
-from agent.prompts.notes import _request_note, _ui_note
+from agent.prompts.notes import request_note, ui_note
 from agent.schema import PlanningDeps, PlanSubmission
 from agent.tools import register_all
 from agent.tools._shared import ERR_TOOL_BUDGET, envelope
@@ -83,7 +83,7 @@ def _time_capability() -> ProcessHistory[PlanningDeps]:
 def build_prompt(query: str, brief: Any, *, repair: str | None = None) -> str:
     """The text handed to the model, built in one place."""
     prompt = (
-        f"locale={brief.locale}\n{_request_note(brief)}\nrequest={query!r}\n"
+        f"locale={brief.locale}\n{request_note(brief)}\nrequest={query!r}\n"
         "Plan the walk for this request, then submit it with submit_plan."
     )
     return prompt if repair is None else f"{prompt}\n{repair}"
@@ -151,7 +151,7 @@ def _instructions(deps: PlanningDeps, brief: ReaderBrief) -> str:
     """The instructions for this run, composed from the database once."""
     if deps.instructions is None:
         deps.instructions = compose_instructions(
-            _catalogue(deps), _territories(deps), _ui_note(brief)
+            _catalogue(deps), _territories(deps), ui_note(brief)
         )
     return deps.instructions
 
