@@ -2,15 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Protocol
-
 from db.store.base import PostgresRepository
-
-
-class StatsRepository(Protocol):
-    """The admin counts the stats route depends on (a fake implements this)."""
-
-    def stats(self) -> dict[str, int]: ...
+from db.store.errors import StorageUnavailableError
 
 
 class PostgresStatsRepository(PostgresRepository):
@@ -29,5 +22,6 @@ class PostgresStatsRepository(PostgresRepository):
                 """
             )
             row = cur.fetchone()
-        assert row is not None
+        if row is None:
+            raise StorageUnavailableError("stats query returned no row")
         return {key: int(value) for key, value in row.items()}

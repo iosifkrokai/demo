@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Any
+from typing import TYPE_CHECKING, Annotated, Any
 
 from pydantic import BaseModel, Field
 from pydantic_ai import RunContext
 
 from agent.schema import PlanningDeps
-from agent.tools import (
+from agent.tools._shared import (
     ERR_BAD_ARGUMENT,
     ERR_EMPTY_QUERY,
     ERR_NOT_FOUND,
@@ -21,7 +21,11 @@ from agent.tools import (
 from core import constants
 from db.embeddings import model as embeddings_model
 from db.embeddings.query import embed_query
+from db.store.mappers import parse_links
 from routing.select import rrf_fuse
+
+if TYPE_CHECKING:
+    from db.store.registry import Repositories
 
 SIGNALS = ("embedding", "alias", "category", "nearby")
 
@@ -66,7 +70,9 @@ class Where(BaseModel):
     radius_m: float | None = None
 
 
-def _text_hits(store: Any, query: str, area: Any, pool: int) -> list[tuple[int, float]] | None:
+def _text_hits(
+    store: Repositories, query: str, area: Any, pool: int
+) -> list[tuple[int, float]] | None:
     """Vector hits — only when the query says something and a model can embed it."""
     if not query.strip() or not embeddings_model.is_available():
         return None
@@ -74,28 +80,31 @@ def _text_hits(store: Any, query: str, area: Any, pool: int) -> list[tuple[int, 
     if not qvec:
         return None
     found = store.places.by_embedding(qvec, limit=pool, area=area)
-    return [(place.id, score) for place, score in found]
+    return [(place.id, score) for place, score in found if place.id is not None]
 
 
-def _alias_hits(store: Any, query: str, area: Any, pool: int) -> list[tuple[int, float]] | None:
+def _alias_hits(
+    store: Repositories, query: str, area: Any, pool: int
+) -> list[tuple[int, float]] | None:
     """The other names a place answers to, matched as trigrams — no model needed."""
     if not query.strip():
         return None
     found = store.places.by_alias(query, limit=pool, area=area)
-    return [(place.id, score) for place, score in found]
+    return [(place.id, score) for place, score in found if place.id is not None]
 
 
 def _category_hits(
-    store: Any, codes: list[str], area: Any, pool: int
+    store: Repositories, codes: list[str], area: Any, pool: int
 ) -> list[tuple[int, float]] | None:
     """Everything the catalogue files under the codes the request named."""
     if not codes:
         return None
-    return [(p.id, 0.0) for p in store.places.by_category(codes, pool, area=area)]
+    places = store.places.by_category(codes, pool, area=area)
+    return [(p.id, 0.0) for p in places if p.id is not None]
 
 
 def _near_hits(
-    store: Any, near: tuple[float, float, float] | None, area: Any, pool: int
+    store: Repositories, near: tuple[float, float, float] | None, area: Any, pool: int
 ) -> list[tuple[int, float]] | None:
     """Everything inside the radius of the point the request named."""
     if near is None:
@@ -103,7 +112,7 @@ def _near_hits(
     around = store.places.nearby(
         near[0], near[1], radius_km=near[2] / 1000.0, limit=pool, area=area
     )
-    return [(p.id, 0.0) for p in around]
+    return [(p.id, 0.0) for p in around if p.id is not None]
 
 
 def card_of(place: Any) -> dict[str, Any]:
@@ -119,13 +128,12 @@ def catalogue_rows(
     *,
     categories: list[str],
     area: str | None,
-    repos: Any,
+    repos: Repositories | None,
     limit: int = constants.MAX_CATALOGUE_PLACES,
 ) -> tuple[list[Any], bool]:
-    """The places of a catalogue: every one the named codes cover in the territory —
-    the request itself, not the agent's reading of it. A request with no code to
-    retrieve by leaves the list to the places the agent named. The flag says the list
-    was cut, at `limit` or at the pool a code was read from.
+    """The places of a catalogue: every one the named codes cover in the territory — the
+    request itself, not the agent's reading of it. With no code to retrieve by, the list is
+    the places the agent named; the flag says it was cut at `limit` or at a code's pool.
     """
     if categories:
         rows, error, _message = fetch(
@@ -140,7 +148,7 @@ def catalogue_rows(
 
 
 def _catalogue_by_code(
-    store: Any, categories: list[str], area: str | None, limit: int
+    store: Repositories, categories: list[str], area: str | None, limit: int
 ) -> tuple[list[Any], bool]:
     """Each code ranked on its own, so no one code can crowd another out of the list."""
     codes = store.taxonomy.db_values(categories)
@@ -166,9 +174,9 @@ def find_places(
     limit: int = DEFAULT_FIND_LIMIT,
     *,
     where: Where | None = None,
-    repos: Any = None,
+    repos: Repositories | None = None,
 ) -> dict[str, Any]:
-    """Rank real places against a description, a category, and/or a point."""
+    """Rank real places against a description, category, point, or territory."""
     where = where or Where()
     requested = [c for c in (category_codes or []) if c.strip()]
 
@@ -200,7 +208,7 @@ def find_places(
             message="give a description, a category, or a point to search around",
         )
 
-    def run(store: Any) -> list[dict[str, Any]]:
+    def run(store: Repositories) -> list[dict[str, Any]]:
         db_cats = store.taxonomy.db_values(requested)
         provenance["categories"] = db_cats
         provenance["dropped_codes"] = [c for c in requested if c not in db_cats]
@@ -241,7 +249,7 @@ def find_places(
     )
 
 
-def get_place_facts(place_id: int, *, repos: Any = None) -> dict[str, Any]:
+def get_place_facts(place_id: int, *, repos: Repositories | None = None) -> dict[str, Any]:
     """The provenance says so (`fact_status="raw_unverified"`); a missing place
     returns ``error="not_found"``.
     """
@@ -259,15 +267,13 @@ def get_place_facts(place_id: int, *, repos: Any = None) -> dict[str, Any]:
             message="place_id must be a positive integer",
         )
 
-    def run(store: Any) -> list[dict[str, Any]]:
+    def run(store: Repositories) -> list[dict[str, Any]]:
         place = store.places.get_by_id(place_id)
         if place is None:
             return []
         facts = project(place, _FACT_FIELDS)
-        links = place.links
-        facts["links"] = (
-            list(links)[:MAX_LINKS_PER_PLACE] if isinstance(links, (list, tuple)) else None
-        )
+        links = parse_links(place.links)[:MAX_LINKS_PER_PLACE]
+        facts["links"] = links or None
         return [facts]
 
     rows, error, message = fetch(repos, run)
@@ -305,7 +311,7 @@ def register_find_places(agent: Any) -> None:
         limit: int = DEFAULT_FIND_LIMIT,
         where: Where | None = None,
     ) -> dict[str, Any]:
-        """Find real places matching a description, a category, and/or a point."""
+        """Find real places matching a description, category, point, or territory."""
         return find_places(
             query,
             category_codes,

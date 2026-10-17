@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import math
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pydantic_ai import RunContext
 
 from agent.schema import PlanningDeps
-from agent.tools import (
+from agent.tools._shared import (
     ERR_BAD_ARGUMENT,
     ERR_DB_UNAVAILABLE,
     ToolAnswer,
@@ -23,6 +23,9 @@ from routing.stops import candidate_of
 from routing.valhalla.matrix import time_matrix
 from routing.valhalla.snap import snap_locations
 
+if TYPE_CHECKING:
+    from db.store.registry import Repositories
+
 MAX_STOPS = 12
 MAX_CANDIDATES = 12
 MAX_RESULTS = 5
@@ -30,19 +33,18 @@ MAX_DETOUR_MINUTES = 30
 DEFAULT_DETOUR_MINUTES = 10
 DEFAULT_RADIUS_KM = 0.6
 NEARBY_PER_STOP = 8
-UNREACHABLE_S = 1e8
 
 
 def _reachable(seconds: float) -> bool:
     """A leg we can actually measure: neither unknown (NaN) nor unreachable."""
-    return math.isfinite(seconds) and seconds < UNREACHABLE_S
+    return math.isfinite(seconds) and seconds < constants.UNREACHABLE_S
 
 
 def nearby_services(
     stop_ids: list[int],
     category_codes: list[str] | None = None,
     *,
-    repos: Any,
+    repos: Repositories | None,
     profile: str = "pedestrian",
     max_detour_minutes: float | None = None,
     deadline_s: float | None = None,
@@ -101,7 +103,7 @@ def nearby_services(
 
 
 def _collect_services(
-    store: Any, stops: list[Candidate], category_codes: list[str] | None
+    store: Repositories, stops: list[Candidate], category_codes: list[str] | None
 ) -> dict[int, Candidate]:
     """Services near any stop, by category. Never a stop the route already has."""
     requested = [c for c in (category_codes or []) if c.strip()]
@@ -109,16 +111,19 @@ def _collect_services(
     allowed = set(wanted_codes) if wanted_codes else None
     on_route = {stop.id for stop in stops}
     found: dict[int, Candidate] = {}
-    for stop in stops:
-        near = store.places.nearby(
-            stop.lat, stop.lon, radius_km=DEFAULT_RADIUS_KM, limit=NEARBY_PER_STOP
-        )
-        for place in near:
-            if place.id in on_route or place.id in found:
-                continue
-            if allowed is not None and (place.category or "") not in allowed:
-                continue
-            found[place.id] = candidate_of(place, 0.0)
+    near = store.places.nearby_many(
+        [(stop.lat, stop.lon) for stop in stops],
+        radius_km=DEFAULT_RADIUS_KM,
+        limit_per_stop=NEARBY_PER_STOP,
+    )
+    for place in near:
+        if place.id is None:
+            continue
+        if place.id in on_route or place.id in found:
+            continue
+        if allowed is not None and (place.category or "") not in allowed:
+            continue
+        found[place.id] = candidate_of(place, 0.0)
     return found
 
 

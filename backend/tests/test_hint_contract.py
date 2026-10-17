@@ -1,9 +1,6 @@
 """The ask box's starters are the benchmark's own requests, and must not drift from them.
 
-A hint is the request the demo will be judged by, so it is not worded here: it is taken
-from a case the harness already measures — the compliance set and the ready-made walks.
-This contract reads both sides, so a reworded chip, a dropped case or a mis-typed
-category all fail in the offline gate rather than on stage.
+The chips are not worded here; they are read from the measured cases and walks.
 """
 
 from __future__ import annotations
@@ -85,10 +82,8 @@ def test_the_parsers_see_every_chip() -> None:
 
 def test_the_russian_starters_are_the_requests_the_benchmark_measures() -> None:
     """The chips and the measured requests are the same set — no invented wording,
-    and no case left without a way to be tapped. A case that names a moment
-    (`filters.at`) is the one exception, and for a reason rather than for convenience:
-    a chip carries text and a transport, not an hour, and «открытые в это время» is a
-    request only a moment makes meaningful."""
+    and no case left without a way to be tapped. A case naming a moment (`filters.at`)
+    is the exception: a chip carries text and a transport, not an hour."""
     measured = {
         case.query
         for case in load_golden_cases()

@@ -19,7 +19,7 @@ from db.store.columns import (
     PLACE_SELECT,
     PLACE_WRITE_COLUMNS,
 )
-from db.store.errors import DuplicateSourceError
+from db.store.errors import DuplicateSourceError, StorageUnavailableError
 from db.store.mappers import place_from_row, place_payload
 from db.store.services import (
     DEFAULT_PROFILE,
@@ -63,10 +63,8 @@ _ALIAS_SELECT = ", ".join(f"p.{column}" for column in PLACE_COLUMNS)
 
 
 def _in_area(alias: str, area: str | None) -> tuple[str, list[str]]:
-    """SQL and its parameter that keep a search inside one area's own polygon.
-
-    The polygon, not its bounding box: `grodno-district` surrounds the city of Grodno and
-    holds it as a hole, so a box would hand back the city's points to a district search.
+    """SQL and its parameter that keep a search inside one area's polygon, not its bounding
+    box: ``grodno-district`` holds the city of Grodno as a hole.
     """
     if not area:
         return "", []
@@ -165,34 +163,6 @@ class PostgresPlaceRepository(PostgresRepository):
         with self._cursor() as cur:
             cur.execute(sql, params)
             return [place_from_row(row) for row in cur.fetchall()]
-
-    def name_match(self, query: str, limit: int = 5) -> list[tuple[Place, float]]:
-        """Name-only trigram search, best first, with the similarity it scored."""
-        words = re.findall(r"[а-яёa-z]{2,}", query.lower())
-        if not words:
-            return []
-
-        conditions = " OR ".join(["name ILIKE %s OR name %%> %s"] * len(words))
-        word_sims = ["GREATEST(similarity(name, %s), word_similarity(%s, name))"] * len(words)
-        order_expr = "(" + ") + (".join(word_sims) + ")"
-
-        params: list[Any] = []
-        for word in words:
-            params.extend([f"%{word}%", word])
-        for word in words:
-            params.extend([word, word])
-        params.append(limit)
-
-        sql = f"""
-            SELECT {PLACE_SELECT}, ({order_expr}) AS _name_sim
-              FROM places
-             WHERE {conditions}
-             ORDER BY _name_sim DESC
-             LIMIT %s
-        """
-        with self._cursor() as cur:
-            cur.execute(sql, params)
-            return [(place_from_row(row), float(row["_name_sim"])) for row in cur.fetchall()]
 
     def by_alias(
         self,
@@ -311,14 +281,6 @@ class PostgresPlaceRepository(PostgresRepository):
             )
             return [int(row["id"]) for row in cur.fetchall()]
 
-    def category_of(self, ids: Sequence[int]) -> dict[int, str]:
-        """`{place_id: category}` for these ids — the avoid-filter reads it."""
-        if not ids:
-            return {}
-        with self._cursor() as cur:
-            cur.execute("SELECT id, category FROM places WHERE id = ANY(%s)", (list(ids),))
-            return {row["id"]: row["category"] for row in cur.fetchall()}
-
     def with_category(self, codes: Iterable[str], *, lat_lon_only: bool = False) -> list[Place]:
         """Places in these categories — the quality layer's reference set."""
         wanted = list(codes)
@@ -332,28 +294,6 @@ class PostgresPlaceRepository(PostgresRepository):
             )
             return [place_from_row(row) for row in cur.fetchall()]
 
-    def embeddings_by_ids(self, ids: Sequence[int]) -> dict[int, list[float]]:
-        """Vectors for the MMR diversity step; ids with no vector are skipped."""
-        if not ids:
-            return {}
-        with self._cursor() as cur:
-            cur.execute(
-                "SELECT id, embedding::text FROM places "
-                "WHERE id = ANY(%s) AND embedding IS NOT NULL",
-                (list(ids),),
-            )
-            out: dict[int, list[float]] = {}
-            for place_id, raw in cur.fetchall():
-                if isinstance(raw, str):
-                    try:
-                        out[place_id] = [float(x) for x in raw.strip("[]").split(",") if x.strip()]
-                    except ValueError:
-                        continue
-                else:
-                    arr = raw.tolist() if hasattr(raw, "tolist") else raw
-                    out[place_id] = list(arr)
-            return out
-
     def places_along(
         self,
         shape: dict[str, Any],
@@ -363,10 +303,8 @@ class PostgresPlaceRepository(PostgresRepository):
         max_off_line_m: float | None = None,
         limit: int = MAX_SERVICES,
     ) -> dict[str, Any]:
-        """Places of any named categories beside a route line, ordered along it.
-
-        The codes reach the line query as they are, whatever their role: a museum and a
-        café are measured the same way. Nothing here is a detour, only «beside the line».
+        """Places of any named categories beside a route line, ordered along it; role is
+        not consulted, and nothing here is a detour — only «beside the line».
         """
         return self._beside_line(
             shape,
@@ -377,6 +315,40 @@ class PostgresPlaceRepository(PostgresRepository):
             reason="no_category_codes",
         )
 
+    def nearby_many(
+        self,
+        points: Sequence[tuple[float, float]],
+        radius_km: float = 12.0,
+        limit_per_stop: int = 50,
+    ) -> list[Place]:
+        """Places near any of the points, nearest first within each point's own search."""
+        if not points:
+            return []
+        lats = [float(point[0]) for point in points]
+        lons = [float(point[1]) for point in points]
+        qualified = ", ".join(f"places.{column}" for column in PLACE_COLUMNS)
+        with self._cursor() as cur:
+            cur.execute(
+                f"""
+                SELECT {qualified}
+                  FROM unnest(%s::float8[], %s::float8[]) AS stops(lat, lon)
+                  CROSS JOIN LATERAL (
+                      SELECT * FROM places
+                       WHERE places.lat BETWEEN stops.lat - %s / 111.0
+                                            AND stops.lat + %s / 111.0
+                         AND places.lon BETWEEN stops.lon - %s
+                                                / (111.0 * GREATEST(0.2, cos(radians(stops.lat))))
+                                            AND stops.lon + %s
+                                                / (111.0 * GREATEST(0.2, cos(radians(stops.lat))))
+                       ORDER BY (places.lat - stops.lat) * (places.lat - stops.lat)
+                              + (places.lon - stops.lon) * (places.lon - stops.lon)
+                       LIMIT %s
+                  ) AS places
+                """,
+                (lats, lons, radius_km, radius_km, radius_km, radius_km, limit_per_stop),
+            )
+            return [place_from_row(row) for row in cur.fetchall()]
+
     def steps_along(
         self,
         shape: dict[str, Any],
@@ -385,11 +357,8 @@ class PostgresPlaceRepository(PostgresRepository):
         max_off_line_m: float | None = None,
         limit: int = MAX_STEPS_ON_ROUTE,
     ) -> dict[str, Any]:
-        """Stairways the drawn line runs over — the walk's own geometry, re-read.
-
-        The gate is the measured distance from the line to a stairway's own point, and
-        it is the same line query the services use; a normal walk keeps its stairways
-        off the line, so a hit means the route climbs one.
+        """Stairways the drawn line runs over, re-read from the walk's own geometry: a
+        normal walk keeps its stairways off the line, so a hit means the route climbs one.
         """
         gate = STEP_ON_LINE_M if max_off_line_m is None else max_off_line_m
         return self._beside_line(
@@ -538,7 +507,8 @@ class PostgresPlaceRepository(PostgresRepository):
             except psycopg.errors.UniqueViolation as exc:
                 raise DuplicateSourceError(str(fields.get("source_url"))) from exc
             row = cur.fetchone()
-        assert row is not None
+        if row is None:
+            raise StorageUnavailableError("insert returned no place row")
         return place_from_row(row)
 
     def update_place(self, place_id: int, fields: dict[str, Any]) -> Place | None:

@@ -1,14 +1,6 @@
-"""Fortifications and named boulders, re-read from the local extract.
-
-The corrected tag map (`osm_tags.sight_tag_to_category`) types `military=bunker`, a fort
-name, `natural=stone` and a bare `historic=ruins` differently from the Overpass snapshot
-`places_osm_raw.csv` holds: pillboxes sat in `замок`, named stones in `архитектура`, and
-a watermill's ruin read as a castle. This stage reads the extract once, re-derives each
-object's category, and writes the correction two ways — a sidecar
-(`place_categories.json`) that re-labels the rows the snapshot already holds, and a
-dataset (`places_finds.csv`) that adds the fortifications and boulders it never held.
-Run `python -m db.seed.finds --pbf <extract>` to regenerate both.
-"""
+"""Fortifications and named boulders, re-read from the local extract: this stage
+re-derives each object's category and writes both the sidecar that re-labels rows the
+snapshot already holds and the dataset that adds what it never held."""
 
 from __future__ import annotations
 
@@ -110,12 +102,8 @@ def element_to_row(element: dict[str, Any], category: str) -> Row | None:
 
 
 def collect_elements(pbf_path: Path) -> list[dict[str, Any]]:
-    """One C++-filtered pass over the extract, the elements in the order ``osm_tags`` maps.
-
-    ``KeyFilter`` runs in C++, so Python sees only objects carrying `historic`, `military`
-    or `natural` — the keys the two new categories and the ruins fall-through read. Node
-    locations are resolved for the ways' centres in a second filtered pass, never a
-    per-object Python callback over the whole file.
+    """One C++-filtered pass over the extract, with the ways' node locations resolved in
+    a second filtered pass rather than a per-object Python callback.
     """
     osmium: Any = _osmium()
     base = osmium.SimpleHandler
@@ -166,15 +154,9 @@ def collect_elements(pbf_path: Path) -> list[dict[str, Any]]:
 def split_objects(
     elements: Iterable[dict[str, Any]], existing: dict[str, dict[str, Any]]
 ) -> tuple[list[Row], list[dict[str, Any]]]:
-    """Re-derive every object's category, split into new rows and re-labelled rows.
-
-    An object the committed datasets already hold is a *correction* — the row keeps its
-    name, district and prose, and only its category changes; the category is part of the
-    text a vector was built from, so that row's vector is dropped and rebuilt. An object
-    they do not hold is a *row*, but only for the two new categories: the stage is not a
-    re-fetch, and inventing rows for every monastery the snapshot missed is what this
-    deliberately does not do.
-    """
+    """Re-derive each object's category: one already held is a correction that keeps its
+    name, district and prose and only changes category, and a new row is admitted only for
+    the two new categories. A changed category clears the row's vector."""
     rows: list[Row] = []
     corrections: list[dict[str, Any]] = []
     for element in elements:
@@ -245,13 +227,9 @@ def write_sidecar(entries: list[dict[str, Any]], path: Path) -> None:
 
 
 def held_records(data_dir: Path | None = None) -> dict[str, dict[str, Any]]:
-    """The rows the *other* datasets hold, keyed by source_url.
-
-    This stage's own dataset is left out: a second run would otherwise find the rows it
-    wrote last time already committed, count every one of them as a row the datasets hold,
-    and rewrite the file empty — and the next seed would apply that, pruning them from the
-    database. Its output is not evidence about what the data holds; every other dataset is.
-    """
+    """The rows the *other* datasets hold, keyed by ``source_url``; this stage's own
+    dataset is excluded, or a second run would count its output as evidence and rewrite
+    it empty."""
     datasets = default_datasets()
     if data_dir is not None:
         datasets = [ds.with_data_dir(data_dir) for ds in datasets]

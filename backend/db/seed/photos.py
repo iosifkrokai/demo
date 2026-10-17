@@ -23,6 +23,8 @@ from typing import Any
 
 import psycopg
 
+from core import constants
+from core.config import DEFAULT_DSN
 from core.paths import PHOTOS_DIR
 from db.connection import connect
 
@@ -30,7 +32,7 @@ BACKEND = Path(__file__).resolve().parent.parent
 HINTS = PHOTOS_DIR / "osm_photo_hints.json"
 OUT = PHOTOS_DIR / "place_photos.json"
 CACHE = Path(os.environ.get("PHOTO_CACHE", PHOTOS_DIR / "cache"))
-DSN = os.environ.get("DATABASE_URL", "postgresql://grodno:grodno@localhost:5432/grodno")
+DSN = os.environ.get("DATABASE_URL", DEFAULT_DSN)
 
 PBF = os.environ.get("OSM_PBF")
 
@@ -200,7 +202,7 @@ def haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
 
     dlat, dlon = radians(lat2 - lat1), radians(lon2 - lon1)
     a = sin(dlat / 2) ** 2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(dlon / 2) ** 2
-    return 2 * 6371000 * asin(sqrt(a))
+    return 2 * constants.EARTH_RADIUS_M * asin(sqrt(a))
 
 
 def page_meta(wiki: str, titles: list[str]) -> dict[str, dict[str, Any]]:

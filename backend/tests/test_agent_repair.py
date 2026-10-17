@@ -18,7 +18,7 @@ from agent.client import (
     _repair_note,
 )
 from agent.models import ReaderBrief, TripRequirements
-from agent.runner import _build_prompt
+from agent.runner import build_prompt
 from agent.schema import PlanningDeps, PlanSubmission
 from core import constants
 from routing.models import Requirement
@@ -182,9 +182,9 @@ def test_a_run_without_a_deadline_keeps_the_caller_budget() -> None:
 def test_the_repair_note_is_appended_to_the_prompt() -> None:
     brief = ReaderBrief(locale="ru")
 
-    base = _build_prompt("два часа пешком", brief)
+    base = build_prompt("два часа пешком", brief)
 
-    assert _build_prompt("два часа пешком", brief, repair="NOTE") == base + "\nNOTE"
+    assert build_prompt("два часа пешком", brief, repair="NOTE") == base + "\nNOTE"
 
 
 def _planner(monkeypatch, script: list[tuple[AgentOutcome | None, str | None]]) -> list[str | None]:

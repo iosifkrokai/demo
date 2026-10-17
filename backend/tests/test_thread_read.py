@@ -10,6 +10,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from agent import thread
+from api import deps
 from api.models.accounts import SESSION_COOKIE
 from api.routers import routes as routes_api
 from core.passwords import hash_token
@@ -87,7 +88,8 @@ def _app() -> tuple[TestClient, FakeThreadRepository]:
     app = FastAPI()
     app.include_router(routes_api.router)
     app.state.repos = SimpleNamespace(threads=repo)
-    app.state.users_repository = FakeUsers(hash_token(TOKEN_A), hash_token(TOKEN_B))
+    users = FakeUsers(hash_token(TOKEN_A), hash_token(TOKEN_B))
+    app.dependency_overrides[deps.get_user_repository] = lambda: users
     return TestClient(app), repo
 
 

@@ -28,15 +28,13 @@ def ui_requirements(brief: ReaderBrief) -> list[Requirement]:
     """Requirements the tourist set with a visible control (source="ui")."""
     out: list[Requirement] = []
     for code in brief.hard_services:
-        out.append(Requirement(kind="service", strength="hard", code=code, label=code, source="ui"))
+        out.append(Requirement(kind="service", strength="hard", code=code, source="ui"))
     for code in brief.interests:
-        out.append(
-            Requirement(kind="interest", strength="soft", code=code, label=code, source="ui")
-        )
+        out.append(Requirement(kind="interest", strength="soft", code=code, source="ui"))
     for code in brief.avoid:
-        out.append(Requirement(kind="avoid", strength="hard", code=code, label=code, source="ui"))
+        out.append(Requirement(kind="avoid", strength="hard", code=code, source="ui"))
     if "wheelchair" in brief.mobility:
-        out.append(Requirement(kind="step_free", strength="hard", label="step_free", source="ui"))
+        out.append(Requirement(kind="step_free", strength="hard", source="ui"))
     return out
 
 
@@ -103,12 +101,10 @@ def _reading_requirements(
                 kind=item.kind,
                 strength=item.strength,
                 code=code,
-                label=code or item.name or item.kind,
                 name=item.name if item.kind == "must_visit" else None,
                 place_id=place_id,
                 text=_verbatim(item.text, query),
                 source="text",
-                confidence=max(0.0, min(1.0, float(item.confidence))),
             )
         )
     return out, unsupported
@@ -141,7 +137,7 @@ def _unknowns(reading: PlanSubmission, unsupported: list[str], mobility: list[st
     return unknowns
 
 
-def _merge(
+def merge_contract(
     query: str,
     brief: ReaderBrief,
     reading: PlanSubmission,
@@ -180,12 +176,9 @@ def _merge(
 
     return TripRequirements(
         locale=brief.locale,
-        raw_query=query,
         party=party,
         budget_minutes=budget,
         costing=brief.profile or reading.profile or None,
-        origin_lat=brief.origin[0] if brief.origin is not None else None,
-        origin_lon=brief.origin[1] if brief.origin is not None else None,
         areas=areas,
         outside_coverage=_outside_names(reading.outside_coverage),
         result_mode=mode,
@@ -204,6 +197,3 @@ def _outside_names(raw: list[str]) -> list[str]:
         if cleaned and cleaned not in out:
             out.append(cleaned)
     return out
-
-
-__all__ = ["_merge", "_reading_requirements", "ui_requirements", "ui_used"]

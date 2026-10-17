@@ -1,4 +1,4 @@
-"""FastAPI agent: turns free-text Russian queries into pedestrian walking routes."""
+"""FastAPI agent: free-text queries to pedestrian walking routes."""
 
 from __future__ import annotations
 

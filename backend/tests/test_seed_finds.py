@@ -13,11 +13,9 @@ def _element(osm_id: int, lat: float, lon: float, **tags: str) -> dict[str, Any]
 
 
 def test_a_ruin_is_a_condition_and_does_not_type_the_object() -> None:
-    """`historic=ruins` alone said `замок`, which put pillboxes and mills in the castle.
+    """`historic=ruins` is a condition, not a type: bare ruins fall through to the catch-all.
 
-    A bare ruin, and a mill's ruin, fall through to the catch-all; a castle in ruins is
-    still a castle, so `historic=castle` and `building=castle` keep it.
-    """
+    A castle in ruins is still a castle, so `historic=castle` and `building=castle` keep it."""
     from db.seed.osm_tags import sight_tag_to_category
 
     assert sight_tag_to_category({"historic": "ruins"}) == "архитектура"
@@ -143,13 +141,13 @@ def test_a_new_row_outside_the_project_area_is_dropped() -> None:
 
 
 def test_the_committed_files_validate_as_the_new_dataset_and_sidecar() -> None:
-    from db.seed.datasets import default_datasets, load_dataset, validate_record
+    from db.seed.datasets import default_datasets, load_dataset
     from db.seed.finds import read_place_category_entries
 
     finds = next(ds for ds in default_datasets() if ds.name == "finds")
     rows = load_dataset(finds)
 
-    assert not any(validate_record(finds, row) for row in rows)
+    assert not any(finds.validator(row) for row in rows)
     assert {row["category"] for row in rows} <= {"укрепление", "валун"}
     entries = read_place_category_entries()
     assert entries, "the committed place_categories.json is empty"
@@ -157,11 +155,7 @@ def test_the_committed_files_validate_as_the_new_dataset_and_sidecar() -> None:
 
 
 def test_the_stage_does_not_read_its_own_dataset() -> None:
-    """A second run must not treat its last output as rows the datasets already hold.
-
-    It did, and the result was a silently emptied `places_finds.csv`: 60 rows the next
-    seed would have pruned from the database.
-    """
+    """A second run must not treat its last output as rows the datasets already hold."""
     from db.seed.datasets import default_datasets, load_dataset
     from db.seed.finds import held_records
 

@@ -16,10 +16,7 @@ router = APIRouter(tags=["health"])
 
 
 def _valhalla_ok() -> bool:
-    try:
-        return bool(valhalla_ping())
-    except Exception:
-        return False
+    return bool(valhalla_ping())
 
 
 @router.get("/health", response_model=HealthResponse)

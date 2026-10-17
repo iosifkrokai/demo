@@ -1,14 +1,6 @@
 """The Excel form a sender fills, built from the reply's JSON Schema and read back into it.
-
-The schema in ``db/data/external/v1/schema.json`` stays the contract: this renders it as a
-workbook — a sheet per repeating group, a drop-down per dictionary — and turns a filled
-workbook back into the document, so the two cannot drift.
-
-Run it with the tools it needs, which are not service dependencies:
-
-    uv run --with openpyxl --with jsonschema python -m db.external_form build
-    uv run --with openpyxl --with jsonschema python -m db.external_form read form.xlsx
-"""
+The schema in ``db/data/external/v1/schema.json`` stays the contract; run with
+``uv run --with openpyxl --with jsonschema python -m db.external_form build``."""
 
 from __future__ import annotations
 

@@ -9,7 +9,7 @@ from typing import Any, get_args
 
 import pytest
 
-from agent.mapping import _merge
+from agent.mapping import merge_contract
 from agent.models import ReaderBrief
 from agent.schema import PlanSubmission
 from api.models.routes import TransportLiteral
@@ -30,7 +30,7 @@ def _candidate(pid: int, lat: float, lon: float) -> Candidate:
 def _contract(brief_profile: str | None, submitted_profile: str) -> Any:
     brief = ReaderBrief(locale="ru", profile=brief_profile)
     submission = PlanSubmission(profile=submitted_profile)
-    return _merge("прогулка", brief, submission, set(), None)
+    return merge_contract("прогулка", brief, submission, set(), None)
 
 
 def test_the_tourists_transport_beats_the_models_guess() -> None:
@@ -46,7 +46,8 @@ def test_the_models_transport_stands_only_when_no_control_was_used() -> None:
 
 def _mode(brief_mode: str | None, outcome: str | None) -> str:
     brief = ReaderBrief(locale="ru", result_mode=brief_mode)
-    return _merge("прогулка", brief, PlanSubmission(outcome=outcome), set(), None).result_mode
+    contract = merge_contract("прогулка", brief, PlanSubmission(outcome=outcome), set(), None)
+    return contract.result_mode
 
 
 def test_a_result_mode_the_tourist_chose_beats_the_models_reading() -> None:
@@ -62,7 +63,8 @@ def test_a_result_mode_nobody_chose_is_the_models_to_read() -> None:
 
 def _step_free(mobility: tuple[str, ...]) -> bool:
     brief = ReaderBrief(locale="ru", mobility=mobility)
-    return bool(_merge("прогулка", brief, PlanSubmission(), set(), None).of_kind("step_free"))
+    contract = merge_contract("прогулка", brief, PlanSubmission(), set(), None)
+    return bool(contract.of_kind("step_free"))
 
 
 def test_the_wheelchair_control_is_a_step_free_route_not_only_a_note() -> None:
@@ -75,7 +77,7 @@ def test_the_wheelchair_control_is_a_step_free_route_not_only_a_note() -> None:
 def test_the_wheelchair_control_still_admits_what_is_not_proven() -> None:
     """Step-free is measured along the line; a barrier-free entrance is not."""
     brief = ReaderBrief(locale="ru", mobility=("wheelchair",))
-    contract = _merge("прогулка", brief, PlanSubmission(), set(), None)
+    contract = merge_contract("прогулка", brief, PlanSubmission(), set(), None)
 
     assert "wheelchair_accessible" in contract.unknowns
 
@@ -117,7 +119,7 @@ def test_the_leg_rule_follows_the_costing_not_the_word() -> None:
 
 
 def test_a_bicycle_leg_is_capped_by_riding_distance_not_by_the_budget() -> None:
-    """A bicycle used to get the driven rule: one leg could be the whole budget."""
+    """A bicycle leg is capped by riding distance, not by the time budget."""
     ride = (constants.BICYCLE_LEG_KM / constants.BICYCLE_SPEED_KMH) * 3600
     longest = constants.MAX_BUDGET_MIN * 60
 

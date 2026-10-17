@@ -1,11 +1,4 @@
-"""Stairways for the places catalogue, read from the local OSM extract.
-
-The catalogue holds three of the infrastructure sheet's objects; this stage seeds the
-stairways (`highway=steps`) from a PBF into a versioned dataset, the way
-`aliases_en.py` reads `name:en`. A stairway is a `service`: something the walk passes
-and the router may one day avoid (roadmap item 5), not a stop. Run
-`python -m db.seed.steps --pbf <extract>` to regenerate `places_steps.csv`.
-"""
+"""Stairways from the local OSM extract, seeded as services rather than stops."""
 
 from __future__ import annotations
 
@@ -36,10 +29,8 @@ Row = dict[str, str | None]
 
 
 def _osmium() -> Any:
-    """Import pyosmium on demand — it is not a declared dependency.
-
-    A checkout that only applies the written CSV still imports this module; only
-    regenerating the file needs the extract reader installed in the venv.
+    """Import pyosmium on demand — not a declared dependency, so applying the written CSV
+    needs no extract reader.
     """
     try:
         return importlib.import_module("osmium")
@@ -71,11 +62,7 @@ def facts_of(tags: dict[str, str]) -> list[str]:
 
 
 def element_to_row(element: dict[str, Any]) -> Row | None:
-    """One OSM element → a 14-column places row, or None when it is not a stairway here.
-
-    The name is what OSM holds and nothing else: an unnamed stairway stays unnamed
-    (roadmap item 3), so no generated «Лестница» label is invented for it.
-    """
+    """One OSM element → a 14-column places row, or None when it is not a stairway here."""
     tags = element.get("tags") or {}
     if tags.get("highway") != "steps":
         return None
@@ -117,11 +104,8 @@ def _osm_id(source_url: str) -> int:
 
 
 def collect_rows(pbf_path: Path) -> list[Row]:
-    """One filtered pass over the extract, the rows ordered by OSM id for a stable file.
-
-    ``KeyFilter`` runs in C++, so Python sees only the ways tagged `highway=steps`, and
-    the node locations are read for those ways' centres. The order the handler returns is
-    heap order, so the rows are sorted by id — the file must not depend on it.
+    """One filtered pass over the extract, rows sorted by OSM id so the file does not depend
+    on the handler's heap order.
     """
     osmium: Any = _osmium()
     base = osmium.SimpleHandler

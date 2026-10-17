@@ -14,6 +14,8 @@ from typing import Any
 
 import httpx
 
+from core import constants
+
 from .datasets import BBOX
 from .districts import district_at
 
@@ -94,7 +96,7 @@ _ATTEMPTS = 4
 
 def haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     """Metres between two lat/lon points."""
-    earth_radius_m = 6371000
+    earth_radius_m = constants.EARTH_RADIUS_M
     phi1, phi2 = math.radians(lat1), math.radians(lat2)
     dphi = math.radians(lat2 - lat1)
     dlam = math.radians(lon2 - lon1)
@@ -106,17 +108,9 @@ def fill_town_names(
     rows: list[dict[str, Any]],
     resolve: Callable[[str], str | None],
 ) -> dict[str, int]:
-    """Replace a Belarusian ``town`` with the Russian one, when the mapping knows it.
-
-    ``addr:city`` in OSM is Belarusian («Гродна», «Слонім») while the product speaks
-    Russian, so the card would show the wrong language. The mapping is a committed file
-    (`db/data/town_names.json`), not a geocoder: reverse geocoding answers the same
-    question but needs a network pass per value, and a village translated by guesswork is
-    a wrong fact on a card.
-
-    ``resolve`` is injected so this is testable offline. A value the mapping does not
-    know is left exactly as it was — and counted, so the gap stays visible.
-    """
+    """Replace a Belarusian ``town`` with the Russian one when the committed mapping knows
+    it; a value it does not know is left alone and counted. ``resolve`` is injected so the
+    stage is testable offline."""
     translated = kept = 0
     for row in rows:
         town = str(row.get("town") or "").strip()
@@ -150,18 +144,9 @@ def resolve_district(lat: float, lon: float, tags: dict[str, str]) -> str:
 def fill_districts(
     rows: list[dict[str, Any]], previous: Mapping[str, str] | None = None
 ) -> dict[str, int]:
-    """Give every row a district, offline.
-
-    The Overpass rows carry no ``addr:district`` on these objects, so the committed
-    boundary answers first: it is the only source that knows where a border runs, and a
-    snapshot carried from an older fetch may hold the nearest-centre answer that boundary
-    has since corrected. Outside every boundary the previous snapshot is the best evidence
-    left — an exact match on ``source_url`` keeps the district it already had — and a
-    genuinely new point falls back to the raion whose centre is nearest.
-
-    A re-fetch that skipped this would write ``district: ""`` over every sight, which is
-    why it runs before the file is written. Returns the counts for the fetch report.
-    """
+    """Give every row a district offline: the committed boundary first, the previous
+    snapshot's district for a point outside it, else the nearest raion. It must run before
+    the file is written or a re-fetch blanks the column."""
     known = previous or {}
     carried = derived = 0
     for row in rows:

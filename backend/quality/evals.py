@@ -182,9 +182,7 @@ def _service_checks(
 ) -> tuple[list[dict[str, Any]], int]:
     """Every check one services_along case makes of its own response.
 
-    ``service_codes`` is the taxonomy's own list, as the API hands it in: without it
-    the store rejects every requested code and answers an empty catalogue of services.
-    """
+    ``service_codes`` must be the taxonomy's own, or the store answers an empty catalogue."""
     checks: list[dict[str, Any]] = []
     raw = case.raw
     shape = raw["shape"]
@@ -515,10 +513,7 @@ def _covered(stops: list[Any], rows: list[dict[str, Any]]) -> int:
 def _held(repos: Any, name: str) -> Any | None:
     """The row the corpus keeps under this exact name, or None.
 
-    The case files are Wikivoyage walks: their coordinates and names are their author's,
-    and a third of the stops either match nothing we hold or sit hundreds of metres from
-    our row. Only the name can say whether the stop tests the search at all.
-    """
+    The case coordinates are the walk author's; only an exact name identifies a stop."""
     wanted = name.strip().lower()
     for place in repos.places.keyword_search(name, limit=20):
         if place.name.strip().lower() == wanted:

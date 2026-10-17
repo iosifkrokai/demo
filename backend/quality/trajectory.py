@@ -220,9 +220,7 @@ def _script_steps(case: dict[str, Any], ids: list[int]) -> list[ModelResponse]:
 def _record_args(fn: Any, args: tuple[Any, ...], kwargs: dict[str, Any]) -> dict[str, Any]:
     """The named arguments of a tool call, plumbing (repos/facts) left out.
 
-    A request object taken as a single argument is recorded as its own fields: those
-    are what the agent passed, and an envelope of ours is not an argument of anyone's.
-    """
+    A request object passed alone is recorded as its own fields, not as an envelope."""
     try:
         bound = inspect.signature(fn).bind(*args, **kwargs)
     except TypeError:

@@ -15,9 +15,7 @@ SCAN = 200
 def _stops(repos, count: int = 4) -> list[RerouteStop]:
     """Hand-picked stops near one another, taken from the catalogue, not a model.
 
-    Sights only: the planner does not stop at a service, so a set of cafés would come
-    back as no walk at all. The old town's nearest rows are mostly services.
-    """
+    Sights only: the planner does not stop at a service, and the nearest rows are mostly them."""
     from routing.models import CategoryFacts
 
     facts = CategoryFacts.from_rows(repos.taxonomy.all())
@@ -165,10 +163,9 @@ def test_a_body_carrying_two_lists_is_refused() -> None:
 
 
 def test_the_matrix_agrees_with_the_line_that_gets_drawn(db_repos) -> None:
-    """The matrix is the currency of every rule — the order, the budget, whether a
-    walk fits — and the drawn line is what the tourist actually walks. When the two
-    disagree, the rules are being decided on numbers nobody will ever walk.
-    """
+    """The matrix is the currency of every rule, and the drawn line is what the tourist walks.
+
+    When the two disagree, the rules are decided on numbers nobody will ever walk."""
     from routing.render import render
     from routing.stops import candidate_of
     from routing.valhalla.matrix import time_matrix

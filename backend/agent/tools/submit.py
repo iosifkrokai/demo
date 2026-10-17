@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from agent.schema import PlanSubmission
-from agent.tools import envelope
+from agent.tools._shared import envelope
 from agent.tools.places import card_of, catalogue_rows
 from agent.tools.plan import plan_walk
 from agent.tools.verify import verdicts_of
+from db.store.errors import StorageUnavailableError
 from routing.models import TripRequirements, WalkRequest
 from routing.stops import candidate_of
 from routing.verify import (
@@ -17,6 +18,9 @@ from routing.verify import (
     verify,
     verify_catalogue,
 )
+
+if TYPE_CHECKING:
+    from db.store.registry import Repositories
 
 MAX_SERVICES_MEASURED = 24
 
@@ -35,7 +39,9 @@ def _problems(verdicts: list[dict[str, Any]]) -> list[dict[str, str]]:
     ]
 
 
-def _evidence(repos: Any, contract: TripRequirements, shape: Any) -> ServiceAlongEvidence | None:
+def _evidence(
+    repos: Repositories | None, contract: TripRequirements, shape: Any
+) -> ServiceAlongEvidence | None:
     """Measure the services beside the line, for the codes the request named."""
     codes = _named_codes(contract)
     if not codes or not shape or repos is None:
@@ -47,7 +53,7 @@ def _evidence(repos: Any, contract: TripRequirements, shape: Any) -> ServiceAlon
             service_category_codes=repos.taxonomy.service_codes(),
             limit=MAX_SERVICES_MEASURED,
         )
-    except Exception:
+    except StorageUnavailableError:
         return ServiceAlongEvidence(measured=False, by_code={})
     by_code: dict[str, list[dict[str, Any]]] = {}
     for item in answer.get("items", []):
@@ -72,17 +78,14 @@ def measure_submission(
     request: WalkRequest,
     submission: PlanSubmission,
     *,
-    repos: Any,
+    repos: Repositories | None,
     facts: Any,
     contract: TripRequirements,
     deadline_s: float | None = None,
 ) -> dict[str, Any]:
-    """Measure and verify the finished plan; the status is code's, not the model's.
-
-    The verdicts are read off the route that was measured, not off the ids that were
-    asked for: the planner drops stops — a budget too small for the walk, a point
-    nothing reaches, a service that is not a stop — and a requirement proved by a stop
-    the walk does not contain would be a satisfied nobody can see.
+    """Measure and verify the finished plan; the status is code's, not the model's. Verdicts
+    are read off the route that was measured, not the ids that were asked for: a requirement
+    proved by a stop the walk does not contain would be a satisfied nobody can see.
     """
     result_mode = contract.result_mode
     narrative = submission.narrative

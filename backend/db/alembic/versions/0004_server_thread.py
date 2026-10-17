@@ -1,22 +1,4 @@
-"""the server-side thread: a journal of planning turns
-
-A refinement used to be a snapshot the client re-sent on every turn, with no
-server record of what had come before. These two tables give the server its own
-memory of a run: `threads` is the run session, and `turns` is one row per
-exchange — the query, the submission the agent proposed, and the measurement the
-tools returned.
-
-`revision` is a per-thread sequence the store mints against the rows already
-present, and `(thread_id, revision)` is the key, so a turn is addressed by number
-and the journal has no gaps. The JSON columns hold the submission and the
-measurement whole, so a turn replays without re-planning it. Turns cascade with
-their thread: a thread has no meaning without them.
-
-Revision ID: 0004_server_thread
-Revises: 0003_drop_anonymous_client
-Create Date: 2026-10-12
-
-"""
+"""The server-side thread: threads and turns."""
 
 from __future__ import annotations
 
@@ -50,8 +32,6 @@ def upgrade() -> None:
         )
         """
     )
-    # The key already serves `WHERE thread_id = ?`; the index makes the
-    # `ORDER BY revision DESC LIMIT 1` of `latest` a seek rather than a sort.
     op.execute(
         "CREATE INDEX IF NOT EXISTS turns_thread_revision_ix ON turns (thread_id, revision DESC)"
     )

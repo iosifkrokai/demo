@@ -1,8 +1,6 @@
 """A renamed row must lose the vector that spells its old name.
 
-`embed_missing` only ever fills `embedding IS NULL`, so a writer that changes the text a
-vector was built from has to clear it in the same statement — otherwise the row keeps
-matching a name it no longer has, and no later seed ever repairs it.
+`embed_missing` only fills `embedding IS NULL`, so the writer must clear it in the same statement.
 """
 
 from __future__ import annotations

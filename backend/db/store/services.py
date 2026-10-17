@@ -24,11 +24,10 @@ MAX_STEPS_ON_ROUTE = 50
 
 STEP_ON_LINE_M = 1.0
 
-_PROFILE_ALIASES: dict[str, str] = {
+_SERVICE_PROFILE: dict[str, str] = {
     "pedestrian": "pedestrian",
     "bicycle": "bicycle",
     "auto": "car",
-    "car": "car",
     "truck": "car",
     "bus": "car",
     "motorcycle": "car",
@@ -41,16 +40,13 @@ def threshold_for(profile: str, max_off_line_m: float | None = None) -> float:
     """How far off the line this profile is willing to go, in metres."""
     if max_off_line_m is not None:
         return float(max_off_line_m)
-    key = _PROFILE_ALIASES.get(profile, DEFAULT_PROFILE)
+    key = _SERVICE_PROFILE.get(constants.normalize_transport(profile), DEFAULT_PROFILE)
     return MAX_OFF_LINE_M[key]
 
 
 def service_codes(categories: Iterable[str] | None, known: Sequence[str]) -> list[str]:
-    """The categories a service request means, given the taxonomy's default list.
-
-    ``known`` is the highlighted service list the repository hands in, so no categories
-    named means exactly those — a stairway is a service the taxonomy does not highlight
-    and this default does not show.
+    """The categories a service request means; ``None`` means exactly the highlighted
+    ``known`` list, so a stairway the taxonomy does not highlight is not shown by default.
     """
     allowed = set(known)
     if categories is None:

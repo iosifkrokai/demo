@@ -1,4 +1,4 @@
-"""Reading `data/taxonomy.csv` — the seed's view of the taxonomy."""
+"""Reading `db/data/taxonomy.csv` — the seed's view of the taxonomy."""
 
 from __future__ import annotations
 

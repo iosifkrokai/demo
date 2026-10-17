@@ -68,7 +68,7 @@ def plan_with_agent(
         return None
     if not available():
         log.info("agent_plan: agent unavailable (no key/model) — no planner")
-        runner._record_model_failure("agent_unavailable", runner._build_prompt(text, brief))
+        runner.record_model_failure("agent_unavailable", runner.build_prompt(text, brief))
         return None
 
     deps = _deps(brief, repos, wall_clock_s)
@@ -106,7 +106,7 @@ def _attempt(
     submission, failure = _submission(query, brief, deps, wall_clock_s, repair=repair)
     if submission is None:
         return None, failure
-    contract = mapping._merge(query, brief, submission, deps.observed_ids, deps.repos)
+    contract = mapping.merge_contract(query, brief, submission, deps.observed_ids, deps.repos)
     contract.at = deps.now
     contract.at_chosen = deps.at_chosen
     if submission.outcome == "refuse":
@@ -239,7 +239,7 @@ def _submission(
 ) -> tuple[PlanSubmission | None, str | None]:
     """The model's answer, or None with the reason already logged."""
     try:
-        submission, failure = runner._run_agent(
+        submission, failure = runner.run_agent(
             query, brief, deps, wall_clock_s=wall_clock_s, repair=repair
         )
     except Exception as exc:

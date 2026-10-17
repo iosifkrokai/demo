@@ -104,9 +104,8 @@ def test_snap_radii_start_broad_and_widen() -> None:
 
 
 def test_the_matrix_asks_without_a_radius_first() -> None:
-    """A radius lets the engine pick the cheapest edge within reach rather than the
-    nearest one, which folds two places on one street onto a single edge and turns a
-    ninety-metre walk into no time at all. It is a last resort, not a starting point.
+    """A radius lets the engine pick the cheapest edge, folding two places on one street
+    onto a single edge; it is a last resort, not a starting point.
     """
     assert valhalla.MATRIX_SNAP_RADII_M[0] is None
     assert list(valhalla.MATRIX_SNAP_RADII_M[1:]) == sorted(valhalla.MATRIX_SNAP_RADII_M[1:])
@@ -228,9 +227,7 @@ def _street_stops(count: int) -> list[Candidate]:
 def _line_cost(positions: list[int], step_s: float = 120.0) -> tuple[CostMatrix, float]:
     """A matrix along one street, candidate `i` standing at `positions[i]` steps in.
 
-    Nothing beats walking a street end to end, so the best order is known without
-    enumerating anything: it is the street order, and it costs the whole span.
-    """
+    The best order is the street order, so it costs the whole span without enumeration."""
     n = len(positions)
     walk = [[abs(positions[i] - positions[j]) * step_s for j in range(n)] for i in range(n)]
     anchor = OriginAnchor(
@@ -271,10 +268,7 @@ def test_a_polish_reaches_the_order_an_exhaustive_search_would() -> None:
 
 
 def test_the_optimizer_does_not_leave_a_walk_to_be_improved() -> None:
-    """Eight stops is past the point of enumeration, so this is the branch a real
-    refinement takes: regret insertion seeds the order from the stops that must stay
-    and, until the polish, that seed was the answer it returned.
-    """
+    """Eight stops is past enumeration: the refine branch must reach the street order's cost."""
     stops = _street_stops(8)
     cost, best = _line_cost([3, 7, 0, 5, 2, 6, 1, 4])
     problem = WalkProblem(stops, cost, ResolvedConstraints(time_budget_minutes=None))

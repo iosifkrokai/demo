@@ -170,10 +170,7 @@ def test_a_real_duplicate_still_fails_beside_an_excluded_pair() -> None:
 def test_the_exception_list_parses_and_names_distinct_pairs() -> None:
     """The list is a reviewable file: every entry is two distinct normalised names.
 
-    The count is pinned so a pair cannot be declared without someone seeing the number
-    move: 6 after the 2026-10-14 review, 17 after the curated walks printed eleven more
-    on 2026-10-15.
-    """
+    The count is pinned so a new pair cannot be declared unnoticed."""
     exceptions = duplicate_exceptions()
 
     assert len(exceptions) == 17

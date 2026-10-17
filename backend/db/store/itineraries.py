@@ -55,7 +55,7 @@ def _split_by_role(
     for payload in payloads:
         try:
             is_service = taxonomy.role(payload["category"]) == "service"
-        except Exception:
+        except KeyError:
             is_service = False
         (services if is_service else stops).append(payload)
     return stops, services

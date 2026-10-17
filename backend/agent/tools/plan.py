@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, replace
-from typing import Annotated, Any
+from typing import TYPE_CHECKING, Annotated, Any
 
 from pydantic import Field
 from pydantic_ai import RunContext
 
 from agent.schema import PlanningDeps
-from agent.tools import (
+from agent.tools._shared import (
     ERR_BAD_ARGUMENT,
     ERR_DB_UNAVAILABLE,
     ToolAnswer,
@@ -37,13 +37,16 @@ from routing.valhalla.constants import costing_for, costing_options_for
 from routing.valhalla.types import RouteStatus
 from routing.validate import validate
 
+if TYPE_CHECKING:
+    from db.store.registry import Repositories
+
 MAX_STOPS_PER_CALL = constants.VALHALLA_MAX_LOCATIONS
 
 log = logging.getLogger(__name__)
 
 
 def _measure_key(request: WalkRequest, *, data_version: str, regime: str = "order") -> str:
-    """The identity of one measurement: the stops, the profile and the budget."""
+    """Every input that changes a measurement's numbers, in cache-key form."""
     origin = request.origin
     where = f"{origin.lat:.6f},{origin.lon:.6f}" if origin is not None else "-"
     keep = ",".join(str(i) for i in sorted(request.must_keep_ids or []))
@@ -70,7 +73,7 @@ def _order_regime(deadline_s: float | None, origin: LatLon | None) -> str:
     return "order" if room and origin is None else "noorder"
 
 
-def _data_version(repos: Any) -> str:
+def _data_version(repos: Repositories | None) -> str:
     """The projection's content version, or "" when it cannot be read."""
     datasets = getattr(repos, "datasets", None)
     if datasets is None:
@@ -81,10 +84,12 @@ def _data_version(repos: Any) -> str:
         return ""
 
 
-def _facts(repos: Any, facts: CategoryFacts | None) -> CategoryFacts:
+def _facts(repos: Repositories | None, facts: CategoryFacts | None) -> CategoryFacts:
     """The taxonomy as a value — built from the repository when not handed one."""
     if facts is not None:
         return facts
+    if repos is None:
+        return CategoryFacts()
     return CategoryFacts.from_rows(repos.taxonomy.all())
 
 
@@ -105,10 +110,8 @@ def _stop(card: Any, visit_minutes: int) -> dict[str, Any]:
 def _stops_and_services(
     candidates: list[Candidate], taxonomy: CategoryFacts, keep: set[int]
 ) -> tuple[list[Candidate], list[Candidate]]:
-    """Split the candidates into the stops of the walk and the services beside it.
-
-    A service is a place the walk rests at, not a sight of it, so it is not a stop —
-    unless the request pinned it by id, which is a person saying they want to go there.
+    """A service is where the walk rests, not a sight of it, so it is not a stop — unless the
+    request pinned it by id, which is a person saying they want to go there.
     """
     stops: list[Candidate] = []
     services: list[Candidate] = []
@@ -124,7 +127,7 @@ def _stops_and_services(
 class MeasureSetup:
     """What a measurement needs besides the stops and the request itself."""
 
-    repos: Any
+    repos: Repositories | None
     provenance: dict[str, Any]
     facts: CategoryFacts | None = None
     preserve_order: bool = False
@@ -136,13 +139,9 @@ def measure_candidates(
     request: WalkRequest,
     setup: MeasureSetup,
 ) -> dict[str, Any]:
-    """Order — unless told not to — and measure stops the caller already holds.
-
-    Takes stops rather than ids, because a client holds points that are not in the
-    catalogue. `preserve_order` makes its order the answer: nothing reorders it and
-    nothing is dropped to fit a budget — a walk that no longer fits says so instead.
-    A service — a café, a hotel — is where the walk passes, not where it stops: it is
-    dropped here unless the request asked for it by name, and the drop is reported.
+    """Order, unless told not to, and measure stops the caller already holds rather than ids:
+    a client holds points outside the catalogue. ``preserve_order`` keeps its order and drops
+    nothing for the budget; a service is dropped unless named, and the drop is reported.
     """
     costing = costing_for(request.profile)
     options = costing_options_for(request.profile, request.step_free)
@@ -234,7 +233,7 @@ def measure_candidates(
 def plan_walk(
     request: WalkRequest,
     *,
-    repos: Any,
+    repos: Repositories | None,
     facts: CategoryFacts | None = None,
     deadline_s: float | None = None,
 ) -> dict[str, Any]:

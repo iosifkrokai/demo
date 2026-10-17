@@ -133,8 +133,8 @@ class Place(BaseModel):
     lon: float
     blurb: str | None = None
     fun_fact: str | None = None
-    fun_facts: list[str] = []
-    links: list[dict[str, Any]] = []
+    fun_facts: list[str] = Field(default_factory=list)
+    links: list[dict[str, Any]] = Field(default_factory=list)
     photo: Photo | None = None
     visit_minutes: int | None = None
     opening_hours: str | None = None
@@ -145,8 +145,7 @@ class Place(BaseModel):
 
 
 class ParsedQuery(BaseModel):
-    keywords: list[str] = []
-    categories: list[str] = []
+    categories: list[str] = Field(default_factory=list)
     time_budget_minutes: int | None = None
     source: Literal["agent", "explicit"] = "agent"
 
@@ -230,7 +229,7 @@ class RouteResponse(BaseModel):
     result_mode: Literal["route", "catalogue"] = "route"
     budget: BudgetInfo | None = None
     explanation: str | None = None
-    status: str | None = None
+    status: OverallStatus | None = None
     requirements: list[dict[str, Any]] | None = None
     interpretation: Interpretation | None = None
     costing: str | None = None
@@ -260,7 +259,6 @@ class ThreadResponse(BaseModel):
 
 class RerouteStop(BaseModel):
     """One stop the client is showing: a place it found, a point it placed, or both.
-
     `key` is the client's own name for it, echoed back in the order it was measured.
     """
 
@@ -315,7 +313,6 @@ class ServicesAlongReq(BaseModel):
     categories: list[str] | None = Field(default=None, max_length=8)
     max_off_line_m: float | None = Field(default=None, ge=10, le=1500)
     limit: int | None = Field(default=None, ge=1, le=20)
-    session_id: str | None = Field(default=None, max_length=128)
 
 
 class RouteProgressOut(BaseModel):

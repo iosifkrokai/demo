@@ -1,4 +1,4 @@
-"""Reading `data/itineraries.json` — the seed's view of the curated walks."""
+"""Reading `db/data/itineraries.json` — the seed's view of the curated walks."""
 
 from __future__ import annotations
 

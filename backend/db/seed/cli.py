@@ -11,6 +11,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from core.config import DEFAULT_DSN
 from core.paths import (
     GEO_DIR,
     PHOTOS_DIR,
@@ -33,8 +34,6 @@ from .datasets import (
     collect_records,
     read_curated,
 )
-
-DEFAULT_DSN = "postgresql://grodno:grodno@localhost:5432/grodno"
 
 
 def _dsn(args: argparse.Namespace) -> str:
@@ -61,7 +60,7 @@ def _count_by(rows: list[dict[str, Any]], key: str) -> dict[str, int]:
 
 
 def _write_registries(conn: Any, *, areas: bool) -> dict[str, Any]:
-    """Write what is not a row of a dataset: the places' declared aliases and the taxonomies."""
+    """Write the registries and sidecars that are not dataset rows."""
     from . import pipeline
 
     written: dict[str, Any] = {"areas_written": 0}
@@ -223,10 +222,8 @@ def _drop_excluded_names(rows: list[dict[str, Any]]) -> tuple[list[dict[str, Any
 
 
 def _previous_districts(path: Path) -> dict[str, str]:
-    """``source_url → district`` from the snapshot the fetch is about to replace.
-
-    Read before writing, so a re-fetch keeps the districts already resolved instead of
-    blanking the column (`overpass.fill_districts`).
+    """``source_url → district`` from the snapshot about to be replaced, read before
+    writing so a re-fetch keeps the districts already resolved.
     """
     if not path.is_file():
         return {}

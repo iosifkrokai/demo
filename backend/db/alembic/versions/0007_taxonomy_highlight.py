@@ -1,16 +1,4 @@
-"""whether a service category is highlighted beside a route by default
-
-The default highlight was "every role=service category", so seeding stairways would
-have shown 1500 stairs instead of cafés and toilets (roadmap item 7). This column
-names the categories the default shows; the coordinates live in `taxonomy.csv`, which
-the seed projects, and the five services the catalogue already shipped with are set
-here so a live database needs no re-seed.
-
-Revision ID: 0007_taxonomy_highlight
-Revises: 0006_place_is_free
-Create Date: 2026-10-14
-
-"""
+"""Add categories.highlight."""
 
 from __future__ import annotations
 

@@ -10,6 +10,7 @@ from api import deps
 from api.models.accounts import (
     REASON_INVALID_REQUEST,
     REASON_LAST_ADMIN,
+    REASON_NOT_AUTHENTICATED,
     REASON_PLACE_NOT_FOUND,
     REASON_SELF_DELETE,
     REASON_SELF_ROLE,
@@ -32,7 +33,7 @@ from api.models.accounts import (
 from db.store.errors import DuplicateSourceError
 from db.store.mappers import place_payload
 from db.store.places import PostgresPlaceRepository
-from db.store.stats import StatsRepository
+from db.store.stats import PostgresStatsRepository
 from db.store.users import UserRepository
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -54,9 +55,8 @@ def admin_list_users(
 
 
 def _target_or_error(user_id: str, repo: UserRepository) -> tuple[Any, Any]:
-    """The user this request names, or the 404 that says there is no such user.
-
-    A malformed uuid and an unknown one are the same answer.
+    """The user this request names, or the 404 that says there is no such user; a malformed
+    uuid and an unknown one are the same answer.
     """
     target_id = deps.parse_uuid(user_id)
     target = repo.get_user(target_id) if target_id is not None else None
@@ -89,7 +89,8 @@ def admin_patch_user(
     actor, err = deps.require_admin(request, repo)
     if err is not None:
         return err
-    assert actor is not None
+    if actor is None:
+        return deps.error(401, REASON_NOT_AUTHENTICATED)
     target, err = _target_or_error(user_id, repo)
     if err is not None:
         return err
@@ -122,7 +123,8 @@ def admin_delete_user(
     actor, err = deps.require_admin(request, repo)
     if err is not None:
         return err
-    assert actor is not None
+    if actor is None:
+        return deps.error(401, REASON_NOT_AUTHENTICATED)
     target, err = _target_or_error(user_id, repo)
     if err is not None:
         return err
@@ -220,7 +222,7 @@ def admin_delete_place(
 def admin_stats(
     request: Request,
     repo: Annotated[UserRepository, Depends(deps.get_user_repository)],
-    stats: Annotated[StatsRepository, Depends(deps.get_stats_repository)],
+    stats: Annotated[PostgresStatsRepository, Depends(deps.get_stats_repository)],
 ) -> Any:
     _, err = deps.require_admin(request, repo)
     if err is not None:

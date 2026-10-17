@@ -60,7 +60,7 @@ class Photo(BaseModel):
 
 
 class ResolvedConstraints(BaseModel):
-    must_visit_ids: list[int] = []
+    must_visit_ids: list[int] = Field(default_factory=list)
     time_budget_minutes: int | None = 120
     round_trip: bool = False
     origin: LatLon | None = None
@@ -76,8 +76,8 @@ class Candidate(BaseModel):
     lon: float
     blurb: str | None = None
     fun_fact: str | None = None
-    fun_facts: list[str] = []
-    links: list[dict[str, Any]] = []
+    fun_facts: list[str] = Field(default_factory=list)
+    links: list[dict[str, Any]] = Field(default_factory=list)
     photo: Photo | None = None
     opening_hours: str | None = None
     ticket_price: str | None = None
@@ -86,23 +86,22 @@ class Candidate(BaseModel):
     district: str | None = None
     visit_minutes_db: int | None = None
     relevance: float = 0.0
-    rrf_score: float = 0.0
 
 
 class OriginAnchor(BaseModel):
     """The tourist's own position as a leg endpoint, measured beside the matrix
     rather than as a row of it: the origin is not a stop and has no index."""
 
-    from_origin: list[float] = []
-    to_origin: list[float] = []
+    from_origin: list[float] = Field(default_factory=list)
+    to_origin: list[float] = Field(default_factory=list)
 
 
 class CostMatrix(BaseModel):
     """Walk cost matrix + per-place visit times, and the origin's own legs."""
 
-    walk_seconds: list[list[float]] = []
-    visit_minutes: list[int] = []
-    indices: list[int] = []
+    walk_seconds: list[list[float]] = Field(default_factory=list)
+    visit_minutes: list[int] = Field(default_factory=list)
+    indices: list[int] = Field(default_factory=list)
     anchor: OriginAnchor | None = None
 
 
@@ -199,22 +198,16 @@ class Requirement(BaseModel):
 
     code: str | None = None
 
-    label: str | None = None
-
     text: str | None = None
 
     name: str | None = None
     place_id: int | None = None
 
     source: RequirementSource = "text"
-    confidence: float = Field(default=1.0, ge=0.0, le=1.0)
 
     status: RequirementStatus = "pending"
     place_ids: list[int] = Field(default_factory=list)
     reason: str | None = None
-
-    def is_resolved(self) -> bool:
-        return self.status in ("satisfied", "unmet", "uncertain")
 
 
 class PartyComposition(BaseModel):
@@ -230,7 +223,6 @@ class TripRequirements(BaseModel):
     """Everything the route must respect, in one place."""
 
     locale: Literal["ru", "en"] = "ru"
-    raw_query: str = ""
 
     at: datetime | None = None
     at_chosen: bool = False
@@ -240,9 +232,6 @@ class TripRequirements(BaseModel):
     budget_minutes: int | None = None
 
     costing: str | None = None
-
-    origin_lat: float | None = None
-    origin_lon: float | None = None
 
     areas: list[str] = Field(default_factory=list)
 
@@ -266,19 +255,6 @@ class TripRequirements(BaseModel):
     def of_kind(self, kind: RequirementKind) -> list[Requirement]:
         return [r for r in self.requirements if r.kind == kind]
 
-    def hard_service_codes(self) -> list[str]:
-        """Category codes that MUST appear on the route."""
-        return [r.code for r in self.hard() if r.kind == "service" and r.code]
-
-    def soft_service_codes(self) -> list[str]:
-        return [r.code for r in self.soft() if r.kind == "service" and r.code]
-
-    def must_visit_ids(self) -> list[int]:
-        return [r.place_id for r in self.of_kind("must_visit") if r.place_id is not None]
-
-    def must_visit_names(self) -> list[str]:
-        return [r.name for r in self.of_kind("must_visit") if r.name]
-
     def avoid_codes(self) -> list[str]:
         return [r.code for r in self.of_kind("avoid") if r.code]
 
@@ -292,10 +268,6 @@ class TripRequirements(BaseModel):
     def failed_hard(self) -> list[Requirement]:
         """Hard requirements the verifier could not satisfy or prove."""
         return [r for r in self.hard() if r.status in ("unmet", "uncertain")]
-
-    def is_ready(self) -> bool:
-        """True only when every hard requirement is proven satisfied."""
-        return not self.failed_hard() and not self.unresolved_hard()
 
     def public_requirements(self) -> list[dict[str, Any]]:
         """Localizable view of the requirement list for the HTTP response."""

@@ -10,7 +10,7 @@ from pydantic_ai.messages import ToolReturnPart
 from agent import runner
 from agent.client import plan_with_agent
 from agent.models import ReaderBrief
-from agent.tools import ERR_TOOL_BUDGET
+from agent.tools._shared import ERR_TOOL_BUDGET
 from core import constants
 from routing.models import CategoryFacts
 
@@ -47,8 +47,8 @@ def _service(repos, category: str) -> int:
 
 
 def _spy(seen: list[str | None]):
-    """A `_run_agent` that records the repair note each pass was handed."""
-    real = runner._run_agent
+    """A `run_agent` that records the repair note each pass was handed."""
+    real = runner.run_agent
 
     def spy(query, brief, deps, *, wall_clock_s=None, repair=None):
         seen.append(repair)
@@ -208,13 +208,13 @@ def test_a_deleted_stop_is_subtracted_from_both_lists() -> None:
 def test_the_run_carries_a_live_deadline(fake_model: FakeModel, db_repos, monkeypatch) -> None:
     """`seconds_left()` stops being infinite: the deadline reaches the tools."""
     left: list[float] = []
-    real = runner._run_agent
+    real = runner.run_agent
 
     def spy(query, brief, deps, *, wall_clock_s=None, repair=None):
         left.append(deps.seconds_left())
         return real(query, brief, deps, wall_clock_s=wall_clock_s, repair=repair)
 
-    monkeypatch.setattr(runner, "_run_agent", spy)
+    monkeypatch.setattr(runner, "run_agent", spy)
     ids = _ids(db_repos)
     fake_model.finish(ordered_ids=ids, budget_minutes=120)
 
@@ -262,7 +262,7 @@ def test_a_route_that_breaks_a_hard_rule_is_rebuilt_once(
     sights = _sights(db_repos)
     cafe = _service(db_repos, "кафе")
     seen: list[str | None] = []
-    monkeypatch.setattr(runner, "_run_agent", _spy(seen))
+    monkeypatch.setattr(runner, "run_agent", _spy(seen))
     fake_model.finish(ordered_ids=[*sights, cafe], must_keep_ids=[cafe], budget_minutes=240)
     fake_model.finish(ordered_ids=sights, budget_minutes=240)
     brief = ReaderBrief(locale="ru", avoid=("кафе",))
@@ -280,7 +280,7 @@ def test_a_route_that_breaks_nothing_is_not_rebuilt(
 ) -> None:
     """Nothing to repair: the model is asked once, and the second step stays unspent."""
     seen: list[str | None] = []
-    monkeypatch.setattr(runner, "_run_agent", _spy(seen))
+    monkeypatch.setattr(runner, "run_agent", _spy(seen))
     fake_model.finish(ordered_ids=_sights(db_repos), budget_minutes=240)
 
     outcome = plan_with_agent("два часа пешком", ReaderBrief(locale="ru"), repos=db_repos)
@@ -292,7 +292,7 @@ def test_a_route_that_breaks_nothing_is_not_rebuilt(
 def test_a_refusal_is_never_rebuilt(fake_model: FakeModel, db_repos, monkeypatch) -> None:
     """Outside the region is an answer, not a bad plan: it gets no second pass."""
     seen: list[str | None] = []
-    monkeypatch.setattr(runner, "_run_agent", _spy(seen))
+    monkeypatch.setattr(runner, "run_agent", _spy(seen))
     fake_model.finish(outcome="refuse", refusal_reason="Вильнюс — вне региона")
 
     outcome = plan_with_agent("прогулка по Вильнюсу", ReaderBrief(locale="ru"), repos=db_repos)
@@ -309,7 +309,7 @@ def test_a_second_try_that_helps_nothing_is_dropped(
     sights = _sights(db_repos)
     cafe = _service(db_repos, "кафе")
     seen: list[str | None] = []
-    monkeypatch.setattr(runner, "_run_agent", _spy(seen))
+    monkeypatch.setattr(runner, "run_agent", _spy(seen))
     fake_model.finish(
         ordered_ids=[*sights, cafe], must_keep_ids=[cafe], budget_minutes=240, narrative="первый"
     )
@@ -328,16 +328,11 @@ def test_a_second_try_that_helps_nothing_is_dropped(
 def test_an_oversized_turn_is_trimmed_instead_of_ending_the_pass(
     fake_model: FakeModel, db_repos, monkeypatch
 ) -> None:
-    """Three calls in one turn against a budget of two: the surplus is refused.
-
-    A provider may put several calls in one answer, and the framework's own limit
-    projects the whole batch before anything runs — so the pass used to be thrown
-    away and the budget note asked the model to spend it all over again.
-    """
+    """Three calls in one turn against a budget of two: the surplus is refused, not the pass."""
     monkeypatch.setattr(constants, "MAX_TOOL_CALLS", 2)
     ids = _ids(db_repos)
     seen: list[str | None] = []
-    monkeypatch.setattr(runner, "_run_agent", _spy(seen))
+    monkeypatch.setattr(runner, "run_agent", _spy(seen))
     fake_model.turn(
         ("find_places", {"query": "замок"}),
         ("find_places", {"query": "костёл"}),
@@ -368,12 +363,9 @@ def test_the_answer_cap_travels_under_the_name_the_gateway_reads() -> None:
 
 
 def test_the_request_limit_outlasts_the_tool_budget() -> None:
-    """The tool budget is the one that refuses politely, so it has to run out first.
+    """The tool budget is the one that refuses politely, so it must run out first.
 
-    A pass that dies on the request limit is thrown away whole and asked for again,
-    which is what the denial hook exists to stop — the model must not be able to
-    reach the limit while it still has calls it is allowed to make.
-    """
+    Otherwise the request limit discards the pass whole and asks the model again."""
     from agent.runner import MAX_REQUESTS
 
     assert MAX_REQUESTS > constants.MAX_TOOL_CALLS + 1
@@ -382,15 +374,11 @@ def test_the_request_limit_outlasts_the_tool_budget() -> None:
 def test_a_call_the_model_got_wrong_does_not_spend_the_budget(
     fake_model: FakeModel, db_repos, monkeypatch
 ) -> None:
-    """Two good calls and one the schema rejects, against a budget of two.
-
-    A call that never reaches a tool body is not a call the model spent, so the
-    pass still finishes with a submission instead of being cut short.
-    """
+    """A call the schema rejects never reaches a tool body, so it does not spend the budget."""
     monkeypatch.setattr(constants, "MAX_TOOL_CALLS", 2)
     ids = _ids(db_repos)
     seen: list[str | None] = []
-    monkeypatch.setattr(runner, "_run_agent", _spy(seen))
+    monkeypatch.setattr(runner, "run_agent", _spy(seen))
     fake_model.turn(
         ("find_places", {}),
         ("find_places", {"query": "замок"}),
@@ -406,13 +394,13 @@ def test_a_call_the_model_got_wrong_does_not_spend_the_budget(
 def test_the_ids_a_tool_returned_are_recorded(fake_model: FakeModel, db_repos, monkeypatch) -> None:
     """The id guard reads what a tool actually answered — and it is a hook now."""
     handed: list[Any] = []
-    real = runner._run_agent
+    real = runner.run_agent
 
     def spy(query, brief, deps, *, wall_clock_s=None, repair=None):
         handed.append(deps)
         return real(query, brief, deps, wall_clock_s=wall_clock_s, repair=repair)
 
-    monkeypatch.setattr(runner, "_run_agent", spy)
+    monkeypatch.setattr(runner, "run_agent", spy)
     ids = _ids(db_repos)
     fake_model.call("find_places", query="замок").finish(ordered_ids=ids, budget_minutes=120)
 

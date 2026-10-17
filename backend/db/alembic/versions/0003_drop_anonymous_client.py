@@ -1,22 +1,4 @@
-"""the anonymous client and its saved routes leave the schema
-
-``clients``, ``client_preferences`` and ``saved_routes`` existed for a browser
-that had not signed in yet: a signing-in account "adopted" that client so the
-client's saved routes became the account's. The product is sign-in only — the
-panel route guard sends an anonymous visitor to ``/login``, and every endpoint
-the app calls goes through the session — so the tables and the
-``users.client_id`` link hold nothing the application can reach, and this
-revision removes them.
-
-Order matters: ``users.client_id`` references ``clients``, and so do the two
-feature tables, so the column goes first and ``clients`` last. Dropping the
-column takes its own unique constraint and foreign key with it.
-
-Revision ID: 0003_drop_anonymous_client
-Revises: 0002_taxonomy_itineraries
-Create Date: 2026-10-11
-
-"""
+"""Drop the anonymous client, its preferences, its saved routes, and users.client_id."""
 
 from __future__ import annotations
 
@@ -29,7 +11,6 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # Column first: it carries the FK (and the unique) back into `clients`.
     op.execute("ALTER TABLE users DROP COLUMN IF EXISTS client_id")
     op.execute("DROP TABLE IF EXISTS saved_routes")
     op.execute("DROP TABLE IF EXISTS client_preferences")
@@ -37,8 +18,6 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # The reverse of the baseline's own DDL, so a downgrade lands on the same
-    # schema 0001 built. Rows are not restored — only the shape.
     op.execute(
         """
         CREATE TABLE IF NOT EXISTS clients (

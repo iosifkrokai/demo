@@ -103,7 +103,6 @@ def test_generate_returns_a_route(live_stack, api: httpx.Client) -> None:
     assert response.status_code == 200, response.text
     _carries(response.json(), RouteResponse)
 
-    # The run is over by now, so the panel's next poll reads the end of it.
     tracked = api.get(f"/routes/progress/{progress_id}")
     assert tracked.status_code == 200, tracked.text
     _carries(tracked.json(), RouteProgressOut)

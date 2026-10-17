@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
+from hashlib import sha256
 from typing import Any
 
 import pydantic_ai
@@ -18,7 +19,8 @@ from agent.models import ReaderBrief
 from agent.prompts import compose_instructions
 from agent.prompts.notes import _request_note, _ui_note
 from agent.schema import PlanningDeps, PlanSubmission
-from agent.tools import ERR_TOOL_BUDGET, envelope, register_all
+from agent.tools import register_all
+from agent.tools._shared import ERR_TOOL_BUDGET, envelope
 from core import constants
 
 log = logging.getLogger(__name__)
@@ -48,10 +50,9 @@ SUBMIT_DESCRIPTION = (
 
 
 def effective_wall_clock(wall_clock_s: float | None) -> float:
-    """The wall-clock bound one run gets: the tighter of the fixed ceiling and
-    the caller's request budget. ``None`` (or a non-positive value) means the
-    ceiling. One function so the deadline the tools see and the timeout the run
-    is killed by cannot disagree.
+    """The wall-clock bound one run gets: the tighter of the fixed ceiling and the caller's
+    request budget, with ``None`` or a non-positive value meaning the ceiling. One function
+    so the deadline the tools see and the timeout that kills the run cannot disagree.
     """
     if wall_clock_s is not None and wall_clock_s > 0:
         return min(WALL_CLOCK_TIMEOUT_S, float(wall_clock_s))
@@ -79,7 +80,7 @@ def _time_capability() -> ProcessHistory[PlanningDeps]:
     return ProcessHistory(processor)
 
 
-def _build_prompt(query: str, brief: Any, *, repair: str | None = None) -> str:
+def build_prompt(query: str, brief: Any, *, repair: str | None = None) -> str:
     """The text handed to the model, built in one place."""
     prompt = (
         f"locale={brief.locale}\n{_request_note(brief)}\nrequest={query!r}\n"
@@ -97,10 +98,17 @@ def _usage_line(usage: Any) -> str:
     )
 
 
-def _record_model_failure(reason: str, prompt: str = "") -> None:
+def record_model_failure(reason: str, prompt: str = "") -> None:
     """Say why no plan was recorded. Logfire keeps the log with the rest of the run."""
     level = logging.INFO if reason in _NO_MODEL else logging.ERROR
-    log.log(level, "agent_plan: no plan (%s) prompt=%r", reason, prompt[:200])
+    digest = sha256(prompt.encode()).hexdigest()[:12] if prompt else "-"
+    log.log(
+        level,
+        "agent_plan: no plan (%s) prompt_len=%d prompt_sha=%s",
+        reason,
+        len(prompt),
+        digest,
+    )
 
 
 def _catalogue(deps: PlanningDeps) -> Sequence[Any]:
@@ -149,10 +157,8 @@ def _instructions(deps: PlanningDeps, brief: ReaderBrief) -> str:
 
 
 def _build_agent(model: Any, brief: ReaderBrief, deps: PlanningDeps) -> Any:
-    """Create the PydanticAI agent, its tool surface, and its terminal output.
-
-    `end_strategy` is left at its default `'early'` on purpose: a `submit_plan`
-    sent beside a stray search is the answer, and the stray call is dropped.
+    """`end_strategy` is left at its default `'early'` on purpose: a `submit_plan` sent
+    beside a stray search is the answer, and the stray call is dropped.
     """
     agent = pydantic_ai.Agent(
         model,
@@ -168,7 +174,7 @@ def _build_agent(model: Any, brief: ReaderBrief, deps: PlanningDeps) -> Any:
 TOOL_BUDGET_FAILURE = "UsageLimitExceeded"
 
 
-def _run_with_timeout(fn: Any, timeout_s: float) -> tuple[Any, str | None]:
+def run_with_timeout(fn: Any, timeout_s: float) -> tuple[Any, str | None]:
     """Run `fn()` with a wall-clock bound. Returns (result, failure_reason)."""
     ex = ThreadPoolExecutor(max_workers=1, thread_name_prefix="agent-plan")
     try:
@@ -185,7 +191,7 @@ def _run_with_timeout(fn: Any, timeout_s: float) -> tuple[Any, str | None]:
         ex.shutdown(wait=False)
 
 
-def _run_agent(
+def run_agent(
     query: str,
     brief: ReaderBrief,
     deps: PlanningDeps,
@@ -206,7 +212,7 @@ def _run_agent(
         timeout=MODEL_TIMEOUT_S,
         extra_body=model_mod.answer_cap(MAX_OUTPUT_TOKENS),
     )
-    prompt = _build_prompt(query, brief)
+    prompt = build_prompt(query, brief)
     asked = prompt if repair is None else f"{prompt}\n{repair}"
 
     def call() -> Any:
@@ -220,26 +226,17 @@ def _run_agent(
         )
 
     bound = effective_wall_clock(wall_clock_s)
-    result, failure = _run_with_timeout(call, bound)
+    result, failure = run_with_timeout(call, bound)
     if failure is not None or result is None:
         log.info("agent_plan: gave up after %d tool call(s)", deps.tool_calls_used)
     if failure is not None:
-        _record_model_failure(failure, prompt)
+        record_model_failure(failure, prompt)
         return None, failure
     if result is None:
-        _record_model_failure("unexpected_output", prompt)
+        record_model_failure("unexpected_output", prompt)
         return None, "unexpected_output"
     log.info("%s", _usage_line(result.usage))
     if not isinstance(getattr(result, "output", None), PlanSubmission):
-        _record_model_failure("no_submission", prompt)
+        record_model_failure("no_submission", prompt)
         return None, "no_submission"
     return result.output, None
-
-
-__all__ = [
-    "_build_prompt",
-    "_record_model_failure",
-    "_run_agent",
-    "_run_with_timeout",
-    "effective_wall_clock",
-]

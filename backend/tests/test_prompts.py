@@ -11,10 +11,7 @@ def _instructions() -> str:
 
 
 def test_a_territory_search_is_bounded_to_one_call() -> None:
-    """The over-search the live logs show — nine find_places calls for one Old Town
-    walk — is answered by an explicit rule, not by a bigger budget: search once,
-    then plan, then submit.
-    """
+    """A territory is searched once, then planned, then submitted — by rule, not budget."""
     text = _instructions().lower()
     assert "search it once." in text
     assert "single find_places call" in text

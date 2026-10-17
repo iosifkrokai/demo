@@ -23,10 +23,7 @@ def _nearby(repos, limit: int = SCAN) -> list:
 def _sight_ids(repos, limit: int = 5) -> list[int]:
     """Hand-picked stops: real rows near one another, chosen by a query, not by a model.
 
-    Services are left out: the walk is not measured through them, so asking for a café
-    would make the route shorter than the ids and the count assertions below untrue.
-    The old town's nearest rows are mostly services, hence the wide scan.
-    """
+    Services are left out so the route is not shorter than the ids; hence the wide scan."""
     facts = _facts(repos)
     ids = [
         row.id

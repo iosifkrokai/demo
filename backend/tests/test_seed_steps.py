@@ -85,11 +85,7 @@ def test_a_stairway_outside_the_project_area_is_dropped() -> None:
 
 def test_a_stairway_inside_the_oblast_ring_but_outside_the_fetch_box_is_dropped() -> None:
     """Two gates hold the ingest and they do not coincide: the ring is the project area,
-    the box is the fetch rectangle.
-
-    The box's north edge went up to 55.01 on 2026-10-15 so that it covers the ring's own
-    north (55.0043), which the finds dataset needs; the ring still dips below the box in
-    the south, and that residue is the case pinned here.
+    the box is the fetch rectangle, and the ring still dips below the box in the south.
     """
     from db.seed.datasets import BBOX
     from db.seed.geofence import inside_project_area
@@ -124,7 +120,7 @@ def test_the_rows_are_written_in_the_14_column_pipe_format(tmp_path: Path) -> No
 
 
 def test_the_committed_file_validates_as_the_steps_dataset() -> None:
-    from db.seed.datasets import default_datasets, load_dataset, validate_record
+    from db.seed.datasets import default_datasets, load_dataset
 
     steps = next(ds for ds in default_datasets() if ds.name == "steps")
     rows = load_dataset(steps)
@@ -132,7 +128,7 @@ def test_the_committed_file_validates_as_the_steps_dataset() -> None:
     assert rows, "the committed places_steps.csv is empty"
     assert all(row["category"] == "лестница" for row in rows)
     assert all(row["source_url"].startswith("osm:") for row in rows)
-    assert not any(validate_record(steps, row) for row in rows)
+    assert not any(steps.validator(row) for row in rows)
 
 
 def test_the_file_reader_marks_the_stairway_as_not_highlighted() -> None:
@@ -151,7 +147,7 @@ def test_the_file_reader_marks_the_stairway_as_not_highlighted() -> None:
 
 
 def test_the_service_default_still_names_the_same_categories(db_repos: Any) -> None:
-    """Adding stairways must not move the map's default highlight (roadmap item 7)."""
+    """Adding stairways must not move the map's default highlight."""
     codes = db_repos.taxonomy.service_codes()
 
     assert set(codes) == HIGHLIGHTED_SERVICES

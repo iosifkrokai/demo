@@ -37,20 +37,10 @@ GEOFENCE_PROBLEM = "outside Grodno region"
 
 DEFAULT_DUP_RADIUS_M = _constants.DUPLICATE_RADIUS_M
 
-# Two names within this distance are *likely the same object mapped twice*: real double
-# mappings sit metres apart. Measured on the committed files: after the twins collapse,
-# nothing shares a name+category closer than 80 m, so above this radius a same-name pair
-# is a namesake (two «Остановка»-like objects on one street), not a duplicate. Both bands
-# are reported — the report separates the two rather than merging them into one number.
 SAME_OBJECT_RADIUS_M = 30.0
 
 TWIN_RADIUS_M = 5.0
 
-# A curated row reaches its target by name and nothing else — the CSV carries no
-# coordinate and no id — so a name several automatic rows answer to is a guess unless
-# they stand together. Measured on the committed files: «Еврейское кладбище» is three
-# cemeteries 70 to 190 km apart, while the only other shared names are a hand-authored
-# row beside its OSM twin.
 CURATED_TWIN_RADIUS_M = 2000.0
 
 COLUMNS = [
@@ -85,11 +75,8 @@ MIN_BUCKET_ROWS = 2
 
 
 def load_excluded_names(path: Path | None = None) -> frozenset[str]:
-    """The names no dataset may carry, normalised for comparison.
-
-    Read from ``excluded_names.json``: text the source uses on unrelated objects, which
-    names nothing (see the file's own `reason` fields). A judgement call written down,
-    not a pattern guessed in code.
+    """The names no dataset may carry, normalised for comparison; read from
+    ``excluded_names.json``, a judgement written down rather than a pattern guessed.
     """
     source = path or EXCLUDED_NAMES_JSON
     if not source.is_file():
@@ -106,11 +93,8 @@ def is_excluded_name(name: str | None, excluded: frozenset[str] | None = None) -
 
 
 def load_town_names(path: Path | None = None) -> dict[str, str]:
-    """Belarusian → Russian settlement names, as the committed mapping file has them.
-
-    Applied to a row's `town` on the way into a dataset (`overpass.fill_town_names`).
-    A value the file does not list is left alone: the alternative is guessing at a
-    village spelling, and a wrong town is worse than a Belarusian one.
+    """Belarusian → Russian settlement names from the committed mapping; a value the file
+    does not list is left alone, since a wrong town is worse than a Belarusian one.
     """
     source = path or TOWN_NAMES_JSON
     if not source.is_file():
@@ -120,12 +104,6 @@ def load_town_names(path: Path | None = None) -> dict[str, str]:
 
 
 def read_place_alias_entries(path: Path | None = None) -> list[dict[str, str]]:
-    """``place_aliases.json`` as rows: one name, the row it belongs to, its locale.
-
-    Read from ``place_aliases.json``: an object the source maps under a spelling of
-    its own — the Belarusian form of a Russian name, the name of the complex rather
-    than of the building, a part of it. A judgement written down per name.
-    """
     source = path or PLACE_ALIASES_JSON
     if not source.is_file():
         return []
@@ -145,10 +123,8 @@ def read_place_alias_entries(path: Path | None = None) -> list[dict[str, str]]:
 
 
 def load_place_aliases(path: Path | None = None) -> dict[str, frozenset[str]]:
-    """Those names normalised, by the `source_url` of the row they belong to.
-
-    The view the merge rules need: a protected row is bucketed under every name it
-    answers to, so it can shadow an automatic row that spells the place differently.
+    """Those names normalised, by ``source_url``: a protected row is bucketed under every
+    name it answers to, so it can shadow an automatic row that spells the place differently.
     """
     out: dict[str, set[str]] = {}
     for row in read_place_alias_entries(path):
@@ -289,10 +265,6 @@ def normalize_osm_steps(row: dict[str, Any]) -> dict[str, Any]:
     return _normalize_common(row, visit_required=False)
 
 
-def _read_pipe(path: Path) -> list[dict[str, Any]]:
-    return read_pipe_csv(path)
-
-
 @dataclass
 class Dataset:
     """One versioned CSV dataset with its loader and natural-key prefix."""
@@ -324,7 +296,7 @@ def default_datasets() -> list[Dataset]:
             "city",
             filename="places_grodno_city.csv",
             prefix="city:",
-            reader=_read_pipe,
+            reader=read_pipe_csv,
             validator=validate_city_region,
             normalizer=normalize_city_region,
             category_source=SOURCE_DATASET,
@@ -335,7 +307,7 @@ def default_datasets() -> list[Dataset]:
             "region",
             filename="places_region.csv",
             prefix="region:",
-            reader=_read_pipe,
+            reader=read_pipe_csv,
             validator=validate_city_region,
             normalizer=normalize_city_region,
             category_source=SOURCE_DATASET,
@@ -346,7 +318,7 @@ def default_datasets() -> list[Dataset]:
             "osm",
             filename="places_osm_raw.csv",
             prefix="osm:",
-            reader=_read_pipe,
+            reader=read_pipe_csv,
             validator=validate_osm_sight,
             normalizer=normalize_osm_sight,
             category_source=SOURCE_AUTO,
@@ -357,7 +329,7 @@ def default_datasets() -> list[Dataset]:
             "poi",
             filename="places_poi.csv",
             prefix="osm_poi:",
-            reader=_read_pipe,
+            reader=read_pipe_csv,
             validator=validate_osm_service,
             normalizer=normalize_osm_service,
             category_source=SOURCE_AUTO,
@@ -369,7 +341,7 @@ def default_datasets() -> list[Dataset]:
             "steps",
             filename="places_steps.csv",
             prefix="osm:",
-            reader=_read_pipe,
+            reader=read_pipe_csv,
             validator=validate_osm_steps,
             normalizer=normalize_osm_steps,
             category_source=SOURCE_AUTO,
@@ -380,7 +352,7 @@ def default_datasets() -> list[Dataset]:
             FINDS_DATASET,
             filename="places_finds.csv",
             prefix="osm:",
-            reader=_read_pipe,
+            reader=read_pipe_csv,
             validator=validate_osm_sight,
             normalizer=normalize_osm_sight,
             category_source=SOURCE_AUTO,
@@ -447,15 +419,9 @@ def _widest_gap_m(rows: list[dict[str, Any]]) -> float:
 
 
 def match_place(name: str, db_rows: list[dict[str, Any]]) -> tuple[dict[str, Any] | None, str]:
-    """The row a curated name means, and how the code knows: ``exact`` | ``contains`` |
-    ``fuzzy`` | ``ambiguous`` | ``none``.
-
-    Equality first, then containment (never by id). Several rows answering to one name
-    are resolved by evidence, not by the order the heap returned them: a hand-authored
-    row is the place the curated text was written for, and automatic rows are the same
-    object only while they stand together — three cemeteries 70 km apart under one name
-    are three places, and the overlay says ``ambiguous`` rather than picking one.
-    """
+    """The row a curated name means, and how: ``exact`` | ``contains`` | ``fuzzy`` |
+    ``ambiguous`` | ``none``. Equality first, then containment; rows answering to one name
+    are resolved by evidence, and namesakes far apart answer ``ambiguous``."""
     n = name.lower()
     ordered = sorted(db_rows, key=lambda r: (r.get("category_source") != SOURCE_DATASET, r["id"]))
     named = [r for r in ordered if r["name"].strip().lower() == n]
@@ -485,11 +451,6 @@ def load_dataset(ds: Dataset) -> list[dict[str, Any]]:
     return ds.reader(ds.path)
 
 
-def validate_record(ds: Dataset, raw: dict[str, Any]) -> list[str]:
-    """Return the problems for one raw row (empty = valid)."""
-    return ds.validator(raw)
-
-
 def classify_reject(problems: list[str]) -> str:
     """'geofence' when the point is outside the project area, else 'invalid'."""
     return "geofence" if any(GEOFENCE_PROBLEM in p for p in problems) else "invalid"
@@ -509,7 +470,7 @@ def collect_records(datasets: list[Dataset]) -> dict[str, Any]:
         missing = not raw_rows and ds.optional and not ds.path.exists()
         valid = invalid = geofence = 0
         for raw in raw_rows:
-            problems = validate_record(ds, raw)
+            problems = ds.validator(raw)
             if problems:
                 kind = classify_reject(problems)
                 if kind == "geofence":
@@ -580,7 +541,7 @@ def norm_name(name: str | None) -> str:
 
 def haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     """Metres between two lat/lon points."""
-    r = 6371000.0
+    r = _constants.EARTH_RADIUS_M
     phi1, phi2 = math.radians(lat1), math.radians(lat2)
     dphi = math.radians(lat2 - lat1)
     dlam = math.radians(lon2 - lon1)
@@ -591,16 +552,8 @@ def haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
 def find_suspected_duplicates(
     records: list[dict[str, Any]], radius_m: float = DEFAULT_DUP_RADIUS_M
 ) -> list[dict[str, Any]]:
-    """Record pairs sharing a normalised name **and category** within ``radius_m``.
-
-    Both halves matter. The name alone is not evidence: two «Остановка» rows are two
-    different stops, and two «Часовня» rows in different categories are different
-    kinds of object — grouping on the name alone reported 1597 "duplicates" of which
-    the overwhelming majority were generated service labels. Generated labels are
-    skipped outright (``is_fallback_name``); the count of what was skipped is in the
-    report, so the omission stays visible.
-
-    Candidates for merging, not proof — reported for review, not dropped.
+    """Record pairs sharing a normalised name and category within ``radius_m``; generated
+    labels are skipped. Candidates for review, not proof, and never dropped.
     """
     buckets: dict[tuple[str, str], list[dict[str, Any]]] = {}
     for r in records:
@@ -662,9 +615,8 @@ def resolve_shadowed(
     radius_m: float = DEFAULT_DUP_RADIUS_M,
     aliases: dict[str, frozenset[str]] | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """Split records into the ones to project and the automatic ones a hand-authored row shadows.
-    Same name within ``radius_m`` — the hand-authored row's own, or one the alias file
-    gives it; that row keeps the place.
+    """Split records into those to project and the automatic ones a hand-authored row
+    shadows: same name within ``radius_m``, the hand-authored row's own or an alias's.
     """
     known = aliases or {}
     buckets: dict[str, list[dict[str, Any]]] = {}
@@ -739,9 +691,8 @@ def _twin_groups(records: list[dict[str, Any]], radius_m: float) -> list[list[in
 def resolve_twins(
     records: list[dict[str, Any]], radius_m: float = TWIN_RADIUS_M
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """Collapse automatic records mapping one object twice: same name and category, metres apart.
-    Distance is what tells a twin from a namesake — same-name fortifications a hundred
-    metres apart are distinct objects, and are left alone.
+    """Collapse automatic records mapping one object twice: same name and category, metres
+    apart — distance tells a twin from a namesake.
     """
     buckets: dict[tuple[str, str], list[int]] = {}
     for index, r in enumerate(records):
@@ -786,11 +737,8 @@ def resolve_twins(
 def resolve_declared_merges(
     records: list[dict[str, Any]], declared: list[dict[str, str]]
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[str]]:
-    """Drop the rows a declared pair names as the losing side of one object.
-
-    Returns the records to project, the drops to report, and the declarations the data
-    no longer holds. A merge that quietly stopped applying would leave the pair it was
-    written for in place, so a stale declaration is said out loud instead.
+    """Drop the losing side of each declared pair, returning the records, the drops and the
+    declarations the data no longer holds — a stale declaration is reported, not ignored.
     """
     index_of = {str(r.get("source_url")): index for index, r in enumerate(records)}
     dropped: set[int] = set()
@@ -826,11 +774,8 @@ def resolve_declared_merges(
 def collapse(
     records: list[dict[str, Any]],
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[str]]:
-    """The records the seed projects: the hand-authored rows, twins and declared pairs applied.
-
-    The one place the three rules are put in order, so a stage that names rows by identity
-    (``streets``) sees the same set the projection will — a row that has been collapsed
-    cannot keep a name or a street the seed is about to drop.
+    """The records the seed projects, with the three collapse rules applied in order so a
+    stage naming rows by identity sees the set the projection will.
     """
     kept, hand = resolve_shadowed(records, aliases=load_place_aliases())
     kept, twins = resolve_twins(kept)

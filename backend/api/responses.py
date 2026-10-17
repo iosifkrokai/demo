@@ -6,6 +6,8 @@ import logging
 from collections.abc import Sequence
 from typing import Any
 
+from fastapi import HTTPException
+
 from agent.client import AgentOutcome
 from agent.models import BriefStop, ReaderBrief, RefinementBrief, TripRequirements
 from agent.tools.plan import MeasureSetup, measure_candidates
@@ -60,7 +62,6 @@ def to_places(
     candidates: list[Candidate], facts: CategoryFacts, keys: dict[int, str] | None = None
 ) -> list[Place]:
     """Candidates → the response points (one mapping, used by every branch).
-
     `keys` names them the way the client that sent the route named them.
     """
     named = keys or {}
@@ -266,7 +267,6 @@ def route_response(
     *,
     repos: Any,
     facts: CategoryFacts,
-    deadline: dict[str, Any] | None = None,
     previous: Sequence[BriefStop] | None = None,
 ) -> RouteResponse:
     """The one place a run's outcome becomes the response body."""
@@ -274,11 +274,9 @@ def route_response(
     measured = outcome.measured
 
     if outcome.refused:
-        return _refusal_response(outcome, deadline=deadline)
+        return _refusal_response(outcome)
     if contract.result_mode == "catalogue":
-        return _catalogue_response(
-            outcome, repos=repos, facts=facts, previous=previous, deadline=deadline
-        )
+        return _catalogue_response(outcome, repos=repos, facts=facts, previous=previous)
 
     route = _ordered_candidates(repos, outcome)
 
@@ -316,7 +314,7 @@ def route_response(
         budget=budget,
         explanation=narrative,
         alternatives=offers or None,
-        status=outcome.status,
+        status=OVERALL_STATUSES.get(outcome.status, "pending"),
         requirements=contract.public_requirements(),
         interpretation=interpretation(contract, outcome.status),
         costing=costing,
@@ -326,7 +324,6 @@ def route_response(
             "requirements_source": contract.source,
             "problems": outcome.problems,
             "verdicts": measured.get("verdicts"),
-            "deadline": deadline,
         },
     )
 
@@ -337,9 +334,7 @@ DEFAULT_REFUSAL = (
 )
 
 
-def _refusal_response(
-    outcome: AgentOutcome, *, deadline: dict[str, Any] | None = None
-) -> RouteResponse:
+def _refusal_response(outcome: AgentOutcome) -> RouteResponse:
     """The agent said the request cannot be served: infeasible, with its reason."""
     contract = outcome.requirements
     reason = (outcome.submission.refusal_reason or "").strip() or DEFAULT_REFUSAL
@@ -365,7 +360,6 @@ def _refusal_response(
             "reason": "refused",
             "problems": outcome.problems,
             "outside_coverage": list(contract.outside_coverage),
-            "deadline": deadline,
         },
     )
 
@@ -379,7 +373,6 @@ def _catalogue_response(
     repos: Any,
     facts: CategoryFacts,
     previous: Sequence[BriefStop] | None = None,
-    deadline: dict[str, Any] | None = None,
 ) -> RouteResponse:
     """A list to choose from: the places, no line, and no numbers nobody measured."""
     contract = outcome.requirements
@@ -398,7 +391,7 @@ def _catalogue_response(
         result_mode="catalogue",
         budget=None,
         explanation=narrative or CATALOGUE_PLACES.format(n=len(points)),
-        status=outcome.status,
+        status=OVERALL_STATUSES.get(outcome.status, "pending"),
         requirements=contract.public_requirements(),
         interpretation=interpretation(contract, outcome.status),
         costing=costing_for(contract.costing),
@@ -410,7 +403,6 @@ def _catalogue_response(
             "requirements_source": contract.source,
             "problems": outcome.problems,
             "verdicts": measured.get("verdicts"),
-            "deadline": deadline,
         },
     )
 
@@ -479,12 +471,11 @@ def reader_brief(req: GenerateReq) -> ReaderBrief:
 
 
 def _placed_stop(stop: RerouteStop, index: int) -> Candidate:
-    """A stop the client placed itself: no row, so a point and nothing more, under
-    a negative id — the catalogue numbers from one upwards. The wire refuses a stop
-    with nowhere to be, so the coordinates are here.
+    """A stop the client placed itself: no row, a point and nothing more, under a negative id.
+    The catalogue numbers from one upwards; the wire refuses a stop with nowhere to be.
     """
-    assert stop.lat is not None
-    assert stop.lon is not None
+    if stop.lat is None or stop.lon is None:
+        raise HTTPException(status_code=422, detail={"reason": "stop_without_location"})
     return Candidate(
         id=-(index + 1),
         name=stop.name or PLACED_STOP_NAME,
@@ -502,7 +493,6 @@ def _as_measured(candidates: list[Candidate], measured: dict[str, Any]) -> list[
 
 def reroute_response(req: RerouteReq, *, repos: Any) -> RouteResponse:
     """Measure and draw the route the client is holding, without asking the model.
-
     Editing a stop is a measurement, not a request to be interpreted.
     """
     stops = req.as_stops()

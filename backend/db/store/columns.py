@@ -5,7 +5,6 @@ from __future__ import annotations
 PLACE_COLUMNS: tuple[str, ...] = (
     "id",
     "name",
-    "description",
     "category",
     "blurb",
     "fun_fact",

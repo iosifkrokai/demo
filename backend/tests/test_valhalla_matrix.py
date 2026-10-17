@@ -33,10 +33,8 @@ def _radii(payload: dict[str, Any]) -> list[int | None]:
 
 
 def test_the_matrix_asks_without_a_snap_radius_first(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A radius lets the engine correlate a location onto any edge inside it and keep
-    the cheapest, so two places on one street land on the same edge: a ninety-metre
-    walk then comes back as no time at all. Left to its own default the engine
-    answers what `/route` answers, to the second.
+    """A radius lets the engine pick the cheapest edge, folding two places on one street
+    onto a single edge; the default must answer what `/route` answers.
     """
     sent = _payloads(monkeypatch)
 

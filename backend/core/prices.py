@@ -1,9 +1,6 @@
 """What `ticket_price` says about admission: the one place the prose is read.
-
-The column holds two vocabularies: OSM's `fee`/`charge` tag (`yes`/`no`) on the
-automatic rows, and a human sentence on the hand-authored ones. A plan verdict
-about cost needs a fact, so the reading is stated once here, and `None` — unknown —
-is the answer for every string this file does not positively understand.
+The column holds OSM's `fee`/`charge` tags (`yes`/`no`) on automatic rows and a human
+sentence on hand-authored ones; every string not positively understood answers ``None``.
 """
 
 from __future__ import annotations

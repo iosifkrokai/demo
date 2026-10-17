@@ -1,14 +1,6 @@
-"""Which district a coordinate falls in, from the committed boundaries.
-
-The ``district`` column used to be "the nearest raion centre", and a border is not a
-Voronoi of centres: measured against these boundaries, 1108 of 7466 committed rows sat in a
-neighbouring district. The boundaries are now committed data
-(``db/data/geo/districts_border.json``, OSM ``admin_level=6``, ODbL) and the answer is a
-point-in-polygon: holes are respected, and a city wins over the district around it.
-
-A point outside every polygon answers ``None`` — an honest unknown the caller keeps its own
-fallback for, rather than a district invented from distance.
-"""
+"""Which district a coordinate falls in, from the committed boundaries: point-in-polygon
+over ``db/data/geo/districts_border.json``, holes respected and a city winning over its
+surrounding district. A point outside every polygon answers ``None``."""
 
 from __future__ import annotations
 
@@ -69,10 +61,8 @@ def _ring_wkt(ring: Ring) -> str:
 
 
 def wkt(slug: str) -> str | None:
-    """The district's boundary as WKT, or ``None`` for a slug the file does not hold.
-
-    A record is a shape, not a box: the city of Grodno is a hole in the district around
-    it, and every hole is cut out of the shell that holds it.
+    """The district's boundary as WKT, or ``None`` for an unknown slug; holes are cut out
+    of the shell that holds them.
     """
     district = next((d for d in districts() if d["slug"] == slug), None)
     if district is None:
@@ -102,11 +92,8 @@ def district_at(lat: float, lon: float) -> str | None:
 
 
 def _nearest_within_snap(lat: float, lon: float) -> str | None:
-    """The ring a point in the hairline between two of them stands closest to.
-
-    OSM's district rings do not tile perfectly: 22 committed rows sit inside the oblast and
-    inside no district at all, a hundred to seven hundred metres from the nearest one.
-    Naming that neighbour beats falling back to the nearest raion centre ten kilometres away.
+    """The ring a point in the hairline between districts stands closest to, within
+    :data:`SNAP_M`.
     """
     candidates = [
         district

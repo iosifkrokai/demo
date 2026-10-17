@@ -131,29 +131,26 @@ def compute_cost_matrix(
     else:
         visits = raw_visits
 
-    keep_idx = list(range(len(candidates)))
-
-    kept_original_idx = keep_idx
-    if len(keep_idx) != len(candidates):
-        candidates = [candidates[i] for i in keep_idx]
-        visits = [visits[i] for i in keep_idx]
-        coords = [{"lat": c.lat, "lon": c.lon} for c in candidates]
-        coords = snap_locations(coords, costing=costing)
-        matrix = time_matrix(coords, coords, costing=costing, costing_options=costing_options)
-
     return CostMatrix(
         walk_seconds=matrix,
         visit_minutes=visits,
-        indices=kept_original_idx,
+        indices=list(range(len(candidates))),
         anchor=anchor,
     )
 
 
-def _usable_link(value: float) -> bool:
-    """UNKNOWN_S (NaN) counts as usable; only UNREACHABLE_S (or an infinite cell)
-    marks a pair as impossible.
-    """
-    return math.isnan(value) or (math.isfinite(value) and value < constants.UNREACHABLE_S)
+def leg_value(cell: float) -> float:
+    """NaN contributes 0; an infinite or sentinel cell means unreachable."""
+    if math.isnan(cell):
+        return 0.0
+    if not math.isfinite(cell) or cell >= constants.UNREACHABLE_S:
+        return float(constants.UNREACHABLE_S)
+    return cell
+
+
+def reachable(cell: float) -> bool:
+    """NaN is usable (unknown); an infinite or sentinel cell is not."""
+    return math.isnan(cell) or (math.isfinite(cell) and cell < constants.UNREACHABLE_S)
 
 
 def sub_matrix(cost: CostMatrix, idx: list[int]) -> CostMatrix:
@@ -178,11 +175,12 @@ def _best_pair(candidates: list[Candidate], cost: CostMatrix) -> tuple[list[Cand
     best: tuple[tuple[int, float], int, int] | None = None
     for i in range(n):
         for j in range(i + 1, n):
-            linked = _usable_link(cost.walk_seconds[i][j]) or _usable_link(cost.walk_seconds[j][i])
+            linked = reachable(cost.walk_seconds[i][j]) or reachable(cost.walk_seconds[j][i])
             key = (1 if linked else 0, candidates[i].relevance + candidates[j].relevance)
             if best is None or key > best[0]:
                 best = (key, i, j)
-    assert best is not None
+    if best is None:
+        return [], sub_matrix(cost, [])
     _, i, j = best
     return [candidates[i], candidates[j]], sub_matrix(cost, [i, j])
 
@@ -202,8 +200,8 @@ def drop_unreachable(
     while changed:
         changed = False
         for i in sorted(alive):
-            can_reach = any(j != i and _usable_link(cost.walk_seconds[i][j]) for j in alive)
-            reachable_from = any(j != i and _usable_link(cost.walk_seconds[j][i]) for j in alive)
+            can_reach = any(j != i and reachable(cost.walk_seconds[i][j]) for j in alive)
+            reachable_from = any(j != i and reachable(cost.walk_seconds[j][i]) for j in alive)
             if not (can_reach and reachable_from):
                 alive.discard(i)
                 changed = True
@@ -238,9 +236,7 @@ def prune_unroutable_stops(
         if i is None or j is None:
             return False
         cell = cost.walk_seconds[i][j]
-        if math.isnan(cell):
-            return False
-        return not math.isfinite(cell) or cell >= constants.UNREACHABLE_S
+        return not reachable(cell)
 
     changed = True
     while changed and len(keep) >= constants.MIN_TOUR_STOPS:
@@ -261,19 +257,12 @@ def prune_unroutable_stops(
 
 
 def walk_cost(order: list[int], matrix: list[list[float]]) -> float:
-    """An infinite cell saturates at UNREACHABLE_S; a NaN cell (UNKNOWN_S) is
-    skipped, not saturated.
-    """
+    """An infinite cell saturates at UNREACHABLE_S; a NaN cell (UNKNOWN_S) is skipped."""
     if len(order) < constants.MIN_LEG_POINTS:
         return 0.0
     total = 0.0
     for a, b in itertools.pairwise(order):
-        cell = matrix[a][b]
-        if math.isnan(cell):
-            continue
-        if not math.isfinite(cell):
-            return float(constants.UNREACHABLE_S)
-        total += cell
+        total += leg_value(matrix[a][b])
         if total >= constants.UNREACHABLE_S:
             return float(constants.UNREACHABLE_S)
     return total

@@ -64,5 +64,5 @@ def ping(timeout: float = 2.0) -> bool:
             timeout=timeout,
         )
         return True
-    except Exception:
+    except UpstreamUnavailableError:
         return False

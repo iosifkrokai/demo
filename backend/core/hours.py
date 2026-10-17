@@ -1,11 +1,6 @@
-"""When a place is open: the hours a plan can be checked against, and the silence.
-
-`opening_hours` is a reference string, not a schedule — the data README says so, and the
-sets hold 339 spellings of it: OSM syntax (`Mo-Su 10:00-22:00`, `24/7`), Russian prose
-(«ежедневно 9:00–18:00», «вт–вс 10:00–18:00») and sentences that are not a schedule at
-all («снаружи — в любое время», «по записи»). This file reads the subset it understands
-exactly, and answers ``None`` — unknown — for everything else, because a schedule
-misread is a promise nobody made.
+"""When a place is open, for a plan to check against.
+`opening_hours` is OSM syntax, Russian prose, or not a schedule at all: anything this
+module does not understand answers ``None``, because a schedule misread is a promise nobody made.
 """
 
 from __future__ import annotations
@@ -111,7 +106,6 @@ def local_at(instant: datetime) -> datetime:
 
 def parse_moment(value: datetime | str) -> datetime:
     """One instant from a wire value: a wall clock is Grodno time, an instant is placed.
-
     The same rule for the request and for whoever compares two moments, so "10:00" means
     ten in the morning in Grodno wherever it is read.
     """
@@ -123,7 +117,6 @@ def parse_moment(value: datetime | str) -> datetime:
 
 def opens_at(text: str | None, when: datetime) -> bool | None:
     """Whether a place is open at ``when``, or ``None`` when the string does not say.
-
     ``when`` is the local wall clock — pass ``local_at(now_utc)`` for "now".
     """
     cleaned = _clean(text or "")

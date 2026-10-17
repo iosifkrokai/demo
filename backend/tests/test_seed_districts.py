@@ -70,9 +70,7 @@ def test_a_point_in_the_hairline_between_two_rings_takes_the_nearest() -> None:
 def test_the_committed_districts_are_the_ones_the_boundaries_give() -> None:
     """The column is derived, not authored: a row disagreeing with its polygon is a bug.
 
-    Every dataset that carries the column is walked, so a new one cannot arrive with
-    guessed districts: `places_finds.csv` inherits the answer through `resolve_district`.
-    """
+    Every dataset carrying the column is walked, so a new one cannot arrive with guesses."""
     import csv
     import io
     from pathlib import Path

@@ -1,15 +1,6 @@
-"""Street hints for the unnamed stops and toilets, measured from the local OSM extract.
-
-OSM leaves most transport stops and toilets unnamed, so the seed writes a kind label
-(«Остановка», «Туалет») and a thousand rows read the same. The nearest *named* road is
-what tells two of them apart, but the answer is a measurement, not a fact: the stage
-reads the roads out of the PBF, measures every target row's distance to the nearest one,
-and writes a sidecar only for the rows the answer is unambiguous for. The candidate set
-is the road classes a walk uses — service ways, paths and cycleways carry a name too, but
-naming a stop after the footpath beside it names the wrong thing. The measurement is
-printed at 15/25/50/100 m; the file is written at 15 m with a 40 m ambiguity margin.
-Stage: collect, measure, write, and optionally apply.
-"""
+"""Street hints for the unnamed stops and toilets, measured from the local extract: the
+nearest *named* road tells two label-only rows apart, and a sidecar is written only for
+rows the answer is unambiguous for over the road classes a walk uses."""
 
 from __future__ import annotations
 
@@ -24,13 +15,14 @@ from itertools import pairwise
 from pathlib import Path
 from typing import Any
 
+from core.config import DEFAULT_DSN
 from core.paths import PLACE_STREETS_JSON
 
 from .datasets import collapse, collect_records, default_datasets
 from .osm_tags import is_fallback_name
 
 PBF = os.environ.get("OSM_PBF")
-DSN = os.environ.get("DATABASE_URL", "postgresql://grodno:grodno@localhost:5432/grodno")
+DSN = os.environ.get("DATABASE_URL", DEFAULT_DSN)
 
 SOURCE = "osm_street"
 
@@ -76,11 +68,8 @@ _DESCRIPTION = (
 
 @dataclass(frozen=True)
 class Road:
-    """A highway way as a polyline, the label it answers to, and whether that is a name.
-
-    ``named`` is False for a road the extract tags with a number alone (``ref`` without
-    ``name``): ``name`` then holds that number, so the point can be told apart from one
-    that really landed on a street.
+    """A highway way as a polyline, the label it answers to, and whether that label is a
+    name: ``named`` is False for a road tagged with a number alone, where ``name`` holds it.
     """
 
     name: str
@@ -99,9 +88,8 @@ class StreetAnswer:
 
 
 def _osmium() -> Any:
-    """Import pyosmium on demand, with a clear error when it is not installed.
-    Not a declared dependency, so a checkout that reads the written file imports this
-    module without the extract reader.
+    """Import pyosmium on demand — not a declared dependency, so applying the written
+    file needs no extract reader.
     """
     try:
         return importlib.import_module("osmium")
@@ -128,12 +116,8 @@ def looks_like_road_number(label: str | None) -> bool:
 
 
 def collect_roads(pbf_path: Path) -> list[Road]:
-    """The street-class roads of the extract as polylines, in two C++-filtered passes.
-
-    Pass one keeps the ways of the street classes and the node ids they name; pass two
-    resolves only those node ids to coordinates. Both filters run in C++, so Python sees
-    roughly a tenth of the file rather than every object — the difference between half a
-    minute and the ten a Python callback per node does not finish in.
+    """The street-class roads as polylines, in two C++-filtered passes: ways first, then
+    only the node ids they name resolved to coordinates.
     """
     osmium: Any = _osmium()
     base = osmium.SimpleHandler
@@ -219,11 +203,8 @@ def _segment_cells(
 
 
 class StreetIndex:
-    """Roads bucketed into a coarse grid, so a point only measures its neighbourhood.
-
-    A cell is 0.004° (≥ 260 m across), so the point's own cell and its eight neighbours
-    already cover more than any threshold here, and a road sitting on the point cannot
-    hide in a cell the point never looks at.
+    """Roads bucketed into a coarse grid so a point only measures its neighbourhood; the
+    cell size guarantees the point's cell and its eight neighbours cover every threshold.
     """
 
     def __init__(self, roads: Sequence[Road]) -> None:
@@ -259,14 +240,9 @@ def answer_from_ranked(
     threshold_m: float = STREET_THRESHOLD_M,
     ambiguity_m: float = STREET_AMBIGUITY_M,
 ) -> StreetAnswer:
-    """The street a point stands on, or why none can be named.
-
-    The road is the point's street only while it is the nearest of all roads and no
-    differently named road stands within ``ambiguity_m``; a road with a number instead of
-    a name is refused outright, since naming the stop «Остановка (Р42)» says which road
-    it is on and nothing a reader wants. The margin is nearly three times the threshold
-    by default, so a road a metre or two out of place cannot flip the answer.
-    """
+    """The street a point stands on, or why none can be named: the road must be the nearest
+    of all roads with no differently named road within ``ambiguity_m``; a number-only road
+    is refused, since «Остановка (Р42)» says which road, not what street."""
     if not ranked or ranked[0][0] > threshold_m:
         return StreetAnswer("none", None, None, None)
     dist, road = ranked[0]
@@ -339,11 +315,8 @@ def measure(
     *,
     thresholds: Iterable[float] = MEASURE_THRESHOLDS_M,
 ) -> dict[str, dict[str, int]]:
-    """The status counts at each threshold, ambiguity measured at the threshold itself.
-
-    ``got`` is every row with a road inside the threshold — named, ambiguous or a road
-    number — so ``number`` and ``ambiguous`` share of it says how much the method is
-    worth before any rule is applied.
+    """The status counts at each threshold, ambiguity measured at the threshold itself;
+    ``got`` is every row with a road inside it, including number-only and ambiguous ones.
     """
     ranked = [(_ranked_for(index, record)) for record in targets]
     out: dict[str, dict[str, int]] = {}
@@ -401,10 +374,8 @@ def run_stage(
     apply: bool = False,
     dsn: str | None = None,
 ) -> dict[str, Any]:
-    """Measure every unnamed stop and toilet against the extract, and write the sidecar.
-
-    ``records``/``data_dir`` default to the committed datasets; ``apply`` overlays the
-    written file on the row names inside one transaction the caller commits.
+    """Measure every unnamed stop and toilet against the extract, write the sidecar, and
+    optionally apply it inside one transaction the caller commits.
     """
     pbf = pbf_path or (Path(PBF) if PBF else None)
     if pbf is None:

@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pydantic_ai import RunContext
 
 from agent.schema import PlanningDeps
-from agent.tools import (
+from agent.tools._shared import (
     ERR_BAD_ARGUMENT,
     ToolAnswer,
     envelope,
@@ -15,12 +15,17 @@ from agent.tools import (
     project,
 )
 
+if TYPE_CHECKING:
+    from db.store.registry import Repositories
+
 MAX_AREAS_PER_CALL = 8
 
 _AREA_FIELDS = ("code", "name_ru", "name_en", "kind")
 
 
-def find_areas(term: str, locale: str = "ru", *, repos: Any = None) -> dict[str, Any]:
+def find_areas(
+    term: str, locale: str = "ru", *, repos: Repositories | None = None
+) -> dict[str, Any]:
     """Resolve a territory name ("старый город", "Новогрудок") to area slugs."""
     provenance: dict[str, Any] = {
         "source": "areas",

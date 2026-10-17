@@ -47,8 +47,12 @@ def _is_distance_limit_error(exc: Exception) -> bool:
 def _pair_metres(a: dict[str, Any], b: dict[str, Any]) -> float:
     """Equirectangular straight-line distance in metres (fine at these scales)."""
     lat_mid = math.radians((float(a["lat"]) + float(b["lat"])) / 2)
-    dx = math.radians(float(a["lon"]) - float(b["lon"])) * 6_371_000 * math.cos(lat_mid)
-    dy = math.radians(float(a["lat"]) - float(b["lat"])) * 6_371_000
+    dx = (
+        math.radians(float(a["lon"]) - float(b["lon"]))
+        * constants.EARTH_RADIUS_M
+        * math.cos(lat_mid)
+    )
+    dy = math.radians(float(a["lat"]) - float(b["lat"])) * constants.EARTH_RADIUS_M
     return math.hypot(dx, dy)
 
 

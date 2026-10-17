@@ -1,10 +1,6 @@
-"""English names for the objects we hold, read from the local OSM extract.
-
-OSM carries ``name:en`` for an object the 14-column dataset has nowhere to put; this
-stage reads it from a PBF into a sidecar alias file, so the retrieval alias signal can
-answer an English query without a schema change. Stage: collect from the extract, write
-the file, and optionally apply it to ``place_aliases``.
-"""
+"""English names for the objects we hold, read from the local OSM extract into a sidecar.
+The dataset has no column for a translated name, so the file lets the retrieval alias
+signal answer an English query without a schema change; optionally applied to ``place_aliases``."""
 
 from __future__ import annotations
 
@@ -16,13 +12,14 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
+from core.config import DEFAULT_DSN
 from core.paths import PLACE_ALIASES_EN_JSON
 from db.connection import connect
 from db.seed.datasets import collect_records, default_datasets, norm_name
 
 from .geofence import inside_project_area
 
-DSN = os.environ.get("DATABASE_URL", "postgresql://grodno:grodno@localhost:5432/grodno")
+DSN = os.environ.get("DATABASE_URL", DEFAULT_DSN)
 
 PBF = os.environ.get("OSM_PBF")
 
@@ -32,9 +29,8 @@ _SOURCE = "osm"
 
 
 def _osmium() -> Any:
-    """Import pyosmium on demand, with a clear error when it is not installed.
-    Not a declared dependency, so a checkout that only applies the written file still
-    imports this module without the extract reader.
+    """Import pyosmium on demand — not a declared dependency, so applying the written
+    file needs no extract reader.
     """
     try:
         return importlib.import_module("osmium")
@@ -57,13 +53,9 @@ _DESCRIPTION = (
 
 
 def osm_targets(records: Iterable[dict[str, Any]]) -> dict[str, dict[str, Any]]:
-    """The OSM identity (``node/123``) behind each record's ``source_url``.
-
-    Only a record whose own point falls inside the project area is kept: an object the
-    datasets hold outside the region is not a place this file may name. An identity two
-    records claim (a sight and a service mapped as one object) is kept once, by the
-    order the datasets are read, so the file does not depend on heap order.
-    """
+    """The OSM identity (``node/123``) behind each record's ``source_url``, limited to
+    points inside the project area. An identity two records claim is kept once, in
+    dataset order, so the file does not depend on heap order."""
     targets: dict[str, dict[str, Any]] = {}
     for record in records:
         match = _OSM_REF.match(str(record.get("source_url") or ""))
@@ -86,13 +78,8 @@ def osm_targets(records: Iterable[dict[str, Any]]) -> dict[str, dict[str, Any]]:
 
 
 def alias_for(name_en: str, name_ru: str) -> str | None:
-    """The one English name to keep from an OSM ``name:en`` value.
-
-    OSM allows a semicolon list, so the first candidate that says something the row does
-    not already say wins — a choice that depends on the tag, not on map order. A value
-    that repeats the row's own name (Cyrillic under ``name:en`` happens) carries nothing
-    and yields no alias; a Cyrillic value that differs is a name like any other and is
-    kept. Normalising both sides means case and punctuation do not decide.
+    """The one English name to keep from an OSM ``name:en`` semicolon list: the first
+    candidate that differs from the row's own name after normalisation, or ``None``.
     """
     key = norm_name(name_ru)
     for part in name_en.split(";"):
@@ -104,13 +91,8 @@ def alias_for(name_en: str, name_ru: str) -> str | None:
 
 def collect_names(pbf_path: Path, targets: dict[str, Any]) -> tuple[dict[str, str], int]:
     """One pass over the extract: the ``name:en`` of every object we hold, and how many
-    objects in the whole file carry the tag at all.
-
-    The wanted identities are exact, so an object of another type with the same number
-    is a different object and stays out. The first ``name:en`` a wanted object states is
-    kept (an object does not repeat the key), matching "first by document". The key
-    filter runs in C++, so Python sees only the objects that carry the tag at all.
-    """
+    objects carry the tag. Identities are exact, so another object type with the same
+    number stays out, and the key filter runs in C++."""
     osmium: Any = _osmium()
     wanted = set(targets)
     base_handler = osmium.SimpleHandler
@@ -153,11 +135,8 @@ def collect_names(pbf_path: Path, targets: dict[str, Any]) -> tuple[dict[str, st
 def build_entries(
     targets: dict[str, dict[str, Any]], found: dict[str, str]
 ) -> tuple[list[dict[str, Any]], dict[str, int]]:
-    """Turn the objects the extract named into the sidecar's entries, in ``source_url``
-    order.
-
-    An identity we hold no record for is dropped: the file only names our places. Each
-    surviving object is one alias, and a name the row already carries is not written.
+    """The sidecar's entries in ``source_url`` order; identities with no record and names
+    the row already carries are dropped.
     """
     stats = {"matched": 0, "written": 0, "repeats_ru": 0, "multiple_candidates": 0}
     entries: list[dict[str, Any]] = []
@@ -203,10 +182,8 @@ def run_stage(
     apply: bool = False,
     dsn: str | None = None,
 ) -> dict[str, Any]:
-    """Generate the English-alias sidecar from the extract, and optionally apply it.
-
-    ``records``/``data_dir`` default to the committed datasets; ``apply`` writes the file
-    into ``place_aliases`` inside one transaction the caller commits.
+    """Generate the English-alias sidecar, and optionally apply it to ``place_aliases``
+    inside one transaction the caller commits.
     """
     pbf = pbf_path or (Path(PBF) if PBF else None)
     if pbf is None:

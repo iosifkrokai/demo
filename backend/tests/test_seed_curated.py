@@ -69,9 +69,7 @@ def test_an_absent_name_is_not_ambiguous() -> None:
 def _projected_rows() -> list[dict[str, Any]]:
     """The rows the seed projects, as ``match_place`` reads them.
 
-    Built from the committed datasets alone — ``--dry-run``'s view — so a curated row is
-    proven to resolve without a database, the way the file it lives in must.
-    """
+    Built from the committed datasets alone, so a curated row resolves without a database."""
     collected = collect_records(default_datasets())
     kept, _shadowed, _stale = collapse(collected["records"])
     return [

@@ -20,6 +20,7 @@ __all__ = [
     "previous_stops",
     "reconcile",
     "reconcile_brief",
+    "reconcile_context",
     "record",
     "thread_key",
 ]
@@ -65,11 +66,8 @@ def reconcile(context: RefinementBrief | None, recorded: Turn | None) -> Refinem
 def _recorded(
     repo: ThreadRepository, *, thread_id: str | None, identity: str | None
 ) -> Turn | None:
-    """The turn a refinement starts from: the named run's, or the account's newest.
-
-    A run id lives in the browser and does not survive a reload, so the client can
-    name a thread this server never saw while still holding a route on screen. The
-    account's newest turn is that route.
+    """The turn a refinement starts from: the named run's, or the account's newest. A run id
+    does not survive a reload, so a thread this server never saw falls back to that newest.
     """
     if thread_id:
         recorded = repo.latest(thread_id)
@@ -118,6 +116,27 @@ def reconcile_brief(
     return dataclasses.replace(brief, context=reconcile(brief.context, recorded))
 
 
+def reconcile_context(
+    repo: ThreadRepository,
+    *,
+    thread_id: str | None,
+    brief: ReaderBrief,
+    identity: str | None = None,
+) -> tuple[ReaderBrief, tuple[BriefStop, ...]]:
+    """The brief and the stops a refinement starts from, read from the journal once."""
+    if brief.context is None:
+        return brief, ()
+    try:
+        recorded = _recorded(repo, thread_id=thread_id, identity=identity)
+    except StorageUnavailableError as exc:
+        log.warning("thread %s: journal unreadable (%s)", thread_id, exc)
+        return brief, brief.context.base_points
+    reconciled = dataclasses.replace(brief, context=reconcile(brief.context, recorded))
+    if recorded is not None:
+        return reconciled, journal_stops(recorded)
+    return reconciled, brief.context.base_points
+
+
 def record(
     repo: ThreadRepository,
     *,
@@ -129,5 +148,5 @@ def record(
     """Append this turn to the thread's journal; a failed write is only logged."""
     try:
         repo.append(thread_id, query=query, submission=submission, measurement=measurement)
-    except Exception as exc:
-        log.warning("thread %s: turn not recorded (%s: %s)", thread_id, type(exc).__name__, exc)
+    except StorageUnavailableError as exc:
+        log.warning("thread %s: turn not recorded (%s)", thread_id, exc)

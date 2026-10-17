@@ -1,14 +1,12 @@
-"""The model endpoint is configuration, and it is read from the environment.
+"""The model endpoint is configuration, read from the environment.
 
-No network and no model: this pins where a key and a model name come from, and
-that a blank assignment means "unset".
-"""
+No network and no model: a blank assignment means "unset", not a value."""
 
 from __future__ import annotations
 
 import pytest
 
-from core.config import chosen_provider, model_name, provider
+from core.config import chosen_provider, model_name
 
 
 @pytest.fixture(autouse=True)
@@ -20,8 +18,8 @@ def _no_ambient_llm_env(monkeypatch):
 
 def test_the_settings_come_from_the_environment(monkeypatch) -> None:
     monkeypatch.setenv("OPENROUTER_BASE_URL", "https://gateway.example/v1")
-    assert provider("openrouter").base_url == "https://gateway.example/v1"
-    assert provider("openrouter").default_model
+    assert chosen_provider().base_url == "https://gateway.example/v1"
+    assert chosen_provider().default_model
 
 
 def test_the_key_is_read_from_the_environment(monkeypatch) -> None:
@@ -37,7 +35,7 @@ def test_with_no_key_at_all_the_endpoint_is_named_but_has_none(monkeypatch) -> N
 
 
 def test_the_model_name_has_one_home(monkeypatch) -> None:
-    assert model_name() == provider("openrouter").default_model
+    assert model_name() == chosen_provider().default_model
 
     monkeypatch.setenv("LLM_MODEL", "some/model")
     assert model_name() == "some/model"
@@ -48,4 +46,4 @@ def test_a_blank_variable_is_not_a_value(monkeypatch) -> None:
     monkeypatch.setenv("OPENROUTER_API_KEY", "")
     monkeypatch.setenv("LLM_MODEL", "")
     assert chosen_provider().api_key is None
-    assert model_name() == provider("openrouter").default_model
+    assert model_name() == chosen_provider().default_model

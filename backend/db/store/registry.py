@@ -16,7 +16,7 @@ from db.store.users import PostgresUserRepository
 
 @dataclass(frozen=True)
 class Repositories:
-    """One instance per request-scoped component, wired once at startup."""
+    """Process-wide repositories, wired once at startup."""
 
     places: PostgresPlaceRepository
     areas: PostgresAreaRepository

@@ -13,7 +13,6 @@ from routing.valhalla import http as valhalla_http
 from routing.valhalla.route import best_route, route_through
 from routing.valhalla.types import RouteStatus
 
-# A two-point leg at the origin, in the encoded-polyline alphabet the decoder reads.
 LEG_SHAPE = "????"
 
 POINTS = [

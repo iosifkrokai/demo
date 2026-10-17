@@ -69,20 +69,12 @@ class PostgresCategoryRepository(PostgresRepository):
                 self._cache = tuple(category_from_row(row) for row in cur.fetchall())
         return self._cache
 
-    def refresh(self) -> None:
-        """Drop the held copy — for a process that re-seeds underneath itself."""
-        self._cache = None
-        self._index = None
-
     def all_codes(self) -> tuple[str, ...]:
         return tuple(cat.code for cat in self.all())
 
     def service_codes(self) -> tuple[str, ...]:
-        """The service categories highlighted by default, as the taxonomy marks them.
-
-        A role of `service` is not enough: stairways are a service the catalogue holds
-        and the map does not show unasked, so the highlight flag — not the role — is
-        what the default reads.
+        """The service categories highlighted by default: role alone is not enough, since
+        stairways are a service the catalogue holds but the map does not show unasked.
         """
         return tuple(cat.code for cat in self.all() if cat.role == "service" and cat.highlight)
 
@@ -102,13 +94,6 @@ class PostgresCategoryRepository(PostgresRepository):
         if cat is None:
             raise KeyError(f"unknown category code: {code!r}")
         return cat.role
-
-    def visit_minutes(self, code: str) -> int:
-        """Default visit time for a code. Raises KeyError if unknown."""
-        cat = self.get(code)
-        if cat is None:
-            raise KeyError(f"unknown category code: {code!r}")
-        return cat.visit_minutes
 
     def db_values(self, codes: Iterable[str]) -> list[str]:
         """Map query codes/terms to ``places.category`` values."""

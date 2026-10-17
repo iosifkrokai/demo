@@ -2,6 +2,32 @@
 
 from __future__ import annotations
 
+EARTH_RADIUS_M = 6_371_000.0
+EARTH_RADIUS_KM = 6_371.0
+
+TRANSPORT_ALIASES: dict[str, str] = {
+    "pedestrian": "pedestrian",
+    "walk": "pedestrian",
+    "foot": "pedestrian",
+    "bicycle": "bicycle",
+    "bike": "bicycle",
+    "auto": "auto",
+    "car": "auto",
+    "drive": "auto",
+    "truck": "truck",
+    "bus": "bus",
+    "motorcycle": "motorcycle",
+    "motor_scooter": "motor_scooter",
+    "any": "any",
+}
+
+
+def normalize_transport(profile: str | None) -> str:
+    """The canonical name of a client's transport profile."""
+    name = (profile or "pedestrian").strip().lower()
+    return TRANSPORT_ALIASES.get(name, name)
+
+
 MIN_LEG_POINTS = 2
 MIN_TOUR_STOPS = 3
 

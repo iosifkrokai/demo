@@ -9,9 +9,7 @@ SCAN = 200
 def _stops(repos, limit: int = 5) -> list:
     """Real rows near one another that can hold a walk — services are not stops.
 
-    The nearest rows to the old town are mostly cafés and bus stops, so the scan is
-    wide and the services are dropped, exactly as the planner drops them.
-    """
+    The old town's nearest rows are mostly services, so the scan is wide and they are dropped."""
     from routing.models import CategoryFacts
 
     facts = CategoryFacts.from_rows(repos.taxonomy.all())
@@ -135,12 +133,9 @@ def _facts(repos):
 
 
 def test_a_catalogue_submits_the_places_themselves(db_repos) -> None:
-    """The answer to «все костёлы Вороновского района» is places, not the verdicts about
-    them: a response builder reads cards, and a verdict carries no id to be read.
+    """The answer to «все костёлы Вороновского района» is places, not the verdicts about them.
 
-    The district is named because the catalogue reads a bounded pool per code: a whole
-    oblast holds more костёлы than the pool does, and then the list is a slice of them.
-    """
+    The district is named because the catalogue reads a bounded pool per code."""
     from agent.schema import PlanSubmission
     from agent.tools.submit import measure_submission
     from routing.models import Requirement, TripRequirements, WalkRequest

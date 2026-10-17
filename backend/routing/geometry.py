@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 
+from core import constants
 from routing.models import Candidate
 
 
@@ -16,6 +17,6 @@ def distance_pt_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     """Equirectangular distance in metres (fine at city scale)."""
 
     lat_mid = math.radians((lat1 + lat2) / 2)
-    dx = math.radians(lon1 - lon2) * 6_371_000 * math.cos(lat_mid)
-    dy = math.radians(lat1 - lat2) * 6_371_000
+    dx = math.radians(lon1 - lon2) * constants.EARTH_RADIUS_M * math.cos(lat_mid)
+    dy = math.radians(lat1 - lat2) * constants.EARTH_RADIUS_M
     return math.hypot(dx, dy)

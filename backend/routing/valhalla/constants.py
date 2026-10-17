@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from core import constants
+
 PRECISION = 1e6
 
 LOCATION_SNAP_RADIUS_M = 100
@@ -41,13 +43,11 @@ VALHALLA_COSTINGS = frozenset(
         "truck",
     }
 )
-_PROFILE_ALIASES = {"car": "auto", "drive": "auto", "walk": "pedestrian"}
 
 
 def costing_for(profile: str | None) -> str:
     """The engine's name for a client's transport profile."""
-    name = (profile or "pedestrian").strip().lower()
-    name = _PROFILE_ALIASES.get(name, name)
+    name = constants.normalize_transport(profile)
     return name if name in VALHALLA_COSTINGS else "pedestrian"
 
 
@@ -55,12 +55,7 @@ STEP_PENALTY = 3600.0
 
 
 def costing_options_for(profile: str | None, step_free: bool) -> dict[str, Any]:
-    """The costing tune a step-free walk is measured with — nothing for any other.
-
-    ``step_penalty`` is the engine's price for a staircase, and only the pedestrian
-    costing reads it. An empty mapping keeps every ordinary request on its default
-    costing, which is what the engine answers when nothing is asked of it.
-    """
+    """The costing tune a step-free walk is measured with — nothing for any other."""
     name = costing_for(profile)
     if not step_free or name != "pedestrian":
         return {}

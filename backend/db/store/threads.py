@@ -9,6 +9,7 @@ from psycopg.types.json import Jsonb
 
 from db.models.thread import Thread, Turn
 from db.store.base import PostgresRepository
+from db.store.errors import StorageUnavailableError
 from db.store.mappers import model_from_row
 
 log = logging.getLogger(__name__)
@@ -76,7 +77,8 @@ class PostgresThreadRepository(PostgresRepository):
                 (thread_id, thread_id, query, Jsonb(submission), Jsonb(measurement)),
             )
             row = cur.fetchone()
-        assert row is not None
+        if row is None:
+            raise StorageUnavailableError("insert returned no turn row")
         return model_from_row(Turn, row)
 
     def latest(self, thread_id: str) -> Turn | None:

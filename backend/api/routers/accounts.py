@@ -12,6 +12,7 @@ from api import deps
 from api.models.accounts import (
     REASON_EMAIL_TAKEN,
     REASON_INVALID_CREDENTIALS,
+    REASON_NOT_AUTHENTICATED,
     REASON_PLACE_NOT_FOUND,
     SESSION_COOKIE,
     AuthMeOut,
@@ -48,7 +49,8 @@ def _start_session(
     user: User,
 ) -> None:
     """Mint a session, store only its hash, and hand the token to the browser."""
-    assert user.id is not None
+    if user.id is None:
+        raise deps.http_error(500, "account_without_id")
     token = new_session_token()
     expires = datetime.now(UTC) + timedelta(seconds=SESSION_TTL_S)
     repo.create_session(hash_token(token), user.id, expires)
@@ -147,8 +149,8 @@ def list_visited(
     user, err = deps.require_user(request, repo)
     if err is not None:
         return err
-    assert user is not None
-    assert user.id is not None
+    if user is None or user.id is None:
+        return deps.error(401, REASON_NOT_AUTHENTICATED)
     marks = repo.list_visited(user.id)
     by_id = {place.id: place for place in places.get_by_ids([m.place_id for m in marks])}
     items: list[VisitedItem] = []
@@ -171,8 +173,8 @@ def mark_visited(
     user, err = deps.require_user(request, repo)
     if err is not None:
         return err
-    assert user is not None
-    assert user.id is not None
+    if user is None or user.id is None:
+        return deps.error(401, REASON_NOT_AUTHENTICATED)
     mark = repo.mark_visited(user.id, place_id)
     place = places.get_by_id(place_id) if mark is not None else None
     if mark is None or place is None or mark.visited_at is None:
@@ -190,8 +192,8 @@ def mark_visited_bulk(
     user, err = deps.require_user(request, repo)
     if err is not None:
         return err
-    assert user is not None
-    assert user.id is not None
+    if user is None or user.id is None:
+        return deps.error(401, REASON_NOT_AUTHENTICATED)
     marked = repo.mark_visited_many(user.id, body.place_ids)
     return VisitedBulkOut(marked=marked, count=len(marked))
 
@@ -206,7 +208,7 @@ def unmark_visited(
     user, err = deps.require_user(request, repo)
     if err is not None:
         return err
-    assert user is not None
-    assert user.id is not None
+    if user is None or user.id is None:
+        return deps.error(401, REASON_NOT_AUTHENTICATED)
     repo.unmark_visited(user.id, place_id)
     return Response(status_code=204)

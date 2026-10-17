@@ -1,4 +1,4 @@
-"""The `places` row and its two children."""
+"""The `places` row."""
 
 from __future__ import annotations
 
@@ -12,7 +12,6 @@ class Place:
 
     id: int | None = None
     name: str = ""
-    description: str | None = None
     category: str | None = None
     blurb: str | None = None
     fun_fact: str | None = None
@@ -33,31 +32,4 @@ class Place:
     photo_author: str | None = None
     photo_license: str | None = None
     photo_source: str | None = None
-    created_at: datetime | None = None
-
-
-@dataclass(frozen=True)
-class PlaceAlias:
-    """A name a place is also known by, in one locale."""
-
-    id: int | None = None
-    place_id: int = 0
-    alias: str = ""
-    locale: str = "ru"
-    source: str | None = None
-    created_at: datetime | None = None
-
-
-@dataclass(frozen=True)
-class PlaceSource:
-    """Where a place came from, per provider — keyed on (provider, external_id)."""
-
-    id: int | None = None
-    place_id: int = 0
-    provider: str = ""
-    external_id: str = ""
-    url: str | None = None
-    license: str | None = None
-    fetched_at: datetime | None = None
-    verified_at: datetime | None = None
     created_at: datetime | None = None

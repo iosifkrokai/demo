@@ -36,11 +36,8 @@ PROVIDER_BY_PREFIX = {
 def stale_embedding(
     name_expr: LiteralString, category_expr: LiteralString, town_expr: LiteralString
 ) -> LiteralString:
-    """The SQL that drops a row's vector when the text it was built from changes.
-
-    A vector is a projection of ``embeddings.embedded_text`` — the row's name, category
-    and town — so every writer of one of those three clears it in the same statement.
-    ``embed_missing`` only ever fills ``NULL``, so clearing is enough.
+    """The SQL that drops a row's vector when its name, category or town changes; since
+    ``embed_missing`` only fills ``NULL``, clearing is enough to force a rebuild.
     """
     return (
         f"CASE WHEN places.name IS DISTINCT FROM {name_expr} "
@@ -82,6 +79,7 @@ def upsert_sql() -> LiteralString:
             is_free = EXCLUDED.is_free,
             visit_minutes = EXCLUDED.visit_minutes, links = EXCLUDED.links,
             embedding = {stale}
+        RETURNING (xmax = 0) AS inserted
     """
 
 
@@ -118,9 +116,9 @@ def apply_dataset(
     with conn.cursor() as cur:
         for r in records:
             r["is_free"] = free_entry(r.get("ticket_price"))
-            cur.execute("SELECT 1 FROM places WHERE source_url = %s", (r["source_url"],))
-            was_new = cur.fetchone() is None
             cur.execute(sql.SQL(statement), r)
+            row = cur.fetchone()
+            was_new = True if row is None else bool(row[0])
             src = source_fields(r["source_url"], ds.license)
             cur.execute(
                 """
@@ -140,14 +138,9 @@ def apply_dataset(
 
 
 def reset_curated(conn: psycopg.Connection, records: list[dict[str, Any]]) -> dict[str, Any]:
-    """Give every curated row back to its dataset, so the overlay is applied afresh.
-
-    The CSV is applied by name on every seed, so a row an earlier run marked and this
-    one does not choose would otherwise stay marked for good — and that flag is
-    protection, which means a wrong one is never rewritten again. A curated row no
-    dataset of this run holds is left alone and counted: the seed does not unset what it
-    cannot account for. The caller commits.
-    """
+    """Give every curated row back to its dataset so the overlay applies afresh; a curated
+    row no dataset of this run holds is left alone and counted, since the flag is
+    protection. The caller commits."""
     known = {str(r["source_url"]): r["_category_source"] for r in records}
     reset = 0
     unknown = 0
@@ -251,16 +244,9 @@ def _alias_lookups(cur: Any) -> tuple[dict[str, int], dict[str, int]]:
 
 
 def apply_place_aliases(conn: psycopg.Connection, path: Path | None = None) -> dict[str, Any]:
-    """Write one alias file's declared names into ``place_aliases``.
-
-    The file is the whole truth for the rows it writes: an alias it no longer names is
-    deleted, so editing the file is enough. A file that is absent is not a declaration
-    and leaves the table alone. The delete is scoped by the file's own name, so the
-    English sidecar and the hand-authored file cannot sweep each other's rows. A row the
-    seed shadowed is gone from ``places`` but its identity survives in ``place_sources``,
-    so the alias lands on the survivor; an alias neither finds is reported, since the file
-    claiming a place the seed never wrote is a fact worth seeing. The caller commits.
-    """
+    """Write one alias file's declared names into ``place_aliases``; an absent file is a
+    no-op and deletion is scoped to that file, so the two alias files cannot sweep each
+    other's rows. A shadowed row's identity resolves through ``place_sources``."""
     source = path or PLACE_ALIASES_JSON
     if not source.is_file():
         return {"skipped": f"no {source.name}"}
@@ -289,14 +275,9 @@ def apply_place_aliases(conn: psycopg.Connection, path: Path | None = None) -> d
 
 
 def load_areas(conn: psycopg.Connection, geo_dir: Path | None = None) -> dict[str, int]:
-    """Idempotently write the named-area registry from `areas.json`.
-
-    The polygon follows the row: only an area whose `geometry` names a border file
-    gets that ring, and the others keep `geom = NULL`. The file is the whole truth,
-    so an area whose geometry it no longer declares has any earlier ring cleared, and
-    an area it does not declare at all is deleted — a name resolving to a row no file
-    holds would hand the planner a code the data disowns. The caller commits.
-    """
+    """Idempotently write the named-area registry from ``areas.json``: the file is the
+    whole truth, so an area it no longer declares is deleted and its ring cleared. The
+    caller commits."""
     directory = geo_dir or GEO_DIR
     document = json.loads((directory / "areas.json").read_text(encoding="utf-8"))
     declared = [area["slug"] for area in document["areas"]]
@@ -345,10 +326,8 @@ def load_areas(conn: psycopg.Connection, geo_dir: Path | None = None) -> dict[st
 def _area_geometry(
     directory: Path, area: dict[str, Any]
 ) -> tuple[str | None, str | None, str | None]:
-    """(wkt, source, license) from the border file this area's `geometry` names.
-
-    A file can hold one boundary (its own `rings`) or many (`districts`, one per slug):
-    an area that names a `record` takes that record's polygon out of the shared file.
+    """(wkt, source, license) from the border file this area's ``geometry`` names; an area
+    naming a ``record`` takes that record's polygon out of a shared file.
     """
     declared = area.get("geometry") or {}
     name = declared.get("source")
@@ -375,11 +354,8 @@ def _border_wkt(meta: dict[str, Any]) -> str | None:
 
 
 def load_categories(conn: psycopg.Connection, categories: Iterable[Any]) -> int:
-    """Idempotently write the taxonomy. `code` is the natural key.
-
-    Every projected column is written on conflict too, `highlight` included: what the
-    map shows beside a route by default is a decision in the file, not one made once by
-    a migration, and a flag the file changes has to reach the database on the next seed.
+    """Idempotently write the taxonomy, keyed by ``code``; every projected column is
+    written on conflict too, ``highlight`` included, because the file is the decision.
     """
     written = 0
     with conn.cursor() as cur:
@@ -412,10 +388,8 @@ def load_categories(conn: psycopg.Connection, categories: Iterable[Any]) -> int:
 
 
 def load_itineraries(conn: psycopg.Connection, itineraries: Iterable[Any]) -> int:
-    """Idempotently write the curated walks and their named stops.
-
-    The file is the registry: a walk it no longer carries is deleted, and its stops
-    with it (the foreign key cascades), so a dropped route cannot stay in the product.
+    """Idempotently write the curated walks and stops; a walk the file no longer carries
+    is deleted, and its stops with it through the cascade.
     """
     items = list(itineraries)
     written = 0
@@ -508,15 +482,9 @@ def apply_photos(conn: psycopg.Connection, photos_dir: Path | None = None) -> in
 
 
 def apply_place_streets(conn: psycopg.Connection, path: Path | None = None) -> dict[str, Any]:
-    """Overlay the committed ``place_streets.json`` on the generated service labels.
-
-    The dataset upsert writes «Остановка» back from the CSV on every seed, so the street
-    hint must be laid on *after* it or the next seed would win the name back. The update
-    fires only where the row still carries the label the file extends, so a row the data
-    has since given a real name is left alone, and a re-run changes nothing. A file that
-    is absent is not a declaration and leaves the names as the CSVs wrote them. The
-    caller commits.
-    """
+    """Overlay ``place_streets.json`` on the generated service labels after the dataset
+    upsert, or the next seed wins the name back; only a row still carrying the label is
+    extended. An absent file is not a declaration, and the caller commits."""
     from .streets import read_place_street_entries
 
     source = path or PLACE_STREETS_JSON
@@ -541,15 +509,9 @@ def apply_place_streets(conn: psycopg.Connection, path: Path | None = None) -> d
 
 
 def apply_place_categories(conn: psycopg.Connection, path: Path | None = None) -> dict[str, Any]:
-    """Overlay the committed ``place_categories.json`` on the OSM rows' categories.
-
-    The dataset upsert writes the snapshot's ``historic=ruins`` category back on every
-    seed, so the re-derived category must be laid on *after* it or the next seed would
-    win it back. Only an automatic row is re-labelled — a curated or dataset category is
-    a human's and the trigger would revert the write. The category is part of the text a
-    vector is a projection of, so this write clears the vector like any other. A file
-    that is absent is not a declaration. The caller commits.
-    """
+    """Overlay ``place_categories.json`` after the dataset upsert, on automatic rows only —
+    the trigger reverts a curated or dataset category. A category change clears the vector,
+    an absent file is not a declaration, and the caller commits."""
     from .finds import read_place_category_entries
 
     source = path or PLACE_CATEGORIES_JSON

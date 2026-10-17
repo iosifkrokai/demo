@@ -1,4 +1,4 @@
-"""Accounts, their sessions, and the places they have visited."""
+"""Accounts and the places they have visited."""
 
 from __future__ import annotations
 
@@ -26,17 +26,6 @@ class AdminUser(User):
     """A user as the admin list shows one: the row plus its activity count."""
 
     visited: int = 0
-
-
-@dataclass(frozen=True)
-class UserSession:
-    """One signed-in browser. Only the hash of the token is ever stored."""
-
-    token_hash: str = ""
-    user_id: UUID | None = None
-    created_at: datetime | None = None
-    expires_at: datetime | None = None
-    last_seen_at: datetime | None = None
 
 
 @dataclass(frozen=True)

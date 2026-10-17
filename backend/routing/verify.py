@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import re
 from datetime import datetime
-from typing import Any, Literal, NamedTuple
+from typing import TYPE_CHECKING, Any, Literal, NamedTuple
 
 from core import constants
 from core.hours import local_at, opens_at
 from core.prices import free_entry
+from db.store.errors import StorageUnavailableError
 from routing.models import (
     REASON_MUST_VISIT_OUTSIDE as REASON_MUST_VISIT_OUTSIDE_CODE,
     CategoryFacts,
@@ -16,12 +17,16 @@ from routing.models import (
     TripRequirements,
 )
 
+if TYPE_CHECKING:
+    from db.store.registry import Repositories
+
 __all__ = [
     "INFEASIBLE_REASONS",
-    "REASON_CODES",
     "REPAIRABLE_REASONS",
-    "geometry_ok",
+    "ServiceAlongEvidence",
+    "StepsAlong",
     "overall_status",
+    "steps_evidence",
     "verify",
     "verify_catalogue",
     "verify_summary",
@@ -80,62 +85,24 @@ class ServiceAlongEvidence(NamedTuple):
 
 
 class StepsAlong(NamedTuple):
-    """What the catalogue's stairways say about the drawn line.
-
-    ``measured=False`` is the data the code could not consult — a missing line or an
-    unreachable catalogue — and it is ``uncertain``, never ``unmet``.
+    """What the catalogue's stairways say about the drawn line. ``measured=False`` is data
+    the code could not consult, and it is ``uncertain``, never ``unmet``.
     """
 
     measured: bool
     steps: list[dict[str, Any]]
 
 
-def steps_evidence(repos: Any, shape: Any) -> StepsAlong:
+def steps_evidence(repos: Repositories | None, shape: Any) -> StepsAlong:
     """The stairways the route runs over, or the honest word that they were not read."""
     if repos is None or not shape:
         return StepsAlong(measured=False, steps=[])
     try:
         answer = repos.places.steps_along(shape)
-    except Exception:
+    except StorageUnavailableError:
         return StepsAlong(measured=False, steps=[])
     return StepsAlong(measured=True, steps=list(answer.get("items") or []))
 
-
-REASON_CODES: frozenset[str] = frozenset(
-    {
-        REASON_MUST_VISIT_OK,
-        REASON_MUST_VISIT_OUTSIDE,
-        REASON_MUST_VISIT_ABSENT,
-        REASON_MUST_VISIT_UNROUTABLE,
-        REASON_MUST_VISIT_UNSPECIFIED,
-        REASON_SERVICE_OK,
-        REASON_SERVICE_ALONG_ROUTE,
-        REASON_SERVICE_NOT_MEASURED,
-        REASON_HARD_SERVICE_ABSENT,
-        REASON_SOFT_SERVICE_ABSENT,
-        REASON_INTEREST_OK,
-        REASON_INTEREST_ABSENT,
-        REASON_MUST_VISIT_IN_CATALOGUE,
-        REASON_SERVICE_IN_CATALOGUE,
-        REASON_INTEREST_IN_CATALOGUE,
-        REASON_AVOID_OK,
-        REASON_AVOID_VIOLATED,
-        REASON_FREE_OK,
-        REASON_FREE_PAID,
-        REASON_FREE_UNKNOWN,
-        REASON_OPEN_OK,
-        REASON_OPEN_CLOSED,
-        REASON_OPEN_UNKNOWN,
-        REASON_OPEN_NOT_DATED,
-        REASON_STEP_FREE_PROVEN,
-        REASON_STEPS_ON_ROUTE,
-        REASON_STEPS_UNKNOWN,
-        REASON_CODE_UNSPECIFIED,
-        REASON_CODE_UNKNOWN,
-        REASON_ROUTE_MISSING,
-        REASON_GEOMETRY_MISSING,
-    }
-)
 
 INFEASIBLE_REASONS: frozenset[str] = frozenset(
     {
@@ -483,9 +450,9 @@ def _verify_open(
     geom_ok: bool,
     at: datetime | None,
 ) -> None:
-    """Whether the walk is inside opening hours at ``at``. The moment is an input, not
-    a clock read: a verdict about "now" that changes between two identical requests is
-    not a verdict. Without a moment the request cannot be proven either way.
+    """Whether the walk is inside opening hours at ``at``, an input rather than a clock read.
+    A verdict about "now" that changes between identical requests is not a verdict;
+    without a moment the request cannot be proven either way.
     """
     if at is None:
         _set(r, "uncertain", [], REASON_OPEN_NOT_DATED)
@@ -518,10 +485,8 @@ def _verify_open(
 
 
 def _verify_step_free(r: Requirement, steps: StepsAlong | None, route_present: bool) -> None:
-    """Whether the measured line runs over a stairway. The verdict is about the walk's
-    own geometry — ``steps_along`` re-read it — never about the costing option that
-    built it, so a route that still crosses a staircase is ``unmet`` how ever it was asked
-    for. Without the stairway data the answer is ``uncertain``, not a claim.
+    """Whether the measured line runs over a stairway. The verdict is read off the walk's
+    own geometry, never the costing option that built it; without the data it is ``uncertain``.
     """
     if not route_present:
         _set(r, "uncertain", [], REASON_ROUTE_MISSING)
@@ -545,11 +510,8 @@ def verify(  # noqa: PLR0913 — the verdict's whole input: route, line, and wha
     at: datetime | None = None,
     steps_along: StepsAlong | None = None,
 ) -> list[Requirement]:
-    """Statuses are written onto the requirement objects *in place* and the same
-    list is returned; every requirement leaves resolved.
-
-    ``at`` is the moment the walk is checked against, passed in rather than read off
-    the clock: the same route verified twice against the same ``at`` answers the same.
+    """Statuses are written onto the requirement objects *in place*, and the same list is
+    returned with every requirement resolved. ``at`` is passed in, never read off the clock.
     """
     codes = facts.codes
     stops = _route_stops(plan)
@@ -593,11 +555,8 @@ def verify_catalogue(
     facts: CategoryFacts,
     at: datetime | None = None,
 ) -> list[Requirement]:
-    """Check a CATALOGUE (a list of places to choose from) against the request.
-
-    A catalogue is a choice, so a fact it must carry is proven by *some* place holding
-    it — one free place in the list answers «бесплатно», where a walk would have to be
-    free stop by stop.
+    """Check a CATALOGUE against the request: a fact it must carry is proven by *some* place
+    holding it — one free place answers «бесплатно», where a walk must be free stop by stop.
     """
     codes = facts.codes
     empty = not places

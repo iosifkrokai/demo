@@ -23,12 +23,8 @@ class PlaceBackfill(Protocol):
 
 
 def embedded_text(name: str, category: str | None, town: str | None) -> str:
-    """The text a row's vector is a projection of.
-
-    The category and the town are what a tourist actually says («музеи Гродно»): a vector
-    of the name alone leaves 45% of the corpus duplicated and reaches nothing. The blurb
-    is deliberately not here — measured, it dilutes the two that matter (precision@10
-    0.63 against 0.75), and only 1% of the rows have one.
+    """The text a row's vector is a projection of: name, category and town. The blurb is
+    deliberately left out because it dilutes the two that matter.
     """
     parts = [f"{name}."]
     for field in (category, town):

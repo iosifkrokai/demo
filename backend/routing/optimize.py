@@ -18,6 +18,7 @@ from routing.valhalla.route import optimized_route as valhalla_optimized_route
 from .cost import (
     ORIGIN_INDEX,
     leg_seconds,
+    leg_value,
     prune_unroutable_stops,
     route_legs,
     total_seconds,
@@ -95,11 +96,7 @@ def optimize(problem: WalkProblem) -> tuple[list[Candidate], dict[str, Any]]:
 
 
 def _both_orders(problem: WalkProblem, info: dict[str, Any]) -> tuple[list[int], dict[str, Any]]:
-    """Insertion and nearest-neighbour, both polished, the cheaper one kept.
-
-    Neither wins everywhere: from a dozen stops the insertion pass takes over, at
-    nine or ten the multi-start walk is often ahead. A tie goes to insertion.
-    """
+    """Insertion and nearest-neighbour, both polished; the cheaper order wins, ties to insertion."""
     inserted = polish(_regret_insertion(problem, problem.must_idx, info={})[0], problem)
     walked = polish(_nn_2opt_multi(problem, {})[0], problem)
     inserted_total = _order_total(inserted, problem)
@@ -128,22 +125,11 @@ def _report_missing_must(
     return info
 
 
-def _leg_value(cell: float) -> float:
-    """NaN contributes 0; an infinite/sentinel cell contributes UNREACHABLE_S so the
-    order stays infeasible.
-    """
-    if math.isnan(cell):
-        return 0.0
-    if not math.isfinite(cell):
-        return float(constants.UNREACHABLE_S)
-    return cell
-
-
 def _order_total(order: list[int], problem: WalkProblem) -> float:
     """Total route time (walk + visit), the tourist's own legs included."""
     total = total_seconds(order, problem.matrix, problem.visits)
     if problem.anchor is not None and order:
-        total += _leg_value(leg_seconds(problem.matrix, problem.anchor, ORIGIN_INDEX, order[0]))
+        total += leg_value(leg_seconds(problem.matrix, problem.anchor, ORIGIN_INDEX, order[0]))
     total += _closing_leg(order, problem)
     return total
 
@@ -153,8 +139,8 @@ def _closing_leg(order: list[int], problem: WalkProblem) -> float:
     if not problem.round_trip or len(order) < constants.MIN_LEG_POINTS:
         return 0.0
     if problem.anchor is not None:
-        return _leg_value(leg_seconds(problem.matrix, problem.anchor, order[-1], ORIGIN_INDEX))
-    return _leg_value(problem.matrix[order[-1]][order[0]])
+        return leg_value(leg_seconds(problem.matrix, problem.anchor, order[-1], ORIGIN_INDEX))
+    return leg_value(problem.matrix[order[-1]][order[0]])
 
 
 def _measured_total(order: list[int], problem: WalkProblem) -> float:
@@ -489,11 +475,7 @@ def _two_opt(order: list[int], matrix: list[list[float]]) -> list[int]:
 
 
 def polish(order: list[int], problem: WalkProblem) -> list[int]:
-    """The order, improved until neither a reversal nor a shift shortens the walk.
-
-    A reversal never moves the ends, so the shift is the one move that can decide
-    where the walk begins.
-    """
+    """The order, improved until neither a reversal nor a shift shortens the walk."""
     if len(order) < constants.MIN_TOUR_STOPS:
         return order
     previous: list[int] | None = None

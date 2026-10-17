@@ -1,36 +1,9 @@
-"""baseline: extensions + full current schema
-
-This is the single source of truth for the Postgres schema. It reproduces
-statement for statement what db/init.sql described on 2026-10-10, i.e. the
-cumulative result of the old db/migrations/0002…0009 patches:
-
-  * extensions: postgis, vector, pg_trgm, citext
-  * places: every column including the 0002 region fields, the 0004
-    category_source, the 0006 photo attribution, and the 0009 vector(384)
-  * the 0004 curated-category guard function + trigger
-  * place_aliases / place_sources / areas            (0004)
-  * clients / client_preferences / saved_routes      (0005)
-  * users / user_sessions / visited_places           (0008)
-
-Two items in the old SQL were not schema and are deliberately not here:
-  * db/migrations/0003's ``SET pg_trgm.word_similarity_threshold = 0.45`` is a
-    session GUC — a runtime tuning knob that never persists in the catalog.
-  * db/migrations/0007's ``UPDATE places ...`` renamed a category value; it is
-    a data backfill, not DDL. No init.sql equivalent existed either.
-db/migrate_add_facts.sql was subsumed by 0002 and is already represented by the
-places.fun_facts / places.links columns.
-
-Revision ID: 0001_baseline
-Revises:
-Create Date: 2026-10-10
-
-"""
+"""The baseline schema: extensions, tables, indexes, and the curated-category guard."""
 
 from __future__ import annotations
 
 from alembic import op
 
-# revision identifiers, used by Alembic.
 revision = "0001_baseline"
 down_revision = None
 branch_labels = None
@@ -38,14 +11,11 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # --- extensions -------------------------------------------------------
     op.execute("CREATE EXTENSION IF NOT EXISTS postgis")
     op.execute("CREATE EXTENSION IF NOT EXISTS vector")
     op.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm")
-    # Case-insensitive email for accounts (spec 005). See old 0008.
     op.execute("CREATE EXTENSION IF NOT EXISTS citext")
 
-    # --- places -----------------------------------------------------------
     op.execute(
         """
         CREATE TABLE IF NOT EXISTS places (
@@ -54,13 +24,9 @@ def upgrade() -> None:
           description   TEXT,
           category      TEXT,
           blurb         TEXT,
-          -- Short "did you know" line shown next to the marker on the map.
           fun_fact      TEXT,
-          -- Additional facts (JSON array of strings).
           fun_facts     TEXT,
-          -- JSON array [{title, url}] of related links.
           links         TEXT,
-          -- Visitor info (region dataset; see specs/001-grodno-region-coverage).
           opening_hours TEXT,
           ticket_price  TEXT,
           visit_minutes INT,
@@ -70,14 +36,8 @@ def upgrade() -> None:
           lon           DOUBLE PRECISION NOT NULL,
           geom          GEOGRAPHY(POINT, 4326) GENERATED ALWAYS AS
                           (ST_SetSRID(ST_MakePoint(lon, lat), 4326)::geography) STORED,
-          -- embedding dim MUST match agent/embeddings.EMBED_DIM: the local CPU
-          -- model intfloat/multilingual-e5-small (384-d). See old 0009.
           embedding     VECTOR(384),
           source_url    TEXT UNIQUE NOT NULL,
-          -- A photo is only ever stored with its attribution: Wikimedia files
-          -- are licensed, and "photo_url set, author NULL" would be a licence
-          -- violation waiting to happen. All four come from one resolution
-          -- pass, never guessed.
           photo_url     TEXT,
           photo_author  TEXT,
           photo_license TEXT,
@@ -104,12 +64,6 @@ def upgrade() -> None:
         "ON places USING GIN (district gin_trgm_ops)"
     )
 
-    # --- places.category_source + curated-category guard (old 0004) --------
-    #
-    # 'curated' | 'dataset' | 'auto': who owns a row's category. An UPDATE that
-    # changes `category` on a curated/dataset row is reverted unless the writer
-    # opted in for its transaction
-    # (SELECT set_config('grodno.allow_curated_category_change', 'on', true)).
     op.execute(
         "ALTER TABLE places ADD COLUMN IF NOT EXISTS category_source TEXT NOT NULL DEFAULT 'auto'"
     )
@@ -122,7 +76,7 @@ def upgrade() -> None:
                AND NEW.category IS DISTINCT FROM OLD.category
                AND COALESCE(current_setting('grodno.allow_curated_category_change', true), 'off') <> 'on'
             THEN
-                NEW.category := OLD.category;   -- curated wins; the write is ignored
+                NEW.category := OLD.category;
             END IF;
             RETURN NEW;
         END;
@@ -138,7 +92,6 @@ def upgrade() -> None:
         """
     )
 
-    # --- place_aliases ----------------------------------------------------
     op.execute(
         """
         CREATE TABLE IF NOT EXISTS place_aliases (
@@ -166,7 +119,6 @@ def upgrade() -> None:
         """
     )
 
-    # --- place_sources ----------------------------------------------------
     op.execute(
         """
         CREATE TABLE IF NOT EXISTS place_sources (
@@ -190,7 +142,6 @@ def upgrade() -> None:
     )
     op.execute("CREATE INDEX IF NOT EXISTS place_sources_place_ix ON place_sources (place_id)")
 
-    # --- areas ------------------------------------------------------------
     op.execute(
         """
         CREATE TABLE IF NOT EXISTS areas (
@@ -213,7 +164,6 @@ def upgrade() -> None:
     )
     op.execute("CREATE INDEX IF NOT EXISTS areas_kind_ix ON areas (kind)")
 
-    # --- clients / client_preferences / saved_routes (old 0005, spec 003) --
     op.execute(
         """
         CREATE TABLE IF NOT EXISTS clients (
@@ -264,7 +214,6 @@ def upgrade() -> None:
         """
     )
 
-    # --- users / user_sessions / visited_places (old 0008, spec 005) ------
     op.execute(
         """
         CREATE TABLE IF NOT EXISTS users (
@@ -314,8 +263,6 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # The baseline has no prior revision to return to; a from-scratch teardown
-    # drops the objects in reverse dependency order.
     op.execute("DROP TABLE IF EXISTS visited_places")
     op.execute("DROP TABLE IF EXISTS user_sessions")
     op.execute("DROP TABLE IF EXISTS users")

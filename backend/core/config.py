@@ -5,6 +5,9 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 
+DEFAULT_DSN = "postgresql://grodno:grodno@localhost:5432/grodno"
+DEFAULT_MODEL = "deepseek/deepseek-v4.1-flash"
+
 
 @dataclass
 class Settings:
@@ -12,7 +15,7 @@ class Settings:
 
     HOST: str = os.environ.get("AGENT_HOST", "0.0.0.0")
     PORT: int = int(os.environ.get("AGENT_PORT", "8080"))
-    DSN: str = os.environ.get("DATABASE_URL", "postgresql://grodno:grodno@localhost:5432/grodno")
+    DSN: str = os.environ.get("DATABASE_URL", DEFAULT_DSN)
     VALHALLA_URL: str = os.environ.get("VALHALLA_URL", "http://localhost:8002")
 
 
@@ -34,38 +37,14 @@ class Provider:
     default_model: str
 
 
-@dataclass(frozen=True)
-class _Spec:
-    """Where one provider's settings live, and what it answers to by default."""
-
-    key_env: str
-    base_env: str
-    default_model: str
-
-
-_SPECS: dict[str, _Spec] = {
-    "openrouter": _Spec(
-        key_env="OPENROUTER_API_KEY",
-        base_env="OPENROUTER_BASE_URL",
-        default_model="deepseek/deepseek-v4.1-flash",
-    ),
-}
-
-
-def provider(name: str) -> Provider:
-    """One provider, as the environment currently describes it."""
-    spec = _SPECS[name]
-    return Provider(
-        name=name,
-        api_key=os.environ.get(spec.key_env) or None,
-        base_url=os.environ.get(spec.base_env) or None,
-        default_model=spec.default_model,
-    )
-
-
 def chosen_provider() -> Provider:
-    """The endpoint this process talks to — named once, so no caller repeats it."""
-    return provider("openrouter")
+    """The endpoint this process talks to, as the environment describes it."""
+    return Provider(
+        name="openrouter",
+        api_key=os.environ.get("OPENROUTER_API_KEY") or None,
+        base_url=os.environ.get("OPENROUTER_BASE_URL") or None,
+        default_model=DEFAULT_MODEL,
+    )
 
 
 def model_name() -> str:

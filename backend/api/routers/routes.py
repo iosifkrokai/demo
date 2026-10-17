@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Annotated, Any
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from agent import client, thread
 from agent.models import BriefStop
@@ -23,6 +23,7 @@ from api.models.routes import (
 from core import constants, progress
 from core.errors import AgentError, InterpretationUnavailableError, NoRoutePossibleError
 from core.passwords import hash_token
+from db.store.users import UserRepository
 from routing.models import CategoryFacts
 from routing.stops import candidate_of
 
@@ -94,8 +95,9 @@ def _plan(req: GenerateReq, request: Request) -> RouteResponse:
     brief = responses.reader_brief(req)
     identity = _identity(request)
     thread_id = thread.thread_key(req.session_id, identity=identity) if req.session_id else None
+    previous: tuple[BriefStop, ...] = ()
     if brief.context is not None:
-        brief = thread.reconcile_brief(
+        brief, previous = thread.reconcile_context(
             repos.threads, thread_id=thread_id, brief=brief, identity=identity
         )
     refinement = bool(brief.context and brief.context.base_points)
@@ -108,12 +110,6 @@ def _plan(req: GenerateReq, request: Request) -> RouteResponse:
     )
     if outcome is None:
         raise InterpretationUnavailableError("the request could not be planned")
-
-    previous: tuple[BriefStop, ...] = ()
-    if brief.context is not None:
-        previous = thread.previous_stops(
-            repos.threads, thread_id=thread_id, context=brief.context, identity=identity
-        )
 
     if thread_id:
         thread.record(
@@ -140,12 +136,15 @@ def read_progress(progress_id: str) -> Any:
 
 @router.get("/routes/threads/{session_id}", response_model=ThreadResponse)
 @deps.storage_guarded
-def read_thread(session_id: str, request: Request) -> Any:
+def read_thread(
+    session_id: str,
+    request: Request,
+    repo: Annotated[UserRepository, Depends(deps.get_user_repository)],
+) -> Any:
     """The turns recorded for this run, read back by the session that named it."""
-    user, err = deps.require_user(request, deps.get_user_repository(request))
+    _user, err = deps.require_user(request, repo)
     if err is not None:
         return err
-    assert user is not None
     thread_id = thread.thread_key(session_id, identity=_identity(request))
     journal = deps.get_repos(request).threads.journal(thread_id)
     return _thread_response(session_id, journal)
@@ -154,7 +153,10 @@ def read_thread(session_id: str, request: Request) -> Any:
 @router.post("/routes/reroute", response_model=RouteResponse)
 def reroute(req: RerouteReq, request: Request) -> RouteResponse:
     """Measure and order the points the client already holds. No model, no prompt."""
-    return deps.guarded(responses.reroute_response, req=req, repos=deps.get_repos(request))
+    try:
+        return responses.reroute_response(req=req, repos=deps.get_repos(request))
+    except AgentError as exc:
+        raise HTTPException(status_code=exc.http_status, detail=str(exc)) from exc
 
 
 @router.post("/routes/explain")

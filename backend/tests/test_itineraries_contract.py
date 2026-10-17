@@ -1,10 +1,6 @@
 """Every stop of a ready-made route must be a place the seed actually projects.
 
-A stop is keyed on `places.source_url`, and nothing in the seed path checks that the
-key exists: `--dry-run` never reads the itinerary file, and an unknown key is silently
-dropped by `db/store/itineraries.py`, showing up only as the «часть точек не нашлась»
-banner on a live stack. This is the contract that keeps a ready-made route from rotting
-when a dataset is re-fetched under it.
+A stop keyed on `places.source_url` that no dataset holds is dropped silently.
 """
 
 from __future__ import annotations

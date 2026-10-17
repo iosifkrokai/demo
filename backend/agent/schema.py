@@ -9,21 +9,18 @@ from typing import TYPE_CHECKING, Literal
 
 from pydantic import BaseModel, Field
 
-from routing.models import CategoryFacts, LatLon
+from routing.models import CategoryFacts, LatLon, RequirementKind
 
 if TYPE_CHECKING:
     from db.store.registry import Repositories
 
-RequirementKindL = Literal[
-    "must_visit", "service", "interest", "avoid", "free", "open", "step_free"
-]
 StrengthL = Literal["hard", "soft"]
 
 
 class AgentRequirement(BaseModel):
     """One requirement the model read out of the text."""
 
-    kind: RequirementKindL = Field(
+    kind: RequirementKind = Field(
         description=(
             "must_visit — a named place to SEE; interest — a category of place "
             "(«замки»); service — a café, toilet or hotel the walk passes; avoid — "

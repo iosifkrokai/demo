@@ -11,7 +11,7 @@ import psycopg
 from db.models.user import AdminUser, User, VisitedPlace
 from db.store.base import PostgresRepository
 from db.store.columns import USER_COLUMNS, USER_SECRET_SELECT, USER_SELECT
-from db.store.errors import EmailTakenError
+from db.store.errors import EmailTakenError, StorageUnavailableError
 from db.store.mappers import model_from_row
 
 
@@ -105,7 +105,8 @@ class PostgresUserRepository(PostgresRepository):
                 row = cur.fetchone()
             except psycopg.errors.UniqueViolation as exc:
                 raise EmailTakenError(email) from exc
-        assert row is not None
+        if row is None:
+            raise StorageUnavailableError("insert returned no user row")
         return model_from_row(User, row)
 
     def get_user_by_email(self, email: str) -> User | None:

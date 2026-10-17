@@ -9,14 +9,7 @@ from typing import Any
 from core import constants
 from routing.models import Candidate, CostMatrix, ResolvedConstraints, ValidatedPlan
 
-from .cost import ORIGIN_INDEX, leg_seconds, route_legs
-
-
-def _leg_s(value: float) -> float:
-    """Cell value with non-finite cells saturated to UNREACHABLE_S."""
-    if math.isnan(value):
-        return 0.0
-    return float(constants.UNREACHABLE_S) if not math.isfinite(value) else value
+from .cost import ORIGIN_INDEX, leg_seconds, leg_value, route_legs
 
 
 def _leg_sum(matrix: list[list[float]], order: list[int]) -> float:
@@ -24,7 +17,7 @@ def _leg_sum(matrix: list[list[float]], order: list[int]) -> float:
         return 0.0
     total = 0.0
     for a, b in itertools.pairwise(order):
-        total += _leg_s(matrix[a][b])
+        total += leg_value(matrix[a][b])
         if total >= constants.UNREACHABLE_S:
             return float(constants.UNREACHABLE_S)
     return total
@@ -82,12 +75,12 @@ def validate(
 
     walk = _leg_sum(matrix, order)
     if anchor is not None and order:
-        walk += _leg_s(leg_seconds(matrix, anchor, ORIGIN_INDEX, order[0]))
+        walk += leg_value(leg_seconds(matrix, anchor, ORIGIN_INDEX, order[0]))
     if constraints.round_trip and len(order) >= constants.MIN_LEG_POINTS:
         if anchor is not None:
-            walk += _leg_s(leg_seconds(matrix, anchor, order[-1], ORIGIN_INDEX))
+            walk += leg_value(leg_seconds(matrix, anchor, order[-1], ORIGIN_INDEX))
         else:
-            walk += _leg_s(matrix[order[-1]][order[0]])
+            walk += leg_value(matrix[order[-1]][order[0]])
     visits_s = sum(visits[i] for i in order) * 60
     total = int(walk) + int(visits_s)
 
@@ -97,7 +90,7 @@ def validate(
     cats = {c.category for c in route if c.category}
     diversity = len(cats) / n if n else 0.0
 
-    max_leg = max((_leg_s(leg_seconds(matrix, anchor, a, b)) for a, b in legs), default=0.0)
+    max_leg = max((leg_value(leg_seconds(matrix, anchor, a, b)) for a, b in legs), default=0.0)
 
     unknown_legs = sum(1 for a, b in legs if math.isnan(leg_seconds(matrix, anchor, a, b)))
 

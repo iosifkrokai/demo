@@ -1,19 +1,25 @@
 # Working in this repo
 
-Grodno walking-route planner: free-text Russian query → a walkable route over real
-sights. Valhalla for routing, Postgres (PostGIS + pgvector) for data, a FastAPI
-service, a React/Vite frontend served by nginx.
+Grodno walking-route planner: free-text Russian/English query → a walkable route
+over real sights. Valhalla for routing, Postgres (PostGIS + pgvector) for data, a
+FastAPI service, a React/Vite frontend served by nginx.
+
+`README.md` is the human guide. This file is for agents and carries the rules that
+are easy to break.
 
 ## Layout
 
 ```
 backend/     the service — api (HTTP) · agent (the planner) · routing (the
              deterministic math) · core · quality · tests
-             db/  — the persistence side: models (rows) · store (repositories)
-                    · seed (the projection) · alembic · connection.py
-                    · embeddings (the local model) · data (the datasets)
-                    · external_form.py (the filled-in form we send out, off the
-                      contract in db/data/external/)
+             db/  — models (rows) · store (repositories) · seed (the projection)
+                    · alembic · connection.py · embeddings (the local model)
+                    · data (the datasets) · external_form.py (the filled-in form
+                    we send out, off the contract in db/data/external/)
+             quality/bench/ — the evaluation harness (config · models ·
+                    analysis · report · cases · compliance · golden · run ·
+                    cli); quality/runner.py is its CLI facade, and
+                    quality/report.py the one-page readout
 frontend/    React + Vite + MapLibre, talked to over nginx
 docker-compose.yml   the whole stack, including the db image (inline)
 ```
@@ -30,10 +36,10 @@ the optimizer, the budget arithmetic and the requirement verdicts. It imports
 arithmetic without the agent reaching into it.
 
 Each layer declares its own shapes: `db/models/` the rows, `routing/models.py` the
-measurement's currency and the requirement contract, `api/models/` the wire. There
-is no shared `contracts/` — where a rule is genuinely needed by two layers it lives
-below both (`core/accounts.py` is the email/password rules the seed and the API
-share, and `core/cache.py` is the reading cache).
+measurement's currency and the requirement contract, `api/models/` the wire.
+There is no shared `contracts/` — where a rule is genuinely needed by two layers
+it lives below both (`core/accounts.py` is the email/password rules the seed and
+the API share, and `core/cache.py` is the reading cache).
 
 Nothing above `db/store` writes SQL or holds a connection: a logic layer is
 handed repositories (`db/store/registry.py::Repositories`) and calls them.
@@ -44,10 +50,14 @@ handed repositories (`db/store/registry.py::Repositories`) and calls them.
 
 ```bash
 make up        # build + start db, valhalla, agent, frontend (creates .env first)
-make seed      # apply the committed data — idempotent, safe to re-run
 make migrate   # apply the schema (Alembic)
+make seed      # apply the committed data — idempotent, safe to re-run
 make help      # everything else
 ```
+
+`make migrate` must run before `make seed` on a fresh volume. Alembic reads the DSN
+from `core.config` via `db/alembic/env.py`, so it must run from `backend/` for
+`core` to be importable; the Makefile target already does that.
 
 The Valhalla tile build on first start is slow; the embedding model is baked into
 the image at build time, so there is no first-call download.
@@ -62,7 +72,8 @@ make test-frontend   # typecheck · eslint · vitest
 
 Python is managed by `uv` in `backend/` (there is no `requirements.txt`), pinned to
 3.12. Live tests skip themselves when the stack is not reachable — a skip is not a
-pass you should ignore.
+pass you should ignore. Pyright covers `agent api core db routing`; `quality/` and
+`tests/` are covered by ruff, pytest collection and the quality smoke commands.
 
 ## Things that are not negotiable
 
@@ -91,16 +102,27 @@ pass you should ignore.
 - **No comments.** New code carries no `#` and no `//` commentary. When something
   genuinely has to be said, one short docstring line says it — what the thing is
   for, not how it works. The code is the explanation.
+- **Quality has six layers:** routes, curated, compliance, trajectory, evals and
+  retrieval. A missing artifact reads «НЕ ИЗМЕРЯЛОСЬ», never green.
+
+## Agent conventions
+
+- A model name is written once, as the default in `core/config.py`. The endpoint
+  and key come from the environment; the client is the same OpenAI-shaped one for
+  OpenRouter, a gateway or OpenAI itself.
+- Changing a value in `core/constants.py` is a code-review decision: edit → tests
+  → commit.
+- The planner sends **no `costing_options`** — the map panel
+  (`frontend/src/utils/valhalla.ts`) does. Overriding the engine's per-costing
+  defaults would move every measured time in every answer, which is a re-baseline
+  of the quality layers rather than a tweak.
 
 ## Where the rest is written down
 
 | File | For |
 |---|---|
-| `README.md` | what it is, endpoints, architecture, troubleshooting |
-| `backend/db/data/README.md` | the seed contract: dataset schema, natural keys, protection |
-| `backend/quality/README.md` | the three quality layers and how to run them |
+| `README.md` | what it is, endpoints, architecture, data, quality, tests, troubleshooting |
 | `frontend/DESIGN.md` | the design system |
+| `.claude/skills/seed-db`, `add-dataset`, `run-quality` | recurring multi-step jobs, with their failure modes |
 
-Recurring multi-step jobs are skills under `.claude/skills/`: `seed-db`,
-`add-dataset`, `run-quality`. Read the one that matches the task before improvising
-the steps — each carries the failure modes that are easy to get wrong.
+Read the skill that matches the task before improvising the steps.

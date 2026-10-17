@@ -3,15 +3,18 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pydantic_ai import RunContext
 
 from agent.schema import PlanningDeps
-from agent.tools import ERR_BAD_ARGUMENT, ToolAnswer, envelope, fetch
+from agent.tools._shared import ERR_BAD_ARGUMENT, ToolAnswer, envelope, fetch
 from routing.models import Requirement, TripRequirements
 from routing.stops import candidate_of
 from routing.verify import overall_status, steps_evidence, verify, verify_summary
+
+if TYPE_CHECKING:
+    from db.store.registry import Repositories
 
 MAX_SPECS_PER_CALL = 20
 
@@ -36,7 +39,7 @@ def check_requirements(  # noqa: PLR0913 — the tool's whole surface, all four 
     requirement_specs: list[dict[str, Any]],
     stop_ids: list[int],
     *,
-    repos: Any,
+    repos: Repositories | None,
     facts: Any,
     geometry: dict[str, Any] | None = None,
     unknowns: list[str] | None = None,

@@ -1,25 +1,4 @@
-"""taxonomy, itineraries, and the area registry's missing columns
-
-Three things that lived in files until now, and move into the database so the
-service stops reading datasets at runtime:
-
-  * ``categories``      — the taxonomy, whose row shape `db/models/category.py`
-                          already described but which had no table.
-  * ``itineraries`` (+``itinerary_stops``) — the curated walks the catalogue
-                          endpoint serves, previously read from
-                          ``data/itineraries.json``.
-  * ``areas.note`` / ``areas.is_project_area`` — the two facts ``areas.json``
-                          carries that the `areas` table had nowhere to put.
-
-The project-area row is keyed ``grodno-oblast`` (the slug ``areas.json`` marks
-``is_project_area``), not the ``grodno-voblast`` the seed used to invent from an
-English alias; the seed is corrected alongside this revision.
-
-Revision ID: 0002_taxonomy_itineraries
-Revises: 0001_baseline
-Create Date: 2026-10-11
-
-"""
+"""Taxonomy, itineraries, and the area registry's two missing columns."""
 
 from __future__ import annotations
 
@@ -71,8 +50,6 @@ def upgrade() -> None:
         """
     )
 
-    # The two facts areas.json carries that the table had no home for. Both are
-    # nullable/defaulted so an existing row needs no backfill.
     op.execute("ALTER TABLE areas ADD COLUMN IF NOT EXISTS note TEXT")
     op.execute(
         "ALTER TABLE areas ADD COLUMN IF NOT EXISTS is_project_area BOOLEAN NOT NULL DEFAULT false"

@@ -19,13 +19,12 @@ from api.models.accounts import (
     ROLE_ADMIN,
     SESSION_COOKIE,
 )
-from core.errors import AgentError
 from core.passwords import hash_token
 from db.models.user import User
 from db.store.errors import StorageUnavailableError
 from db.store.places import PostgresPlaceRepository
 from db.store.registry import Repositories
-from db.store.stats import StatsRepository
+from db.store.stats import PostgresStatsRepository
 from db.store.users import UserRepository
 
 log = logging.getLogger(__name__)
@@ -38,14 +37,6 @@ def require_llm() -> None:
             status_code=503,
             detail={"reason": "llm_not_configured"},
         )
-
-
-def guarded[T](fn: Callable[..., T], **kwargs: Any) -> T:
-    """Run a planning call and map its failures onto HTTP."""
-    try:
-        return fn(**kwargs)
-    except AgentError as e:
-        raise HTTPException(status_code=e.http_status, detail=str(e)) from e
 
 
 def error(status: int, reason: str) -> JSONResponse:
@@ -113,7 +104,8 @@ def require_admin(
     user, err = require_user(request, repo)
     if err is not None:
         return None, err
-    assert user is not None
+    if user is None:
+        return None, error(401, REASON_NOT_AUTHENTICATED)
     if user.role != ROLE_ADMIN:
         return None, error(403, REASON_NOT_ADMIN)
     return user, None
@@ -125,18 +117,15 @@ def get_repos(request: Request) -> Repositories:
 
 
 def get_place_repository(request: Request) -> PostgresPlaceRepository:
-    """The process-wide place repository, or a test-injected fake."""
-    repo = getattr(request.app.state, "places_repository", None)
-    return repo if repo is not None else get_repos(request).places
+    """The process-wide place repository."""
+    return get_repos(request).places
 
 
 def get_user_repository(request: Request) -> UserRepository:
-    """The process-wide account repository, or a test-injected fake."""
-    repo = getattr(request.app.state, "users_repository", None)
-    return repo if repo is not None else get_repos(request).users
+    """The process-wide account repository."""
+    return get_repos(request).users
 
 
-def get_stats_repository(request: Request) -> StatsRepository:
-    """The process-wide stats repository, or a test-injected fake."""
-    repo = getattr(request.app.state, "stats_repository", None)
-    return repo if repo is not None else get_repos(request).stats
+def get_stats_repository(request: Request) -> PostgresStatsRepository:
+    """The process-wide stats repository."""
+    return get_repos(request).stats

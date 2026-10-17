@@ -323,13 +323,8 @@ def test_the_collapse_never_touches_hand_authored_rows() -> None:
 
 def test_the_committed_files_collapse_exactly_these_twins() -> None:
     """The collapse over the committed sets, pinning the count so a new rule shows up here.
-
-    The 38 stairways are all «Лестница»: OSM splits one staircase into ways a metre apart
-    (osm:way/606412524 and its neighbour 606412525 are 0.8 m, some pairs exactly 0.0 m),
-    which the rule reads as the one object they are. The bound below is two radii, not one:
-    a dropped row is measured to the row that kept it, which may be a neighbour of the
-    group's head rather than the head itself.
-    """
+    OSM splits one staircase into ways a metre apart, so the rule reads them as one object;
+    the two-radius bound holds because a dropped row may sit beside the group's head."""
     from db.seed.datasets import TWIN_RADIUS_M, collect_records, default_datasets, resolve_twins
 
     collected = collect_records(default_datasets())
@@ -353,9 +348,7 @@ def test_the_committed_files_collapse_exactly_these_twins() -> None:
 def test_the_committed_files_carry_no_excluded_names() -> None:
     """The names `fetch` refuses must not be in the files already committed.
 
-    `seed fetch` drops them (db/seed/cli.py), so a name coming back would mean the
-    file was regenerated before the guard, or edited past it.
-    """
+    A name coming back means the file was regenerated before the guard, or edited past it."""
     from db.seed.datasets import (
         default_datasets,
         is_excluded_name,

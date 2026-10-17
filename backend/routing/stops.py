@@ -33,5 +33,4 @@ def candidate_of(place: Place, rrf_score: float) -> Candidate:
         photo=_photo_model(place),
         visit_minutes_db=place.visit_minutes,
         relevance=rrf_score,
-        rrf_score=rrf_score,
     )

@@ -1,9 +1,6 @@
 """What `seed fetch` must not lose when it rewrites a dataset.
 
-The rows come from Overpass, which knows nothing about our districts: the column is
-filled at fetch time, and a re-fetch that forgot to fill it would silently blank every
-sight's district (the committed `places_osm_raw.csv` has one on every row). These tests
-pin the offline fill and the name guard that stand between the source and the file.
+Overpass knows nothing about districts, so a re-fetch must fill the column at fetch time.
 """
 
 from __future__ import annotations
@@ -28,7 +25,6 @@ def test_a_refetch_keeps_the_district_only_where_no_boundary_answers() -> None:
 def test_a_new_point_falls_back_to_the_nearest_raion_centre() -> None:
     from db.seed.overpass import fill_districts
 
-    # Слоним — ближайший райцентр к этой точке; ответ обязан быть офлайновым.
     rows = [_row("osm:node/2", 53.0936, 25.3203)]
     stats = fill_districts(rows, {})
 
@@ -39,7 +35,6 @@ def test_a_new_point_falls_back_to_the_nearest_raion_centre() -> None:
 def test_a_district_already_present_is_left_alone() -> None:
     from db.seed.overpass import fill_districts
 
-    # addr:district from the tags, or a row built by hand — never overwritten.
     rows = [_row("osm:node/3", 53.10, 25.30, district="Лидский район")]
 
     assert fill_districts(rows, {"osm:node/3": "Слонимский район"}) == {"carried": 0, "derived": 0}
@@ -60,9 +55,7 @@ def test_the_guard_drops_an_excluded_name() -> None:
 def test_a_church_tagged_as_an_attraction_is_still_a_church() -> None:
     """OSM marks notable churches `tourism=attraction`; the catch-all must not win.
 
-    Reading the catch-all first put 419 churches, chapels and synagogues into
-    `архитектура`, where «покажи костёлы» could not find them.
-    """
+    Reading the catch-all first put churches into `архитектура`, where «покажи костёлы» failed."""
     from db.seed.osm_tags import sight_tag_to_category
 
     assert (
@@ -109,12 +102,9 @@ def test_the_catch_all_tags_still_answer_when_nothing_sharper_does() -> None:
 
 
 def test_a_manor_is_not_a_castle_and_a_palace_is_not_either() -> None:
-    """`historic=manor` read as `замок` put 59 manor houses and palaces in the castles.
+    """`historic=manor` is `усадьба` and `palace` is `дворец`, not `замок`.
 
-    The taxonomy gives `historic=manor` its own category (`усадьба`, whose `osm_tags`
-    column has said `historic=manor|place=estate` all along) and `palace` another, so the
-    code was contradicting the file that is the single source of category codes.
-    """
+    The taxonomy file is the single source of category codes the code must follow."""
     from db.seed.osm_tags import sight_tag_to_category
 
     assert sight_tag_to_category({"historic": "manor"}) == "усадьба"

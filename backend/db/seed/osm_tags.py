@@ -52,12 +52,6 @@ RAILWAY_CATEGORY = {
     "tram_stop": "остановка транспорта",
 }
 
-# Labels generated for services OSM leaves unnamed. They name a *kind*, not an
-# object: a hundred rows reading «Остановка» are a hundred different stops, so the
-# duplicate *review* must not read them as evidence of anything
-# (`datasets.find_suspected_duplicates`, whose list would otherwise be flooded).
-# `resolve_twins` still collapses two of a kind standing on top of each other —
-# that is a question of distance, and at five metres the answer is one object.
 FALLBACK_LABEL_BY_CATEGORY = {
     "туалет": "Туалет",
     "остановка транспорта": "Остановка",
@@ -76,19 +70,9 @@ Row = dict[str, str | float | None]
 
 
 def sight_tag_to_category(tags: dict[str, str]) -> str | None:
-    """Map OSM tags → our sight category, or None.
-
-    The order is the mapping. Worship and church buildings are read *before* the two
-    catch-all tags (`tourism=attraction`, `historic=archaeological_site`): reading those
-    first put 419 churches, chapels and synagogues into `архитектура`, because OSM tags a
-    notable church as an attraction — and «покажи костёлы» then missed them.
-
-    Fortifications come before the named `historic` kinds so a pillbox named as a ruin
-    reads as one, and boulders come after them so a memorial stone stays a памятник. A
-    bare `historic=ruins` is a *condition*, not a type: it is not read here at all and
-    falls through to whatever else the tags say, the boulder predicate included — only
-    what nothing can type reaches the catch-all.
-    """
+    """Map OSM tags → our sight category, or ``None``. The order is the mapping: worship
+    before the catch-alls, fortifications before named ``historic`` kinds, boulders after
+    them; a bare ``historic=ruins`` is a condition that falls through."""
     return (
         _worship_category(tags)
         or _building_category(tags)
@@ -101,11 +85,8 @@ def sight_tag_to_category(tags: dict[str, str]) -> str | None:
 
 
 def _fortification_category(tags: dict[str, str]) -> str | None:
-    """A fort, pillbox, blindage or trench: the tags OSM states, else the name.
-
-    `military=bunker` and `historic=fort` are the only fortification tags the extract
-    carries in any number, and they are on a minority of the objects — the name is the
-    only evidence a «ДОТ Гродненского УР» or a «Блиндаж 1-ой мировой войны» carries.
+    """A fort, pillbox, blindage or trench: the tags OSM states, else a matching name,
+    since most such objects carry only a name such as «ДОТ Гродненского УР».
     """
     if tags.get("military") == "bunker" or tags.get("historic") == "fort":
         return "укрепление"
@@ -131,12 +112,8 @@ def _source_name(tags: dict[str, str]) -> str:
 
 
 def _historic_category(historic: str) -> str | None:
-    """What the `historic` key alone settles — named kinds only, not the catch-all.
-
-    A castle in ruins is still a castle, and stays `замок`; `historic=ruins` on its own
-    decides nothing, so a pillbox or a mill's ruin does not become a castle by it. A manor
-    is not a castle either — the taxonomy gives `historic=manor` its own category, and
-    reading it as `замок` put 47 manor houses and palaces in the castles.
+    """What the ``historic`` key alone settles — named kinds only: a castle in ruins stays
+    ``замок``, ``historic=ruins`` alone decides nothing, and a manor has its own category.
     """
     if historic == "castle":
         return "замок"
@@ -159,11 +136,8 @@ def _tourism_category(tourism: str) -> str | None:
 
 
 def _generic_category(tags: dict[str, str]) -> str | None:
-    """The catch-all tags, read last: what is left without a sharper answer.
-
-    `tourism=attraction`, `historic=archaeological_site` and `historic=ruins` say "worth
-    seeing" or "damaged", not what the thing is, so every other mapping speaks first and
-    this one only catches the rest — a watermill's ruin, a nameless archaeological site.
+    """The catch-all tags, read last: they say "worth seeing" or "damaged", not what the
+    thing is, so every sharper mapping speaks first.
     """
     if (
         tags.get("tourism") == "attraction"
@@ -181,9 +155,6 @@ def _worship_category(tags: dict[str, str]) -> str | None:
     religion = tags.get("religion", "")
     if religion == "christian":
         return _christian_rite(tags.get("denomination", ""))
-    # A mosque, a synagogue, a shrine: `храм` is where the taxonomy puts them — «синагога»,
-    # «кирха» and «каплица» are its own aliases, which is why synagogues read as
-    # `архитектура` before.
     return "храм"
 
 
@@ -195,12 +166,7 @@ def _christian_rite(denomination: str) -> str:
 
 
 def _building_category(tags: dict[str, str]) -> str | None:
-    """A church building is a костёл for Catholics and a церковь for anyone else.
-
-    A worship building whose religion is not tagged Christian still reads as a place of
-    worship, not as plain architecture: «часовня» and «каплица» are `храм` in the
-    taxonomy, and 89 chapels sat in `архитектура` for want of this.
-    """
+    """A worship building is a костёл for Catholics and a церковь for anyone else."""
     building = tags.get("building", "")
     if building in ("church", "cathedral", "chapel"):
         if tags.get("religion", "") != "christian":
@@ -246,10 +212,8 @@ def sight_name(tags: dict[str, str]) -> str | None:
 
 
 def ticket_price_of(tags: dict[str, str]) -> str:
-    """The ``fee``/``charge`` tag as a price, or "" when it is only punctuation.
-
-    A lone dash reads as a value though it says nothing, so it never becomes a price
-    — the reply forbids it, and ``ticket_price`` keeps it out at the source.
+    """The ``fee``/``charge`` tag as a price, or "" when it is only punctuation — a lone
+    dash says nothing and is not a price.
     """
     for key in _TICKET_TAGS:
         value = (tags.get(key) or "").strip()
@@ -259,12 +223,8 @@ def ticket_price_of(tags: dict[str, str]) -> str:
 
 
 def service_name(tags: dict[str, str], category: str) -> str | None:
-    """Name: ``name`` else ``name:ru``.
-    Toilets and transport stops fall back to «Туалет» / «Остановка»; others dropped.
-
-    The fallback carries the street when OSM knows it — the only thing that tells two
-    unnamed stops apart offline, and what keeps the catalogue from showing a hundred
-    identical «Остановка» rows.
+    """A name, else the category's fallback label, with the street: the street is what
+    tells two unnamed stops apart offline.
     """
     name = tags.get("name") or tags.get("name:ru")
     if name:
